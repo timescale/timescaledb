@@ -1,0 +1,54 @@
+\set ON_ERROR_STOP 1
+{% set databases = ['Test1', 'test2'] %}
+{% import 'admin.sql.j2' as admin %}
+
+{{admin.create_database('meta')}}
+{% for db in databases -%}
+{{admin.create_database(db)}}
+{%- endfor %}
+
+{{admin.load_scripts('meta')}}
+{{admin.load_scripts_meta()}}
+{% for db in databases -%}
+{{admin.load_scripts(db)}}
+{{admin.load_scripts_main(db)}}
+{%- endfor %}
+
+{% for db in databases -%}
+{{admin.init_fdw(db, databases)}}
+{%- endfor %}
+
+\set ECHO ALL
+\c meta
+{% for db in databases -%}
+SELECT add_node('{{ db }}' :: NAME, '{{ db }}' :: NAME);
+{%- endfor %}
+
+SELECT add_namespace('testNs' :: NAME);
+SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
+SELECT *
+FROM node;
+SELECT *
+FROM namespace;
+SELECT *
+FROM namespace_node;
+SELECT *
+FROM field;
+
+\c Test1
+
+SELECT *
+FROM node;
+SELECT *
+FROM namespace;
+SELECT *
+FROM namespace_node;
+SELECT *
+FROM field;
+\dt "testNs".*
+\det "testNs".*
+\d+ "testNs".distinct
+\d+ "testNs".cluster

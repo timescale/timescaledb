@@ -41,15 +41,6 @@ CREATE TABLE IF NOT EXISTS distinct_tables (
     UNIQUE (project_id, namespace, replica_no) --creates an index
 );
 
---CREATE TYPE IF NOT EXISTS
-DO $$
-BEGIN
-    IF NOT EXISTS(SELECT 1
-                  FROM pg_type
-                  WHERE typname = 'field_index_type') THEN
-        CREATE TYPE field_index_type AS ENUM ('NONE', 'TIME-VALUE', 'VALUE-TIME');
-    END IF;
-END$$;
 
 CREATE TABLE IF NOT EXISTS data_fields (
     table_name      REGCLASS NOT NULL REFERENCES data_tables (table_name) ON DELETE CASCADE,

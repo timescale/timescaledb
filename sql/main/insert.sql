@@ -44,7 +44,8 @@ BEGIN
           dt.project_id = create_data_table.project_id AND
           dt.namespace = create_data_table.namespace AND
           dt.replica_no = create_data_table.replica_no AND
-          dt."partition" = create_data_table.partition_number
+          dt."partition" = create_data_table.partition_number AND
+          dt.total_partitions = create_data_table.total_partitions
     ORDER BY end_time DESC
     LIMIT 1;
 
@@ -56,7 +57,8 @@ BEGIN
               dt.project_id = create_data_table.project_id AND
               dt.namespace = create_data_table.namespace AND
               dt.replica_no = create_data_table.replica_no AND
-              dt."partition" = create_data_table.partition_number
+              dt."partition" = create_data_table.partition_number AND
+              dt.total_partitions = create_data_table.total_partitions
         ORDER BY start_time ASC
         LIMIT 1;
 
@@ -76,10 +78,10 @@ BEGIN
     END IF;
 
     IF table_start IS NOT NULL THEN
-        table_name := format('%s_%s_%s_%s_%s', project_id, namespace, replica_no, partition_number,
+        table_name := format('%s_%s_%s_%s_%s_%s', project_id, namespace, replica_no, total_partitions, partition_number,
                              table_start / 1e9 :: BIGINT);
     ELSE
-        table_name := format('%s_%s_%s_%s_%s', project_id, namespace, replica_no, partition_number,
+        table_name := format('%s_%s_%s_%s_%s_%s', project_id, namespace, replica_no, total_partitions, partition_number,
                              table_end / 1e9 :: BIGINT);
     END IF;
 
@@ -538,15 +540,7 @@ $BODY$
 SELECT array_to_string(get_fields_from_json(project_id, namespace), ', ')
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_cluster_table_name(
-    project_id BIGINT,
-    namespace  TEXT,
-    replica_no SMALLINT
-)
-    RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
-$BODY$
-SELECT format('%s_%s_%s', project_id, namespace, replica_no);
-$BODY$;
+
 
 CREATE OR REPLACE FUNCTION get_master_table_name(
     project_id BIGINT,
@@ -582,54 +576,6 @@ $BODY$
 SELECT format('%s_%s_%s_%s_copy_t', project_id, namespace, replica_no, partition_number);
 $BODY$;
 
-
-CREATE OR REPLACE FUNCTION create_cluster_table(
-    project_id BIGINT,
-    namespace  TEXT,
-    replica_no SMALLINT
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    table_name TEXT;
-BEGIN
-    table_name := get_cluster_table_name(project_id, namespace, replica_no);
-
-    EXECUTE format(
-        $$
-            CREATE TABLE IF NOT EXISTS cluster."%s" (
-                time BIGINT NOT NULL
-            )
-        $$, table_name);
-    EXCEPTION
-    WHEN unique_violation OR duplicate_table OR duplicate_object THEN
---ignore
-END
-$BODY$;
-
-CREATE OR REPLACE FUNCTION create_master_table(
-    project_id       BIGINT,
-    namespace        TEXT,
-    replica_no       SMALLINT,
-    partition_number SMALLINT,
-    total_partitions SMALLINT
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    cluster_table_name TEXT;
-    table_name         TEXT;
-BEGIN
-    cluster_table_name := get_cluster_table_name(project_id, namespace, replica_no);
-    table_name := get_master_table_name(project_id, namespace, replica_no);
-
-    EXECUTE format($$ CREATE TABLE IF NOT EXISTS "%s" () INHERITS(cluster."%s") $$,
-                   table_name, cluster_table_name);
-    EXCEPTION
-    WHEN unique_violation OR duplicate_table OR duplicate_object THEN
---ignore
-END
-$BODY$;
 
 CREATE OR REPLACE FUNCTION create_partition_table(
     project_id       INT,
