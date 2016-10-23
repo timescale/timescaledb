@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS node (
 
 CREATE TABLE IF NOT EXISTS namespace (
     name                        NAME PRIMARY KEY NOT NULL,
-    schema_name                 NAME             NOT NULL,
+    schema_name                 NAME UNIQUE      NOT NULL,
     cluster_table_name          NAME             NOT NULL,
     cluster_distinct_table_name NAME             NOT NULL
 );
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS field (
                                             ('double precision' :: REGTYPE, 'text' :: REGTYPE, 'boolean' :: REGTYPE, 'bigint' :: REGTYPE)),
     is_partitioning BOOLEAN DEFAULT FALSE,
     is_distinct     BOOLEAN DEFAULT FALSE,
-    index_types       field_index_type [],
+    index_types     field_index_type [],
     PRIMARY KEY (namespace_name, name)
 );
 

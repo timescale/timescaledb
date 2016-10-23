@@ -1,16 +1,16 @@
-CREATE OR REPLACE FUNCTION create_field_on_data_tables(
-    schema_name        NAME,
-    cluster_table_name NAME,
-    field              NAME,
-    data_type_oid      REGTYPE,
-    is_partitioning    BOOLEAN,
-    index_types        field_index_type []
+CREATE OR REPLACE FUNCTION create_field_indexes_on_data_tables(
+    namespace_name NAME,
+    field_name     NAME,
+    index_types    field_index_type []
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    --TODO:!!!!
+    PERFORM _create_data_table_index(dt.table_oid, field_name, index_type)
+    FROM data_table dt
+    CROSS JOIN unnest(index_types) AS index_type
+    WHERE dt.namespace_name = create_field_indexes_on_data_tables.namespace_name;
 END
 $BODY$;
 
@@ -53,8 +53,7 @@ BEGIN
 
     PERFORM create_field_on_cluster_table(namespace_row.schema_name, namespace_row.cluster_table_name, NEW.name,
                                           NEW.data_type);
-    PERFORM create_field_on_data_tables(namespace_row.schema_name, namespace_row.cluster_table_name, NEW.name,
-                                        NEW.data_type, NEW.is_partitioning, NEW.index_types);
+    PERFORM create_field_indexes_on_data_tables(NEW.namespace_name, NEW.name, NEW.index_types);
     RETURN NEW;
 END
 $BODY$

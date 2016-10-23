@@ -20,7 +20,8 @@ CREATE OR REPLACE FUNCTION add_namespace(
 $BODY$
 INSERT INTO namespace (name, schema_name, cluster_table_name, cluster_distinct_table_name)
 VALUES (namespace_name, get_schema_name(namespace_name), get_cluster_table_name(namespace_name),
-        get_cluster_distinct_table_name(namespace_name));
+        get_cluster_distinct_table_name(namespace_name))
+ON CONFLICT DO NOTHING;
 
 INSERT INTO namespace_node (namespace_name, database_name, master_table_name, remote_table_name,
                             distinct_local_table_name, distinct_remote_table_name)
@@ -31,7 +32,8 @@ INSERT INTO namespace_node (namespace_name, database_name, master_table_name, re
         get_remote_table_name(namespace_name, n),
         get_local_distinct_table_name(namespace_name),
         get_remote_distinct_table_name(namespace_name, n)
-    FROM node AS n;
+    FROM node AS n
+ON CONFLICT DO NOTHING;
 $BODY$;
 
 
@@ -46,6 +48,7 @@ CREATE OR REPLACE FUNCTION add_field(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 INSERT INTO field (namespace_name, name, data_type, is_partitioning, is_distinct, index_types)
-VALUES (namespace_name, field_name, data_type, is_partitioning, is_distinct, idx_types);
+VALUES (namespace_name, field_name, data_type, is_partitioning, is_distinct, idx_types)
+ON CONFLICT DO NOTHING;
 $BODY$;
 

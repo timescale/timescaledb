@@ -239,38 +239,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION close_data_table_end(data_table_row data_tables)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    max_time  BIGINT;
-    table_end BIGINT;
-BEGIN
-    EXECUTE format($$ SELECT max("time") FROM %s $$, data_table_row.table_name)
-    INTO max_time;
 
-    IF max_time IS NULL THEN
-        max_time := data_table_row.start_time;
-    END IF;
-
-    table_end := ((max_time :: BIGINT / (1e9 * 60 * 60 * 24) + 1) :: BIGINT) * (1e9 * 60 * 60 * 24) :: BIGINT - 1;
-
-    EXECUTE FORMAT(
-        $$
-            ALTER TABLE %s DROP CONSTRAINT time_range
-        $$,
-        data_table_row.table_name);
-    EXECUTE FORMAT(
-        $$
-            ALTER TABLE %s ADD  CONSTRAINT time_range CHECK(time >= %L AND time <= %L)
-        $$,
-        data_table_row.table_name, data_table_row.start_time, table_end);
-
-    UPDATE data_tables
-    SET end_time = table_end
-    WHERE table_name = data_table_row.table_name;
-END
-$BODY$;
 
 
 CREATE OR REPLACE FUNCTION create_index(
@@ -413,18 +382,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_partitioning_field(
-    project_id INT,
-    namespace  TEXT
-)
-    RETURNS TEXT LANGUAGE SQL STABLE AS
-$BODY$
-SELECT field
-FROM cluster.project_field AS pf
-WHERE pf.project_id = get_partitioning_field.project_id AND
-      pf.namespace = get_partitioning_field.namespace AND
-      is_partition_key = TRUE;
-$BODY$;
+
 
 
 CREATE OR REPLACE FUNCTION get_fields(
@@ -552,17 +510,7 @@ $BODY$
 SELECT format('%s_%s_%s_master', project_id, namespace, replica_no);
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_partition_table_name(
-    project_id       INT,
-    namespace        TEXT,
-    replica_no       SMALLINT,
-    partition_number SMALLINT,
-    total_partitions SMALLINT
-)
-    RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
-$BODY$
-SELECT format('%s_%s_%s_%s_partition', project_id, namespace, replica_no, partition_number);
-$BODY$;
+
 
 CREATE OR REPLACE FUNCTION get_temp_copy_table_name(
     project_id       INT,
