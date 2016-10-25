@@ -9,6 +9,8 @@ CREATE DATABASE "{{db}}";
 \ir ../common/types.sql
 \ir ../common/tables.sql
 {%- endmacro %}
+
+
 {% macro load_scripts_main(db) %}
 \c {{db}}
 \ir ../main/namespace_triggers.sql
@@ -21,6 +23,15 @@ CREATE DATABASE "{{db}}";
 \ir ../main/partition_table_triggers.sql
 \ir ../main/data_table_constructors.sql
 {%- endmacro %}
+
+{% macro load_scripts_main_kafka(db) %}
+\c {{db}}
+\ir ../main/kafka_offset_table.sql
+\ir ../main/kafka_offset_node_trigger.sql
+\ir ../main/kafka_offset_functions.sql
+{%- endmacro %}
+
+
 {% macro load_scripts_meta() %}
 \c meta
 \ir ../meta/names.sql
@@ -38,7 +49,7 @@ CREATE USER MAPPING FOR CURRENT_USER SERVER "{{ db }}" OPTIONS ( USER 'postgres'
 \c {{db}}
 {% for db_other in databases -%}
 {% if db_other != db %}
-CREATE SERVER "{{ db_other }}" FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'localhost');
+CREATE SERVER "{{ db_other }}" FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'localhost', dbname '{{ db_other }}');
 CREATE USER MAPPING FOR CURRENT_USER SERVER "{{ db_other }}" OPTIONS ( USER 'postgres');
 {% endif %}
 {%- endfor %}
