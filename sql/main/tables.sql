@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS data_table (
 );
 --TODO: any constrants for when total_partitions change?
 
-CREATE SEQUENCE data_table_index_name_prefix;
+CREATE SEQUENCE IF NOT EXISTS data_table_index_name_prefix;
 
 CREATE TABLE IF NOT EXISTS data_table_index (
     table_oid  REGCLASS         NOT NULL REFERENCES data_table (table_oid) ON DELETE CASCADE,

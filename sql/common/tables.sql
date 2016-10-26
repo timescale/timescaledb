@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS node (
     hostname      TEXT             NOT NULL
 );
 
-CREATE TABLE cluster_user (
+CREATE TABLE IF NOT EXISTS cluster_user (
     username TEXT PRIMARY KEY NOT NULL,
     password TEXT --not any more of a security hole than usual since stored in  pg_user_mapping anyway
 );

@@ -1,0 +1,3 @@
+testNs	1257987600000000000	{"device_id":"dev1","series_0":1.5,"series_1":1,"series_3":3,"series_4":4}
+testNs	1257987600000000000	{"device_id":"dev1","series_0":1.5,"series_1":2}
+testNs	1257894002000000000	{"device_id":"dev1","series_0":2.5,"series_1":3,"series_4":4}

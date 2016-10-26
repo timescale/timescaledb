@@ -18,7 +18,8 @@ BEGIN
     END LOOP;
     RETURN NEW;
 END
-$BODY$;
+$BODY$
+SET SEARCH_PATH = 'public';
 
 BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_cluster_user

@@ -65,7 +65,8 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION create_remote_distinct_table(
     schema_name        NAME,
-    table_name         NAME,
+    local_table_name   NAME,
+    remote_table_name  NAME,
     cluster_table_name NAME,
     server_name        NAME
 )
@@ -74,9 +75,10 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            CREATE FOREIGN TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%1$I.%3$I) SERVER %4$I OPTIONS (schema_name '%1$I')
+            CREATE FOREIGN TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%1$I.%3$I) SERVER %4$I
+            OPTIONS (schema_name %1$L, table_name %5$L)
         $$,
-        schema_name, table_name, cluster_table_name, server_name);
+        schema_name, remote_table_name, cluster_table_name, server_name, local_table_name);
 END
 $BODY$;
 
@@ -98,7 +100,8 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION create_remote_table(
     schema_name        NAME,
-    table_name         NAME,
+    remote_table_name  NAME,
+    master_table_name  NAME,
     cluster_table_name NAME,
     server_name        NAME
 )
@@ -107,9 +110,9 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            CREATE FOREIGN TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%1$I.%3$I) SERVER %4$I OPTIONS (schema_name '%1$I')
+            CREATE FOREIGN TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%1$I.%3$I) SERVER %4$I OPTIONS (schema_name %1$L, table_name %5$L)
         $$,
-        schema_name, table_name, cluster_table_name, server_name);
+        schema_name, remote_table_name, cluster_table_name, server_name, master_table_name);
 END
 $BODY$;
 
@@ -165,9 +168,11 @@ BEGIN
         FROM node AS n
         WHERE n.database_name = NEW.database_name;
 
-        PERFORM create_remote_table(namespace_row.schema_name, NEW.remote_table_name, namespace_row.cluster_table_name,
+        PERFORM create_remote_table(namespace_row.schema_name, NEW.remote_table_name, NEW.master_table_name,
+                                    namespace_row.cluster_table_name,
                                     node_row.server_name);
-        PERFORM create_remote_distinct_table(namespace_row.schema_name, NEW.distinct_remote_table_name,
+        PERFORM create_remote_distinct_table(namespace_row.schema_name, NEW.distinct_local_table_name,
+                                             NEW.distinct_remote_table_name,
                                              namespace_row.cluster_distinct_table_name,
                                              node_row.server_name);
     END IF;
@@ -177,7 +182,8 @@ $BODY$
 SET SEARCH_PATH = 'public';
 
 BEGIN;
-DROP TRIGGER IF EXISTS trigger_on_create_namespace_node  ON namespace_node;
+DROP TRIGGER IF EXISTS trigger_on_create_namespace_node
+ON namespace_node;
 CREATE TRIGGER trigger_on_create_namespace_node AFTER INSERT OR UPDATE OR DELETE ON namespace_node
 FOR EACH ROW EXECUTE PROCEDURE on_create_namespace_node();
 COMMIT;

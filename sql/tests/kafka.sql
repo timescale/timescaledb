@@ -1,29 +1,18 @@
 \set ON_ERROR_STOP 1
-{% set databases = ['Test1', 'test2'] %}
-{% import 'admin.sql.j2' as admin %}
 
-{{admin.create_database('meta')}}
-{% for db in databases -%}
-{{admin.create_database(db)}}
-{%- endfor %}
-
-{{admin.load_scripts('meta')}}
-{{admin.load_scripts_meta()}}
-{% for db in databases -%}
-{{admin.load_scripts(db)}}
-{{admin.load_scripts_main(db)}}
-{{admin.load_scripts_main_kafka(db)}}
-{%- endfor %}
-
-{% for db in databases -%}
-{{admin.init_fdw(db, databases)}}
-{%- endfor %}
+\ir create_clustered_db.sql
+\c Test1
+\ir load_kafka.sql
+\c test2
+\ir load_kafka.sql
 
 \set ECHO ALL
 \c meta
-{% for db in databases -%}
-SELECT add_node('{{ db }}' :: NAME, '{{ db }}' :: NAME);
-{%- endfor %}
+SELECT add_cluster_user('postgres', NULL);
+
+SELECT add_node('Test1' :: NAME, 'localhost');
+SELECT add_node('test2' :: NAME, 'localhost');
+
 
 \c Test1
 \dt public.*

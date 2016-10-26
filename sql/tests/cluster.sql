@@ -1,28 +1,13 @@
 \set ON_ERROR_STOP 1
-{% set databases = ['Test1', 'test2'] %}
-{% import 'admin.sql.j2' as admin %}
 
-{{admin.create_database('meta')}}
-{% for db in databases -%}
-{{admin.create_database(db)}}
-{%- endfor %}
-
-{{admin.load_scripts('meta')}}
-{{admin.load_scripts_meta()}}
-{% for db in databases -%}
-{{admin.load_scripts(db)}}
-{{admin.load_scripts_main(db)}}
-{%- endfor %}
+\ir create_clustered_db.sql
 
 \set ECHO ALL
 \c meta
 SELECT add_cluster_user('postgres', NULL);
 
-{% for db in databases -%}
-SELECT add_node('{{ db }}' :: NAME, 'localhost');
-{%- endfor %}
-
-
+SELECT add_node('Test1' :: NAME, 'localhost');
+SELECT add_node('test2' :: NAME, 'localhost');
 
 SELECT add_namespace('testNs' :: NAME);
 SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);

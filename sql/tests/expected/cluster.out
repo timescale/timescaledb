@@ -5,12 +5,13 @@ SELECT add_cluster_user('postgres', NULL);
  
 (1 row)
 
-SELECT add_node('Test1' :: NAME, 'localhost');SELECT add_node('test2' :: NAME, 'localhost');
+SELECT add_node('Test1' :: NAME, 'localhost');
  add_node 
 ----------
  
 (1 row)
 
+SELECT add_node('test2' :: NAME, 'localhost');
  add_node 
 ----------
  
@@ -259,7 +260,7 @@ Indexes:
     "4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
     "data_0_10_1477008000_pidx" btree ("time" DESC NULLS LAST, "Device_id")
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 10) = 0)
+    "partition" CHECK (get_partition_for_key("Device_id", '10'::smallint) = '0'::smallint)
     "time_range" CHECK ("time" >= '1477008000000000000'::bigint AND "time" <= NULL::bigint)
 Inherits: "testNs".partition_0_10
 
@@ -274,7 +275,7 @@ Inherits: "testNs".partition_0_10
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 10) = 0)
+    "partition" CHECK (get_partition_for_key("Device_id", '10'::smallint) = '0'::smallint)
 Inherits: "testNs".master
 Child tables: "testNs".data_0_10_1477008000
 
@@ -301,7 +302,7 @@ Indexes:
     "4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
     "data_0_10_1477008000_pidx" btree ("time" DESC NULLS LAST, "Device_id")
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 10) = 0)
+    "partition" CHECK (get_partition_for_key("Device_id", '10'::smallint) = '0'::smallint)
     "time_range" CHECK ("time" >= '1477008000000000000'::bigint AND "time" <= '1477094399999999999'::bigint)
 Inherits: "testNs".partition_0_10
 

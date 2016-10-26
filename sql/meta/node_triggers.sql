@@ -45,6 +45,11 @@ BEGIN
             INSERT INTO %I.node SELECT * from node;
         $$,
         NEW.schema_name);
+        EXECUTE format(
+        $$
+            INSERT INTO %I.cluster_user SELECT * from cluster_user;
+        $$,
+        NEW.schema_name);
 
     FOR schema_name IN
     SELECT n.schema_name
