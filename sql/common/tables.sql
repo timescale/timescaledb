@@ -1,7 +1,13 @@
 CREATE TABLE IF NOT EXISTS node (
     database_name NAME PRIMARY KEY NOT NULL,
     schema_name   NAME UNIQUE      NOT NULL, --public schema of remote
-    server_name   NAME UNIQUE      NOT NULL
+    server_name   NAME UNIQUE      NOT NULL,
+    hostname      TEXT             NOT NULL
+);
+
+CREATE TABLE cluster_user (
+    username TEXT PRIMARY KEY NOT NULL,
+    password TEXT --not any more of a security hole than usual since stored in  pg_user_mapping anyway
 );
 
 CREATE TABLE IF NOT EXISTS namespace (

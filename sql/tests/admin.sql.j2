@@ -8,11 +8,14 @@ CREATE DATABASE "{{db}}";
 \ir ../common/extensions.sql
 \ir ../common/types.sql
 \ir ../common/tables.sql
+\ir ../common/cluster_setup_functions.sql
 {%- endmacro %}
 
 
 {% macro load_scripts_main(db) %}
 \c {{db}}
+\ir ../main/cluster_user_triggers.sql
+\ir ../main/node_triggers.sql
 \ir ../main/namespace_triggers.sql
 \ir ../main/field_triggers.sql
 \ir ../main/partitioning.sql
@@ -38,20 +41,8 @@ CREATE DATABASE "{{db}}";
 \ir ../meta/names.sql
 \ir ../meta/cluster.sql
 \ir ../meta/node_triggers.sql
+\ir ../meta/cluster_user_triggers.sql
 \ir ../meta/namespace_triggers.sql
 \ir ../meta/field_triggers.sql
 {%- endmacro %}
 
-{% macro init_fdw(db, databases) %}
-\c meta
-CREATE SERVER "{{ db }}" FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'localhost', dbname '{{ db }}');
-CREATE USER MAPPING FOR CURRENT_USER SERVER "{{ db }}" OPTIONS ( USER 'postgres');
-
-\c {{db}}
-{% for db_other in databases -%}
-{% if db_other != db %}
-CREATE SERVER "{{ db_other }}" FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'localhost', dbname '{{ db_other }}');
-CREATE USER MAPPING FOR CURRENT_USER SERVER "{{ db_other }}" OPTIONS ( USER 'postgres');
-{% endif %}
-{%- endfor %}
-{%- endmacro %}

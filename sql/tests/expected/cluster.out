@@ -1,5 +1,11 @@
 \c meta
-SELECT add_node('Test1' :: NAME, 'Test1' :: NAME);SELECT add_node('test2' :: NAME, 'test2' :: NAME);
+SELECT add_cluster_user('postgres', NULL);
+ add_cluster_user 
+------------------
+ 
+(1 row)
+
+SELECT add_node('Test1' :: NAME, 'localhost');SELECT add_node('test2' :: NAME, 'localhost');
  add_node 
 ----------
  
@@ -48,10 +54,10 @@ SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_
 
 SELECT *
 FROM node;
- database_name | schema_name  | server_name 
----------------+--------------+-------------
- Test1         | remote_Test1 | Test1
- test2         | remote_test2 | test2
+ database_name | schema_name  | server_name | hostname  
+---------------+--------------+-------------+-----------
+ Test1         | remote_Test1 | Test1       | localhost
+ test2         | remote_test2 | test2       | localhost
 (2 rows)
 
 SELECT *
@@ -83,10 +89,10 @@ FROM field;
 \c Test1
 SELECT *
 FROM node;
- database_name | schema_name  | server_name 
----------------+--------------+-------------
- Test1         | remote_Test1 | Test1
- test2         | remote_test2 | test2
+ database_name | schema_name  | server_name | hostname  
+---------------+--------------+-------------+-----------
+ Test1         | remote_Test1 | Test1       | localhost
+ test2         | remote_test2 | test2       | localhost
 (2 rows)
 
 SELECT *

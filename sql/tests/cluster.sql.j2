@@ -14,15 +14,15 @@
 {{admin.load_scripts_main(db)}}
 {%- endfor %}
 
-{% for db in databases -%}
-{{admin.init_fdw(db, databases)}}
-{%- endfor %}
-
 \set ECHO ALL
 \c meta
+SELECT add_cluster_user('postgres', NULL);
+
 {% for db in databases -%}
-SELECT add_node('{{ db }}' :: NAME, '{{ db }}' :: NAME);
+SELECT add_node('{{ db }}' :: NAME, 'localhost');
 {%- endfor %}
+
+
 
 SELECT add_namespace('testNs' :: NAME);
 SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);

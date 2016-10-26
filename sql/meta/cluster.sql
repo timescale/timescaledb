@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION add_node(
     database_name NAME,
-    server_name   NAME
+    hostname      TEXT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -8,7 +8,21 @@ DECLARE
     schema_name NAME;
 BEGIN
     schema_name := format('remote_%s', database_name);
-    INSERT INTO node (database_name, schema_name, server_name) VALUES (database_name, schema_name, server_name);
+    INSERT INTO node (database_name, schema_name, server_name, hostname)
+    VALUES (database_name, schema_name, database_name, hostname);
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION add_cluster_user(
+    username TEXT,
+    password TEXT
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+BEGIN
+    INSERT INTO cluster_user (username, password)
+    VALUES (username, password);
 END
 $BODY$;
 
