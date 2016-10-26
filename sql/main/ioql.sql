@@ -141,7 +141,7 @@ CREATE OR REPLACE FUNCTION get_field_list(query ioql_query)
 $BODY$
 SELECT CASE
        WHEN query.select_field IS NULL THEN
-           get_field_list(query.project_id :: INT, query.namespace_name)
+           get_field_list(query.namespace_name)
        ELSE
            array_to_string(ARRAY(
                                (SELECT format('%I', field) AS field_name
@@ -155,26 +155,63 @@ SELECT CASE
 $BODY$
 LANGUAGE SQL STABLE;
 
+CREATE OR REPLACE FUNCTION get_fields_def(
+    namespace_name NAME
+)
+    RETURNS TEXT [] LANGUAGE SQL STABLE AS
+$BODY$
+SELECT ARRAY(
+    SELECT format($$%s %s$$, field_name, data_type)
+    FROM (
+             SELECT
+                 f.name AS field_name,
+                 f.data_type
+             FROM field AS f
+             WHERE f.namespace_name = get_fields_def.namespace_name
+             ORDER BY f.name
+         ) AS info
+);
+$BODY$;
+
+CREATE OR REPLACE FUNCTION get_field_def(
+    namespace_name NAME,
+    field_name     NAME
+)
+    RETURNS TEXT [] LANGUAGE SQL STABLE AS
+$BODY$
+SELECT ARRAY(
+    SELECT format($$%s %s$$, field_name, data_type)
+    FROM (
+             SELECT
+                 f.name AS field_name,
+                 f.data_type
+             FROM field AS f
+             WHERE f.namespace_name = get_field_def.namespace_name AND
+                 f.name = field_name
+             ORDER BY f.name
+         ) AS info
+);
+$BODY$;
 
 CREATE OR REPLACE FUNCTION get_column_def_list(query ioql_query)
     RETURNS TEXT AS
 $BODY$
 SELECT CASE
        WHEN query.select_field IS NULL THEN
-           array_to_string(ARRAY ['time bigint'] || get_fields_def(query.project_id :: INT, query.namespace_name), ', ')
+           array_to_string(ARRAY ['time bigint'] || get_fields_def(query.namespace_name), ', ')
        ELSE
            array_to_string(
                ARRAY ['time bigint'] ||
                ARRAY(
                    (
-                       SELECT get_field_def(query.project_id, query.namespace_name, field) AS field_name
+                       SELECT get_field_def(query.namespace_name, field) AS field_name
                        FROM unnest(query.select_field)
                    )
                    UNION
                    (
                        SELECT CASE
                               WHEN (query.limit_by_field).field IS NOT NULL THEN
-                                  get_field_def(query.project_id, query.namespace_name,
+                                  get_field_def(query.namespace_name,
                                                 (query.limit_by_field).field)
                               END
                    )

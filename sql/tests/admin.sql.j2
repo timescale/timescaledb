@@ -22,6 +22,7 @@ CREATE DATABASE "{{db}}";
 \ir ../main/data_table_triggers.sql
 \ir ../main/partition_table_triggers.sql
 \ir ../main/data_table_constructors.sql
+\ir ../main/insert.sql
 {%- endmacro %}
 
 {% macro load_scripts_main_kafka(db) %}

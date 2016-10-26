@@ -16,8 +16,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION get_distinct_table_local(ns namespace_type)
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
-SELECT table_name
-FROM get_distinct_table(ns.project_id, ns.name, ns.replica_no)
+SELECT get_distinct_table_oid(ns.name)
 $BODY$;
 
 CREATE OR REPLACE FUNCTION get_distinct_table_cluster(ns namespace_type)
