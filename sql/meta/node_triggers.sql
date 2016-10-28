@@ -11,9 +11,9 @@ BEGIN
         $$,
         NEW.schema_name);
 
-    PERFORM _create_server(NEW);
+    PERFORM _sysinternal.create_server(NEW);
 
-    PERFORM _create_user_mapping(cluster_user, NEW)
+    PERFORM _sysinternal.create_user_mapping(cluster_user, NEW)
     FROM cluster_user;
 
     EXECUTE format(

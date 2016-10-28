@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _create_data_table_index(
+CREATE OR REPLACE FUNCTION _sysinternal.create_data_table_index(
     table_oid  REGCLASS,
     field_name NAME,
     index_type field_index_type
@@ -56,7 +56,7 @@ BEGIN
     FOR field_row IN SELECT f.*
                      FROM field AS f
                      WHERE f.namespace_name = NEW.namespace_name LOOP
-        PERFORM _create_data_table_index(NEW.table_oid, field_row.name, index_type)
+        PERFORM _sysinternal.create_data_table_index(NEW.table_oid, field_row.name, index_type)
         FROM unnest(field_row.index_types) AS index_type;
     END LOOP;
 

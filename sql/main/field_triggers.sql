@@ -7,7 +7,7 @@ CREATE OR REPLACE FUNCTION create_field_indexes_on_data_tables(
 $BODY$
 DECLARE
 BEGIN
-    PERFORM _create_data_table_index(dt.table_oid, field_name, index_type)
+    PERFORM _sysinternal.create_data_table_index(dt.table_oid, field_name, index_type)
     FROM data_table dt
     CROSS JOIN unnest(index_types) AS index_type
     WHERE dt.namespace_name = create_field_indexes_on_data_tables.namespace_name;

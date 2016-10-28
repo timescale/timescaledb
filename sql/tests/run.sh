@@ -18,6 +18,8 @@ golden_test() {
 	fi
 }
 
+mkdir -p actual
+rm -fr actual/*
 golden_test cluster.sql cluster.out
 golden_test kafka.sql kafka.out
 golden_test insert.sql insert.out

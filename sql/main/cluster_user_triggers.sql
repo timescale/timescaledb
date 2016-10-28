@@ -14,7 +14,7 @@ BEGIN
     FOR node_row IN SELECT *
                     FROM node
                     WHERE database_name <> current_database() LOOP
-        PERFORM _create_user_mapping(NEW, node_row);
+        PERFORM _sysinternal.create_user_mapping(NEW, node_row);
     END LOOP;
     RETURN NEW;
 END

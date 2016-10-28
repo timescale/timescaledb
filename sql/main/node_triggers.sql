@@ -9,11 +9,11 @@ BEGIN
     END IF;
 
     IF NEW.database_name <> current_database() THEN
-        PERFORM _create_server(NEW);
+        PERFORM _sysinternal.create_server(NEW);
 
         FOR cluster_user_row IN SELECT *
                                 FROM cluster_user LOOP
-            PERFORM _create_user_mapping(cluster_user_row, NEW);
+            PERFORM _sysinternal.create_user_mapping(cluster_user_row, NEW);
         END LOOP;
     END IF;
     RETURN NEW;

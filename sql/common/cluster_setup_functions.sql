@@ -1,4 +1,6 @@
-CREATE OR REPLACE FUNCTION _create_user_mapping(
+CREATE SCHEMA _sysinternal;
+
+CREATE OR REPLACE FUNCTION _sysinternal.create_user_mapping(
     cluster_user_row cluster_user,
     node_row         node
 )
@@ -14,7 +16,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _create_server(
+CREATE OR REPLACE FUNCTION _sysinternal.create_server(
     node_row         node
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
