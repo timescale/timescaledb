@@ -126,6 +126,14 @@ BEGIN
         RAISE EXCEPTION 'Only inserts supported on namespace table';
     END IF;
 
+    IF NEW.schema_name = 'public' THEN
+        RAISE EXCEPTION 'public is not an allowed namespace name';
+    END IF;
+
+    IF position('_' in NEW.schema_name) = 1 THEN
+        RAISE EXCEPTION 'Namespace cannot begin with an underscore (_)';
+    END IF;
+
     PERFORM create_schema(NEW.schema_name);
     PERFORM create_cluster_table(NEW.schema_name, NEW.cluster_table_name);
     PERFORM create_cluster_distinct_table(NEW.schema_name, NEW.cluster_distinct_table_name);
