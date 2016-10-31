@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION on_create_partition_table()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_partition_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -32,5 +32,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_partition_table
 ON partition_table;
 CREATE TRIGGER trigger_on_create_partition_table AFTER INSERT OR UPDATE OR DELETE ON partition_table
-FOR EACH ROW EXECUTE PROCEDURE on_create_partition_table();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_partition_table();
 COMMIT;

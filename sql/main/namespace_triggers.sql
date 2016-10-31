@@ -116,7 +116,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION on_create_namespace()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_namespace()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -124,6 +124,14 @@ DECLARE
 BEGIN
     IF TG_OP <> 'INSERT' THEN
         RAISE EXCEPTION 'Only inserts supported on namespace table';
+    END IF;
+
+    IF NEW.schema_name = 'public' THEN
+        RAISE EXCEPTION 'public is not an allowed namespace name';
+    END IF;
+
+    IF position('_' in NEW.schema_name) = 1 THEN
+        RAISE EXCEPTION 'Namespace cannot begin with an underscore (_)';
     END IF;
 
     PERFORM create_schema(NEW.schema_name);
@@ -138,11 +146,11 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_namespace
 ON namespace;
 CREATE TRIGGER trigger_on_create_namespace AFTER INSERT OR UPDATE OR DELETE ON namespace
-FOR EACH ROW EXECUTE PROCEDURE on_create_namespace();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_namespace();
 COMMIT;
 
 
-CREATE OR REPLACE FUNCTION on_create_namespace_node()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_namespace_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -185,5 +193,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_namespace_node
 ON namespace_node;
 CREATE TRIGGER trigger_on_create_namespace_node AFTER INSERT OR UPDATE OR DELETE ON namespace_node
-FOR EACH ROW EXECUTE PROCEDURE on_create_namespace_node();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_namespace_node();
 COMMIT;

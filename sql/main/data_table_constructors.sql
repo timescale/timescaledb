@@ -6,7 +6,7 @@
 --     <---current open ended start_time table --| existing closed tables | -- current open ended end_time table --->
 -- tables start and end times are aligned at day boundaries.
 --Should not be called directly. Requires a lock on partition (prevents simultaneous inserts)
-CREATE OR REPLACE FUNCTION _calculate_new_data_table_times(
+CREATE OR REPLACE FUNCTION _sysinternal.calculate_new_data_table_times(
         "time"             BIGINT,
         namespace_name     NAME,
         partition_number   SMALLINT,
@@ -23,11 +23,11 @@ BEGIN
     SELECT *
     INTO data_table_row
     FROM data_table AS dt
-    WHERE dt.end_time < _calculate_new_data_table_times."time" AND
-          dt.namespace_name = _calculate_new_data_table_times.namespace_name AND
-          dt.partition_number = _calculate_new_data_table_times.partition_number AND
-          dt.total_partitions = _calculate_new_data_table_times.total_partitions AND
-          dt.partitioning_field = _calculate_new_data_table_times.partitioning_field
+    WHERE dt.end_time < calculate_new_data_table_times."time" AND
+          dt.namespace_name = calculate_new_data_table_times.namespace_name AND
+          dt.partition_number = calculate_new_data_table_times.partition_number AND
+          dt.total_partitions = calculate_new_data_table_times.total_partitions AND
+          dt.partitioning_field = calculate_new_data_table_times.partitioning_field
     ORDER BY end_time DESC
     LIMIT 1
     FOR SHARE;
@@ -36,11 +36,11 @@ BEGIN
         SELECT *
         INTO data_table_row
         FROM data_table AS dt
-        WHERE dt.start_time > _calculate_new_data_table_times."time" AND
-              dt.namespace_name = _calculate_new_data_table_times.namespace_name AND
-              dt.partition_number = _calculate_new_data_table_times.partition_number AND
-              dt.total_partitions = _calculate_new_data_table_times.total_partitions AND
-              dt.partitioning_field = _calculate_new_data_table_times.partitioning_field
+        WHERE dt.start_time > calculate_new_data_table_times."time" AND
+              dt.namespace_name = calculate_new_data_table_times.namespace_name AND
+              dt.partition_number = calculate_new_data_table_times.partition_number AND
+              dt.total_partitions = calculate_new_data_table_times.total_partitions AND
+              dt.partitioning_field = calculate_new_data_table_times.partitioning_field
         ORDER BY start_time ASC
         LIMIT 1
         FOR SHARE;
@@ -64,7 +64,7 @@ END
 $BODY$;
 
 --creates data table. Must be called after aquiring a lock on partition.
-CREATE OR REPLACE FUNCTION _create_data_table(
+CREATE OR REPLACE FUNCTION _sysinternal.create_data_table(
     "time"              BIGINT,
     partition_table_row partition_table
 )
@@ -82,9 +82,9 @@ BEGIN
 
     SELECT *
     INTO table_start, table_end
-    FROM _calculate_new_data_table_times("time", partition_table_row.namespace_name,
-                                         partition_table_row.partition_number, partition_table_row.total_partitions,
-                                         partition_table_row.partitioning_field);
+    FROM _sysinternal.calculate_new_data_table_times("time", partition_table_row.namespace_name,
+                                                             partition_table_row.partition_number, partition_table_row.total_partitions,
+                                                             partition_table_row.partitioning_field);
 
     table_name := get_data_table_name(partition_table_row.namespace_name, partition_table_row.partition_number,
                                       partition_table_row.total_partitions, partition_table_row.partitioning_field,
@@ -136,7 +136,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION _get_data_table(
+CREATE OR REPLACE FUNCTION _sysinternal.get_data_table(
     "time"           BIGINT,
     namespace        TEXT,
     partition_number SMALLINT,
@@ -148,15 +148,15 @@ $BODY$
 --since its unique per namespace_name, partition_number, total_partitions (by pk on partition_table)
 SELECT *
 FROM data_table dt
-WHERE (dt.start_time <= _get_data_table.time OR dt.start_time IS NULL) AND
-      (dt.end_time >= _get_data_table.time OR dt.end_time IS NULL) AND
-      dt.namespace_name = _get_data_table.namespace AND
-      dt.partition_number = _get_data_table.partition_number AND
-      dt.total_partitions = _get_data_table.total_partitions
+WHERE (dt.start_time <= get_data_table.time OR dt.start_time IS NULL) AND
+      (dt.end_time >= get_data_table.time OR dt.end_time IS NULL) AND
+      dt.namespace_name = get_data_table.namespace AND
+      dt.partition_number = get_data_table.partition_number AND
+      dt.total_partitions = get_data_table.total_partitions
 FOR SHARE --lock this row against concurrent modifications
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _idempotent_create_partition_table_with_lock(
+CREATE OR REPLACE FUNCTION _sysinternal.idempotent_create_partition_table_with_lock(
     namespace_name     NAME,
     partition_number   SMALLINT,
     total_partitions   SMALLINT,
@@ -171,10 +171,10 @@ BEGIN
     SELECT *
     INTO partition_table_row
     FROM partition_table AS pt
-    WHERE pt.namespace_name = _idempotent_create_partition_table_with_lock.namespace_name AND
-          pt.partition_number = _idempotent_create_partition_table_with_lock.partition_number AND
-          pt.total_partitions = _idempotent_create_partition_table_with_lock.total_partitions AND
-          pt.partitioning_field = _idempotent_create_partition_table_with_lock.partitioning_field
+    WHERE pt.namespace_name = idempotent_create_partition_table_with_lock.namespace_name AND
+          pt.partition_number = idempotent_create_partition_table_with_lock.partition_number AND
+          pt.total_partitions = idempotent_create_partition_table_with_lock.total_partitions AND
+          pt.partitioning_field = idempotent_create_partition_table_with_lock.partitioning_field
     FOR UPDATE;
 
     IF partition_table_row IS NULL THEN
@@ -189,10 +189,10 @@ BEGIN
         SELECT *
         INTO STRICT partition_table_row
         FROM partition_table AS pt
-        WHERE pt.namespace_name = _idempotent_create_partition_table_with_lock.namespace_name AND
-              pt.partition_number = _idempotent_create_partition_table_with_lock.partition_number AND
-              pt.total_partitions = _idempotent_create_partition_table_with_lock.total_partitions AND
-              pt.partitioning_field = _idempotent_create_partition_table_with_lock.partitioning_field
+        WHERE pt.namespace_name = idempotent_create_partition_table_with_lock.namespace_name AND
+              pt.partition_number = idempotent_create_partition_table_with_lock.partition_number AND
+              pt.total_partitions = idempotent_create_partition_table_with_lock.total_partitions AND
+              pt.partitioning_field = idempotent_create_partition_table_with_lock.partitioning_field
         FOR UPDATE;
     END IF;
     RETURN partition_table_row;
@@ -213,7 +213,7 @@ DECLARE
     partition_table_row partition_table;
 BEGIN
     --uses double-checked locking
-    data_table_row := _get_data_table("time", namespace_name, partition_number, total_partitions);
+    data_table_row := _sysinternal.get_data_table("time", namespace_name, partition_number, total_partitions);
     IF data_table_row IS NULL THEN
         partitioning_field := get_partitioning_field_name(namespace_name);
         IF partitioning_field IS NULL THEN
@@ -222,15 +222,15 @@ BEGIN
         --get lock:
         SELECT *
         INTO partition_table_row
-        FROM _idempotent_create_partition_table_with_lock(namespace_name, partition_number, total_partitions,
-                                                          partitioning_field);
+        FROM _sysinternal.idempotent_create_partition_table_with_lock(namespace_name, partition_number, total_partitions,
+                                                                      partitioning_field);
         --recheck:
-        data_table_row := _get_data_table("time", namespace_name, partition_number, total_partitions);
+        data_table_row := _sysinternal.get_data_table("time", namespace_name, partition_number, total_partitions);
         IF data_table_row IS NULL THEN --recheck
-            PERFORM _create_data_table("time", partition_table_row);
+            PERFORM _sysinternal.create_data_table("time", partition_table_row);
         END IF;
 
-        data_table_row := _get_data_table("time", namespace_name, partition_number, total_partitions);
+        data_table_row := _sysinternal.get_data_table("time", namespace_name, partition_number, total_partitions);
         IF data_table_row IS NULL THEN --recheck
             RAISE EXCEPTION 'Should never happen';
         END IF;

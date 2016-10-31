@@ -7,7 +7,7 @@ SELECT format('kafka_offset_remote_%s', remote_node.database_name) :: NAME;
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION on_create_node_insert_kafka_offset_node()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_node_insert_kafka_offset_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -27,7 +27,7 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_node_insert_kafka_offset_node
 ON node;
 CREATE TRIGGER trigger_on_create_node_insert_kafka_offset_node AFTER INSERT OR UPDATE OR DELETE ON node
-FOR EACH ROW EXECUTE PROCEDURE on_create_node_insert_kafka_offset_node();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_node_insert_kafka_offset_node();
 COMMIT;
 
 CREATE OR REPLACE FUNCTION create_remote_kafka_offset_table(
@@ -48,7 +48,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION on_create_kafka_offset_node()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_kafka_offset_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -75,5 +75,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_kafka_offset_node
 ON kafka_offset_node;
 CREATE TRIGGER trigger_on_create_kafka_offset_node AFTER INSERT OR UPDATE OR DELETE ON kafka_offset_node
-FOR EACH ROW EXECUTE PROCEDURE on_create_kafka_offset_node();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_kafka_offset_node();
 COMMIT;

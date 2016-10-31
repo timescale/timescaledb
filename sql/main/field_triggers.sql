@@ -7,7 +7,7 @@ CREATE OR REPLACE FUNCTION create_field_indexes_on_data_tables(
 $BODY$
 DECLARE
 BEGIN
-    PERFORM _create_data_table_index(dt.table_oid, field_name, index_type)
+    PERFORM _sysinternal.create_data_table_index(dt.table_oid, field_name, index_type)
     FROM data_table dt
     CROSS JOIN unnest(index_types) AS index_type
     WHERE dt.namespace_name = create_field_indexes_on_data_tables.namespace_name;
@@ -34,7 +34,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION on_create_field()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_field()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -63,5 +63,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_field
 ON field;
 CREATE TRIGGER trigger_on_create_field AFTER INSERT OR UPDATE OR DELETE ON field
-FOR EACH ROW EXECUTE PROCEDURE on_create_field();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_field();
 COMMIT;
