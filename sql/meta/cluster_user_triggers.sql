@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION sync_cluster_user()
+CREATE OR REPLACE FUNCTION _sysinternal.sync_cluster_user()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -28,5 +28,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_sync_cluster_user
 ON cluster_user;
 CREATE TRIGGER trigger_sync_cluster_user AFTER INSERT OR UPDATE OR DELETE ON cluster_user
-FOR EACH ROW EXECUTE PROCEDURE sync_cluster_user();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_cluster_user();
 COMMIT;

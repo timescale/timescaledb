@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION sync_namespace()
+CREATE OR REPLACE FUNCTION _sysinternal.sync_namespace()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -27,10 +27,10 @@ $BODY$;
 BEGIN;
 DROP TRIGGER IF EXISTS trigger_sync_namespace ON namespace;
 CREATE TRIGGER trigger_sync_namespace AFTER INSERT OR UPDATE OR DELETE ON namespace
-FOR EACH ROW EXECUTE PROCEDURE sync_namespace();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_namespace();
 COMMIT;
 
-CREATE OR REPLACE FUNCTION sync_namespace_node()
+CREATE OR REPLACE FUNCTION _sysinternal.sync_namespace_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -59,5 +59,5 @@ $BODY$;
 BEGIN;
 DROP TRIGGER IF EXISTS trigger_sync_namespace_node ON namespace_node;
 CREATE TRIGGER trigger_sync_namespace_node AFTER INSERT OR UPDATE OR DELETE ON namespace_node
-FOR EACH ROW EXECUTE PROCEDURE sync_namespace_node();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_namespace_node();
 COMMIT;

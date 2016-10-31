@@ -24,7 +24,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION on_create_data_table()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_data_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -69,11 +69,11 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_data_table
 ON data_table;
 CREATE TRIGGER trigger_on_create_data_table AFTER INSERT OR UPDATE OR DELETE ON data_table
-FOR EACH ROW EXECUTE PROCEDURE on_create_data_table();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_data_table();
 COMMIT;
 
 
-CREATE OR REPLACE FUNCTION on_create_data_table_index()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_data_table_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -110,5 +110,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_data_table_index
 ON data_table_index;
 CREATE TRIGGER trigger_on_create_data_table_index AFTER INSERT OR UPDATE OR DELETE ON data_table_index
-FOR EACH ROW EXECUTE PROCEDURE on_create_data_table_index();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_data_table_index();
 COMMIT;

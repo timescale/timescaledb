@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION on_create_node()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -31,7 +31,7 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_create_node
 ON node;
 CREATE TRIGGER trigger_create_node BEFORE INSERT OR UPDATE OR DELETE ON node
-FOR EACH ROW EXECUTE PROCEDURE on_create_node();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_node();
 COMMIT;
 
 CREATE OR REPLACE FUNCTION sync_node()

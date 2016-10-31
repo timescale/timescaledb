@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION on_create_cluster_user()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_cluster_user()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -25,5 +25,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_cluster_user
 ON cluster_user;
 CREATE TRIGGER trigger_on_create_cluster_user AFTER INSERT OR UPDATE OR DELETE ON cluster_user
-FOR EACH ROW EXECUTE PROCEDURE on_create_cluster_user();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_cluster_user();
 COMMIT;

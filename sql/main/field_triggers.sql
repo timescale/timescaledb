@@ -34,7 +34,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION on_create_field()
+CREATE OR REPLACE FUNCTION _sysinternal.on_create_field()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -63,5 +63,5 @@ BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_field
 ON field;
 CREATE TRIGGER trigger_on_create_field AFTER INSERT OR UPDATE OR DELETE ON field
-FOR EACH ROW EXECUTE PROCEDURE on_create_field();
+FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_field();
 COMMIT;
