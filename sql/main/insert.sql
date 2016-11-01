@@ -21,7 +21,7 @@ CREATE OR REPLACE FUNCTION get_field_list(
 )
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(get_field_names(namespace_name), ', ')
+SELECT array_to_string(get_quoted_field_names(namespace_name), ', ')
 $BODY$;
 
 
@@ -82,7 +82,7 @@ BEGIN
     WHILE time_point IS NOT NULL LOOP
         SELECT *
         INTO distinct_table_oid
-        FROM get_distinct_table_oid(namespace_point);
+        FROM get_distinct_local_table_oid(namespace_point);
 
         SELECT *
         INTO data_table_row

@@ -1,23 +1,28 @@
-DROP TYPE IF EXISTS ioql_return_partial CASCADE;
-CREATE TYPE ioql_return_partial AS (
-    group_field     TEXT,
-    time            BIGINT,
-    partial_value_1 DOUBLE PRECISION,
-    partial_count   BIGINT
-);
+--TODO: change partial names so that they can't conflict with the group_field
+CREATE OR REPLACE FUNCTION get_partial_aggregate_col_name(field_index BIGINT, field_name NAME, suffix NAME)
+    RETURNS NAME AS $BODY$
+SELECT format('%s_%s_%s', field_index, suffix, field_name) :: NAME;
+$BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 --TODO: change partial names so that they can't conflict with the group_field
-CREATE OR REPLACE FUNCTION get_partial_aggregate_item_sql(item select_item)
+CREATE OR REPLACE FUNCTION get_partial_aggregate_item_sql(field_index BIGINT, item select_item)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN item.func = 'AVG' THEN
-           format('sum(%1$s) as "%2$s_avg_sum", count(*) as "%2$s_avg_count"', get_field_value_specifier(item.field),
-                  item.field)
+           format('sum(%1$I) as %2$I, count(*) as %3$I',
+                  item.field,
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_sum'),
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_count')
+           )
        WHEN item.func = 'COUNT' THEN
-           format('count(*) as "%2$s_count"', get_field_value_specifier(item.field), item.field)
+           format('count(*) as %I',
+                  get_partial_aggregate_col_name(field_index, item.field, 'count')
+           )
        ELSE
-           format('%3$s(%1$s) as "%2$s_%3$s"', get_field_value_specifier(item.field), item.field,
-                  lower(item.func :: TEXT))
+           format('%2$s(%1$I) as %3$I',
+                  item.field,
+                  lower(item.func :: TEXT),
+                  get_partial_aggregate_col_name(field_index, item.field, lower(item.func :: TEXT)))
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -30,19 +35,34 @@ SELECT CASE
            format('%s as group_time, %s', get_time_clause(agg.group_time), field_list)
        END
 FROM
-    (SELECT array_to_string(ARRAY(SELECT get_partial_aggregate_item_sql(i)
-                                  FROM unnest(items) i), ', ') AS field_list) AS field_sql;
+    (
+        SELECT array_to_string(
+                   ARRAY(
+                       SELECT get_partial_aggregate_item_sql(ord, ROW (field, func))
+                       FROM unnest(items) WITH ORDINALITY AS x(field, func, ord)
+                   )
+                   , ', ') AS field_list
+    ) AS field_sql;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_item_sql(item select_item)
+CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_item_sql(field_index BIGINT, item select_item)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN item.func = 'AVG' THEN
-           format('sum("%1$s_avg_sum") as "%1$s_avg_sum", sum("%1$s_avg_count") as "%1$s_avg_count"', item.field)
+           format('sum(%1$I) as %1$I, sum(%2$I) as %2$I',
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_sum'),
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_count')
+           )
        WHEN item.func = 'COUNT' THEN
-           format('sum("%1$s_count") as "%1$s_count"', item.field)
+           format('sum(%1$I) as %1$I',
+                  get_partial_aggregate_col_name(field_index, item.field, 'count')
+           )
        ELSE
-           format('%2$s("%1$s_%2$s") as "%1$s_%2$s"', item.field, lower(item.func :: TEXT))
+           format('%1$s(%2$I) as %2$I',
+                  lower(item.func :: TEXT),
+                  get_partial_aggregate_col_name(field_index, item.field,
+                                                 lower(item.func :: TEXT))
+           )
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -50,25 +70,37 @@ CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_sql(items select_item [
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN agg.group_field IS NOT NULL THEN
-           format('%s, group_time as group_time, %s', agg.group_field, field_list)
+           FORMAT('%s, group_time as group_time, %s', agg.group_field, field_list)
        ELSE
            format('group_time as group_time, %s', field_list)
        END
 FROM
-    (SELECT array_to_string(ARRAY(SELECT get_combine_partial_aggregate_item_sql(i)
-                                  FROM unnest(items) i), ', ') AS field_list) AS field_sql;
+    (
+        SELECT array_to_string(ARRAY(
+                                   SELECT get_combine_partial_aggregate_item_sql(ord, ROW (field, func))
+                                   FROM unnest(items) WITH ORDINALITY AS x(field, func, ord)
+                               )
+        , ', ') AS field_list
+    ) AS field_sql;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
-CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_zero_value_item_sql(item select_item)
+CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_zero_value_item_sql(field_index BIGINT, item select_item)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN item.func = 'AVG' THEN
-           format('NULL::double precision as "%1$s_avg_sum", NULL::numeric as "%1$s_avg_count"', item.field)
+           format('NULL::double precision as %I, NULL::numeric as %I',
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_sum'),
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_count')
+           )
        WHEN item.func = 'COUNT' THEN
-           format('NULL::numeric as "%1$s_count"', item.field)
+           format('NULL::numeric as %I',
+                  get_partial_aggregate_col_name(field_index, item.field, 'count')
+           )
        ELSE
-           format('NULL::double precision as "%1$s_%2$s"', item.field, lower(item.func :: TEXT))
+           format('NULL::double precision as %I',
+                  get_partial_aggregate_col_name(field_index, item.field, lower(item.func :: TEXT))
+           )
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -81,46 +113,75 @@ SELECT CASE
            format('NULL::bigint as group_time, %s', field_list)
        END
 FROM
-    (SELECT array_to_string(ARRAY(SELECT get_combine_partial_aggregate_zero_value_item_sql(i)
-                                  FROM unnest(items) i), ', ') AS field_list) AS field_sql;
+    (
+        SELECT array_to_string(
+                   ARRAY(
+                       SELECT get_combine_partial_aggregate_zero_value_item_sql(ord, ROW (field, func))
+                       FROM unnest(items) WITH ORDINALITY AS x(field, func, ord)
+                   )
+                   , ', ') AS field_list
+    ) AS field_sql;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
-CREATE OR REPLACE FUNCTION get_partial_aggregate_column_def_item_sql(item select_item)
+CREATE OR REPLACE FUNCTION get_partial_aggregate_column_def_item_sql(field_index BIGINT, item select_item)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN item.func = 'AVG' THEN
-           format('"%1$s_avg_sum" double precision, "%1$s_avg_count" numeric', item.field)
+           format('%I double precision, %I numeric',
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_sum'),
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_count')
+           )
        WHEN item.func = 'COUNT' THEN
-           format('"%1$s_count" numeric', item.field)
+           format('%I numeric',
+                  get_partial_aggregate_col_name(field_index, item.field, 'count'))
        ELSE
-           format('"%1$s_%2$s" double precision', item.field, lower(item.func :: TEXT))
+           format('%I double precision',
+                  get_partial_aggregate_col_name(field_index, item.field, lower(item.func :: TEXT)))
        END;
 $BODY$ LANGUAGE 'sql' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_partial_aggregate_column_def(query ioql_query, items select_item [], agg aggregate_type)
+CREATE OR REPLACE FUNCTION get_partial_aggregate_column_def(query ioql_query)
     RETURNS TEXT AS $BODY$
 SELECT CASE
-       WHEN agg.group_field IS NOT NULL THEN
-           format('%s, group_time bigint, %s', get_field_def(query.project_id, query.namespace_name, agg.group_field),
+       WHEN (query.aggregate).group_field IS NOT NULL THEN
+           format('%I %s, group_time bigint, %s', (query.aggregate).group_field,
+                  get_field_type(query.namespace_name, (query.aggregate).group_field),
                   field_list)
        ELSE
            format('group_time bigint, %s', field_list)
        END
 FROM
-    (SELECT array_to_string(ARRAY(SELECT get_partial_aggregate_column_def_item_sql(i)
-                                  FROM unnest(items) i), ', ') AS field_list) AS field_sql;
+    (
+        SELECT array_to_string(
+                   ARRAY(
+                       SELECT get_partial_aggregate_column_def_item_sql(ord, ROW (field, func))
+                       FROM unnest(query.select_items) WITH ORDINALITY AS x(field, func, ord)
+                   ), ', ') AS field_list
+    ) AS field_sql;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_finalize_aggregate_item_sql(item select_item)
+
+CREATE OR REPLACE FUNCTION get_finalize_aggregate_item_sql(field_index BIGINT, item select_item)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN item.func = 'AVG' THEN
-           format('sum("%1$s_avg_sum")/sum("%1$s_avg_count") as "avg(%1$s)"', item.field)
+           format('sum(%2$I)/sum(%3$I) AS %1$I',
+                  get_result_aggregate_column_name(item.field, item.func),
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_sum'),
+                  get_partial_aggregate_col_name(field_index, item.field, 'avg_count')
+           )
        WHEN item.func = 'COUNT' THEN
-           format('sum("%1$s_count") as "sum(%1$s)"', item.field)
+           format('sum(%2$I) AS %1$I',
+                  get_result_aggregate_column_name(item.field, item.func),
+                  get_partial_aggregate_col_name(field_index, item.field, 'count')
+           )
        ELSE
-           format('%2$s("%1$s_%2$s") as "%2$s(%1$s)"', item.field, lower(item.func :: TEXT))
+           format('%1$s(%3$I) AS %2$I',
+                  lower(item.func :: TEXT),
+                  get_result_aggregate_column_name(item.field, item.func),
+                  get_partial_aggregate_col_name(field_index, item.field, lower(item.func :: TEXT))
+           )
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -133,60 +194,34 @@ SELECT CASE
            format('group_time as time, %s', field_list)
        END
 FROM
-    (SELECT array_to_string(ARRAY(SELECT get_finalize_aggregate_item_sql(i)
-                                  FROM unnest(items) i), ', ') AS field_list) AS field_sql;
+    (
+        SELECT array_to_string(
+                   ARRAY(
+                       SELECT get_finalize_aggregate_item_sql(ord, ROW (field, func))
+                       FROM unnest(items) WITH ORDINALITY AS x(field, func, ord))
+                   , ', ') AS field_list
+    ) AS field_sql;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
-CREATE OR REPLACE FUNCTION get_finalize_aggregate_column_def_item_sql(item select_item)
-    RETURNS TEXT AS $BODY$
-SELECT CASE
-       WHEN item.func = 'AVG' THEN
-           format('"avg(%s)" double precision', item.field)
-       WHEN item.func = 'COUNT' THEN
-           format('"count(%s)" numeric', item.field)
-       ELSE
-           format('"%2$s(%1$s)" double precision', item.field, lower(item.func :: TEXT))
-       END;
-$BODY$ LANGUAGE SQL IMMUTABLE STRICT;
-
-
-CREATE OR REPLACE FUNCTION get_finalize_aggregate_column_def(query ioql_query, items select_item [], agg aggregate_type)
-    RETURNS TEXT AS $BODY$
-SELECT CASE
-       WHEN agg.group_field IS NOT NULL THEN
-           format('%s, time bigint, %s', get_field_def(query.project_id, query.namespace_name, agg.group_field),
-                  field_list)
-       ELSE
-           format('time bigint, %s', field_list)
-       END
-FROM
-    (SELECT array_to_string(ARRAY(SELECT get_finalize_aggregate_column_def_item_sql(i)
-                                  FROM unnest(items) i), ', ') AS field_list) AS field_sql;
-$BODY$ LANGUAGE SQL IMMUTABLE STRICT;
-
-
-CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query, dt data_tables,
+CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query, dt data_table,
                                                   additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT AS
 $BODY$
 DECLARE
-    ns            namespace_type;
     select_clause TEXT;
 BEGIN
-    ns := ROW (query.project_id, query.namespace_name, 1);
     select_clause :=
-    'SELECT ' || get_partial_aggregate_sql(query.select_field, query.aggregate);
+    'SELECT ' || get_partial_aggregate_sql(query.select_items, query.aggregate);
     RETURN base_query_raw(
         select_clause,
-        format('FROM %s', dt.table_name),
+        format('FROM %s', dt.table_oid),
         get_where_clause(
-            default_predicates(ns, query, dt.total_partitions),
-            additional_constraints,
-            get_required_fields_predicate(dt.table_name :: TEXT, query)
+            default_predicates(query, dt.total_partitions),
+            additional_constraints
         ),
         get_groupby_clause(query.aggregate),
-        get_agg_orderby_clause(query), --need to order if will limit
+        get_orderby_clause_agg(query), --need to order if will limit
         get_limit_clause(query.limit_rows + 1));
 END
 $BODY$
@@ -198,39 +233,46 @@ CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_sql(
     query                  ioql_query,
     part                   namespace_partition_type,
     additional_constraints TEXT DEFAULT NULL)
-    RETURNS TEXT AS $BODY$
-SELECT format('SELECT * FROM (%s) as combined_partition LIMIT %L', string_agg(code_part, ' UNION ALL '
-ORDER BY table_time DESC), query.limit_rows +
-                           1) -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
+    RETURNS TEXT AS
+$BODY$
+SELECT format('SELECT * FROM (%s) as combined_partition LIMIT %L',
+              string_agg(code_part, ' UNION ALL '
+              ORDER BY table_time DESC),
+              query.limit_rows +
+              1) -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
 FROM
-    (SELECT
-         '(' || code || ')' code_part,
-         GREATEST(dt.start_time, dt.end_time) AS table_time
-     FROM
-             get_data_tables_for_partitions_time_desc(part) dt,
-         LATERAL base_query_agg_partial(query, dt, additional_constraints) code) f;
+    (
+        SELECT
+            '(' || code || ')' code_part,
+            GREATEST(dt.start_time, dt.end_time) AS table_time
+        FROM get_data_tables_for_partitions_time_desc(part) dt,
+            LATERAL base_query_agg_partial(query, dt, additional_constraints) code
+    ) f;
 $BODY$ LANGUAGE SQL IMMUTABLE;
 
 
-CREATE OR REPLACE FUNCTION get_max_time_on_partition(part namespace_partition_type, add_constraint TEXT)
-    RETURNS BIGINT AS $BODY$
+CREATE OR REPLACE FUNCTION get_max_time_on_partition(part namespace_partition_type, additional_constraints TEXT)
+    RETURNS BIGINT AS
+$BODY$
 DECLARE
     time           BIGINT;
-    data_table_row data_tables;
+    data_table_row data_table;
 BEGIN
     time := NULL;
+
     FOR data_table_row IN
     SELECT *
     FROM get_data_tables_for_partitions_time_desc(part) LOOP
         EXECUTE format(
             $$
-         SELECT time
-         FROM %s
-         %s
-         ORDER BY time DESC NULLS LAST
-         LIMIT 1
-      $$, data_table_row.table_name, get_where_clause(add_constraint))
+                SELECT time
+                FROM %s
+                %s
+                ORDER BY time DESC NULLS LAST
+                LIMIT 1
+            $$, data_table_row.table_oid, get_where_clause(additional_constraints))
         INTO time;
+
         IF time IS NOT NULL THEN
             RETURN time;
         END IF;
@@ -249,29 +291,29 @@ SELECT format('SELECT * FROM (%s) as combined_node LIMIT %L',
               coalesce(
                   string_agg(code_part, ' UNION ALL '),
                   format('SELECT %s WHERE FALSE',
-                         get_combine_partial_aggregate_zero_value_sql(query.select_field, query.aggregate))
+                         get_combine_partial_aggregate_zero_value_sql(query.select_items, query.aggregate))
               ), query.limit_rows + 1)
 -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
 FROM
-    (SELECT '(' || code || ')' code_part
-     FROM get_partitions_for_namespace(get_namespace(query)) parts,
-             ioql_query_local_partition_agg_limit_rows_sql(query, parts, additional_constraints) AS code) f;
+    (
+        SELECT '(' || code || ')' code_part
+        FROM get_partitions_for_namespace(query.namespace_name) parts,
+            LATERAL ioql_query_local_partition_agg_limit_rows_sql(query, parts, additional_constraints) AS code
+    ) AS f;
 $BODY$ LANGUAGE SQL IMMUTABLE;
 
 
-CREATE OR REPLACE FUNCTION get_time_periods_limit(ns            namespace_type, additional_constraints TEXT,
-                                                  period_length BIGINT, num_periods INT)
+CREATE OR REPLACE FUNCTION get_time_periods_limit(namespace_name NAME, additional_constraints TEXT,
+                                                  period_length  BIGINT, num_periods INT)
     RETURNS time_range LANGUAGE SQL STABLE AS
 $BODY$
 -- start and end inclusive
-SELECT periods.*
+SELECT (get_time_periods_limit_for_max(max_time.max_time, period_length, num_periods)).*
 FROM
-(
-    SELECT max(times) AS time
-    FROM get_partitions_for_namespace(ns) parts,
-            get_max_time_on_partition(parts, additional_constraints) times
-) AS max_time,
-        get_time_periods_limit_for_max(max_time.time, period_length, num_periods) AS periods
+    (
+        SELECT max(get_max_time_on_partition(parts, additional_constraints)) AS max_time
+        FROM get_partitions_for_namespace(namespace_name) parts
+    ) AS max_time
 $BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_grouped_sql(query                  ioql_query,
@@ -280,16 +322,17 @@ CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_grouped_sql(query          
 $BODY$
 DECLARE
     trange        time_range;
-    ns            namespace_type;
     ungrouped_sql TEXT;
     grouped_sql   TEXT;
 BEGIN
-    ns := get_namespace(query);
     IF query.limit_time_periods IS NOT NULL THEN
-        trange := get_time_periods_limit(ns, combine_predicates(default_predicates(ns, query), additional_constraints),
-                                         (query.aggregate).group_time, query.limit_time_periods);
+        trange := get_time_periods_limit(query.namespace_name,
+                                         combine_predicates(default_predicates(query), additional_constraints),
+                                         (query.aggregate).group_time,
+                                         query.limit_time_periods);
         additional_constraints := combine_predicates(
-            format('time >= %L AND time <=%L', trange.start_time, trange.end_time), additional_constraints);
+            format('time >= %L AND time <=%L', trange.start_time, trange.end_time),
+            additional_constraints);
     END IF;
     ungrouped_sql := ioql_query_local_node_agg_ungrouped_sql(query, additional_constraints);
 
@@ -303,10 +346,10 @@ BEGIN
             %4$s
             LIMIT %5$L
         $$,
-        get_combine_partial_aggregate_sql(query.select_field, query.aggregate),
+        get_combine_partial_aggregate_sql(query.select_items, query.aggregate),
         ungrouped_sql,
         get_groupby_clause(query.aggregate),
-        get_agg_orderby_clause(query),
+        get_orderby_clause_agg(query),
         query.limit_rows);
 
 
@@ -328,7 +371,7 @@ $BODY$;
 --------------- CLUSTER FUNCTIONS ------------
 
 
-CREATE OR REPLACE FUNCTION ioql_exec_query_agg_without_limit_sql(query ioql_query, ns namespace_type)
+CREATE OR REPLACE FUNCTION ioql_exec_query_agg_without_limit_sql(query ioql_query)
     RETURNS TEXT LANGUAGE SQL STABLE AS $BODY$
 --function aggregates partials across nodes.
 SELECT format(
@@ -336,14 +379,14 @@ SELECT format(
           SELECT
             %1$s
           FROM  ioql_query_nodes_individually(
-                  get_cluster_table(%4$L::namespace_type), %5$L, 'ioql_query_local_node_agg', %2$L
+                  get_cluster_table(%4$L), %5$L, 'ioql_query_local_node_agg', %2$L
                 ) as data(%2$s)
           %3$s
       $$,
-    get_finalize_aggregate_sql(query.select_field, query.aggregate),
-    get_partial_aggregate_column_def(query, query.select_field, query.aggregate),
+    get_finalize_aggregate_sql(query.select_items, query.aggregate),
+    get_partial_aggregate_column_def(query),
     get_groupby_clause(query.aggregate),
-    ns,
+    query.namespace_name,
     query)
 $BODY$;
 
@@ -351,10 +394,8 @@ CREATE OR REPLACE FUNCTION ioql_exec_query_agg(query ioql_query)
     RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
-    ns  namespace_type;
     sql TEXT;
 BEGIN
-    ns := ROW (query.project_id, query.namespace_name, 1);
     IF query.limit_time_periods IS NOT NULL THEN
         sql := format(
             $$
@@ -368,8 +409,8 @@ BEGIN
                 %2$s
                 %3$s
             $$,
-            ioql_exec_query_agg_without_limit_sql(query, ns),
-            get_agg_orderby_clause(query, 'time'),
+            ioql_exec_query_agg_without_limit_sql(query),
+            get_orderby_clause_agg(query, 'time'),
             get_limit_clause(query.limit_rows)
         );
 
@@ -384,8 +425,8 @@ BEGIN
                 %s
                 %s
             $$,
-            ioql_exec_query_agg_without_limit_sql(query, ns),
-            get_agg_orderby_clause(query, 'time'),
+            ioql_exec_query_agg_without_limit_sql(query),
+            get_orderby_clause_agg(query, 'time'),
             get_limit_clause(query.limit_rows));
 
         RAISE NOTICE E'Cross-node SQL:\n%\n', sql;

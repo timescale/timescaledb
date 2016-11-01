@@ -23,31 +23,34 @@ SELECT add_namespace('testNs' :: NAME);
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY['VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'series_0', 'double precision', FALSE, FALSE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'series_0', 'double precision', FALSE, FALSE,
+                 ARRAY ['TIME-VALUE'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'series_1', 'double precision', FALSE, FALSE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'series_1', 'double precision', FALSE, FALSE,
+                 ARRAY ['TIME-VALUE'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'series_2', 'double precision', FALSE, FALSE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'series_2', 'double precision', FALSE, FALSE,
+                 ARRAY ['TIME-VALUE'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'series_bool', 'boolean', FALSE, FALSE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'series_bool', 'boolean', FALSE, FALSE, ARRAY ['TIME-VALUE'] :: field_index_type []);
  add_field 
 -----------
  
@@ -55,35 +58,41 @@ SELECT add_field('testNs' :: NAME, 'series_bool', 'boolean', FALSE, FALSE, ARRAY
 
 \c Test1
 BEGIN;
-SELECT * FROM create_temp_copy_table_one_partition('copy_t',get_partition_for_key('dev1', 10::SMALLINT),10::SMALLINT);
+SELECT *
+FROM create_temp_copy_table_one_partition('copy_t', get_partition_for_key('dev1', 10 :: SMALLINT), 10 :: SMALLINT);
  create_temp_copy_table_one_partition 
 --------------------------------------
  copy_t
 (1 row)
 
 \COPY copy_t FROM 'data/ds1_dev1_1.tsv';
-SELECT * FROM insert_data_one_partition('copy_t',get_partition_for_key('dev1', 10::SMALLINT),10::SMALLINT);
+SELECT *
+FROM insert_data_one_partition('copy_t', get_partition_for_key('dev1', 10 :: SMALLINT), 10 :: SMALLINT);
  insert_data_one_partition 
 ---------------------------
  
 (1 row)
 
 COMMIT;
-SELECT close_data_table_end(dt.table_oid) FROM data_table dt WHERE dt.namespace_name = 'testNs';
+SELECT close_data_table_end(dt.table_oid)
+FROM data_table dt
+WHERE dt.namespace_name = 'testNs';
  close_data_table_end 
 ----------------------
  
 (1 row)
 
 BEGIN;
-SELECT * FROM create_temp_copy_table_one_partition('copy_t',get_partition_for_key('dev1', 10::SMALLINT),10::SMALLINT);
+SELECT *
+FROM create_temp_copy_table_one_partition('copy_t', get_partition_for_key('dev1', 10 :: SMALLINT), 10 :: SMALLINT);
  create_temp_copy_table_one_partition 
 --------------------------------------
  copy_t
 (1 row)
 
 \COPY copy_t FROM 'data/ds1_dev1_2.tsv';
-SELECT * FROM insert_data_one_partition('copy_t',get_partition_for_key('dev1', 10::SMALLINT),10::SMALLINT);
+SELECT *
+FROM insert_data_one_partition('copy_t', get_partition_for_key('dev1', 10 :: SMALLINT), 10 :: SMALLINT);
  insert_data_one_partition 
 ---------------------------
  
@@ -92,14 +101,16 @@ SELECT * FROM insert_data_one_partition('copy_t',get_partition_for_key('dev1', 1
 COMMIT;
 \c test2
 BEGIN;
-SELECT * FROM create_temp_copy_table_one_partition('copy_t',get_partition_for_key('dev2', 10::SMALLINT),10::SMALLINT);
+SELECT *
+FROM create_temp_copy_table_one_partition('copy_t', get_partition_for_key('dev2', 10 :: SMALLINT), 10 :: SMALLINT);
  create_temp_copy_table_one_partition 
 --------------------------------------
  copy_t
 (1 row)
 
 \COPY copy_t FROM 'data/ds1_dev2_1.tsv';
-SELECT * FROM insert_data_one_partition('copy_t',get_partition_for_key('dev2', 10::SMALLINT),10::SMALLINT);
+SELECT *
+FROM insert_data_one_partition('copy_t', get_partition_for_key('dev2', 10 :: SMALLINT), 10 :: SMALLINT);
  insert_data_one_partition 
 ---------------------------
  
@@ -133,7 +144,8 @@ COMMIT;
  testNs | partition_0_10       | table | postgres
 (6 rows)
 
-SELECT * FROM "testNs".cluster;
+SELECT *
+FROM "testNs".cluster;
         time         | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
@@ -148,10 +160,39 @@ SELECT * FROM "testNs".cluster;
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
 (10 rows)
 
-SELECT * FROM "testNs".distinct;
+SELECT *
+FROM "testNs".distinct;
    field   | value |  last_time_approx   
 -----------+-------+---------------------
  device_id | dev1  | 1258074000000000000
  device_id | dev2  | 1257894000000000000
 (2 rows)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
+                                                      json                                                       
+-----------------------------------------------------------------------------------------------------------------
+ {"time":1257987600000000000,"device_id":"dev1","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+ {"time":1257987600000000000,"device_id":"dev1","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
+ {"time":1257897600000000000,"device_id":"dev1","series_0":4.5,"series_1":5,"series_2":null,"series_bool":false}
+ {"time":1257894002000000000,"device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
+ {"time":1257894001000000000,"device_id":"dev1","series_0":3.5,"series_1":4,"series_2":null,"series_bool":null}
+ {"time":1257894000000001000,"device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
+ {"time":1257894000000000000,"device_id":"dev1","series_0":1.5,"series_1":1,"series_2":2,"series_bool":true}
+ {"time":1257894000000000000,"device_id":"dev2","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
+ {"time":1257894000000000000,"device_id":"dev1","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+ {"time":1257894000000000000,"device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+(10 rows)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate=> new_aggregate(10e9::BIGINT)
+                     ));
+                       json                        
+---------------------------------------------------
+ {"time":1257987600000000000,"sum(series_0)":3}
+ {"time":1257897600000000000,"sum(series_0)":4.5}
+ {"time":1257894000000000000,"sum(series_0)":14.5}
+(3 rows)
 

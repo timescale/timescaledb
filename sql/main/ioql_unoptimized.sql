@@ -1,5 +1,3 @@
-DROP TYPE IF EXISTS time_range CASCADE;
-CREATE TYPE time_range AS (start_time BIGINT, end_time BIGINT);
 
 CREATE OR REPLACE FUNCTION get_cluster_name(namespace_type)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
@@ -236,20 +234,7 @@ UNION
 )
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_required_fields_predicate(data_table TEXT, query ioql_query)
-    RETURNS TEXT LANGUAGE SQL IMMUTABLE STRICT AS
-$BODY$
-SELECT format(
-    'NOT EXISTS ((SELECT * FROM get_required_fields(%2$L)) EXCEPT ((SELECT field_name FROM data_fields WHERE table_name = %1$L::regclass)))',
-    data_table, query);
-$BODY$;
 
-CREATE OR REPLACE FUNCTION get_select_field_predicate(items select_item [])
-    RETURNS TEXT LANGUAGE SQL IMMUTABLE STRICT AS
-$BODY$
-SELECT string_agg(format('%I IS NOT NULL', field), ' AND ')
-FROM unnest(items);
-$BODY$;
 
 CREATE OR REPLACE FUNCTION get_partitioning_predicate(ns                       namespace_type,
                                                       partitioning_field_value TEXT,
@@ -268,23 +253,7 @@ FROM unnest(cond.predicates) AS p
 WHERE is_partition_key(ns, p.field) AND cond.conjunctive = 'AND' AND p.op = '='
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_one_field_predicate_clause(ns namespace_type, field_pred field_predicate)
-    RETURNS TEXT LANGUAGE SQL STABLE STRICT AS
-$BODY$
-SELECT format('(%1$s%2$s%3$L AND %1$s IS NOT NULL)', get_field_value_specifier(ns, field_pred.field), field_pred.op,
-              field_pred.constant)
-$BODY$;
 
-CREATE OR REPLACE FUNCTION get_field_predicate_clause(ns namespace_type, cond field_condition_type)
-    RETURNS TEXT LANGUAGE SQL STABLE STRICT AS
-$BODY$
-SELECT '(' || string_agg(field_info.where_pred, ' ' || cond.conjunctive || ' ') || ')'
-FROM unnest(cond.predicates) AS p,
-LATERAL (
-SELECT *
-FROM get_one_field_predicate_clause(ns, p)
-) AS field_info(where_pred);
-$BODY$;
 
 CREATE OR REPLACE FUNCTION combine_predicates(VARIADIC clauses TEXT [])
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
@@ -305,18 +274,7 @@ $BODY$
 SELECT format('%s(%s)', lower(select_i.func :: TEXT), select_i.field);
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_groupby_clause(agg aggregate_type)
-    RETURNS TEXT LANGUAGE SQL IMMUTABLE STRICT AS
-$BODY$
-SELECT CASE
-       WHEN agg IS NULL THEN
-           NULL
-       WHEN agg.group_field IS NOT NULL THEN
-           format('GROUP BY %s, group_time', agg.group_field)
-       ELSE
-           'GROUP BY group_time'
-       END;
-$BODY$;
+
 --
 CREATE OR REPLACE FUNCTION get_groupby_clause(ns namespace_type, agg aggregate_type)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
@@ -355,18 +313,6 @@ SELECT CASE
        ELSE
            'ORDER BY time DESC NULLS LAST'
        END;
-$BODY$;
-
-
-CREATE OR REPLACE FUNCTION default_predicates(ns namespace_type, query ioql_query, total_partitions INT = NULL)
-    RETURNS TEXT LANGUAGE SQL STABLE AS
-$BODY$
-SELECT combine_predicates(
-    get_time_predicate(query.time_condition),
-    get_field_predicate_clause(ns, query.field_condition),
-    get_select_field_predicate(query.select_field),
-    get_partitioning_predicate(ns, get_partitioning_field_value(ns, query.field_condition), total_partitions)
-);
 $BODY$;
 
 
@@ -486,16 +432,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_time_periods_limit_for_max(max_time BIGINT, period_length BIGINT, num_periods INT)
-    RETURNS time_range LANGUAGE SQL STABLE AS
-$BODY$
---todo unit test;
--- start and end inclusive
-SELECT ROW (
-       (max_time - (max_time % period_length)) - (period_length :: BIGINT * (num_periods - 1) :: BIGINT),
-       max_time
-) :: time_range;
-$BODY$;
+
 
 CREATE OR REPLACE FUNCTION group_field_agg(query                  ioql_query,
                                            data_table             REGCLASS,
@@ -630,22 +567,7 @@ SELECT CASE
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION no_cluster_table(query ioql_query)
-    RETURNS TABLE(json TEXT) LANGUAGE PLPGSQL STABLE AS
-$BODY$
-BEGIN
-    IF EXISTS(
-        SELECT 1
-        FROM system.namespaces
-        WHERE name = query.namespace_name AND project_id = query.project_id
-    ) THEN
-        RAISE NOTICE 'empty result, cluster table not found %', query;
-        RETURN;
-    ELSE
-        RAISE EXCEPTION 'Namespace ''%'' does not exist in project ''%'' ', query.namespace_name, query.project_id;
-    END IF;
-END
-$BODY$;
+
 
 
 CREATE OR REPLACE FUNCTION ioql_exec_query_unoptimized(query ioql_query)

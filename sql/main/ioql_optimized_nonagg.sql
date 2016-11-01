@@ -8,28 +8,25 @@ CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every(query 
     RETURNS SETOF RECORD LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    ns                        namespace_type;
     cnt                       INT;
     total_cnt                 INT := 0;
     distinct_cnt              INT := 0;
-    data_table_row            data_tables;
+    data_table_row            data_table;
     query_sql_scan_base_table TEXT;
     query_sql_scan            TEXT;
     query_sql_jump            TEXT;
     distinct_value_cnt        JSONB;
     distinct_value_original   JSONB;
 BEGIN
-    ns := ROW (query.project_id, query.namespace_name, 1);
-
-    IF is_partition_key(ns, (query.limit_by_field).field) THEN
+    IF get_partitioning_field_name(query.namespace_name) = (query.limit_by_field).field THEN
         SELECT jsonb_object_agg(value, (query.limit_by_field).count)
         INTO distinct_value_cnt
-        FROM get_distinct_values_local(ns, (query.limit_by_field).field) AS value
-        WHERE get_partition_for_key(value, part.total_partitions) = part.partition_no;
+        FROM get_distinct_values_local(query.namespace_name, (query.limit_by_field).field) AS value
+        WHERE get_partition_for_key(value, part.total_partitions) = part.partition_number;
     ELSE
         SELECT jsonb_object_agg(value, (query.limit_by_field).count)
         INTO distinct_value_cnt
-        FROM get_distinct_values_local(ns, (query.limit_by_field).field) AS value;
+        FROM get_distinct_values_local(query.namespace_name, (query.limit_by_field).field) AS value;
     END IF;
 
     distinct_value_original := distinct_value_cnt;
@@ -38,7 +35,7 @@ BEGIN
         $$
             CREATE TEMP TABLE results (%s)
         $$,
-        get_column_def_list(query));
+        get_result_column_def_list_nonagg(query));
 
     SELECT count(*)
     INTO distinct_cnt
@@ -47,12 +44,10 @@ BEGIN
     query_sql_scan_base_table :=
     -- query for easy limit 10000
     base_query_raw(
-        format('SELECT %s::bigint as time, %s',
-               get_time_clause((query.aggregate).group_time), get_field_list(query)),
+        get_full_select_clause_nonagg(query),
         'FROM %1$s',
         get_where_clause(
-            get_time_predicate(query.time_condition),
-            get_required_fields_predicate('%1$s', query)
+            get_time_predicate(query.time_condition)
         ),
         NULL,
         'ORDER BY time DESC NULLS LAST',
@@ -62,43 +57,42 @@ BEGIN
     query_sql_scan :=
     format(
         $$
-            SELECT %s::bigint as time, %s
+            %s
             FROM (%s) simple_scan
             %s
         $$,
-        get_time_clause((query.aggregate).group_time), get_field_list(query),
+        get_full_select_clause_nonagg(query),
         query_sql_scan_base_table,
         get_where_clause(
-            get_field_predicate_clause(ns, query.field_condition),
-            get_select_field_predicate(query.select_field),
+            get_field_predicate_clause(query.field_condition),
+            get_select_field_predicate(query.select_items),
             format('%s IS NOT NULL', (query.limit_by_field).field)
         )
     );
 
     query_sql_jump :=
     base_query_raw(
-        get_full_select_clause(ns, query),
+        get_full_select_clause_nonagg(query),
         'FROM %1$s',
         get_where_clause(
-            default_predicates(ns, query, part.total_partitions),
-            format('(%s)::text = %s AND %s is not null', get_field_value_specifier(ns, (query.limit_by_field).field),
-                   'distinct_value.key', (query.limit_by_field).field),
-            get_required_fields_predicate('%1$s', query),
+            default_predicates(query, part.total_partitions),
+            format('%1$I::text = %2$s AND %1$I IS NOT NULL', (query.limit_by_field).field,
+                   'distinct_value.key'),
             '(time < min_table.min_time OR min_table.min_time IS NULL)'
         ),
-        get_groupby_clause(ns, query.aggregate),
+        get_groupby_clause(query.aggregate),
         'ORDER BY time DESC NULLS LAST, ' || (query.limit_by_field).field,
         'LIMIT distinct_value.value::int');
 
     FOR data_table_row IN SELECT *
                           FROM get_data_tables_for_partitions_time_desc(part) LOOP
         RAISE NOTICE E'ioql_query_local_partition_rows_limit_by_every scan: \n % \n', format(query_sql_scan,
-                                                                                             data_table_row.table_name);
+                                                                                             data_table_row.table_oid);
         EXECUTE format(
             $$
                 WITH inserted as (
                     INSERT INTO results
-                    SELECT time, %2$s
+                    %2$s
                     FROM
                     (
                         SELECT
@@ -113,7 +107,9 @@ BEGIN
                 SELECT count(*)
                 FROM inserted
             $$,
-            format(query_sql_scan, data_table_row.table_name), get_field_list(query), (query.limit_by_field).field
+            format(query_sql_scan, data_table_row.table_oid),
+            get_full_select_clause_nonagg(query),
+            (query.limit_by_field).field
         )
         USING distinct_value_cnt INTO cnt;
 
@@ -148,7 +144,7 @@ BEGIN
 
 
         RAISE NOTICE E'ioql_query_local_partition_rows_limit_by_every jump %:\n %\n',
-        total_cnt, format(query_sql_jump, data_table_row.table_name);
+        total_cnt, format(query_sql_jump, data_table_row.table_oid);
 
         EXECUTE format(
             $$
@@ -162,7 +158,7 @@ BEGIN
                 ) min_table on (distinct_value.key = min_table.gp),
                 LATERAL(%1$s) every_jump
             $$,
-            format(query_sql_jump, data_table_row.table_name),
+            format(query_sql_jump, data_table_row.table_oid),
             (query.limit_by_field).field)
         USING distinct_value_cnt;
 
@@ -212,7 +208,7 @@ CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit(query i
     RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
-    data_table_row data_tables;
+    data_table_row data_table;
     cnt            INT;
     total_cnt      INT := 0;
     query_sql      TEXT;
@@ -220,15 +216,19 @@ BEGIN
     FOR data_table_row IN
     SELECT *
     FROM get_data_tables_for_partitions_time_desc(part) LOOP
-        query_sql :=  base_query_builder(
-            query,
-            data_table_row.table_name,
-            get_required_fields_predicate(data_table_row.table_name :: TEXT, query),
-            get_full_select_clause(get_namespace(query), query),
-            get_limit_clause(query.limit_rows - total_cnt),
-            part.total_partitions
+
+        query_sql :=  base_query_raw(
+            get_full_select_clause_nonagg(query),
+            get_from_clause(data_table_row),
+            get_where_clause(
+                default_predicates(query, part.total_partitions)
+            ),
+            get_groupby_clause(query.aggregate),
+            get_orderby_clause_nonagg(query),
+            get_limit_clause(query.limit_rows - total_cnt)
         );
-        RAISE NOTICE E'ioql_query_local_partition_rows_regular_limit table: % SQL:\n% ', data_table_row, query_sql;
+
+        RAISE NOTICE E'ioql_query_local_partition_rows_regular_limit table: %, SQL:\n% ', data_table_row, query_sql;
         RETURN QUERY EXECUTE query_sql;
 
         GET DIAGNOSTICS cnt := ROW_COUNT;
@@ -253,7 +253,7 @@ BEGIN
                 SELECT *
                 FROM ioql_query_local_partition_rows_regular_limit($1, $2) AS res(%s)
             $$,
-            get_column_def_list(query))
+            get_result_column_def_list_nonagg(query))
         USING query, part;
     ELSE
         RETURN QUERY EXECUTE format(
@@ -261,7 +261,7 @@ BEGIN
                 SELECT *
                 FROM ioql_query_local_partition_rows_limit_by_every($1, $2) AS res(%s)
             $$,
-            get_column_def_list(query))
+            get_result_column_def_list_nonagg(query))
         USING query, part;
     END IF;
 END
@@ -277,33 +277,34 @@ BEGIN
     IF NOT (query.limit_by_field IS NULL) THEN
         RETURN QUERY EXECUTE format(
             $$
-                SELECT time, %3$s
+                SELECT %3$s
                 FROM
                 (
                     SELECT
                         ROW_NUMBER() OVER (PARTITION BY %2$s ORDER BY time DESC NULLS LAST) as rank,
                         partition_results.*
-                    FROM get_partitions_for_namespace(get_namespace($1)) parts,
+                    FROM get_partitions_for_namespace($1.namespace_name) parts,
                     ioql_query_local_partition_rows($1, parts) as partition_results(%1$s)
                 ) AS across_partitions
                 WHERE rank <= ($1.limit_by_field).count
                 ORDER BY time DESC NULLS LAST, %2$s
                 LIMIT $1.limit_rows
             $$,
-            get_column_def_list(query),
+            get_result_column_def_list_nonagg(query),
             (query.limit_by_field).field,
-            get_field_list(query))
+            get_result_column_list_nonagg(query)
+        )
         USING query;
     ELSE
         RETURN QUERY EXECUTE format(
             $$
                 SELECT partition_results.*
-                FROM get_partitions_for_namespace(get_namespace($1)) parts,
+                FROM get_partitions_for_namespace($1.namespace_name) parts,
                 ioql_query_local_partition_rows($1, parts) as partition_results(%1$s)
                 ORDER BY time DESC NULLS LAST
                 LIMIT $1.limit_rows
             $$,
-            get_column_def_list(query))
+            get_result_column_def_list_nonagg(query))
         USING query;
     END IF;
 END
@@ -311,7 +312,7 @@ $BODY$;
 
 --------------- CLUSTER FUNCTIONS ------------
 
-CREATE OR REPLACE FUNCTION ioql_exec_query_nonagg_without_limit(query ioql_query, ns namespace_type)
+CREATE OR REPLACE FUNCTION ioql_exec_query_nonagg_without_limit(query ioql_query)
     RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS $BODY$
 --function aggregates partials across nodes.
 BEGIN
@@ -320,51 +321,50 @@ BEGIN
             SELECT *
             FROM
               ioql_query_nodes_individually (
-                get_cluster_table($2::namespace_type), $1, 'ioql_query_local_node_nonagg', get_column_def_list($1)
+                get_cluster_table($1.namespace_name), $1, 'ioql_query_local_node_nonagg', get_result_column_def_list_nonagg($1)
               ) as res(%1$s)
             ORDER BY time DESC NULLS LAST
-            LIMIT $3
+            LIMIT $1.limit_rows
         $$,
-        get_column_def_list(query))
-    USING query, ns, query.limit_rows;
+        get_result_column_def_list_nonagg(query))
+    USING query;
 END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_exec_query_nonagg(query ioql_query)
     RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS $BODY$
 DECLARE
-    ns namespace_type;
 BEGIN
-    ns := ROW (query.project_id, query.namespace_name, 1);
     IF query.limit_by_field IS NOT NULL THEN
         RETURN QUERY EXECUTE format(
             $$
-                SELECT time, %4$s
+                SELECT %4$s
                 FROM (
                     SELECT
                         ROW_NUMBER() OVER (PARTITION BY %2$s ORDER BY time DESC NULLS LAST) AS rank,
                          *
-                    FROM  ioql_exec_query_nonagg_without_limit($1, $2) as ieq(%1$s)
+                    FROM  ioql_exec_query_nonagg_without_limit($1) as ieq(%1$s)
                 ) as ranked
-                WHERE rank <= $3 OR time IS NULL
+                WHERE rank <= $2 OR time IS NULL
                 ORDER BY time DESC NULLS LAST, %2$s
                 LIMIT $1.limit_rows
             $$,
-            get_column_def_list(query),
+            get_result_column_def_list_nonagg(query),
             (query.limit_by_field).field,
             query,
-            get_field_list(query))
-        USING query, ns, (query.limit_by_field).count;
+            get_result_column_list_nonagg(query)
+        )
+        USING query, (query.limit_by_field).count;
     ELSE
         RETURN QUERY EXECUTE format(
             $$
                 SELECT *
-                FROM  ioql_exec_query_nonagg_without_limit($1, $2) as ieq(%1$s)
+                FROM  ioql_exec_query_nonagg_without_limit($1) as ieq(%1$s)
                 ORDER BY time DESC NULLS LAST
                 LIMIT $1.limit_rows
             $$,
-            get_column_def_list(query))
-        USING query, ns;
+            get_result_column_def_list_nonagg(query))
+        USING query;
 
     END IF;
 END;
