@@ -9,7 +9,8 @@ DECLARE
 BEGIN
     schema_name := format('remote_%s', database_name);
     INSERT INTO node (database_name, schema_name, server_name, hostname)
-    VALUES (database_name, schema_name, database_name, hostname);
+    VALUES (database_name, schema_name, database_name, hostname)
+    ON CONFLICT DO NOTHING;
 END
 $BODY$;
 
@@ -22,7 +23,8 @@ $BODY$
 DECLARE
 BEGIN
     INSERT INTO cluster_user (username, password)
-    VALUES (username, password);
+    VALUES (username, password)
+    ON CONFLICT DO NOTHING;
 END
 $BODY$;
 

@@ -3,6 +3,7 @@
 --------------------------------------
 DO $CREATETYPES$
 BEGIN
+    LOCK pg_type;
     IF NOT EXISTS(SELECT 1
                   FROM pg_type
                   WHERE typname = 'field_predicate_op') THEN
@@ -34,11 +35,11 @@ BEGIN
             limit_time_periods INT, --limit # of time periods, only aggregates
             limit_by_field     limit_by_field_type -- limit by every field value, only non-aggregate; field must be distinct
         );
+
+        CREATE TYPE time_range AS (start_time BIGINT, end_time BIGINT);
+
+        CREATE TYPE namespace_partition_type AS (namespace_name NAME, partition_number SMALLINT, total_partitions SMALLINT);
     END IF;
-
-    CREATE TYPE time_range AS (start_time BIGINT, end_time BIGINT);
-
-    CREATE TYPE namespace_partition_type AS (namespace_name NAME, partition_number SMALLINT, total_partitions SMALLINT);
 END
 $CREATETYPES$;
 ---------------------------------------------

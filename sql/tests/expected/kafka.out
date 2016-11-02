@@ -66,10 +66,16 @@ SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
             0 |         100
 (1 row)
 
-SELECT * FROM kafka_get_start_and_next_offset('topic', 1::SMALLINT, 0);
+SELECT * FROM kafka_get_start_and_next_offset('topic', 1::SMALLINT, 25);
  start_offset | next_offset 
 --------------+-------------
-            0 |           0
+           25 |          25
+(1 row)
+
+SELECT * FROM kafka_get_start_and_next_offset('topic2', 0::SMALLINT, 29);
+ start_offset | next_offset 
+--------------+-------------
+           29 |          29
 (1 row)
 
 \c test2
@@ -96,10 +102,11 @@ SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
 (1 row)
 
 SELECT * FROM kafka_offset_local;
- topic | partition_number | start_offset | next_offset | database_name 
--------+------------------+--------------+-------------+---------------
- topic |                0 |            0 |         100 | Test1
- topic |                1 |            0 |           0 | Test1
- topic |                0 |          101 |         101 | Test1
-(3 rows)
+ topic  | partition_number | start_offset | next_offset | database_name 
+--------+------------------+--------------+-------------+---------------
+ topic  |                0 |            0 |         100 | Test1
+ topic  |                1 |           25 |          25 | Test1
+ topic2 |                0 |           29 |          29 | Test1
+ topic  |                0 |          101 |         101 | Test1
+(4 rows)
 

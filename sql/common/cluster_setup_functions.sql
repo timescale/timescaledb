@@ -1,4 +1,4 @@
-CREATE SCHEMA _sysinternal;
+CREATE SCHEMA IF NOT EXISTS _sysinternal;
 
 CREATE OR REPLACE FUNCTION _sysinternal.create_user_mapping(
     cluster_user_row cluster_user,

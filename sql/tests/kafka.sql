@@ -23,7 +23,8 @@ SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
 SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
 SELECT * FROM kafka_set_next_offset('topic', 0::SMALLINT, 0, 100);
 SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
-SELECT * FROM kafka_get_start_and_next_offset('topic', 1::SMALLINT, 0);
+SELECT * FROM kafka_get_start_and_next_offset('topic', 1::SMALLINT, 25);
+SELECT * FROM kafka_get_start_and_next_offset('topic2', 0::SMALLINT, 29);
 \c test2
 SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
 \set ON_ERROR_STOP 0
