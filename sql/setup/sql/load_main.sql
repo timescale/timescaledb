@@ -1,0 +1,23 @@
+\ir ../../main/cluster_user_triggers.sql
+\ir ../../main/node_triggers.sql
+\ir ../../main/namespace_triggers.sql
+\ir ../../main/field_triggers.sql
+\ir ../../main/partitioning.sql
+\ir ../../main/schema_info.sql
+\ir ../../main/names.sql
+\ir ../../main/tables.sql
+\ir ../../main/data_table_triggers.sql
+\ir ../../main/partition_table_triggers.sql
+\ir ../../main/data_table_constructors.sql
+\ir ../../main/insert.sql
+
+\ir ../../main/ioql.sql
+\ir ../../main/ioql_result_schema_nonagg.sql
+\ir ../../main/ioql_result_schema_agg.sql
+\ir ../../main/ioql_schema_info.sql
+\ir ../../main/ioql_sql_gen.sql
+\ir ../../main/ioql_remote_calls.sql
+\ir ../../main/ioql_optimized_agg.sql
+\ir ../../main/ioql_distinct_queries.sql
+\ir ../../main/ioql_optimized_nonagg.sql
+\ir ../../main/ioql_optimized.sql

@@ -6,13 +6,13 @@ CREATE DATABASE "Test1";
 CREATE DATABASE test2;
 
 \c meta
-\ir load_common.sql
-\ir load_meta.sql
+\ir ../../setup/load_common.sql
+\ir ../../setup/load_meta.sql
 
 \c Test1
-\ir load_common.sql
-\ir load_main.sql
+\ir ../../setup/load_common.sql
+\ir ../../setup/load_main.sql
 
 \c test2
-\ir load_common.sql
-\ir load_main.sql
+\ir ../../setup/load_common.sql
+\ir ../../setup/load_main.sql
