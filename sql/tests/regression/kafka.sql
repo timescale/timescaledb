@@ -2,9 +2,9 @@
 
 \ir create_clustered_db.sql
 \c Test1
-\ir load_kafka.sql
+\ir ../../setup/load_kafka.sql
 \c test2
-\ir load_kafka.sql
+\ir ../../setup/load_kafka.sql
 
 \set ECHO ALL
 \c meta
