@@ -2,9 +2,9 @@
 
 \ir create_clustered_db.sql
 \c Test1
-\ir ../../setup/load_kafka.sql
+\ir ../../setup/sql/load_kafka.sql
 \c test2
-\ir ../../setup/load_kafka.sql
+\ir ../../setup/sql/load_kafka.sql
 
 \set ECHO ALL
 \c meta
@@ -34,8 +34,3 @@ SELECT * FROM kafka_set_next_offset('topic', 0::SMALLINT, 100, 101);
 \c Test1
 SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
 SELECT * FROM kafka_offset_local;
-
-
-
-
-
