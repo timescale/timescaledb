@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 UPDATE=${UPDATE:-false}
 
 golden_test() {
