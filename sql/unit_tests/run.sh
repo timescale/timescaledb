@@ -9,14 +9,14 @@ set -e
 POSTGRES_HOST=${POSTGRES_HOST:-localhost}
 POSTGRES_USER=${POSTGRES_USER:-postgres}
 RESET_POSTGRES_DB=${RESET_POSTGRES_DB:-true}
-
+INSTALL_DB=${INSTALL_DB:-Test1}
 echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER"
 
 if [ $RESET_POSTGRES_DB == "true" ]; then
     echo "Cleaning up DB"
 
     psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -f ../tests/idempotent_include.sql
-    psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -d meta -f ../plpgunit/install/1.install-unit-test.sql
+    psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -d $INSTALL_DB -f ../plpgunit/install/1.install-unit-test.sql
 fi
 
 if [ "$#" -ne 0 ]; then
@@ -27,7 +27,7 @@ fi
 
 for test in $tests; do
     echo 'Setting up:' $test
-    psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -f $test
+    psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB -v ON_ERROR_STOP=1 -f $test
 done
 
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -f ./start_tests.sql
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB -v ON_ERROR_STOP=1 -f ./start_tests.sql
