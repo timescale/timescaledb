@@ -15,5 +15,5 @@ There are three commands to run tests: (1) all tests, (2) regression tests, and
 ```bash
 make test
 make test-regression
-make tests-unit
+make test-unit
 ```
