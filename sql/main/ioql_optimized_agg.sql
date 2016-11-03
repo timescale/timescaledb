@@ -205,7 +205,7 @@ $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
 CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query, dt data_table,
-                                                  additional_constraints TEXT DEFAULT NULL)
+                                                   additional_constraints TEXT, limit_sub TEXT)
     RETURNS TEXT AS
 $BODY$
 DECLARE
@@ -222,56 +222,14 @@ BEGIN
         ),
         get_groupby_clause(query.aggregate),
         get_orderby_clause_agg(query), --need to order if will limit
-        get_limit_clause(query.limit_rows + 1));
+        'LIMIT ' || limit_sub
+    );
 END
 $BODY$
 LANGUAGE PLPGSQL STABLE;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows(
-    query                  ioql_query,
-    part                   namespace_partition_type,
-    additional_constraints TEXT DEFAULT NULL)
-    RETURNS SETOF RECORD AS
-$BODY$
-DECLARE
-    dt        data_table;
-    cnt_times INT;
-BEGIN
-    EXECUTE format(
-        $$
-            CREATE TEMP TABLE results (
-                %s
-            )
-        $$,
-        get_partial_aggregate_column_def(query));
 
-    FOR dt IN SELECT *
-              FROM get_data_tables_for_partitions_time_desc(part) LOOP
-        RAISE NOTICE 'q: %', format($$ INSERT INTO results %s $$,
-                                    base_query_agg_partial(query, dt, additional_constraints));
-        EXECUTE format($$ INSERT INTO results %s $$,
-                       base_query_agg_partial(query, dt, additional_constraints));
-        IF query.limit_rows IS NOT NULL THEN
-            --TODO: This can be optimized more. Each group needs to be closed. We need limt_rows closed groups not times
-            SELECT count(*)
-            INTO cnt_times
-            FROM (SELECT DISTINCT group_time
-                  FROM results) AS dis;
-            IF cnt_times >= query.limit_rows + 1
-            THEN -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
-                EXIT;
-            END IF;
-        END IF;
-    END LOOP;
 
-    RETURN QUERY SELECT *
-                 FROM results;
-    DROP TABLE results;
-    RETURN;
-END
-$BODY$ LANGUAGE plpgsql VOLATILE;
-
---------------- PARTITION FUNCTIONS ------------
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_sql(
     query                  ioql_query,
@@ -279,13 +237,37 @@ CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_sql(
     additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT AS
 $BODY$
-SELECT format(
-    $$
-        SELECT * FROM ioql_query_local_partition_agg_limit_rows(%L, %L, %L) as combined_partition(%s)
-    $$,
-    query, part, additional_constraints, get_partial_aggregate_column_def(query)
-)
-$BODY$ LANGUAGE SQL IMMUTABLE;
+DECLARE
+    data_table_row  data_table;
+    code            TEXT = '';
+    index           INT = 0;
+    previous_tables TEXT = '';
+BEGIN
+    FOR data_table_row IN SELECT *
+                          FROM get_data_tables_for_partitions_time_desc(part) LOOP
+        IF index = 0 THEN
+            code := code || format($$  WITH results_%s AS (%s) $$,
+                                   index,
+                                   base_query_agg_partial(query, data_table_row, additional_constraints,
+                                                           (query.limit_rows+1) :: TEXT));
+            previous_tables := 'SELECT * FROM results_0';
+        ELSE
+            code := code || format($$  , results_%s AS (%s) $$, index,
+                                   base_query_agg_partial(query, data_table_row, additional_constraints,
+                                                           format(
+                                                               '(SELECT %L - COUNT(DISTINCT group_time) FROM (%s) as x)',
+                                                               query.limit_rows + 1, previous_tables)
+                                   ));
+            previous_tables := previous_tables || format(' UNION ALL SELECT * FROM results_%s', index);
+        END IF;
+        index := index + 1;
+    END LOOP;
+    code := code || previous_tables;
+    RETURN code;
+END
+$BODY$ LANGUAGE plpgsql STABLE ;
+
+--------------- PARTITION FUNCTIONS ------------
 
 
 CREATE OR REPLACE FUNCTION get_max_time_on_partition(part namespace_partition_type, additional_constraints TEXT)
