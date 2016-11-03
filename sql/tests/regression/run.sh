@@ -26,3 +26,4 @@ golden_test cluster.sql cluster.out
 golden_test kafka.sql kafka.out
 golden_test insert.sql insert.out
 golden_test query.sql query.out
+echo "Success"

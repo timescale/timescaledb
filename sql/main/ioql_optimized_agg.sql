@@ -204,28 +204,25 @@ FROM
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
-CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query, dt data_table,
-                                                  additional_constraints TEXT, limit_sub TEXT,
-                                                  include_table_time     BOOLEAN DEFAULT FALSE)
+CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query,
+                                                  table_oid              REGCLASS,
+                                                  total_partitions       SMALLINT,
+                                                  additional_constraints TEXT,
+                                                  limit_sub              TEXT)
     RETURNS TEXT AS
 $BODY$
 DECLARE
     select_clause TEXT;
 BEGIN
-    IF include_table_time THEN
-        select_clause :=
-        format('SELECT %L::bigint as "_table_start", ', dt.start_time) ||
-        get_partial_aggregate_sql(query.select_items, query.aggregate);
-    ELSE
-        select_clause :=
-        'SELECT ' || get_partial_aggregate_sql(query.select_items, query.aggregate);
-    END IF;
+
+    select_clause :=
+    'SELECT ' || get_partial_aggregate_sql(query.select_items, query.aggregate);
 
     RETURN base_query_raw(
         select_clause,
-        format('FROM %s', dt.table_oid),
+        format('FROM %s', table_oid),
         get_where_clause(
-            default_predicates(query, dt.total_partitions),
+            default_predicates(query, total_partitions),
             additional_constraints
         ),
         get_groupby_clause(query.aggregate),
@@ -239,7 +236,7 @@ LANGUAGE PLPGSQL STABLE;
 --------------- PARTITION FUNCTIONS ------------
 
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_sql(
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_by_only_time_sql(
     query                  ioql_query,
     part                   namespace_partition_type,
     additional_constraints TEXT DEFAULT NULL)
@@ -256,16 +253,23 @@ BEGIN
         IF index = 0 THEN
             code := code || format($$  WITH results_%s AS (%s) $$,
                                    index,
-                                   base_query_agg_partial(query, data_table_row, additional_constraints,
+                                   base_query_agg_partial(query,
+                                                          data_table_row.table_oid,
+                                                          data_table_row.total_partitions,
+                                                          additional_constraints,
                                                           (query.limit_rows + 1) :: TEXT));
             previous_tables := 'SELECT * FROM results_0';
         ELSE
-            --the stopping criteria is if I already have my limit+1 in distinct rows
-            --otherwise have to try to get that many rows again
+            --the stopping criteria is if I already have limit_rows+1 in distinct rows
+            --the +1 guarantees that the limit_rows'th group was closed
+            --otherwise have to try to get limit_rows rows again
             --NOTE: Limiting by query.limit_rows - count(distinct) is not right
             --      this is because my new rows may overlap with previous rows.
             code := code || format($$  , results_%s AS (%s) $$, index,
-                                   base_query_agg_partial(query, data_table_row, additional_constraints,
+                                   base_query_agg_partial(query,
+                                                          data_table_row.table_oid,
+                                                          data_table_row.total_partitions,
+                                                          additional_constraints,
                                                           format(
                                                               '(SELECT CASE WHEN COUNT(DISTINCT group_time) = %1$L THEN 0 ELSE %1$L END FROM (%2$s) as x)',
                                                               query.limit_rows + 1,
@@ -280,7 +284,7 @@ BEGIN
 END
 $BODY$ LANGUAGE plpgsql STABLE;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_with_group_field_sql(
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_by_time_and_group_sql(
     query                  ioql_query,
     part                   namespace_partition_type,
     additional_constraints TEXT DEFAULT NULL)
@@ -299,8 +303,12 @@ BEGIN
             --always scan first table
             code := code || format($$  WITH results_%s AS (%s) $$,
                                    index,
-                                   base_query_agg_partial(query, data_table_row, additional_constraints,
-                                                          (query.limit_rows) :: TEXT, TRUE));
+                                   base_query_agg_partial(query,
+                                                          data_table_row.table_oid,
+                                                          data_table_row.total_partitions,
+                                                          additional_constraints,
+                                                          (query.limit_rows) :: TEXT
+                                   ));
             previous_tables := 'SELECT * FROM results_0';
         ELSE
             --continue going down unless the stopping criteria is met
@@ -309,7 +317,10 @@ BEGIN
             -- 2) each of those top combinations belongs to a closed group.
             --    a closed group is one where the group starts after the start_time of the last table processed.
             code := code || format($$  , results_%s AS (%s) $$, index,
-                                   base_query_agg_partial(query, data_table_row, additional_constraints,
+                                   base_query_agg_partial(query,
+                                                          data_table_row.table_oid,
+                                                          data_table_row.total_partitions,
+                                                          additional_constraints,
                                                           format(
                                                               '(SELECT CASE WHEN COUNT(*) = %1$L AND min(group_time) > %4$L THEN 0 ELSE %1$L END '
                                                               ||
@@ -318,41 +329,8 @@ BEGIN
                                                               previous_tables,
                                                               (query.aggregate).group_field,
                                                               prev_start_time
-                                                          ),
-                                                          TRUE
+                                                          )
                                    ));
-
-            --             code := code || format($$  , results_%s AS (%s) $$, index,
-            --                                    base_query_agg_partial(
-            --                                        query,
-            --                                        data_table_row,
-            --                                        additional_constraints,
-            --                                        format(
-            --                                            '(' ||
-            --                                            'SELECT ' ||
-            --                                            '  CASE WHEN COUNT(*) = %1$L AND  ' ||
-            --                                            '  bool_and(_min_table_start IS NULL OR _min_table_start < group_time)' ||
-            --                                            '  THEN ' ||
-            --                                            '    0 ' ||
-            --                                            ' ELSE ' ||
-            --                                            '    %1$L ' ||
-            --                                            'END ' ||
-            --                                            'FROM (' ||
-            --                                            '    SELECT ' ||
-            --                                            '         %2$s, ' ||
-            --                                            '         group_time, ' ||
-            --                                            '         min(_table_start) as _min_table_start '
-            --                                            '    FROM (%3$s) as x ' ||
-            --                                            '    GROUP BY group_time, %2$s' ||
-            --                                            '    ORDER BY group_time, %2$s' ||
-            --                                            '    LIMIT %1$L' ||
-            --                                            '      ) as agg' ||
-            --                                            ')',
-            --                                            query.limit_rows,
-            --                                            (query.aggregate).group_field,
-            --                                            previous_tables),
-            --                                        TRUE
-            --                                    ));
             previous_tables := previous_tables || format(' UNION ALL SELECT * FROM results_%s', index);
         END IF;
         prev_start_time := data_table_row.start_time;
@@ -363,6 +341,26 @@ BEGIN
 END
 $BODY$ LANGUAGE plpgsql STABLE;
 
+
+--this generates sql for the case that there is no limit_rows clause
+--then query the partition directly
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_no_limit_rows_sql(
+    query                  ioql_query,
+    part                   namespace_partition_type,
+    additional_constraints TEXT DEFAULT NULL)
+    RETURNS TEXT LANGUAGE SQL AS
+$BODY$
+SELECT base_query_agg_partial(query,
+                              format('%I.%I', get_schema_name(query.namespace_name),
+                                     partition_table_row.table_name) :: REGCLASS,
+                              partition_table_row.total_partitions,
+                              additional_constraints,
+                              NULL
+)
+FROM get_partition_table_row(part) AS partition_table_row;
+$BODY$;
+
+
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_sql(
     query                  ioql_query,
     part                   namespace_partition_type,
@@ -370,10 +368,14 @@ CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_sql(
     RETURNS TEXT LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    IF (query.aggregate).group_field IS NULL THEN
-        RETURN ioql_query_local_partition_agg_limit_rows_sql(query, part, additional_constraints);
+    IF query.limit_rows IS NULL THEN
+        RETURN ioql_query_local_partition_agg_no_limit_rows_sql(query, part, additional_constraints);
     ELSE
-        RETURN ioql_query_local_partition_agg_limit_rows_with_group_field_sql(query, part, additional_constraints);
+        IF (query.aggregate).group_field IS NULL THEN
+            RETURN ioql_query_local_partition_agg_limit_rows_by_only_time_sql(query, part, additional_constraints);
+        ELSE
+            RETURN ioql_query_local_partition_agg_limit_rows_by_time_and_group_sql(query, part, additional_constraints);
+        END IF;
     END IF;
 END
 $BODY$;

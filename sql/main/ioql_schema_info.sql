@@ -20,3 +20,14 @@ WHERE
     dt.total_partitions = _np.total_partitions
 ORDER BY GREATEST(start_time, end_time) DESC
 $BODY$;
+
+CREATE OR REPLACE FUNCTION get_partition_table_row(np namespace_partition_type)
+    RETURNS partition_table LANGUAGE SQL STABLE AS
+$BODY$
+SELECT pt.*
+FROM partition_table pt
+WHERE
+    pt.namespace_name = np.namespace_name AND
+    pt.partition_number = np.partition_number AND
+    pt.total_partitions = np.total_partitions
+$BODY$;
