@@ -59,10 +59,4 @@ FROM "testNs".cluster;
 SELECT *
 FROM "testNs".distinct;
 
-SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
-SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate=> new_aggregate(10e9::BIGINT)
-                     ));
+

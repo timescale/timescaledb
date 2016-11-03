@@ -168,3 +168,55 @@ FROM "testNs".distinct;
  device_id | dev2  | 1257894000000000000
 (2 rows)
 
+\c Test1
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
+                                                      json                                                       
+-----------------------------------------------------------------------------------------------------------------
+ {"time":1257987600000000000,"device_id":"dev1","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+ {"time":1257987600000000000,"device_id":"dev1","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
+ {"time":1257897600000000000,"device_id":"dev1","series_0":4.5,"series_1":5,"series_2":null,"series_bool":false}
+ {"time":1257894002000000000,"device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
+ {"time":1257894001000000000,"device_id":"dev1","series_0":3.5,"series_1":4,"series_2":null,"series_bool":null}
+ {"time":1257894000000001000,"device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
+ {"time":1257894000000000000,"device_id":"dev1","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+ {"time":1257894000000000000,"device_id":"dev1","series_0":1.5,"series_1":1,"series_2":2,"series_bool":true}
+ {"time":1257894000000000000,"device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+ {"time":1257894000000000000,"device_id":"dev2","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
+(10 rows)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate=> new_aggregate((100*60*60*1e9)::BIGINT)
+                     ));
+                      json                       
+-------------------------------------------------
+ {"time":1257840000000000000,"sum(series_0)":22}
+(1 row)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate=> new_aggregate((100*60*60*1e9)::BIGINT, 'series_1')
+                     ));
+                             json                              
+---------------------------------------------------------------
+ {"series_1":3,"time":1257840000000000000,"sum(series_0)":5}
+ {"series_1":2,"time":1257840000000000000,"sum(series_0)":4.5}
+ {"series_1":4,"time":1257840000000000000,"sum(series_0)":3.5}
+ {"series_1":1,"time":1257840000000000000,"sum(series_0)":4.5}
+ {"series_1":5,"time":1257840000000000000,"sum(series_0)":4.5}
+(5 rows)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate=> new_aggregate((100*60*60*1e9)::BIGINT, 'series_1'),
+                                    limit_rows => 1
+                     ));
+                             json                              
+---------------------------------------------------------------
+ {"series_1":1,"time":1257840000000000000,"sum(series_0)":4.5}
+(1 row)
+
