@@ -188,7 +188,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate=> new_aggregate((100*60*60*1e9)::BIGINT)
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT)
                      ));
                       json                       
 -------------------------------------------------
@@ -198,7 +198,18 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate=> new_aggregate((100*60*60*1e9)::BIGINT, 'series_1')
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT),
+                                    limit_rows => 1
+                     ));
+                      json                       
+-------------------------------------------------
+ {"time":1257840000000000000,"sum(series_0)":22}
+(1 row)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT, 'series_1')
                      ));
                              json                              
 ---------------------------------------------------------------
@@ -212,7 +223,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate=> new_aggregate((100*60*60*1e9)::BIGINT, 'series_1'),
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT, 'series_1'),
                                     limit_rows => 1
                      ));
                              json                              

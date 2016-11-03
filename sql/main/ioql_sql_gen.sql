@@ -147,7 +147,8 @@ SELECT CASE
        WHEN query.limit_rows IS NULL THEN
            NULL --no need to order if not gonna limit
        WHEN (query.aggregate).group_field IS NOT NULL THEN
-           format('ORDER BY %s DESC NULLS LAST, %s', time_col,
+           format('ORDER BY %s DESC NULLS LAST, %s',
+                  time_col,
                   (query.aggregate).group_field) --group field needs to be included so that 5 aggregates across partitions overlap
        ELSE
            format('ORDER BY %s DESC NULLS LAST', time_col)
