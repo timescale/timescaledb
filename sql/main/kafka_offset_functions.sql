@@ -57,7 +57,8 @@ BEGIN
           loc.start_offset = kafka_set_next_offset.start_offset;
     GET DIAGNOSTICS affected = ROW_COUNT;
     IF affected <> 1 THEN
-        RAISE EXCEPTION 'Rows affected not = 1. Affected: %', affected;
+        RAISE EXCEPTION 'Rows affected not = 1. Affected: %', affected
+        USING ERRCODE = 'IO501';
     END IF;
 END
 $BODY$;

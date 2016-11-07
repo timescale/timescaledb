@@ -15,7 +15,8 @@ BEGIN
     ELSIF index_type = 'VALUE-TIME' THEN
         index_name := format('%s-%s-time', prefix, field_name);
     ELSE
-        RAISE EXCEPTION 'Unknown index type %', index_type;
+        RAISE EXCEPTION 'Unknown index type %', index_type
+        USING ERRCODE = 'IO103';
     END IF;
 
     INSERT INTO data_table_index (table_oid, field_name, index_name, index_type) VALUES
@@ -45,12 +46,14 @@ BEGIN
            ) THEN
             RETURN NEW;
         ELSE
-            RAISE EXCEPTION 'This type of update not allowed on data_table';
+            RAISE EXCEPTION 'This type of update not allowed on data_table'
+            USING ERRCODE = 'IO101';
         END IF;
     END IF;
 
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts and updates supported on data_table table';
+        RAISE EXCEPTION 'Only inserts and updates supported on data_table table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     FOR field_row IN SELECT f.*
@@ -79,7 +82,8 @@ $BODY$
 DECLARE
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table';
+        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     IF NEW.index_type = 'TIME-VALUE' THEN
@@ -99,7 +103,8 @@ BEGIN
             $$,
             NEW.index_name, NEW.table_oid, NEW.field_name);
     ELSE
-        RAISE EXCEPTION 'Unknown index type %', index_type;
+        RAISE EXCEPTION 'Unknown index type %', index_type
+        USING ERRCODE = 'IO103';
     END IF;
     RETURN NEW;
 END

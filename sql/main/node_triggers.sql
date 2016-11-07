@@ -5,7 +5,8 @@ DECLARE
     cluster_user_row cluster_user;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on node table';
+        RAISE EXCEPTION 'Only inserts supported on node table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     IF NEW.database_name <> current_database() THEN

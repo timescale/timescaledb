@@ -123,15 +123,18 @@ DECLARE
     remote_node node;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table';
+        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     IF NEW.schema_name = 'public' THEN
-        RAISE EXCEPTION 'public is not an allowed namespace name';
+        RAISE EXCEPTION 'public is not an allowed namespace name'
+        USING ERRCODE = 'IO104';
     END IF;
 
-    IF position('_' in NEW.schema_name) = 1 THEN
-        RAISE EXCEPTION 'Namespace cannot begin with an underscore (_)';
+    IF position('_' IN NEW.schema_name) = 1 THEN
+        RAISE EXCEPTION 'Namespace cannot begin with an underscore (_)'
+        USING ERRCODE = 'IO104';
     END IF;
 
     PERFORM create_schema(NEW.schema_name);
@@ -158,7 +161,8 @@ DECLARE
     node_row      node;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table';
+        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     SELECT *

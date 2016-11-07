@@ -42,7 +42,8 @@ DECLARE
     node_row      node;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table';
+        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     SELECT *

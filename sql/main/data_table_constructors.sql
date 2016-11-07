@@ -217,7 +217,8 @@ BEGIN
     IF data_table_row IS NULL THEN
         partitioning_field := get_partitioning_field_name(namespace_name);
         IF partitioning_field IS NULL THEN
-            RAISE EXCEPTION 'No partitioning field for namespace %', namespace_name;
+            RAISE EXCEPTION 'No partitioning field for namespace %', namespace_name
+            USING ERRCODE = 'IO102';
         END IF;
         --get lock:
         SELECT *
@@ -232,7 +233,8 @@ BEGIN
 
         data_table_row := _sysinternal.get_data_table("time", namespace_name, partition_number, total_partitions);
         IF data_table_row IS NULL THEN --recheck
-            RAISE EXCEPTION 'Should never happen';
+            RAISE EXCEPTION 'Should never happen'
+            USING ERRCODE = 'IO501';
         END IF;
     END IF;
     RETURN data_table_row;

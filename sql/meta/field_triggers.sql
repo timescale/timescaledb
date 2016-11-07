@@ -5,7 +5,8 @@ DECLARE
     schema_name NAME;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on field table';
+        RAISE EXCEPTION 'Only inserts supported on field table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     FOR schema_name IN

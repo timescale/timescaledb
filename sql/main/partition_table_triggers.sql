@@ -5,7 +5,8 @@ DECLARE
     namespace_node_row namespace_node;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on partition_table table';
+        RAISE EXCEPTION 'Only inserts supported on partition_table table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     SELECT *
@@ -20,7 +21,8 @@ BEGIN
                     CONSTRAINT partition CHECK(get_partition_for_key(%4$I::text, %5$L) = %6$L)
                 ) INHERITS(%1$I.%3$I)
             $$,
-        get_schema_name(NEW.namespace_name), NEW.table_name, namespace_node_row.master_table_name, NEW.partitioning_field,
+        get_schema_name(NEW.namespace_name), NEW.table_name, namespace_node_row.master_table_name,
+        NEW.partitioning_field,
         NEW.total_partitions, NEW.partition_number
     );
     RETURN NEW;

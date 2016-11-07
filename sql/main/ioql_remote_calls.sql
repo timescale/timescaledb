@@ -55,7 +55,8 @@ BEGIN
                 INTO remote_result;
 
                 IF remote_result != 1 THEN --now this really should not happen
-                    RAISE EXCEPTION 'ioql remote error % %', remote_result, dblink_error_message(serverName);
+                    RAISE EXCEPTION 'ioql remote error % %', remote_result, dblink_error_message(serverName)
+                    USING ERRCODE = 'IO502';
                 END IF;
             END IF;
             remote_servers := remote_servers || ARRAY [serverName];
@@ -76,7 +77,8 @@ BEGIN
 
         GET DIAGNOSTICS remote_cnt := ROW_COUNT;
         IF remote_cnt != 0 THEN
-            RAISE EXCEPTION 'ioql remote count error %', remote_cnt;
+            RAISE EXCEPTION 'ioql remote count error %', remote_cnt
+            USING ERRCODE = 'IO502';
         END IF;
     END LOOP;
 

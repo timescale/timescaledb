@@ -3,7 +3,8 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_node()
 $BODY$
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on node table';
+        RAISE EXCEPTION 'Only inserts supported on node table'
+        USING ERRCODE = 'IO101';
     END IF;
     EXECUTE format(
         $$
@@ -45,7 +46,7 @@ BEGIN
             INSERT INTO %I.node SELECT * from node;
         $$,
         NEW.schema_name);
-        EXECUTE format(
+    EXECUTE format(
         $$
             INSERT INTO %I.cluster_user SELECT * from cluster_user;
         $$,

@@ -5,7 +5,8 @@ DECLARE
     node_row node;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on node table';
+        RAISE EXCEPTION 'Only inserts supported on node table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     --NOTE:  creating the role should be done outside this purview. Permissions are complex and should be set by the DBA

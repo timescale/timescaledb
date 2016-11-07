@@ -5,7 +5,8 @@ DECLARE
     schema_name NAME;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table';
+        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     FOR schema_name IN
@@ -25,7 +26,8 @@ END
 $BODY$;
 
 BEGIN;
-DROP TRIGGER IF EXISTS trigger_sync_namespace ON namespace;
+DROP TRIGGER IF EXISTS trigger_sync_namespace
+ON namespace;
 CREATE TRIGGER trigger_sync_namespace AFTER INSERT OR UPDATE OR DELETE ON namespace
 FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_namespace();
 COMMIT;
@@ -37,7 +39,8 @@ DECLARE
     schema_name NAME;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace_node table';
+        RAISE EXCEPTION 'Only inserts supported on namespace_node table'
+        USING ERRCODE = 'IO101';
     END IF;
 
     FOR schema_name IN
@@ -57,7 +60,8 @@ END
 $BODY$;
 
 BEGIN;
-DROP TRIGGER IF EXISTS trigger_sync_namespace_node ON namespace_node;
+DROP TRIGGER IF EXISTS trigger_sync_namespace_node
+ON namespace_node;
 CREATE TRIGGER trigger_sync_namespace_node AFTER INSERT OR UPDATE OR DELETE ON namespace_node
 FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_namespace_node();
 COMMIT;
