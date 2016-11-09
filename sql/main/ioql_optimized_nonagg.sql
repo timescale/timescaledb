@@ -3,43 +3,51 @@
 -- The quey plan for this query is as follows:
 --   1) Scan the top 10000 rows of table and try to fulfil the query with those items.
 --   2) Then for every by_every item not fulfilled, try to scan for it, using its index.
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every(query ioql_query,
-                                                                          part  namespace_partition_type)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL VOLATILE AS
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every_sql(query ioql_query,
+                                                                              part  namespace_partition_type)
+    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    cnt                       INT;
-    total_cnt                 INT := 0;
-    distinct_cnt              INT := 0;
+    distinct_value_sql        TEXT;
+    index                     INT = 0;
+    previous_tables           TEXT = '';
+    code                      TEXT = '';
+
+    query_sql_scan_base_table TEXT = '';
+    query_sql_scan            TEXT = '';
+    query_sql_jump            TEXT = '';
     data_table_row            data_table;
-    query_sql_scan_base_table TEXT;
-    query_sql_scan            TEXT;
-    query_sql_jump            TEXT;
-    distinct_value_cnt        JSONB;
-    distinct_value_original   JSONB;
 BEGIN
+
+
     IF get_partitioning_field_name(query.namespace_name) = (query.limit_by_field).field THEN
-        SELECT jsonb_object_agg(value, (query.limit_by_field).count)
-        INTO distinct_value_cnt
-        FROM get_distinct_values_local(query.namespace_name, (query.limit_by_field).field) AS value
-        WHERE get_partition_for_key(value, part.total_partitions) = part.partition_number;
+        distinct_value_sql = format(
+            $$
+              SELECT value AS value, %2$L::bigint AS cnt
+              FROM get_distinct_values_local(%3$L, %1$L) AS value
+              WHERE get_partition_for_key(value, %4$L) = %5$L
+            $$,
+            (query.limit_by_field).field,
+            (query.limit_by_field).count,
+            query.namespace_name,
+            part.total_partitions,
+            part.partition_number);
     ELSE
-        SELECT jsonb_object_agg(value, (query.limit_by_field).count)
-        INTO distinct_value_cnt
-        FROM get_distinct_values_local(query.namespace_name, (query.limit_by_field).field) AS value;
+        distinct_value_sql = format(
+            $$
+              SELECT value, %2$L::bigint as cnt
+              FROM get_distinct_values_local(%3$L, %1$L) AS value
+            $$,
+            (query.limit_by_field).field,
+            (query.limit_by_field).count,
+            query.namespace_name);
     END IF;
 
-    distinct_value_original := distinct_value_cnt;
 
-    EXECUTE format(
+    code = format(
         $$
-            CREATE TEMP TABLE results (%s)
-        $$,
-        get_result_column_def_list_nonagg(query));
-
-    SELECT count(*)
-    INTO distinct_cnt
-    FROM jsonb_object_keys(distinct_value_original);
+        WITH distinct_value AS (%s)
+        $$, distinct_value_sql);
 
     query_sql_scan_base_table :=
     -- query for easy limit 10000
@@ -51,7 +59,8 @@ BEGIN
         ),
         NULL,
         'ORDER BY time DESC NULLS LAST',
-        'LIMIT ' || (distinct_cnt * (query.limit_by_field).count * 2));
+        format('LIMIT (SELECT count(*) * %L FROM distinct_value)', (query.limit_by_field).count * 2)
+    );
 
 
     query_sql_scan :=
@@ -76,132 +85,71 @@ BEGIN
         'FROM %1$s',
         get_where_clause(
             default_predicates(query, part.total_partitions),
-            format('%1$I::text = %2$s AND %1$I IS NOT NULL', (query.limit_by_field).field,
-                   'distinct_value.key'),
-            '(time < min_table.min_time OR min_table.min_time IS NULL)'
+            format('%1$I::text = dv_counts_min_time.value AND %1$I IS NOT NULL', (query.limit_by_field).field),
+            '(time < dv_counts_min_time.min_time OR dv_counts_min_time.min_time IS NULL)'
         ),
         get_groupby_clause(query.aggregate),
         'ORDER BY time DESC NULLS LAST, ' || (query.limit_by_field).field,
-        'LIMIT distinct_value.value::int');
+        'LIMIT dv_counts_min_time.remaining_cnt');
 
     FOR data_table_row IN SELECT *
                           FROM get_data_tables_for_partitions_time_desc(part) LOOP
-        RAISE NOTICE E'ioql_query_local_partition_rows_limit_by_every scan: \n % \n', format(query_sql_scan,
-                                                                                             data_table_row.table_oid);
-        EXECUTE format(
-            $$
-                WITH inserted as (
-                    INSERT INTO results
-                    %2$s
-                    FROM
-                    (
-                        SELECT
-                            ROW_NUMBER() OVER (PARTITION BY %3$s ORDER BY time DESC NULLS LAST) as rank,
-                            (($1::jsonb)->>(%3$s::text))::int as cnt,
-                            res.*
-                        FROM (%1$s) as res
-                    ) AS with_rank
-                    WHERE rank <= cnt
-                    RETURNING time
-                )
-                SELECT count(*)
-                FROM inserted
-            $$,
-            format(query_sql_scan, data_table_row.table_oid),
-            get_full_select_clause_nonagg(query),
-            (query.limit_by_field).field
-        )
-        USING distinct_value_cnt INTO cnt;
-
-        total_cnt := total_cnt + cnt;
-        IF total_cnt >= query.limit_rows THEN
-            EXIT;
-        END IF;
-
-        IF cnt > 0 THEN
-            EXECUTE format(
+        IF index = 0 THEN
+            code := code || format(
                 $$
-                    SELECT jsonb_object_agg(original.key, original.value::int - coalesce(existing.cnt, 0))
-                    FROM jsonb_each_text($1) as original
-                    LEFT JOIN (
-                        SELECT %1$s grp, count(*) cnt
-                        FROM results
-                        GROUP BY %1$s
-                    ) as existing on (original.key = existing.grp)
-                    WHERE  (original.value::int - coalesce(existing.cnt, 0)) > 0
+                        , result_scan AS (
+                            %1$s
+                            FROM
+                                (
+                                    SELECT
+                                        ROW_NUMBER() OVER (PARTITION BY %2$I ORDER BY time DESC NULLS LAST) as rank,
+                                    res.*
+                                    FROM (%3$s) as res
+                                ) AS with_rank
+                                WHERE rank <= %4$L
+                        )
+                   $$,
+                get_full_select_clause_nonagg(query),
+                (query.limit_by_field).field,
+                format(query_sql_scan, data_table_row.table_oid),
+                (query.limit_by_field).count
+            );
+
+            previous_tables := 'SELECT * FROM result_scan';
+        END IF;
+
+        code := code || format(
+            $$  , results_%3$s AS (
+                    WITH dv_counts_min_time AS (
+                        SELECT original.value AS value, original.cnt - coalesce(existing.cnt, 0) as remaining_cnt, min_time as min_time
+                        FROM distinct_value as original
+                        LEFT JOIN (
+                            SELECT %1$s::text AS value, count(*) AS cnt, min(time) AS min_time
+                            FROM (%2$s) AS previous_results
+                            GROUP BY %1$s
+                        ) as existing on (original.value = existing.value)
+                        WHERE  (original.cnt - coalesce(existing.cnt, 0)) > 0
+                    )
+                    SELECT every_jump.*
+                    FROM dv_counts_min_time,
+                     LATERAL (%4$s) AS every_jump
+                    )
                 $$,
-                (query.limit_by_field).field)
-            USING distinct_value_original INTO distinct_value_cnt;
 
-            SELECT count(*)
-            INTO distinct_cnt
-            FROM jsonb_object_keys(distinct_value_cnt);
+            (query.limit_by_field).field,
+            previous_tables,
+            index,
+            format(query_sql_jump, data_table_row.table_oid)
+        );
 
-            IF distinct_cnt = 0 THEN
-                EXIT;
-            END IF;
-        END IF;
+        previous_tables := previous_tables || format(' UNION ALL SELECT * FROM results_%s', index);
 
-
-        RAISE NOTICE E'ioql_query_local_partition_rows_limit_by_every jump %:\n %\n',
-        total_cnt, format(query_sql_jump, data_table_row.table_oid);
-
-        EXECUTE format(
-            $$
-                INSERT INTO results
-                SELECT every_jump.*
-                FROM jsonb_each_text($1) as distinct_value
-                LEFT JOIN (
-                    SELECT %2$s::text as gp, min(time) as min_time
-                    FROM results
-                    GROUP BY %2$s
-                ) min_table on (distinct_value.key = min_table.gp),
-                LATERAL(%1$s) every_jump
-            $$,
-            format(query_sql_jump, data_table_row.table_oid),
-            (query.limit_by_field).field)
-        USING distinct_value_cnt;
-
-        GET DIAGNOSTICS cnt := ROW_COUNT;
-        total_cnt := total_cnt + cnt;
-        IF total_cnt >= query.limit_rows THEN
-            EXIT;
-        END IF;
-
-        IF cnt > 0 THEN
-            EXECUTE format(
-                $$
-                    SELECT jsonb_object_agg(original.key, original.value::int - coalesce(existing.cnt, 0))
-                    FROM jsonb_each_text($1) as original
-                    LEFT JOIN (
-                        SELECT %1$s grp, count(*) cnt
-                        FROM results
-                        GROUP BY %1$s
-                    ) as existing on (original.key = existing.grp)
-                    WHERE  (original.value::int - coalesce(existing.cnt, 0)) > 0
-                $$,
-                (query.limit_by_field).field)
-            USING distinct_value_original INTO distinct_value_cnt;
-
-            SELECT count(*)
-            INTO distinct_cnt
-            FROM jsonb_object_keys(distinct_value_cnt);
-
-            IF distinct_cnt = 0 THEN
-                EXIT;
-            END IF;
-        END IF;
-
+        index := index + 1;
     END LOOP;
-
-    RETURN QUERY
-    SELECT *
-    FROM results
-    LIMIT query.limit_rows;
-    DROP TABLE results;
+    code := code || previous_tables;
+    RETURN code;
 END
-$BODY$
-SET constraint_exclusion = ON;
+$BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit(query ioql_query,
                                                                          part  namespace_partition_type)
@@ -256,13 +204,8 @@ BEGIN
             get_result_column_def_list_nonagg(query))
         USING query, part;
     ELSE
-        RETURN QUERY EXECUTE format(
-            $$
-                SELECT *
-                FROM ioql_query_local_partition_rows_limit_by_every($1, $2) AS res(%s)
-            $$,
-            get_result_column_def_list_nonagg(query))
-        USING query, part;
+        RAISE NOTICE E'ioql_query_local_partition_rows SQL:\n%', ioql_query_local_partition_rows_limit_by_every_sql(query, part) ;
+        RETURN QUERY EXECUTE ioql_query_local_partition_rows_limit_by_every_sql(query, part);
     END IF;
 END
 $BODY$;
