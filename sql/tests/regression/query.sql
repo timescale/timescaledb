@@ -39,3 +39,9 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0')],
                                     limit_by_field => new_limit_by_field('device_id', 1)
                      ));
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0')],
+                                    limit_rows => 1
+                     ));

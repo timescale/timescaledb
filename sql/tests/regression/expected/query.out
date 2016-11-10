@@ -231,3 +231,24 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
  {"series_1":1,"time":1257840000000000000,"sum(series_0)":4.5}
 (1 row)
 
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0')],
+                                    limit_by_field => new_limit_by_field('device_id', 1)
+                     ));
+                              json                              
+----------------------------------------------------------------
+ {"time":1257987600000000000,"series_0":1.5,"device_id":"dev1"}
+ {"time":1257894000000000000,"series_0":1.5,"device_id":"dev2"}
+(2 rows)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0')],
+                                    limit_rows => 1
+                     ));
+                    json                     
+---------------------------------------------
+ {"time":1257987600000000000,"series_0":1.5}
+(1 row)
+

@@ -151,108 +151,119 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit(query ioql_query,
-                                                                         part  namespace_partition_type)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql(query ioql_query,
+                                                                             part  namespace_partition_type)
+    RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-DECLARE
-    data_table_row data_table;
-    cnt            INT;
-    total_cnt      INT := 0;
-    query_sql      TEXT;
-BEGIN
-    FOR data_table_row IN
-    SELECT *
-    FROM get_data_tables_for_partitions_time_desc(part) LOOP
-
-        query_sql :=  base_query_raw(
-            get_full_select_clause_nonagg(query),
-            get_from_clause(data_table_row),
-            get_where_clause(
-                default_predicates(query, part.total_partitions)
-            ),
-            get_groupby_clause(query.aggregate),
-            get_orderby_clause_nonagg(query),
-            get_limit_clause(query.limit_rows - total_cnt)
-        );
-
-        RAISE NOTICE E'ioql_query_local_partition_rows_regular_limit table: %, SQL:\n% ', data_table_row, query_sql;
-        RETURN QUERY EXECUTE query_sql;
-
-        GET DIAGNOSTICS cnt := ROW_COUNT;
-        total_cnt := total_cnt + cnt;
-        IF total_cnt >= query.limit_rows THEN
-            EXIT;
-        END IF;
-    END LOOP;
-END
+SELECT format(
+    $$
+        SELECT *
+        FROM (%s) combined_partition
+        %s
+    $$,
+    string_agg(code, ' UNION ALL '),
+    get_limit_clause(query.limit_rows)
+)
+FROM (
+         SELECT '(' || base_query_raw(
+             get_full_select_clause_nonagg(query),
+             get_from_clause(data_table_row),
+             get_where_clause(
+                 default_predicates(query, part.total_partitions)
+             ),
+             get_groupby_clause(query.aggregate),
+             get_orderby_clause_nonagg(query),
+             get_limit_clause(query.limit_rows)
+         ) || ')' AS code
+         FROM get_data_tables_for_partitions_time_desc(part) AS data_table_row
+     ) AS code_per_data_table;
 $BODY$
 SET constraint_exclusion = ON;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows(query ioql_query, part namespace_partition_type)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query, part namespace_partition_type)
+    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
 BEGIN
-    RAISE NOTICE E'ioql_query_local_partition_rows SQL:\n%', query;
     IF query.limit_by_field IS NULL THEN
-        RETURN QUERY EXECUTE format(
-            $$
-                SELECT *
-                FROM ioql_query_local_partition_rows_regular_limit($1, $2) AS res(%s)
-            $$,
-            get_result_column_def_list_nonagg(query))
-        USING query, part;
+        RETURN ioql_query_local_partition_rows_regular_limit_sql(query, part);
     ELSE
-        RAISE NOTICE E'ioql_query_local_partition_rows SQL:\n%', ioql_query_local_partition_rows_limit_by_every_sql(query, part) ;
-        RETURN QUERY EXECUTE ioql_query_local_partition_rows_limit_by_every_sql(query, part);
+        RETURN ioql_query_local_partition_rows_limit_by_every_sql(query, part);
     END IF;
 END
 $BODY$;
 
 --------------- NODE FUNCTIONS ------------
 
-CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg(query ioql_query)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
+CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(query ioql_query)
+    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
+DECLARE
+    code TEXT;
 BEGIN
     --each partition has limited correctly, but the union of partitions needs to be re-limited.
     IF NOT (query.limit_by_field IS NULL) THEN
-        RETURN QUERY EXECUTE format(
+        SELECT format(
             $$
                 SELECT %3$s
                 FROM
                 (
                     SELECT
                         ROW_NUMBER() OVER (PARTITION BY %2$s ORDER BY time DESC NULLS LAST) as rank,
-                        partition_results.*
-                    FROM get_partitions_for_namespace($1.namespace_name) parts,
-                    ioql_query_local_partition_rows($1, parts) as partition_results(%1$s)
-                ) AS across_partitions
-                WHERE rank <= ($1.limit_by_field).count
+                        combined_node.*
+                    FROM (%4$s) as combined_node
+                ) AS node_result
+                WHERE rank <= %5$L
                 ORDER BY time DESC NULLS LAST, %2$s
-                LIMIT $1.limit_rows
+                %6$s
             $$,
             get_result_column_def_list_nonagg(query),
             (query.limit_by_field).field,
-            get_result_column_list_nonagg(query)
+            get_result_column_list_nonagg(query),
+            string_agg(code_part, ' UNION ALL '),
+            (query.limit_by_field).count,
+            get_limit_clause(query.limit_rows)
         )
-        USING query;
+        INTO STRICT code
+        FROM
+            (
+                SELECT '(' || ioql_query_local_partition_rows_sql(query, parts) || ')' AS code_part
+                FROM get_partitions_for_namespace(query.namespace_name) parts
+            ) AS code_per_partition;
     ELSE
-        RETURN QUERY EXECUTE format(
+        SELECT format(
             $$
-                SELECT partition_results.*
-                FROM get_partitions_for_namespace($1.namespace_name) parts,
-                ioql_query_local_partition_rows($1, parts) as partition_results(%1$s)
+                SELECT *
+                FROM  (%1$s) AS combined_node
                 ORDER BY time DESC NULLS LAST
-                LIMIT $1.limit_rows
+                %2$s
             $$,
-            get_result_column_def_list_nonagg(query))
-        USING query;
+            string_agg(code_part, ' UNION ALL '),
+            get_limit_clause(query.limit_rows)
+        )
+        INTO STRICT code
+        FROM
+            (
+                SELECT '(' || ioql_query_local_partition_rows_sql(query, parts) || ')' AS code_part
+                FROM get_partitions_for_namespace(query.namespace_name) parts
+            ) AS code_per_partition;
     END IF;
+    RETURN code;
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg(query ioql_query)
+    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    code TEXT;
+BEGIN
+    code := ioql_query_local_node_nonagg_sql(query);
+    RAISE NOTICE E'Per-Node nonagg SQL:\n%', code;
+    RETURN QUERY EXECUTE code;
+END;
+$BODY$
+SET constraint_exclusion = ON;
 --------------- CLUSTER FUNCTIONS ------------
 
 CREATE OR REPLACE FUNCTION ioql_exec_query_nonagg_without_limit(query ioql_query)
