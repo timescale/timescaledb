@@ -1,0 +1,6 @@
+time bigint; bool_1 boolean; device_id text; field_only_dev2 double precision; field_only_ref2 text; num_1 double precision; num_2 double precision; string_1 text; string_2 text
+1257897600000000000;false;dev1;null;null;null;5;const;five
+1257894001000000000;true;dev1;null;null;null;4;const;four
+1257894000000001000;true;dev1;null;null;null;3;const;three
+1257894000000000000;true;dev1;null;null;null;1;const;one
+1257894000000000000;false;dev1;null;null;null;2;const;two

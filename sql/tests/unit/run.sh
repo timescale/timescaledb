@@ -13,14 +13,22 @@ INSTALL_DB=${INSTALL_DB:-Test1}
 echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER"
 
 NODES="Test1 test2"
+SETUPDIR="../../setup"
+
 if [ $RESET_POSTGRES_DB == "true" ]; then
     echo "Cleaning up DB"
 
-    ../../setup/setup_meta.sh
+    $SETUPDIR/setup_meta.sh
+    $SETUPDIR/add_cluster_user.sh postgres
+
     for node in $NODES; do
-        ../../setup/setup_node.sh $node
-        ../../setup/setup_kafka.sh $node
+        $SETUPDIR/setup_node.sh $node
+        $SETUPDIR/setup_kafka.sh $node
+        $SETUPDIR/add_node.sh $node $POSTGRES_HOST
     done
+
+    ./add_test_inputs.sh
+    ./add_test_outputs.sh
 
     psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -d $INSTALL_DB -f ../../plpgunit/install/1.install-unit-test.sql
 fi

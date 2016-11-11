@@ -1,4 +1,3 @@
-
 \ir ../../main/names.sql
 
 DROP FUNCTION IF EXISTS unit_tests.names_tests_start_set();
@@ -22,7 +21,6 @@ BEGIN
 END
 $$
 LANGUAGE plpgsql;
-
 
 DROP FUNCTION IF EXISTS unit_tests.names_tests_stop_set();
 CREATE FUNCTION unit_tests.names_tests_stop_set()
