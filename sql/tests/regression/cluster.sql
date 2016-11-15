@@ -9,58 +9,94 @@ SELECT add_cluster_user('postgres', NULL);
 SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
 
-SELECT add_namespace('testNs' :: NAME);
+SELECT add_hypertable('testNs' :: NAME, 'Device_id');
+SELECT * 
+FROM  partition_replica;
+
+
 SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on', 'bigint', FALSE, FALSE, ARRAY['TIME-VALUE','VALUE-TIME'] :: field_index_type []);
 
+SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
+
 SELECT *
 FROM node;
 SELECT *
-FROM namespace;
+FROM hypertable;
 SELECT *
-FROM namespace_node;
+FROM hypertable_replica;
+SELECT * 
+FROM  distinct_replica_node;
+SELECT * 
+FROM  partition_epoch;
+SELECT * 
+FROM  partition;
+SELECT * 
+FROM  partition_replica;
+SELECT *
+FROM chunk;
+SELECT *
+FROM chunk_replica_node;
 SELECT *
 FROM field;
 
+\echo *********************************************************************************************************ß
 \c Test1
 
 SELECT *
 FROM node;
 SELECT *
-FROM namespace;
+FROM hypertable;
 SELECT *
-FROM namespace_node;
+FROM hypertable_replica;
+SELECT * 
+FROM  distinct_replica_node;
+SELECT * 
+FROM  partition_epoch;
+SELECT * 
+FROM  partition;
+SELECT * 
+FROM  partition_replica;
+SELECT *
+FROM chunk;
+SELECT *
+FROM chunk_replica_node;
 SELECT *
 FROM field;
-\dt "testNs".*
-\det "testNs".*
-\d+ "testNs".distinct
-\d+ "testNs".cluster
-
+\d+ "_sys_1_testNs".*
+--\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
+--\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
+--\det "_sys_1_testNs".*
+--\d+ "testNs".distinct
 --test idempotence
 \c meta
-SELECT add_namespace('testNs' :: NAME);
+
+SELECT add_hypertable('testNs' :: NAME, 'Device_id');
+
 SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on', 'bigint', FALSE, FALSE, ARRAY['TIME-VALUE','VALUE-TIME'] :: field_index_type []);
+
+SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
 \c Test1
-\d+ "testNs".cluster
+\d+ "_sys_1_testNs".*
 
-SELECT get_or_create_data_table((1477075243*1e9)::bigint, 'testNs'::NAME, 0::SMALLINT, 10::SMALLINT);
-\dt "testNs".*
-\det "testNs".*
-\d+ "testNs".data_0_10_1477008000
-\d+ "testNs".partition_0_10
+\c meta
+SELECT close_chunk_end(1);
+SELECT *
+FROM chunk;
 
-SELECT close_data_table_end('"testNs".data_0_10_1477008000');
-\d+ "testNs".data_0_10_1477008000
+SELECT * FROM get_or_create_chunk(1,10::bigint);
+SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
+SELECT *
+FROM chunk;
 
-SELECT get_or_create_data_table((1477075243*1e9)::bigint, 'testNs'::NAME, 0::SMALLINT, 10::SMALLINT);
-\dt "testNs".*
-SELECT get_or_create_data_table(((1477075243+(60*60*25))*1e9)::bigint, 'testNs'::NAME, 0::SMALLINT, 10::SMALLINT);
-\dt "testNs".*
+\c Test1
+\d+ "_sys_1_testNs".*
+
+
