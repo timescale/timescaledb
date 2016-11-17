@@ -49,3 +49,62 @@ END
 $BODY$;
 
 
+--gets or creates a chunk on a data node. First tries seeing if chunk exists.
+--If not, ask meta server to create one. Local lock obtained by this call.
+--NOTE: cannot close chunk after calling this because it locks the chunk locally.
+CREATE OR REPLACE FUNCTION get_or_create_chunk(
+    partition_id     INT,
+    time_point       BIGINT
+)
+    RETURNS chunk LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+  chunk_row chunk;
+  meta_row meta;
+BEGIN
+    chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+   
+    IF chunk_row IS NULL THEN
+        SELECT *
+        INTO STRICT meta_row
+        FROM meta;
+
+        raise warning 'testing % %', partition_id, time_point;
+
+        SELECT t.*
+        INTO chunk_row
+        FROM dblink(meta_row.server_name, 
+          format('SELECT * FROM get_or_create_chunk(%L, %L) ', partition_id, time_point)) 
+          AS t(id INTEGER, partition_id INTEGER, start_time BIGINT, end_time BIGINT);
+
+        IF chunk_row IS NULL THEN
+            RAISE EXCEPTION 'Should never happen: chunk not found in remote meta call on database %', current_database()
+            USING ERRCODE = 'IO501';
+        END IF;
+
+        --need to fetch locally to get lock.
+        chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+
+        IF chunk_row IS NULL THEN
+            RAISE EXCEPTION 'Should never happen: chunk not found after creation on database %', current_database()
+            USING ERRCODE = 'IO501';
+        END IF;
+    END IF;
+    
+    RETURN chunk_row;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION close_chunk_end(
+    chunk_id INT
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+BEGIN 
+        PERFORM 1
+        FROM meta m,
+        dblink(m.server_name, 
+          format('SELECT * FROM close_chunk_end(%L)', chunk_id)) AS t(x text);
+END
+$BODY$;

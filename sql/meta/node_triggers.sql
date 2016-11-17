@@ -12,9 +12,9 @@ BEGIN
         $$,
         NEW.schema_name);
 
-    PERFORM _sysinternal.create_server(NEW);
+    PERFORM _sysinternal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
 
-    PERFORM _sysinternal.create_user_mapping(cluster_user, NEW)
+    PERFORM _sysinternal.create_user_mapping(cluster_user, NEW.server_name)
     FROM cluster_user;
 
     EXECUTE format(
@@ -41,6 +41,9 @@ $BODY$
 DECLARE
     schema_name NAME;
 BEGIN
+    --TODO: need more complete logic for node joins
+    --copy existing tables that need to be synced over (first checking those tables are empty on new node). Now we assume all joins happen at beginning
+    --take list of synced tables from sync_triggers + the chunk_table.
     EXECUTE format(
         $$
             INSERT INTO %I.node SELECT * from node;
@@ -49,6 +52,11 @@ BEGIN
     EXECUTE format(
         $$
             INSERT INTO %I.cluster_user SELECT * from cluster_user;
+        $$,
+        NEW.schema_name);
+     EXECUTE format(
+        $$
+            INSERT INTO %I.meta SELECT * from meta;
         $$,
         NEW.schema_name);
 

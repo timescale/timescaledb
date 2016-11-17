@@ -33,7 +33,7 @@ DECLARE
 BEGIN
     FOREACH table_name IN ARRAY ARRAY['cluster_user', 'hypertable', 'hypertable_replica', 
     'distinct_replica_node', 'partition_epoch', 'partition','partition_replica',
-    'chunk_replica_node', 'field']::NAME[] LOOP
+    'chunk_replica_node', 'field', 'meta']::NAME[] LOOP
        EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_0_sync_%1$s ON %1$s

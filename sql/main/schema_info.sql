@@ -1,15 +1,27 @@
+CREATE OR REPLACE FUNCTION get_distinct_table_oid(
+    hypertable_name NAME,
+    replica_id      SMALLINT,
+    database_name   NAME 
+)
+    RETURNS REGCLASS LANGUAGE SQL STABLE AS
+$BODY$
+SELECT format('%I.%I', drn.schema_name, drn.table_name) :: REGCLASS
+FROM distinct_replica_node AS drn
+WHERE drn.hypertable_name = get_distinct_table_oid.hypertable_name AND
+      drn.replica_id = get_distinct_table_oid.replica_id AND
+      drn.database_name = get_distinct_table_oid.database_name;
+$BODY$;
+
+
 CREATE OR REPLACE FUNCTION get_distinct_local_table_oid(
     hypertable_name NAME,
     replica_id      SMALLINT
 )
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
-SELECT format('%I.%I', drn.schema_name, drn.table_name) :: REGCLASS
-FROM distinct_replica_node AS drn
-WHERE drn.hypertable_name = get_distinct_local_table_oid.hypertable_name AND
-      drn.replica_id = get_distinct_local_table_oid.replica_id AND
-      drn.database_name = current_database();
+  SELECT get_distinct_table_oid(hypertable_name, replica_id, current_database())
 $BODY$;
+
 
 CREATE OR REPLACE FUNCTION get_field_names(
     hypertable_name NAME
@@ -96,5 +108,24 @@ BEGIN
     RETURN data_type;
 END
 $BODY$;
+
+
+CREATE OR REPLACE FUNCTION get_open_partition_for_key( 
+    hypertable_name NAME,
+    key_value text 
+)
+    RETURNS partition LANGUAGE SQL STABLE AS
+$BODY$
+    WITH part_epoch AS (
+      SELECT *
+      FROM partition_epoch pe
+      WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
+            end_time IS NULL 
+    )
+    SELECT  p.*
+    FROM  part_epoch pe INNER JOIN partition p ON (p.epoch_id = pe.id) 
+    WHERE get_partition_for_key(key_value, pe.partitioning_mod) BETWEEN p.keyspace_start AND p.keyspace_end; 
+$BODY$;
+
 
 

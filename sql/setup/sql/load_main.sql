@@ -1,6 +1,7 @@
 \ir ../../main/table_creation.sql
 \ir ../../main/cluster_user_triggers.sql
 \ir ../../main/node_triggers.sql
+\ir ../../main/meta_triggers.sql
 \ir ../../main/hypertable_triggers.sql
 \ir ../../main/hypertable_replica_triggers.sql
 \ir ../../main/distinct_replica_node_triggers.sql
@@ -16,7 +17,7 @@
 \ir ../../main/chunk_triggers.sql
 \ir ../../main/chunk.sql
 --\ir ../../main/data_table_constructors.sql
---\ir ../../main/insert.sql
+\ir ../../main/insert.sql
 
 --\ir ../../main/ioql.sql
 --\ir ../../main/ioql_result_schema_nonagg.sql

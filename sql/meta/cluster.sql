@@ -1,3 +1,28 @@
+CREATE OR REPLACE FUNCTION set_meta(
+    database_name NAME,
+    hostname      TEXT
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+  meta_row meta;
+BEGIN
+    SELECT *
+    INTO meta_row
+    FROM meta
+    LIMIT 1;
+
+    IF meta_row IS NULL THEN 
+      INSERT INTO meta (database_name, hostname, server_name)
+      VALUES (database_name, hostname, database_name);
+    ELSE
+      IF meta_row.database_name <> database_name OR meta_row.hostname <> hostname THEN
+        RAISE EXCEPTION 'Changing meta info is not supported' USING ERRCODE = 'IO101';
+      END IF;
+    END IF;
+END
+$BODY$;
+
 CREATE OR REPLACE FUNCTION add_node(
     database_name NAME,
     hostname      TEXT

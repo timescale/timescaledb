@@ -6,6 +6,7 @@
 \c meta
 SELECT add_cluster_user('postgres', NULL);
 
+SELECT set_meta('meta' :: NAME, 'localhost');
 SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
 
@@ -25,6 +26,8 @@ SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
 SELECT *
 FROM node;
 SELECT *
+FROM meta;
+SELECT *
 FROM hypertable;
 SELECT *
 FROM hypertable_replica;
@@ -42,6 +45,9 @@ SELECT *
 FROM chunk_replica_node;
 SELECT *
 FROM field;
+
+\des+
+\deu+
 
 \echo *********************************************************************************************************ß
 \c Test1
@@ -49,6 +55,8 @@ FROM field;
 SELECT *
 FROM node;
 SELECT *
+FROM meta;
+SELECT *
 FROM hypertable;
 SELECT *
 FROM hypertable_replica;
@@ -66,7 +74,12 @@ SELECT *
 FROM chunk_replica_node;
 SELECT *
 FROM field;
+
+\des+
+\deu+
+
 \d+ "_sys_1_testNs".*
+
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
 --\det "_sys_1_testNs".*

@@ -54,22 +54,6 @@ BEGIN
 END
 $BODY$;
 
-
-CREATE OR REPLACE FUNCTION _sysinternal.get_chunk(
-    partition_id     INT,
-    time_point       BIGINT
-)
-    RETURNS chunk LANGUAGE SQL VOLATILE AS
-$BODY$
-    SELECT *
-    FROM chunk c
-    WHERE c.partition_id = get_chunk.partition_id AND 
-    (c.start_time <= time_point OR c.start_time IS NULL) AND 
-    (c.end_time >= time_point OR c.end_time IS NULL) 
-    FOR SHARE;
-$BODY$;
-
-
 --creates chunk. Must be called after aquiring a lock on partition.
 CREATE OR REPLACE FUNCTION _sysinternal.create_chunk(
     partition_id     INT,
@@ -121,7 +105,7 @@ BEGIN
       chunk_row := _sysinternal.get_chunk(partition_id, time_point);
 
       IF chunk_row IS NULL THEN --recheck
-          RAISE EXCEPTION 'Should never happen'
+          RAISE EXCEPTION 'Should never happen: chunk not found after creation on meta'
           USING ERRCODE = 'IO501';
       END IF;
     END IF;
@@ -193,6 +177,7 @@ BEGIN
           PERFORM 1 
           FROM dblink(node_row.server_name, format('SELECT * FROM set_end_time_for_chunk_close(%L, %L)', chunk_id, table_end)) AS t(x text);
           PERFORM dblink_exec(node_row.server_name, 'COMMIT');
+          --TODO: should we disconnect here?
           PERFORM dblink_disconnect(node_row.server_name);
       END LOOP;
 END
