@@ -21,7 +21,7 @@ NAMESPACE="33_testNs"
 psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_META -v ON_ERROR_STOP=1  <<EOF
     SELECT add_namespace('$NAMESPACE' :: NAME);
     SELECT add_field('$NAMESPACE' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'num_1', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+    SELECT add_field('$NAMESPACE' :: NAME, 'nUm_1', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
     SELECT add_field('$NAMESPACE' :: NAME, 'num_2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
     SELECT add_field('$NAMESPACE' :: NAME, 'bool_1', 'boolean', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
     SELECT add_field('$NAMESPACE' :: NAME, 'string_1', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
@@ -30,7 +30,7 @@ psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_META -v ON_ERROR_STOP=1 
     SELECT add_field('$NAMESPACE' :: NAME, 'field_only_dev2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
 EOF
 
-INPUT_DATA_DIR="input_data" 
+INPUT_DATA_DIR="../import_data" 
 FILE_SUFFIX=".tsv"
 DATASETS=`ls $INPUT_DATA_DIR/*$FILE_SUFFIX`
 TEMPTABLENAME="copy_t"
@@ -46,8 +46,8 @@ psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_MAIN -v ON_ERROR_STOP=1 
         SELECT *
         FROM create_temp_copy_table_one_partition('copy_t'::text, get_partition_for_key('$PARTITION_KEY'::text, 10 :: SMALLINT), 10 :: SMALLINT);
         \COPY $TEMPTABLENAME FROM '$DS_PATH';
-        DROP TABLE IF EXISTS $DATASET;
         CREATE SCHEMA IF NOT EXISTS test_input_data;
+        DROP TABLE IF EXISTS test_input_data.$DATASET;
         CREATE TABLE test_input_data.$DATASET AS SELECT * FROM $TEMPTABLENAME; 
         COMMIT; 
 EOF

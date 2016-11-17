@@ -16,7 +16,7 @@ echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER and with meta db $INST
 
 cd $DIR
 
-OUTPUT_DATA_DIR="expected_outputs"
+OUTPUT_DATA_DIR="../expected_outputs"
 FILE_SUFFIX="csv"
 DATAFILES=`ls $OUTPUT_DATA_DIR/*.$FILE_SUFFIX`
 SCHEMA_NAME="test_outputs"
