@@ -109,6 +109,27 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION get_partition_for_epoch( 
+    epoch partition_epoch,
+    key_value text 
+)
+    RETURNS partition LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE 
+  partition_row partition;
+BEGIN
+  EXECUTE format($$
+    SELECT  p.*
+    FROM  partition p 
+    WHERE p.epoch_id = %L AND
+    %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end 
+  $$,
+  epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
+  INTO STRICT partition_row;
+
+  RETURN partition_row;
+END
+$BODY$;
 
 CREATE OR REPLACE FUNCTION get_open_partition_for_key( 
     hypertable_name NAME,
@@ -116,16 +137,15 @@ CREATE OR REPLACE FUNCTION get_open_partition_for_key(
 )
     RETURNS partition LANGUAGE SQL STABLE AS
 $BODY$
-    WITH part_epoch AS (
-      SELECT *
-      FROM partition_epoch pe
+      SELECT p.*
+      FROM partition_epoch pe,
+           get_partition_for_epoch(pe, key_value) p
       WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
-            end_time IS NULL 
-    )
-    SELECT  p.*
-    FROM  part_epoch pe INNER JOIN partition p ON (p.epoch_id = pe.id) 
-    WHERE get_partition_for_key(key_value, pe.partitioning_mod) BETWEEN p.keyspace_start AND p.keyspace_end; 
+            end_time IS NULL  
 $BODY$;
+
+
+
 
 
 

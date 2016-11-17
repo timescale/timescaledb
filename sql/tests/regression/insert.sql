@@ -23,12 +23,10 @@ SELECT add_field('testNs' :: NAME, 'series_bool', 'boolean', FALSE, FALSE, ARRAY
 \c Test1
 BEGIN;
 SELECT *
-FROM create_temp_copy_table_one_partition('copy_t');
+FROM create_temp_copy_table('copy_t');
 \COPY copy_t FROM 'data/ds1_dev1_1.tsv';
 SELECT *
-FROM 
-get_open_partition_for_key('testNs','dev1') part,
-insert_data_one_partition('copy_t', part.id);
+FROM insert_data('copy_t');
 COMMIT;
 
 SELECT close_chunk_end(c.id)
@@ -38,23 +36,19 @@ INNER JOIN chunk c ON (c.partition_id = part.id);
 \c Test1
 BEGIN;
 SELECT *
-FROM create_temp_copy_table_one_partition('copy_t');
+FROM create_temp_copy_table('copy_t');
 \COPY copy_t FROM 'data/ds1_dev1_2.tsv';
 SELECT *
-FROM 
-get_open_partition_for_key('testNs','dev1') part,
-insert_data_one_partition('copy_t', part.id);
+FROM insert_data('copy_t');
 COMMIT;
 
 \c test2
 BEGIN;
 SELECT *
-FROM create_temp_copy_table_one_partition('copy_t');
+FROM create_temp_copy_table('copy_t');
 \COPY copy_t FROM 'data/ds1_dev2_1.tsv';
 SELECT *
-FROM 
-get_open_partition_for_key('testNs','dev2') part,
-insert_data_one_partition('copy_t', part.id);
+FROM insert_data('copy_t');
 COMMIT;
 
 \c Test1

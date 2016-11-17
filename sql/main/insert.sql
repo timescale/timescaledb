@@ -34,7 +34,7 @@ SELECT array_to_string(get_fields_from_json(hypertable_name), ', ')
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION create_temp_copy_table_one_partition(
+CREATE OR REPLACE FUNCTION create_temp_copy_table(
     table_name       TEXT
 )
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
@@ -53,6 +53,9 @@ BEGIN
     RETURN table_name;
 END
 $BODY$;
+
+
+
 
 --creates fields from project_series, not namespaces
 CREATE OR REPLACE FUNCTION insert_data_one_partition(
@@ -138,9 +141,111 @@ BEGIN
 END
 $BODY$;
 
+--creates fields from project_series, not namespaces
+CREATE OR REPLACE FUNCTION insert_data(
+    copy_table_oid   REGCLASS
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    crn_record              RECORD;
+    distinct_table_oid      REGCLASS;
+    time_point              BIGINT;
+    hypertable_point        NAME;
+    partition_id            INT;
+BEGIN
+    time_point := 1;
+    EXECUTE format(
+        $$
+            SELECT "time", ct.hypertable_name, p.id  
+            FROM %s ct
+            LEFT JOIN partition_epoch pe ON (
+              pe.hypertable_name = ct.hypertable_name AND  
+              (pe.start_time <= ct."time" OR pe.start_time IS NULL) AND 
+              (pe.end_time   >= ct."time" OR pe.end_time IS NULL)
+            )
+            LEFT JOIN  get_partition_for_epoch(pe, value->>pe.partitioning_field) AS p ON(true)
+            ORDER BY hypertable_name 
+            LIMIT 1
+        $$, copy_table_oid)
+    INTO time_point, hypertable_point, partition_id;
+    IF time_point IS NOT NULL AND partition_id IS NULL THEN
+        RAISE EXCEPTION 'Should never happen: could not find partition for insert'
+        USING ERRCODE = 'IO501';
+    END IF;
 
+    WHILE time_point IS NOT NULL LOOP
+      FOR crn_record  IN 
+        SELECT crn.database_name, crn.schema_name, crn.table_name, c.start_time, c.end_time, pr.hypertable_name, pr.replica_id
+        FROM get_or_create_chunk(partition_id, time_point) c
+        INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
+        INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
+      LOOP
+          SELECT *
+          INTO distinct_table_oid
+          FROM get_distinct_table_oid(hypertable_point, crn_record.replica_id, crn_record.database_name);
 
+          BEGIN
+            LOOP
+              EXECUTE format(
+                  $$
+                      WITH selected AS
+                      (
+                          DELETE FROM %2$s
+                          WHERE ("time" >= %3$L OR  %3$L IS NULL) and ("time" <= %4$L OR %4$L IS NULL)
+                                AND hypertable_name = %5$L
+                          RETURNING *
+                      ),
+                      distinct_field AS (
+                          SELECT name
+                          FROM field
+                          WHERE hypertable_name = %5$L  AND is_distinct = TRUE
+                      ),
+                      insert_distinct AS (
+                          INSERT INTO  %6$s as distinct_table
+                              SELECT distinct_field.name, value->>distinct_field.name
+                              FROM  distinct_field
+                              CROSS JOIN selected
+                              WHERE value ? distinct_field.name
+                              GROUP BY distinct_field.name, (value->>distinct_field.name)
+                              ON CONFLICT 
+                                  DO NOTHING
+                      )
+                      INSERT INTO %1$s (time, %7$s) SELECT time, %8$s FROM selected;
+                  $$, 
+                  format('%I.%I', crn_record.schema_name, crn_record.table_name)::regclass, 
+                  copy_table_oid, crn_record.start_time, crn_record.end_time,
+                  hypertable_point, distinct_table_oid,
+                  get_field_list(hypertable_point),
+                  get_field_from_json_list(hypertable_point));
+              EXIT;
+            END LOOP;
+          EXCEPTION WHEN deadlock_detected THEN
+            --do nothing, rerun loop (deadlock can be caused by concurrent updates to distinct table)
+            --TODO: try to get rid of this by ordering the insert
+          END;
+      END LOOP;
 
-
+      EXECUTE format(
+        $$
+            SELECT "time", ct.hypertable_name, p.id  
+            FROM %s ct
+            LEFT JOIN partition_epoch pe ON (
+              pe.hypertable_name = ct.hypertable_name AND  
+              (pe.start_time <= ct."time" OR pe.start_time IS NULL) AND 
+              (pe.end_time   >= ct."time" OR pe.end_time IS NULL)
+            )
+            LEFT JOIN  get_partition_for_epoch(pe, value->>pe.partitioning_field) AS p ON(true)
+            ORDER BY hypertable_name 
+            LIMIT 1
+        $$, copy_table_oid)
+      INTO time_point, hypertable_point, partition_id;
+      IF time_point IS NOT NULL AND partition_id IS NULL THEN
+          RAISE EXCEPTION 'Should never happen: could not find partition for insert'
+          USING ERRCODE = 'IO501';
+      END IF;
+    END LOOP;
+END
+$BODY$;
 
 
