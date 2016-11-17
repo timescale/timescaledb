@@ -105,18 +105,13 @@ BEGIN
                       ),
                       insert_distinct AS (
                           INSERT INTO  %6$s as distinct_table
-                              SELECT distinct_field.name, value->>distinct_field.name, max(time)
+                              SELECT distinct_field.name, value->>distinct_field.name
                               FROM  distinct_field
                               CROSS JOIN selected
                               WHERE value ? distinct_field.name
                               GROUP BY distinct_field.name, (value->>distinct_field.name)
                               ON CONFLICT 
-                                  -- (field, value)
                                   DO NOTHING
-                                  --DO UPDATE
-                                 -- SET last_time_approx = EXCLUDED.last_time_approx + (1e9::bigint * 60*60*24::bigint)
-                                  --WHERE EXCLUDED.last_time_approx > distinct_table.last_time_approx
-                                  --DO UPDATE SET last_time_approx = EXCLUDED.last_time_approx
                       )
                       INSERT INTO %1$s (time, %7$s) SELECT time, %8$s FROM selected;
                   $$, 

@@ -39,7 +39,6 @@ BEGIN
             CREATE TABLE IF NOT EXISTS %1$I.%2$I (
                 field TEXT,
                 value TEXT,
-                last_time_approx BIGINT,
                 PRIMARY KEY(field, value)
             );
         $$, schema_name, table_name);
