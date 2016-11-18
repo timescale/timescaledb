@@ -1,4 +1,4 @@
-start-pg-docker:
+start-pg-docker: stop-pg-docker
 	@./start-pg-docker.sh
 
 stop-pg-docker:
