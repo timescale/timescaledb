@@ -19,13 +19,16 @@
 --\ir ../../main/data_table_constructors.sql
 \ir ../../main/insert.sql
 
---\ir ../../main/ioql.sql
---\ir ../../main/ioql_result_schema_nonagg.sql
---\ir ../../main/ioql_result_schema_agg.sql
---\ir ../../main/ioql_schema_info.sql
---\ir ../../main/ioql_sql_gen.sql
---\ir ../../main/ioql_remote_calls.sql
---\ir ../../main/ioql_optimized_agg.sql
---\ir ../../main/ioql_distinct_queries.sql
---\ir ../../main/ioql_optimized_nonagg.sql
---\ir ../../main/ioql_optimized.sql
+\ir ../../main/ioql.sql
+\ir ../../main/ioql_exec_node.sql
+\ir ../../main/ioql_result_schema_nonagg.sql
+\ir ../../main/ioql_result_schema_agg.sql
+\ir ../../main/ioql_schema_info.sql
+\ir ../../main/ioql_sql_gen.sql
+\ir ../../main/ioql_remote_calls.sql
+\ir ../../main/ioql_optimized_agg.sql
+\ir ../../main/ioql_sqlgen_cluster_agg.sql
+\ir ../../main/ioql_distinct_queries.sql
+\ir ../../main/ioql_optimized_nonagg.sql
+\ir ../../main/ioql_sqlgen_cluster_nonagg.sql
+\ir ../../main/ioql_optimized.sql

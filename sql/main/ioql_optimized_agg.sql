@@ -206,7 +206,7 @@ $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query,
                                                   table_oid              REGCLASS,
-                                                  total_partitions       SMALLINT,
+                                                  epoch                  partition_epoch,
                                                   additional_constraints TEXT,
                                                   limit_sub              TEXT)
     RETURNS TEXT AS
@@ -222,7 +222,7 @@ BEGIN
         select_clause,
         format('FROM %s', table_oid),
         get_where_clause(
-            default_predicates(query, total_partitions),
+            default_predicates(query, epoch),
             additional_constraints
         ),
         get_groupby_clause(query.aggregate),
@@ -238,24 +238,24 @@ LANGUAGE PLPGSQL STABLE;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_by_only_time_sql(
     query                  ioql_query,
-    part                   namespace_partition_type,
+    epoch                  partition_epoch,
+    pr                     partition_replica,
     additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT AS
 $BODY$
 DECLARE
-    data_table_row  data_table;
+    crn_row         chunk_replica_node;
     code            TEXT = '';
     index           INT = 0;
-    previous_tables TEXT = '';
+    previous_tables TEXT = NULL;
 BEGIN
-    FOR data_table_row IN SELECT *
-                          FROM get_data_tables_for_partitions_time_desc(part) LOOP
+    FOR crn_row IN SELECT * FROM get_local_chunk_replica_node_for_pr_time_desc(pr) LOOP
         IF index = 0 THEN
             code := code || format($$  WITH results_%s AS (%s) $$,
                                    index,
                                    base_query_agg_partial(query,
-                                                          data_table_row.table_oid,
-                                                          data_table_row.total_partitions,
+                                                          format('%I.%I', crn_row.schema_name, crn_row.table_name)::REGCLASS,
+                                                          epoch,
                                                           additional_constraints,
                                                           (query.limit_rows + 1) :: TEXT));
             previous_tables := 'SELECT * FROM results_0';
@@ -267,8 +267,8 @@ BEGIN
             --      this is because my new rows may overlap with previous rows.
             code := code || format($$  , results_%s AS (%s) $$, index,
                                    base_query_agg_partial(query,
-                                                          data_table_row.table_oid,
-                                                          data_table_row.total_partitions,
+                                                          format('%I.%I', crn_row.schema_name, crn_row.table_name)::REGCLASS,
+                                                          epoch,
                                                           additional_constraints,
                                                           format(
                                                               '(SELECT CASE WHEN COUNT(DISTINCT group_time) = %1$L THEN 0 ELSE %1$L END FROM (%2$s) as x)',
@@ -286,26 +286,31 @@ $BODY$ LANGUAGE plpgsql STABLE;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_by_time_and_group_sql(
     query                  ioql_query,
-    part                   namespace_partition_type,
+    epoch                  partition_epoch,
+    pr                     partition_replica,
     additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT AS
 $BODY$
 DECLARE
-    data_table_row  data_table;
+    crn_row         RECORD;
     code            TEXT = '';
     index           INT = 0;
     previous_tables TEXT = '';
     prev_start_time BIGINT;
 BEGIN
-    FOR data_table_row IN SELECT *
-                          FROM get_data_tables_for_partitions_time_desc(part) LOOP
+
+  --todo this join stupid a redo of  get_local_chunk_replica_node_for_pr_time_desc
+    FOR crn_row IN SELECT c.start_time, crn.*
+                   FROM get_local_chunk_replica_node_for_pr_time_desc(pr) crn
+                   INNER JOIN chunk c ON (c.id = crn.chunk_id)
+        LOOP
         IF index = 0 THEN
             --always scan first table
             code := code || format($$  WITH results_%s AS (%s) $$,
                                    index,
                                    base_query_agg_partial(query,
-                                                          data_table_row.table_oid,
-                                                          data_table_row.total_partitions,
+                                                          format('%I.%I', crn_row.schema_name, crn_row.table_name),
+                                                          epoch,
                                                           additional_constraints,
                                                           (query.limit_rows) :: TEXT
                                    ));
@@ -318,8 +323,8 @@ BEGIN
             --    a closed group is one where the group starts after the start_time of the last table processed.
             code := code || format($$  , results_%s AS (%s) $$, index,
                                    base_query_agg_partial(query,
-                                                          data_table_row.table_oid,
-                                                          data_table_row.total_partitions,
+                                                          format('%I.%I', crn_row.schema_name, crn_row.table_name),
+                                                          epoch,
                                                           additional_constraints,
                                                           format(
                                                               '(SELECT CASE WHEN COUNT(*) = %1$L AND min(group_time) > %4$L THEN 0 ELSE %1$L END '
@@ -333,7 +338,7 @@ BEGIN
                                    ));
             previous_tables := previous_tables || format(' UNION ALL SELECT * FROM results_%s', index);
         END IF;
-        prev_start_time := data_table_row.start_time;
+        prev_start_time := crn_row.start_time;
         index := index + 1;
     END LOOP;
     code := code || previous_tables;
@@ -342,65 +347,63 @@ END
 $BODY$ LANGUAGE plpgsql STABLE;
 
 
---this generates sql for the case that there is no limit_rows clause
---then query the partition directly
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_no_limit_rows_sql(
     query                  ioql_query,
-    part                   namespace_partition_type,
+    epoch                  partition_epoch,
+    pr                     partition_replica,
     additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT LANGUAGE SQL AS
 $BODY$
-SELECT base_query_agg_partial(query,
-                              format('%I.%I', get_schema_name(query.namespace_name),
-                                     partition_table_row.table_name) :: REGCLASS,
-                              partition_table_row.total_partitions,
+SELECT string_agg('(' || base_query_agg_partial(query,
+                              format('%I.%I', crn.schema_name, crn.table_name) :: REGCLASS,
+                              epoch,
                               additional_constraints,
-                              NULL
-)
-FROM get_partition_table_row(part) AS partition_table_row;
+                              NULL) || ')', ' UNION ALL ' )
+ FROM get_local_chunk_replica_node_for_pr_time_desc(pr) crn
 $BODY$;
 
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_sql(
     query                  ioql_query,
-    part                   namespace_partition_type,
+    epoch                  partition_epoch,
+    pr                     partition_replica, 
     additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     IF query.limit_rows IS NULL THEN
-        RETURN ioql_query_local_partition_agg_no_limit_rows_sql(query, part, additional_constraints);
+        RETURN ioql_query_local_partition_agg_no_limit_rows_sql(query, epoch, pr, additional_constraints);
     ELSE
         IF (query.aggregate).group_field IS NULL THEN
-            RETURN ioql_query_local_partition_agg_limit_rows_by_only_time_sql(query, part, additional_constraints);
+            RETURN ioql_query_local_partition_agg_limit_rows_by_only_time_sql(query, epoch, pr, additional_constraints);
         ELSE
-            RETURN ioql_query_local_partition_agg_limit_rows_by_time_and_group_sql(query, part, additional_constraints);
+            RETURN ioql_query_local_partition_agg_limit_rows_by_time_and_group_sql(query, epoch, pr, additional_constraints);
         END IF;
     END IF;
 END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_max_time_on_partition(part namespace_partition_type, additional_constraints TEXT)
+CREATE OR REPLACE FUNCTION get_max_time_on_partition(part_replica partition_replica, additional_constraints TEXT)
     RETURNS BIGINT AS
 $BODY$
 DECLARE
     time           BIGINT;
-    data_table_row data_table;
+    crn_row        chunk_replica_node;
 BEGIN
     time := NULL;
 
-    FOR data_table_row IN
+    FOR crn_row IN
     SELECT *
-    FROM get_data_tables_for_partitions_time_desc(part) LOOP
+    FROM  get_local_chunk_replica_node_for_pr_time_desc(part_replica) LOOP
         EXECUTE format(
             $$
                 SELECT time
-                FROM %s
+                FROM %I.%I
                 %s
                 ORDER BY time DESC NULLS LAST
                 LIMIT 1
-            $$, data_table_row.table_oid, get_where_clause(additional_constraints))
+            $$, crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
         INTO time;
 
         IF time IS NOT NULL THEN
@@ -414,9 +417,13 @@ $BODY$ LANGUAGE PLPGSQL STABLE;
 --------------- NODE FUNCTIONS ------------
 
 CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_ungrouped_sql(
-    query                  ioql_query,
-    additional_constraints TEXT DEFAULT NULL)
-    RETURNS TEXT AS $BODY$
+    query       ioql_query,
+    epoch       partition_epoch,
+    replica_id  SMALLINT,
+    additional_constraints TEXT DEFAULT NULL
+)
+    RETURNS TEXT AS 
+$BODY$
 SELECT format('SELECT * FROM (%s) as combined_node ',
               coalesce(
                   string_agg(code_part, ' UNION ALL '),
@@ -427,27 +434,33 @@ SELECT format('SELECT * FROM (%s) as combined_node ',
 FROM
     (
         SELECT '(' || code || ')' code_part
-        FROM get_partitions_for_namespace(query.namespace_name) parts,
-            LATERAL ioql_query_local_partition_agg_sql(query, parts, additional_constraints) AS code
+        FROM  get_partition_replicas(epoch, replica_id) pr,
+            LATERAL ioql_query_local_partition_agg_sql(query, epoch, pr, additional_constraints) AS code
+        WHERE code is not null AND code <> ''
     ) AS f;
 $BODY$ LANGUAGE SQL IMMUTABLE;
 
 
-CREATE OR REPLACE FUNCTION get_time_periods_limit(namespace_name NAME, additional_constraints TEXT,
-                                                  period_length  BIGINT, num_periods INT)
+CREATE OR REPLACE FUNCTION get_time_periods_limit(epoch                   partition_epoch,
+                                                  replica_id              SMALLINT, 
+                                                  additional_constraints  TEXT,
+                                                  period_length           BIGINT, 
+                                                  num_periods             INT)
     RETURNS time_range LANGUAGE SQL STABLE AS
 $BODY$
 -- start and end inclusive
 SELECT (get_time_periods_limit_for_max(max_time.max_time, period_length, num_periods)).*
 FROM
     (
-        SELECT max(get_max_time_on_partition(parts, additional_constraints)) AS max_time
-        FROM get_partitions_for_namespace(namespace_name) parts
+        SELECT max(get_max_time_on_partition(pr, additional_constraints)) AS max_time
+        FROM get_partition_replicas(epoch, replica_id) pr
     ) AS max_time
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_grouped_sql(query                  ioql_query,
-                                                                 additional_constraints TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_grouped_sql( query       ioql_query,
+                                                                  epoch       partition_epoch,
+                                                                  replica_id  SMALLINT,
+                                                                  additional_constraints TEXT DEFAULT NULL)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
@@ -464,7 +477,8 @@ BEGIN
             format('time >= %L AND time <=%L', trange.start_time, trange.end_time),
             additional_constraints);
     END IF;
-    ungrouped_sql := ioql_query_local_node_agg_ungrouped_sql(query, additional_constraints);
+
+    ungrouped_sql := ioql_query_local_node_agg_ungrouped_sql(query, epoch, replica_id, additional_constraints);
 
     grouped_sql := format(
         $$
@@ -482,89 +496,9 @@ BEGIN
         get_orderby_clause_agg(query),
         query.limit_rows);
 
-
-    RAISE NOTICE E'Per-Node SQL:\n%\n', grouped_sql;
-
     RETURN grouped_sql;
 END
 $BODY$;
-
-
-CREATE OR REPLACE FUNCTION ioql_query_local_node_agg(query ioql_query)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
-$BODY$
-BEGIN
-    RETURN QUERY EXECUTE ioql_query_local_node_agg_grouped_sql(query);
-END;
-$BODY$;
-
---------------- CLUSTER FUNCTIONS ------------
-
-
-CREATE OR REPLACE FUNCTION ioql_exec_query_agg_without_limit_sql(query ioql_query)
-    RETURNS TEXT LANGUAGE SQL STABLE AS $BODY$
---function aggregates partials across nodes.
-SELECT format(
-    $$
-          SELECT
-            %1$s
-          FROM  ioql_query_nodes_individually(
-                  get_cluster_table(%4$L), %5$L, 'ioql_query_local_node_agg', %2$L
-                ) as data(%2$s)
-          %3$s
-      $$,
-    get_finalize_aggregate_sql(query.select_items, query.aggregate),
-    get_partial_aggregate_column_def(query),
-    get_groupby_clause(query.aggregate),
-    query.namespace_name,
-    query)
-$BODY$;
-
-CREATE OR REPLACE FUNCTION ioql_exec_query_agg(query ioql_query)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
-$BODY$
-DECLARE
-    sql TEXT;
-BEGIN
-    IF query.limit_time_periods IS NOT NULL THEN
-        sql := format(
-            $$
-                with without_limit AS (
-                  %1$s
-                )
-                SELECT without_limit.*
-                FROM  without_limit,
-                      get_time_periods_limit_for_max((SELECT max(time) from without_limit), ($1.aggregate).group_time, $1.limit_time_periods) limits
-                WHERE time >= limits.start_time AND time <= limits.end_time
-                %2$s
-                %3$s
-            $$,
-            ioql_exec_query_agg_without_limit_sql(query),
-            get_orderby_clause_agg(query, 'time'),
-            get_limit_clause(query.limit_rows)
-        );
-
-        RAISE NOTICE E'Cross-node SQL:\n%\n', sql;
-        RETURN QUERY EXECUTE sql
-        USING query;
-    ELSE
-        sql := format(
-            $$
-                SELECT *
-                FROM (%s) without_limit
-                %s
-                %s
-            $$,
-            ioql_exec_query_agg_without_limit_sql(query),
-            get_orderby_clause_agg(query, 'time'),
-            get_limit_clause(query.limit_rows));
-
-        RAISE NOTICE E'Cross-node SQL:\n%\n', sql;
-        RETURN QUERY EXECUTE sql;
-    END IF;
-END;
-$BODY$
-SET constraint_exclusion = ON;
 
 
 

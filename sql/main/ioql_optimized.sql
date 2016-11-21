@@ -1,30 +1,31 @@
-CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(_query ioql_query)
-    RETURNS TEXT AS $BODY$
+CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(query ioql_query)
+    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS 
+$BODY$
+DECLARE 
+  sql_code TEXT;
+  epoch partition_epoch;
 BEGIN
-    IF get_cluster_table(_query.namespace_name) IS NULL THEN
+    --TODO : broken; assumes one partition_epoch. Needs to be a loop.
+    SELECT *
+    INTO epoch
+    FROM partition_epoch pe 
+    WHERE pe.hypertable_name = query.namespace_name;
+
+    IF epoch IS NULL THEN
         RETURN format($$ SELECT * FROM no_cluster_table(%L) $$, _query);
     END IF;
-
-    IF _query.aggregate IS NULL THEN
-        RETURN format(
-            $$
-                SELECT *
-                FROM ioql_exec_query_nonagg(%L) as ans(%s)
-                ORDER BY time DESC NULLS LAST
-            $$, _query, get_result_column_def_list_nonagg(_query));
+    
+    IF NOT query.aggregate IS NULL THEN
+        sql_code := ioql_query_agg_sql(query, epoch);
+        RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
+        RETURN sql_code;
     ELSE
-        RETURN format(
-            $$
-                SELECT *
-                FROM ioql_exec_query_agg(%L) as ans(%s)
-                ORDER BY time DESC NULLS LAST
-            $$,
-            _query,
-            get_result_column_def_list_agg(_query));
+        sql_code := ioql_query_nonagg_sql(query, epoch);
+        RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
+        RETURN sql_code;
     END IF;
 END
-$BODY$
-LANGUAGE plpgsql STABLE;
+$BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_exec_query_record_cursor(query ioql_query, curs REFCURSOR)
     RETURNS REFCURSOR AS $BODY$

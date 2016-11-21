@@ -4,7 +4,8 @@
 --   1) Scan the top 10000 rows of table and try to fulfil the query with those items.
 --   2) Then for every by_every item not fulfilled, try to scan for it, using its index.
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every_sql(query ioql_query,
-                                                                              part  namespace_partition_type)
+                                                                              epoch partition_epoch, 
+                                                                              pr partition_replica)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -16,31 +17,42 @@ DECLARE
     query_sql_scan_base_table TEXT = '';
     query_sql_scan            TEXT = '';
     query_sql_jump            TEXT = '';
-    data_table_row            data_table;
+    crn_row                   chunk_replica_node;
+    partition_row             partition;
 BEGIN
 
 
-    IF get_partitioning_field_name(query.namespace_name) = (query.limit_by_field).field THEN
+    IF epoch.partitioning_field = (query.limit_by_field).field THEN
+        SELECT * 
+        INTO STRICT partition_row
+        FROM partition p
+        WHERE p.id = pr.partition_id;
+
         distinct_value_sql = format(
             $$
               SELECT value AS value, %2$L::bigint AS cnt
-              FROM get_distinct_values_local(%3$L, %1$L) AS value
-              WHERE get_partition_for_key(value, %4$L) = %5$L
+              FROM get_distinct_values_local(%3$L, %4$L, %1$L) AS value
+              WHERE get_partition_for_key(value, %5$L) BETWEEN %6$L AND %7$L
             $$,
             (query.limit_by_field).field,
             (query.limit_by_field).count,
-            query.namespace_name,
-            part.total_partitions,
-            part.partition_number);
+            pr.hypertable_name,
+            pr.replica_id,
+            epoch.partitioning_mod,
+            partition_row.keyspace_start,
+            partition_row.keyspace_end
+          );
     ELSE
         distinct_value_sql = format(
             $$
               SELECT value, %2$L::bigint as cnt
-              FROM get_distinct_values_local(%3$L, %1$L) AS value
+              FROM get_distinct_values_local(%3$L, %4$L, %1$L) AS value
             $$,
             (query.limit_by_field).field,
             (query.limit_by_field).count,
-            query.namespace_name);
+            pr.hypertable_name,
+            pr.replica_id
+          );
     END IF;
 
 
@@ -84,7 +96,7 @@ BEGIN
         get_full_select_clause_nonagg(query),
         'FROM %1$s',
         get_where_clause(
-            default_predicates(query, part.total_partitions),
+            default_predicates(query, epoch),
             format('%1$I::text = dv_counts_min_time.value AND %1$I IS NOT NULL', (query.limit_by_field).field),
             '(time < dv_counts_min_time.min_time OR dv_counts_min_time.min_time IS NULL)'
         ),
@@ -92,8 +104,10 @@ BEGIN
         'ORDER BY time DESC NULLS LAST, ' || (query.limit_by_field).field,
         'LIMIT dv_counts_min_time.remaining_cnt');
 
-    FOR data_table_row IN SELECT *
-                          FROM get_data_tables_for_partitions_time_desc(part) LOOP
+    FOR crn_row IN SELECT *
+                          FROM  get_local_chunk_replica_node_for_pr_time_desc(pr)
+        LOOP
+        
         IF index = 0 THEN
             code := code || format(
                 $$
@@ -111,7 +125,7 @@ BEGIN
                    $$,
                 get_full_select_clause_nonagg(query),
                 (query.limit_by_field).field,
-                format(query_sql_scan, data_table_row.table_oid),
+                format(query_sql_scan, format('%I.%I', crn_row.schema_name, crn_row.table_name)),
                 (query.limit_by_field).count
             );
 
@@ -139,7 +153,7 @@ BEGIN
             (query.limit_by_field).field,
             previous_tables,
             index,
-            format(query_sql_jump, data_table_row.table_oid)
+            format(query_sql_jump, format('%I.%I', crn_row.schema_name, crn_row.table_name))
         );
 
         previous_tables := previous_tables || format(' UNION ALL SELECT * FROM results_%s', index);
@@ -151,8 +165,9 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql(query ioql_query,
-                                                                             part  namespace_partition_type)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql( query ioql_query,
+                                                                              epoch partition_epoch, 
+                                                                              pr partition_replica)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT format(
@@ -167,35 +182,38 @@ SELECT format(
 FROM (
          SELECT '(' || base_query_raw(
              get_full_select_clause_nonagg(query),
-             get_from_clause(data_table_row),
+             get_from_clause(crn),
              get_where_clause(
-                 default_predicates(query, part.total_partitions)
+                 default_predicates(query, epoch)
              ),
              get_groupby_clause(query.aggregate),
              get_orderby_clause_nonagg(query),
              get_limit_clause(query.limit_rows)
          ) || ')' AS code
-         FROM get_data_tables_for_partitions_time_desc(part) AS data_table_row
-     ) AS code_per_data_table;
+         FROM get_local_chunk_replica_node_for_pr_time_desc(pr) AS crn
+     ) AS code_per_crn
+HAVING string_agg(code, ' UNION ALL ') IS NOT NULL 
 $BODY$
 SET constraint_exclusion = ON;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query, part namespace_partition_type)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query, epoch partition_epoch, pr partition_replica)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
 BEGIN
     IF query.limit_by_field IS NULL THEN
-        RETURN ioql_query_local_partition_rows_regular_limit_sql(query, part);
+        RETURN ioql_query_local_partition_rows_regular_limit_sql(query, epoch, pr);
     ELSE
-        RETURN ioql_query_local_partition_rows_limit_by_every_sql(query, part);
+        RETURN ioql_query_local_partition_rows_limit_by_every_sql(query, epoch, pr);
     END IF;
 END
 $BODY$;
 
 --------------- NODE FUNCTIONS ------------
 
-CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(query ioql_query)
+CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(query ioql_query,
+                                                            epoch partition_epoch,
+                                                            replica_id  SMALLINT)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
@@ -227,8 +245,8 @@ BEGIN
         INTO STRICT code
         FROM
             (
-                SELECT '(' || ioql_query_local_partition_rows_sql(query, parts) || ')' AS code_part
-                FROM get_partitions_for_namespace(query.namespace_name) parts
+                SELECT '(' || ioql_query_local_partition_rows_sql(query, epoch, pr) || ')' AS code_part
+                FROM get_partition_replicas(epoch, replica_id) pr
             ) AS code_per_partition;
     ELSE
         SELECT format(
@@ -244,85 +262,12 @@ BEGIN
         INTO STRICT code
         FROM
             (
-                SELECT '(' || ioql_query_local_partition_rows_sql(query, parts) || ')' AS code_part
-                FROM get_partitions_for_namespace(query.namespace_name) parts
+                SELECT '(' || ioql_query_local_partition_rows_sql(query, epoch, pr) || ')' AS code_part
+                FROM get_partition_replicas(epoch, replica_id) pr
             ) AS code_per_partition;
     END IF;
     RETURN code;
 END
 $BODY$;
-
-CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg(query ioql_query)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
-$BODY$
-DECLARE
-    code TEXT;
-BEGIN
-    code := ioql_query_local_node_nonagg_sql(query);
-    RAISE NOTICE E'Per-Node nonagg SQL:\n%', code;
-    RETURN QUERY EXECUTE code;
-END;
-$BODY$
-SET constraint_exclusion = ON;
---------------- CLUSTER FUNCTIONS ------------
-
-CREATE OR REPLACE FUNCTION ioql_exec_query_nonagg_without_limit(query ioql_query)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS $BODY$
---function aggregates partials across nodes.
-BEGIN
-    RETURN QUERY EXECUTE FORMAT(
-        $$
-            SELECT *
-            FROM
-              ioql_query_nodes_individually (
-                get_cluster_table($1.namespace_name), $1, 'ioql_query_local_node_nonagg', get_result_column_def_list_nonagg($1)
-              ) as res(%1$s)
-            ORDER BY time DESC NULLS LAST
-            LIMIT $1.limit_rows
-        $$,
-        get_result_column_def_list_nonagg(query))
-    USING query;
-END
-$BODY$;
-
-CREATE OR REPLACE FUNCTION ioql_exec_query_nonagg(query ioql_query)
-    RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS $BODY$
-DECLARE
-BEGIN
-    IF query.limit_by_field IS NOT NULL THEN
-        RETURN QUERY EXECUTE format(
-            $$
-                SELECT %4$s
-                FROM (
-                    SELECT
-                        ROW_NUMBER() OVER (PARTITION BY %2$s ORDER BY time DESC NULLS LAST) AS rank,
-                         *
-                    FROM  ioql_exec_query_nonagg_without_limit($1) as ieq(%1$s)
-                ) as ranked
-                WHERE rank <= $2 OR time IS NULL
-                ORDER BY time DESC NULLS LAST, %2$s
-                LIMIT $1.limit_rows
-            $$,
-            get_result_column_def_list_nonagg(query),
-            (query.limit_by_field).field,
-            query,
-            get_result_column_list_nonagg(query)
-        )
-        USING query, (query.limit_by_field).count;
-    ELSE
-        RETURN QUERY EXECUTE format(
-            $$
-                SELECT *
-                FROM  ioql_exec_query_nonagg_without_limit($1) as ieq(%1$s)
-                ORDER BY time DESC NULLS LAST
-                LIMIT $1.limit_rows
-            $$,
-            get_result_column_def_list_nonagg(query))
-        USING query;
-
-    END IF;
-END;
-$BODY$;
-
 
 
