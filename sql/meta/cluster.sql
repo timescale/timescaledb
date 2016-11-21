@@ -64,7 +64,8 @@ CREATE OR REPLACE FUNCTION add_hypertable(
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
     number_partitions       SMALLINT = NULL,
-    replication_factor      SMALLINT = 1
+    replication_factor      SMALLINT = 1,
+    placement               chunk_placement_type = 'STICKY'
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -94,14 +95,16 @@ BEGIN
         associated_schema_name, associated_table_prefix,
         root_schema_name, root_table_name,
         distinct_schema_name, distinct_table_name,
-        replication_factor)
+        replication_factor,
+        placement)
     VALUES (
         hypertable_name,
         main_schema_name, hypertable_name,
         associated_schema_name, associated_table_prefix,
         associated_schema_name, format('%s_root', associated_table_prefix),
         associated_schema_name, format('%s_distinct', associated_table_prefix),
-        replication_factor)
+        replication_factor, 
+        placement)
     ON CONFLICT DO NOTHING;
 
     IF number_partitions != 0 THEN

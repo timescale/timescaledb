@@ -31,16 +31,17 @@ CREATE TABLE IF NOT EXISTS cluster_user (
 --    ii) root table is the ancesstor of all the data tables (across replicas). Should not be queryable for data (TODO).
 --    iii) distinct root table is the ancestor of all distinct tables (across replicas).  Should not be queryable for data (TODO).
 CREATE TABLE IF NOT EXISTS hypertable (
-    name                    NAME     NOT NULL PRIMARY KEY CHECK (name NOT LIKE '\_%'),
-    main_schema_name        NAME     NOT NULL,
-    main_table_name         NAME     NOT NULL,
-    associated_schema_name  NAME     NOT NULL,
-    associated_table_prefix NAME     NOT NULL,
-    root_schema_name        NAME     NOT NULL,
-    root_table_name         NAME     NOT NULL,
-    distinct_schema_name    NAME     NOT NULL,
-    distinct_table_name     NAME     NOT NULL,
-    replication_factor      SMALLINT NOT NULL CHECK (replication_factor > 0),
+    name                    NAME                  NOT NULL PRIMARY KEY CHECK (name NOT LIKE '\_%'),
+    main_schema_name        NAME                  NOT NULL,
+    main_table_name         NAME                  NOT NULL,
+    associated_schema_name  NAME                  NOT NULL,
+    associated_table_prefix NAME                  NOT NULL,
+    root_schema_name        NAME                  NOT NULL,
+    root_table_name         NAME                  NOT NULL,
+    distinct_schema_name    NAME                  NOT NULL,
+    distinct_table_name     NAME                  NOT NULL,
+    replication_factor      SMALLINT              NOT NULL CHECK (replication_factor > 0),
+    placement               chunk_placement_type  NOT NULL,
     UNIQUE (main_schema_name, main_table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     UNIQUE (root_schema_name, root_table_name)
@@ -124,6 +125,7 @@ CREATE TABLE IF NOT EXISTS partition_replica (
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,
     UNIQUE (schema_name, table_name),
+    UNIQUE (partition_id, replica_id),
     FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
 );
 

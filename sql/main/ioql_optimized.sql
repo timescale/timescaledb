@@ -3,27 +3,32 @@ CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(query ioql_query)
 $BODY$
 DECLARE
     sql_code TEXT;
-    epoch    partition_epoch;
 BEGIN
-    --TODO : broken; assumes one partition_epoch. Needs to be a loop.
-    SELECT *
-    INTO epoch
-    FROM partition_epoch pe
-    WHERE pe.hypertable_name = query.namespace_name;
+    --TODO : cross-epoch queries can be optimized much more than a simple limit. 
+    SELECT format(
+      $$ SELECT *
+         FROM (%s) AS union_epoch
+         LIMIT %L
+      $$,
+          string_agg('('||code_epoch.code||')', ' UNION ALL '),
+          query.limit_rows)
+    INTO sql_code
+    FROM (
+      SELECT CASE WHEN  NOT query.aggregate IS NULL THEN
+                    ioql_query_agg_sql(query, pe)
+                  ELSE
+                     ioql_query_nonagg_sql(query, pe)
+                  END AS code
+      FROM partition_epoch pe
+      WHERE pe.hypertable_name = query.namespace_name
+    ) AS code_epoch;
 
-    IF epoch IS NULL THEN
+    IF NOT FOUND THEN
         RETURN format($$ SELECT * FROM no_cluster_table(%L) $$, _query);
     END IF;
 
-    IF NOT query.aggregate IS NULL THEN
-        sql_code := ioql_query_agg_sql(query, epoch);
-        RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
-        RETURN sql_code;
-    ELSE
-        sql_code := ioql_query_nonagg_sql(query, epoch);
-        RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
-        RETURN sql_code;
-    END IF;
+    RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
+    RETURN sql_code;
 END
 $BODY$;
 

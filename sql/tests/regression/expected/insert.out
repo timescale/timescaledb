@@ -131,7 +131,14 @@ COMMIT;
 -----------+--------+------------+----------
  device_id | text   | device_id  | extended
  time      | bigint | "time"     | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
+btree, for table "testNs._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
+
+      Index "testNs.10-time-series_bool"
+   Column    |  Type   | Definition  | Storage 
+-------------+---------+-------------+---------
+ time        | bigint  | "time"      | plain
+ series_bool | boolean | series_bool | plain
+btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
 
            Index "testNs.1_pidx"
   Column   |  Type  | Definition | Storage  
@@ -145,7 +152,7 @@ btree, for table "testNs._hyper_1_1_0_partition"
 ----------+------------------+------------+---------
  time     | bigint           | "time"     | plain
  series_0 | double precision | series_0   | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
+btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_0 IS NOT NULL)
 
            Index "testNs.2_pidx"
   Column   |  Type  | Definition | Storage  
@@ -159,21 +166,49 @@ btree, for table "testNs._hyper_1_2_0_partition"
 ----------+------------------+------------+---------
  time     | bigint           | "time"     | plain
  series_1 | double precision | series_1   | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
+btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_1 IS NOT NULL)
 
            Index "testNs.4-time-series_2"
   Column  |       Type       | Definition | Storage 
 ----------+------------------+------------+---------
  time     | bigint           | "time"     | plain
  series_2 | double precision | series_2   | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
+btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_2 IS NOT NULL)
 
        Index "testNs.5-time-series_bool"
    Column    |  Type   | Definition  | Storage 
 -------------+---------+-------------+---------
  time        | bigint  | "time"      | plain
  series_bool | boolean | series_bool | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
+btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_bool IS NOT NULL)
+
+      Index "testNs.6-device_id-time"
+  Column   |  Type  | Definition | Storage  
+-----------+--------+------------+----------
+ device_id | text   | device_id  | extended
+ time      | bigint | "time"     | plain
+btree, for table "testNs._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
+
+           Index "testNs.7-time-series_0"
+  Column  |       Type       | Definition | Storage 
+----------+------------------+------------+---------
+ time     | bigint           | "time"     | plain
+ series_0 | double precision | series_0   | plain
+btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
+
+           Index "testNs.8-time-series_1"
+  Column  |       Type       | Definition | Storage 
+----------+------------------+------------+---------
+ time     | bigint           | "time"     | plain
+ series_1 | double precision | series_1   | plain
+btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
+
+           Index "testNs.9-time-series_2"
+  Column  |       Type       | Definition | Storage 
+----------+------------------+------------+---------
+ time     | bigint           | "time"     | plain
+ series_2 | double precision | series_2   | plain
+btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
 
              Table "testNs._hyper_1_0_1_distinct_data"
  Column | Type | Modifiers | Storage  | Stats target | Description 
@@ -191,23 +226,13 @@ Index "testNs._hyper_1_0_1_distinct_data_pkey"
  value  | text | value      | extended
 primary key, btree, for table "testNs._hyper_1_0_1_distinct_data"
 
-                Foreign table "testNs._hyper_1_0_2_distinct_data"
- Column | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
---------+------+-----------+-------------+----------+--------------+-------------
- field  | text | not null  |             | extended |              | 
- value  | text | not null  |             | extended |              | 
-Server: test2
-FDW Options: (schema_name 'testNs', table_name '_hyper_1_0_2_distinct_data')
-Inherits: "testNs"._hyper_1_0_distinct
-
                 Table "testNs._hyper_1_0_distinct"
  Column | Type | Modifiers | Storage  | Stats target | Description 
 --------+------+-----------+----------+--------------+-------------
  field  | text | not null  | extended |              | 
  value  | text | not null  | extended |              | 
 Inherits: "testNs"._hyper_1_distinct
-Child tables: "testNs"._hyper_1_0_1_distinct_data,
-              "testNs"._hyper_1_0_2_distinct_data
+Child tables: "testNs"._hyper_1_0_1_distinct_data
 
                          Table "testNs._hyper_1_0_replica"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -222,23 +247,7 @@ Inherits: "testNs"._hyper_1_root
 Child tables: "testNs"._hyper_1_1_0_partition,
               "testNs"._hyper_1_2_0_partition
 
-                            Foreign table "testNs._hyper_1_1_0_1_data"
-   Column    |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------+------------------+-----------+-------------+----------+--------------+-------------
- time        | bigint           | not null  |             | plain    |              | 
- device_id   | text             |           |             | extended |              | 
- series_0    | double precision |           |             | plain    |              | 
- series_1    | double precision |           |             | plain    |              | 
- series_2    | double precision |           |             | plain    |              | 
- series_bool | boolean          |           |             | plain    |              | 
-Check constraints:
-    "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" <= '1257983999999999999'::bigint)
-Server: test2
-FDW Options: (schema_name 'testNs', table_name '_hyper_1_1_0_1_data')
-Inherits: "testNs"._hyper_1_1_0_partition
-
-                         Table "testNs._hyper_1_1_0_2_data"
+                         Table "testNs._hyper_1_1_0_1_data"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
  time        | bigint           | not null  | plain    |              | 
@@ -253,6 +262,26 @@ Indexes:
     "3-time-series_1" btree ("time" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
     "4-time-series_2" btree ("time" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "5-time-series_bool" btree ("time" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+Check constraints:
+    "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "time_range" CHECK ("time" <= '1257983999999999999'::bigint)
+Inherits: "testNs"._hyper_1_1_0_partition
+
+                         Table "testNs._hyper_1_1_0_2_data"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ time        | bigint           | not null  | plain    |              | 
+ device_id   | text             |           | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "10-time-series_bool" btree ("time" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-device_id-time" btree (device_id, "time" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "7-time-series_0" btree ("time" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "8-time-series_1" btree ("time" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "9-time-series_2" btree ("time" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
 Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" >= '1257984000000000000'::bigint)
@@ -319,13 +348,6 @@ Child tables: "testNs"._hyper_1_0_replica
 
 \c test2
 \d+ "testNs".*
-      Index "testNs.1-device_id-time"
-  Column   |  Type  | Definition | Storage  
------------+--------+------------+----------
- device_id | text   | device_id  | extended
- time      | bigint | "time"     | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
-
            Index "testNs.1_pidx"
   Column   |  Type  | Definition | Storage  
 -----------+--------+------------+----------
@@ -333,40 +355,12 @@ btree, for table "testNs._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
  device_id | text   | device_id  | extended
 btree, for table "testNs._hyper_1_1_0_partition"
 
-           Index "testNs.2-time-series_0"
-  Column  |       Type       | Definition | Storage 
-----------+------------------+------------+---------
- time     | bigint           | "time"     | plain
- series_0 | double precision | series_0   | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_0 IS NOT NULL)
-
            Index "testNs.2_pidx"
   Column   |  Type  | Definition | Storage  
 -----------+--------+------------+----------
  time      | bigint | "time"     | plain
  device_id | text   | device_id  | extended
 btree, for table "testNs._hyper_1_2_0_partition"
-
-           Index "testNs.3-time-series_1"
-  Column  |       Type       | Definition | Storage 
-----------+------------------+------------+---------
- time     | bigint           | "time"     | plain
- series_1 | double precision | series_1   | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_1 IS NOT NULL)
-
-           Index "testNs.4-time-series_2"
-  Column  |       Type       | Definition | Storage 
-----------+------------------+------------+---------
- time     | bigint           | "time"     | plain
- series_2 | double precision | series_2   | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_2 IS NOT NULL)
-
-       Index "testNs.5-time-series_bool"
-   Column    |  Type   | Definition  | Storage 
--------------+---------+-------------+---------
- time        | bigint  | "time"      | plain
- series_bool | boolean | series_bool | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_bool IS NOT NULL)
 
                 Foreign table "testNs._hyper_1_0_1_distinct_data"
  Column | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
@@ -377,30 +371,13 @@ Server: Test1
 FDW Options: (schema_name 'testNs', table_name '_hyper_1_0_1_distinct_data')
 Inherits: "testNs"._hyper_1_0_distinct
 
-             Table "testNs._hyper_1_0_2_distinct_data"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_0_2_distinct_data_pkey" PRIMARY KEY, btree (field, value)
-Inherits: "testNs"._hyper_1_0_distinct
-
-Index "testNs._hyper_1_0_2_distinct_data_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
-primary key, btree, for table "testNs._hyper_1_0_2_distinct_data"
-
                 Table "testNs._hyper_1_0_distinct"
  Column | Type | Modifiers | Storage  | Stats target | Description 
 --------+------+-----------+----------+--------------+-------------
  field  | text | not null  | extended |              | 
  value  | text | not null  | extended |              | 
 Inherits: "testNs"._hyper_1_distinct
-Child tables: "testNs"._hyper_1_0_1_distinct_data,
-              "testNs"._hyper_1_0_2_distinct_data
+Child tables: "testNs"._hyper_1_0_1_distinct_data
 
                          Table "testNs._hyper_1_0_replica"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -415,24 +392,20 @@ Inherits: "testNs"._hyper_1_root
 Child tables: "testNs"._hyper_1_1_0_partition,
               "testNs"._hyper_1_2_0_partition
 
-                         Table "testNs._hyper_1_1_0_1_data"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- time        | bigint           | not null  | plain    |              | 
- device_id   | text             |           | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "1-device_id-time" btree (device_id, "time" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-time-series_0" btree ("time" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "3-time-series_1" btree ("time" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "4-time-series_2" btree ("time" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "5-time-series_bool" btree ("time" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+                            Foreign table "testNs._hyper_1_1_0_1_data"
+   Column    |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
+-------------+------------------+-----------+-------------+----------+--------------+-------------
+ time        | bigint           | not null  |             | plain    |              | 
+ device_id   | text             |           |             | extended |              | 
+ series_0    | double precision |           |             | plain    |              | 
+ series_1    | double precision |           |             | plain    |              | 
+ series_2    | double precision |           |             | plain    |              | 
+ series_bool | boolean          |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" <= '1257983999999999999'::bigint)
+Server: Test1
+FDW Options: (schema_name 'testNs', table_name '_hyper_1_1_0_1_data')
 Inherits: "testNs"._hyper_1_1_0_partition
 
                             Foreign table "testNs._hyper_1_1_0_2_data"
@@ -532,6 +505,5 @@ FROM "testNs"._hyper_1_0_distinct;
 -----------+-------
  device_id | dev1
  device_id | dev2
- device_id | dev1
-(3 rows)
+(2 rows)
 

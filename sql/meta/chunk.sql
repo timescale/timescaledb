@@ -144,7 +144,7 @@ BEGIN
         PERFORM dblink_connect(node_row.server_name, node_row.server_name);
         PERFORM dblink_exec(node_row.server_name, 'BEGIN');
         PERFORM 1
-        FROM dblink(node_row.server_name, format('SELECT * FROM lock_for_chunk_close(%L)',
+        FROM dblink(node_row.server_name, format('SELECT * FROM _sysinternal.lock_for_chunk_close(%L)',
                                                  chunk_id)) AS t(x TEXT);
     END LOOP;
 
@@ -160,7 +160,7 @@ BEGIN
         SELECT t.max_time
         INTO max_time_replica
         FROM dblink(crn_node_row.server_name,
-                    format('SELECT * FROM max_time_for_chunk_close(%L, %L)', crn_node_row.schema_name,
+                    format('SELECT * FROM _sysinternal.max_time_for_chunk_close(%L, %L)', crn_node_row.schema_name,
                            crn_node_row.table_name)) AS t(max_time BIGINT);
 
         IF max_time = 0 THEN
@@ -187,7 +187,7 @@ BEGIN
     LOOP
         PERFORM 1
         FROM dblink(node_row.server_name,
-                    format('SELECT * FROM set_end_time_for_chunk_close(%L, %L)', chunk_id, table_end)) AS t(x TEXT);
+                    format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, table_end)) AS t(x TEXT);
         PERFORM dblink_exec(node_row.server_name, 'COMMIT');
         --TODO: should we disconnect here?
         PERFORM dblink_disconnect(node_row.server_name);

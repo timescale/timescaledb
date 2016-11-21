@@ -190,7 +190,7 @@ BEGIN
         epoch_row.partitioning_func, epoch_row.partitioning_field,
         epoch_row.partitioning_mod, keyspace_start, keyspace_end);
 
-    EXECUTE FORMAT(
+    EXECUTE format(
         $$
             CREATE INDEX  %3$I ON %1$I.%2$I  ("time" DESC NULLS LAST, %4$I)
         $$,
@@ -210,26 +210,26 @@ CREATE OR REPLACE FUNCTION _sysinternal.set_time_constraint(
 $BODY$
 DECLARE
 BEGIN
-    EXECUTE FORMAT(
+    EXECUTE format(
         $$
             ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS time_range
         $$,
         schema_name, table_name);
 
     IF start_time IS NOT NULL AND end_time IS NOT NULL THEN
-        EXECUTE FORMAT(
+        EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time >= %L AND time <= %L)
         $$,
             schema_name, table_name, start_time, end_time);
     ELSIF start_time IS NOT NULL THEN
-        EXECUTE FORMAT(
+        EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time >= %L)
         $$,
             schema_name, table_name, start_time);
     ELSIF end_time IS NOT NULL THEN
-        EXECUTE FORMAT(
+        EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time <= %L)
         $$,

@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION lock_for_chunk_close(
+CREATE OR REPLACE FUNCTION _sysinternal.lock_for_chunk_close(
     chunk_id INTEGER
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -15,7 +15,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION max_time_for_chunk_close(
+CREATE OR REPLACE FUNCTION _sysinternal.max_time_for_chunk_close(
     schema_name NAME,
     table_name  NAME
 )
@@ -36,7 +36,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION set_end_time_for_chunk_close(
+CREATE OR REPLACE FUNCTION _sysinternal.set_end_time_for_chunk_close(
     chunk_id INTEGER,
     max_time BIGINT
 )
@@ -69,8 +69,6 @@ BEGIN
         SELECT *
         INTO STRICT meta_row
         FROM meta;
-
-        RAISE WARNING 'testing % %', partition_id, time_point;
 
         SELECT t.*
         INTO chunk_row

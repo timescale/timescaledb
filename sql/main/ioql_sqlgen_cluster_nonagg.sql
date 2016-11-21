@@ -3,11 +3,11 @@ CREATE OR REPLACE FUNCTION ioql_query_nonagg_without_limit_sql(query ioql_query,
 --function aggregates partials across nodes.
 BEGIN
     --todo: the order by and limit can be removed?
-    RETURN FORMAT(
+    RETURN format(
         $$
             SELECT *
             FROM  ioql_exec_query_nodes(
-                %2$L, %5$L, %1$L  
+                %2$L, %5$L, %1$L
               ) as res(%1$s)
             ORDER BY time DESC NULLS LAST
             %4$s
@@ -66,6 +66,3 @@ BEGIN
     END IF;
 END;
 $BODY$;
-
-
-
