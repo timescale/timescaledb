@@ -4,7 +4,7 @@ $BODY$
 SELECT DISTINCT pr.*
 FROM partition p
 INNER JOIN partition_replica pr ON (pr.partition_id = p.id)
-INNER JOIN  chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
+INNER JOIN chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
 WHERE p.epoch_id = epoch.id AND
       pr.replica_id = get_partition_replicas.replica_id AND
       crn.database_name = current_database()

@@ -11,17 +11,20 @@ SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
 
 SELECT add_hypertable('testNs' :: NAME, 'Device_id');
-SELECT * 
-FROM  partition_replica;
+SELECT *
+FROM partition_replica;
 
 
-SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on', 'bigint', FALSE, FALSE, ARRAY['TIME-VALUE','VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY ['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE,
+                 ARRAY ['VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY [] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY [] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on',
+                 'bigint', FALSE, FALSE, ARRAY ['TIME-VALUE', 'VALUE-TIME'] :: field_index_type []);
 
-SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
+SELECT *
+FROM get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 
 SELECT *
 FROM node;
@@ -31,14 +34,14 @@ SELECT *
 FROM hypertable;
 SELECT *
 FROM hypertable_replica;
-SELECT * 
-FROM  distinct_replica_node;
-SELECT * 
-FROM  partition_epoch;
-SELECT * 
-FROM  partition;
-SELECT * 
-FROM  partition_replica;
+SELECT *
+FROM distinct_replica_node;
+SELECT *
+FROM partition_epoch;
+SELECT *
+FROM partition;
+SELECT *
+FROM partition_replica;
 SELECT *
 FROM chunk;
 SELECT *
@@ -60,14 +63,14 @@ SELECT *
 FROM hypertable;
 SELECT *
 FROM hypertable_replica;
-SELECT * 
-FROM  distinct_replica_node;
-SELECT * 
-FROM  partition_epoch;
-SELECT * 
-FROM  partition;
-SELECT * 
-FROM  partition_replica;
+SELECT *
+FROM distinct_replica_node;
+SELECT *
+FROM partition_epoch;
+SELECT *
+FROM partition;
+SELECT *
+FROM partition_replica;
 SELECT *
 FROM chunk;
 SELECT *
@@ -89,13 +92,16 @@ FROM field;
 
 SELECT add_hypertable('testNs' :: NAME, 'Device_id');
 
-SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on', 'bigint', FALSE, FALSE, ARRAY['TIME-VALUE','VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY ['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE,
+                 ARRAY ['VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY [] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY [] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on',
+                 'bigint', FALSE, FALSE, ARRAY ['TIME-VALUE', 'VALUE-TIME'] :: field_index_type []);
 
-SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
+SELECT *
+FROM get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 \c Test1
 \d+ "_sys_1_testNs".*
 
@@ -104,8 +110,10 @@ SELECT close_chunk_end(1);
 SELECT *
 FROM chunk;
 
-SELECT * FROM get_or_create_chunk(1,10::bigint);
-SELECT * FROM get_or_create_chunk(1,1257894000000000000::bigint);
+SELECT *
+FROM get_or_create_chunk(1, 10 :: BIGINT);
+SELECT *
+FROM get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 SELECT *
 FROM chunk;
 

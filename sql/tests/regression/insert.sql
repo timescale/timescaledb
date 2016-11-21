@@ -10,7 +10,7 @@ SELECT set_meta('meta' :: NAME, 'localhost');
 SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
 
-SELECT add_hypertable('testNs' :: NAME, 'device_id', 'testNs', 'testNs' );
+SELECT add_hypertable('testNs' :: NAME, 'device_id', 'testNs', 'testNs');
 SELECT add_field('testNs' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
 SELECT add_field('testNs' :: NAME, 'series_0', 'double precision', FALSE, FALSE,
                  ARRAY ['TIME-VALUE'] :: field_index_type []);
@@ -30,7 +30,7 @@ FROM insert_data('copy_t');
 COMMIT;
 
 SELECT close_chunk_end(c.id)
-FROM get_open_partition_for_key('testNs','dev1') part
+FROM get_open_partition_for_key('testNs', 'dev1') part
 INNER JOIN chunk c ON (c.partition_id = part.id);
 
 \c Test1

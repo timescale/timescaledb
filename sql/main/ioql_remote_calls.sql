@@ -1,20 +1,20 @@
 CREATE OR REPLACE FUNCTION ioql_exec_query_nodes(
-    query         ioql_query,
-    epoch         partition_epoch,
-    columnDef     TEXT
+    query     ioql_query,
+    epoch     partition_epoch,
+    columnDef TEXT
 )
     RETURNS SETOF RECORD AS
 $BODY$
 DECLARE
-    database_names NAME[];
+    database_names   NAME [];
     query_replica_id SMALLINT;
     --r query_return%rowtype;
-    serverName     TEXT;
-    isConnected    BOOLEAN;
-    query_sql      TEXT;
-    remote_result  INT := 0;
-    remote_cnt     INT := 0;
-    remote_servers TEXT [] := ARRAY [] :: TEXT [];
+    serverName       TEXT;
+    isConnected      BOOLEAN;
+    query_sql        TEXT;
+    remote_result    INT := 0;
+    remote_cnt       INT := 0;
+    remote_servers   TEXT [] := ARRAY [] :: TEXT [];
 BEGIN
     SELECT hr.replica_id
     INTO STRICT query_replica_id
@@ -24,24 +24,27 @@ BEGIN
     LIMIT 1;
 
     SELECT ARRAY(
-      SELECT DISTINCT crn.database_name
-      FROM partition_replica pr 
-      INNER JOIN chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
-      WHERE pr.hypertable_name = query.namespace_name AND
-            pr.replica_id = query_replica_id
+        SELECT DISTINCT crn.database_name
+        FROM partition_replica pr
+        INNER JOIN chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
+        WHERE pr.hypertable_name = query.namespace_name AND
+              pr.replica_id = query_replica_id
     )
     INTO database_names;
 
-    query_sql := format('SELECT * FROM  ioql_exec_local_node(%L, %L, %L) AS res_local(%s)', query, epoch, query_replica_id, columnDef);
+    query_sql := format('SELECT * FROM  ioql_exec_local_node(%L, %L, %L) AS res_local(%s)', query, epoch,
+                        query_replica_id, columnDef);
 
     FOR serverName, isConnected IN
-    SELECT n.server_name, conn IS NOT NULL 
-    FROM  node n 
+    SELECT
+        n.server_name,
+        conn IS NOT NULL
+    FROM node n
     LEFT JOIN dblink_get_connections() conn ON (n.server_name = ANY (conn))
     WHERE
-        n.database_name = ANY(database_names) AND 
-        n.database_name <> current_database() 
-        LOOP
+        n.database_name = ANY (database_names) AND
+        n.database_name <> current_database()
+    LOOP
 
         IF NOT isConnected THEN
             PERFORM dblink_connect(serverName, serverName);
@@ -72,12 +75,12 @@ BEGIN
         remote_servers := remote_servers || ARRAY [serverName];
     END LOOP;
 
-    IF current_database() = ANY(database_names) THEN
+    IF current_database() = ANY (database_names) THEN
         RAISE NOTICE E'ioql local query:\n%', query_sql;
         RETURN QUERY EXECUTE query_sql;
     END IF;
 
-    FOR serverName IN 
+    FOR serverName IN
     SELECT unnest(remote_servers)
     LOOP
         RETURN QUERY EXECUTE format($$ SELECT * FROM dblink_get_result(%L, true) AS res(%s) $$, serverName, columnDef);

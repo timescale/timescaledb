@@ -3,7 +3,7 @@
 --collisions here shouldn't cause errors
 CREATE OR REPLACE FUNCTION get_result_aggregate_column_name(field_name NAME, func aggregate_function_type)
     RETURNS NAME AS $BODY$
-SELECT format('%s(%s)', lower(func :: TEXT), substr(field_name, 1, (63 - 2) - (char_length(func :: TEXT))))::NAME;
+SELECT format('%s(%s)', lower(func :: TEXT), substr(field_name, 1, (63 - 2) - (char_length(func :: TEXT)))) :: NAME;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION get_result_field_def_item_agg(item select_item)

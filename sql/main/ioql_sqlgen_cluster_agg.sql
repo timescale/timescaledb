@@ -16,7 +16,7 @@ SELECT format(
     query.namespace_name,
     query,
     epoch
-  )
+)
 $BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_query_agg_sql(query ioql_query, epoch partition_epoch)
@@ -53,7 +53,7 @@ BEGIN
             ioql_query_agg_without_limit_sql(query, epoch),
             get_orderby_clause_agg(query, 'time'),
             get_limit_clause(query.limit_rows)
-          );
+        );
     END IF;
 END;
 $BODY$

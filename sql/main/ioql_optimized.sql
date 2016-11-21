@@ -1,20 +1,20 @@
 CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(query ioql_query)
-    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS 
+    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
-DECLARE 
-  sql_code TEXT;
-  epoch partition_epoch;
+DECLARE
+    sql_code TEXT;
+    epoch    partition_epoch;
 BEGIN
     --TODO : broken; assumes one partition_epoch. Needs to be a loop.
     SELECT *
     INTO epoch
-    FROM partition_epoch pe 
+    FROM partition_epoch pe
     WHERE pe.hypertable_name = query.namespace_name;
 
     IF epoch IS NULL THEN
         RETURN format($$ SELECT * FROM no_cluster_table(%L) $$, _query);
     END IF;
-    
+
     IF NOT query.aggregate IS NULL THEN
         sql_code := ioql_query_agg_sql(query, epoch);
         RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;

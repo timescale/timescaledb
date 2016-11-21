@@ -16,11 +16,13 @@ BEGIN
           h.replica_id = NEW.replica_id;
 
     IF NEW.database_name = current_database() THEN
-      PERFORM _sysinternal.create_local_distinct_table(NEW.schema_name, NEW.table_name, 
-      hypertable_replica_row.distinct_schema_name, hypertable_replica_row.distinct_table_name); 
+        PERFORM _sysinternal.create_local_distinct_table(NEW.schema_name, NEW.table_name,
+                                                         hypertable_replica_row.distinct_schema_name,
+                                                         hypertable_replica_row.distinct_table_name);
     ELSE
-      PERFORM _sysinternal.create_remote_table(NEW.schema_name, NEW.table_name, 
-      hypertable_replica_row.distinct_schema_name, hypertable_replica_row.distinct_table_name, NEW.database_name);
+        PERFORM _sysinternal.create_remote_table(NEW.schema_name, NEW.table_name,
+                                                 hypertable_replica_row.distinct_schema_name,
+                                                 hypertable_replica_row.distinct_table_name, NEW.database_name);
     END IF;
 
     RETURN NEW;
@@ -31,6 +33,6 @@ SET SEARCH_PATH = 'public';
 BEGIN;
 DROP TRIGGER IF EXISTS trigger_on_create_distinct_replica_node
 ON distinct_replica_node;
-CREATE TRIGGER  trigger_on_create_distinct_replica_node AFTER INSERT OR UPDATE OR DELETE ON distinct_replica_node
+CREATE TRIGGER trigger_on_create_distinct_replica_node AFTER INSERT OR UPDATE OR DELETE ON distinct_replica_node
 FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_distinct_replica_node();
 COMMIT;

@@ -1,5 +1,3 @@
-
-
 CREATE OR REPLACE FUNCTION _sysinternal.on_create_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
@@ -18,7 +16,7 @@ BEGIN
 
     PERFORM _sysinternal.create_root_table(NEW.root_schema_name, NEW.root_table_name);
     PERFORM _sysinternal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
-    
+
     RETURN NEW;
 END
 $BODY$

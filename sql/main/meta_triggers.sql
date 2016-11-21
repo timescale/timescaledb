@@ -21,7 +21,7 @@ $BODY$
 SET SEARCH_PATH = 'public';
 
 BEGIN;
-DROP TRIGGER IF EXISTS trigger_on_create_meta 
+DROP TRIGGER IF EXISTS trigger_on_create_meta
 ON meta;
 CREATE TRIGGER trigger_on_create_meta AFTER INSERT OR UPDATE OR DELETE ON meta
 FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_meta();

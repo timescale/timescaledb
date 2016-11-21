@@ -8,7 +8,6 @@
 \ir ../../main/field_triggers.sql
 \ir ../../main/partitioning.sql
 \ir ../../main/schema_info.sql
-\ir ../../main/names.sql
 \ir ../../main/tables.sql
 \ir ../../main/partition_replica_triggers.sql
 \ir ../../main/chunk_replica_node_index.sql
@@ -16,7 +15,6 @@
 \ir ../../main/chunk_replica_node_triggers.sql
 \ir ../../main/chunk_triggers.sql
 \ir ../../main/chunk.sql
---\ir ../../main/data_table_constructors.sql
 \ir ../../main/insert.sql
 
 \ir ../../main/ioql.sql

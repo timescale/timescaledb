@@ -19,18 +19,29 @@ SELECT add_node('test2' :: NAME, 'localhost');
 \det+ public.*
 
 
-SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
-SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
-SELECT * FROM kafka_set_next_offset('topic', 0::SMALLINT, 0, 100);
-SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
-SELECT * FROM kafka_get_start_and_next_offset('topic', 1::SMALLINT, 25);
-SELECT * FROM kafka_get_start_and_next_offset('topic2', 0::SMALLINT, 29);
+SELECT *
+FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
+SELECT *
+FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
+SELECT *
+FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 0, 100);
+SELECT *
+FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
+SELECT *
+FROM kafka_get_start_and_next_offset('topic', 1 :: SMALLINT, 25);
+SELECT *
+FROM kafka_get_start_and_next_offset('topic2', 0 :: SMALLINT, 29);
 \c test2
-SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
+SELECT *
+FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
 \set ON_ERROR_STOP 0
-SELECT * FROM kafka_set_next_offset('topic', 0::SMALLINT, 0, 101);
+SELECT *
+FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 0, 101);
 \set ON_ERROR_STOP 1
-SELECT * FROM kafka_set_next_offset('topic', 0::SMALLINT, 100, 101);
+SELECT *
+FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 100, 101);
 \c Test1
-SELECT * FROM kafka_get_start_and_next_offset('topic', 0::SMALLINT, 0);
-SELECT * FROM kafka_offset_local;
+SELECT *
+FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
+SELECT *
+FROM kafka_offset_local;

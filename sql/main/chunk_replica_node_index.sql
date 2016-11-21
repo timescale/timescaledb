@@ -1,8 +1,8 @@
 CREATE OR REPLACE FUNCTION _sysinternal.create_chunk_replica_node_index(
     schema_name NAME,
-    table_name NAME,
-    field_name NAME,
-    index_type field_index_type
+    table_name  NAME,
+    field_name  NAME,
+    index_type  field_index_type
 )
     RETURNS VOID LANGUAGE PLPGSQL AS
 $BODY$

@@ -17,7 +17,7 @@ BEGIN
         query.namespace_name,
         get_limit_clause(query.limit_rows),
         epoch
-      );
+    );
 END
 $BODY$;
 
@@ -62,7 +62,7 @@ BEGIN
             get_result_column_list_nonagg(query),
             ioql_query_nonagg_without_limit_sql(query, epoch),
             get_limit_clause(query.limit_rows)
-          );
+        );
     END IF;
 END;
 $BODY$;

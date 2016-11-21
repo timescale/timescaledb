@@ -69,26 +69,26 @@ WHERE p.field = partitioning_field_name AND cond.conjunctive = 'AND' AND p.op = 
 $BODY$;
 
 CREATE OR REPLACE FUNCTION get_partitioning_predicate(
-  query ioql_query,
-  epoch partition_epoch
+    query ioql_query,
+    epoch partition_epoch
 )
     RETURNS TEXT LANGUAGE PLPGSQL IMMUTABLE STRICT AS
 $BODY$
 DECLARE
-    keyspace_value SMALLINT; 
-    field_value        TEXT;
+    keyspace_value SMALLINT;
+    field_value    TEXT;
 BEGIN
     field_value := get_constrained_partitioning_field_value(epoch.partitioning_field, query.field_condition);
 
-    EXECUTE format($$ SELECT %s(%L, %L) $$,  epoch.partitioning_func, field_value, epoch.partitioning_mod)
+    EXECUTE format($$ SELECT %s(%L, %L) $$, epoch.partitioning_func, field_value, epoch.partitioning_mod)
     INTO keyspace_value;
 
     IF field_value IS NOT NULL THEN
-        RETURN format('%s(%I, %L) = %L', 
-          epoch.partitioning_func,
-          epoch.partitioning_field,
-          epoch.partitioning_mod,
-          keyspace_value);
+        RETURN format('%s(%I, %L) = %L',
+                      epoch.partitioning_func,
+                      epoch.partitioning_field,
+                      epoch.partitioning_mod,
+                      keyspace_value);
     END IF;
     RETURN NULL;
 END

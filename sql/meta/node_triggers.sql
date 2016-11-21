@@ -54,7 +54,7 @@ BEGIN
             INSERT INTO %I.cluster_user SELECT * from cluster_user;
         $$,
         NEW.schema_name);
-     EXECUTE format(
+    EXECUTE format(
         $$
             INSERT INTO %I.meta SELECT * from meta;
         $$,

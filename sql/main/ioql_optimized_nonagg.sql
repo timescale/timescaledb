@@ -4,8 +4,8 @@
 --   1) Scan the top 10000 rows of table and try to fulfil the query with those items.
 --   2) Then for every by_every item not fulfilled, try to scan for it, using its index.
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every_sql(query ioql_query,
-                                                                              epoch partition_epoch, 
-                                                                              pr partition_replica)
+                                                                              epoch partition_epoch,
+                                                                              pr    partition_replica)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -23,7 +23,7 @@ BEGIN
 
 
     IF epoch.partitioning_field = (query.limit_by_field).field THEN
-        SELECT * 
+        SELECT *
         INTO STRICT partition_row
         FROM partition p
         WHERE p.id = pr.partition_id;
@@ -41,7 +41,7 @@ BEGIN
             epoch.partitioning_mod,
             partition_row.keyspace_start,
             partition_row.keyspace_end
-          );
+        );
     ELSE
         distinct_value_sql = format(
             $$
@@ -52,7 +52,7 @@ BEGIN
             (query.limit_by_field).count,
             pr.hypertable_name,
             pr.replica_id
-          );
+        );
     END IF;
 
 
@@ -105,9 +105,9 @@ BEGIN
         'LIMIT dv_counts_min_time.remaining_cnt');
 
     FOR crn_row IN SELECT *
-                          FROM  get_local_chunk_replica_node_for_pr_time_desc(pr)
-        LOOP
-        
+                   FROM get_local_chunk_replica_node_for_pr_time_desc(pr)
+    LOOP
+
         IF index = 0 THEN
             code := code || format(
                 $$
@@ -165,9 +165,9 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql( query ioql_query,
-                                                                              epoch partition_epoch, 
-                                                                              pr partition_replica)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql(query ioql_query,
+                                                                             epoch partition_epoch,
+                                                                             pr    partition_replica)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT format(
@@ -192,11 +192,12 @@ FROM (
          ) || ')' AS code
          FROM get_local_chunk_replica_node_for_pr_time_desc(pr) AS crn
      ) AS code_per_crn
-HAVING string_agg(code, ' UNION ALL ') IS NOT NULL 
+HAVING string_agg(code, ' UNION ALL ') IS NOT NULL
 $BODY$
 SET constraint_exclusion = ON;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query, epoch partition_epoch, pr partition_replica)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query, epoch partition_epoch,
+                                                               pr    partition_replica)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
@@ -211,9 +212,9 @@ $BODY$;
 
 --------------- NODE FUNCTIONS ------------
 
-CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(query ioql_query,
-                                                            epoch partition_epoch,
-                                                            replica_id  SMALLINT)
+CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(query      ioql_query,
+                                                            epoch      partition_epoch,
+                                                            replica_id SMALLINT)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE

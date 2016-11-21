@@ -26,26 +26,26 @@ BEGIN
 END
 $BODY$;
 
-DO 
+DO
 $BODY$
 DECLARE
-  table_name NAME;
+    table_name NAME;
 BEGIN
-    FOREACH table_name IN ARRAY ARRAY['cluster_user', 'hypertable', 'hypertable_replica', 
-    'distinct_replica_node', 'partition_epoch', 'partition','partition_replica',
-    'chunk_replica_node', 'field', 'meta']::NAME[] LOOP
-       EXECUTE format(
+    FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'hypertable_replica',
+    'distinct_replica_node', 'partition_epoch', 'partition', 'partition_replica',
+    'chunk_replica_node', 'field', 'meta'] :: NAME [] LOOP
+        EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_0_sync_%1$s ON %1$s
-            $$, 
+            $$,
             table_name);
-       EXECUTE format(
+        EXECUTE format(
             $$
                 CREATE TRIGGER trigger_0_sync_%1$s AFTER INSERT OR UPDATE OR DELETE ON %1$s
                 FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_only_insert();
-            $$, 
+            $$,
             table_name);
-   END LOOP;
+    END LOOP;
 END
 $BODY$;
 

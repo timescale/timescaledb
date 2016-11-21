@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION  _sysinternal.create_schema(
+CREATE OR REPLACE FUNCTION _sysinternal.create_schema(
     schema_name NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -11,7 +11,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION  _sysinternal.create_root_table(
+CREATE OR REPLACE FUNCTION _sysinternal.create_root_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -27,7 +27,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION  _sysinternal.create_root_distinct_table(
+CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -45,7 +45,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION  _sysinternal.create_local_distinct_table(
+CREATE OR REPLACE FUNCTION _sysinternal.create_local_distinct_table(
     schema_name         NAME,
     table_name          NAME,
     replica_schema_name NAME,
@@ -63,19 +63,20 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION  _sysinternal.create_remote_table(
-    schema_name         NAME,
-    table_name          NAME,
-    parent_schema_name  NAME,
-    parent_table_name   NAME,
-    database_name       NAME
+CREATE OR REPLACE FUNCTION _sysinternal.create_remote_table(
+    schema_name        NAME,
+    table_name         NAME,
+    parent_schema_name NAME,
+    parent_table_name  NAME,
+    database_name      NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  node_row node;
+    node_row node;
 BEGIN
-    SELECT * INTO STRICT node_row
+    SELECT *
+    INTO STRICT node_row
     FROM node n
     WHERE n.database_name = create_remote_table.database_name;
 
@@ -92,7 +93,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_local_data_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
-    parent_table_name NAME
+    parent_table_name  NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -123,23 +124,24 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _sysinternal.create_data_partition_table(
-    schema_name         NAME,
-    table_name          NAME,
-    parent_schema_name  NAME,
-    parent_table_name   NAME,
-    keyspace_start      SMALLINT,
-    keyspace_end        SMALLINT, 
-    epoch_id            INT
+    schema_name        NAME,
+    table_name         NAME,
+    parent_schema_name NAME,
+    parent_table_name  NAME,
+    keyspace_start     SMALLINT,
+    keyspace_end       SMALLINT,
+    epoch_id           INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE 
-  epoch_row partition_epoch;
-  field_exists BOOLEAN;
+DECLARE
+    epoch_row    partition_epoch;
+    field_exists BOOLEAN;
 BEGIN
-    SELECT * INTO STRICT epoch_row
+    SELECT *
+    INTO STRICT epoch_row
     FROM partition_epoch pe
-    WHERE  pe.id = epoch_id;
+    WHERE pe.id = epoch_id;
 
     EXECUTE format(
         $$
@@ -147,13 +149,13 @@ BEGIN
             ) INHERITS(%3$I.%4$I)
         $$,
         schema_name, table_name, parent_schema_name, parent_table_name);
-  
-    SELECT COUNT(*) > 0 
+
+    SELECT COUNT(*) > 0
     INTO field_exists
     FROM field f
     WHERE f.hypertable_name = epoch_row.hypertable_name
-    AND f.name =  epoch_row.partitioning_field;
-    
+          AND f.name = epoch_row.partitioning_field;
+
     IF field_exists THEN
         PERFORM _sysinternal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
     END IF;
@@ -163,27 +165,28 @@ $BODY$;
 CREATE SEQUENCE IF NOT EXISTS pidx_index_name_seq;
 
 CREATE OR REPLACE FUNCTION _sysinternal.add_partition_constraint(
-    schema_name         NAME,
-    table_name          NAME,
-    keyspace_start      SMALLINT,
-    keyspace_end        SMALLINT, 
-    epoch_id            INT
+    schema_name    NAME,
+    table_name     NAME,
+    keyspace_start SMALLINT,
+    keyspace_end   SMALLINT,
+    epoch_id       INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE 
-  epoch_row partition_epoch;
+DECLARE
+    epoch_row partition_epoch;
 BEGIN
-    SELECT * INTO STRICT epoch_row
+    SELECT *
+    INTO STRICT epoch_row
     FROM partition_epoch pe
-    WHERE  pe.id = epoch_id;
+    WHERE pe.id = epoch_id;
 
     EXECUTE format(
         $$
             ALTER TABLE %1$I.%2$I 
             ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
         $$,
-        schema_name, table_name, 
+        schema_name, table_name,
         epoch_row.partitioning_func, epoch_row.partitioning_field,
         epoch_row.partitioning_mod, keyspace_start, keyspace_end);
 
@@ -192,20 +195,20 @@ BEGIN
             CREATE INDEX  %3$I ON %1$I.%2$I  ("time" DESC NULLS LAST, %4$I)
         $$,
         schema_name, table_name,
-        format('%s_pidx',  nextval('pidx_index_name_seq')),
+        format('%s_pidx', nextval('pidx_index_name_seq')),
         epoch_row.partitioning_field);
 END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _sysinternal.set_time_constraint(
-    schema_name         NAME,
-    table_name          NAME,
-    start_time      BIGINT,
-    end_time        BIGINT 
+    schema_name NAME,
+    table_name  NAME,
+    start_time  BIGINT,
+    end_time    BIGINT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE 
+DECLARE
 BEGIN
     EXECUTE FORMAT(
         $$
@@ -213,25 +216,25 @@ BEGIN
         $$,
         schema_name, table_name);
 
-      IF start_time IS NOT NULL AND end_time IS NOT NULL THEN 
+    IF start_time IS NOT NULL AND end_time IS NOT NULL THEN
         EXECUTE FORMAT(
-        $$
+            $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time >= %L AND time <= %L)
         $$,
-        schema_name, table_name, start_time, end_time);
-      ELSIF start_time IS NOT NULL THEN 
+            schema_name, table_name, start_time, end_time);
+    ELSIF start_time IS NOT NULL THEN
         EXECUTE FORMAT(
-        $$
+            $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time >= %L)
         $$,
-        schema_name, table_name, start_time);
-      ELSIF end_time IS NOT NULL THEN 
+            schema_name, table_name, start_time);
+    ELSIF end_time IS NOT NULL THEN
         EXECUTE FORMAT(
-        $$
+            $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time <= %L)
         $$,
-        schema_name, table_name, end_time);
-      END IF;
+            schema_name, table_name, end_time);
+    END IF;
 END
 $BODY$;
 

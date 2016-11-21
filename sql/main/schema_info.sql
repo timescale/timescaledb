@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION get_distinct_table_oid(
     hypertable_name NAME,
     replica_id      SMALLINT,
-    database_name   NAME 
+    database_name   NAME
 )
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
@@ -19,7 +19,7 @@ CREATE OR REPLACE FUNCTION get_distinct_local_table_oid(
 )
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
-  SELECT get_distinct_table_oid(hypertable_name, replica_id, current_database())
+SELECT get_distinct_table_oid(hypertable_name, replica_id, current_database())
 $BODY$;
 
 
@@ -51,7 +51,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION get_field_names_and_types(
     hypertable_name NAME,
-    field_names    NAME []
+    field_names     NAME []
 )
     RETURNS TABLE(field NAME, data_type REGTYPE) LANGUAGE PLPGSQL STABLE AS
 $BODY$
@@ -89,7 +89,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION get_field_type(
     hypertable_name NAME,
-    field_name     NAME
+    field_name      NAME
 )
     RETURNS REGTYPE LANGUAGE PLPGSQL STABLE AS
 $BODY$
@@ -109,39 +109,39 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_partition_for_epoch( 
-    epoch partition_epoch,
-    key_value text 
+CREATE OR REPLACE FUNCTION get_partition_for_epoch(
+    epoch     partition_epoch,
+    key_value TEXT
 )
     RETURNS partition LANGUAGE PLPGSQL STABLE AS
 $BODY$
-DECLARE 
-  partition_row partition;
+DECLARE
+    partition_row partition;
 BEGIN
-  EXECUTE format($$
+    EXECUTE format($$
     SELECT  p.*
     FROM  partition p 
     WHERE p.epoch_id = %L AND
     %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end 
   $$,
-  epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
-  INTO STRICT partition_row;
+                   epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
+    INTO STRICT partition_row;
 
-  RETURN partition_row;
+    RETURN partition_row;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_open_partition_for_key( 
+CREATE OR REPLACE FUNCTION get_open_partition_for_key(
     hypertable_name NAME,
-    key_value text 
+    key_value       TEXT
 )
     RETURNS partition LANGUAGE SQL STABLE AS
 $BODY$
-      SELECT p.*
-      FROM partition_epoch pe,
-           get_partition_for_epoch(pe, key_value) p
-      WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
-            end_time IS NULL  
+SELECT p.*
+FROM partition_epoch pe,
+        get_partition_for_epoch(pe, key_value) p
+WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
+      end_time IS NULL
 $BODY$;
 
 

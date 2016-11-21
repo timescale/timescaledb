@@ -1,8 +1,8 @@
 CREATE SCHEMA IF NOT EXISTS _sysinternal;
 
 CREATE OR REPLACE FUNCTION _sysinternal.create_user_mapping(
-    cluster_user_row  cluster_user,
-    server_name       NAME 
+    cluster_user_row cluster_user,
+    server_name      NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -24,10 +24,10 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_server(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-        EXECUTE format(
-            $$
-                CREATE SERVER %I FOREIGN DATA WRAPPER postgres_fdw OPTIONS(host '%s', dbname '%s') ;
-            $$,
-         server_name, hostname, database_name);
+    EXECUTE format(
+        $$
+            CREATE SERVER %I FOREIGN DATA WRAPPER postgres_fdw OPTIONS(host '%s', dbname '%s') ;
+        $$,
+        server_name, hostname, database_name);
 END
 $BODY$;

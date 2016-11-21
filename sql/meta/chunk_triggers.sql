@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    field_row field;
+    field_row   field;
     schema_name NAME;
 BEGIN
     IF TG_OP = 'UPDATE' THEN
@@ -13,9 +13,9 @@ BEGIN
            )
            AND (
                OLD.id = NEW.id AND
-               OLD.partition_id = NEW.partition_id 
+               OLD.partition_id = NEW.partition_id
            ) THEN
-          NULL;
+            NULL;
         ELSE
             RAISE EXCEPTION 'This type of update not allowed on % table', TG_TABLE_NAME
             USING ERRCODE = 'IO101';
@@ -27,32 +27,37 @@ BEGIN
 
     --sync data on insert
     IF TG_OP = 'INSERT' THEN
-      FOR schema_name IN
-      SELECT n.schema_name
-      FROM node AS n
-      LOOP
-          EXECUTE format(
-              $$
+        FOR schema_name IN
+        SELECT n.schema_name
+        FROM node AS n
+        LOOP
+            EXECUTE format(
+                $$
                   INSERT INTO %I.%I SELECT $1.*
               $$,
-              schema_name,
-              TG_TABLE_NAME
-          )
-          USING NEW;
-      END LOOP;
+                schema_name,
+                TG_TABLE_NAME
+            )
+            USING NEW;
+        END LOOP;
 
-      --do not sync data on update. synced by close_chunk logic.
+        --do not sync data on update. synced by close_chunk logic.
 
-      --TODO: random node picking broken (should make sure replicas are on different nodes). also stickiness.
-      INSERT INTO chunk_replica_node(chunk_id,partition_replica_id, database_name, schema_name, table_name)
-      SELECT NEW.id, 
-             pr.id, 
-             (SELECT database_name FROM node ORDER BY random() LIMIT 1),
-             pr.schema_name,
-             format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
-      FROM partition_replica pr
-      INNER JOIN hypertable h ON (h.name = pr.hypertable_name)
-      WHERE pr.partition_id = NEW.partition_id;
+        PERFORM setseed(NEW.id::double precision/ 2147483647::double precision);
+        --TODO: random node picking broken (should make sure replicas are on different nodes). also stickiness.
+        INSERT INTO chunk_replica_node (chunk_id, partition_replica_id, database_name, schema_name, table_name)
+            SELECT
+                NEW.id,
+                pr.id,
+                (SELECT database_name
+                 FROM node
+                 ORDER BY random()
+                 LIMIT 1),
+                pr.schema_name,
+                format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
+            FROM partition_replica pr
+            INNER JOIN hypertable h ON (h.name = pr.hypertable_name)
+            WHERE pr.partition_id = NEW.partition_id;
     END IF;
 
     RETURN NEW;
