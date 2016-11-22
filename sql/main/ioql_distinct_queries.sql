@@ -1,10 +1,10 @@
-CREATE OR REPLACE FUNCTION get_distinct_values_local(namespace_name NAME, field TEXT)
+CREATE OR REPLACE FUNCTION get_distinct_values_local(hypertable_name NAME, replica_id SMALLINT, field TEXT)
     RETURNS SETOF TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     table_name REGCLASS;
 BEGIN
-    table_name := get_distinct_local_table_oid(namespace_name);
+    table_name := get_distinct_local_table_oid(hypertable_name, replica_id);
     RETURN QUERY EXECUTE format(
         $$
             SELECT DISTINCT value

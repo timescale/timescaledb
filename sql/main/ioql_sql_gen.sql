@@ -15,10 +15,10 @@ $BODY$
 SELECT format('SELECT %s', get_result_column_list_nonagg(query));
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_from_clause(data_table_row data_table)
+CREATE OR REPLACE FUNCTION get_from_clause(crn chunk_replica_node)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
-SELECT format('FROM %s', data_table_row.table_oid);
+SELECT format('FROM %I.%I', crn.schema_name, crn.table_name);
 $BODY$;
 
 /* predicates */
@@ -68,33 +68,40 @@ FROM unnest(cond.predicates) AS p
 WHERE p.field = partitioning_field_name AND cond.conjunctive = 'AND' AND p.op = '='
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_partitioning_predicate(query            ioql_query,
-                                                      total_partitions SMALLINT)
+CREATE OR REPLACE FUNCTION get_partitioning_predicate(
+    query ioql_query,
+    epoch partition_epoch
+)
     RETURNS TEXT LANGUAGE PLPGSQL IMMUTABLE STRICT AS
 $BODY$
 DECLARE
-    partitioning_field NAME;
-    field_value        TEXT;
+    keyspace_value SMALLINT;
+    field_value    TEXT;
 BEGIN
-    partitioning_field := get_partitioning_field_name(query.namespace_name);
-    field_value := get_constrained_partitioning_field_value(partitioning_field, query.field_condition);
+    field_value := get_constrained_partitioning_field_value(epoch.partitioning_field, query.field_condition);
+
+    EXECUTE format($$ SELECT %s(%L, %L) $$, epoch.partitioning_func, field_value, epoch.partitioning_mod)
+    INTO keyspace_value;
 
     IF field_value IS NOT NULL THEN
-        RETURN format('get_partition_for_key(%I, %L) = %L', partitioning_field, total_partitions,
-                      get_partition_for_key(field_value, total_partitions));
+        RETURN format('%s(%I, %L) = %L',
+                      epoch.partitioning_func,
+                      epoch.partitioning_field,
+                      epoch.partitioning_mod,
+                      keyspace_value);
     END IF;
     RETURN NULL;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, total_partitions SMALLINT = NULL)
+CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_epoch)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(
     get_time_predicate(query.time_condition),
     get_field_predicate_clause(query.field_condition),
     get_select_field_predicate(query.select_items),
-    get_partitioning_predicate(query, total_partitions)
+    get_partitioning_predicate(query, epoch)
 );
 $BODY$;
 

@@ -8,3 +8,14 @@ BEGIN
     END IF;
 END
 $BODY$;
+
+DO
+$BODY$
+BEGIN
+    IF NOT EXISTS(SELECT 1
+                  FROM pg_type
+                  WHERE typname = 'chunk_placement_type') THEN
+        CREATE TYPE chunk_placement_type AS ENUM ('RANDOM', 'STICKY');
+    END IF;
+END
+$BODY$;

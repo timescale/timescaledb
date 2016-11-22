@@ -1,30 +1,36 @@
-CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(_query ioql_query)
-    RETURNS TEXT AS $BODY$
+CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(query ioql_query)
+    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    sql_code TEXT;
 BEGIN
-    IF get_cluster_table(_query.namespace_name) IS NULL THEN
+    --TODO : cross-epoch queries can be optimized much more than a simple limit. 
+    SELECT format(
+      $$ SELECT *
+         FROM (%s) AS union_epoch
+         LIMIT %L
+      $$,
+          string_agg('('||code_epoch.code||')', ' UNION ALL '),
+          query.limit_rows)
+    INTO sql_code
+    FROM (
+      SELECT CASE WHEN  NOT query.aggregate IS NULL THEN
+                    ioql_query_agg_sql(query, pe)
+                  ELSE
+                     ioql_query_nonagg_sql(query, pe)
+                  END AS code
+      FROM partition_epoch pe
+      WHERE pe.hypertable_name = query.namespace_name
+    ) AS code_epoch;
+
+    IF NOT FOUND THEN
         RETURN format($$ SELECT * FROM no_cluster_table(%L) $$, _query);
     END IF;
 
-    IF _query.aggregate IS NULL THEN
-        RETURN format(
-            $$
-                SELECT *
-                FROM ioql_exec_query_nonagg(%L) as ans(%s)
-                ORDER BY time DESC NULLS LAST
-            $$, _query, get_result_column_def_list_nonagg(_query));
-    ELSE
-        RETURN format(
-            $$
-                SELECT *
-                FROM ioql_exec_query_agg(%L) as ans(%s)
-                ORDER BY time DESC NULLS LAST
-            $$,
-            _query,
-            get_result_column_def_list_agg(_query));
-    END IF;
+    RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
+    RETURN sql_code;
 END
-$BODY$
-LANGUAGE plpgsql STABLE;
+$BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_exec_query_record_cursor(query ioql_query, curs REFCURSOR)
     RETURNS REFCURSOR AS $BODY$

@@ -3,6 +3,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_cluster_user()
 $BODY$
 DECLARE
     node_row node;
+    meta_row meta;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
         RAISE EXCEPTION 'Only inserts supported on node table'
@@ -15,9 +16,16 @@ BEGIN
     FOR node_row IN SELECT *
                     FROM node
                     WHERE database_name <> current_database() LOOP
-        PERFORM _sysinternal.create_user_mapping(NEW, node_row);
+        PERFORM _sysinternal.create_user_mapping(NEW, node_row.server_name);
     END LOOP;
     RETURN NEW;
+
+    FOR meta_row IN SELECT *
+                    FROM meta LOOP
+        PERFORM _sysinternal.create_user_mapping(NEW, meta_row.server_name);
+    END LOOP;
+    RETURN NEW;
+
 END
 $BODY$
 SET SEARCH_PATH = 'public';

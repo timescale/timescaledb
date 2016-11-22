@@ -5,6 +5,12 @@ SELECT add_cluster_user('postgres', NULL);
  
 (1 row)
 
+SELECT set_meta('meta' :: NAME, 'localhost');
+ set_meta 
+----------
+ 
+(1 row)
+
 SELECT add_node('Test1' :: NAME, 'localhost');
  add_node 
 ----------
@@ -17,143 +23,330 @@ SELECT add_node('test2' :: NAME, 'localhost');
  
 (1 row)
 
-SELECT add_namespace('testNs' :: NAME);
- add_namespace 
----------------
+SELECT add_hypertable('testNs' :: NAME, 'Device_id');
+ add_hypertable 
+----------------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT *
+FROM partition_replica;
+ id | partition_id | hypertable_name | replica_id |  schema_name  |       table_name       
+----+--------------+-----------------+------------+---------------+------------------------
+  1 |            1 | testNs          |          0 | _sys_1_testNs | _hyper_1_1_0_partition
+  2 |            2 | testNs          |          0 | _sys_1_testNs | _hyper_1_2_0_partition
+(2 rows)
+
+SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY ['TIME-VALUE'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE,
+                 ARRAY ['VALUE-TIME'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY [] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY [] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on', 'bigint', FALSE, FALSE, ARRAY['TIME-VALUE','VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on',
+                 'bigint', FALSE, FALSE, ARRAY ['TIME-VALUE', 'VALUE-TIME'] :: field_index_type []);
  add_field 
 -----------
  
+(1 row)
+
+SELECT *
+FROM get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
 (1 row)
 
 SELECT *
 FROM node;
- database_name | schema_name  | server_name | hostname  
----------------+--------------+-------------+-----------
- Test1         | remote_Test1 | Test1       | localhost
- test2         | remote_test2 | test2       | localhost
+ database_name | schema_name  | server_name | hostname  | active | id 
+---------------+--------------+-------------+-----------+--------+----
+ Test1         | remote_Test1 | Test1       | localhost | t      |  1
+ test2         | remote_test2 | test2       | localhost | t      |  2
 (2 rows)
 
 SELECT *
-FROM namespace;
-  name  | schema_name | cluster_table_name | cluster_distinct_table_name 
---------+-------------+--------------------+-----------------------------
- testNs | testNs      | cluster            | distinct
+FROM meta;
+ database_name | hostname  | server_name 
+---------------+-----------+-------------
+ meta          | localhost | meta
 (1 row)
 
 SELECT *
-FROM namespace_node;
- namespace_name | database_name | master_table_name | remote_table_name | distinct_local_table_name | distinct_remote_table_name 
-----------------+---------------+-------------------+-------------------+---------------------------+----------------------------
- testNs         | Test1         | master            | remote_Test1      | local_distinct            | remote_distinct_Test1
- testNs         | test2         | master            | remote_test2      | local_distinct            | remote_distinct_test2
+FROM hypertable;
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY
+(1 row)
+
+SELECT *
+FROM hypertable_replica;
+ hypertable_name | replica_id |  schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
+-----------------+------------+---------------+--------------------+----------------------+---------------------
+ testNs          |          0 | _sys_1_testNs | _hyper_1_0_replica | _sys_1_testNs        | _hyper_1_0_distinct
+(1 row)
+
+SELECT *
+FROM distinct_replica_node;
+ hypertable_name | replica_id | database_name |  schema_name  |         table_name         
+-----------------+------------+---------------+---------------+----------------------------
+ testNs          |          0 | Test1         | _sys_1_testNs | _hyper_1_0_1_distinct_data
+(1 row)
+
+SELECT *
+FROM partition_epoch;
+ id | hypertable_name | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_field 
+----+-----------------+------------+----------+-----------------------+------------------+--------------------
+  1 | testNs          |            |          | get_partition_for_key |            32768 | Device_id
+(1 row)
+
+SELECT *
+FROM partition;
+ id | epoch_id | keyspace_start | keyspace_end 
+----+----------+----------------+--------------
+  1 |        1 |              0 |        16383
+  2 |        1 |          16384 |        32767
 (2 rows)
 
 SELECT *
+FROM partition_replica;
+ id | partition_id | hypertable_name | replica_id |  schema_name  |       table_name       
+----+--------------+-----------------+------------+---------------+------------------------
+  1 |            1 | testNs          |          0 | _sys_1_testNs | _hyper_1_1_0_partition
+  2 |            2 | testNs          |          0 | _sys_1_testNs | _hyper_1_2_0_partition
+(2 rows)
+
+SELECT *
+FROM chunk;
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
+(1 row)
+
+SELECT *
+FROM chunk_replica_node;
+ chunk_id | partition_replica_id | database_name |  schema_name  |     table_name      
+----------+----------------------+---------------+---------------+---------------------
+        1 |                    1 | Test1         | _sys_1_testNs | _hyper_1_1_0_1_data
+(1 row)
+
+SELECT *
 FROM field;
- namespace_name |                              name                               |    data_type     | is_partitioning | is_distinct |       index_types       
-----------------+-----------------------------------------------------------------+------------------+-----------------+-------------+-------------------------
- testNs         | Device_id                                                       | text             | t               | t           | {TIME-VALUE}
- testNs         | temp                                                            | double precision | f               | f           | {VALUE-TIME}
- testNs         | occupied                                                        | boolean          | f               | f           | {}
- testNs         | latitude                                                        | bigint           | f               | f           | {}
- testNs         | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           | f               | f           | {TIME-VALUE,VALUE-TIME}
+ hypertable_name |                              name                               |    data_type     | is_partitioning | is_distinct |       index_types       
+-----------------+-----------------------------------------------------------------+------------------+-----------------+-------------+-------------------------
+ testNs          | Device_id                                                       | text             | t               | t           | {TIME-VALUE}
+ testNs          | temp                                                            | double precision | f               | f           | {VALUE-TIME}
+ testNs          | occupied                                                        | boolean          | f               | f           | {}
+ testNs          | latitude                                                        | bigint           | f               | f           | {}
+ testNs          | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           | f               | f           | {TIME-VALUE,VALUE-TIME}
 (5 rows)
 
+\des+
+                                                     List of foreign servers
+ Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |            FDW Options             | Description 
+-------+----------+----------------------+-------------------+------+---------+------------------------------------+-------------
+ Test1 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'Test1') | 
+ test2 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'test2') | 
+(2 rows)
+
+\deu+
+                 List of user mappings
+ Server | User name |           FDW Options            
+--------+-----------+----------------------------------
+ Test1  | postgres  | ("user" 'postgres', password '')
+ test2  | postgres  | ("user" 'postgres', password '')
+(2 rows)
+
+\echo *********************************************************************************************************ß
+*********************************************************************************************************ß
 \c Test1
 SELECT *
 FROM node;
- database_name | schema_name  | server_name | hostname  
----------------+--------------+-------------+-----------
- Test1         | remote_Test1 | Test1       | localhost
- test2         | remote_test2 | test2       | localhost
+ database_name | schema_name  | server_name | hostname  | active | id 
+---------------+--------------+-------------+-----------+--------+----
+ Test1         | remote_Test1 | Test1       | localhost | t      |  1
+ test2         | remote_test2 | test2       | localhost | t      |  2
 (2 rows)
 
 SELECT *
-FROM namespace;
-  name  | schema_name | cluster_table_name | cluster_distinct_table_name 
---------+-------------+--------------------+-----------------------------
- testNs | testNs      | cluster            | distinct
+FROM meta;
+ database_name | hostname  | server_name 
+---------------+-----------+-------------
+ meta          | localhost | meta
 (1 row)
 
 SELECT *
-FROM namespace_node;
- namespace_name | database_name | master_table_name | remote_table_name | distinct_local_table_name | distinct_remote_table_name 
-----------------+---------------+-------------------+-------------------+---------------------------+----------------------------
- testNs         | Test1         | master            | remote_Test1      | local_distinct            | remote_distinct_Test1
- testNs         | test2         | master            | remote_test2      | local_distinct            | remote_distinct_test2
+FROM hypertable;
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY
+(1 row)
+
+SELECT *
+FROM hypertable_replica;
+ hypertable_name | replica_id |  schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
+-----------------+------------+---------------+--------------------+----------------------+---------------------
+ testNs          |          0 | _sys_1_testNs | _hyper_1_0_replica | _sys_1_testNs        | _hyper_1_0_distinct
+(1 row)
+
+SELECT *
+FROM distinct_replica_node;
+ hypertable_name | replica_id | database_name |  schema_name  |         table_name         
+-----------------+------------+---------------+---------------+----------------------------
+ testNs          |          0 | Test1         | _sys_1_testNs | _hyper_1_0_1_distinct_data
+(1 row)
+
+SELECT *
+FROM partition_epoch;
+ id | hypertable_name | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_field 
+----+-----------------+------------+----------+-----------------------+------------------+--------------------
+  1 | testNs          |            |          | get_partition_for_key |            32768 | Device_id
+(1 row)
+
+SELECT *
+FROM partition;
+ id | epoch_id | keyspace_start | keyspace_end 
+----+----------+----------------+--------------
+  1 |        1 |              0 |        16383
+  2 |        1 |          16384 |        32767
 (2 rows)
 
 SELECT *
-FROM field;
- namespace_name |                              name                               |    data_type     | is_partitioning | is_distinct |       index_types       
-----------------+-----------------------------------------------------------------+------------------+-----------------+-------------+-------------------------
- testNs         | Device_id                                                       | text             | t               | t           | {TIME-VALUE}
- testNs         | temp                                                            | double precision | f               | f           | {VALUE-TIME}
- testNs         | occupied                                                        | boolean          | f               | f           | {}
- testNs         | latitude                                                        | bigint           | f               | f           | {}
- testNs         | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           | f               | f           | {TIME-VALUE,VALUE-TIME}
-(5 rows)
-
-\dt "testNs".*
-             List of relations
- Schema |      Name      | Type  |  Owner   
---------+----------------+-------+----------
- testNs | cluster        | table | postgres
- testNs | distinct       | table | postgres
- testNs | local_distinct | table | postgres
- testNs | master         | table | postgres
-(4 rows)
-
-\det "testNs".*
-         List of foreign tables
- Schema |         Table         | Server 
---------+-----------------------+--------
- testNs | remote_distinct_test2 | test2
- testNs | remote_test2          | test2
+FROM partition_replica;
+ id | partition_id | hypertable_name | replica_id |  schema_name  |       table_name       
+----+--------------+-----------------+------------+---------------+------------------------
+  1 |            1 | testNs          |          0 | _sys_1_testNs | _hyper_1_1_0_partition
+  2 |            2 | testNs          |          0 | _sys_1_testNs | _hyper_1_2_0_partition
 (2 rows)
 
-\d+ "testNs".distinct
-                            Table "testNs.distinct"
-      Column      |  Type  | Modifiers | Storage  | Stats target | Description 
-------------------+--------+-----------+----------+--------------+-------------
- field            | text   | not null  | extended |              | 
- value            | text   | not null  | extended |              | 
- last_time_approx | bigint |           | plain    |              | 
-Indexes:
-    "distinct_pkey" PRIMARY KEY, btree (field, value)
-Child tables: "testNs".local_distinct,
-              "testNs".remote_distinct_test2
+SELECT *
+FROM chunk;
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
+(1 row)
 
-\d+ "testNs".cluster
-                                                         Table "testNs.cluster"
+SELECT *
+FROM chunk_replica_node;
+ chunk_id | partition_replica_id | database_name |  schema_name  |     table_name      
+----------+----------------------+---------------+---------------+---------------------
+        1 |                    1 | Test1         | _sys_1_testNs | _hyper_1_1_0_1_data
+(1 row)
+
+SELECT *
+FROM field;
+ hypertable_name |                              name                               |    data_type     | is_partitioning | is_distinct |       index_types       
+-----------------+-----------------------------------------------------------------+------------------+-----------------+-------------+-------------------------
+ testNs          | Device_id                                                       | text             | t               | t           | {TIME-VALUE}
+ testNs          | temp                                                            | double precision | f               | f           | {VALUE-TIME}
+ testNs          | occupied                                                        | boolean          | f               | f           | {}
+ testNs          | latitude                                                        | bigint           | f               | f           | {}
+ testNs          | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           | f               | f           | {TIME-VALUE,VALUE-TIME}
+(5 rows)
+
+\des+
+                                                     List of foreign servers
+ Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |            FDW Options             | Description 
+-------+----------+----------------------+-------------------+------+---------+------------------------------------+-------------
+ meta  | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'meta')  | 
+ test2 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'test2') | 
+(2 rows)
+
+\deu+
+                 List of user mappings
+ Server | User name |           FDW Options            
+--------+-----------+----------------------------------
+ meta   | postgres  | ("user" 'postgres', password '')
+ test2  | postgres  | ("user" 'postgres', password '')
+(2 rows)
+
+\d+ "_sys_1_testNs".*
+   Index "_sys_1_testNs.1-time-Device_id"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate ("Device_id" IS NOT NULL)
+
+        Index "_sys_1_testNs.1_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_partition"
+
+        Index "_sys_1_testNs.2-temp-time"
+ Column |       Type       | Definition | Storage 
+--------+------------------+------------+---------
+ temp   | double precision | temp       | plain
+ time   | bigint           | "time"     | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (temp IS NOT NULL)
+
+        Index "_sys_1_testNs.2_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_2_0_partition"
+
+                                Index "_sys_1_testNs.3-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ time                                                            | bigint | "time"                                                          | plain
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+                                Index "_sys_1_testNs.4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+ time                                                            | bigint | "time"                                                          | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+         Table "_sys_1_testNs._hyper_1_0_1_distinct_data"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Indexes:
+    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (field, value)
+Inherits: "_sys_1_testNs"._hyper_1_0_distinct
+
+Index "_sys_1_testNs._hyper_1_0_1_distinct_data_pkey"
+ Column | Type | Definition | Storage  
+--------+------+------------+----------
+ field  | text | field      | extended
+ value  | text | value      | extended
+primary key, btree, for table "_sys_1_testNs._hyper_1_0_1_distinct_data"
+
+             Table "_sys_1_testNs._hyper_1_0_distinct"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Inherits: "_sys_1_testNs"._hyper_1_distinct
+Child tables: "_sys_1_testNs"._hyper_1_0_1_distinct_data
+
+                                                Table "_sys_1_testNs._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -162,50 +355,220 @@ Child tables: "testNs".local_distinct,
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-Child tables: "testNs".master,
-              "testNs".remote_test2
+Inherits: "_sys_1_testNs"._hyper_1_root
+Child tables: "_sys_1_testNs"._hyper_1_1_0_partition,
+              "_sys_1_testNs"._hyper_1_2_0_partition
 
+                                               Table "_sys_1_testNs._hyper_1_1_0_1_data"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "1-time-Device_id" btree ("time" DESC NULLS LAST, "Device_id") WHERE "Device_id" IS NOT NULL
+    "2-temp-time" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
+    "3-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an" btree ("time" DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
+    "4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
+
+                                              Table "_sys_1_testNs._hyper_1_1_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "1_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+Child tables: "_sys_1_testNs"._hyper_1_1_0_1_data
+
+                                              Table "_sys_1_testNs._hyper_1_2_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "2_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+
+              Table "_sys_1_testNs._hyper_1_distinct"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Indexes:
+    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (field, value)
+Child tables: "_sys_1_testNs"._hyper_1_0_distinct
+
+Index "_sys_1_testNs._hyper_1_distinct_pkey"
+ Column | Type | Definition | Storage  
+--------+------+------------+----------
+ field  | text | field      | extended
+ value  | text | value      | extended
+primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
+
+                                                  Table "_sys_1_testNs._hyper_1_root"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Child tables: "_sys_1_testNs"._hyper_1_0_replica
+
+--\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
+--\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
+--\det "_sys_1_testNs".*
+--\d+ "testNs".distinct
 --test idempotence
 \c meta
-SELECT add_namespace('testNs' :: NAME);
- add_namespace 
----------------
+SELECT add_hypertable('testNs' :: NAME, 'Device_id');
+ add_hypertable 
+----------------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY['TIME-VALUE'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY ['TIME-VALUE'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE, ARRAY['VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE,
+                 ARRAY ['VALUE-TIME'] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY[] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY [] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY[] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY [] :: field_index_type []);
  add_field 
 -----------
  
 (1 row)
 
-SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on', 'bigint', FALSE, FALSE, ARRAY['TIME-VALUE','VALUE-TIME'] :: field_index_type []);
+SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on',
+                 'bigint', FALSE, FALSE, ARRAY ['TIME-VALUE', 'VALUE-TIME'] :: field_index_type []);
  add_field 
 -----------
  
+(1 row)
+
+SELECT *
+FROM get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
 (1 row)
 
 \c Test1
-\d+ "testNs".cluster
-                                                         Table "testNs.cluster"
+\d+ "_sys_1_testNs".*
+   Index "_sys_1_testNs.1-time-Device_id"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate ("Device_id" IS NOT NULL)
+
+        Index "_sys_1_testNs.1_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_partition"
+
+        Index "_sys_1_testNs.2-temp-time"
+ Column |       Type       | Definition | Storage 
+--------+------------------+------------+---------
+ temp   | double precision | temp       | plain
+ time   | bigint           | "time"     | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (temp IS NOT NULL)
+
+        Index "_sys_1_testNs.2_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_2_0_partition"
+
+                                Index "_sys_1_testNs.3-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ time                                                            | bigint | "time"                                                          | plain
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+        Index "_sys_1_testNs.3_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_3_0_partition"
+
+                                Index "_sys_1_testNs.4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+ time                                                            | bigint | "time"                                                          | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+        Index "_sys_1_testNs.4_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_4_0_partition"
+
+         Table "_sys_1_testNs._hyper_1_0_1_distinct_data"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Indexes:
+    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (field, value)
+Inherits: "_sys_1_testNs"._hyper_1_0_distinct
+
+Index "_sys_1_testNs._hyper_1_0_1_distinct_data_pkey"
+ Column | Type | Definition | Storage  
+--------+------+------------+----------
+ field  | text | field      | extended
+ value  | text | value      | extended
+primary key, btree, for table "_sys_1_testNs._hyper_1_0_1_distinct_data"
+
+             Table "_sys_1_testNs._hyper_1_0_distinct"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Inherits: "_sys_1_testNs"._hyper_1_distinct
+Child tables: "_sys_1_testNs"._hyper_1_0_1_distinct_data
+
+                                                Table "_sys_1_testNs._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -214,37 +577,13 @@ SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-Child tables: "testNs".master,
-              "testNs".remote_test2
+Inherits: "_sys_1_testNs"._hyper_1_root
+Child tables: "_sys_1_testNs"._hyper_1_1_0_partition,
+              "_sys_1_testNs"._hyper_1_2_0_partition,
+              "_sys_1_testNs"._hyper_1_3_0_partition,
+              "_sys_1_testNs"._hyper_1_4_0_partition
 
-SELECT get_or_create_data_table((1477075243*1e9)::bigint, 'testNs'::NAME, 0::SMALLINT, 10::SMALLINT);
-                            get_or_create_data_table                            
---------------------------------------------------------------------------------
- ("""testNs"".data_0_10_1477008000",testNs,0,10,Device_id,1477008000000000000,)
-(1 row)
-
-\dt "testNs".*
-                List of relations
- Schema |         Name         | Type  |  Owner   
---------+----------------------+-------+----------
- testNs | cluster              | table | postgres
- testNs | data_0_10_1477008000 | table | postgres
- testNs | distinct             | table | postgres
- testNs | local_distinct       | table | postgres
- testNs | master               | table | postgres
- testNs | partition_0_10       | table | postgres
-(6 rows)
-
-\det "testNs".*
-         List of foreign tables
- Schema |         Table         | Server 
---------+-----------------------+--------
- testNs | remote_distinct_test2 | test2
- testNs | remote_test2          | test2
-(2 rows)
-
-\d+ "testNs".data_0_10_1477008000
-                                                  Table "testNs.data_0_10_1477008000"
+                                               Table "_sys_1_testNs._hyper_1_1_0_1_data"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -258,14 +597,11 @@ Indexes:
     "2-temp-time" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
     "3-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an" btree ("time" DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
     "4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
-    "data_0_10_1477008000_pidx" btree ("time" DESC NULLS LAST, "Device_id")
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", '10'::smallint) = '0'::smallint)
-    "time_range" CHECK ("time" >= '1477008000000000000'::bigint AND "time" <= NULL::bigint)
-Inherits: "testNs".partition_0_10
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
 
-\d+ "testNs".partition_0_10
-                                                     Table "testNs.partition_0_10"
+                                              Table "_sys_1_testNs._hyper_1_1_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -274,19 +610,247 @@ Inherits: "testNs".partition_0_10
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "1_pidx" btree ("time" DESC NULLS LAST, "Device_id")
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", '10'::smallint) = '0'::smallint)
-Inherits: "testNs".master
-Child tables: "testNs".data_0_10_1477008000
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+Child tables: "_sys_1_testNs"._hyper_1_1_0_1_data
 
-SELECT close_data_table_end('"testNs".data_0_10_1477008000');
- close_data_table_end 
-----------------------
+                                              Table "_sys_1_testNs._hyper_1_2_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "2_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+
+                                              Table "_sys_1_testNs._hyper_1_3_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "3_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+
+                                              Table "_sys_1_testNs._hyper_1_4_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "4_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+
+              Table "_sys_1_testNs._hyper_1_distinct"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Indexes:
+    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (field, value)
+Child tables: "_sys_1_testNs"._hyper_1_0_distinct
+
+Index "_sys_1_testNs._hyper_1_distinct_pkey"
+ Column | Type | Definition | Storage  
+--------+------+------------+----------
+ field  | text | field      | extended
+ value  | text | value      | extended
+primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
+
+                                                  Table "_sys_1_testNs._hyper_1_root"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Child tables: "_sys_1_testNs"._hyper_1_0_replica
+
+\c meta
+SELECT close_chunk_end(1);
+ close_chunk_end 
+-----------------
  
 (1 row)
 
-\d+ "testNs".data_0_10_1477008000
-                                                  Table "testNs.data_0_10_1477008000"
+SELECT *
+FROM chunk;
+ id | partition_id | start_time |    end_time    
+----+--------------+------------+----------------
+  1 |            1 |            | 86399999999999
+(1 row)
+
+SELECT *
+FROM get_or_create_chunk(1, 10 :: BIGINT);
+ id | partition_id | start_time |    end_time    
+----+--------------+------------+----------------
+  1 |            1 |            | 86399999999999
+(1 row)
+
+SELECT *
+FROM get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+ id | partition_id |   start_time   | end_time 
+----+--------------+----------------+----------
+  2 |            1 | 86400000000000 |         
+(1 row)
+
+SELECT *
+FROM chunk;
+ id | partition_id |   start_time   |    end_time    
+----+--------------+----------------+----------------
+  1 |            1 |                | 86399999999999
+  2 |            1 | 86400000000000 |               
+(2 rows)
+
+\c Test1
+\d+ "_sys_1_testNs".*
+   Index "_sys_1_testNs.1-time-Device_id"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate ("Device_id" IS NOT NULL)
+
+        Index "_sys_1_testNs.1_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_partition"
+
+        Index "_sys_1_testNs.2-temp-time"
+ Column |       Type       | Definition | Storage 
+--------+------------------+------------+---------
+ temp   | double precision | temp       | plain
+ time   | bigint           | "time"     | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (temp IS NOT NULL)
+
+        Index "_sys_1_testNs.2_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_2_0_partition"
+
+                                Index "_sys_1_testNs.3-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ time                                                            | bigint | "time"                                                          | plain
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+        Index "_sys_1_testNs.3_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_3_0_partition"
+
+                                Index "_sys_1_testNs.4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+ time                                                            | bigint | "time"                                                          | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+        Index "_sys_1_testNs.4_pidx"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_4_0_partition"
+
+   Index "_sys_1_testNs.5-time-Device_id"
+  Column   |  Type  | Definition  | Storage  
+-----------+--------+-------------+----------
+ time      | bigint | "time"      | plain
+ Device_id | text   | "Device_id" | extended
+btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate ("Device_id" IS NOT NULL)
+
+        Index "_sys_1_testNs.6-temp-time"
+ Column |       Type       | Definition | Storage 
+--------+------------------+------------+---------
+ temp   | double precision | temp       | plain
+ time   | bigint           | "time"     | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate (temp IS NOT NULL)
+
+                                Index "_sys_1_testNs.7-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ time                                                            | bigint | "time"                                                          | plain
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+                                Index "_sys_1_testNs.8-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_"
+                             Column                              |  Type  |                           Definition                            | Storage 
+-----------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
+ time                                                            | bigint | "time"                                                          | plain
+btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
+
+         Table "_sys_1_testNs._hyper_1_0_1_distinct_data"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Indexes:
+    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (field, value)
+Inherits: "_sys_1_testNs"._hyper_1_0_distinct
+
+Index "_sys_1_testNs._hyper_1_0_1_distinct_data_pkey"
+ Column | Type | Definition | Storage  
+--------+------+------------+----------
+ field  | text | field      | extended
+ value  | text | value      | extended
+primary key, btree, for table "_sys_1_testNs._hyper_1_0_1_distinct_data"
+
+             Table "_sys_1_testNs._hyper_1_0_distinct"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Inherits: "_sys_1_testNs"._hyper_1_distinct
+Child tables: "_sys_1_testNs"._hyper_1_0_1_distinct_data
+
+                                                Table "_sys_1_testNs._hyper_1_0_replica"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Inherits: "_sys_1_testNs"._hyper_1_root
+Child tables: "_sys_1_testNs"._hyper_1_1_0_partition,
+              "_sys_1_testNs"._hyper_1_2_0_partition,
+              "_sys_1_testNs"._hyper_1_3_0_partition,
+              "_sys_1_testNs"._hyper_1_4_0_partition
+
+                                               Table "_sys_1_testNs._hyper_1_1_0_1_data"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -300,46 +864,116 @@ Indexes:
     "2-temp-time" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
     "3-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an" btree ("time" DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
     "4-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
-    "data_0_10_1477008000_pidx" btree ("time" DESC NULLS LAST, "Device_id")
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", '10'::smallint) = '0'::smallint)
-    "time_range" CHECK ("time" >= '1477008000000000000'::bigint AND "time" <= '1477094399999999999'::bigint)
-Inherits: "testNs".partition_0_10
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "time_range" CHECK ("time" <= '86399999999999'::bigint)
+Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
 
-SELECT get_or_create_data_table((1477075243*1e9)::bigint, 'testNs'::NAME, 0::SMALLINT, 10::SMALLINT);
-                                     get_or_create_data_table                                      
----------------------------------------------------------------------------------------------------
- ("""testNs"".data_0_10_1477008000",testNs,0,10,Device_id,1477008000000000000,1477094399999999999)
-(1 row)
+                                               Table "_sys_1_testNs._hyper_1_1_0_2_data"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "5-time-Device_id" btree ("time" DESC NULLS LAST, "Device_id") WHERE "Device_id" IS NOT NULL
+    "6-temp-time" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
+    "7-time-really_long_field_goes_on_and_on_and_on_and_on_and_on_an" btree ("time" DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
+    "8-really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "time_range" CHECK ("time" >= '86400000000000'::bigint)
+Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
 
-\dt "testNs".*
-                List of relations
- Schema |         Name         | Type  |  Owner   
---------+----------------------+-------+----------
- testNs | cluster              | table | postgres
- testNs | data_0_10_1477008000 | table | postgres
- testNs | distinct             | table | postgres
- testNs | local_distinct       | table | postgres
- testNs | master               | table | postgres
- testNs | partition_0_10       | table | postgres
-(6 rows)
+                                              Table "_sys_1_testNs._hyper_1_1_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "1_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+Child tables: "_sys_1_testNs"._hyper_1_1_0_1_data,
+              "_sys_1_testNs"._hyper_1_1_0_2_data
 
-SELECT get_or_create_data_table(((1477075243+(60*60*25))*1e9)::bigint, 'testNs'::NAME, 0::SMALLINT, 10::SMALLINT);
-                            get_or_create_data_table                            
---------------------------------------------------------------------------------
- ("""testNs"".data_0_10_1477094400",testNs,0,10,Device_id,1477094400000000000,)
-(1 row)
+                                              Table "_sys_1_testNs._hyper_1_2_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "2_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
 
-\dt "testNs".*
-                List of relations
- Schema |         Name         | Type  |  Owner   
---------+----------------------+-------+----------
- testNs | cluster              | table | postgres
- testNs | data_0_10_1477008000 | table | postgres
- testNs | data_0_10_1477094400 | table | postgres
- testNs | distinct             | table | postgres
- testNs | local_distinct       | table | postgres
- testNs | master               | table | postgres
- testNs | partition_0_10       | table | postgres
-(7 rows)
+                                              Table "_sys_1_testNs._hyper_1_3_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "3_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+
+                                              Table "_sys_1_testNs._hyper_1_4_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Indexes:
+    "4_pidx" btree ("time" DESC NULLS LAST, "Device_id")
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: "_sys_1_testNs"._hyper_1_0_replica
+
+              Table "_sys_1_testNs._hyper_1_distinct"
+ Column | Type | Modifiers | Storage  | Stats target | Description 
+--------+------+-----------+----------+--------------+-------------
+ field  | text | not null  | extended |              | 
+ value  | text | not null  | extended |              | 
+Indexes:
+    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (field, value)
+Child tables: "_sys_1_testNs"._hyper_1_0_distinct
+
+Index "_sys_1_testNs._hyper_1_distinct_pkey"
+ Column | Type | Definition | Storage  
+--------+------+------------+----------
+ field  | text | field      | extended
+ value  | text | value      | extended
+primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
+
+                                                  Table "_sys_1_testNs._hyper_1_root"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             |           | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Child tables: "_sys_1_testNs"._hyper_1_0_replica
 
