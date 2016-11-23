@@ -17,23 +17,26 @@ echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER and with meta db $INST
 cd $DIR
 
 # Todo - read the ns and fields from the csv/tsv file
-NAMESPACE="33_testNs"
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_META -v ON_ERROR_STOP=1  <<EOF
-    SELECT add_namespace('$NAMESPACE' :: NAME);
-    SELECT add_field('$NAMESPACE' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'nUm_1', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'num_2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'bool_1', 'boolean', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'string_1', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'string_2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'field_only_ref2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-    SELECT add_field('$NAMESPACE' :: NAME, 'field_only_dev2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+NAMESPACES="33_testNs emptyNs"
+for NAMESPACE in $NAMESPACES; do
+  psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_META -v ON_ERROR_STOP=1  <<EOF
+      SELECT add_hypertable('$NAMESPACE' :: NAME, 'device_id');
+      SELECT add_field('$NAMESPACE' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'nUm_1', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'num_2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'bool_1', 'boolean', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'string_1', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'string_2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'field_only_ref2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'field_only_dev2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
 EOF
+
+done
 
 INPUT_DATA_DIR="../import_data" 
 FILE_SUFFIX=".tsv"
 DATASETS=`ls $INPUT_DATA_DIR/*$FILE_SUFFIX`
-TEMPTABLENAME="copy_t"
+TEMPTABLENAME="copy_t2"
 
 for DS_PATH in $DATASETS; do 
     DATASET=`basename $DS_PATH $FILE_SUFFIX`
@@ -44,7 +47,7 @@ psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_MAIN -v ON_ERROR_STOP=1 
         BEGIN;
         DROP TABLE IF EXISTS $TEMPTABLENAME;
         SELECT *
-        FROM create_temp_copy_table_one_partition('copy_t'::text, get_partition_for_key('$PARTITION_KEY'::text, 10 :: SMALLINT), 10 :: SMALLINT);
+        FROM create_temp_copy_table('$TEMPTABLENAME');
         \COPY $TEMPTABLENAME FROM '$DS_PATH';
         CREATE SCHEMA IF NOT EXISTS test_input_data;
         DROP TABLE IF EXISTS test_input_data.$DATASET;
@@ -55,5 +58,5 @@ EOF
 done  
 
 cd $PWD
- 
+
  
