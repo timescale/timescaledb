@@ -11,7 +11,8 @@ BEGIN
     FROM chunk_replica_node crn
     INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
     CROSS JOIN unnest(index_types) AS index_type
-    WHERE pr.hypertable_name = create_chunk_replica_node_indexes_for_field.hypertable_name;
+    WHERE pr.hypertable_name = create_chunk_replica_node_indexes_for_field.hypertable_name AND
+          crn.database_name = current_database();
 END
 $BODY$;
 
