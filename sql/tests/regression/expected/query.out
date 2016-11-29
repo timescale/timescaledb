@@ -524,6 +524,10 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
  {"time":1257894000000000000,"device_id":"dev1","series_0":1.5,"series_1":1,"series_2":2,"series_bool":true}
 (10 rows)
 
+\set ON_ERROR_STOP 0
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'DoesNotExist'));
+\set ON_ERROR_STOP 1
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],

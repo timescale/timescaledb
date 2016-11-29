@@ -7,6 +7,10 @@
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
 
+\set ON_ERROR_STOP 0
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'DoesNotExist'));
+\set ON_ERROR_STOP 1
 
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',

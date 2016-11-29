@@ -35,7 +35,6 @@ BEGIN
     FETCH cursor INTO returned_record;
     IF FOUND = TRUE THEN
         RAISE EXCEPTION 'Unexpected row: %v', to_jsonb(returned_record);
-        EXIT;
     END IF;
 
     CLOSE cursor;

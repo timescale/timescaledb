@@ -18,6 +18,7 @@
 \ir ../../main/insert.sql
 
 \ir ../../main/ioql.sql
+\ir ../../main/ioql_errors.sql
 \ir ../../main/ioql_exec_node.sql
 \ir ../../main/ioql_result_schema_nonagg.sql
 \ir ../../main/ioql_result_schema_agg.sql

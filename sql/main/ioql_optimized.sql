@@ -3,16 +3,11 @@ CREATE OR REPLACE FUNCTION ioql_exec_query_record_sql(query ioql_query)
 $BODY$
 DECLARE
     sql_code TEXT;
+    inner_sql TEXT;
 BEGIN
     --TODO : cross-epoch queries can be optimized much more than a simple limit. 
-    SELECT format(
-      $$ SELECT *
-         FROM (%s) AS union_epoch
-         LIMIT %L
-      $$,
-          string_agg('('||code_epoch.code||')', ' UNION ALL '),
-          query.limit_rows)
-    INTO sql_code
+    SELECT code_epoch.code    
+    INTO inner_sql
     FROM (
       SELECT CASE WHEN  NOT query.aggregate IS NULL THEN
                     ioql_query_agg_sql(query, pe)
@@ -24,8 +19,17 @@ BEGIN
     ) AS code_epoch;
 
     IF NOT FOUND THEN
-        RETURN format($$ SELECT * FROM no_cluster_table(%L) $$, _query);
+        PERFORM no_cluster_table(query); 
     END IF;
+
+    SELECT format(
+      $$ SELECT *
+         FROM (%s) AS union_epoch
+         LIMIT %L
+      $$,
+          string_agg('('||inner_sql||')', ' UNION ALL '),
+          query.limit_rows)
+    INTO sql_code;
 
     RAISE NOTICE E'Cross-node SQL:\n%\n', sql_code;
     RETURN sql_code;
