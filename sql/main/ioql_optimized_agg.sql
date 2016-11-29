@@ -475,8 +475,9 @@ DECLARE
     grouped_sql   TEXT;
 BEGIN
     IF query.limit_time_periods IS NOT NULL THEN
-        trange := get_time_periods_limit(query.namespace_name,
-                                         combine_predicates(default_predicates(query), additional_constraints),
+        trange := get_time_periods_limit(epoch,
+                                         replica_id, 
+                                         combine_predicates(default_predicates(query, epoch), additional_constraints),
                                          (query.aggregate).group_time,
                                          query.limit_time_periods);
         additional_constraints := combine_predicates(

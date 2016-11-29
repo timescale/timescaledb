@@ -576,6 +576,21 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT, 'series_1'),
+                                    limit_time_periods => 1
+                     ));
+                             json                              
+---------------------------------------------------------------
+ {"series_1":3,"time":1257840000000000000,"sum(series_0)":5}
+ {"series_1":2,"time":1257840000000000000,"sum(series_0)":4.5}
+ {"series_1":4,"time":1257840000000000000,"sum(series_0)":3.5}
+ {"series_1":1,"time":1257840000000000000,"sum(series_0)":4.5}
+ {"series_1":5,"time":1257840000000000000,"sum(series_0)":4.5}
+(5 rows)
+
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0')],
                                     limit_by_field => new_limit_by_field('device_id', 1)
                      ));
