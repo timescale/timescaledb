@@ -12,12 +12,13 @@ BEGIN
     --fix the ordering for equal time items
     OPEN cursor FOR EXECUTE format(
       $$
-        SELECT * 
+        SELECT *
         FROM (%s) as res
         ORDER BY time DESC NULLS LAST, res
       $$, ioql_exec_query_record_sql(query));
 
-    FOR expected_record in EXECUTE format('SELECT * FROM %I.%I', expected_table_schema, expected_table)
+    FOR expected_record in EXECUTE format('SELECT * FROM %I.%I as res ORDER BY time DESC NULLS LAST, res',
+    expected_table_schema, expected_table)
     LOOP    
         FETCH cursor INTO returned_record;
         IF FOUND = FALSE THEN 

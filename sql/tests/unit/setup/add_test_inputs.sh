@@ -25,8 +25,8 @@ for NAMESPACE in $NAMESPACES; do
       SELECT add_field('$NAMESPACE' :: NAME, 'nUm_1', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
       SELECT add_field('$NAMESPACE' :: NAME, 'num_2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
       SELECT add_field('$NAMESPACE' :: NAME, 'bool_1', 'boolean', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'string_1', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'string_2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'string_1', 'text', FALSE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+      SELECT add_field('$NAMESPACE' :: NAME, 'string_2', 'text', FALSE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
       SELECT add_field('$NAMESPACE' :: NAME, 'field_only_ref2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
       SELECT add_field('$NAMESPACE' :: NAME, 'field_only_dev2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
 EOF

@@ -7,9 +7,9 @@ set -e
 PWD=`pwd`
 DIR=`dirname $0`
 
-if [ "$#" -ne 2 ] ; then
-    echo "usage: $0 batch_name partition_value"
-    echo "ex: $0 test_input_data.batch1_dev1 dev1"
+if [ "$#" -ne 1 ] ; then
+    echo "usage: $0 batch_name"
+    echo "ex: $0 test_input_data.batch1_dev1"
     exit 1
 fi
 
@@ -21,7 +21,7 @@ echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER and with db $INSTALL_D
 
 cd $DIR
 psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_MAIN -v ON_ERROR_STOP=1  <<EOF
-    select insert_data_one_partition('$1', get_partition_for_key('$2'::text, 10 :: SMALLINT), 10 :: SMALLINT);
+    SELECT insert_data('$1');
 EOF
 cd $PWD
  
