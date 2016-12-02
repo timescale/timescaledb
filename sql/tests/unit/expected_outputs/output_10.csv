@@ -4,8 +4,3 @@ time bigint; bool_1 boolean; device_id text; field_only_dev2 double precision; f
 1257897600000000000;f;dev1;null;null;1.5;5;const;five
 1257894002000000000;t;dev1;null;null;1.5;8;const;three
 1257894001000000000;t;dev1;null;null;1.5;4;const;four
-1257894000000001000;t;dev1;null;null;1.5;3;const;three
-1257894000000000000;t;dev2;3;null;1.5;9;const;one
-1257894000000000000;f;dev1;null;null;1.5;2;const;two
-1257894000000000000;t;dev1;null;null;1.5;1;const;one
-1257894000000000000;t;dev2;null;null;1.5;10;const;two

@@ -31,11 +31,30 @@ DROP TABLE IF EXISTS tmptable;
 select test_utils.query_to_table($QUERY, 'tmptable');
 \copy (Select * From tmptable) To '$TMPFILE' With CSV DELIMITER ';' NULL 'null';
 EOF
+
 echo "select test_utils.query_to_table($QUERY, 'tmptable');"
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $QUERY_DB -v \
-ON_ERROR_STOP=1 -c "\d tmptable" | tail -n +4 | sed "s/|//;s/|/;/;s/  */ /g;s/ ; /;/g" \
-| tr -d '\n' | sed "s/.$//;s/^ //" > $OUTPUTFILE
+
+#
+# Convert
+#
+#             Table "public.tmptable"
+#     Column      |       Type       | Modifiers
+# -----------------+------------------+-----------
+# time            | bigint           |
+# bool_1          | boolean          |
+# ....
+#
+# into
+#
+# time bigint ; bool_1 boolean;
+#
+# will also change parenthesis to underscores.
+
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $QUERY_DB -v ON_ERROR_STOP=1 -c "\d tmptable" | \
+tail -n +4 | sed "s/|//;s/|/;/;s/  */ /g;s/ ; /;/g" | tr -d '\n' | sed "s/.$//;s/^ //;s/[\(,\)]/_/g" > $OUTPUTFILE
+
+# add the rows from the query to the file
 cat $TMPFILE >> $OUTPUTFILE
-#rm $TMPFILE
+rm $TMPFILE
 
 cd $PWD
