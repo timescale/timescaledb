@@ -35,18 +35,41 @@ ON partition;
 CREATE TRIGGER trigger_create_partition AFTER INSERT OR UPDATE OR DELETE ON partition
 FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_partition();
 
-FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'hypertable_replica',
+
+FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'hypertable_index', 'deleted_hypertable_index', 'hypertable_replica',
 'distinct_replica_node', 'partition_epoch', 'partition', 'partition_replica',
-'chunk_replica_node', 'field', 'meta'] :: NAME [] LOOP
+'chunk_replica_node', 'field', 'deleted_field', 'meta', 'default_replica_node'] :: NAME [] LOOP
     EXECUTE format(
         $$
-            DROP TRIGGER IF EXISTS trigger_0_sync_%1$s ON %1$s
+            DROP TRIGGER IF EXISTS trigger_0_sync_insert_%1$s ON %1$s;
+            DROP TRIGGER IF EXISTS trigger_0_sync_update_%1$s ON %1$s;
+            DROP TRIGGER IF EXISTS trigger_0_sync_delete_%1$s ON %1$s;
         $$,
         table_name);
     EXECUTE format(
         $$
-            CREATE TRIGGER trigger_0_sync_%1$s AFTER INSERT OR UPDATE OR DELETE ON %1$s
-            FOR EACH ROW EXECUTE PROCEDURE _meta.sync_only_insert();
+            CREATE TRIGGER trigger_0_sync_insert_%1$s AFTER INSERT ON %1$s
+            FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_insert();
+            CREATE TRIGGER trigger_0_sync_update_%1$s AFTER UPDATE ON %1$s
+            FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_update();
+            CREATE TRIGGER trigger_0_sync_delete_%1$s AFTER DELETE ON %1$s
+            FOR EACH ROW EXECUTE PROCEDURE _sysinternal.sync_delete();
+
+
+        $$,
+        table_name);
+END LOOP;
+
+FOREACH table_name IN ARRAY ARRAY ['field', 'hypertable_index'] :: NAME [] LOOP
+    EXECUTE format(
+        $$
+            DROP TRIGGER IF EXISTS trigger_0_deleted_%1$s ON %1$s
+        $$,
+        table_name);
+    EXECUTE format(
+        $$
+            CREATE TRIGGER trigger_0_deleted_%1$s AFTER DELETE ON %1$s
+            FOR EACH ROW EXECUTE PROCEDURE _meta.log_delete();
         $$,
         table_name);
 END LOOP;

@@ -82,7 +82,7 @@ iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
         rv = (prev_planner_hook)(parse, cursorOptions, boundParams);
     } else {
         /* Call the standard planner */
-        elog(LOG, "     calling standard_planner");
+        //elog(LOG, "     calling standard_planner");
         rv = standard_planner(parse, cursorOptions, boundParams);
     }
 

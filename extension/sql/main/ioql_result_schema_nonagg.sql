@@ -12,6 +12,15 @@ SELECT CASE
                FROM
                    (
                        (
+                          SELECT time_field AS field_name
+                          FROM get_time_field(query.namespace_name) time_field
+                          WHERE time_field NOT IN (
+                            SELECT field AS field_name
+                            FROM unnest(query.select_items)
+                          )
+                       )
+                      UNION ALL
+                       (
                            SELECT field AS field_name
                            FROM unnest(query.select_items)
                        )
@@ -46,7 +55,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION get_result_column_list_nonagg(query ioql_query)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(ARRAY ['time'] || quote_names(get_result_field_array_nonagg(query)), ', ')
+SELECT array_to_string(quote_names(get_result_field_array_nonagg(query)), ', ')
 $BODY$;
 
 --all fields and their types
@@ -64,7 +73,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION get_result_column_def_list_nonagg(query ioql_query)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(ARRAY ['time bigint'] || get_result_field_def_array_nonagg(query), ', ')
+SELECT array_to_string(get_result_field_def_array_nonagg(query), ', ')
 $BODY$;
 
 

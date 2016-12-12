@@ -11,6 +11,21 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _sysinternal.create_main_table(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            CREATE TABLE IF NOT EXISTS %I.%I (
+            )
+        $$, schema_name, table_name);
+END
+$BODY$;
+
 CREATE OR REPLACE FUNCTION _sysinternal.create_root_table(
     schema_name NAME,
     table_name  NAME
@@ -21,7 +36,6 @@ BEGIN
     EXECUTE format(
         $$
             CREATE TABLE IF NOT EXISTS %I.%I (
-                time BIGINT NOT NULL
             )
         $$, schema_name, table_name);
 END
@@ -190,13 +204,6 @@ BEGIN
         epoch_row.partitioning_func, epoch_row.partitioning_field,
         epoch_row.partitioning_mod, keyspace_start, keyspace_end);
 
-    EXECUTE format(
-        $$
-            CREATE INDEX  %3$I ON %1$I.%2$I  ("time" DESC NULLS LAST, %4$I)
-        $$,
-        schema_name, table_name,
-        format('%s_pidx', nextval('pidx_index_name_seq')),
-        epoch_row.partitioning_field);
 END
 $BODY$;
 

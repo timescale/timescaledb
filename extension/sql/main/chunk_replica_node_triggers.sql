@@ -1,10 +1,12 @@
+/*
+    Creates tables (and associated indexes) for chunk_replica_node rows.
+*/
 CREATE OR REPLACE FUNCTION _sysinternal.on_create_chunk_replica_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     partition_replica_row partition_replica;
     chunk_row             chunk;
-    field_row             field;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
         RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
@@ -26,13 +28,10 @@ BEGIN
                                                      partition_replica_row.schema_name,
                                                      partition_replica_row.table_name);
 
-        FOR field_row IN SELECT f.*
-                         FROM field AS f
-                         WHERE f.hypertable_name = partition_replica_row.hypertable_name LOOP
-            PERFORM _sysinternal.create_chunk_replica_node_index(NEW.schema_name, NEW.table_name, field_row.name,
-                                                                 index_type)
-            FROM unnest(field_row.index_types) AS index_type;
-        END LOOP;
+        PERFORM _sysinternal.create_chunk_replica_node_index(NEW.schema_name, NEW.table_name,
+                                h.main_schema_name, h.main_index_name, h.definition)
+        FROM hypertable_index h
+        WHERE h.hypertable_name = partition_replica_row.hypertable_name;
     ELSE
         PERFORM _sysinternal.create_remote_table(NEW.schema_name, NEW.table_name,
                                                  partition_replica_row.schema_name, partition_replica_row.table_name,

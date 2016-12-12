@@ -18,6 +18,9 @@ BEGIN
         FROM generate_series(0, NEW.replication_factor - 1) AS replica_id
     ON CONFLICT DO NOTHING;
 
+    PERFORM _meta.assign_default_replica_node(n.database_name, NEW.name)
+    FROM node n;
+    
     RETURN NEW;
 END
 $BODY$;

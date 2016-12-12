@@ -11,18 +11,29 @@ SELECT add_node('Test1' :: NAME, 'localhost');
 
 SELECT add_node('test2' :: NAME, 'localhost');
 
-SELECT add_hypertable('testNs' :: NAME, 'Device_id');
+\c Test1 
+
+CREATE TABLE PUBLIC."testNs" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp DOUBLE PRECISION NULL,
+  occupied BOOLEAN NULL,
+  latitude BIGINT NULL,
+  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
+);
+
+CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
+
+
+SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
+
+\c meta 
 SELECT *
 FROM partition_replica;
-
-
-SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY ['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE,
-                 ARRAY ['VALUE-TIME'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY [] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY [] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on',
-                 'bigint', FALSE, FALSE, ARRAY ['TIME-VALUE', 'VALUE-TIME'] :: field_index_type []);
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
@@ -90,16 +101,6 @@ FROM field;
 --\d+ "testNs".distinct
 --test idempotence
 \c meta
-
-SELECT add_hypertable('testNs' :: NAME, 'Device_id');
-
-SELECT add_field('testNs' :: NAME, 'Device_id', 'text', TRUE, TRUE, ARRAY ['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'temp', 'double precision', FALSE, FALSE,
-                 ARRAY ['VALUE-TIME'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'occupied', 'boolean', FALSE, FALSE, ARRAY [] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'latitude', 'bigint', FALSE, FALSE, ARRAY [] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on',
-                 'bigint', FALSE, FALSE, ARRAY ['TIME-VALUE', 'VALUE-TIME'] :: field_index_type []);
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);

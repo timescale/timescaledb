@@ -37,8 +37,10 @@ FROM kafka_get_start_and_next_offset('topic2', 0 :: SMALLINT, 29);
 SELECT *
 FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
 \set ON_ERROR_STOP 0
+SET client_min_messages TO FATAL;
 SELECT *
 FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 0, 101);
+SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 1
 SELECT *
 FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 100, 101);
