@@ -430,6 +430,14 @@ primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO "_sys_1_testNs"._hyper_1_root DO INSTEAD  INSERT INTO "_sys_1_testNs"._hyper_1_insert_temp ("time", "Device_id", temp, occupied, latitude, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an)  SELECT new."time",
+            new."Device_id",
+            new.temp,
+            new.occupied,
+            new.latitude,
+            new.really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an
 Child tables: "_sys_1_testNs"._hyper_1_0_replica
 
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
@@ -592,6 +600,14 @@ primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO "_sys_1_testNs"._hyper_1_root DO INSTEAD  INSERT INTO "_sys_1_testNs"._hyper_1_insert_temp ("time", "Device_id", temp, occupied, latitude, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an)  SELECT new."time",
+            new."Device_id",
+            new.temp,
+            new.occupied,
+            new.latitude,
+            new.really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an
 Child tables: "_sys_1_testNs"._hyper_1_0_replica
 
 \c meta
@@ -826,5 +842,13 @@ primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO "_sys_1_testNs"._hyper_1_root DO INSTEAD  INSERT INTO "_sys_1_testNs"._hyper_1_insert_temp ("time", "Device_id", temp, occupied, latitude, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an)  SELECT new."time",
+            new."Device_id",
+            new.temp,
+            new.occupied,
+            new.latitude,
+            new.really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an
 Child tables: "_sys_1_testNs"._hyper_1_0_replica
 

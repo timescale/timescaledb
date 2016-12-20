@@ -163,6 +163,16 @@ Indexes:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)  SELECT new."time",
+            new."Device_id",
+            new.temp_c,
+            new.humidity,
+            new.sensor_1,
+            new.sensor_2,
+            new.sensor_3,
+            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 \d+ _sys_1_._hyper_1_1_0_1_data
@@ -224,6 +234,16 @@ Indexes:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)  SELECT new."time",
+            new."Device_id",
+            new.temp_c,
+            new.humidity,
+            new.sensor_1,
+            new.sensor_2,
+            new.sensor_3,
+            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
@@ -288,6 +308,17 @@ Indexes:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", humidity, sensor_1, sensor_2_renamed, sensor_3_renamed, temp_f, sensor_3, sensor_4)  SELECT new."time",
+            new."Device_id",
+            new.humidity,
+            new.sensor_1,
+            new.sensor_2_renamed,
+            new.sensor_3_renamed,
+            new.temp_f,
+            new.sensor_3,
+            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
@@ -328,6 +359,17 @@ Indexes:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
+Rules:
+    _redirect AS
+    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", humidity, sensor_1, sensor_2_renamed, sensor_3_renamed, temp_f, sensor_3, sensor_4)  SELECT new."time",
+            new."Device_id",
+            new.humidity,
+            new.sensor_1,
+            new.sensor_2_renamed,
+            new.sensor_3_renamed,
+            new.temp_f,
+            new.sensor_3,
+            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 \d+ _sys_1_._hyper_1_1_0_1_data
