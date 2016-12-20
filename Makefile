@@ -1,15 +1,29 @@
-start-pg-docker: stop-pg-docker
-	@./start-pg-docker.sh
 
-stop-pg-docker:
-	@docker rm -f postgres || :
+TEST_IMAGE_NAME = iobeamdb-test
+TEST_CONTAINER_NAME = iobeamdb-test-container
+
+MAKE = make
+
+all: test 
+
+build-test-docker: 
+	@docker build . -t $(TEST_IMAGE_NAME)
+
+start-test-docker: stop-test-docker
+	@IOBEAMDB_DOCKER_IMAGE=$(TEST_IMAGE_NAME) ./scripts/start-pg-docker.sh
+
+stop-test-docker:
+	@docker rm -f iobeamdb || :
 
 test-regression:
-	@cd sql/tests/regression; ./run.sh
+	@cd extension/sql/tests/regression; ./run.sh
 
 test-unit:
-	@cd sql/tests/unit; ./run.sh
+	@cd extension/sql/tests/unit; ./run.sh
 
-test: test-regression test-unit
+test-all: test-regression test-unit
+	@echo Running all tests
 
-.PHONY: start-pg-docker stop-pg-docker test test-regression test-unit
+test: build-test-docker start-test-docker test-all stop-test-docker
+
+.PHONY: build-test-docker start-test-docker stop-test-docker test-regression test-unit test-all test all

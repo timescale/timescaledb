@@ -1,0 +1,55 @@
+CREATE OR REPLACE FUNCTION setup_meta()
+    RETURNS void LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    table_name NAME;
+BEGIN
+
+DROP TRIGGER IF EXISTS trigger_on_create_chunk_replica_node
+ON chunk_replica_node;
+CREATE TRIGGER trigger_on_create_chunk_replica_node AFTER INSERT OR UPDATE OR DELETE ON chunk_replica_node
+FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_chunk_replica_node_meta();
+
+DROP TRIGGER IF EXISTS trigger_on_create_chunk
+ON chunk;
+CREATE TRIGGER trigger_on_create_chunk AFTER INSERT OR UPDATE OR DELETE ON chunk
+FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_chunk();
+
+DROP TRIGGER IF EXISTS trigger_create_hypertable
+ON hypertable;
+CREATE TRIGGER trigger_create_hypertable AFTER INSERT OR UPDATE OR DELETE ON hypertable
+FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_hypertable();
+
+DROP TRIGGER IF EXISTS trigger_create_node
+ON node;
+CREATE TRIGGER trigger_create_node BEFORE INSERT OR UPDATE OR DELETE ON node
+FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_node();
+
+DROP TRIGGER IF EXISTS trigger_sync_node
+ON node;
+CREATE TRIGGER trigger_sync_node AFTER INSERT ON node
+FOR EACH ROW EXECUTE PROCEDURE _meta.sync_node();
+
+DROP TRIGGER IF EXISTS trigger_create_partition
+ON partition;
+CREATE TRIGGER trigger_create_partition AFTER INSERT OR UPDATE OR DELETE ON partition
+FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_partition();
+
+FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'hypertable_replica',
+'distinct_replica_node', 'partition_epoch', 'partition', 'partition_replica',
+'chunk_replica_node', 'field', 'meta'] :: NAME [] LOOP
+    EXECUTE format(
+        $$
+            DROP TRIGGER IF EXISTS trigger_0_sync_%1$s ON %1$s
+        $$,
+        table_name);
+    EXECUTE format(
+        $$
+            CREATE TRIGGER trigger_0_sync_%1$s AFTER INSERT OR UPDATE OR DELETE ON %1$s
+            FOR EACH ROW EXECUTE PROCEDURE _meta.sync_only_insert();
+        $$,
+        table_name);
+END LOOP;
+
+END
+$BODY$;
