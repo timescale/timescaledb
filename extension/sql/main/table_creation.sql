@@ -41,6 +41,25 @@ BEGIN
 END
 $BODY$;
 
+-- Creates the temporary table for INSERTs. INSERTs on the root table are
+-- redirected to the temporary table using a RULE. An associated trigger
+-- on this table then inserts all rows in bulk after all rows are INSERTed.
+-- The table is UNLOGGED for performance.
+CREATE OR REPLACE FUNCTION _sysinternal.create_insert_temp_table(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            CREATE UNLOGGED TABLE IF NOT EXISTS %I.%I (
+            )
+        $$, schema_name, table_name);
+END
+$BODY$;
+
 CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
     schema_name NAME,
     table_name  NAME
@@ -197,7 +216,7 @@ BEGIN
 
     EXECUTE format(
         $$
-            ALTER TABLE %1$I.%2$I 
+            ALTER TABLE %1$I.%2$I
             ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
         $$,
         schema_name, table_name,
@@ -244,5 +263,3 @@ BEGIN
     END IF;
 END
 $BODY$;
-
-

@@ -53,9 +53,9 @@ CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_1)  WHERE series_1
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
+ testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
@@ -319,6 +319,16 @@ Child tables: "testNs"._hyper_1_0_distinct
  value  | text | value      | extended
 primary key, btree, for table "testNs._hyper_1_distinct"
 
+                    Unlogged table "testNs._hyper_1_insert_temp"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ time        | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+
                             Table "testNs._hyper_1_root"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
@@ -437,6 +447,16 @@ Child tables: "testNs"._hyper_1_0_distinct
  field  | text | field      | extended
  value  | text | value      | extended
 primary key, btree, for table "testNs._hyper_1_distinct"
+
+                    Unlogged table "testNs._hyper_1_insert_temp"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ time        | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
 
                             Table "testNs._hyper_1_root"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 

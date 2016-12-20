@@ -13,6 +13,7 @@ CREATE OR REPLACE FUNCTION _meta.add_hypertable(
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
     associated_table_prefix NAME,
+    insert_temp_table_name  NAME,
     hypertable_name         NAME,
     placement               chunk_placement_type,
     created_on              NAME
@@ -34,6 +35,10 @@ BEGIN
         associated_table_prefix = format('_hyper_%s', id);
     END IF;
 
+    IF insert_temp_table_name IS NULL THEN
+        insert_temp_table_name = format('_hyper_%s_insert_temp', id);
+    END IF;
+
     IF number_partitions IS NULL THEN
         SELECT COUNT(*)
         INTO number_partitions
@@ -50,8 +55,9 @@ BEGIN
         associated_schema_name, associated_table_prefix,
         root_schema_name, root_table_name,
         distinct_schema_name, distinct_table_name,
+        insert_temp_table_name,
         replication_factor,
-        placement, 
+        placement,
         time_field_name, time_field_type,
         created_on)
     VALUES (
@@ -60,7 +66,8 @@ BEGIN
         associated_schema_name, associated_table_prefix,
         associated_schema_name, format('%s_root', associated_table_prefix),
         associated_schema_name, format('%s_distinct', associated_table_prefix),
-        replication_factor, 
+        insert_temp_table_name,
+        replication_factor,
         placement,
         time_field_name, time_field_type,
         created_on
@@ -103,8 +110,8 @@ CREATE OR REPLACE FUNCTION _meta.drop_field(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
-DELETE FROM field f 
-WHERE f.hypertable_name = drop_field.hypertable_name AND f.NAME = field_name; 
+DELETE FROM field f
+WHERE f.hypertable_name = drop_field.hypertable_name AND f.NAME = field_name;
 $BODY$;
 
 --Sets the is_distinct flag for a field on a hypertable.
@@ -116,9 +123,9 @@ CREATE OR REPLACE FUNCTION _meta.alter_column_set_is_distinct(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field 
-SET is_distinct = new_is_distinct, modified_on = modified_on_node 
-WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = field_name; 
+UPDATE field
+SET is_distinct = new_is_distinct, modified_on = modified_on_node
+WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = field_name;
 $BODY$;
 
 --Sets the default for a column on a hypertable.
@@ -130,9 +137,9 @@ CREATE OR REPLACE FUNCTION _meta.alter_column_set_default(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field 
-SET default_value = new_default_value, modified_on = modified_on_node 
-WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = field_name; 
+UPDATE field
+SET default_value = new_default_value, modified_on = modified_on_node
+WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = field_name;
 $BODY$;
 
 --Sets the not null flag for a column on a hypertable.
@@ -144,9 +151,9 @@ CREATE OR REPLACE FUNCTION _meta.alter_column_set_not_null(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field 
-SET not_null = new_not_null, modified_on = modified_on_node 
-WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = field_name; 
+UPDATE field
+SET not_null = new_not_null, modified_on = modified_on_node
+WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = field_name;
 $BODY$;
 
 --Renames the column on a hypertable
@@ -158,9 +165,9 @@ CREATE OR REPLACE FUNCTION _meta.alter_table_rename_column(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field 
-SET NAME = new_field_name, modified_on = modified_on_node 
-WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old_field_name; 
+UPDATE field
+SET NAME = new_field_name, modified_on = modified_on_node
+WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old_field_name;
 $BODY$;
 
 --Add an index to a hypertable
@@ -180,7 +187,7 @@ $BODY$;
 
 --Drops the index for a hypertable
 CREATE OR REPLACE FUNCTION _meta.drop_index(
-    main_schema_name NAME, 
+    main_schema_name NAME,
     main_index_name NAME,
     modified_on NAME
 )
@@ -188,6 +195,5 @@ CREATE OR REPLACE FUNCTION _meta.drop_index(
 $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
 DELETE FROM hypertable_index i
-WHERE i.main_index_name = drop_index.main_index_name AND i.main_schema_name = drop_index.main_schema_name; 
+WHERE i.main_index_name = drop_index.main_index_name AND i.main_schema_name = drop_index.main_schema_name;
 $BODY$;
-

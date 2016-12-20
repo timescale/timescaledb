@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS hypertable (
     root_table_name         NAME                  NOT NULL,
     distinct_schema_name    NAME                  NOT NULL,
     distinct_table_name     NAME                  NOT NULL,
+    insert_temp_table_name  NAME                  NOT NULL,
     replication_factor      SMALLINT              NOT NULL CHECK (replication_factor > 0),
     placement               chunk_placement_type  NOT NULL,
     time_field_name         NAME                  NOT NULL,
@@ -85,8 +86,8 @@ CREATE TABLE IF NOT EXISTS default_replica_node (
 --so there can be multiple rows for one hypertable-replica on different nodes.
 --that way writes are local. Optimized reads are also local for many queries.
 --But, some read queries are cross-node.
---Each row creates a table. 
---  Parent table:  hypertable_replica.distinct_table 
+--Each row creates a table.
+--  Parent table:  hypertable_replica.distinct_table
 --  No children, created table contains data.
 CREATE TABLE IF NOT EXISTS distinct_replica_node (
     hypertable_name NAME     NOT NULL,
@@ -115,7 +116,7 @@ CREATE TABLE IF NOT EXISTS partition_epoch (
     CHECK (start_time < end_time)
 );
 
--- A partition defines a partition in a partition_epoch. 
+-- A partition defines a partition in a partition_epoch.
 -- For any partition the keyspace is defined as [0, partition_epoch.partitioning_mod]
 -- For any epoch, there must be a partition that covers every element in the keyspace.
 CREATE TABLE IF NOT EXISTS partition (
@@ -127,7 +128,7 @@ CREATE TABLE IF NOT EXISTS partition (
     CHECK (keyspace_end > keyspace_start)
 );
 
---Represents a replica for a partition. 
+--Represents a replica for a partition.
 --Each row creates a table:
 --   Parent: "hypertable_replica.schema_name"."hypertable_replica.table_name"
 --   Children: "chunk_replica_node.schema_name"."chunk_replica_node.table_name"
@@ -158,7 +159,7 @@ CREATE TABLE IF NOT EXISTS chunk (
 
 --A mapping between chunks, partition_replica, and node.
 --This represents the table where actual data is stored.
---Each row represents a table: 
+--Each row represents a table:
 --  Parent table: "partition_replica.schema_name"."partition_replica.table_name"
 CREATE TABLE IF NOT EXISTS chunk_replica_node (
     chunk_id             INT  NOT NULL  REFERENCES chunk (id),
@@ -171,8 +172,8 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
     UNIQUE (schema_name, table_name)
 );
 
---Represents a hypertable field. 
---TODO: remove is_partitioning. defined in partition_epoch table. 
+--Represents a hypertable field.
+--TODO: remove is_partitioning. defined in partition_epoch table.
 CREATE TABLE IF NOT EXISTS field (
     hypertable_name NAME                NOT NULL REFERENCES hypertable (name),
     name            NAME                NOT NULL,

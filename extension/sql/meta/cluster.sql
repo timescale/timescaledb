@@ -54,7 +54,6 @@ BEGIN
 END
 $BODY$;
 
-
 CREATE OR REPLACE FUNCTION add_partition_epoch(
     hypertable_name    NAME,
     keyspace_start     SMALLINT [],
@@ -90,5 +89,3 @@ SELECT add_partition_epoch(
     partitioning_field
 )
 $BODY$;
-
-
