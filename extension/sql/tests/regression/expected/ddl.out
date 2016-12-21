@@ -93,13 +93,13 @@ FROM create_temp_copy_table('copy_t');
 
 \COPY copy_t FROM 'data/ds2_ddl_1.tsv';
 SELECT * FROM copy_t;
-    hypertable_name    |                                                                      value                                                                       
------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------
- public."Hypertable_1" | {"time": 1257894000000000000, "temp_c": 30, "humidity": 70, "sensor_1": 1, "sensor_2": "2", "sensor_3": 3, "sensor_4": 100, "Device_id": "dev1"}
+                                                                      value                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ {"time": 1257894000000000000, "temp_c": 30, "humidity": 70, "sensor_1": 1, "sensor_2": "2", "sensor_3": 3, "sensor_4": 100, "Device_id": "dev1"}
 (1 row)
 
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('public."Hypertable_1"', 'copy_t');
  insert_data 
 -------------
  
@@ -168,7 +168,7 @@ SELECT * FROM PUBLIC.default_replica_node;
  test2         | public."Hypertable_1" |          0
 (2 rows)
 
-\c test2 
+\c test2
 \d+ PUBLIC."Hypertable_1"
                                  Table "public.Hypertable_1"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
@@ -225,7 +225,7 @@ ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_2 TO sensor_2_renamed;
 ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
 DROP INDEX "ind_sensor_1";
 --expect error cases
-\set ON_ERROR_STOP 0 
+\set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
 \set ON_ERROR_STOP 1
@@ -272,7 +272,7 @@ SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
  Device_id | dev1
 (2 rows)
 
-\c Test1 
+\c Test1
 \d+ PUBLIC."Hypertable_1"
                                  Table "public.Hypertable_1"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 

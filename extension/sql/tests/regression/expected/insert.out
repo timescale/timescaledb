@@ -75,7 +75,7 @@ FROM create_temp_copy_table('copy_t');
 
 \COPY copy_t FROM 'data/ds1_dev1_1.tsv';
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('testNs', 'copy_t');
  insert_data 
 -------------
  
@@ -101,7 +101,7 @@ FROM create_temp_copy_table('copy_t');
 
 \COPY copy_t FROM 'data/ds1_dev1_2.tsv';
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('testNs', 'copy_t');
  insert_data 
 -------------
  
@@ -119,7 +119,7 @@ FROM create_temp_copy_table('copy_t');
 
 \COPY copy_t FROM 'data/ds1_dev2_1.tsv';
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('testNs', 'copy_t');
  insert_data 
 -------------
  

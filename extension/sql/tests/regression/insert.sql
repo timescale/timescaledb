@@ -36,7 +36,7 @@ SELECT *
 FROM create_temp_copy_table('copy_t');
 \COPY copy_t FROM 'data/ds1_dev1_1.tsv';
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('testNs', 'copy_t');
 COMMIT;
 
 SELECT close_chunk_end(c.id)
@@ -49,7 +49,7 @@ SELECT *
 FROM create_temp_copy_table('copy_t');
 \COPY copy_t FROM 'data/ds1_dev1_2.tsv';
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('testNs', 'copy_t');
 COMMIT;
 
 \c test2
@@ -58,7 +58,7 @@ SELECT *
 FROM create_temp_copy_table('copy_t');
 \COPY copy_t FROM 'data/ds1_dev2_1.tsv';
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('testNs', 'copy_t');
 COMMIT;
 
 \c Test1
@@ -70,5 +70,3 @@ SELECT *
 FROM "testNs"._hyper_1_0_replica;
 SELECT *
 FROM "testNs"._hyper_1_0_distinct;
-
-
