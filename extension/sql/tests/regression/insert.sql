@@ -33,8 +33,8 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 \c Test1
 BEGIN;
 SELECT *
-FROM create_temp_copy_table('copy_t');
-\COPY copy_t FROM 'data/ds1_dev1_1.tsv';
+FROM create_temp_copy_table('testNs', 'copy_t');
+\COPY copy_t FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 SELECT *
 FROM insert_data('testNs', 'copy_t');
 COMMIT;
@@ -46,8 +46,8 @@ INNER JOIN chunk c ON (c.partition_id = part.id);
 \c Test1
 BEGIN;
 SELECT *
-FROM create_temp_copy_table('copy_t');
-\COPY copy_t FROM 'data/ds1_dev1_2.tsv';
+FROM create_temp_copy_table('testNs', 'copy_t');
+\COPY copy_t FROM 'data/ds1_dev1_2.tsv' NULL AS '';
 SELECT *
 FROM insert_data('testNs', 'copy_t');
 COMMIT;
@@ -55,8 +55,8 @@ COMMIT;
 \c test2
 BEGIN;
 SELECT *
-FROM create_temp_copy_table('copy_t');
-\COPY copy_t FROM 'data/ds1_dev2_1.tsv';
+FROM create_temp_copy_table('testNs', 'copy_t');
+\COPY copy_t FROM 'data/ds1_dev2_1.tsv' NULL AS '';
 SELECT *
 FROM insert_data('testNs', 'copy_t');
 COMMIT;

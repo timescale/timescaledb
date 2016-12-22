@@ -37,8 +37,8 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
 
 BEGIN;
 SELECT *
-FROM create_temp_copy_table('copy_t');
-\COPY copy_t FROM 'data/ds2_ddl_1.tsv';
+FROM create_temp_copy_table('public."Hypertable_1"', 'copy_t');
+\COPY copy_t FROM 'data/ds2_ddl_1.tsv' NULL AS '';
 SELECT * FROM copy_t;
 SELECT *
 FROM insert_data('public."Hypertable_1"', 'copy_t');
