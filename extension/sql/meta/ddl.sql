@@ -13,6 +13,7 @@ CREATE OR REPLACE FUNCTION _meta.add_hypertable(
     associated_table_prefix NAME,
     hypertable_name         NAME,
     placement               chunk_placement_type,
+    chunk_size_bytes        BIGINT,
     created_on              NAME
 )
     RETURNS hypertable LANGUAGE PLPGSQL VOLATILE AS
@@ -49,7 +50,8 @@ BEGIN
         root_schema_name, root_table_name,
         distinct_schema_name, distinct_table_name,
         replication_factor,
-        placement,
+        placement, 
+        chunk_size_bytes,
         time_field_name, time_field_type,
         created_on)
     VALUES (
@@ -60,6 +62,7 @@ BEGIN
         associated_schema_name, format('%s_distinct', associated_table_prefix),
         replication_factor,
         placement,
+        chunk_size_bytes,
         time_field_name, time_field_type,
         created_on
       )

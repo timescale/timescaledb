@@ -5,7 +5,6 @@
 --will never be disjoint in terms of time. Therefore you will have:
 --     <---current open ended start_time table --| existing closed tables | -- current open ended end_time table --->
 --Should not be called directly. Requires a lock on partition (prevents simultaneous inserts)
-
 CREATE OR REPLACE FUNCTION _meta.calculate_new_chunk_times(
         partition_id INT,
         "time"       BIGINT,
@@ -58,7 +57,7 @@ END
 $BODY$;
 
 --creates chunk. Must be called after aquiring a lock on partition.
-CREATE OR REPLACE FUNCTION _meta.create_chunk(
+CREATE OR REPLACE FUNCTION _meta.create_chunk_unlocked(
     partition_id INT,
     time_point   BIGINT
 )
@@ -77,9 +76,8 @@ BEGIN
 END
 $BODY$;
 
---gets or creates chunk. If creating chunk takes a lock on the corresponding partition.
---This prevents concurrently creating chunks on same partitions. 
-CREATE OR REPLACE FUNCTION _meta.get_or_create_chunk(
+--creates and returns a new chunk, taking a lock on the partition being modified.
+CREATE OR REPLACE FUNCTION _meta.create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
@@ -89,29 +87,47 @@ DECLARE
     chunk_row     chunk;
     partition_row partition;
 BEGIN
+    --get lock
+    SELECT *
+    INTO partition_row
+    FROM partition
+    WHERE id = partition_id
+    FOR UPDATE;
+
+    --recheck:
     chunk_row := _sysinternal.get_chunk(partition_id, time_point);
 
-    --uses double-checked locking
     IF chunk_row IS NULL THEN
-        --get lock
-        SELECT *
-        INTO partition_row
-        FROM partition
-        WHERE id = partition_id
-        FOR UPDATE;
-        --recheck:
+        PERFORM _meta.create_chunk_unlocked(partition_id, time_point);
         chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+    END IF;
 
-        IF chunk_row IS NULL THEN
-            PERFORM _meta.create_chunk(partition_id, time_point);
-        END IF;
+    IF chunk_row IS NULL THEN --recheck
+        RAISE EXCEPTION 'Should never happen: chunk not found after creation on meta'
+        USING ERRCODE = 'IO501';
+    END IF;
 
-        chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+    RETURN chunk_row;
+END
+$BODY$;
 
-        IF chunk_row IS NULL THEN --recheck
-            RAISE EXCEPTION 'Should never happen: chunk not found after creation on meta'
-            USING ERRCODE = 'IO501';
-        END IF;
+--gets or creates chunk. Concurrent chunk creation is prevented at the 
+--partition level by taking a lock on the partition being modified.
+CREATE OR REPLACE FUNCTION _meta.get_or_create_chunk(
+    partition_id INT,
+    time_point   BIGINT
+)
+    RETURNS chunk LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    chunk_row           chunk;
+    chunk_table_name    NAME;
+    chunk_max_size      BIGINT;
+BEGIN
+    chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+
+    IF chunk_row IS NULL THEN
+        chunk_row := _meta.create_chunk(partition_id, time_point);
     END IF;
 
     RETURN chunk_row;
@@ -128,14 +144,27 @@ DECLARE
     node_row         node;
     max_time_replica BIGINT;
     max_time         BIGINT = 0;
-    table_end        BIGINT;
     chunk_row        chunk;
+    partition_row    partition;
 BEGIN
+    --get chunk lock
     SELECT *
     INTO chunk_row
     FROM chunk c
     WHERE c.id = chunk_id
     FOR UPDATE;
+
+    --get partition lock
+    SELECT *
+    INTO partition_row
+    FROM partition
+    WHERE id = chunk_row.partition_id
+    FOR UPDATE;
+
+    -- the chunk is already closed if its end time is set
+    IF chunk_row.end_time IS NOT NULL THEN
+        RETURN;
+    END IF;
 
     --PHASE 1: lock chunk row on all rows (prevents concurrent chunk insert)
     FOR node_row IN
@@ -172,13 +201,15 @@ BEGIN
         END IF;
     END LOOP;
 
-    --TODO: is this right?
-    table_end :=((coalesce(max_time, chunk_row.start_time, 0) :: BIGINT / (1e9 * 60 * 60 * 24) + 1) :: BIGINT) *
-                (1e9 * 60 * 60 * 24) :: BIGINT - 1;
+    IF max_time IS NULL THEN
+        -- No rows in chunk, so closing is a NOP.
+        RAISE WARNING 'Cannot close an empty chunk table';
+        RETURN;
+    END IF;
 
     --set time locally
     UPDATE chunk
-    SET end_time = table_end
+    SET end_time = max_time
     WHERE id = chunk_id;
 
     --PHASE 3: set max_time remotely
@@ -188,7 +219,7 @@ BEGIN
     LOOP
         PERFORM 1
         FROM dblink(node_row.server_name,
-                    format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, table_end)) AS t(x TEXT);
+                    format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)) AS t(x TEXT);
         PERFORM dblink_exec(node_row.server_name, 'COMMIT');
         --TODO: should we disconnect here?
         PERFORM dblink_disconnect(node_row.server_name);

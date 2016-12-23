@@ -52,9 +52,9 @@ CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT N
 CREATE INDEX ON PUBLIC."testNs" (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
@@ -96,9 +96,9 @@ FROM meta;
 
 SELECT *
 FROM hypertable;
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
 (1 row)
 
 SELECT *
@@ -200,9 +200,9 @@ FROM meta;
 
 SELECT *
 FROM hypertable;
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
 (1 row)
 
 SELECT *
@@ -583,32 +583,31 @@ SELECT _meta.close_chunk_end(1);
 
 SELECT *
 FROM chunk;
- id | partition_id | start_time |    end_time    
-----+--------------+------------+----------------
-  1 |            1 |            | 86399999999999
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
 (1 row)
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 10 :: BIGINT);
- id | partition_id | start_time |    end_time    
-----+--------------+------------+----------------
-  1 |            1 |            | 86399999999999
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
 (1 row)
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
- id | partition_id |   start_time   | end_time 
-----+--------------+----------------+----------
-  2 |            1 | 86400000000000 |         
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
 (1 row)
 
 SELECT *
 FROM chunk;
- id | partition_id |   start_time   |    end_time    
-----+--------------+----------------+----------------
-  1 |            1 |                | 86399999999999
-  2 |            1 | 86400000000000 |               
-(2 rows)
+ id | partition_id | start_time | end_time 
+----+--------------+------------+----------
+  1 |            1 |            |         
+(1 row)
 
 \c Test1
 \d+ "_sys_1_testNs".*
@@ -639,34 +638,6 @@ btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (temp IS NOT NUL
  time                                                            | bigint | "time"                                                          | plain
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
 btree, for table "_sys_1_testNs._hyper_1_1_0_1_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
-
-Index "_sys_1_testNs.5-testNs_Device_id_time_idx"
-  Column   |  Type  | Definition  | Storage  
------------+--------+-------------+----------
- Device_id | text   | "Device_id" | extended
- time      | bigint | "time"      | plain
-btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate ("Device_id" IS NOT NULL)
-
-                                Index "_sys_1_testNs.6-testNs_really_long_field_goes_on_and_on_and_on_and_on_and_o_i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
- time                                                            | bigint | "time"                                                          | plain
-btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
-
-   Index "_sys_1_testNs.7-testNs_temp_time_idx"
- Column |       Type       | Definition | Storage 
---------+------------------+------------+---------
- temp   | double precision | temp       | plain
- time   | bigint           | "time"     | plain
-btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate (temp IS NOT NULL)
-
-                                Index "_sys_1_testNs.8-testNs_time_really_long_field_goes_on_and_on_and_on_and_on__i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- time                                                            | bigint | "time"                                                          | plain
- really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint | really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | plain
-btree, for table "_sys_1_testNs._hyper_1_1_0_2_data", predicate (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL)
 
          Table "_sys_1_testNs._hyper_1_0_1_distinct_data"
  Column | Type | Modifiers | Storage  | Stats target | Description 
@@ -721,26 +692,6 @@ Indexes:
     "4-testNs_time_really_long_field_goes_on_and_on_and_on_and_on__i" btree ("time" DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" <= '86399999999999'::bigint)
-Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
-
-                                               Table "_sys_1_testNs._hyper_1_1_0_2_data"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-Indexes:
-    "5-testNs_Device_id_time_idx" btree ("Device_id", "time" DESC NULLS LAST) WHERE "Device_id" IS NOT NULL
-    "6-testNs_really_long_field_goes_on_and_on_and_on_and_on_and_o_i" btree (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an, "time" DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
-    "7-testNs_temp_time_idx" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
-    "8-testNs_time_really_long_field_goes_on_and_on_and_on_and_on__i" btree ("time" DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an IS NOT NULL
-Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" >= '86400000000000'::bigint)
 Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
 
                                               Table "_sys_1_testNs._hyper_1_1_0_partition"
@@ -755,8 +706,7 @@ Inherits: "_sys_1_testNs"._hyper_1_1_0_partition
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: "_sys_1_testNs"._hyper_1_0_replica
-Child tables: "_sys_1_testNs"._hyper_1_1_0_1_data,
-              "_sys_1_testNs"._hyper_1_1_0_2_data
+Child tables: "_sys_1_testNs"._hyper_1_1_0_1_data
 
                                               Table "_sys_1_testNs._hyper_1_2_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 

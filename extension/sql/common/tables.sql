@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS hypertable (
     time_field_name         NAME                  NOT NULL,
     time_field_type         REGTYPE               NOT NULL,
     created_on              NAME                  NOT NULL REFERENCES node(database_name),
+    chunk_size_bytes        BIGINT                NOT NULL CHECK (chunk_size_bytes > 0),
     UNIQUE (main_schema_name, main_table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     UNIQUE (root_schema_name, root_table_name)
@@ -187,11 +188,11 @@ CREATE TABLE IF NOT EXISTS partition_replica (
 CREATE TABLE IF NOT EXISTS chunk (
     id           SERIAL NOT NULL    PRIMARY KEY,
     partition_id INT    NOT NULL    REFERENCES partition (id),
-    start_time   BIGINT NULL        CHECK (start_time > 0),
-    end_time     BIGINT NULL        CHECK (end_time > 0),
+    start_time   BIGINT NULL        CHECK (start_time >= 0),
+    end_time     BIGINT NULL        CHECK (end_time >= 0),
     UNIQUE (partition_id, start_time),
     UNIQUE (partition_id, end_time),
-    CHECK (start_time < end_time)
+    CHECK (start_time <= end_time)
 );
 
 -- A mapping between chunks, partition_replica, and nodes representing where
