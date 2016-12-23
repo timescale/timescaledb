@@ -37,11 +37,11 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
 
 BEGIN;
 SELECT *
-FROM create_temp_copy_table('copy_t');
-\COPY copy_t FROM 'data/ds2_ddl_1.tsv';
+FROM create_temp_copy_table('public."Hypertable_1"', 'copy_t');
+\COPY copy_t FROM 'data/ds2_ddl_1.tsv' NULL AS '';
 SELECT * FROM copy_t;
 SELECT *
-FROM insert_data('copy_t');
+FROM insert_data('public."Hypertable_1"', 'copy_t');
 COMMIT;
 
 --TODO: make following work.
@@ -53,7 +53,7 @@ COMMIT;
 SELECT * FROM PUBLIC.default_replica_node;
 
 
-\c test2 
+\c test2
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sys_1_"."_hyper_1_root"
@@ -73,7 +73,7 @@ ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
 DROP INDEX "ind_sensor_1";
 
 --expect error cases
-\set ON_ERROR_STOP 0 
+\set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
 \set ON_ERROR_STOP 1
@@ -89,9 +89,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
 SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
 
 
-\c Test1 
+\c Test1
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sys_1_"."_hyper_1_root"
 \d+ _sys_1_._hyper_1_1_0_1_data
-
-

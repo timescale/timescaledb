@@ -46,30 +46,28 @@ EOF
 
 done
 
-INPUT_DATA_DIR="../import_data" 
+INPUT_DATA_DIR="../import_data"
 FILE_SUFFIX=".tsv"
 DATASETS=`ls $INPUT_DATA_DIR/*$FILE_SUFFIX`
 TEMPTABLENAME="copy_t2"
 
-for DS_PATH in $DATASETS; do 
+for DS_PATH in $DATASETS; do
     DATASET=`basename $DS_PATH $FILE_SUFFIX`
     PARTITION_KEY=`echo $DATASET | cut -f2 -d_ `
     echo "Setting up $DATASET with partitionkey $PARTITION_KEY"
- 
+
 psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_MAIN -v ON_ERROR_STOP=1  <<EOF
         BEGIN;
         DROP TABLE IF EXISTS $TEMPTABLENAME;
         SELECT *
-        FROM create_temp_copy_table('$TEMPTABLENAME');
-        \COPY $TEMPTABLENAME FROM '$DS_PATH';
+        FROM create_temp_copy_table('$NAMESPACE', '$TEMPTABLENAME');
+        \COPY $TEMPTABLENAME FROM '$DS_PATH' NULL AS '';
         CREATE SCHEMA IF NOT EXISTS test_input_data;
         DROP TABLE IF EXISTS test_input_data.$DATASET;
-        CREATE TABLE test_input_data.$DATASET AS SELECT * FROM $TEMPTABLENAME; 
-        COMMIT; 
+        CREATE TABLE test_input_data.$DATASET AS SELECT * FROM $TEMPTABLENAME;
+        COMMIT;
 EOF
 
-done  
+done
 
 cd $PWD
-
- 

@@ -1,2 +1,2 @@
-33_testNs	{"bool_1":true,"string_1":"const","string_2":"one","field_only_dev2":3,"device_id":"dev2","nUm_1":1.5,"num_2":9,"time":1257894000000000000}
-33_testNs	{"bool_1":true,"string_1":"const","string_2":"two","device_id":"dev2","nUm_1":1.5,"num_2":10,"time":1257894000000000000}
+1257894000000000000	true	dev2	3		1.5	9	const	one
+1257894000000000000	true	dev2			1.5	10	const	two

@@ -1,2 +1,2 @@
-testNs	{"series_1":1,"series_5":5,"series_6":6,"device_id":"dev2","series_0":1.5,"time":1257894000000000000}
-testNs	{"series_1":2,"series_6":6.1,"device_id":"dev2","series_0":1.5,"time":1257894000000000000}
+1257894000000000000	dev2	1.5	1		
+1257894000000000000	dev2	1.5	2		
