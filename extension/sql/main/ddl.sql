@@ -29,11 +29,13 @@ BEGIN
        INTO STRICT time_field_type
        FROM pg_attribute
        WHERE attrelid = main_table AND attname = time_field_name;
+       PERFORM dblink_connect('meta_conn', get_meta_server_name());
+       PERFORM dblink_exec('meta_conn', 'BEGIN');
 
         SELECT (t.r::hypertable).*
         INTO hypertable_row
         FROM dblink(
-          get_meta_server_name(),
+          'meta_conn',
           format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ', 
             schema_name,
             table_name, 
@@ -53,14 +55,14 @@ BEGIN
        FROM pg_attribute att 
        WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
       LOOP
-        PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row);
+        PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row, 'meta_conn');
       END LOOP; 
 
 
       PERFORM 1
       FROM pg_index, 
       LATERAL dblink(
-          get_meta_server_name(),
+          'meta_conn',
           format('SELECT _meta.add_index(%L, %L,%L, %L, %L)', 
             hypertable_row.name,
             hypertable_row.main_schema_name,
@@ -70,6 +72,8 @@ BEGIN
         )) AS t(r TEXT)
       WHERE indrelid = main_table;
       
+      PERFORM dblink_exec('meta_conn', 'COMMIT');
+      PERFORM dblink_disconnect('meta_conn');
       RETURN hypertable_row;
 END
 $BODY$;
