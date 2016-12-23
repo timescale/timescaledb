@@ -106,8 +106,22 @@ FROM insert_data('public."Hypertable_1"', 'copy_t');
 (1 row)
 
 COMMIT;
---TODO: make following work.
---SELECT * FROM PUBLIC."Hypertable_1";
+SELECT * FROM PUBLIC."Hypertable_1";
+        time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
+---------------------+-----------+--------+----------+----------+----------+----------+----------
+ 1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
+(1 row)
+
+EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Append  (cost=0.00..27.00 rows=702 width=204)
+   ->  Seq Scan on _hyper_1_0_replica  (cost=0.00..0.00 rows=1 width=204)
+   ->  Seq Scan on _hyper_1_1_0_partition  (cost=0.00..0.00 rows=1 width=204)
+   ->  Seq Scan on _hyper_1_2_0_partition  (cost=0.00..13.50 rows=350 width=204)
+   ->  Seq Scan on _hyper_1_1_0_1_data  (cost=0.00..13.50 rows=350 width=204)
+(5 rows)
+
 \d+ PUBLIC."Hypertable_1"
                                  Table "public.Hypertable_1"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
@@ -324,4 +338,10 @@ Indexes:
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _sys_1_._hyper_1_1_0_partition
+
+SELECT * FROM PUBLIC."Hypertable_1";
+        time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 
+---------------------+-----------+----------+----------+------------------+------------------+--------+----------+----------
+ 1257894000000000000 | dev1      |       70 |        1 |                2 |                3 |     31 |      131 |      131
+(1 row)
 

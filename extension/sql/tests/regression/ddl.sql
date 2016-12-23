@@ -44,8 +44,8 @@ SELECT *
 FROM insert_data('public."Hypertable_1"', 'copy_t');
 COMMIT;
 
---TODO: make following work.
---SELECT * FROM PUBLIC."Hypertable_1";
+SELECT * FROM PUBLIC."Hypertable_1";
+EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sys_1_"."_hyper_1_root"
@@ -93,3 +93,6 @@ SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sys_1_"."_hyper_1_root"
 \d+ _sys_1_._hyper_1_1_0_1_data
+
+SELECT * FROM PUBLIC."Hypertable_1";
+
