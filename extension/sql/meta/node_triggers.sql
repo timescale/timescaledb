@@ -66,6 +66,10 @@ BEGIN
         )
         USING NEW;
     END LOOP;
+
+    PERFORM _meta.assign_default_replica_node(NEW.database_name, h.name)
+    FROM hypertable h;
+
     RETURN NEW;
 END
 $BODY$;

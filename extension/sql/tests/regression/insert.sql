@@ -10,15 +10,25 @@ SELECT set_meta('meta' :: NAME, 'localhost');
 SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
 
-SELECT add_hypertable('testNs' :: NAME, 'device_id', 'testNs', 'testNs');
-SELECT add_field('testNs' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'series_0', 'double precision', FALSE, FALSE,
-                 ARRAY ['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'series_1', 'double precision', FALSE, FALSE,
-                 ARRAY ['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'series_2', 'double precision', FALSE, FALSE,
-                 ARRAY ['TIME-VALUE'] :: field_index_type []);
-SELECT add_field('testNs' :: NAME, 'series_bool', 'boolean', FALSE, FALSE, ARRAY ['TIME-VALUE'] :: field_index_type []);
+\c Test1
+
+CREATE TABLE PUBLIC."testNs" (
+  time BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."testNs" (device_id, time DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+
+SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
+
+SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
 \c Test1
 BEGIN;

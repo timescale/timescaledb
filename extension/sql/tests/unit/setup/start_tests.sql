@@ -1,3 +1,3 @@
 BEGIN TRANSACTION;
-SELECT * FROM unit_tests.begin();
+SELECT * FROM unit_tests.begin(6);
 ROLLBACK TRANSACTION;

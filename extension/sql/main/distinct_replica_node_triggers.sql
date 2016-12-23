@@ -1,3 +1,6 @@
+/*
+  Creates tables for distinct_replica_node rows.
+*/
 CREATE OR REPLACE FUNCTION _sysinternal.on_create_distinct_replica_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$

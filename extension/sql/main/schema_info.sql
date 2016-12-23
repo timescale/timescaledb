@@ -22,6 +22,15 @@ $BODY$
 SELECT get_distinct_table_oid(hypertable_name, replica_id, current_database())
 $BODY$;
 
+CREATE OR REPLACE FUNCTION get_time_field(
+    hypertable_name NAME
+)
+    RETURNS NAME LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT time_field_name
+    FROM hypertable h
+    WHERE h.name = hypertable_name;
+$BODY$;
 
 CREATE OR REPLACE FUNCTION get_field_names(
     hypertable_name NAME
@@ -32,7 +41,7 @@ SELECT ARRAY(
     SELECT name
     FROM field f
     WHERE f.hypertable_name = get_field_names.hypertable_name
-    ORDER BY name
+    ORDER BY attnum
 );
 $BODY$;
 
@@ -113,7 +122,7 @@ CREATE OR REPLACE FUNCTION get_partition_for_epoch(
     epoch     partition_epoch,
     key_value TEXT
 )
-    RETURNS partition LANGUAGE PLPGSQL STABLE AS
+    RETURNS partition LANGUAGE PLPGSQL STABLE STRICT AS
 $BODY$
 DECLARE
     partition_row partition;
@@ -146,6 +155,31 @@ $BODY$;
 
 
 
+
+CREATE OR REPLACE FUNCTION is_main_table(
+    table_oid regclass
+)
+    RETURNS bool LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT EXISTS(SELECT 1 FROM hypertable WHERE main_table_name = relname AND main_schema_name = nspname)
+  FROM pg_class c 
+  INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+  WHERE c.OID = table_oid;
+$BODY$;
+
+
+
+CREATE OR REPLACE FUNCTION hypertable_from_main_table(
+    table_oid regclass
+)
+    RETURNS hypertable LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT h.*
+  FROM pg_class c 
+  INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+  INNER JOIN hypertable h ON (h.main_table_name = c.relname AND h.main_schema_name = n.nspname)
+  WHERE c.OID = table_oid;
+$BODY$;
 
 
 

@@ -51,9 +51,13 @@ SELECT add_node('test2' :: NAME, 'localhost');
  public | chunk_replica_node       | table | postgres
  public | chunk_replica_node_index | table | postgres
  public | cluster_user             | table | postgres
+ public | default_replica_node     | table | postgres
+ public | deleted_field            | table | postgres
+ public | deleted_hypertable_index | table | postgres
  public | distinct_replica_node    | table | postgres
  public | field                    | table | postgres
  public | hypertable               | table | postgres
+ public | hypertable_index         | table | postgres
  public | hypertable_replica       | table | postgres
  public | kafka_offset_cluster     | table | postgres
  public | kafka_offset_local       | table | postgres
@@ -63,7 +67,7 @@ SELECT add_node('test2' :: NAME, 'localhost');
  public | partition                | table | postgres
  public | partition_epoch          | table | postgres
  public | partition_replica        | table | postgres
-(16 rows)
+(20 rows)
 
 \det+ public.*
                                                List of foreign tables
@@ -123,8 +127,10 @@ FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
 (1 row)
 
 \set ON_ERROR_STOP 0
+SET client_min_messages TO FATAL;
 SELECT *
 FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 0, 101);
+SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 1
 SELECT *
 FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 100, 101);

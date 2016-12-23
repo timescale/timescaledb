@@ -17,6 +17,7 @@ BEGIN
         ORDER BY time DESC NULLS LAST, res
       $$, ioql_exec_query_record_sql(query));
 
+    --RAISE NOTICE 'testing %', expected_table;
     FOR expected_record in EXECUTE format('SELECT * FROM %I.%I as res ORDER BY time DESC NULLS LAST, res',
     expected_table_schema, expected_table)
     LOOP    

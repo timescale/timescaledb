@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS hypertable (
     distinct_table_name     NAME                  NOT NULL,
     replication_factor      SMALLINT              NOT NULL CHECK (replication_factor > 0),
     placement               chunk_placement_type  NOT NULL,
+    time_field_name         NAME                  NOT NULL,
+    time_field_type         REGTYPE               NOT NULL,
+    created_on              NAME                  NOT NULL REFERENCES node(database_name),
     UNIQUE (main_schema_name, main_table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     UNIQUE (root_schema_name, root_table_name)
@@ -65,6 +68,18 @@ CREATE TABLE IF NOT EXISTS hypertable_replica (
     PRIMARY KEY (hypertable_name, replica_id),
     UNIQUE (schema_name, table_name)
 );
+
+--mapping that shows which replica is pointed to by the main table, for each node.
+--the translation from main table to replica should happens in C tranformation
+--right after the parsing step. (RULES cannot be used, unfortunately)
+CREATE TABLE IF NOT EXISTS default_replica_node (
+    database_name        NAME NOT NULL  REFERENCES node (database_name),
+    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name),
+    replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
+    PRIMARY KEY (database_name, hypertable_name),
+    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
+);
+
 
 --there should be one distinct_replica_node for each node with a chunk from that replica
 --so there can be multiple rows for one hypertable-replica on different nodes.
@@ -161,13 +176,34 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
 CREATE TABLE IF NOT EXISTS field (
     hypertable_name NAME                NOT NULL REFERENCES hypertable (name),
     name            NAME                NOT NULL,
+    attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
     data_type       REGTYPE             NOT NULL,
-    is_partitioning BOOLEAN             NOT NULL DEFAULT FALSE,
+    default_value   TEXT                NULL,
     is_distinct     BOOLEAN             NOT NULL DEFAULT FALSE,
-    index_types     field_index_type [] NOT NULL,
-    PRIMARY KEY (hypertable_name, name)
+    not_null        BOOLEAN             NOT NULL,
+    created_on      NAME                NOT NULL REFERENCES node(database_name),
+    modified_on     NAME                NOT NULL REFERENCES node(database_name),
+    PRIMARY KEY (hypertable_name, name),
+    UNIQUE(hypertable_name, attnum)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS one_partition_field
-    ON field (hypertable_name)
-    WHERE is_partitioning;
+CREATE TABLE IF NOT EXISTS deleted_field ( 
+  LIKE field,
+  deleted_on NAME
+);
+
+CREATE TABLE IF NOT EXISTS hypertable_index (
+    hypertable_name  NAME                NOT NULL REFERENCES hypertable (name),
+    main_schema_name NAME                NOT NULL, --schema name of main table (needed for a uniqueness constraint)
+    main_index_name  NAME                NOT NULL, --index name on main table
+    definition       TEXT                NOT NULL, --def with /*INDEX_NAME*/ and /*TABLE_NAME*/ placeholders
+    created_on       NAME                NOT NULL REFERENCES node(database_name),
+    PRIMARY KEY (hypertable_name, main_index_name),
+    UNIQUE(main_schema_name, main_index_name) --globally unique since index names globally unique
+);
+
+CREATE TABLE IF NOT EXISTS deleted_hypertable_index ( 
+  LIKE hypertable_index,
+  deleted_on NAME
+);
+

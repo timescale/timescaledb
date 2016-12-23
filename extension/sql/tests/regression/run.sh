@@ -6,7 +6,7 @@ UPDATE=${UPDATE:-false}
 golden_test() {
 	psql -h localhost -U postgres -q -X -f $1 > actual/$2
 	
-  if diff actual/$2 expected/$2;
+  if diff expected/$2 actual/$2;
 	then
     	echo "$2 matches golden file"
 	else
@@ -16,6 +16,7 @@ golden_test() {
         	mv actual/$2 expected/$2
     	else
         	echo "ERROR: golden file doesn't match: $2"
+          exit 1
     	fi
 	fi
 }
@@ -26,4 +27,5 @@ golden_test cluster.sql cluster.out
 golden_test kafka.sql kafka.out
 golden_test insert.sql insert.out
 golden_test query.sql query.out
+golden_test ddl.sql ddl.out
 echo "Success"

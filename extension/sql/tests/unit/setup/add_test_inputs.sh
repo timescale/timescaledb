@@ -19,16 +19,29 @@ cd $DIR
 # Todo - read the ns and fields from the csv/tsv file
 NAMESPACES="33_testNs emptyNs"
 for NAMESPACE in $NAMESPACES; do
-  psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_META -v ON_ERROR_STOP=1  <<EOF
-      SELECT add_hypertable('$NAMESPACE' :: NAME, 'device_id');
-      SELECT add_field('$NAMESPACE' :: NAME, 'device_id', 'text', TRUE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'nUm_1', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'num_2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'bool_1', 'boolean', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'string_1', 'text', FALSE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'string_2', 'text', FALSE, TRUE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'field_only_ref2', 'text', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
-      SELECT add_field('$NAMESPACE' :: NAME, 'field_only_dev2', 'double precision', FALSE, FALSE, ARRAY ['VALUE-TIME'] :: field_index_type []);
+  psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_MAIN -v ON_ERROR_STOP=1  <<EOF
+CREATE TABLE PUBLIC."$NAMESPACE" (
+  time BIGINT NOT NULL,
+  bool_1 BOOLEAN NULL,
+  device_id TEXT NOT NULL,
+  field_only_dev2 DOUBLE PRECISION NULL,
+  field_only_ref2 TEXT NULL,
+  "nUm_1" DOUBLE PRECISION NULL,
+  num_2 DOUBLE PRECISION NULL,
+  string_1 TEXT NULL,
+  string_2 TEXT NULL
+);
+
+CREATE INDEX ON PUBLIC."$NAMESPACE" (time, device_id);
+CREATE INDEX ON PUBLIC."$NAMESPACE" (device_id, time);
+CREATE INDEX ON PUBLIC."$NAMESPACE" ("nUm_1", time);
+
+SELECT * FROM add_hypertable('"public"."$NAMESPACE"', 'time', 'device_id', hypertable_name=>'$NAMESPACE');
+
+SELECT set_is_distinct_flag('"public"."$NAMESPACE"', 'device_id', TRUE);
+SELECT set_is_distinct_flag('"public"."$NAMESPACE"', 'string_1', TRUE);
+SELECT set_is_distinct_flag('"public"."$NAMESPACE"', 'string_2', TRUE);
+
 EOF
 
 done
