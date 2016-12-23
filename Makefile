@@ -24,6 +24,9 @@ test-unit:
 test-all: test-regression test-unit
 	@echo Running all tests
 
+setup-single-node-db:
+	PGDATABASE=test ./scripts/run_sql.sh setup_single_node_db.psql 
+
 test: build-test-docker start-test-docker test-all stop-test-docker
 
-.PHONY: build-test-docker start-test-docker stop-test-docker test-regression test-unit test-all test all
+.PHONY: build-test-docker start-test-docker stop-test-docker test-regression test-unit test-all test all setup-single-node-db

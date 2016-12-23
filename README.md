@@ -9,6 +9,23 @@ This will allow you to run the tests. When finished,
 make stop-pg-docker
 ```
 
+### Initializing a single-node database
+After setting up a docker image, you can start a local 
+single node database with the following command:
+```bash
+make setup-single-node-db
+```
+This will set up a database named iobeam which can be accessed with:
+```bash
+psql -U postgres -h localhost -d iobeam
+```
+
+### Examples
+
+ * [DDL Operations](src/master/extension/sql/tests/regression/ddl.sql)
+ * [Insert Operations](src/master/extension/sql/tests/regression/insert.sql)
+ * [Querying With Ioql](src/master/extension/sql/tests/regression/query.sql)
+
 ### Testing
 There are three commands to run tests: (1) all tests, (2) regression tests, and
 (3) unit tests. They are:
