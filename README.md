@@ -22,9 +22,9 @@ psql -U postgres -h localhost -d iobeam
 
 ### Examples
 
- * [DDL Operations](src/master/extension/sql/tests/regression/ddl.sql)
- * [Insert Operations](src/master/extension/sql/tests/regression/insert.sql)
- * [Querying With Ioql](src/master/extension/sql/tests/regression/query.sql)
+ * [DDL Operations](extension/sql/tests/regression/ddl.sql)
+ * [Insert Operations](extension/sql/tests/regression/insert.sql)
+ * [Querying With Ioql](extension/sql/tests/regression/query.sql)
 
 ### Testing
 There are three commands to run tests: (1) all tests, (2) regression tests, and
