@@ -61,7 +61,9 @@ iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	if(IobeamLoaded()) 
 	{
 		/* replace call to main table with call to the replica table */ 
-		change_table_name_walker((Node *) parse, NULL);
+		if (parse->commandType ==  CMD_SELECT) {
+			change_table_name_walker((Node *) parse, NULL);
+		}
 	}
 
 	if (prev_planner_hook != NULL) {
