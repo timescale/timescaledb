@@ -20,8 +20,7 @@ BEGIN
 END
 $BODY$;
 
--- Used to update a hypertable (or the insert temp table) when a new
--- field is added.
+-- Used to update a hypertable when a new field is added.
 CREATE OR REPLACE FUNCTION _sysinternal.create_field_on_table(
     schema_name   NAME,
     table_name    NAME,
@@ -214,13 +213,6 @@ BEGIN
       -- update root table
       PERFORM _sysinternal.create_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                                 NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
-      -- update insert temp table
-      PERFORM _sysinternal.create_field_on_table(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                                NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
-      -- update temp table redirect rule
-      PERFORM _sysinternal.create_insert_temp_table_rule(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                                         hypertable_row.root_schema_name, hypertable_row.root_table_name);
-
       IF new.created_on <> current_database() THEN
         PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
         -- update main table on others
@@ -241,13 +233,6 @@ BEGIN
         -- update root table
         PERFORM _sysinternal.exec_alter_column_set_default(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name, NEW.default_value);
-        -- update insert temp table
-        PERFORM _sysinternal.exec_alter_column_set_default(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                              NEW.name, NEW.default_value);
-        -- update temp table redirect rule
-        PERFORM _sysinternal.create_insert_temp_table_rule(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                                           hypertable_row.root_schema_name, hypertable_row.root_table_name);
-
         IF NEW.modified_on <> current_database() THEN
           PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
           -- update main table on others
@@ -260,12 +245,6 @@ BEGIN
         -- update root table
         PERFORM _sysinternal.exec_alter_column_set_not_null(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name, NEW.not_null);
-        -- update insert temp table
-        PERFORM _sysinternal.exec_alter_column_set_not_null(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                              NEW.name, NEW.not_null);
-        -- update temp table redirect rule
-        PERFORM _sysinternal.create_insert_temp_table_rule(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                                           hypertable_row.root_schema_name, hypertable_row.root_table_name);
         IF NEW.modified_on <> current_database() THEN
           PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
           -- update main table on others
@@ -278,12 +257,6 @@ BEGIN
         -- update root table
         PERFORM _sysinternal.exec_alter_table_rename_column(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               OLD.name, NEW.name);
-        -- update insert temp table
-        PERFORM _sysinternal.exec_alter_table_rename_column(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                              OLD.name, NEW.name);
-        -- update temp table redirect rule
-        PERFORM _sysinternal.create_insert_temp_table_rule(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                                           hypertable_row.root_schema_name, hypertable_row.root_table_name);
         IF NEW.modified_on <> current_database() THEN
           PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
           -- update main table on others
@@ -330,18 +303,9 @@ BEGIN
     FROM hypertable AS h
     WHERE h.name = NEW.hypertable_name;
 
-    -- drop temp table redirect rule briefly
-    PERFORM _sysinternal.drop_insert_temp_table_rule(hypertable_row.root_schema_name, hypertable_row.root_table_name);
     -- update root table
     PERFORM _sysinternal.drop_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name);
-    -- update insert temp table
-    PERFORM _sysinternal.drop_field_on_table(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                              NEW.name);
-    -- update temp table redirect rule
-    PERFORM _sysinternal.create_insert_temp_table_rule(hypertable_row.associated_schema_name, hypertable_row.insert_temp_table_name,
-                                                       hypertable_row.root_schema_name, hypertable_row.root_table_name);
-
     IF NEW.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
       -- update main table on others

@@ -7,7 +7,6 @@ CREATE OR REPLACE FUNCTION  add_hypertable(
     number_partitions       SMALLINT = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    insert_temp_table_name  NAME = NULL,
     hypertable_name         NAME = NULL,
     placement               chunk_placement_type = 'STICKY'
 )
@@ -37,7 +36,7 @@ BEGIN
         INTO hypertable_row
         FROM dblink(
           'meta_conn',
-          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
             schema_name,
             table_name,
             time_field_name,
@@ -47,7 +46,6 @@ BEGIN
             number_partitions,
             associated_schema_name,
             associated_table_prefix,
-            insert_temp_table_name,
             hypertable_name,
             placement,
             current_database()

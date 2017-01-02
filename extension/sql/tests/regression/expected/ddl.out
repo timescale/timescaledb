@@ -51,15 +51,15 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 SELECT * FROM add_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
------------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
- public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+-----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
+ public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT * FROM hypertable;
-         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
------------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
- public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+-----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
+ public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT * FROM hypertable_index;
@@ -83,29 +83,8 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
  
 (1 row)
 
-BEGIN;
-SELECT *
-FROM create_temp_copy_table('public."Hypertable_1"', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds2_ddl_1.tsv' NULL AS '';
-SELECT * FROM copy_t;
-        time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
----------------------+-----------+--------+----------+----------+----------+----------+----------
- 1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
-(1 row)
-
-SELECT *
-FROM insert_data('public."Hypertable_1"', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
-COMMIT;
+INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
 ---------------------+-----------+--------+----------+----------+----------+----------+----------
@@ -150,6 +129,8 @@ Indexes:
     "Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -163,16 +144,6 @@ Indexes:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)  SELECT new."time",
-            new."Device_id",
-            new.temp_c,
-            new.humidity,
-            new.sensor_1,
-            new.sensor_2,
-            new.sensor_3,
-            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 \d+ _sys_1_._hyper_1_1_0_1_data
@@ -221,6 +192,8 @@ Indexes:
     "Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -234,16 +207,6 @@ Indexes:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)  SELECT new."time",
-            new."Device_id",
-            new.temp_c,
-            new.humidity,
-            new.sensor_1,
-            new.sensor_2,
-            new.sensor_3,
-            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
@@ -294,6 +257,8 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
 Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -308,17 +273,6 @@ Indexes:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", humidity, sensor_1, sensor_2_renamed, sensor_3_renamed, temp_f, sensor_3, sensor_4)  SELECT new."time",
-            new."Device_id",
-            new.humidity,
-            new.sensor_1,
-            new.sensor_2_renamed,
-            new.sensor_3_renamed,
-            new.temp_f,
-            new.sensor_3,
-            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
@@ -345,6 +299,8 @@ SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
 Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -359,17 +315,6 @@ Indexes:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO _sys_1_._hyper_1_root DO INSTEAD  INSERT INTO _sys_1_._hyper_1_insert_temp ("time", "Device_id", humidity, sensor_1, sensor_2_renamed, sensor_3_renamed, temp_f, sensor_3, sensor_4)  SELECT new."time",
-            new."Device_id",
-            new.humidity,
-            new.sensor_1,
-            new.sensor_2_renamed,
-            new.sensor_3_renamed,
-            new.temp_f,
-            new.sensor_3,
-            new.sensor_4
 Child tables: _sys_1_._hyper_1_0_replica
 
 \d+ _sys_1_._hyper_1_1_0_1_data

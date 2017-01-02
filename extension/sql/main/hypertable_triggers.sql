@@ -16,11 +16,17 @@ BEGIN
 
     PERFORM _sysinternal.create_root_table(NEW.root_schema_name, NEW.root_table_name);
     PERFORM _sysinternal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
-    PERFORM _sysinternal.create_insert_temp_table(NEW.associated_schema_name, NEW.insert_temp_table_name, NEW.main_schema_name, NEW.main_table_name);
-
+    
     IF NEW.created_on <> current_database() THEN
        PERFORM _sysinternal.create_main_table(NEW.main_schema_name, NEW.main_table_name);
     END IF;
+
+    EXECUTE format(
+        $$
+            CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
+            FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert();
+        $$, NEW.main_schema_name, NEW.main_table_name);
+
 
     RETURN NEW;
 END

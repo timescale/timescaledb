@@ -52,9 +52,9 @@ CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT N
 CREATE INDEX ON PUBLIC."testNs" (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
@@ -96,9 +96,9 @@ FROM meta;
 
 SELECT *
 FROM hypertable;
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT *
@@ -200,9 +200,9 @@ FROM meta;
 
 SELECT *
 FROM hypertable;
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
+ testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT *
@@ -411,16 +411,6 @@ Index "_sys_1_testNs._hyper_1_distinct_pkey"
  value  | text | value      | extended
 primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
 
-                                          Unlogged table "_sys_1_testNs._hyper_1_insert_temp"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-
                                                   Table "_sys_1_testNs._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -430,14 +420,6 @@ primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO "_sys_1_testNs"._hyper_1_root DO INSTEAD  INSERT INTO "_sys_1_testNs"._hyper_1_insert_temp ("time", "Device_id", temp, occupied, latitude, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an)  SELECT new."time",
-            new."Device_id",
-            new.temp,
-            new.occupied,
-            new.latitude,
-            new.really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an
 Child tables: "_sys_1_testNs"._hyper_1_0_replica
 
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
@@ -581,16 +563,6 @@ Index "_sys_1_testNs._hyper_1_distinct_pkey"
  value  | text | value      | extended
 primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
 
-                                          Unlogged table "_sys_1_testNs._hyper_1_insert_temp"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-
                                                   Table "_sys_1_testNs._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -600,14 +572,6 @@ primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO "_sys_1_testNs"._hyper_1_root DO INSTEAD  INSERT INTO "_sys_1_testNs"._hyper_1_insert_temp ("time", "Device_id", temp, occupied, latitude, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an)  SELECT new."time",
-            new."Device_id",
-            new.temp,
-            new.occupied,
-            new.latitude,
-            new.really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an
 Child tables: "_sys_1_testNs"._hyper_1_0_replica
 
 \c meta
@@ -823,16 +787,6 @@ Index "_sys_1_testNs._hyper_1_distinct_pkey"
  value  | text | value      | extended
 primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
 
-                                          Unlogged table "_sys_1_testNs._hyper_1_insert_temp"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-
                                                   Table "_sys_1_testNs._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -842,13 +796,5 @@ primary key, btree, for table "_sys_1_testNs._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an | bigint           |           | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO "_sys_1_testNs"._hyper_1_root DO INSTEAD  INSERT INTO "_sys_1_testNs"._hyper_1_insert_temp ("time", "Device_id", temp, occupied, latitude, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an)  SELECT new."time",
-            new."Device_id",
-            new.temp,
-            new.occupied,
-            new.latitude,
-            new.really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_an
 Child tables: "_sys_1_testNs"._hyper_1_0_replica
 

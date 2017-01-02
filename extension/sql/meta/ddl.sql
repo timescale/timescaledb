@@ -13,7 +13,6 @@ CREATE OR REPLACE FUNCTION _meta.add_hypertable(
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
     associated_table_prefix NAME,
-    insert_temp_table_name  NAME,
     hypertable_name         NAME,
     placement               chunk_placement_type,
     created_on              NAME
@@ -35,10 +34,6 @@ BEGIN
         associated_table_prefix = format('_hyper_%s', id);
     END IF;
 
-    IF insert_temp_table_name IS NULL THEN
-        insert_temp_table_name = format('_hyper_%s_insert_temp', id);
-    END IF;
-
     IF number_partitions IS NULL THEN
         SELECT COUNT(*)
         INTO number_partitions
@@ -55,7 +50,6 @@ BEGIN
         associated_schema_name, associated_table_prefix,
         root_schema_name, root_table_name,
         distinct_schema_name, distinct_table_name,
-        insert_temp_table_name,
         replication_factor,
         placement,
         time_field_name, time_field_type,
@@ -66,7 +60,6 @@ BEGIN
         associated_schema_name, associated_table_prefix,
         associated_schema_name, format('%s_root', associated_table_prefix),
         associated_schema_name, format('%s_distinct', associated_table_prefix),
-        insert_temp_table_name,
         replication_factor,
         placement,
         time_field_name, time_field_type,

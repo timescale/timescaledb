@@ -53,9 +53,9 @@ CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_1)  WHERE series_1
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | insert_temp_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+------------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   | _hyper_1_insert_temp   |                  1 | STICKY    | time            | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
+ testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
@@ -92,39 +92,16 @@ INNER JOIN chunk c ON (c.partition_id = part.id);
 
 \c Test1
 BEGIN;
-SELECT *
-FROM create_temp_copy_table('testNs', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds1_dev1_2.tsv' NULL AS '';
-SELECT *
-FROM insert_data('testNs', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
+INSERT INTO "testNs"(time, device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894002000000000, 'dev1', 2.5, 3);
 COMMIT;
 \c test2
 BEGIN;
-SELECT *
-FROM create_temp_copy_table('testNs', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds1_dev2_1.tsv' NULL AS '';
-SELECT *
-FROM insert_data('testNs', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
+INSERT INTO "testNs"(time, device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894000000000000, 'dev2', 1.5, 2);
 COMMIT;
 \c Test1
 \d+ "testNs".*
@@ -319,16 +296,6 @@ Child tables: "testNs"._hyper_1_0_distinct
  value  | text | value      | extended
 primary key, btree, for table "testNs._hyper_1_distinct"
 
-                    Unlogged table "testNs._hyper_1_insert_temp"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- time        | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-
                             Table "testNs._hyper_1_root"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
@@ -338,14 +305,6 @@ primary key, btree, for table "testNs._hyper_1_distinct"
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO "testNs"._hyper_1_root DO INSTEAD  INSERT INTO "testNs"._hyper_1_insert_temp ("time", device_id, series_0, series_1, series_2, series_bool)  SELECT new."time",
-            new.device_id,
-            new.series_0,
-            new.series_1,
-            new.series_2,
-            new.series_bool
 Child tables: "testNs"._hyper_1_0_replica
 
 \c test2
@@ -456,16 +415,6 @@ Child tables: "testNs"._hyper_1_0_distinct
  value  | text | value      | extended
 primary key, btree, for table "testNs._hyper_1_distinct"
 
-                    Unlogged table "testNs._hyper_1_insert_temp"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- time        | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-
                             Table "testNs._hyper_1_root"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
@@ -475,14 +424,6 @@ primary key, btree, for table "testNs._hyper_1_distinct"
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Rules:
-    _redirect AS
-    ON INSERT TO "testNs"._hyper_1_root DO INSTEAD  INSERT INTO "testNs"._hyper_1_insert_temp ("time", device_id, series_0, series_1, series_2, series_bool)  SELECT new."time",
-            new.device_id,
-            new.series_0,
-            new.series_1,
-            new.series_2,
-            new.series_bool
 Child tables: "testNs"._hyper_1_0_replica
 
 SELECT *

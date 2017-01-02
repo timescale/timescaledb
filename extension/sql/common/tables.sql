@@ -40,7 +40,6 @@ CREATE TABLE IF NOT EXISTS hypertable (
     root_table_name         NAME                  NOT NULL,
     distinct_schema_name    NAME                  NOT NULL,
     distinct_table_name     NAME                  NOT NULL,
-    insert_temp_table_name  NAME                  NOT NULL,
     replication_factor      SMALLINT              NOT NULL CHECK (replication_factor > 0),
     placement               chunk_placement_type  NOT NULL,
     time_field_name         NAME                  NOT NULL,
@@ -188,7 +187,7 @@ CREATE TABLE IF NOT EXISTS field (
     UNIQUE(hypertable_name, attnum)
 );
 
-CREATE TABLE IF NOT EXISTS deleted_field ( 
+CREATE TABLE IF NOT EXISTS deleted_field (
   LIKE field,
   deleted_on NAME
 );
@@ -203,8 +202,7 @@ CREATE TABLE IF NOT EXISTS hypertable_index (
     UNIQUE(main_schema_name, main_index_name) --globally unique since index names globally unique
 );
 
-CREATE TABLE IF NOT EXISTS deleted_hypertable_index ( 
+CREATE TABLE IF NOT EXISTS deleted_hypertable_index (
   LIKE hypertable_index,
   deleted_on NAME
 );
-

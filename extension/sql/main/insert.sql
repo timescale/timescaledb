@@ -108,7 +108,7 @@ BEGIN
     EXECUTE format(
         $$
             SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
-            FROM %1$s ct
+            FROM ONLY %1$s ct
             LEFT JOIN hypertable h ON (h.NAME = %2$L)
             LEFT JOIN partition_epoch pe ON (
               pe.hypertable_name = %2$L AND
@@ -169,7 +169,7 @@ BEGIN
                 $$
               WITH selected AS
               (
-                  DELETE FROM %2$s
+                  DELETE FROM ONLY %2$s
                   WHERE (%7$I >= %3$L OR %3$L IS NULL) and (%7$I <= %4$L OR %4$L IS NULL)
                   RETURNING *
               )%5$s
@@ -185,7 +185,7 @@ BEGIN
         EXECUTE format(
             $$
                 SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
-                FROM %1$s ct
+                FROM ONLY %1$s ct
                 LEFT JOIN hypertable h ON (h.NAME = %2$L)
                 LEFT JOIN partition_epoch pe ON (
                   pe.hypertable_name = %2$L AND

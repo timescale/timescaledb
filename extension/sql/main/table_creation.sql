@@ -41,61 +41,20 @@ BEGIN
 END
 $BODY$;
 
--- Creates/updates the rule governing INSERTs.
--- Called whenever a field is added to the root table so that the redirection
--- of data is kept up to date.
-CREATE OR REPLACE FUNCTION _sysinternal.create_insert_temp_table_rule(
-    temp_schema_name      NAME,
-    temp_table_name       NAME,
-    main_schema_name      NAME,
-    main_table_name       NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+-- Trigger function to move INSERT'd data on the main table into the
+-- proper partitions.
+CREATE OR REPLACE FUNCTION _sysinternal.on_main_table_insert()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     EXECUTE format(
         $$
-            CREATE OR REPLACE RULE %I AS ON INSERT TO %I.%I DO INSTEAD INSERT INTO %I.%I (SELECT NEW.*)
-        $$, '_redirect', main_schema_name, main_table_name, temp_schema_name, temp_table_name);
-END
-$BODY$;
-
--- Drops the rule governing INSERTs.
--- Called whenever a field is removed from the root table otherwise the rule
--- refers to a non-existent field.
-CREATE OR REPLACE FUNCTION _sysinternal.drop_insert_temp_table_rule(
-    root_schema_name      NAME,
-    root_table_name       NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            DROP RULE IF EXISTS %I ON %I.%I
-        $$, '_redirect', root_schema_name, root_table_name);
-END
-$BODY$;
-
--- Creates the temporary table for INSERTs.
--- INSERTs on the root table are redirected to the temporary table using a RULE.
--- An associated trigger on this table then inserts all rows in bulk after
--- all rows are INSERTed. The table is UNLOGGED for performance.
-CREATE OR REPLACE FUNCTION _sysinternal.create_insert_temp_table(
-    temp_schema_name      NAME,
-    temp_table_name       NAME,
-    main_schema_name      NAME,
-    main_table_name       NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            CREATE UNLOGGED TABLE IF NOT EXISTS %I.%I (
-            )
-        $$, temp_schema_name, temp_table_name);
-    PERFORM _sysinternal.create_insert_temp_table_rule(temp_schema_name, temp_table_name, main_schema_name, main_table_name);
+            SELECT insert_data(
+                (SELECT name FROM hypertable
+                WHERE main_schema_name = %1$L AND main_table_name = %2$L)
+                , %3$L)
+        $$, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_RELID);
+    RETURN NEW;
 END
 $BODY$;
 
