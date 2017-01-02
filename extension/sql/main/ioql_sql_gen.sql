@@ -1,11 +1,11 @@
-CREATE OR REPLACE FUNCTION get_time_clause(group_time BIGINT)
+CREATE OR REPLACE FUNCTION get_time_clause(time_col_name NAME, group_time BIGINT)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT CASE
        WHEN group_time IS NOT NULL THEN
-           format('(time - (time %% %L::bigint))::bigint', group_time)
+           format('(%1$I - (%1$I %% %2$L::bigint))::bigint', time_col_name, group_time)
        ELSE
-           'time'
+           format('%I', time_col_name)
        END;
 $BODY$;
 
@@ -30,11 +30,11 @@ FROM unnest(clauses) AS clause(val)
 WHERE val IS NOT NULL;
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_time_predicate(cond time_condition_type)
+CREATE OR REPLACE FUNCTION get_time_predicate(time_col_name NAME, cond time_condition_type)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT string_agg(clauses.val, ' AND ')
-FROM (VALUES ('time>=' || cond.from_time), ('time<' || cond.to_time)) AS clauses(val);
+FROM (VALUES (format('%I >= ', time_col_name) || cond.from_time), (format('%I < ', time_col_name) || cond.to_time)) AS clauses(val);
 $BODY$;
 
 --TODO: Review this
@@ -98,7 +98,7 @@ CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(
-    get_time_predicate(query.time_condition),
+    get_time_predicate(get_time_field(query.namespace_name), query.time_condition),
     get_field_predicate_clause(query.field_condition),
     get_select_field_predicate(query.select_items),
     get_partitioning_predicate(query, epoch)
@@ -141,9 +141,9 @@ CREATE OR REPLACE FUNCTION get_orderby_clause_nonagg(query ioql_query)
 $BODY$
 SELECT CASE
        WHEN query.limit_by_field IS NOT NULL THEN
-           'ORDER BY time DESC NULLS LAST, ' || (query.limit_by_field).field
-       ELSE
-           'ORDER BY time DESC NULLS LAST'
+           format('ORDER BY %I DESC NULLS LAST, %s', get_time_field(query.namespace_name), (query.limit_by_field).field)
+	  ELSE
+           format('ORDER BY %I DESC NULLS LAST', get_time_field(query.namespace_name))
        END;
 $BODY$;
 

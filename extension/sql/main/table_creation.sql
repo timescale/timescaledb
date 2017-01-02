@@ -234,21 +234,26 @@ BEGIN
     IF start_time IS NOT NULL AND end_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time >= %L AND time <= %L)
+            ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$L AND %1$I <= %5$L)
         $$,
+		    _sysinternal.time_col_name_for_crn(schema_name, table_name),
             schema_name, table_name, start_time, end_time);
     ELSIF start_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time >= %L)
+            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %L)
         $$,
-            schema_name, table_name, start_time);
+            schema_name, table_name,
+		    _sysinternal.time_col_name_for_crn(schema_name, table_name),
+             start_time);
     ELSIF end_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(time <= %L)
+            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %L)
         $$,
-            schema_name, table_name, end_time);
+            schema_name, table_name, 
+			_sysinternal.time_col_name_for_crn(schema_name, table_name),
+			end_time);
     END IF;
 END
 $BODY$;

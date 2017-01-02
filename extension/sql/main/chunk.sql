@@ -26,10 +26,10 @@ DECLARE
 BEGIN
     EXECUTE format(
         $$
-            SELECT max("time")
+            SELECT max(%I)
             FROM %I.%I
         $$,
-        schema_name, table_name)
+        _sysinternal.time_col_name_for_crn(schema_name, table_name), schema_name, table_name)
     INTO max_time;
 
     RETURN max_time;

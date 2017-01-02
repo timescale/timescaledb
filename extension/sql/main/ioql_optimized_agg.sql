@@ -26,13 +26,13 @@ SELECT CASE
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_partial_aggregate_sql(items select_item [], agg aggregate_type)
+CREATE OR REPLACE FUNCTION get_partial_aggregate_sql(time_col_name NAME, items select_item [], agg aggregate_type)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN agg.group_field IS NOT NULL THEN
-           format('%s, %s as group_time, %s', agg.group_field, get_time_clause(agg.group_time), field_list)
+           format('%s, %s as group_time, %s', agg.group_field, get_time_clause(time_col_name, agg.group_time), field_list)
        ELSE
-           format('%s as group_time, %s', get_time_clause(agg.group_time), field_list)
+           format('%s as group_time, %s', get_time_clause(time_col_name, agg.group_time), field_list)
        END
 FROM
     (
@@ -216,7 +216,7 @@ DECLARE
 BEGIN
 
     select_clause :=
-    'SELECT ' || get_partial_aggregate_sql(query.select_items, query.aggregate);
+    'SELECT ' || get_partial_aggregate_sql(get_time_field(query.namespace_name), query.select_items, query.aggregate);
 
     RETURN base_query_raw(
         select_clause,
@@ -390,7 +390,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_max_time_on_partition(part_replica partition_replica, additional_constraints TEXT)
+CREATE OR REPLACE FUNCTION get_max_time_on_partition(time_col_name NAME, part_replica partition_replica, additional_constraints TEXT)
     RETURNS BIGINT AS
 $BODY$
 DECLARE
@@ -404,12 +404,12 @@ BEGIN
     FROM get_local_chunk_replica_node_for_pr_time_desc(part_replica) LOOP
         EXECUTE format(
             $$
-                SELECT time
-                FROM %I.%I
-                %s
-                ORDER BY time DESC NULLS LAST
+                SELECT %1$I
+                FROM %2$I.%3$I
+                %4$s
+                ORDER BY %1$I DESC NULLS LAST
                 LIMIT 1
-            $$, crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
+            $$, time_col_name, crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
         INTO time;
 
         IF time IS NOT NULL THEN
@@ -458,7 +458,7 @@ $BODY$
 SELECT (get_time_periods_limit_for_max(max_time.max_time, period_length, num_periods)).*
 FROM
     (
-        SELECT max(get_max_time_on_partition(pr, additional_constraints)) AS max_time
+        SELECT max(get_max_time_on_partition(get_time_field(epoch.hypertable_name),pr, additional_constraints)) AS max_time
         FROM get_partition_replicas(epoch, replica_id) pr
     ) AS max_time
 $BODY$;
@@ -481,7 +481,7 @@ BEGIN
                                          (query.aggregate).group_time,
                                          query.limit_time_periods);
         additional_constraints := combine_predicates(
-            format('time >= %L AND time <=%L', trange.start_time, trange.end_time),
+            format('%1$I >= %2$L AND %1$I <=%3$L', get_time_field(query.namespace_name), trange.start_time, trange.end_time),
             additional_constraints);
     END IF;
 

@@ -182,4 +182,24 @@ $BODY$
 $BODY$;
 
 
+CREATE OR REPLACE FUNCTION _sysinternal.time_col_name_for_crn(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS NAME LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    time_col_name NAME;
+BEGIN
+    SELECT h.time_field_name INTO STRICT time_col_name
+    FROM hypertable h
+    INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)  
+    INNER JOIN partition p ON (p.epoch_id = pe.id)
+    INNER JOIN chunk c ON (c.partition_id = p.id)
+    INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
+    WHERE crn.schema_name = time_col_name_for_crn.schema_name AND
+    crn.table_name = time_col_name_for_crn.table_name;
+    RETURN time_col_name;
+END
+$BODY$;
 
