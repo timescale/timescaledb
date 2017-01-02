@@ -46,6 +46,8 @@ COMMIT;
 
 SELECT * FROM PUBLIC."Hypertable_1";
 EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
+SELECT * FROM ONLY PUBLIC."Hypertable_1";
+EXPLAIN SELECT * FROM ONLY PUBLIC."Hypertable_1";
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sys_1_"."_hyper_1_root"

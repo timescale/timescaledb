@@ -122,6 +122,17 @@ EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
    ->  Seq Scan on _hyper_1_1_0_1_data  (cost=0.00..13.50 rows=350 width=204)
 (5 rows)
 
+SELECT * FROM ONLY PUBLIC."Hypertable_1";
+ time | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
+------+-----------+--------+----------+----------+----------+----------+----------
+(0 rows)
+
+EXPLAIN SELECT * FROM ONLY PUBLIC."Hypertable_1";
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Seq Scan on "Hypertable_1"  (cost=0.00..13.50 rows=350 width=204)
+(1 row)
+
 \d+ PUBLIC."Hypertable_1"
                                  Table "public.Hypertable_1"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 

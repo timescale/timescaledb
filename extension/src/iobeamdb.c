@@ -92,7 +92,7 @@ change_table_name_walker(Node *node, void *context)
 	if (IsA(node, RangeTblEntry))
 	{
 		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
-		if (rangeTableEntry->rtekind == RTE_RELATION)
+		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
 		{
 			Oid replicaOid;
 			replicaOid = get_replica_oid(rangeTableEntry->relid);
