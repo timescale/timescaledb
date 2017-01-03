@@ -45,16 +45,14 @@ BEGIN
 
     hypertable_row := hypertable_from_main_table(table_oid);
 
-    PERFORM *
-        FROM dblink(
-          get_meta_server_name(),
+    PERFORM _sysinternal.meta_transaction_exec(
           format('SELECT _meta.add_index(%L, %L, %L, %L, %L)', 
             hypertable_row.name,
             hypertable_row.main_schema_name,
             (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
             def,
             current_database()
-        )) AS t(r TEXT);
+        ));
   END LOOP;
 END
 $BODY$;
@@ -104,21 +102,19 @@ BEGIN
       INNER JOIN hypertable_index i ON (i.hypertable_name = h.name)
       WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name; 
 
-      IF NOT is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+      --if table_oid is not null, it is a main table
+      IF table_oid IS NULL OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
         RETURN;
       END IF; 
 
       --TODO: this ignores the concurrently and cascade/restrict modifiers
-      
-
-      PERFORM *
-          FROM dblink(
-            get_meta_server_name(),
+      PERFORM 
+          _sysinternal.meta_transaction_exec(
             format('SELECT _meta.drop_index(%L, %L, %L)', 
               info.schema_name,
               info.object_name,
               current_database()
-          )) AS t(r TEXT);
+          ));
   END LOOP;
 END
 $BODY$;
@@ -174,14 +170,13 @@ BEGIN
       INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = f.attnum AND attisdropped) --do not match on att.attname here. it gets mangled 
       WHERE hypertable_name = hypertable_row.name 
     LOOP
-        PERFORM *
-        FROM dblink(
-          get_meta_server_name(),
+        PERFORM 
+          _sysinternal.meta_transaction_exec(
           format('SELECT _meta.drop_field(%L, %L, %L)', 
             hypertable_row.name,
             rec.name,
             current_database()
-        )) AS t(r TEXT);
+        ));
         found_action = TRUE;
     END LOOP; 
 
@@ -192,15 +187,14 @@ BEGIN
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND f.name IS DISTINCT FROM att.attname
     LOOP
-        PERFORM *
-        FROM dblink(
-          get_meta_server_name(),
+        PERFORM 
+          _sysinternal.meta_transaction_exec(
           format('SELECT _meta.alter_table_rename_column(%L, %L, %L, %L)', 
             hypertable_row.name,
             rec.old_name,
             rec.new_name,
             current_database()
-        )) AS t(r TEXT);
+        ));
         found_action = TRUE;
     END LOOP;
 
@@ -211,15 +205,14 @@ BEGIN
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND _sysinternal.get_default_value_for_attribute(att) IS DISTINCT FROM f.default_value
     LOOP
-        PERFORM *
-        FROM dblink(
-          get_meta_server_name(),
+        PERFORM 
+          _sysinternal.meta_transaction_exec(
           format('SELECT _meta.alter_column_set_default(%L, %L, %L, %L)', 
             hypertable_row.name,
             rec.name,
             rec.new_default_value,
             current_database()
-        )) AS t(r TEXT);
+        ));
         found_action = TRUE;
     END LOOP;
 
@@ -230,23 +223,22 @@ BEGIN
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND attnotnull != f.not_null
     LOOP
-        PERFORM *
-        FROM dblink(
-          get_meta_server_name(),
+        PERFORM 
+        _sysinternal.meta_transaction_exec(
           format('SELECT _meta.alter_column_set_not_null(%L, %L, %L, %L)', 
             hypertable_row.name,
             rec.name,
             rec.new_not_null,
             current_database()
-        )) AS t(r TEXT);
+        ));
         found_action = TRUE;
     END LOOP;
 
     --type changed
     FOR rec IN 
-      SELECT name, attnotnull AS new_not_null 
+      SELECT name
       FROM field f
-      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
+      INNER JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND att.atttypid IS DISTINCT FROM f.data_type
     LOOP
       RAISE EXCEPTION 'ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable %', info.objid::regclass

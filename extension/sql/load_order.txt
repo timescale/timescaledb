@@ -36,6 +36,7 @@ sql/main/chunk_triggers.sql
 sql/main/chunk.sql
 sql/main/insert.sql
 sql/main/meta_info.sql
+sql/main/meta_commands.sql
 sql/main/ddl_util.sql
 sql/main/ddl.sql
 sql/main/ddl_triggers.sql

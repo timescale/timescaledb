@@ -220,8 +220,14 @@ BEGIN
         PERFORM 1
         FROM dblink(node_row.server_name,
                     format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)) AS t(x TEXT);
+    END LOOP;
+
+    --Commit
+    FOR node_row IN
+    SELECT *
+    FROM node n
+    LOOP
         PERFORM dblink_exec(node_row.server_name, 'COMMIT');
-        --TODO: should we disconnect here?
         PERFORM dblink_disconnect(node_row.server_name);
     END LOOP;
 END

@@ -11,6 +11,8 @@
 #include "commands/extension.h"
 #include "tcop/tcopprot.h"
 
+#include "access/xact.h"
+
 #include "fmgr.h"
 
 
@@ -24,6 +26,7 @@ PG_MODULE_MAGIC;
 static planner_hook_type prev_planner_hook = NULL;
 static bool isLoaded = false;
 PlannedStmt *iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams);
+static void io_xact_callback(XactEvent event, void *arg);
 
 void 
 _PG_init(void)
@@ -31,6 +34,7 @@ _PG_init(void)
 	elog(INFO, "iobeamdb loaded");
 	prev_planner_hook = planner_hook;
 	planner_hook = iobeamdb_planner;
+	RegisterXactCallback(io_xact_callback, NULL);
 }
 
 void 
@@ -167,5 +171,31 @@ get_replica_oid(Oid mainRelationOid)
 	}
 	SPI_finish();
 	return replicaOid;
+}
+
+/*
+ * Commits meta commands issued with utility function in meta_commands.sql (e.g. _sysinternal.meta_transaction_exec)
+ * These commands are committed in the pre-commit hook of the local transaction.
+ * */
+static void io_xact_callback(XactEvent event, void *arg)
+{
+	char* shouldPrecommit = GetConfigOptionByName("io.commit_meta_conn_in_precommit_hook", NULL, true);
+	
+	/* Quick exit if no connections with meta were in this transaction. */
+	if (shouldPrecommit == NULL || strlen(shouldPrecommit) == 0)
+		return;
+	
+	if (event == XACT_EVENT_PRE_COMMIT) {
+		int ret;
+		
+		SPI_connect();
+		ret = SPI_execute("SELECT 1 FROM _sysinternal.meta_transaction_end()", false, 0);
+		if (ret <= 0)
+		{
+			elog(ERROR, "Got an SPI error");
+		}
+		
+		SPI_finish();
+	}
 }
 
