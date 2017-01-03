@@ -20,6 +20,7 @@ BEGIN
 END
 $BODY$;
 
+-- Used to update a hypertable when a new field is added.
 CREATE OR REPLACE FUNCTION _sysinternal.create_field_on_table(
     schema_name   NAME,
     table_name    NAME,
@@ -39,7 +40,7 @@ BEGIN
     IF NOT not_null THEN
       null_constraint = 'NULL';
     END IF;
-    
+
     default_constraint = 'DEFAULT '|| default_value;
 
     EXECUTE format(
@@ -48,14 +49,14 @@ BEGIN
         $$,
         schema_name, table_name, field, data_type_oid, default_constraint, null_constraint);
 
-    SELECT att.attnum INTO STRICT created_columns_att_num 
-    FROM pg_attribute att 
-    WHERE att.attrelid = format('%I.%I', schema_name, table_name)::regclass AND att.attname = field 
-    AND NOT attisdropped; 
+    SELECT att.attnum INTO STRICT created_columns_att_num
+    FROM pg_attribute att
+    WHERE att.attrelid = format('%I.%I', schema_name, table_name)::regclass AND att.attname = field
+    AND NOT attisdropped;
 
-    IF created_columns_att_num IS DISTINCT FROM attnum THEN 
+    IF created_columns_att_num IS DISTINCT FROM attnum THEN
       RAISE EXCEPTION 'Inconsistent state: the attnum of newly created colum does not match (% vs %)', attnum, created_columns_att_num
-      USING ERRCODE = 'IO501'; 
+      USING ERRCODE = 'IO501';
     END IF;
 END
 $BODY$;
@@ -118,13 +119,13 @@ new_not_null  BOOLEAN
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-IF new_not_null THEN 
+IF new_not_null THEN
   EXECUTE format(
     $$
         ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I SET NOT NULL
     $$,
     schema_name, table_name, field);
-ELSE 
+ELSE
   EXECUTE format(
     $$
         ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I DROP NOT NULL
@@ -143,14 +144,14 @@ DECLARE
    distinct_replica_node_row  distinct_replica_node;
    chunk_replica_node_row chunk_replica_node;
 BEGIN
-  FOR distinct_replica_node_row IN 
-    SELECT * 
+  FOR distinct_replica_node_row IN
+    SELECT *
     FROM distinct_replica_node drn
     WHERE drn.hypertable_name = populate_distinct_table.hypertable_name AND
-          drn.database_name = current_database() 
+          drn.database_name = current_database()
     LOOP
-      FOR chunk_replica_node_row IN 
-        SELECT crn.* 
+      FOR chunk_replica_node_row IN
+        SELECT crn.*
         FROM chunk_replica_node crn
         INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
         WHERE pr.hypertable_name = distinct_replica_node_row.hypertable_name AND
@@ -180,14 +181,14 @@ $BODY$
 DECLARE
    distinct_replica_node_row  distinct_replica_node;
 BEGIN
-  FOR distinct_replica_node_row IN 
-    SELECT * 
+  FOR distinct_replica_node_row IN
+    SELECT *
     FROM distinct_replica_node drn
     WHERE drn.hypertable_name = unpopulate_distinct_table.hypertable_name AND
-          drn.database_name = current_database() 
+          drn.database_name = current_database()
     LOOP
         EXECUTE format($$
-                DELETE FROM %I.%I WHERE field = %L  
+                DELETE FROM %I.%I WHERE field = %L
           $$,
           distinct_replica_node_row.schema_name, distinct_replica_node_row.table_name, field
         );
@@ -209,17 +210,19 @@ BEGIN
       FROM hypertable AS h
       WHERE h.name = NEW.hypertable_name;
 
+      -- update root table
       PERFORM _sysinternal.create_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                                 NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
       IF new.created_on <> current_database() THEN
         PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+        -- update main table on others
         PERFORM _sysinternal.create_field_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                                NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
+                                                  NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
+     END IF;
 
-      END IF;
       PERFORM _sysinternal.create_partition_constraint_for_field(NEW.hypertable_name, NEW.name);
       RETURN NEW;
-    ELSIF TG_OP = 'UPDATE' THEN 
+    ELSIF TG_OP = 'UPDATE' THEN
       SELECT *
       INTO STRICT hypertable_row
       FROM hypertable AS h
@@ -227,30 +230,36 @@ BEGIN
 
       IF NEW.default_value IS DISTINCT FROM OLD.default_value THEN
         update_found = TRUE;
+        -- update root table
         PERFORM _sysinternal.exec_alter_column_set_default(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name, NEW.default_value);
         IF NEW.modified_on <> current_database() THEN
           PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+          -- update main table on others
           PERFORM _sysinternal.exec_alter_column_set_default(hypertable_row.main_schema_name, hypertable_row.main_table_name,
                                               NEW.name, NEW.default_value);
         END IF;
       END IF;
       IF NEW.not_null IS DISTINCT FROM OLD.not_null THEN
         update_found = TRUE;
+        -- update root table
         PERFORM _sysinternal.exec_alter_column_set_not_null(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name, NEW.not_null);
         IF NEW.modified_on <> current_database() THEN
           PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+          -- update main table on others
           PERFORM _sysinternal.exec_alter_column_set_not_null(hypertable_row.main_schema_name, hypertable_row.main_table_name,
                                               NEW.name, NEW.not_null);
         END IF;
       END IF;
       IF NEW.name IS DISTINCT FROM OLD.name THEN
         update_found = TRUE;
+        -- update root table
         PERFORM _sysinternal.exec_alter_table_rename_column(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               OLD.name, NEW.name);
         IF NEW.modified_on <> current_database() THEN
           PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+          -- update main table on others
           PERFORM _sysinternal.exec_alter_table_rename_column(hypertable_row.main_schema_name, hypertable_row.main_table_name,
                                               OLD.name, NEW.name);
         END IF;
@@ -260,7 +269,7 @@ BEGIN
           update_found = TRUE;
           IF NEW.is_distinct THEN
             PERFORM  _sysinternal.populate_distinct_table(NEW.hypertable_name, NEW.name);
-          ELSE 
+          ELSE
             PERFORM  _sysinternal.unpopulate_distinct_table(NEW.hypertable_name, NEW.name);
           END IF;
       END IF;
@@ -270,8 +279,8 @@ BEGIN
         USING ERRCODE = 'IO101';
       END IF;
       RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN 
-      --handled by deleted log 
+    ELSIF TG_OP = 'DELETE' THEN
+      --handled by deleted log
       RETURN OLD;
     END IF;
 END
@@ -294,10 +303,12 @@ BEGIN
     FROM hypertable AS h
     WHERE h.name = NEW.hypertable_name;
 
+    -- update root table
     PERFORM _sysinternal.drop_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name);
     IF NEW.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+      -- update main table on others
       PERFORM _sysinternal.drop_field_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
                                               NEW.name);
     END IF;
@@ -306,4 +317,3 @@ BEGIN
 END
 $BODY$
 SET SEARCH_PATH = 'public';
-

@@ -41,6 +41,23 @@ BEGIN
 END
 $BODY$;
 
+-- Trigger function to move INSERT'd data on the main table into the
+-- proper partitions.
+CREATE OR REPLACE FUNCTION _sysinternal.on_main_table_insert()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            SELECT insert_data(
+                (SELECT name FROM hypertable
+                WHERE main_schema_name = %1$L AND main_table_name = %2$L)
+                , %3$L)
+        $$, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_RELID);
+    RETURN NEW;
+END
+$BODY$;
+
 CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
     schema_name NAME,
     table_name  NAME
@@ -197,7 +214,7 @@ BEGIN
 
     EXECUTE format(
         $$
-            ALTER TABLE %1$I.%2$I 
+            ALTER TABLE %1$I.%2$I
             ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
         $$,
         schema_name, table_name,
@@ -244,5 +261,3 @@ BEGIN
     END IF;
 END
 $BODY$;
-
-

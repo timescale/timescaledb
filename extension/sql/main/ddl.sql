@@ -21,11 +21,11 @@ DECLARE
 BEGIN
        SELECT relname, nspname
        INTO STRICT table_name, schema_name
-       FROM pg_class c 
+       FROM pg_class c
        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
        WHERE c.OID = main_table;
 
-       SELECT atttypid 
+       SELECT atttypid
        INTO STRICT time_field_type
        FROM pg_attribute
        WHERE attrelid = main_table AND attname = time_field_name;
@@ -36,9 +36,9 @@ BEGIN
         INTO hypertable_row
         FROM dblink(
           'meta_conn',
-          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ', 
+          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
             schema_name,
-            table_name, 
+            table_name,
             time_field_name,
             time_field_type,
             partitioning_field,
@@ -52,18 +52,18 @@ BEGIN
         )) AS t(r TEXT);
 
       FOR att_row IN SELECT *
-       FROM pg_attribute att 
+       FROM pg_attribute att
        WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
       LOOP
         PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row, 'meta_conn');
-      END LOOP; 
+      END LOOP;
 
 
       PERFORM 1
-      FROM pg_index, 
+      FROM pg_index,
       LATERAL dblink(
           'meta_conn',
-          format('SELECT _meta.add_index(%L, %L,%L, %L, %L)', 
+          format('SELECT _meta.add_index(%L, %L,%L, %L, %L)',
             hypertable_row.name,
             hypertable_row.main_schema_name,
             (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
@@ -71,7 +71,7 @@ BEGIN
             current_database()
         )) AS t(r TEXT)
       WHERE indrelid = main_table;
-      
+
       PERFORM dblink_exec('meta_conn', 'COMMIT');
       PERFORM dblink_disconnect('meta_conn');
       RETURN hypertable_row;
@@ -98,19 +98,19 @@ DECLARE
 BEGIN
     SELECT relname, nspname
     INTO STRICT table_name, schema_name
-    FROM pg_class c 
+    FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
     SELECT * INTO hypertable_row
     FROM hypertable h
-    WHERE main_schema_name = schema_name AND 
+    WHERE main_schema_name = schema_name AND
           main_table_name = table_name;
 
     PERFORM *
     FROM dblink(
       get_meta_server_name(),
-      format('SELECT _meta.alter_column_set_is_distinct(%L, %L, %L, %L)', 
+      format('SELECT _meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
         hypertable_row.name,
         field_name,
         is_distinct,

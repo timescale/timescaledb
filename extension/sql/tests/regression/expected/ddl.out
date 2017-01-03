@@ -83,29 +83,8 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
  
 (1 row)
 
-BEGIN;
-SELECT *
-FROM create_temp_copy_table('public."Hypertable_1"', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds2_ddl_1.tsv' NULL AS '';
-SELECT * FROM copy_t;
-        time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
----------------------+-----------+--------+----------+----------+----------+----------+----------
- 1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
-(1 row)
-
-SELECT *
-FROM insert_data('public."Hypertable_1"', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
-COMMIT;
+INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
 ---------------------+-----------+--------+----------+----------+----------+----------+----------
@@ -150,6 +129,8 @@ Indexes:
     "Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -211,6 +192,8 @@ Indexes:
     "Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -274,6 +257,8 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
 Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -314,6 +299,8 @@ SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
 Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"

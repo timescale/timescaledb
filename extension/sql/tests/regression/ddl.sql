@@ -35,14 +35,8 @@ CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_1', TRUE);
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
 
-BEGIN;
-SELECT *
-FROM create_temp_copy_table('public."Hypertable_1"', 'copy_t');
-\COPY copy_t FROM 'data/ds2_ddl_1.tsv' NULL AS '';
-SELECT * FROM copy_t;
-SELECT *
-FROM insert_data('public."Hypertable_1"', 'copy_t');
-COMMIT;
+INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 
 SELECT * FROM PUBLIC."Hypertable_1";
 EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
@@ -97,4 +91,3 @@ SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
 \d+ _sys_1_._hyper_1_1_0_1_data
 
 SELECT * FROM PUBLIC."Hypertable_1";
-

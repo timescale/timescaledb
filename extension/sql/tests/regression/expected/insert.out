@@ -92,39 +92,16 @@ INNER JOIN chunk c ON (c.partition_id = part.id);
 
 \c Test1
 BEGIN;
-SELECT *
-FROM create_temp_copy_table('testNs', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds1_dev1_2.tsv' NULL AS '';
-SELECT *
-FROM insert_data('testNs', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
+INSERT INTO "testNs"(time, device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894002000000000, 'dev1', 2.5, 3);
 COMMIT;
 \c test2
 BEGIN;
-SELECT *
-FROM create_temp_copy_table('testNs', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds1_dev2_1.tsv' NULL AS '';
-SELECT *
-FROM insert_data('testNs', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
+INSERT INTO "testNs"(time, device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894000000000000, 'dev2', 1.5, 2);
 COMMIT;
 \c Test1
 \d+ "testNs".*
