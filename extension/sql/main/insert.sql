@@ -1,14 +1,9 @@
--- Get a comma-separated list of fields in a hypertable.
-CREATE OR REPLACE FUNCTION get_field_list(
-    hypertable_name NAME
-)
-    RETURNS TEXT LANGUAGE SQL STABLE AS
-$BODY$
-SELECT array_to_string(get_quoted_field_names(hypertable_name), ', ')
-$BODY$;
+-- This file contains functions that aid in inserting data into a hypertable.
 
 -- Creates a temporary table with the same structure as a given hypertable.
 -- This can be used for bulk inserts.
+-- TODO(rrk) - This is currently only used by unit tests, rewrite unit tests so
+-- we can remove it.
 CREATE OR REPLACE FUNCTION create_temp_copy_table(
     hypertable_name NAME,
     table_name      TEXT
@@ -38,8 +33,21 @@ BEGIN
 END
 $BODY$;
 
+-- Get a comma-separated list of fields in a hypertable.
+CREATE OR REPLACE FUNCTION _sysinternal.get_field_list(
+    hypertable_name NAME
+)
+    RETURNS TEXT LANGUAGE SQL STABLE AS
+$BODY$
+SELECT array_to_string(get_quoted_field_names(hypertable_name), ', ')
+$BODY$;
+
 -- Gets the partition ID of a given epoch and data row.
-CREATE OR REPLACE FUNCTION get_partition_for_epoch_row(
+--
+-- epoch - The epoch whose partition ID we want
+-- copy_record - Record/row from a table
+-- copy_table_name - Name of the relation to cast the record to.
+CREATE OR REPLACE FUNCTION _sysinternal.get_partition_for_epoch_row(
     epoch           partition_epoch,
     copy_record     anyelement,
     copy_table_name TEXT
@@ -66,8 +74,12 @@ BEGIN
 END
 $BODY$;
 
--- Gets the time value of a temp table row.
-CREATE OR REPLACE FUNCTION get_time_from_copy_row(
+-- Gets the value of a field from a given row.
+--
+-- field_name - Name of field/column to fetch
+-- copy_record - Record/row from a table
+-- copy_table_name - Name of the relation to cast the record to
+CREATE OR REPLACE FUNCTION _sysinternal.get_field_from_record(
     field_name      NAME,
     copy_record     anyelement,
     copy_table_name TEXT
@@ -87,7 +99,15 @@ BEGIN
 END
 $BODY$;
 
--- Inserts rows from a temporary table into correct hypertable child tables.
+-- Inserts rows from a (temporary) table into correct hypertable child tables.
+--
+-- In typical use case, the copy_table_oid is the OID of a hypertable's main
+-- table. This allows users to use normal SQL INSERT calls on the main table,
+-- and a trigger that executes after the statement will call this function to
+-- place the data appropriately.
+--
+-- hypertable_name - Name of the hypertable the data belongs to
+-- copy_table_oid -- OID of the table to fetch rows from
 CREATE OR REPLACE FUNCTION insert_data(
     hypertable_name NAME,
     copy_table_oid  REGCLASS
@@ -107,15 +127,15 @@ BEGIN
     time_point := 1;
     EXECUTE format(
         $$
-            SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
+            SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
             FROM ONLY %1$s ct
             LEFT JOIN hypertable h ON (h.NAME = %2$L)
             LEFT JOIN partition_epoch pe ON (
               pe.hypertable_name = %2$L AND
-              (pe.start_time <= (SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'))::bigint OR pe.start_time IS NULL) AND
-              (pe.end_time   >= (SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'))::bigint OR pe.end_time IS NULL)
+              (pe.start_time <= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.start_time IS NULL) AND
+              (pe.end_time   >= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.end_time IS NULL)
             )
-            LEFT JOIN get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
+            LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
             LIMIT 1
         $$, copy_table_oid, hypertable_name)
     INTO STRICT time_point, time_field_name_point, partition_id;
@@ -178,21 +198,21 @@ BEGIN
                 format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
                 copy_table_oid, crn_record.start_time, crn_record.end_time,
                 distinct_clauses,
-                get_field_list(hypertable_name),
+                _sysinternal.get_field_list(hypertable_name),
                 time_field_name_point);
         END LOOP;
 
         EXECUTE format(
             $$
-                SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
+                SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
                 FROM ONLY %1$s ct
                 LEFT JOIN hypertable h ON (h.NAME = %2$L)
                 LEFT JOIN partition_epoch pe ON (
                   pe.hypertable_name = %2$L AND
-                  (pe.start_time <= (SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'))::bigint OR pe.start_time IS NULL) AND
-                  (pe.end_time   >= (SELECT get_time_from_copy_row(h.time_field_name, ct, '%1$s'))::bigint OR pe.end_time IS NULL)
+                  (pe.start_time <= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.start_time IS NULL) AND
+                  (pe.end_time   >= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.end_time IS NULL)
                 )
-                LEFT JOIN get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
+                LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
                 LIMIT 1
             $$, copy_table_oid, hypertable_name)
         INTO time_point, time_field_name_point, partition_id;
