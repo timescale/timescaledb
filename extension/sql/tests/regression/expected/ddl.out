@@ -85,6 +85,11 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
 
 INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+--expect error cases
+\set ON_ERROR_STOP 0
+UPDATE "Hypertable_1" SET time = 0 WHERE TRUE;
+DELETE FROM "Hypertable_1" WHERE "Device_id" = 'dev1';
+\set ON_ERROR_STOP 1
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
 ---------------------+-----------+--------+----------+----------+----------+----------+----------
@@ -130,7 +135,8 @@ Indexes:
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -193,7 +199,8 @@ Indexes:
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -258,7 +265,8 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"
@@ -300,7 +308,8 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_main_table_insert()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
 \d+ "_sys_1_"."_hyper_1_root"
                                 Table "_sys_1_._hyper_1_root"

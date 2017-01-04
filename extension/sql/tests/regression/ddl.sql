@@ -37,6 +37,11 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
 
 INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+--expect error cases
+\set ON_ERROR_STOP 0
+UPDATE "Hypertable_1" SET time = 0 WHERE TRUE;
+DELETE FROM "Hypertable_1" WHERE "Device_id" = 'dev1';
+\set ON_ERROR_STOP 1
 
 SELECT * FROM PUBLIC."Hypertable_1";
 EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
