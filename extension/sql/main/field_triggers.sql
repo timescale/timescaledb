@@ -1,8 +1,7 @@
-/*
-    This file has functions that implement changes to hypertable columns as
-    change to the underlying chunk tables.
-*/
+-- This file has functions that implement changes to hypertable columns as
+-- change to the underlying chunk tables.
 
+-- TODO(mat) - Doc this? Not sure I can do it justice.
 CREATE OR REPLACE FUNCTION _sysinternal.create_partition_constraint_for_field(
     hypertable_name NAME,
     field_name      NAME
@@ -20,7 +19,7 @@ BEGIN
 END
 $BODY$;
 
--- Used to update a hypertable when a new field is added.
+-- Adds a field to a table (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.create_field_on_table(
     schema_name   NAME,
     table_name    NAME,
@@ -33,8 +32,8 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_field_on_table(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  null_constraint TEXT := 'NOT NULL';
-  default_constraint TEXT := '';
+  null_constraint         TEXT := 'NOT NULL';
+  default_constraint      TEXT := '';
   created_columns_att_num INT2;
 BEGIN
     IF NOT not_null THEN
@@ -62,6 +61,7 @@ END
 $BODY$;
 
 
+-- Removes a field from a table (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.drop_field_on_table(
     schema_name   NAME,
     table_name    NAME,
@@ -77,6 +77,7 @@ BEGIN
 END
 $BODY$;
 
+-- Changes the default of a field in a table (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.exec_alter_column_set_default(
     schema_name   NAME,
     table_name    NAME,
@@ -93,6 +94,7 @@ BEGIN
 END
 $BODY$;
 
+-- Renames a field of a table (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.exec_alter_table_rename_column(
     schema_name   NAME,
     table_name    NAME,
@@ -109,13 +111,12 @@ BEGIN
 END
 $BODY$;
 
-
-
+-- Sets a field of a table (e.g. main table or root table) to NOT NULL
 CREATE OR REPLACE FUNCTION _sysinternal.exec_alter_column_set_not_null(
-schema_name   NAME,
-table_name    NAME,
-field         NAME,
-new_not_null  BOOLEAN
+    schema_name   NAME,
+    table_name    NAME,
+    field         NAME,
+    new_not_null  BOOLEAN
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
@@ -135,14 +136,15 @@ END IF;
 END
 $BODY$;
 
+-- Adds distinct values for a field to a hypertable's distinct table.
 CREATE OR REPLACE FUNCTION _sysinternal.populate_distinct_table(
     hypertable_name  NAME,
-    field         NAME
+    field            NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
    distinct_replica_node_row  distinct_replica_node;
-   chunk_replica_node_row chunk_replica_node;
+   chunk_replica_node_row     chunk_replica_node;
 BEGIN
   FOR distinct_replica_node_row IN
     SELECT *
@@ -173,9 +175,10 @@ BEGIN
 END
 $BODY$;
 
+-- Removes distinct values for a field from a hypertable's distinct table.
 CREATE OR REPLACE FUNCTION _sysinternal.unpopulate_distinct_table(
     hypertable_name  NAME,
-    field         NAME
+    field            NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -196,12 +199,15 @@ BEGIN
 END
 $BODY$;
 
+-- Trigger to modify a field from a hypertable.
+-- Called when the user alters the main table by adding a field or changing
+-- the properties of a field.
 CREATE OR REPLACE FUNCTION _sysinternal.on_modify_field()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     hypertable_row hypertable;
-    update_found BOOLEAN = false;
+    update_found   BOOLEAN = false;
 BEGIN
 
     IF TG_OP = 'INSERT' THEN
@@ -287,6 +293,8 @@ END
 $BODY$
 SET SEARCH_PATH = 'public';
 
+-- Trigger to remove a field from a hypertable.
+-- Called when the user alters the main table by deleting a field.
 CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_field()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$

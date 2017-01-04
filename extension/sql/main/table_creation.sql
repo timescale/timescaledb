@@ -1,3 +1,7 @@
+-- This file contains functions and triggers associated with creating new
+-- hypertables.
+
+-- Creates a new schema if it does not exist.
 CREATE OR REPLACE FUNCTION _sysinternal.create_schema(
     schema_name NAME
 )
@@ -11,7 +15,8 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_main_table(
+-- Creates a table for a hypertable (e.g. main table or root table)
+CREATE OR REPLACE FUNCTION _sysinternal.create_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -26,23 +31,9 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_root_table(
-    schema_name NAME,
-    table_name  NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            CREATE TABLE IF NOT EXISTS %I.%I (
-            )
-        $$, schema_name, table_name);
-END
-$BODY$;
-
--- Trigger function to move INSERT'd data on the main table into the
--- proper partitions.
+-- Trigger function to move INSERT'd data on the main table to child tables.
+-- After data is inserted on the main table, it is placed in the correct
+-- partition tables based on its partition key and time.
 CREATE OR REPLACE FUNCTION _sysinternal.on_main_table_insert()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
@@ -58,6 +49,7 @@ BEGIN
 END
 $BODY$;
 
+-- Creates a root distinct table for a hypertable.
 CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
     schema_name NAME,
     table_name  NAME
@@ -88,8 +80,7 @@ BEGIN
     EXECUTE format(
         $$
             CREATE TABLE IF NOT EXISTS %1$I.%2$I (PRIMARY KEY(field, value))
-            INHERITS(%3$I.%4$I);
-
+            INHERITS(%3$I.%4$I)
         $$, schema_name, table_name, replica_schema_name, replica_table_name);
 END
 $BODY$;
