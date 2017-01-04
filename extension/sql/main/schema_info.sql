@@ -22,6 +22,9 @@ $BODY$
 SELECT get_distinct_table_oid(hypertable_name, replica_id, current_database())
 $BODY$;
 
+-- Get the name of the time column for a hypertable.
+--
+-- hypertable_name - name of the hypertable.
 CREATE OR REPLACE FUNCTION get_time_field(
     hypertable_name NAME
 )
@@ -31,6 +34,21 @@ $BODY$
     FROM hypertable h
     WHERE h.name = hypertable_name;
 $BODY$;
+
+-- Get the type of the time column for a hypertable.
+--
+-- hypertable_name - name of the hypertable.
+CREATE OR REPLACE FUNCTION get_time_field_type(
+    hypertable_name NAME
+)
+    RETURNS REGTYPE LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT time_field_type
+    FROM hypertable h
+    WHERE h.name = hypertable_name;
+$BODY$;
+
+
 
 CREATE OR REPLACE FUNCTION get_field_names(
     hypertable_name NAME
@@ -181,7 +199,9 @@ $BODY$
   WHERE c.OID = table_oid;
 $BODY$;
 
-
+-- Get the name of the time column for a chunk_replica_node.
+--
+-- schema_name, table_name - name of the schema and table for the table represented by the crn.
 CREATE OR REPLACE FUNCTION _sysinternal.time_col_name_for_crn(
     schema_name NAME,
     table_name  NAME
@@ -200,6 +220,30 @@ BEGIN
     WHERE crn.schema_name = time_col_name_for_crn.schema_name AND
     crn.table_name = time_col_name_for_crn.table_name;
     RETURN time_col_name;
+END
+$BODY$;
+
+-- Get the type of the time column for a chunk_replica_node.
+--
+-- schema_name, table_name - name of the schema and table for the table represented by the crn.
+CREATE OR REPLACE FUNCTION _sysinternal.time_col_type_for_crn(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS REGTYPE LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    time_col_type REGTYPE;
+BEGIN
+    SELECT h.time_field_type INTO STRICT time_col_type
+    FROM hypertable h
+    INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)  
+    INNER JOIN partition p ON (p.epoch_id = pe.id)
+    INNER JOIN chunk c ON (c.partition_id = p.id)
+    INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
+    WHERE crn.schema_name = time_col_type_for_crn.schema_name AND
+    crn.table_name = time_col_type_for_crn.table_name;
+    RETURN time_col_type;
 END
 $BODY$;
 

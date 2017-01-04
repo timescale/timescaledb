@@ -29,10 +29,10 @@ SELECT CASE
            ARRAY [
            format('%I %s', (query.aggregate).group_field,
                   get_field_type(query.namespace_name, (query.aggregate).group_field)),
-           'time BIGINT'] ||
+           'time '|| get_time_field_type(query.namespace_name) ] ||
            field_array
        ELSE
-           ARRAY ['time bigint'] ||
+           ARRAY ['time '|| get_time_field_type(query.namespace_name)] ||
            field_array
        END
 FROM

@@ -224,36 +224,41 @@ CREATE OR REPLACE FUNCTION _sysinternal.set_time_constraint(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
+  time_col_type regtype;
 BEGIN
+    time_col_type := _sysinternal.time_col_type_for_crn(schema_name, table_name);
+
     EXECUTE format(
         $$
             ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS time_range
         $$,
-        schema_name, table_name);
+            schema_name, table_name);
 
     IF start_time IS NOT NULL AND end_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$L AND %1$I <= %5$L)
+            ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s)
         $$,
-		    _sysinternal.time_col_name_for_crn(schema_name, table_name),
-            schema_name, table_name, start_time, end_time);
+            _sysinternal.time_col_name_for_crn(schema_name, table_name),
+            schema_name, table_name, 
+            _sysinternal.time_literal_sql(start_time, time_col_type),
+            _sysinternal.time_literal_sql(end_time, time_col_type));
     ELSIF start_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %L)
+            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %s)
         $$,
             schema_name, table_name,
-		    _sysinternal.time_col_name_for_crn(schema_name, table_name),
-             start_time);
-    ELSIF end_time IS NOT NULL THEN
+            _sysinternal.time_col_name_for_crn(schema_name, table_name),
+            _sysinternal.time_literal_sql(start_time, time_col_type));
+        ELSIF end_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %L)
+            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s)
         $$,
             schema_name, table_name, 
-			_sysinternal.time_col_name_for_crn(schema_name, table_name),
-			end_time);
+            _sysinternal.time_col_name_for_crn(schema_name, table_name),
+            _sysinternal.time_literal_sql(end_time, time_col_type));
     END IF;
 END
 $BODY$;

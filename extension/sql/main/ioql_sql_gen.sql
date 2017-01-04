@@ -1,11 +1,18 @@
-CREATE OR REPLACE FUNCTION get_time_clause(time_col_name NAME, group_time BIGINT)
+CREATE OR REPLACE FUNCTION get_time_clause(time_col_name NAME, time_col_type regtype, group_time BIGINT)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT CASE
-       WHEN group_time IS NOT NULL THEN
-           format('(%1$I - (%1$I %% %2$L::bigint))::bigint', time_col_name, group_time)
-       ELSE
+       WHEN group_time IS NULL THEN
            format('%I', time_col_name)
+       WHEN time_col_type IN ('BIGINT', 'INTEGER', 'SMALLINT') THEN
+           format('(%1$I - (%1$I %% %2$L::%3$s))::%3$s', time_col_name, group_time, time_col_type)
+       WHEN time_col_type IN ('TIMESTAMP', 'TIMESTAMPTZ') THEN
+           --NOTE: note the conversion at the end. important for timestamp without timezone. right conversion?
+           format('to_timestamp( (
+                  (EXTRACT(EPOCH from %1$I)*1e6)::bigint - 
+                  ( (EXTRACT(EPOCH from %1$I)*1e6)::bigint %% %2$L::bigint )
+              )::double precision / 1e6
+            )::%3$s', time_col_name, group_time, time_col_type) --group time is given in us
        END;
 $BODY$;
 
@@ -30,11 +37,14 @@ FROM unnest(clauses) AS clause(val)
 WHERE val IS NOT NULL;
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_time_predicate(time_col_name NAME, cond time_condition_type)
+CREATE OR REPLACE FUNCTION get_time_predicate(time_col_name NAME, time_col_type regtype, cond time_condition_type)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT string_agg(clauses.val, ' AND ')
-FROM (VALUES (format('%I >= ', time_col_name) || cond.from_time), (format('%I < ', time_col_name) || cond.to_time)) AS clauses(val);
+FROM (
+       VALUES (format('%I >= ', time_col_name) ||  NULLIF(_sysinternal.time_literal_sql(cond.from_time, time_col_type), 'NULL')), 
+              (format('%I < ', time_col_name)  ||  NULLIF(_sysinternal.time_literal_sql(cond.to_time, time_col_type), 'NULL'))
+     ) AS clauses(val);
 $BODY$;
 
 --TODO: Review this
@@ -98,7 +108,7 @@ CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(
-    get_time_predicate(get_time_field(query.namespace_name), query.time_condition),
+    get_time_predicate(get_time_field(query.namespace_name), get_time_field_type(query.namespace_name), query.time_condition),
     get_field_predicate_clause(query.field_condition),
     get_select_field_predicate(query.select_items),
     get_partitioning_predicate(query, epoch)

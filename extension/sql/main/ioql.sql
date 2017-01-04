@@ -19,11 +19,17 @@ BEGIN
 
         CREATE TYPE limit_by_field_type AS (field TEXT, count INT);
 
-        CREATE TYPE aggregate_type AS (group_time BIGINT, group_field TEXT);
+        --Grouptime is in usec if timestamp type used for time column in the data.
+        --If time is numeric, unit used by grouptime needs to match units in the data inserted
+        --(this is determined by user: inserted data can be in sec, usec, nanosec, etc.).
+        CREATE TYPE aggregate_type AS (group_time BIGINT, group_field TEXT); 
 
         CREATE TYPE field_condition_type AS (conjunctive predicate_conjunctive, predicates field_predicate []);
 
-        CREATE TYPE time_condition_type AS (from_time BIGINT, to_time BIGINT); --from_time inclusive; to_time exclusive\
+        --From_time/to_time is in usec if timestamp type used for time column in the data.
+        --If time is numeric, unit used by these fields needs to match units in the data inserted
+        --(this is determined by user: inserted data can be in sec, usec, nanosec, etc.).
+        CREATE TYPE time_condition_type AS (from_time BIGINT, to_time BIGINT); --from_time inclusive; to_time exclusive
 
         CREATE TYPE ioql_query AS (
             namespace_name     TEXT, -- NOT NULL

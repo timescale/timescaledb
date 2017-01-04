@@ -17,6 +17,7 @@ sql/meta/sync_triggers.sql
 sql/meta/setup_meta.sql
 sql/meta/deleted_triggers.sql
 sql/meta/ddl.sql
+sql/main/time_util.sql
 sql/main/table_creation.sql
 sql/main/tables.sql
 sql/main/cluster_user_triggers.sql

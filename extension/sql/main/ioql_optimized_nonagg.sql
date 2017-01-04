@@ -14,6 +14,7 @@ DECLARE
     previous_tables           TEXT = '';
     code                      TEXT = '';
     time_col_name             NAME;
+    time_col_type             REGTYPE;
 
     query_sql_scan_base_table TEXT = '';
     query_sql_scan            TEXT = '';
@@ -22,6 +23,7 @@ DECLARE
     partition_row             partition;
 BEGIN
     time_col_name := get_time_field(query.namespace_name);
+    time_col_type := get_time_field_type(query.namespace_name);
 
     IF epoch.partitioning_field = (query.limit_by_field).field THEN
         SELECT *
@@ -68,7 +70,7 @@ BEGIN
         get_full_select_clause_nonagg(query),
         'FROM %1$s',
         get_where_clause(
-            get_time_predicate(time_col_name, query.time_condition)
+            get_time_predicate(time_col_name, time_col_type, query.time_condition)
         ),
         NULL,
         format('ORDER BY %I DESC NULLS LAST', time_col_name),

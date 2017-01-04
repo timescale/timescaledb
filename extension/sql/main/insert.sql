@@ -74,13 +74,15 @@ BEGIN
 END
 $BODY$;
 
--- Gets the value of a field from a given row.
+-- Gets the value of the time field from a given row.
 --
--- field_name - Name of field/column to fetch
+-- field_name - Name of time field/column to fetch
+-- field_type - Type of the time record
 -- copy_record - Record/row from a table
 -- copy_table_name - Name of the relation to cast the record to
-CREATE OR REPLACE FUNCTION _sysinternal.get_field_from_record(
+CREATE OR REPLACE FUNCTION _sysinternal.get_time_field_from_record(
     field_name      NAME,
+    field_type      REGTYPE,
     copy_record     anyelement,
     copy_table_name TEXT
 )
@@ -91,8 +93,8 @@ DECLARE
 BEGIN
     EXECUTE format(
         $$
-            SELECT row.%I FROM (SELECT (%L::%s).*) as row LIMIT 1
-        $$, field_name, copy_record, copy_table_name)
+            SELECT %s FROM (SELECT (%L::%s).*) as row LIMIT 1
+        $$, _sysinternal.extract_time_sql(format('row.%I', field_name), field_type), copy_record, copy_table_name)
     INTO STRICT t;
 
     RETURN t;
@@ -119,6 +121,7 @@ DECLARE
     distinct_table_oid    REGCLASS;
     time_point            BIGINT;
     time_field_name_point NAME;
+    time_field_type_point REGTYPE;
     partition_id          INT;
     distinct_field        TEXT;
     distinct_clauses      TEXT;
@@ -127,18 +130,20 @@ BEGIN
     time_point := 1;
     EXECUTE format(
         $$
-            SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
+            SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'), h.time_field_name, h.time_field_type, p.id
             FROM ONLY %1$s ct
             LEFT JOIN hypertable h ON (h.NAME = %2$L)
             LEFT JOIN partition_epoch pe ON (
               pe.hypertable_name = %2$L AND
-              (pe.start_time <= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.start_time IS NULL) AND
-              (pe.end_time   >= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.end_time IS NULL)
+              (pe.start_time <= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint 
+                OR pe.start_time IS NULL) AND
+              (pe.end_time   >= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint 
+                OR pe.end_time IS NULL)
             )
             LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
             LIMIT 1
         $$, copy_table_oid, hypertable_name)
-    INTO STRICT time_point, time_field_name_point, partition_id;
+    INTO STRICT time_point, time_field_name_point, time_field_type_point, partition_id;
     IF time_point IS NOT NULL AND partition_id IS NULL THEN
         RAISE EXCEPTION 'Should never happen: could not find partition for insert'
         USING ERRCODE = 'IO501';
@@ -190,13 +195,15 @@ BEGIN
               WITH selected AS
               (
                   DELETE FROM ONLY %2$s
-                  WHERE (%7$I >= %3$L OR %3$L IS NULL) and (%7$I <= %4$L OR %4$L IS NULL)
+                  WHERE (%7$I >= %3$s OR %3$s IS NULL) and (%7$I <= %4$s OR %4$s IS NULL)
                   RETURNING *
               )%5$s
               INSERT INTO %1$s (%6$s) SELECT %6$s FROM selected;
           $$,
                 format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
-                copy_table_oid, crn_record.start_time, crn_record.end_time,
+                copy_table_oid, 
+                _sysinternal.time_literal_sql(crn_record.start_time, time_field_type_point),
+                _sysinternal.time_literal_sql(crn_record.end_time, time_field_type_point),
                 distinct_clauses,
                 _sysinternal.get_field_list(hypertable_name),
                 time_field_name_point);
@@ -204,18 +211,20 @@ BEGIN
 
         EXECUTE format(
             $$
-                SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'), h.time_field_name, p.id
+                SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'), h.time_field_name, h.time_field_type, p.id
                 FROM ONLY %1$s ct
                 LEFT JOIN hypertable h ON (h.NAME = %2$L)
                 LEFT JOIN partition_epoch pe ON (
                   pe.hypertable_name = %2$L AND
-                  (pe.start_time <= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.start_time IS NULL) AND
-                  (pe.end_time   >= (SELECT _sysinternal.get_field_from_record(h.time_field_name, ct, '%1$s'))::bigint OR pe.end_time IS NULL)
+                  (pe.start_time <= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint 
+                    OR pe.start_time IS NULL) AND
+                  (pe.end_time   >= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint 
+                    OR pe.end_time IS NULL)
                 )
                 LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
                 LIMIT 1
             $$, copy_table_oid, hypertable_name)
-        INTO time_point, time_field_name_point, partition_id;
+        INTO time_point, time_field_name_point, time_field_type_point, partition_id;
 
         IF time_point IS NOT NULL AND partition_id IS NULL THEN
             RAISE EXCEPTION 'Should never happen: could not find partition for insert'
