@@ -3,7 +3,6 @@ sql/common/tables.sql
 sql/common/cluster_setup_functions.sql
 sql/common/chunk.sql
 sql/common/hash_function.sql
-sql/meta/names.sql
 sql/meta/cluster.sql
 sql/meta/node_triggers.sql
 sql/meta/cluster_user_triggers.sql
