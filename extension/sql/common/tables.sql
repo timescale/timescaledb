@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS partition_epoch (
     hypertable_name    NAME   NOT NULL  REFERENCES hypertable (name),
     start_time         BIGINT NULL      CHECK (start_time > 0),
     end_time           BIGINT NULL      CHECK (end_time > 0),
-    partitioning_func  NAME   NOT NULL,
+    partitioning_func  NAME   NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
     partitioning_mod   INT    NOT NULL  CHECK (partitioning_mod < 65536),
     partitioning_field NAME   NOT NULL,
     UNIQUE (hypertable_name, start_time),
