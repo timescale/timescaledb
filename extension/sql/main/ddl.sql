@@ -1,4 +1,15 @@
---converts a regular postgres table to a hypertable.
+-- This file defines DDL functions for adding and manipulating hypertables.
+
+-- Converts a regular postgres table to a hypertable.
+--
+-- main_table - The OID of the table to be converted
+-- time_field_name - Name of the field that contains time for a given record
+-- partitioning_field - Name of the field to partition data by
+-- replication_factor -- (Optional) Number of replicas for data
+-- number_partitions - (Optional) Number of partitions for data
+-- associated_schema_name - (Optional) Schema for internal hypertable tables
+-- associated_table_prefix - (Optional) Prefix for internal hypertable table names
+-- hypertable_name - (Optional) Name for the hypertable, if different than the main table name
 CREATE OR REPLACE FUNCTION  add_hypertable(
     main_table              REGCLASS,
     time_field_name         NAME,
@@ -78,12 +89,10 @@ BEGIN
 END
 $BODY$;
 
-/*
-  sets the is_distinct flag for field on a hypertable. The is_distinct
-  flag determines whether the system keep a materialized list of
-  distinct values for the field.
-*/
-CREATE OR REPLACE FUNCTION  set_is_distinct_flag(
+-- Sets the is_distinct flag for field on a hypertable.
+-- The is_distinct flag determines whether the system keep a materialized list
+-- of distinct values for the field.
+CREATE OR REPLACE FUNCTION set_is_distinct_flag(
     main_table    REGCLASS,
     field_name    NAME,
     is_distinct   BOOLEAN
