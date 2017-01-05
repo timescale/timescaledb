@@ -32,11 +32,7 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
 \c Test1
 BEGIN;
-SELECT *
-FROM create_temp_copy_table('testNs', 'copy_t');
-\COPY copy_t FROM 'data/ds1_dev1_1.tsv' NULL AS '';
-SELECT *
-FROM insert_data('testNs', 'copy_t');
+\COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 
 SELECT close_chunk_end(c.id)

@@ -66,21 +66,7 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
 \c Test1
 BEGIN;
-SELECT *
-FROM create_temp_copy_table('testNs', 'copy_t');
- create_temp_copy_table 
-------------------------
- copy_t
-(1 row)
-
-\COPY copy_t FROM 'data/ds1_dev1_1.tsv' NULL AS '';
-SELECT *
-FROM insert_data('testNs', 'copy_t');
- insert_data 
--------------
- 
-(1 row)
-
+\COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 SELECT close_chunk_end(c.id)
 FROM get_open_partition_for_key('testNs', 'dev1') part
