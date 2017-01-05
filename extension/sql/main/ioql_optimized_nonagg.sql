@@ -13,6 +13,8 @@ DECLARE
     index                     INT = 0;
     previous_tables           TEXT = '';
     code                      TEXT = '';
+    time_col_name             NAME;
+    time_col_type             REGTYPE;
 
     query_sql_scan_base_table TEXT = '';
     query_sql_scan            TEXT = '';
@@ -20,7 +22,8 @@ DECLARE
     crn_row                   chunk_replica_node;
     partition_row             partition;
 BEGIN
-
+    time_col_name := get_time_field(query.namespace_name);
+    time_col_type := get_time_field_type(query.namespace_name);
 
     IF epoch.partitioning_field = (query.limit_by_field).field THEN
         SELECT *
@@ -67,10 +70,10 @@ BEGIN
         get_full_select_clause_nonagg(query),
         'FROM %1$s',
         get_where_clause(
-            get_time_predicate(query.time_condition)
+            get_time_predicate(time_col_name, time_col_type, query.time_condition)
         ),
         NULL,
-        'ORDER BY time DESC NULLS LAST',
+        format('ORDER BY %I DESC NULLS LAST', time_col_name),
         format('LIMIT (SELECT count(*) * %L FROM distinct_value)', (query.limit_by_field).count * 2)
     );
 
@@ -98,10 +101,10 @@ BEGIN
         get_where_clause(
             default_predicates(query, epoch),
             format('%1$I::text = dv_counts_min_time.value AND %1$I IS NOT NULL', (query.limit_by_field).field),
-            '(time < dv_counts_min_time.min_time OR dv_counts_min_time.min_time IS NULL)'
+            format('(%I < dv_counts_min_time.min_time OR dv_counts_min_time.min_time IS NULL)', time_col_name)
         ),
         get_groupby_clause(query.aggregate),
-        'ORDER BY time DESC NULLS LAST, ' || (query.limit_by_field).field,
+        'ORDER BY '||quote_ident(time_col_name)||' DESC NULLS LAST, ' || (query.limit_by_field).field,
         'LIMIT dv_counts_min_time.remaining_cnt');
 
     FOR crn_row IN SELECT *
@@ -116,7 +119,7 @@ BEGIN
                             FROM
                                 (
                                     SELECT
-                                        ROW_NUMBER() OVER (PARTITION BY %2$I ORDER BY time DESC NULLS LAST) as rank,
+                                        ROW_NUMBER() OVER (PARTITION BY %2$I ORDER BY %5$I DESC NULLS LAST) as rank,
                                     res.*
                                     FROM (%3$s) as res
                                 ) AS with_rank
@@ -126,7 +129,8 @@ BEGIN
                 get_full_select_clause_nonagg(query),
                 (query.limit_by_field).field,
                 format(query_sql_scan, format('%I.%I', crn_row.schema_name, crn_row.table_name)),
-                (query.limit_by_field).count
+                (query.limit_by_field).count,
+				time_col_name
             );
 
             previous_tables := 'SELECT * FROM result_scan';
@@ -138,7 +142,7 @@ BEGIN
                         SELECT original.value AS value, original.cnt - coalesce(existing.cnt, 0) as remaining_cnt, min_time as min_time
                         FROM distinct_value as original
                         LEFT JOIN (
-                            SELECT %1$s::text AS value, count(*) AS cnt, min(time) AS min_time
+                            SELECT %1$s::text AS value, count(*) AS cnt, min(%5$I) AS min_time
                             FROM (%2$s) AS previous_results
                             GROUP BY %1$s
                         ) as existing on (original.value = existing.value)
@@ -153,7 +157,8 @@ BEGIN
             (query.limit_by_field).field,
             previous_tables,
             index,
-            format(query_sql_jump, format('%I.%I', crn_row.schema_name, crn_row.table_name))
+            format(query_sql_jump, format('%I.%I', crn_row.schema_name, crn_row.table_name)),
+			time_col_name
         );
 
         previous_tables := previous_tables || format(' UNION ALL SELECT * FROM results_%s', index);
@@ -228,12 +233,12 @@ BEGIN
                 FROM
                 (
                     SELECT
-                        ROW_NUMBER() OVER (PARTITION BY %2$s ORDER BY time DESC NULLS LAST) as rank,
+                        ROW_NUMBER() OVER (PARTITION BY %2$s ORDER BY %7$I DESC NULLS LAST) as rank,
                         combined_node.*
                     FROM (%4$s) as combined_node
                 ) AS node_result
                 WHERE rank <= %5$L
-                ORDER BY time DESC NULLS LAST, %2$s
+                ORDER BY %7$I DESC NULLS LAST, %2$s
                 %6$s
             $$,
             get_result_column_def_list_nonagg(query),
@@ -241,7 +246,8 @@ BEGIN
             get_result_column_list_nonagg(query),
             string_agg(code_part, ' UNION ALL '),
             (query.limit_by_field).count,
-            get_limit_clause(query.limit_rows)
+            get_limit_clause(query.limit_rows),
+			get_time_field(query.namespace_name)
         )
         INTO STRICT code
         FROM
@@ -254,11 +260,12 @@ BEGIN
             $$
                 SELECT *
                 FROM  (%1$s) AS combined_node
-                ORDER BY time DESC NULLS LAST
+                ORDER BY %3$I DESC NULLS LAST
                 %2$s
             $$,
             string_agg(code_part, ' UNION ALL '),
-            get_limit_clause(query.limit_rows)
+            get_limit_clause(query.limit_rows),
+			get_time_field(query.namespace_name)
         )
         INTO STRICT code
         FROM

@@ -1,3 +1,4 @@
+
 CREATE OR REPLACE FUNCTION _sysinternal.lock_for_chunk_close(
     chunk_id INTEGER
 )
@@ -26,10 +27,14 @@ DECLARE
 BEGIN
     EXECUTE format(
         $$
-            SELECT max("time")
+            SELECT max(%s)
             FROM %I.%I
         $$,
-        schema_name, table_name)
+    _sysinternal.extract_time_sql(
+        format('%I', _sysinternal.time_col_name_for_crn(schema_name, table_name)),
+        _sysinternal.time_col_type_for_crn(schema_name, table_name)
+    ), 
+    schema_name, table_name)
     INTO max_time;
 
     RETURN max_time;

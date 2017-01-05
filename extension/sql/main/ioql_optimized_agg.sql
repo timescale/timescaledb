@@ -26,13 +26,13 @@ SELECT CASE
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_partial_aggregate_sql(items select_item [], agg aggregate_type)
+CREATE OR REPLACE FUNCTION get_partial_aggregate_sql(time_col_name NAME, time_col_type regtype, items select_item [], agg aggregate_type)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN agg.group_field IS NOT NULL THEN
-           format('%s, %s as group_time, %s', agg.group_field, get_time_clause(agg.group_time), field_list)
+           format('%s, %s as group_time, %s', agg.group_field, get_time_clause(time_col_name, time_col_type, agg.group_time), field_list)
        ELSE
-           format('%s as group_time, %s', get_time_clause(agg.group_time), field_list)
+           format('%s as group_time, %s', get_time_clause(time_col_name, time_col_type, agg.group_time), field_list)
        END
 FROM
     (
@@ -104,13 +104,13 @@ SELECT CASE
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_zero_value_sql(items select_item [], agg aggregate_type)
+CREATE OR REPLACE FUNCTION get_combine_partial_aggregate_zero_value_sql(time_col_type regtype, items select_item [], agg aggregate_type)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN agg.group_field IS NOT NULL THEN
-           format('NULL::text as %s, NULL::bigint as group_time, %s', agg.group_field, field_list)
+           format('NULL::text as %s, NULL::%s as group_time, %s', agg.group_field, time_col_type, field_list)
        ELSE
-           format('NULL::bigint as group_time, %s', field_list)
+           format('NULL::%s as group_time, %s', time_col_type, field_list)
        END
 FROM
     (
@@ -145,11 +145,12 @@ CREATE OR REPLACE FUNCTION get_partial_aggregate_column_def(query ioql_query)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN (query.aggregate).group_field IS NOT NULL THEN
-           format('%I %s, group_time bigint, %s', (query.aggregate).group_field,
+           format('%I %s, group_time %s, %s', (query.aggregate).group_field,
                   get_field_type(query.namespace_name, (query.aggregate).group_field),
+                  get_time_field_type(query.namespace_name),
                   field_list)
        ELSE
-           format('group_time bigint, %s', field_list)
+           format('group_time %s, %s',  get_time_field_type(query.namespace_name), field_list)
        END
 FROM
     (
@@ -216,7 +217,7 @@ DECLARE
 BEGIN
 
     select_clause :=
-    'SELECT ' || get_partial_aggregate_sql(query.select_items, query.aggregate);
+    'SELECT ' || get_partial_aggregate_sql(get_time_field(query.namespace_name), get_time_field_type(query.namespace_name), query.select_items, query.aggregate);
 
     RETURN base_query_raw(
         select_clause,
@@ -390,7 +391,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_max_time_on_partition(part_replica partition_replica, additional_constraints TEXT)
+CREATE OR REPLACE FUNCTION get_max_time_on_partition(time_col_name NAME, time_col_type regtype, part_replica partition_replica, additional_constraints TEXT)
     RETURNS BIGINT AS
 $BODY$
 DECLARE
@@ -404,12 +405,12 @@ BEGIN
     FROM get_local_chunk_replica_node_for_pr_time_desc(part_replica) LOOP
         EXECUTE format(
             $$
-                SELECT time
-                FROM %I.%I
-                %s
+                SELECT %1$s AS time
+                FROM %2$I.%3$I
+                %4$s
                 ORDER BY time DESC NULLS LAST
                 LIMIT 1
-            $$, crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
+            $$,  _sysinternal.extract_time_sql(format('%I',time_col_name), time_col_type), crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
         INTO time;
 
         IF time IS NOT NULL THEN
@@ -434,7 +435,7 @@ SELECT format('SELECT * FROM (%s) as combined_node ',
               coalesce(
                   string_agg(code_part, ' UNION ALL '),
                   format('SELECT %s WHERE FALSE',
-                         get_combine_partial_aggregate_zero_value_sql(query.select_items, query.aggregate))
+                         get_combine_partial_aggregate_zero_value_sql(get_time_field_type(query.namespace_name), query.select_items, query.aggregate))
               ))
 -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
 FROM
@@ -458,7 +459,7 @@ $BODY$
 SELECT (get_time_periods_limit_for_max(max_time.max_time, period_length, num_periods)).*
 FROM
     (
-        SELECT max(get_max_time_on_partition(pr, additional_constraints)) AS max_time
+        SELECT max(get_max_time_on_partition(get_time_field(epoch.hypertable_name),get_time_field_type(epoch.hypertable_name),pr, additional_constraints)) AS max_time
         FROM get_partition_replicas(epoch, replica_id) pr
     ) AS max_time
 $BODY$;
@@ -473,15 +474,21 @@ DECLARE
     trange        time_range;
     ungrouped_sql TEXT;
     grouped_sql   TEXT;
+    time_col_type regtype;
 BEGIN
     IF query.limit_time_periods IS NOT NULL THEN
+        time_col_type := get_time_field_type(query.namespace_name);
         trange := get_time_periods_limit(epoch,
                                          replica_id, 
                                          combine_predicates(default_predicates(query, epoch), additional_constraints),
                                          (query.aggregate).group_time,
                                          query.limit_time_periods);
         additional_constraints := combine_predicates(
-            format('time >= %L AND time <=%L', trange.start_time, trange.end_time),
+            format('%1$I >= %2$s AND %1$I <=%3$s', 
+              get_time_field(query.namespace_name),  
+              _sysinternal.time_literal_sql(trange.start_time, time_col_type), 
+              _sysinternal.time_literal_sql(trange.end_time, time_col_type)
+            ),
             additional_constraints);
     END IF;
 
