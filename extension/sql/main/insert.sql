@@ -190,6 +190,7 @@ BEGIN
                 distinct_clause_idx := distinct_clause_idx + 1;
             END LOOP;
 
+            PERFORM set_config('io.ignore_delete_in_trigger', 'true', true);
             EXECUTE format(
                 $$
               WITH selected AS

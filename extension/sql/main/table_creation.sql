@@ -31,24 +31,6 @@ BEGIN
 END
 $BODY$;
 
--- Trigger function to move INSERT'd data on the main table to child tables.
--- After data is inserted on the main table, it is placed in the correct
--- partition tables based on its partition key and time.
-CREATE OR REPLACE FUNCTION _sysinternal.on_main_table_insert()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            SELECT insert_data(
-                (SELECT name FROM hypertable
-                WHERE main_schema_name = %1$L AND main_table_name = %2$L)
-                , %3$L)
-        $$, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_RELID);
-    RETURN NEW;
-END
-$BODY$;
-
 -- Creates a root distinct table for a hypertable.
 CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
     schema_name NAME,
