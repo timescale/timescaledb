@@ -1,6 +1,5 @@
 \ir ../../meta/cluster.sql
 \ir ../../meta/node_triggers.sql
-\ir ../../meta/cluster_user_triggers.sql
 \ir ../../meta/chunk_triggers.sql
 \ir ../../meta/chunk_replica_node_triggers.sql
 \ir ../../meta/default_replica_node.sql

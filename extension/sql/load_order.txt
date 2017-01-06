@@ -5,7 +5,6 @@ sql/common/chunk.sql
 sql/common/hash_function.sql
 sql/meta/cluster.sql
 sql/meta/node_triggers.sql
-sql/meta/cluster_user_triggers.sql
 sql/meta/chunk_triggers.sql
 sql/meta/chunk_replica_node_triggers.sql
 sql/meta/default_replica_node.sql
