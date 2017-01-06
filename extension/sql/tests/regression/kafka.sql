@@ -1,6 +1,9 @@
 \set ON_ERROR_STOP 1
 
-\ir create_clustered_db.sql
+\o /dev/null
+\ir include/create_clustered_db.sql
+
+\o
 \c Test1
 \ir ../../setup/sql/load_kafka.sql
 select setup_kafka();

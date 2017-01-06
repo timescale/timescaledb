@@ -1,13 +1,31 @@
+\ir include/insert.sql
+\set ON_ERROR_STOP 1
+\ir create_clustered_db.sql
+DROP DATABASE IF EXISTS meta;
+DROP DATABASE IF EXISTS "Test1";
+DROP DATABASE IF EXISTS test2;
+CREATE DATABASE meta;
+CREATE DATABASE "Test1";
+CREATE DATABASE test2;
+\c meta
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+select setup_meta();
  setup_meta 
 ------------
  
 (1 row)
 
+\c Test1
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+select setup_main();
  setup_main 
 ------------
  
 (1 row)
 
+\c test2
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+select setup_main();
  setup_main 
 ------------
  

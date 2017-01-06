@@ -1,7 +1,10 @@
 \set ON_ERROR_STOP 1
 
-\ir insert.sql
+\o /dev/null
+\ir include/insert.sql
 
+\o
+\set ECHO ALL
 \c Test1
 
 SELECT *

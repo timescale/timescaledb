@@ -1,7 +1,9 @@
 \set ON_ERROR_STOP 1
 
-\ir create_clustered_db.sql
+\o /dev/null
+\ir include/create_clustered_db.sql
 
+\o
 \set ECHO ALL
 \c meta
 SELECT add_cluster_user('postgres', NULL);

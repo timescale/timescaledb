@@ -1,18 +1,3 @@
- setup_meta 
-------------
- 
-(1 row)
-
- setup_main 
-------------
- 
-(1 row)
-
- setup_main 
-------------
- 
-(1 row)
-
  setup_kafka 
 -------------
  

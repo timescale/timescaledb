@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP 1
 
-\ir create_clustered_db.sql
+\ir include/create_clustered_db.sql
 
 \set ECHO ALL
 \c meta

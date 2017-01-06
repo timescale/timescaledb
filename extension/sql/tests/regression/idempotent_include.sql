@@ -1,7 +1,9 @@
 \set ON_ERROR_STOP 1
 
-\ir create_clustered_db.sql
+\o /dev/null
+\ir include/create_clustered_db.sql
 
+\o
 \c meta
 \ir ../../setup/sql/load_common.sql
 \ir ../../setup/sql/load_meta.sql
