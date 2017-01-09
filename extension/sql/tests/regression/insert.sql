@@ -3,6 +3,7 @@
 \set ECHO ALL
 \ir include/insert.sql
 
+
 \c Test1
 \d+ "testNs".*
 

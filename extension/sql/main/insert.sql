@@ -117,20 +117,20 @@ CREATE OR REPLACE FUNCTION insert_data(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    crn_record            RECORD;
-    distinct_table_oid    REGCLASS;
-    time_point            BIGINT;
-    time_field_name_point NAME;
-    time_field_type_point REGTYPE;
-    partition_id          INT;
-    distinct_field        TEXT;
-    distinct_clauses      TEXT;
-    distinct_clause_idx   INT;
+    point_record_query_sql      TEXT;
+    point_record                RECORD;
+    crn_record                  RECORD;
+    distinct_table_oid          REGCLASS;
+    distinct_field              TEXT;
+    distinct_clauses            TEXT;
+    distinct_clause_idx         INT;
 BEGIN
-    time_point := 1;
-    EXECUTE format(
+     point_record_query_sql := format(
         $$
-            SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'), h.time_field_name, h.time_field_type, p.id
+            SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s') AS time, 
+                   h.time_field_name, h.time_field_type, 
+                   p.id AS partition_id, p.keyspace_start, p.keyspace_end,
+                   pe.partitioning_func, pe.partitioning_field, pe.partitioning_mod
             FROM ONLY %1$s ct
             LEFT JOIN hypertable h ON (h.NAME = %2$L)
             LEFT JOIN partition_epoch pe ON (
@@ -142,14 +142,17 @@ BEGIN
             )
             LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
             LIMIT 1
-        $$, copy_table_oid, hypertable_name)
-    INTO STRICT time_point, time_field_name_point, time_field_type_point, partition_id;
-    IF time_point IS NOT NULL AND partition_id IS NULL THEN
+        $$, copy_table_oid, hypertable_name);
+
+    EXECUTE point_record_query_sql
+    INTO STRICT point_record;
+    
+    IF point_record.time IS NOT NULL AND point_record.partition_id IS NULL THEN
         RAISE EXCEPTION 'Should never happen: could not find partition for insert'
         USING ERRCODE = 'IO501';
     END IF;
 
-    WHILE time_point IS NOT NULL LOOP
+    WHILE point_record.time IS NOT NULL LOOP
         FOR crn_record IN
         SELECT
             crn.database_name,
@@ -159,7 +162,7 @@ BEGIN
             c.end_time,
             pr.hypertable_name,
             pr.replica_id
-        FROM get_or_create_chunk(partition_id, time_point) c
+        FROM get_or_create_chunk(point_record.partition_id, point_record.time) c
         INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
         INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
         LOOP
@@ -196,38 +199,31 @@ BEGIN
               WITH selected AS
               (
                   DELETE FROM ONLY %2$s
-                  WHERE (%7$I >= %3$s OR %3$s IS NULL) and (%7$I <= %4$s OR %4$s IS NULL)
+                  WHERE (%7$I >= %3$s OR %3$s IS NULL) AND (%7$I <= %4$s OR %4$s IS NULL) AND
+                        (%8$s(%9$I, %10$L) BETWEEN %11$L AND %12$L)
                   RETURNING *
               )%5$s
               INSERT INTO %1$s (%6$s) SELECT %6$s FROM selected;
           $$,
                 format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
                 copy_table_oid, 
-                _sysinternal.time_literal_sql(crn_record.start_time, time_field_type_point),
-                _sysinternal.time_literal_sql(crn_record.end_time, time_field_type_point),
+                _sysinternal.time_literal_sql(crn_record.start_time, point_record.time_field_type),
+                _sysinternal.time_literal_sql(crn_record.end_time, point_record.time_field_type),
                 distinct_clauses,
                 _sysinternal.get_field_list(hypertable_name),
-                time_field_name_point);
+                point_record.time_field_name,
+                point_record.partitioning_func,
+                point_record.partitioning_field,
+                point_record.partitioning_mod,
+                point_record.keyspace_start,
+                point_record.keyspace_end
+              );
         END LOOP;
 
-        EXECUTE format(
-            $$
-                SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'), h.time_field_name, h.time_field_type, p.id
-                FROM ONLY %1$s ct
-                LEFT JOIN hypertable h ON (h.NAME = %2$L)
-                LEFT JOIN partition_epoch pe ON (
-                  pe.hypertable_name = %2$L AND
-                  (pe.start_time <= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint 
-                    OR pe.start_time IS NULL) AND
-                  (pe.end_time   >= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint 
-                    OR pe.end_time IS NULL)
-                )
-                LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
-                LIMIT 1
-            $$, copy_table_oid, hypertable_name)
-        INTO time_point, time_field_name_point, time_field_type_point, partition_id;
+        EXECUTE point_record_query_sql
+        INTO point_record;
 
-        IF time_point IS NOT NULL AND partition_id IS NULL THEN
+        IF point_record.time IS NOT NULL AND point_record.partition_id IS NULL THEN
             RAISE EXCEPTION 'Should never happen: could not find partition for insert'
             USING ERRCODE = 'IO501';
         END IF;
