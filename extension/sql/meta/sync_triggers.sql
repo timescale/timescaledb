@@ -1,3 +1,9 @@
+-- This file contains triggers to keep meta tables on data nodes in sync.
+-- Each data node has a schema on the meta node with copies of the tables that
+-- need to be kept in sync. These triggers update those tables "locally", which
+-- are actually FDW to the remote tables.
+
+-- Trigger to sync inserts on meta node to data nodes.
 CREATE OR REPLACE FUNCTION _sysinternal.sync_insert()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
@@ -21,16 +27,16 @@ BEGIN
 END
 $BODY$;
 
-
+-- Trigger to sync updates on meta node to data nodes.
 CREATE OR REPLACE FUNCTION _sysinternal.sync_update()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     schema_name NAME;
     primary_key_sql TEXT;
-    update_col_sql TEXT; 
+    update_col_sql TEXT;
 BEGIN
-    --primary key sql goes into the where clause 
+    --primary key sql goes into the where clause
     SELECT string_agg(format('%1$I = $1.%1$I', a.attname), ' AND ') INTO primary_key_sql
     FROM   pg_index i
     JOIN   pg_attribute a ON a.attrelid = i.indrelid
@@ -40,10 +46,10 @@ BEGIN
 
     --update_col_sql goes into the set clause
     SELECT string_agg(format('%1$I = $2.%1$I', a.attname), ', ') INTO update_col_sql
-    FROM   pg_attribute a 
+    FROM   pg_attribute a
     WHERE  a.attrelid = TG_RELID::regclass
     AND    a.attnum > 0;
-    
+
     FOR schema_name IN
     SELECT n.schema_name
     FROM node AS n
@@ -63,7 +69,7 @@ BEGIN
 END
 $BODY$;
 
-
+-- Trigger to sync deletes on meta node to data nodes.
 CREATE OR REPLACE FUNCTION _sysinternal.sync_delete()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
@@ -71,7 +77,7 @@ DECLARE
     schema_name NAME;
     primary_key_sql TEXT;
 BEGIN
-    --primary key sql goes into the where clause 
+    --primary key sql goes into the where clause
     SELECT string_agg(format('%1$I = $1.%1$I', a.attname), ' AND ') INTO primary_key_sql
     FROM   pg_index i
     JOIN   pg_attribute a ON a.attrelid = i.indrelid
@@ -96,6 +102,3 @@ BEGIN
     RETURN OLD;
 END
 $BODY$;
-
-
-

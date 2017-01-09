@@ -1,3 +1,4 @@
+-- Trigger on the meta node for when a new hypertable is added.
 CREATE OR REPLACE FUNCTION _meta.on_create_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
@@ -20,7 +21,7 @@ BEGIN
 
     PERFORM _meta.assign_default_replica_node(n.database_name, NEW.name)
     FROM node n;
-    
+
     RETURN NEW;
 END
 $BODY$;

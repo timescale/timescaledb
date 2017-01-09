@@ -1,3 +1,5 @@
+
+-- Sets a database and hostname as a meta node.
 CREATE OR REPLACE FUNCTION set_meta(
     database_name NAME,
     hostname      TEXT
@@ -24,6 +26,7 @@ BEGIN
 END
 $BODY$;
 
+-- Adds a new node to the cluster, with its database name and hostname.
 CREATE OR REPLACE FUNCTION add_node(
     database_name NAME,
     hostname      TEXT
@@ -40,6 +43,7 @@ BEGIN
 END
 $BODY$;
 
+-- Adds new user credentials for the cluster.
 CREATE OR REPLACE FUNCTION add_cluster_user(
     username TEXT,
     password TEXT

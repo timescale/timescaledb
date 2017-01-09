@@ -1,8 +1,6 @@
 CREATE SEQUENCE IF NOT EXISTS default_hypertable_seq;
 
-/*
-  Creates a hypertable.
-*/
+-- Creates a hypertable.
 CREATE OR REPLACE FUNCTION _meta.add_hypertable(
     main_schema_name        NAME,
     main_table_name         NAME,
@@ -74,7 +72,7 @@ BEGIN
 END
 $BODY$;
 
---Adds a column to a hypertable
+-- Adds a column to a hypertable
 CREATE OR REPLACE FUNCTION _meta.add_field(
     hypertable_name NAME,
     field_name      NAME,
@@ -94,7 +92,7 @@ VALUES (hypertable_name, field_name, attnum, data_type, default_value, not_null,
 ON CONFLICT DO NOTHING;
 $BODY$;
 
---Drps a colum from a hypertable
+-- Drops a column from a hypertable
 CREATE OR REPLACE FUNCTION _meta.drop_field(
     hypertable_name NAME,
     field_name      NAME,
@@ -107,7 +105,7 @@ DELETE FROM field f
 WHERE f.hypertable_name = drop_field.hypertable_name AND f.NAME = field_name;
 $BODY$;
 
---Sets the is_distinct flag for a field on a hypertable.
+-- Sets the is_distinct flag for a field on a hypertable.
 CREATE OR REPLACE FUNCTION _meta.alter_column_set_is_distinct(
     hypertable_name   NAME,
     field_name        NAME,
@@ -121,7 +119,7 @@ SET is_distinct = new_is_distinct, modified_on = modified_on_node
 WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = field_name;
 $BODY$;
 
---Sets the default for a column on a hypertable.
+-- Sets the default for a column on a hypertable.
 CREATE OR REPLACE FUNCTION _meta.alter_column_set_default(
     hypertable_name   NAME,
     field_name        NAME,
@@ -135,7 +133,7 @@ SET default_value = new_default_value, modified_on = modified_on_node
 WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = field_name;
 $BODY$;
 
---Sets the not null flag for a column on a hypertable.
+-- Sets the not null flag for a column on a hypertable.
 CREATE OR REPLACE FUNCTION _meta.alter_column_set_not_null(
     hypertable_name   NAME,
     field_name        NAME,
@@ -149,7 +147,7 @@ SET not_null = new_not_null, modified_on = modified_on_node
 WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = field_name;
 $BODY$;
 
---Renames the column on a hypertable
+-- Renames the column on a hypertable
 CREATE OR REPLACE FUNCTION _meta.alter_table_rename_column(
     hypertable_name   NAME,
     old_field_name    NAME,
@@ -163,7 +161,7 @@ SET NAME = new_field_name, modified_on = modified_on_node
 WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old_field_name;
 $BODY$;
 
---Add an index to a hypertable
+-- Add an index to a hypertable
 CREATE OR REPLACE FUNCTION _meta.add_index(
     hypertable_name NAME,
     main_schema_name NAME,
@@ -178,7 +176,7 @@ VALUES (hypertable_name, main_schema_name, main_index_name, definition, created_
 ON CONFLICT DO NOTHING;
 $BODY$;
 
---Drops the index for a hypertable
+-- Drops the index for a hypertable
 CREATE OR REPLACE FUNCTION _meta.drop_index(
     main_schema_name NAME,
     main_index_name NAME,
