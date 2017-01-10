@@ -1,4 +1,10 @@
---data nodes
+-- This file contains table definitions for various abstractions and data
+-- structures for representing hypertables and lower level concepts.
+
+-- Data node information for the cluster. database_name is the postgres database
+-- located on at hostname. server_name is used to identify the connection.
+-- schema_name is the name of the schema used to represent the node on the meta
+-- node (it stores remote wrappers to update meta tables on data nodes).
 CREATE TABLE IF NOT EXISTS node (
     database_name NAME    NOT NULL PRIMARY KEY,
     schema_name   NAME    NOT NULL UNIQUE, --public schema of remote
@@ -8,7 +14,7 @@ CREATE TABLE IF NOT EXISTS node (
     id            SERIAL  NOT NULL UNIQUE -- id for node. used in naming
 );
 
---singleton holding info about meta db.
+-- Singleton (i.e. should only contain one row) holding info about meta db.
 CREATE TABLE IF NOT EXISTS meta (
     database_name NAME NOT NULL PRIMARY KEY,
     hostname      TEXT NOT NULL,
@@ -17,19 +23,29 @@ CREATE TABLE IF NOT EXISTS meta (
 CREATE UNIQUE INDEX there_can_be_only_one_meta
     ON meta ((1));
 
---these users should exist an all nodes+meta in the cluster.
+-- Users should exist an all nodes+meta in the cluster.
 CREATE TABLE IF NOT EXISTS cluster_user (
     username TEXT NOT NULL PRIMARY KEY,
     password TEXT NULL --not any more of a security hole than usual since stored in  pg_user_mapping anyway
 );
 
---The hypertable is an abstraction that represents a replicated table that is partition on 2 dimensions.
---One of the dimensions is time, the other is arbitrary.
---This abstraction also tracks the distinct value set of any columns marked as `distinct`.
---Each row creates 3 tables:
---    i) main table is just an alias to the 0'th replica for now. Represents the hypertable to the user.
---    ii) root table is the ancesstor of all the data tables (across replicas). Should not be queryable for data (TODO).
---    iii) distinct root table is the ancestor of all distinct tables (across replicas).  Should not be queryable for data (TODO).
+-- The hypertable is an abstraction that represents a replicated table that is
+-- partitioned on 2 dimensions: time and another (user-)chosen one.
+-- This abstraction also tracks the distinct value set of any columns marked as `distinct`.
+--
+-- Each row, representing a hypertable, creates 3 tables:
+--    1) main table - an alias to the 0'th replica for now. Represents the
+--       hypertable to the user for insertion and modification.
+--    2) root table - ancesstor of all the data tables (across replicas).
+--       Should not be queryable for data (TODO).
+--    3) distinct root table - ancestor of all distinct tables (across replicas).
+--       Should not be queryable for data (TODO).
+--
+-- Additionally, a schema for associated tables (partitioned, replicated data
+-- tables) is created.
+--
+-- The name and type of the time field (used to partition on time) are defined
+-- in `time_field_name` and `time_field_type`.
 CREATE TABLE IF NOT EXISTS hypertable (
     name                    NAME                  NOT NULL PRIMARY KEY CHECK (name NOT LIKE '\_%'),
     main_schema_name        NAME                  NOT NULL,
@@ -50,14 +66,18 @@ CREATE TABLE IF NOT EXISTS hypertable (
     UNIQUE (root_schema_name, root_table_name)
 );
 
---This represents one replica of the data across all partitions and time.
---Each row creates 2 tables:
---   i)  data replica table (schema_name.table_name)
---       parent is the hypertable root table.
---       childen are the partition_replica tables.
---   ii) distinct replica tables (distinct_schema_name.distinct_table_name)
---       parent is the hypertable distinct root table.
---       childen are created by distinct_replica_node table.
+-- hypertable_replica contains information on how a hypertable's data replicas
+-- are stored. A replica of the data is across all partitions and time.
+--
+-- Each row identifies 2 tables for each hypertable + replica_id combination:
+--   1) data replica table (schema_name.table_name) -
+--      All the data for a hypertable.
+--      Parent: hypertable's `root table`
+--      Children: hypertable's `partition_replica` tables
+--   2) distinct replica tables (distinct_schema_name.distinct_table_name) -
+--      Distinct values in a hypertable.
+--      Parent: hypertable's `distinct root table`
+--      Children: created by `distinct_replica_node` table
 CREATE TABLE IF NOT EXISTS hypertable_replica (
     hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name),
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
@@ -69,9 +89,10 @@ CREATE TABLE IF NOT EXISTS hypertable_replica (
     UNIQUE (schema_name, table_name)
 );
 
---mapping that shows which replica is pointed to by the main table, for each node.
---the translation from main table to replica should happens in C tranformation
---right after the parsing step. (RULES cannot be used, unfortunately)
+-- Mapping that shows which replica is pointed to by the main table on
+-- each node. The translation from main table to replica should happen
+-- in C tranformation right after the parsing step.
+-- (Postgres RULES cannot be used, unfortunately)
 CREATE TABLE IF NOT EXISTS default_replica_node (
     database_name        NAME NOT NULL  REFERENCES node (database_name),
     hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name),
@@ -99,9 +120,16 @@ CREATE TABLE IF NOT EXISTS distinct_replica_node (
     FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
 );
 
---A partition epoch represents a different partitioning of the data.
---It has a start and end time (data time). Data needs to be placed in the correct epoch by time.
---This should change very infrequently. Expensive to start new epoch.
+-- A partition_epoch represents a different partitioning of the data.
+-- It has a start and end time (data time). Data needs to be placed in the correct epoch by time.
+-- Partitionings are defined by a function, field, and modulo:
+--   1) partitioning_func - Takes the partitioning_field and returns a number
+--      which is modulo'd to place the data correctly
+--   2) partitioning_mod - Number used in modulo operation
+--   3) partitioning_field - Field in data to partition by (input to partitioning_func)
+--
+-- Changing a data's partitioning, and thus creating a new epoch, should be done
+-- INFREQUENTLY as it's expensive operation.
 CREATE TABLE IF NOT EXISTS partition_epoch (
     id                 SERIAL NOT NULL  PRIMARY KEY,
     hypertable_name    NAME   NOT NULL  REFERENCES hypertable (name),
@@ -115,9 +143,10 @@ CREATE TABLE IF NOT EXISTS partition_epoch (
     CHECK (start_time < end_time)
 );
 
--- A partition defines a partition in a partition_epoch.
--- For any partition the keyspace is defined as [0, partition_epoch.partitioning_mod]
--- For any epoch, there must be a partition that covers every element in the keyspace.
+-- A partition defines a partition witin a partition_epoch.
+-- For any partition the keyspace is defined as [keyspace_start, keyspace_end].
+-- For any epoch, there must be a partition that covers every element in the
+-- keyspace, i.e. from [0, partition_epoch.partitioning_mod].
 CREATE TABLE IF NOT EXISTS partition (
     id             SERIAL   NOT NULL PRIMARY KEY,
     epoch_id       INT      NOT NULL REFERENCES partition_epoch (id),
@@ -144,8 +173,17 @@ CREATE TABLE IF NOT EXISTS partition_replica (
     FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
 );
 
--- Represent a chunk of data
--- i.e. data for a particular hypername-partition for a particular time.
+-- Represent a (replicated) chunk of data, which is data in a hypertable that is
+-- both partitioned by both the partition_field and time.
+--
+-- For each partition, there can be 0 or more chunks, which are replicated.
+-- At most two chunks per partition are "open-ended", i.e. having a NULL
+-- start_time or a NULL end_time. A NULL start_time means the chunk has
+-- data from the beginning of time until end_time. A NULL end_time means the
+-- chunk has data from start_time until the end of time. Only when there is
+-- one chunk for a partition can it be open-ended on BOTH start_time and end_time.
+--
+-- TODO(erik) - Describe conditions of closure.
 CREATE TABLE IF NOT EXISTS chunk (
     id           SERIAL NOT NULL    PRIMARY KEY,
     partition_id INT    NOT NULL    REFERENCES partition (id),
@@ -156,10 +194,12 @@ CREATE TABLE IF NOT EXISTS chunk (
     CHECK (start_time < end_time)
 );
 
---A mapping between chunks, partition_replica, and node.
---This represents the table where actual data is stored.
---Each row represents a table:
---  Parent table: "partition_replica.schema_name"."partition_replica.table_name"
+-- A mapping between chunks, partition_replica, and nodes representing where
+-- actual data is stored. That is, a chunk_replica_node is a particular
+-- replication instance of a chunk.
+--
+-- Each row represents a table:
+--   Parent table: "partition_replica.schema_name"."partition_replica.table_name"
 CREATE TABLE IF NOT EXISTS chunk_replica_node (
     chunk_id             INT  NOT NULL  REFERENCES chunk (id),
     partition_replica_id INT  NOT NULL  REFERENCES partition_replica (id),
@@ -171,8 +211,7 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
     UNIQUE (schema_name, table_name)
 );
 
---Represents a hypertable field.
---TODO: remove is_partitioning. defined in partition_epoch table.
+-- Represents a hypertable field.
 CREATE TABLE IF NOT EXISTS field (
     hypertable_name NAME                NOT NULL REFERENCES hypertable (name),
     name            NAME                NOT NULL,
@@ -187,6 +226,7 @@ CREATE TABLE IF NOT EXISTS field (
     UNIQUE(hypertable_name, attnum)
 );
 
+-- TODO(mat) - Description?
 CREATE TABLE IF NOT EXISTS deleted_field (
   LIKE field,
   deleted_on NAME
@@ -202,6 +242,7 @@ CREATE TABLE IF NOT EXISTS hypertable_index (
     UNIQUE(main_schema_name, main_index_name) --globally unique since index names globally unique
 );
 
+-- TODO(mat) - Description?
 CREATE TABLE IF NOT EXISTS deleted_hypertable_index (
   LIKE hypertable_index,
   deleted_on NAME

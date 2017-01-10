@@ -1,3 +1,6 @@
+-- This file contains functions related to getting information about the
+-- schema of a hypertable, including fields, their types, etc.
+
 CREATE OR REPLACE FUNCTION get_distinct_table_oid(
     hypertable_name NAME,
     replica_id      SMALLINT,
@@ -37,7 +40,7 @@ $BODY$;
 
 -- Get the type of the time column for a hypertable.
 --
--- hypertable_name - name of the hypertable.
+-- hypertable_name - Name of the hypertable.
 CREATE OR REPLACE FUNCTION get_time_field_type(
     hypertable_name NAME
 )
@@ -49,7 +52,9 @@ $BODY$
 $BODY$;
 
 
-
+-- Get the list of fields for a hypertable as an ARRAY
+--
+-- hypertable_name - Name of the hypertable
 CREATE OR REPLACE FUNCTION get_field_names(
     hypertable_name NAME
 )
@@ -63,6 +68,9 @@ SELECT ARRAY(
 );
 $BODY$;
 
+-- Get the list of fields (each quoted) from a hypertable as an ARRAY
+--
+-- hypertable_name -- Name of the hypertable
 CREATE OR REPLACE FUNCTION get_quoted_field_names(
     hypertable_name NAME
 )
@@ -76,6 +84,10 @@ SELECT ARRAY(
 );
 $BODY$;
 
+-- Get a table of fields and their types for a hypertable
+--
+-- hypertable_name - Name of the hypertable
+-- field_names - Name of the fields to fetch types for
 CREATE OR REPLACE FUNCTION get_field_names_and_types(
     hypertable_name NAME,
     field_names     NAME []
@@ -114,6 +126,10 @@ BEGIN
 END
 $BODY$;
 
+-- Get the Postgres datatype of a field in a hypertable
+--
+-- hypertable_name - Name of the hypertable
+-- field_name - Name of the field whose type is wanted
 CREATE OR REPLACE FUNCTION get_field_type(
     hypertable_name NAME,
     field_name      NAME
@@ -147,9 +163,9 @@ DECLARE
 BEGIN
     EXECUTE format($$
     SELECT  p.*
-    FROM  partition p 
+    FROM  partition p
     WHERE p.epoch_id = %L AND
-    %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end 
+    %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end
   $$,
                    epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
     INTO STRICT partition_row;
@@ -171,29 +187,27 @@ WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
       end_time IS NULL
 $BODY$;
 
-
-
-
+-- Check if a given table OID is a main table for a hypertable
 CREATE OR REPLACE FUNCTION is_main_table(
     table_oid regclass
 )
     RETURNS bool LANGUAGE SQL STABLE AS
 $BODY$
   SELECT EXISTS(SELECT 1 FROM hypertable WHERE main_table_name = relname AND main_schema_name = nspname)
-  FROM pg_class c 
+  FROM pg_class c
   INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
   WHERE c.OID = table_oid;
 $BODY$;
 
 
-
+-- Get a hypertable given its main table OID
 CREATE OR REPLACE FUNCTION hypertable_from_main_table(
     table_oid regclass
 )
     RETURNS hypertable LANGUAGE SQL STABLE AS
 $BODY$
   SELECT h.*
-  FROM pg_class c 
+  FROM pg_class c
   INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
   INNER JOIN hypertable h ON (h.main_table_name = c.relname AND h.main_schema_name = n.nspname)
   WHERE c.OID = table_oid;
@@ -213,7 +227,7 @@ DECLARE
 BEGIN
     SELECT h.time_field_name INTO STRICT time_col_name
     FROM hypertable h
-    INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)  
+    INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)
     INNER JOIN partition p ON (p.epoch_id = pe.id)
     INNER JOIN chunk c ON (c.partition_id = p.id)
     INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
@@ -237,7 +251,7 @@ DECLARE
 BEGIN
     SELECT h.time_field_type INTO STRICT time_col_type
     FROM hypertable h
-    INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)  
+    INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)
     INNER JOIN partition p ON (p.epoch_id = pe.id)
     INNER JOIN chunk c ON (c.partition_id = p.id)
     INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
@@ -246,4 +260,3 @@ BEGIN
     RETURN time_col_type;
 END
 $BODY$;
-
