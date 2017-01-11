@@ -27,6 +27,7 @@ golden_test cluster.sql cluster.out
 golden_test kafka.sql kafka.out
 golden_test insert.sql insert.out
 golden_test ioql_query.sql ioql_query.out
+golden_test sql_query.sql sql_query.out
 golden_test ddl.sql ddl.out
 golden_test timestamp.sql timestamp.out
 echo "Success"
