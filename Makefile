@@ -1,20 +1,28 @@
 
-TEST_IMAGE_NAME = iobeamdb-test
-TEST_CONTAINER_NAME = iobeamdb-test-container
-
+IMAGE_NAME = iobeamdb
 MAKE = make
 
-all: test 
+all: test-docker
 
-build-test-docker: 
-	@docker build . -t $(TEST_IMAGE_NAME)
+# Targets for installing the extension without using Docker
+clean:
+	$(MAKE) -C ./extension clean
+	@rm -f ./extension/iobeamdb--*.sql
 
-start-test-docker: stop-test-docker
-	@IOBEAMDB_DOCKER_IMAGE=$(TEST_IMAGE_NAME) ./scripts/start-pg-docker.sh
+install:
+	$(MAKE) -C ./extension install
 
-stop-test-docker:
+# Targets for building/running Docker images
+build-docker:
+	@docker build . -t $(IMAGE_NAME)
+
+start-docker: stop-docker
+	@IOBEAMDB_DOCKER_IMAGE=$(IMAGE_NAME) ./scripts/start-docker.sh
+
+stop-docker:
 	@docker rm -f iobeamdb || :
 
+# Targets for tests
 test-regression:
 	@cd extension/sql/tests/regression; ./run.sh
 
@@ -24,9 +32,10 @@ test-unit:
 test-all: test-regression test-unit
 	@echo Running all tests
 
+test-docker: build-docker start-docker test-all stop-docker
+
+# Setting up a single node database
 setup-single-node-db:
-	PGDATABASE=test ./scripts/run_sql.sh setup_single_node_db.psql 
+	PGDATABASE=test ./scripts/run_sql.sh setup_single_node_db.psql
 
-test: build-test-docker start-test-docker test-all stop-test-docker
-
-.PHONY: build-test-docker start-test-docker stop-test-docker test-regression test-unit test-all test all setup-single-node-db
+.PHONY: build-docker start-docker stop-docker test-regression test-unit test-all test all setup-single-node-db
