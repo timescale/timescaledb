@@ -104,17 +104,13 @@ BEGIN
     --the chunk. This can happen if someone closes the chunk during that short
     --time window (in which case the local get_chunk_locked might return null).
     WHILE chunk_row IS NULL LOOP
-        SELECT *
-        INTO STRICT meta_row
-        FROM meta;
-
-        --this should use dblink directly and not use _sysinternal.meta_transaction_exec because we can't wait for the end 
+        --this should use dblink directly and not use _sysinternal.meta_transaction_exec because we can't wait for the end
         --of this local transaction to see the new chunk. Indeed we must see the results of _meta.get_or_create_chunk just a few
         --lines down. Which means that this operation must be committed. Thus this operation is not transactional wrt this call.
         --A chunk creation will NOT be rolled back if this transaction later aborts. Not ideal, but good enough for now.
         SELECT t.*
         INTO chunk_row
-        FROM dblink(meta_row.server_name, format('SELECT * FROM _meta.get_or_create_chunk(%L, %L) ', partition_id, time_point))
+        FROM dblink(get_meta_server_name(), format('SELECT * FROM _meta.get_or_create_chunk(%L, %L) ', partition_id, time_point))
             AS t(id INTEGER, partition_id INTEGER, start_time BIGINT, end_time BIGINT);
 
         IF lock_chunk THEN
@@ -133,8 +129,10 @@ CREATE OR REPLACE FUNCTION close_chunk_end(
 $BODY$
 DECLARE
 BEGIN
-    PERFORM _sysinternal.meta_transaction_exec(
+    --This should use dblink directly and not use _sysinternal.meta_transaction_exec because this needs to commit before we can take a lock
+    --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
+    PERFORM 1 FROM dblink(get_meta_server_name(),
                    format('SELECT * FROM _meta.close_chunk_end(%L)', chunk_id)
-                );
+            ) AS t(n TEXT);
 END
 $BODY$;
