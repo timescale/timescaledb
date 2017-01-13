@@ -23,7 +23,7 @@ override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0
 check-sql-files:
 	@echo $(EXT_SQL_FILES)
 
-generate-sql-install-file: 
+generate-sql-install-file:
 	@cat $(SQL_FILES) > $(EXT_SQL_FILE)
 
 install: generate-sql-install-file

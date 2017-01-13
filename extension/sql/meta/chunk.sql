@@ -173,6 +173,7 @@ BEGIN
     LOOP
         PERFORM dblink_connect(node_row.server_name, node_row.server_name);
         PERFORM dblink_exec(node_row.server_name, 'BEGIN');
+        PERFORM _sysinternal.register_dblink_precommit_connection(node_row.server_name);
         PERFORM 1
         FROM dblink(node_row.server_name, format('SELECT * FROM _sysinternal.lock_for_chunk_close(%L)',
                                                  chunk_id)) AS t(x TEXT);
@@ -220,9 +221,6 @@ BEGIN
         PERFORM 1
         FROM dblink(node_row.server_name,
                     format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)) AS t(x TEXT);
-        PERFORM dblink_exec(node_row.server_name, 'COMMIT');
-        --TODO: should we disconnect here?
-        PERFORM dblink_disconnect(node_row.server_name);
     END LOOP;
 END
 $BODY$;

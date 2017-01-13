@@ -49,19 +49,14 @@ $BODY$;
 --create the hypertable column based on a pg_attribute (table column) entry.
 CREATE OR REPLACE FUNCTION _sysinternal.create_column_from_attribute(
   hypertable_name NAME,
-  att pg_attribute,
-  conn_name TEXT = NULL
+  att pg_attribute
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-  IF conn_name IS NULL THEN
-    conn_name = get_meta_server_name();
-  END IF;
-  PERFORM *
-        FROM dblink(
-          conn_name,
+  PERFORM 
+    _sysinternal.meta_transaction_exec(
           format('SELECT _meta.add_field(%L, %L, %L, %L, %L, %L, %L, %L)', 
             hypertable_name,
             att.attname,
@@ -71,7 +66,7 @@ BEGIN
             att.attnotnull,
             FALSE,
             current_database()
-    )) AS t(r TEXT);
+    ));
 END
 $BODY$;
 
