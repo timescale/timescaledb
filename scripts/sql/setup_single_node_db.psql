@@ -25,6 +25,6 @@ CREATE TABLE test_hypertable (
 CREATE INDEX ON test_hypertable (time DESC NULLS LAST, device_id);
 CREATE INDEX ON test_hypertable (time DESC NULLS LAST, temp);
 
-SELECT * FROM add_hypertable('"test_hypertable"', 'time', 'device_id');
+SELECT * FROM create_hypertable('"test_hypertable"', 'time', 'device_id');
 
 

@@ -9,5 +9,5 @@ CREATE TABLE "public"."chunk_test"(
         device_id  TEXT
     );
 
-SELECT * FROM add_hypertable('"public"."chunk_test"', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT * FROM create_hypertable('"public"."chunk_test"', 'time', 'device_id', chunk_size_bytes => 10000);
 INSERT INTO chunk_test VALUES(1, 1, 'dev1');

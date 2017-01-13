@@ -1,7 +1,7 @@
 CREATE SEQUENCE IF NOT EXISTS default_hypertable_seq;
 
 -- Creates a hypertable.
-CREATE OR REPLACE FUNCTION _meta.add_hypertable(
+CREATE OR REPLACE FUNCTION _meta.create_hypertable(
     main_schema_name        NAME,
     main_table_name         NAME,
     time_field_name         NAME,

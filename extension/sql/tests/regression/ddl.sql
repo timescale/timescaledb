@@ -27,7 +27,7 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 
-SELECT * FROM add_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 SELECT * FROM hypertable;
 SELECT * FROM hypertable_index;
 

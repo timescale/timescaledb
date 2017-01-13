@@ -28,7 +28,7 @@ CREATE INDEX ON PUBLIC."testNs" (really_long_field_goes_on_and_on_and_on_and_on_
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 
 
-SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 
 \c meta 

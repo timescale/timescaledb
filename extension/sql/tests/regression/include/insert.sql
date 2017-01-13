@@ -25,7 +25,7 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE 
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 
-SELECT * FROM add_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
@@ -58,7 +58,7 @@ CREATE TABLE chunk_closing_test(
     );
 
 -- Test chunk closing/creation
-SELECT * FROM add_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
 INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
 INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
 INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');

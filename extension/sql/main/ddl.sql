@@ -10,7 +10,7 @@
 -- associated_schema_name - (Optional) Schema for internal hypertable tables
 -- associated_table_prefix - (Optional) Prefix for internal hypertable table names
 -- hypertable_name - (Optional) Name for the hypertable, if different than the main table name
-CREATE OR REPLACE FUNCTION  add_hypertable(
+CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_field_name         NAME,
     partitioning_field      NAME,
@@ -48,7 +48,7 @@ BEGIN
         INTO hypertable_row
         FROM dblink(
           conn_name,
-          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+          format('SELECT t FROM _meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
             schema_name,
             table_name,
             time_field_name,

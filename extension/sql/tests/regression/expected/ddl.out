@@ -35,7 +35,7 @@ CREATE TABLE PUBLIC."Hypertable_1" (
   sensor_4 NUMERIC NOT NULL DEFAULT 1
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
-SELECT * FROM add_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
          name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
 -----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
  public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
