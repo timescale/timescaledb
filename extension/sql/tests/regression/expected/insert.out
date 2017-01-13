@@ -71,9 +71,9 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE 
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 SELECT * FROM add_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------
- testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   |                  1 | STICKY    | timeCustom      | bigint          | Test1
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   |                  1 | STICKY    | timeCustom      | bigint          | Test1      |       1073741824
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
@@ -103,6 +103,41 @@ INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 \c test2
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
+\c Test1
+CREATE TABLE chunk_closing_test(
+        time       BIGINT,
+        metric     INTEGER,
+        device_id  TEXT
+    );
+-- Test chunk closing/creation
+SELECT * FROM add_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ public.chunk_closing_test | public           | chunk_closing_test | _sys_2_                | _hyper_2                | _sys_2_          | _hyper_2_root   | _sys_2_              | _hyper_2_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |            10000
+(1 row)
+
+INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
+INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
+INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
+SELECT * FROM chunk_closing_test;
+ time | metric | device_id 
+------+--------+-----------
+    1 |      1 | dev1
+    2 |      2 | dev2
+    3 |      3 | dev3
+(3 rows)
+
+SELECT * FROM chunk c
+    LEFT JOIN chunk_replica_node crn ON (c.id = crn.chunk_id) 
+    LEFT JOIN partition_replica pr ON (crn.partition_replica_id = pr.id)
+    WHERE hypertable_name = 'public.chunk_closing_test';
+ id | partition_id | start_time | end_time | chunk_id | partition_replica_id | database_name | schema_name |     table_name      | id | partition_id |      hypertable_name      | replica_id | schema_name |       table_name       
+----+--------------+------------+----------+----------+----------------------+---------------+-------------+---------------------+----+--------------+---------------------------+------------+-------------+------------------------
+  4 |            3 |            |        1 |        4 |                    3 | Test1         | _sys_2_     | _hyper_2_3_0_4_data |  3 |            3 | public.chunk_closing_test |          0 | _sys_2_     | _hyper_2_3_0_partition
+  5 |            3 |          2 |        2 |        5 |                    3 | Test1         | _sys_2_     | _hyper_2_3_0_5_data |  3 |            3 | public.chunk_closing_test |          0 | _sys_2_     | _hyper_2_3_0_partition
+  6 |            3 |          3 |          |        6 |                    3 | Test1         | _sys_2_     | _hyper_2_3_0_6_data |  3 |            3 | public.chunk_closing_test |          0 | _sys_2_     | _hyper_2_3_0_partition
+(3 rows)
+
 \c Test1
 \d+ "testNs".*
 Index "testNs.1-testNs_device_id_timeCustom_idx"
@@ -264,7 +299,7 @@ Indexes:
     "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" <= '1257983999999999999'::bigint)
+    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint)
 Inherits: "testNs"._hyper_1_1_0_partition
 
                          Table "testNs._hyper_1_1_0_2_data"
@@ -284,7 +319,7 @@ Indexes:
     "9-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
 Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" >= '1257984000000000000'::bigint)
+    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint)
 Inherits: "testNs"._hyper_1_1_0_partition
 
                        Table "testNs._hyper_1_1_0_partition"
@@ -405,7 +440,7 @@ Child tables: "testNs"._hyper_1_1_0_partition,
  series_bool | boolean          |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" <= '1257983999999999999'::bigint)
+    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint)
 Server: Test1
 FDW Options: (schema_name 'testNs', table_name '_hyper_1_1_0_1_data')
 Inherits: "testNs"._hyper_1_1_0_partition
@@ -421,7 +456,7 @@ Inherits: "testNs"._hyper_1_1_0_partition
  series_bool | boolean          |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" >= '1257984000000000000'::bigint)
+    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint)
 Server: Test1
 FDW Options: (schema_name 'testNs', table_name '_hyper_1_1_0_2_data')
 Inherits: "testNs"._hyper_1_1_0_partition

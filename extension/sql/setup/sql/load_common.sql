@@ -9,3 +9,4 @@ CREATE EXTENSION IF NOT EXISTS hstore;
 \ir ../../common/tables.sql
 \ir ../../common/cluster_setup_functions.sql
 \ir ../../common/chunk.sql
+\ir ../../common/util.sql

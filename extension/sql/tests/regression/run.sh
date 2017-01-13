@@ -6,7 +6,7 @@ UPDATE=${UPDATE:-false}
 golden_test() {
 	psql -h localhost -U postgres -q -X -f $1 > actual/$2
 	
-  if diff expected/$2 actual/$2;
+    if diff expected/$2 actual/$2;
 	then
     	echo "$2 matches golden file"
 	else

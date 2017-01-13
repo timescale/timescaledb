@@ -86,13 +86,27 @@ $BODY$
 DECLARE
     point_record_query_sql      TEXT;
     point_record                RECORD;
+    chunk_row                   chunk;
     crn_record                  RECORD;
     distinct_table_oid          REGCLASS;
     distinct_field              TEXT;
     distinct_clauses            TEXT;
     distinct_clause_idx         INT;
 BEGIN
-     point_record_query_sql := format(
+    --This guard protects against calling insert_data() twice in the same transaction,
+    --which might otherwise cause a deadlock in case the second insert_data() involves a chunk
+    --that was inserted into in the first call to insert_data().
+    --This is a temporary safe guard that should ideally be removed once chunk management
+    --has been refactored and improved to avoid such deadlocks.
+    --NOTE: In its current form, this safe guard unfortunately prohibits transactions
+    --involving INSERTs on two different hypertables.
+    IF current_setting('io.insert_data_guard', true) = 'on' THEN
+        RAISE EXCEPTION 'insert_data() can only be called once per transaction';
+    END IF;
+
+    PERFORM set_config('io.insert_data_guard', 'on', true);
+
+    point_record_query_sql := format(
         $$
             SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s') AS time,
                    h.time_field_name, h.time_field_type,
@@ -120,18 +134,26 @@ BEGIN
     END IF;
 
     WHILE point_record.time IS NOT NULL LOOP
+        --Get the chunk we should insert into
+        chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time);
+
+        --Check if the chunk should be closed (must be done without lock on chunk).
+        PERFORM _sysinternal.close_chunk_if_needed(chunk_row);
+
+        --Get a chunk with lock
+        chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time, TRUE);
+
+        --Do insert on all chunk replicas
         FOR crn_record IN
         SELECT
             crn.database_name,
             crn.schema_name,
             crn.table_name,
-            c.start_time,
-            c.end_time,
             pr.hypertable_name,
             pr.replica_id
-        FROM get_or_create_chunk(point_record.partition_id, point_record.time) c
-        INNER JOIN chunk_replica_node crn ON (crn.chunk_id = c.id)
+        FROM chunk_replica_node crn
         INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
+        WHERE (crn.chunk_id = chunk_row.id)
         LOOP
             distinct_clauses := '';
             distinct_clause_idx := 0;
@@ -149,42 +171,41 @@ BEGIN
                 distinct_clauses := distinct_clauses || ',' || format(
                     $$
                     insert_distinct_%3$s AS (
-                         INSERT INTO  %1$s as distinct_table
-                             SELECT DISTINCT %2$L, selected.%2$I as value
-                             FROM selected
-                             ORDER BY value
-                             ON CONFLICT
-                                 DO NOTHING
-                     )
-                     $$, distinct_table_oid, distinct_field, distinct_clause_idx);
-                distinct_clause_idx := distinct_clause_idx + 1;
+                      INSERT INTO  %1$s as distinct_table
+                      SELECT DISTINCT %2$L, selected.%2$I as value
+                      FROM selected
+                      ORDER BY value
+                      ON CONFLICT DO NOTHING
+                    )
+                    $$, distinct_table_oid, distinct_field, distinct_clause_idx);
+                    distinct_clause_idx := distinct_clause_idx + 1;
             END LOOP;
 
             PERFORM set_config('io.ignore_delete_in_trigger', 'true', true);
             EXECUTE format(
                 $$
-              WITH selected AS
-              (
-                  DELETE FROM ONLY %2$s
-                  WHERE (%7$I >= %3$s OR %3$s IS NULL) AND (%7$I <= %4$s OR %4$s IS NULL) AND
-                        (%8$s(%9$I, %10$L) BETWEEN %11$L AND %12$L)
-                  RETURNING *
-              )%5$s
-              INSERT INTO %1$s (%6$s) SELECT %6$s FROM selected;
-          $$,
-                format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
-                copy_table_oid,
-                _sysinternal.time_literal_sql(crn_record.start_time, point_record.time_field_type),
-                _sysinternal.time_literal_sql(crn_record.end_time, point_record.time_field_type),
-                distinct_clauses,
-                _sysinternal.get_field_list(hypertable_name),
-                point_record.time_field_name,
-                point_record.partitioning_func,
-                point_record.partitioning_field,
-                point_record.partitioning_mod,
-                point_record.keyspace_start,
-                point_record.keyspace_end
-              );
+                WITH selected AS
+                (
+                    DELETE FROM ONLY %2$s
+                    WHERE (%7$I >= %3$s OR %3$s IS NULL) AND (%7$I <= %4$s OR %4$s IS NULL) AND
+                          (%8$s(%9$I, %10$L) BETWEEN %11$L AND %12$L)
+                    RETURNING *
+                )%5$s
+                INSERT INTO %1$s (%6$s) SELECT %6$s FROM selected;
+                $$,
+                    format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
+                    copy_table_oid,
+                    _sysinternal.time_literal_sql(chunk_row.start_time, point_record.time_field_type),
+                    _sysinternal.time_literal_sql(chunk_row.end_time, point_record.time_field_type),
+                    distinct_clauses,
+                    _sysinternal.get_field_list(hypertable_name),
+                    point_record.time_field_name,
+                    point_record.partitioning_func,
+                    point_record.partitioning_field,
+                    point_record.partitioning_mod,
+                    point_record.keyspace_start,
+                    point_record.keyspace_end
+                );
         END LOOP;
 
         EXECUTE point_record_query_sql

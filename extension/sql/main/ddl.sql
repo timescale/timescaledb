@@ -19,7 +19,8 @@ CREATE OR REPLACE FUNCTION  add_hypertable(
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
     hypertable_name         NAME = NULL,
-    placement               chunk_placement_type = 'STICKY'
+    placement               chunk_placement_type = 'STICKY',
+    chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
 )
     RETURNS hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -47,7 +48,7 @@ BEGIN
         INTO hypertable_row
         FROM dblink(
           'meta_conn',
-          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+          format('SELECT t FROM _meta.add_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
             schema_name,
             table_name,
             time_field_name,
@@ -59,6 +60,7 @@ BEGIN
             associated_table_prefix,
             hypertable_name,
             placement,
+            chunk_size_bytes,
             current_database()
         )) AS t(r TEXT);
 

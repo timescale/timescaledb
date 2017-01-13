@@ -48,3 +48,22 @@ INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 \c test2
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
+
+
+\c Test1
+CREATE TABLE chunk_closing_test(
+        time       BIGINT,
+        metric     INTEGER,
+        device_id  TEXT
+    );
+
+-- Test chunk closing/creation
+SELECT * FROM add_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
+INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
+INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
+SELECT * FROM chunk_closing_test;
+SELECT * FROM chunk c
+    LEFT JOIN chunk_replica_node crn ON (c.id = crn.chunk_id) 
+    LEFT JOIN partition_replica pr ON (crn.partition_replica_id = pr.id)
+    WHERE hypertable_name = 'public.chunk_closing_test';
