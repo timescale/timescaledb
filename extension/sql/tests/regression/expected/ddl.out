@@ -38,13 +38,13 @@ CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
          name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
 -----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
- public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
+ public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
 (1 row)
 
 SELECT * FROM hypertable;
          name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
 -----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
- public."Hypertable_1" | public           | Hypertable_1    | _sys_1_                | _hyper_1                | _sys_1_          | _hyper_1_root   | _sys_1_              | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
+ public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
 (1 row)
 
 SELECT * FROM hypertable_index;
@@ -123,8 +123,8 @@ Triggers:
     insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
     modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
-\d+ "_sys_1_"."_hyper_1_root"
-                                Table "_sys_1_._hyper_1_root"
+\d+ "_sysinternal"."_hyper_1_root"
+                              Table "_sysinternal._hyper_1_root"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
 -----------+---------+--------------------------------+----------+--------------+-------------
  time      | bigint  | not null                       | plain    |              | 
@@ -135,10 +135,10 @@ Triggers:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Child tables: _sys_1_._hyper_1_0_replica
+Child tables: _sysinternal._hyper_1_0_replica
 
-\d+ _sys_1_._hyper_1_1_0_1_data
-                             Table "_sys_1_._hyper_1_1_0_1_data"
+\d+ _sysinternal._hyper_1_1_0_1_data
+                           Table "_sysinternal._hyper_1_1_0_1_data"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
 -----------+---------+--------------------------------+----------+--------------+-------------
  time      | bigint  | not null                       | plain    |              | 
@@ -156,7 +156,7 @@ Indexes:
     "4-ind_sensor_1" btree ("time", sensor_1)
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sys_1_._hyper_1_1_0_partition
+Inherits: _sysinternal._hyper_1_1_0_partition
 
 SELECT * FROM PUBLIC.default_replica_node;
  database_name |    hypertable_name    | replica_id 
@@ -187,8 +187,8 @@ Triggers:
     insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
     modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
-\d+ "_sys_1_"."_hyper_1_root"
-                                Table "_sys_1_._hyper_1_root"
+\d+ "_sysinternal"."_hyper_1_root"
+                              Table "_sysinternal._hyper_1_root"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
 -----------+---------+--------------------------------+----------+--------------+-------------
  time      | bigint  | not null                       | plain    |              | 
@@ -199,7 +199,7 @@ Triggers:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Child tables: _sys_1_._hyper_1_0_replica
+Child tables: _sysinternal._hyper_1_0_replica
 
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
  set_is_distinct_flag 
@@ -253,8 +253,8 @@ Triggers:
     insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
     modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
-\d+ "_sys_1_"."_hyper_1_root"
-                                Table "_sys_1_._hyper_1_root"
+\d+ "_sysinternal"."_hyper_1_root"
+                             Table "_sysinternal._hyper_1_root"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -266,9 +266,9 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _sys_1_._hyper_1_0_replica
+Child tables: _sysinternal._hyper_1_0_replica
 
-SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
+SELECT * FROM _sysinternal._hyper_1_0_1_distinct_data;
    field   | value 
 -----------+-------
  sensor_1  | 1
@@ -296,8 +296,8 @@ Triggers:
     insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
     modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
 
-\d+ "_sys_1_"."_hyper_1_root"
-                                Table "_sys_1_._hyper_1_root"
+\d+ "_sysinternal"."_hyper_1_root"
+                             Table "_sysinternal._hyper_1_root"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -309,10 +309,10 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _sys_1_._hyper_1_0_replica
+Child tables: _sysinternal._hyper_1_0_replica
 
-\d+ _sys_1_._hyper_1_1_0_1_data
-                             Table "_sys_1_._hyper_1_1_0_1_data"
+\d+ _sysinternal._hyper_1_1_0_1_data
+                          Table "_sysinternal._hyper_1_1_0_1_data"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -329,7 +329,7 @@ Indexes:
     "3-ind_humidity" btree ("time", humidity)
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sys_1_._hyper_1_1_0_partition
+Inherits: _sysinternal._hyper_1_1_0_partition
 
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 

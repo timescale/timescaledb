@@ -42,37 +42,52 @@ $BODY$
 DECLARE
     remote_node node;
 BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table'
+
+    IF TG_OP = 'INSERT' THEN
+
+        EXECUTE format(
+            $$
+                CREATE SCHEMA IF NOT EXISTS %I
+            $$, NEW.associated_schema_name);
+
+        PERFORM _sysinternal.create_table(NEW.root_schema_name, NEW.root_table_name);
+        PERFORM _sysinternal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
+
+        IF NEW.created_on <> current_database() THEN
+           PERFORM _sysinternal.create_table(NEW.main_schema_name, NEW.main_table_name);
+        END IF;
+
+        -- UPDATE not supported, so do them before action
+        EXECUTE format(
+            $$
+                CREATE TRIGGER modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
+                FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table();
+            $$, NEW.main_schema_name, NEW.main_table_name);
+        EXECUTE format(
+            $$
+                CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
+                FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table();
+            $$, NEW.main_schema_name, NEW.main_table_name);
+
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+
+        PERFORM _sysinternal.drop_root_table(OLD.root_schema_name, OLD.root_table_name);
+        PERFORM _sysinternal.drop_root_distinct_table(OLD.distinct_schema_name, OLD.distinct_table_name);
+
+        if current_setting('io.iobeam_drop', true) <> 'true' THEN
+            PERFORM set_config('io.iobeam_drop', 'true', true);
+            PERFORM _sysinternal.drop_table(OLD.main_schema_name, OLD.main_table_name);
+        END IF;
+
+        RETURN OLD;
+    END IF;
+
+    RAISE EXCEPTION 'Only inserts and delete supported on hypertable metadata table'
         USING ERRCODE = 'IO101';
-    END IF;
 
-    PERFORM _sysinternal.create_schema(NEW.main_schema_name);
-    PERFORM _sysinternal.create_schema(NEW.associated_schema_name);
-    PERFORM _sysinternal.create_schema(NEW.root_schema_name);
-    PERFORM _sysinternal.create_schema(NEW.distinct_schema_name);
-
-    PERFORM _sysinternal.create_table(NEW.root_schema_name, NEW.root_table_name);
-    PERFORM _sysinternal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
-
-    IF NEW.created_on <> current_database() THEN
-       PERFORM _sysinternal.create_table(NEW.main_schema_name, NEW.main_table_name);
-    END IF;
-
-    -- UPDATE not supported, so do them before action
-    EXECUTE format(
-        $$
-            CREATE TRIGGER modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
-            FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table();
-        $$, NEW.main_schema_name, NEW.main_table_name);
-    EXECUTE format(
-        $$
-            CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
-            FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table();
-        $$, NEW.main_schema_name, NEW.main_table_name);
-
-
-    RETURN NEW;
 END
 $BODY$
 SET SEARCH_PATH = 'public';

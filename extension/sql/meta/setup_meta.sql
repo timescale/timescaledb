@@ -62,7 +62,7 @@ BEGIN
     FOREACH table_name IN ARRAY ARRAY ['field', 'hypertable_index'] :: NAME [] LOOP
         EXECUTE format(
             $$
-                DROP TRIGGER IF EXISTS trigger_0_deleted_%1$s ON %1$s
+               DROP TRIGGER IF EXISTS trigger_0_deleted_%1$s ON %1$s
             $$,
             table_name);
         EXECUTE format(

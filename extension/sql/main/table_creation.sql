@@ -31,6 +31,36 @@ BEGIN
 END
 $BODY$;
 
+-- Drop main table if it exists.
+CREATE OR REPLACE FUNCTION _sysinternal.drop_main_table(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            DROP TABLE IF EXISTS %I.%I;
+        $$, schema_name, table_name);
+END
+$BODY$;
+
+-- Drops root table
+CREATE OR REPLACE FUNCTION _sysinternal.drop_root_table(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            DROP TABLE %I.%I CASCADE;
+        $$, schema_name, table_name);
+END
+$BODY$;
+
 -- Creates a root distinct table for a hypertable.
 CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
     schema_name NAME,
@@ -49,6 +79,22 @@ BEGIN
         $$, schema_name, table_name);
 END
 $BODY$;
+
+-- Drops root distinct table
+CREATE OR REPLACE FUNCTION _sysinternal.drop_root_distinct_table(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            DROP TABLE %1$I.%2$I CASCADE;
+        $$, schema_name, table_name);
+END
+$BODY$;
+
 
 CREATE OR REPLACE FUNCTION _sysinternal.create_local_distinct_table(
     schema_name         NAME,

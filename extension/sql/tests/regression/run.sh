@@ -16,7 +16,7 @@ golden_test() {
         	mv actual/$2 expected/$2
     	else
         	echo "ERROR: golden file doesn't match: $2"
-          exit 1
+          	exit 1
     	fi
 	fi
 }
@@ -30,4 +30,6 @@ golden_test ioql_query.sql ioql_query.out
 golden_test sql_query.sql sql_query.out
 golden_test ddl.sql ddl.out
 golden_test timestamp.sql timestamp.out
+golden_test drop_hypertable.sql drop_hypertable.out
+
 echo "Success"

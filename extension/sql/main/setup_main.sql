@@ -91,5 +91,9 @@ BEGIN
        WHEN tag IN ('alter table')
        EXECUTE PROCEDURE _sysinternal.ddl_process_alter_table();
 
+    CREATE EVENT TRIGGER ddl_check_drop_command
+       ON sql_drop
+       EXECUTE PROCEDURE _sysinternal.ddl_process_drop_table();
+
 END
 $BODY$;

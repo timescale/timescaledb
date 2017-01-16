@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS hypertable (
 --      Parent: hypertable's `distinct root table`
 --      Children: created by `distinct_replica_node` table
 CREATE TABLE IF NOT EXISTS hypertable_replica (
-    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name),
+    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
     schema_name          NAME     NOT NULL,
     table_name           NAME     NOT NULL,
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS hypertable_replica (
 -- (Postgres RULES cannot be used, unfortunately)
 CREATE TABLE IF NOT EXISTS default_replica_node (
     database_name        NAME NOT NULL  REFERENCES node (database_name),
-    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name),
+    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
     PRIMARY KEY (database_name, hypertable_name),
     FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS distinct_replica_node (
     table_name      NAME     NOT NULL,
     PRIMARY KEY (hypertable_name, replica_id, database_name),
     UNIQUE (schema_name, table_name),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
+    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
 );
 
 -- A partition_epoch represents a different partitioning of the data.
@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS distinct_replica_node (
 -- INFREQUENTLY as it's expensive operation.
 CREATE TABLE IF NOT EXISTS partition_epoch (
     id                 SERIAL NOT NULL  PRIMARY KEY,
-    hypertable_name    NAME   NOT NULL  REFERENCES hypertable (name),
+    hypertable_name    NAME   NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
     start_time         BIGINT NULL      CHECK (start_time > 0),
     end_time           BIGINT NULL      CHECK (end_time > 0),
     partitioning_func  NAME   NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS partition_epoch (
 -- keyspace, i.e. from [0, partition_epoch.partitioning_mod].
 CREATE TABLE IF NOT EXISTS partition (
     id             SERIAL   NOT NULL PRIMARY KEY,
-    epoch_id       INT      NOT NULL REFERENCES partition_epoch (id),
+    epoch_id       INT      NOT NULL REFERENCES partition_epoch (id) ON DELETE CASCADE,
     keyspace_start SMALLINT NOT NULL CHECK (keyspace_start >= 0), --start inclusive
     keyspace_end   SMALLINT NOT NULL CHECK (keyspace_end > 0), --end   inclusive; compatible with between operator
     UNIQUE (epoch_id, keyspace_start),
@@ -164,14 +164,14 @@ CREATE TABLE IF NOT EXISTS partition (
 --TODO: trigger to verify partition_epoch hypertable name matches this hypertable_name
 CREATE TABLE IF NOT EXISTS partition_replica (
     id              SERIAL   NOT NULL PRIMARY KEY,
-    partition_id    INT      NOT NULL REFERENCES partition (id),
+    partition_id    INT      NOT NULL REFERENCES partition (id) ON DELETE CASCADE,
     hypertable_name NAME     NOT NULL,
     replica_id      SMALLINT NOT NULL,
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,
     UNIQUE (schema_name, table_name),
     UNIQUE (partition_id, replica_id),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
+    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
 );
 
 -- Represent a (replicated) chunk of data, which is data in a hypertable that is
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS partition_replica (
 -- TODO(erik) - Describe conditions of closure.
 CREATE TABLE IF NOT EXISTS chunk (
     id           SERIAL NOT NULL    PRIMARY KEY,
-    partition_id INT    NOT NULL    REFERENCES partition (id),
+    partition_id INT    NOT NULL    REFERENCES partition (id) ON DELETE CASCADE,
     start_time   BIGINT NULL        CHECK (start_time >= 0),
     end_time     BIGINT NULL        CHECK (end_time >= 0),
     UNIQUE (partition_id, start_time),
@@ -202,8 +202,8 @@ CREATE TABLE IF NOT EXISTS chunk (
 -- Each row represents a table:
 --   Parent table: "partition_replica.schema_name"."partition_replica.table_name"
 CREATE TABLE IF NOT EXISTS chunk_replica_node (
-    chunk_id             INT  NOT NULL  REFERENCES chunk (id),
-    partition_replica_id INT  NOT NULL  REFERENCES partition_replica (id),
+    chunk_id             INT  NOT NULL  REFERENCES chunk (id) ON DELETE CASCADE,
+    partition_replica_id INT  NOT NULL  REFERENCES partition_replica (id) ON DELETE CASCADE,
     database_name        NAME NOT NULL  REFERENCES node (database_name),
     schema_name          NAME NOT NULL,
     table_name           NAME NOT NULL,
@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
 
 -- Represents a hypertable field.
 CREATE TABLE IF NOT EXISTS field (
-    hypertable_name NAME                NOT NULL REFERENCES hypertable (name),
+    hypertable_name NAME                NOT NULL REFERENCES hypertable (name) ON DELETE CASCADE,
     name            NAME                NOT NULL,
     attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
     data_type       REGTYPE             NOT NULL,
@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS deleted_field (
 );
 
 CREATE TABLE IF NOT EXISTS hypertable_index (
-    hypertable_name  NAME                NOT NULL REFERENCES hypertable (name),
+    hypertable_name  NAME                NOT NULL REFERENCES hypertable (name) ON DELETE CASCADE,
     main_schema_name NAME                NOT NULL, --schema name of main table (needed for a uniqueness constraint)
     main_index_name  NAME                NOT NULL, --index name on main table
     definition       TEXT                NOT NULL, --def with /*INDEX_NAME*/ and /*TABLE_NAME*/ placeholders

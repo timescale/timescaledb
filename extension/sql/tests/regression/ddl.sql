@@ -51,15 +51,15 @@ SELECT * FROM ONLY PUBLIC."Hypertable_1";
 EXPLAIN SELECT * FROM ONLY PUBLIC."Hypertable_1";
 
 \d+ PUBLIC."Hypertable_1"
-\d+ "_sys_1_"."_hyper_1_root"
-\d+ _sys_1_._hyper_1_1_0_1_data
+\d+ "_sysinternal"."_hyper_1_root"
+\d+ _sysinternal._hyper_1_1_0_1_data
 SELECT * FROM PUBLIC.default_replica_node;
 
 
 \c test2
 
 \d+ PUBLIC."Hypertable_1"
-\d+ "_sys_1_"."_hyper_1_root"
+\d+ "_sysinternal"."_hyper_1_root"
 
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'Device_id', TRUE);
@@ -88,13 +88,13 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
 
 
 \d+ PUBLIC."Hypertable_1"
-\d+ "_sys_1_"."_hyper_1_root"
-SELECT * FROM _sys_1_._hyper_1_0_1_distinct_data;
+\d+ "_sysinternal"."_hyper_1_root"
+SELECT * FROM _sysinternal._hyper_1_0_1_distinct_data;
 
 
 \c Test1
 \d+ PUBLIC."Hypertable_1"
-\d+ "_sys_1_"."_hyper_1_root"
-\d+ _sys_1_._hyper_1_1_0_1_data
+\d+ "_sysinternal"."_hyper_1_root"
+\d+ _sysinternal._hyper_1_1_0_1_data
 
 SELECT * FROM PUBLIC."Hypertable_1";
