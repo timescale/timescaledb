@@ -12,5 +12,5 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node_index (
     definition        TEXT    NOT NULL,
     PRIMARY KEY (schema_name, table_name, index_name),
     FOREIGN KEY (schema_name, table_name) REFERENCES chunk_replica_node (schema_name, table_name),
-    FOREIGN KEY (main_schema_name, main_index_name) REFERENCES hypertable_index (main_schema_name, main_index_name)
+    FOREIGN KEY (main_schema_name, main_index_name) REFERENCES hypertable_index (main_schema_name, main_index_name) ON DELETE CASCADE
 );

@@ -245,14 +245,54 @@ BEGIN
       USING ERRCODE = 'IO101';
     END LOOP;
 
-
     IF NOT found_action THEN
       RAISE EXCEPTION 'Unknown alter table action on %', info.objid::regclass
       USING ERRCODE = 'IO101';
-    END IF; 
+    END IF;
 
   END LOOP;
   END
 $BODY$;
 
 
+--Handles drop table command
+CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_table()
+        RETURNS event_trigger LANGUAGE plpgsql AS $BODY$
+DECLARE
+    obj record;
+BEGIN
+    FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
+    LOOP
+        IF tg_tag = 'DROP TABLE' AND obj.object_name IS NOT NULL THEN
+            PERFORM _sysinternal.drop_hypertable(obj.schema_name, obj.object_name);
+        END IF;
+    END LOOP;
+
+END
+$BODY$;
+
+-- Removes a hypertable.
+CREATE OR REPLACE FUNCTION  _sysinternal.drop_hypertable(
+    schema_name TEXT,
+    hypertable_name TEXT
+    )
+    RETURNS void LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+
+    PERFORM dblink_connect('meta_conn', get_meta_server_name());
+    PERFORM dblink_exec('meta_conn', 'BEGIN');
+
+    PERFORM 1
+    FROM  dblink(
+          'meta_conn',
+          format('SELECT _meta.drop_hypertable(%L::text, %L::text, %L::text)',
+            schema_name,
+            hypertable_name,
+            current_database()
+        )) AS t(r TEXT);
+
+    PERFORM dblink_exec('meta_conn', 'COMMIT');
+    PERFORM dblink_disconnect('meta_conn');
+END
+$BODY$;

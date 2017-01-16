@@ -3,11 +3,7 @@ CREATE OR REPLACE FUNCTION _meta.on_create_chunk_replica_node_meta()
 $BODY$
 DECLARE
 BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
-    END IF;
-
+    IF TG_OP = 'INSERT' THEN
     INSERT INTO distinct_replica_node (hypertable_name, replica_id, database_name, schema_name, table_name)
         SELECT
             pr.hypertable_name,
@@ -22,6 +18,15 @@ BEGIN
     ON CONFLICT DO NOTHING;
 
     RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    RAISE EXCEPTION 'Only inserts and deletes supported on % table', TG_TABLE_NAME
+        USING ERRCODE = 'IO101';
+
 END
 $BODY$
 SET SEARCH_PATH = 'public';

@@ -2,11 +2,8 @@ CREATE OR REPLACE FUNCTION _meta.on_create_partition()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on % name ', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
-    END IF;
-
+    IF TG_OP = 'INSERT' THEN
+    
     INSERT INTO partition_replica (partition_id, hypertable_name, replica_id, schema_name, table_name)
         SELECT
             NEW.id,
@@ -23,7 +20,14 @@ BEGIN
         );
 
     RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    RAISE EXCEPTION 'Only inserts and deletes supported on % name ', TG_TABLE_NAME
+         USING ERRCODE = 'IO101';
+
 END
 $BODY$;
-
-

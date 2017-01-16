@@ -26,8 +26,8 @@ BEGIN
     id :=  nextval('default_hypertable_seq');
 
     IF associated_schema_name IS NULL THEN
-        associated_schema_name = format('_sys_%s_%s', id, hypertable_name);
-    END IF;
+        associated_schema_name = '_sysinternal';
+    END IF; 
 
     IF associated_table_prefix IS NULL THEN
         associated_table_prefix = format('_hyper_%s', id);
@@ -190,4 +190,16 @@ $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
 DELETE FROM hypertable_index i
 WHERE i.main_index_name = drop_index.main_index_name AND i.main_schema_name = drop_index.main_schema_name;
+$BODY$;
+
+-- Drops a hypertable
+CREATE OR REPLACE FUNCTION _meta.drop_hypertable(
+    schema_name NAME,
+    hypertable_name NAME,
+    modified_on NAME
+)
+    RETURNS VOID LANGUAGE SQL VOLATILE AS
+$BODY$
+    SELECT set_config('io.deleting_node', modified_on, true);
+    DELETE FROM hypertable h WHERE h.main_schema_name = schema_name AND h.main_table_name = hypertable_name
 $BODY$;

@@ -16,7 +16,7 @@ BEGIN
       EXECUTE NEW.definition;
       RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
-      EXECUTE format('DROP INDEX %I.%I', OLD.schema_name, OLD.index_name);
+      EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.schema_name, OLD.index_name);
       RETURN OLD;
     END IF;
 END

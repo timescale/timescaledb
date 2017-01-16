@@ -4,21 +4,25 @@ $BODY$
 DECLARE
     hypertable_row hypertable;
 BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on hypertable_replica table'
-        USING ERRCODE = 'IO101';
+    IF TG_OP = 'INSERT' THEN
+        SELECT *
+        INTO STRICT hypertable_row
+        FROM hypertable AS h
+        WHERE h.name = NEW.hypertable_name;
+
+        PERFORM _sysinternal.create_replica_table(NEW.schema_name, NEW.table_name, hypertable_row.root_schema_name,
+                                                  hypertable_row.root_table_name);
+        PERFORM _sysinternal.create_replica_table(NEW.distinct_schema_name, NEW.distinct_table_name,
+                                                  hypertable_row.distinct_schema_name, hypertable_row.distinct_table_name);
+        RETURN NEW;
     END IF;
 
-    SELECT *
-    INTO STRICT hypertable_row
-    FROM hypertable AS h
-    WHERE h.name = NEW.hypertable_name;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
 
-
-    PERFORM _sysinternal.create_replica_table(NEW.schema_name, NEW.table_name, hypertable_row.root_schema_name,
-                                              hypertable_row.root_table_name);
-    PERFORM _sysinternal.create_replica_table(NEW.distinct_schema_name, NEW.distinct_table_name,
-                                              hypertable_row.distinct_schema_name, hypertable_row.distinct_table_name);
+    RAISE EXCEPTION 'Only inserts and deletets supported on hypertable_replica table, got %', TG_OP
+    USING ERRCODE = 'IO101';
 
     RETURN NEW;
 END

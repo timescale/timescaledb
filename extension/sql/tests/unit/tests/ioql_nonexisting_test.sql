@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION unit_tests.test_unknown_hyper_table()
+CREATE OR REPLACE FUNCTION unit_tests.test_unknown_hypertable()
 RETURNS test_result
 AS
 $$

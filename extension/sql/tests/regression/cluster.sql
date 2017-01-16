@@ -92,8 +92,7 @@ FROM field;
 
 \des+
 \deu+
-
-\d+ "_sys_1_testNs".*
+\d+ "_sysinternal".*
 
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
@@ -105,7 +104,7 @@ FROM field;
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 \c Test1
-\d+ "_sys_1_testNs".*
+\d+ "_sysinternal".*
 
 \c meta
 SELECT _meta.close_chunk_end(1);
@@ -120,6 +119,6 @@ SELECT *
 FROM chunk;
 
 \c Test1
-\d+ "_sys_1_testNs".*
+\d+ "_sysinternal".*
 
 

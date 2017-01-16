@@ -3,12 +3,8 @@ CREATE OR REPLACE FUNCTION _meta.on_create_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on hypertable name '
-        USING ERRCODE = 'IO101';
-    END IF;
-
-    INSERT INTO hypertable_replica
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO hypertable_replica
         SELECT
             NEW.name,
             replica_id,
@@ -17,10 +13,19 @@ BEGIN
             NEW.associated_schema_name,
             format('%s_%s_distinct', NEW.associated_table_prefix, replica_id)
         FROM generate_series(0, NEW.replication_factor - 1) AS replica_id
-    ON CONFLICT DO NOTHING;
+        ON CONFLICT DO NOTHING;
 
-    PERFORM _meta.assign_default_replica_node(n.database_name, NEW.name)
-    FROM node n;
+        PERFORM _meta.assign_default_replica_node(n.database_name, NEW.name)
+        FROM node n;
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    RAISE EXCEPTION 'Only inserts and deletes supported on hypertable name '
+    USING ERRCODE = 'IO101';
 
     RETURN NEW;
 END

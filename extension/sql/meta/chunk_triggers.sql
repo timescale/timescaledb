@@ -47,6 +47,10 @@ DECLARE
     field_row   field;
     schema_name NAME;
 BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
     IF TG_OP = 'UPDATE' THEN
         IF (
                (OLD.start_time IS NULL AND new.start_time IS NOT NULL)

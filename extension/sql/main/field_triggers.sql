@@ -307,9 +307,14 @@ BEGIN
     END IF;
 
     SELECT *
-    INTO STRICT hypertable_row
+    INTO hypertable_row
     FROM hypertable AS h
     WHERE h.name = NEW.hypertable_name;
+
+    IF hypertable_row IS NULL THEN
+        --presumably hypertable has been dropped and this is part of cascade
+        RETURN NEW;
+    END IF;
 
     -- update root table
     PERFORM _sysinternal.drop_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,

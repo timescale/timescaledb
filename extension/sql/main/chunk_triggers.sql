@@ -3,8 +3,8 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_chunk()
 $BODY$
 DECLARE
 BEGIN
-    IF TG_OP <> 'INSERT' AND TG_OP <> 'UPDATE' THEN
-        RAISE EXCEPTION 'Only inserts and updates supported on % table', TG_TABLE_NAME
+    IF TG_OP <> 'INSERT' AND TG_OP <> 'UPDATE' AND TG_OP <> 'DELETE' THEN
+        RAISE EXCEPTION 'Only inserts, updates, and deletes supported on % table', TG_TABLE_NAME
         USING ERRCODE = 'IO101';
     END IF;
 
@@ -14,6 +14,9 @@ BEGIN
         WHERE crn.chunk_id = NEW.id;
     END IF;
 
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
     RETURN NEW;
 END
 $BODY$
