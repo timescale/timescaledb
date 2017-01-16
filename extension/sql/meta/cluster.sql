@@ -37,6 +37,9 @@ DECLARE
     schema_name NAME;
 BEGIN
     schema_name := format('remote_%s', database_name);
+    IF database_name = current_database() THEN
+        schema_name = 'public';
+    END IF;
     INSERT INTO public.node (database_name, schema_name, server_name, hostname)
     VALUES (database_name, schema_name, database_name, hostname)
     ON CONFLICT DO NOTHING;

@@ -171,12 +171,9 @@ BEGIN
     SELECT *
     FROM public.node n
     LOOP
-        PERFORM dblink_connect(node_row.server_name, node_row.server_name);
-        PERFORM dblink_exec(node_row.server_name, 'BEGIN');
-        PERFORM _sysinternal.register_dblink_precommit_connection(node_row.server_name);
-        PERFORM 1
-        FROM dblink(node_row.server_name, format('SELECT * FROM _sysinternal.lock_for_chunk_close(%L)',
-                                                 chunk_id)) AS t(x TEXT);
+        PERFORM _meta.node_transaction_exec_with_return(node_row.database_name, node_row.server_name,
+            format('SELECT * FROM _sysinternal.lock_for_chunk_close(%L)', chunk_id)
+        );
     END LOOP;
 
     --PHASE 2: get max time for chunk
@@ -188,11 +185,13 @@ BEGIN
     INNER JOIN node n ON (n.database_name = crn.database_name)
     WHERE crn.chunk_id = close_chunk_end.chunk_id
     LOOP
-        SELECT t.max_time
+        SELECT t.max_time_return::BIGINT
         INTO max_time_replica
-        FROM dblink(crn_node_row.server_name,
-                    format('SELECT * FROM _sysinternal.max_time_for_chunk_close(%L, %L)', crn_node_row.schema_name,
-                           crn_node_row.table_name)) AS t(max_time BIGINT);
+        FROM  _meta.node_transaction_exec_with_return(crn_node_row.database_name, crn_node_row.server_name,
+                    format('SELECT * FROM _sysinternal.max_time_for_chunk_close(%L, %L)', 
+                        crn_node_row.schema_name,
+                        crn_node_row.table_name)
+                ) AS t(max_time_return);
 
         IF max_time = 0 THEN
             max_time := max_time_replica;
@@ -217,10 +216,11 @@ BEGIN
     FOR node_row IN
     SELECT *
     FROM node n
+    WHERE n.database_name <> current_database()
     LOOP
-        PERFORM 1
-        FROM dblink(node_row.server_name,
-                    format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)) AS t(x TEXT);
+        PERFORM _meta.node_transaction_exec_with_return(node_row.database_name, node_row.server_name,
+                    format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)
+                );
     END LOOP;
 END
 $BODY$;

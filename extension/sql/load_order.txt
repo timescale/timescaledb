@@ -4,6 +4,7 @@ sql/common/cluster_setup_functions.sql
 sql/common/chunk.sql
 sql/common/hash_function.sql
 sql/common/dblink_utils.sql
+sql/meta/node_commands.sql
 sql/meta/cluster.sql
 sql/meta/node_triggers.sql
 sql/meta/chunk_triggers.sql

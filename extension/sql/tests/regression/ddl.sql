@@ -15,35 +15,7 @@ SELECT add_node('test2' :: NAME, 'localhost');
 \c Test1
 
 
-CREATE TABLE PUBLIC."Hypertable_1" (
-  time BIGINT NOT NULL,
-  "Device_id" TEXT NOT NULL,
-  temp_c int NOT NULL DEFAULT -1,
-  humidity numeric NULL DEFAULT 0,
-  sensor_1 NUMERIC NULL DEFAULT 1,
-  sensor_2 NUMERIC NOT NULL DEFAULT 1,
-  sensor_3 NUMERIC NOT NULL DEFAULT 1,
-  sensor_4 NUMERIC NOT NULL DEFAULT 1
-);
-CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
-
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-SELECT * FROM hypertable;
-SELECT * FROM hypertable_index;
-
-CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
-CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
-CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_1', TRUE);
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
-
-INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
-VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
---expect error cases
-\set ON_ERROR_STOP 0
-UPDATE "Hypertable_1" SET time = 0 WHERE TRUE;
-DELETE FROM "Hypertable_1" WHERE "Device_id" = 'dev1';
-\set ON_ERROR_STOP 1
+\ir include/ddl_ops_1.sql
 
 SELECT * FROM PUBLIC."Hypertable_1";
 EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
@@ -61,31 +33,7 @@ SELECT * FROM PUBLIC.default_replica_node;
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sysinternal"."_hyper_1_root"
 
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'Device_id', TRUE);
-ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
-ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
-ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;
-ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN humidity SET DEFAULT 100;
-ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_1 DROP DEFAULT;
-ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 SET DEFAULT NULL;
-ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_1 SET NOT NULL;
-ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 DROP NOT NULL;
-ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_2 TO sensor_2_renamed;
-ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
-DROP INDEX "ind_sensor_1";
-
---expect error cases
-\set ON_ERROR_STOP 0
-ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
-ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-\set ON_ERROR_STOP 1
-
---create column with same name as previously renamed one
-ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
---create column with same name as previously dropped one
-ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
-
+\ir include/ddl_ops_2.sql
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sysinternal"."_hyper_1_root"

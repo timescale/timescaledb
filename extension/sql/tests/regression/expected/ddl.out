@@ -24,6 +24,7 @@ SELECT add_node('test2' :: NAME, 'localhost');
 (1 row)
 
 \c Test1
+\ir include/ddl_ops_1.sql
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
   "Device_id" TEXT NOT NULL,
@@ -201,6 +202,7 @@ Triggers:
  sensor_4  | numeric | not null default 1             | main     |              | 
 Child tables: _sysinternal._hyper_1_0_replica
 
+\ir include/ddl_ops_2.sql
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
  set_is_distinct_flag 
 ----------------------

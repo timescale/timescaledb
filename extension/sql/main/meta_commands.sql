@@ -2,8 +2,8 @@
 --Any command executed by the _sysinternal.meta_transaction_exec command will be committed on the meta node only
 --when the local transaction commits.
 
---Called by _sysinternal.meta_transaction_exec to start a transaction. Can be called directly to start a transaction 
---if you need to use some of the more custom dblink functions. Returns the dblink connection name for the started transaction. 
+--Called by _sysinternal.meta_transaction_exec to start a transaction. Can be called directly to start a transaction
+--if you need to use some of the more custom dblink functions. Returns the dblink connection name for the started transaction.
 CREATE OR REPLACE FUNCTION _sysinternal.meta_transaction_start()
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -34,10 +34,51 @@ $BODY$
 DECLARE
     conn_name TEXT;
 BEGIN
-    SELECT _sysinternal.meta_transaction_start() INTO conn_name;
-    
-    PERFORM * FROM dblink(conn_name, sql_code) AS t(r TEXT);
+    IF get_meta_database_name() <> current_database() THEN
+        SELECT _sysinternal.meta_transaction_start() INTO conn_name;
+        PERFORM * FROM dblink(conn_name, sql_code) AS t(r TEXT);
+    ELSE
+        EXECUTE sql_code;
+    END IF;
 END
 $BODY$;
 
+--This should be called to execute code on a meta node with a text return. It is not necessary to
+--call _sysinternal.meta_transaction_start() beforehand. The code excuted by this function
+--will be automatically committed when the local transaction commits (in pre-commit).
+CREATE OR REPLACE FUNCTION  _sysinternal.meta_transaction_exec_with_return(sql_code text)
+    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    conn_name TEXT;
+    return_value TEXT;
+BEGIN
+    IF get_meta_database_name() <> current_database() THEN
+        SELECT _sysinternal.meta_transaction_start() INTO conn_name;
+        SELECT t.r INTO return_value FROM dblink(conn_name, sql_code) AS t(r TEXT);
+    ELSE
+        EXECUTE sql_code INTO return_value;
+    END IF;
+    RETURN return_value;
+END
+$BODY$;
+
+
+--This should be called to execute code on a meta node in a way that doesn't wait for the local commit.
+--i.e. This command is committed on meta right away w/o waiting for the local commit.
+--A consequence is that the remote command will not be rolled back if the local transaction is.
+CREATE OR REPLACE FUNCTION  _sysinternal.meta_immediate_commit_exec_with_return(sql_code text)
+    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    return_value TEXT;
+BEGIN
+    IF get_meta_database_name() <> current_database() THEN
+        SELECT t.r INTO return_value FROM dblink(get_meta_server_name(), sql_code) AS t(r TEXT);
+    ELSE
+        EXECUTE sql_code INTO return_value;
+    END IF;
+    RETURN return_value;
+END
+$BODY$;
 
