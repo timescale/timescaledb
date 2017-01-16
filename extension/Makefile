@@ -35,4 +35,4 @@ package: clean all generate-sql-install-file
 	$(install_sh) -m 644 iobeamdb.control 'package/extension/'
 	$(install_sh) -m 644 iobeamdb--1.0.sql  'package/extension/'
 
-.PHONY: check-sql-files generate-sql-install-file start-pg-docker stop-pg-docker test test-regression test-unit
+.PHONY: check-sql-files generate-sql-install-file

@@ -1,21 +1,26 @@
-### Running docker image
+### Building and running in Docker
 
-To start the database, simply:
+The `Makefile` included in this repo has convenient commands for building,
+starting, and stopping a Docker image of **iobeamdb**:
 ```bash
-make start-pg-docker
-```
-This will allow you to run the tests. When finished,
-```bash
-make stop-pg-docker
+# To build the image
+make build-docker
+# To start the image (will stop any running instances first)
+make start-docker
+# To stop the image
+make stop-docker
 ```
 
-### Initializing a single-node database
-After setting up a docker image, you can start a local 
-single node database with the following command:
+With the Docker image running you can run the tests (see Testing) or create
+your own single-node cluster.
+
+#### Initializing a single-node database
+After starting the Docker image, you can start a local single node database:
 ```bash
 make setup-single-node-db
 ```
-This will set up a database named iobeam which can be accessed with:
+
+This will set up a database named `iobeam` which can be accessed with:
 ```bash
 psql -U postgres -h localhost -d iobeam
 ```
@@ -27,10 +32,14 @@ psql -U postgres -h localhost -d iobeam
  * [Querying With Ioql](extension/sql/tests/regression/query.sql)
 
 ### Testing
-There are three commands to run tests: (1) all tests, (2) regression tests, and
-(3) unit tests. They are:
+There are four commands to run tests:
 ```bash
-make test
+# Build and run a docker image and run all tests in that image
+make test-docker
+# Run all tests (no image built)
+make test-all
+# Run regression tests (no image built)
 make test-regression
+# Run unit tests (no image built)
 make test-unit
 ```
