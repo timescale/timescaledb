@@ -23,7 +23,7 @@ CREATE TABLE PUBLIC."testNs" (
   series_bool BOOLEAN NULL
 );
 CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
-SELECT * FROM add_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 

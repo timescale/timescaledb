@@ -36,7 +36,7 @@ CREATE INDEX ON PUBLIC."$NAMESPACE" (time, device_id);
 CREATE INDEX ON PUBLIC."$NAMESPACE" (device_id, time);
 CREATE INDEX ON PUBLIC."$NAMESPACE" ("nUm_1", time);
 
-SELECT * FROM add_hypertable('"public"."$NAMESPACE"', 'time', 'device_id', hypertable_name=>'$NAMESPACE');
+SELECT * FROM create_hypertable('"public"."$NAMESPACE"', 'time', 'device_id', hypertable_name=>'$NAMESPACE');
 
 SELECT set_is_distinct_flag('"public"."$NAMESPACE"', 'device_id', TRUE);
 SELECT set_is_distinct_flag('"public"."$NAMESPACE"', 'string_1', TRUE);

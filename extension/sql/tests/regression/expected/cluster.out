@@ -51,7 +51,7 @@ CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Devic
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-SELECT * FROM add_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
   name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
 --------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
  testNs | public           | testNs          | _sys_1_testNs          | _hyper_1                | _sys_1_testNs    | _hyper_1_root   | _sys_1_testNs        | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |       1073741824
