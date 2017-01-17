@@ -15,7 +15,7 @@ QUERY_DB=${QUERY_DB:-Test1}
 
 if [ "$#" -ne 2 ] ; then
     echo "usage: $0 query outputfile"
-    echo "ex: $0 \"new_ioql_query(namespace_name => '33_testNs')\" result.csv "
+    echo "ex: $0 \"new_ioql_query(hypertable_name => '33_testNs')\" result.csv "
     echo "NOTE ! This script will not populate the db. You have to make sure the right data is imported before the query"
     exit 1
 fi

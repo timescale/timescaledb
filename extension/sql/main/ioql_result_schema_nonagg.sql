@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION get_result_field_array_nonagg(query ioql_query)
 $BODY$
 SELECT CASE
        WHEN query.select_items IS NULL THEN
-           get_field_names(query.namespace_name)
+           get_field_names(query.hypertable_name)
        ELSE
            ARRAY(
                SELECT *
@@ -13,7 +13,7 @@ SELECT CASE
                    (
                        (
                           SELECT time_field AS field_name
-                          FROM get_time_field(query.namespace_name) time_field
+                          FROM get_time_field(query.hypertable_name) time_field
                           WHERE time_field NOT IN (
                             SELECT field AS field_name
                             FROM unnest(query.select_items)
@@ -64,7 +64,7 @@ CREATE OR REPLACE FUNCTION get_result_field_def_array_nonagg(query ioql_query)
 $BODY$
 SELECT ARRAY(
     SELECT format('%I %s', field, data_type)
-    FROM get_field_names_and_types(query.namespace_name,
+    FROM get_field_names_and_types(query.hypertable_name,
                                    get_result_field_array_nonagg(query)) AS ft(field, data_type)
 )
 $BODY$;
@@ -75,5 +75,3 @@ CREATE OR REPLACE FUNCTION get_result_column_def_list_nonagg(query ioql_query)
 $BODY$
 SELECT array_to_string(get_result_field_def_array_nonagg(query), ', ')
 $BODY$;
-
-

@@ -19,7 +19,7 @@ BEGIN
     SELECT hr.replica_id
     INTO STRICT query_replica_id
     FROM hypertable_replica hr
-    WHERE hr.hypertable_name = query.namespace_name
+    WHERE hr.hypertable_name = query.hypertable_name
     ORDER BY random()
     LIMIT 1;
 
@@ -27,7 +27,7 @@ BEGIN
         SELECT DISTINCT crn.database_name
         FROM partition_replica pr
         INNER JOIN chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
-        WHERE pr.hypertable_name = query.namespace_name AND
+        WHERE pr.hypertable_name = query.hypertable_name AND
               pr.replica_id = query_replica_id
     )
     INTO database_names;
@@ -103,4 +103,3 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql STABLE;
-

@@ -14,10 +14,10 @@ BEGIN
         $$,
         get_result_column_def_list_nonagg(query),
         query,
-        query.namespace_name,
+        query.hypertable_name,
         get_limit_clause(query.limit_rows),
         epoch,
-		get_time_field(query.namespace_name)
+		get_time_field(query.hypertable_name)
     );
 END
 $BODY$;
@@ -49,7 +49,7 @@ BEGIN
             ioql_query_nonagg_without_limit_sql(query, epoch),
             get_limit_clause(query.limit_rows),
             (query.limit_by_field).count,
-			get_time_field(query.namespace_name)
+			get_time_field(query.hypertable_name)
         );
     ELSE
         RETURN format(
@@ -64,7 +64,7 @@ BEGIN
             get_result_column_list_nonagg(query),
             ioql_query_nonagg_without_limit_sql(query, epoch),
             get_limit_clause(query.limit_rows),
-			get_time_field(query.namespace_name)
+			get_time_field(query.hypertable_name)
         );
     END IF;
 END;

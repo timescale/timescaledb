@@ -146,11 +146,11 @@ CREATE OR REPLACE FUNCTION get_partial_aggregate_column_def(query ioql_query)
 SELECT CASE
        WHEN (query.aggregate).group_field IS NOT NULL THEN
            format('%I %s, group_time %s, %s', (query.aggregate).group_field,
-                  get_field_type(query.namespace_name, (query.aggregate).group_field),
-                  get_time_field_type(query.namespace_name),
+                  get_field_type(query.hypertable_name, (query.aggregate).group_field),
+                  get_time_field_type(query.hypertable_name),
                   field_list)
        ELSE
-           format('group_time %s, %s',  get_time_field_type(query.namespace_name), field_list)
+           format('group_time %s, %s',  get_time_field_type(query.hypertable_name), field_list)
        END
 FROM
     (
@@ -217,7 +217,7 @@ DECLARE
 BEGIN
 
     select_clause :=
-    'SELECT ' || get_partial_aggregate_sql(get_time_field(query.namespace_name), get_time_field_type(query.namespace_name), query.select_items, query.aggregate);
+    'SELECT ' || get_partial_aggregate_sql(get_time_field(query.hypertable_name), get_time_field_type(query.hypertable_name), query.select_items, query.aggregate);
 
     RETURN base_query_raw(
         select_clause,
@@ -435,7 +435,7 @@ SELECT format('SELECT * FROM (%s) as combined_node ',
               coalesce(
                   string_agg(code_part, ' UNION ALL '),
                   format('SELECT %s WHERE FALSE',
-                         get_combine_partial_aggregate_zero_value_sql(get_time_field_type(query.namespace_name), query.select_items, query.aggregate))
+                         get_combine_partial_aggregate_zero_value_sql(get_time_field_type(query.hypertable_name), query.select_items, query.aggregate))
               ))
 -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
 FROM
@@ -477,16 +477,16 @@ DECLARE
     time_col_type regtype;
 BEGIN
     IF query.limit_time_periods IS NOT NULL THEN
-        time_col_type := get_time_field_type(query.namespace_name);
+        time_col_type := get_time_field_type(query.hypertable_name);
         trange := get_time_periods_limit(epoch,
-                                         replica_id, 
+                                         replica_id,
                                          combine_predicates(default_predicates(query, epoch), additional_constraints),
                                          (query.aggregate).group_time,
                                          query.limit_time_periods);
         additional_constraints := combine_predicates(
-            format('%1$I >= %2$s AND %1$I <=%3$s', 
-              get_time_field(query.namespace_name),  
-              _sysinternal.time_literal_sql(trange.start_time, time_col_type), 
+            format('%1$I >= %2$s AND %1$I <=%3$s',
+              get_time_field(query.hypertable_name),  
+              _sysinternal.time_literal_sql(trange.start_time, time_col_type),
               _sysinternal.time_literal_sql(trange.end_time, time_col_type)
             ),
             additional_constraints);
@@ -513,6 +513,3 @@ BEGIN
     RETURN grouped_sql;
 END
 $BODY$;
-
-
-
