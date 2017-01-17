@@ -57,6 +57,9 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypert
  testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+\set ON_ERROR_STOP 1
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
  set_is_distinct_flag 
 ----------------------
