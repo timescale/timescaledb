@@ -44,30 +44,78 @@ INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 
 SELECT * FROM PUBLIC."testNs";
 
+
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
 
+\echo 'The next 2 queries will differ in output between UTC and EST since the mod is on the 100th hour UTC'
+SET timezone = 'UTC';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+SET timezone = 'EST';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((100 * 60 * 60 * 1e6) :: BIGINT)
                      ));
 
+\echo 'The rest of the queries will be the same in output between UTC and EST'
 
+SET timezone = 'UTC';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+SET timezone = 'EST';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
                      ));
 
+
+
+SET timezone = 'UTC';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+
+
+SET timezone = 'UTC';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
                   ));
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
+                  ));
+
+
+SET timezone = 'UTC';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT),
                                     limit_time_periods => 2 
                   ));
-
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT),
+                                    limit_time_periods => 2
+                  ));

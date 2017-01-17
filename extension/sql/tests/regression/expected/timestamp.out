@@ -82,6 +82,9 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
  {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
 (5 rows)
 
+\echo 'The next 2 queries will differ in output between UTC and EST since the mod is on the 100th hour UTC'
+The next 2 queries will differ in output between UTC and EST since the mod is on the 100th hour UTC
+SET timezone = 'UTC';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
@@ -92,6 +95,20 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
  {"time":"2009-11-10T08:00:00","sum(series_0)":8.5}
 (1 row)
 
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((100 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+                        json                        
+----------------------------------------------------
+ {"time":"2009-11-10T03:00:00","sum(series_0)":8.5}
+(1 row)
+
+\echo 'The rest of the queries will be the same in output between UTC and EST'
+The rest of the queries will be the same in output between UTC and EST
+SET timezone = 'UTC';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
@@ -103,6 +120,43 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
  {"time":"2009-11-12T01:00:00","sum(series_0)":3}
 (2 rows)
 
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+                        json                        
+----------------------------------------------------
+ {"time":"2009-11-10T23:00:00","sum(series_0)":5.5}
+ {"time":"2009-11-12T01:00:00","sum(series_0)":3}
+(2 rows)
+
+SET timezone = 'UTC';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+                        json                        
+----------------------------------------------------
+ {"time":"2009-11-10T23:00:00","sum(series_0)":5.5}
+ {"time":"2009-11-12T01:00:00","sum(series_0)":3}
+(2 rows)
+
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
+                     ));
+                        json                        
+----------------------------------------------------
+ {"time":"2009-11-10T23:00:00","sum(series_0)":5.5}
+ {"time":"2009-11-12T01:00:00","sum(series_0)":3}
+(2 rows)
+
+SET timezone = 'UTC';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
@@ -114,11 +168,36 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
  {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
 (3 rows)
 
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
+                  ));
+                                                          json                                                          
+------------------------------------------------------------------------------------------------------------------------
+ {"timeCustom":"2009-11-10T23:00:02","device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
+ {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
+ {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+(3 rows)
+
+SET timezone = 'UTC';
 SELECT *
 FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT),
                                     limit_time_periods => 2 
+                  ));
+                       json                       
+--------------------------------------------------
+ {"time":"2009-11-12T01:00:00","sum(series_0)":3}
+(1 row)
+
+SET timezone = 'EST';
+SELECT *
+FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
+                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT),
+                                    limit_time_periods => 2
                   ));
                        json                       
 --------------------------------------------------

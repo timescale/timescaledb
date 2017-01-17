@@ -6,13 +6,21 @@ SELECT CASE
            format('%I', time_col_name)
        WHEN time_col_type IN ('BIGINT', 'INTEGER', 'SMALLINT') THEN
            format('(%1$I - (%1$I %% %2$L::%3$s))::%3$s', time_col_name, group_time, time_col_type)
-       WHEN time_col_type IN ('TIMESTAMP', 'TIMESTAMPTZ') THEN
-           --NOTE: note the conversion at the end. important for timestamp without timezone. right conversion?
+       WHEN time_col_type IN ('TIMESTAMPTZ'::REGTYPE) THEN
            format('to_timestamp( (
-                  (EXTRACT(EPOCH from %1$I)*1e6)::bigint - 
+                  (EXTRACT(EPOCH from %1$I)*1e6)::bigint -
                   ( (EXTRACT(EPOCH from %1$I)*1e6)::bigint %% %2$L::bigint )
               )::double precision / 1e6
-            )::%3$s', time_col_name, group_time, time_col_type) --group time is given in us
+            )', time_col_name, group_time) --group time is given in us
+       WHEN time_col_type IN ('TIMESTAMP'::REGTYPE) THEN
+           --This converts the timestamp to a timestampz, then converts to epoch in UTC time, and then
+           --converts back to a timestamp. All conversions done using the timezone setting.
+           --A consequence is that the mod is taken with respect to UTC time.
+           format('to_timestamp( (
+                  (EXTRACT(EPOCH from %1$I::timestamptz)*1e6)::bigint -
+                  ( (EXTRACT(EPOCH from %1$I::timestamptz)*1e6)::bigint %% %2$L::bigint )
+              )::double precision / 1e6
+            )::timestamp', time_col_name, group_time) --group time is given in us
        END;
 $BODY$;
 
