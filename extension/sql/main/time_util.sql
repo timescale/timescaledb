@@ -17,7 +17,7 @@ BEGIN
       WHEN 'BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype THEN
         RETURN format('%s::bigint', identifier); --scale determined by user.
       WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype THEN
-        RETURN format('((EXTRACT(epoch FROM %s)*1e6)::bigint)', identifier); --microseconds
+        RETURN format('((EXTRACT(epoch FROM %s::timestamptz)*1e6)::bigint)', identifier); --microseconds since UTC epoch
     END CASE;
 END
 $BODY$;
