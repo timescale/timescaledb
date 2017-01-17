@@ -29,10 +29,10 @@ SELECT CASE
            ARRAY [
            format('%I %s', (query.aggregate).group_field,
                   get_field_type(query.hypertable_name, (query.aggregate).group_field)),
-           'time '|| get_time_field_type(query.hypertable_name) ] ||
+           'time '|| get_time_column_type(query.hypertable_name) ] ||
            field_array
        ELSE
-           ARRAY ['time '|| get_time_field_type(query.hypertable_name)] ||
+           ARRAY ['time '|| get_time_column_type(query.hypertable_name)] ||
            field_array
        END
 FROM

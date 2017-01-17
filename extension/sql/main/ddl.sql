@@ -3,8 +3,8 @@
 -- Converts a regular postgres table to a hypertable.
 --
 -- main_table - The OID of the table to be converted
--- time_field_name - Name of the field that contains time for a given record
--- partitioning_field - Name of the field to partition data by
+-- time_column_name - Name of the column that contains time for a given record
+-- partitioning_column - Name of the column to partition data by
 -- replication_factor -- (Optional) Number of replicas for data
 -- number_partitions - (Optional) Number of partitions for data
 -- associated_schema_name - (Optional) Schema for internal hypertable tables
@@ -12,8 +12,8 @@
 -- hypertable_name - (Optional) Name for the hypertable, if different than the main table name
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
-    time_field_name         NAME,
-    partitioning_field      NAME,
+    time_column_name        NAME,
+    partitioning_column     NAME,
     replication_factor      SMALLINT = 1,
     number_partitions       SMALLINT = NULL,
     associated_schema_name  NAME = NULL,
@@ -28,7 +28,7 @@ DECLARE
   hypertable_row hypertable;
   table_name NAME;
   schema_name NAME;
-  time_field_type REGTYPE;
+  time_column_type REGTYPE;
   att_row pg_attribute;
 BEGIN
        SELECT relname, nspname
@@ -38,18 +38,18 @@ BEGIN
        WHERE c.OID = main_table;
 
        SELECT atttypid
-       INTO STRICT time_field_type
+       INTO STRICT time_column_type
        FROM pg_attribute
-       WHERE attrelid = main_table AND attname = time_field_name;
+       WHERE attrelid = main_table AND attname = time_column_name;
 
       SELECT *
         INTO hypertable_row
         FROM  _iobeamdb_meta_api.create_hypertable(
             schema_name,
             table_name,
-            time_field_name,
-            time_field_type,
-            partitioning_field,
+            time_column_name,
+            time_column_type,
+            partitioning_column,
             replication_factor,
             number_partitions,
             associated_schema_name,
@@ -77,7 +77,7 @@ BEGIN
             _sysinternal.get_general_index_definition(indexrelid, indrelid)
         )
       WHERE indrelid = main_table;
-      
+
       RETURN hypertable_row;
 END
 $BODY$;
@@ -109,7 +109,7 @@ BEGIN
     WHERE main_schema_name = schema_name AND
           main_table_name = table_name;
 
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
       format('SELECT _meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
         hypertable_row.name,

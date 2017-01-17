@@ -397,17 +397,17 @@ FROM "_sysinternal"._hyper_1_0_distinct;
 (2 rows)
 
 SELECT * FROM hypertable;
-           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
----------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
- testNs                    | public           | testNs             | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | timeCustom      | bigint          | Test1      |       1073741824
- public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |            10000
+           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs                    | public           | testNs             | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | timeCustom       | bigint           | Test1      |       1073741824
+ public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |            10000
 (2 rows)
 
 DROP TABLE "testNs";
 SELECT * FROM hypertable;
-           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
----------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
- public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |            10000
+           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |            10000
 (1 row)
 
 \dt  "public".*

@@ -46,7 +46,7 @@ typedef struct hypertable_info
 
 typedef struct partitioning_info
 {
-	Name partitioning_field;
+	Name partitioning_column;
 	Name partitioning_func;
 	int32 partitioning_mod;
 } partitioning_info;
@@ -241,13 +241,13 @@ get_hypertable_info(Oid mainRelationOid)
 		for (j = 0; j < total_rows; j++)
 		{
 			HeapTuple tuple = SPI_tuptable->vals[j];
-			Name partitioning_field = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
+			Name partitioning_column = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
 			Name partitioning_func =  DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
 			int32 partitioning_mod =  DatumGetInt32(SPI_getbinval(tuple, tupdesc, 4, &isnull));
 			partitioning_info* info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
 
-			info->partitioning_field = SPI_palloc(sizeof(NameData));
-			memcpy(info->partitioning_field, partitioning_field,  sizeof(NameData));
+			info->partitioning_column = SPI_palloc(sizeof(NameData));
+			memcpy(info->partitioning_column, partitioning_column,  sizeof(NameData));
 
 			info->partitioning_func = SPI_palloc(sizeof(NameData));
 			memcpy(info->partitioning_func, partitioning_func,  sizeof(NameData));
@@ -278,9 +278,9 @@ get_hypertable_info(Oid mainRelationOid)
  * the query contains equivalence qualifiers on the space partition key.
  *
  * This function goes through the upper-level qual of a parse tree and finds quals of the form:
- * 		partitioning_field = const
+ * 		partitioning_column = const
  * It transforms them into the qual:
- * 		partitioning_field = const AND partitioning_func(partition_field, partitioning_mod) = partitioning_func(const, partitioning_mod)
+ * 		partitioning_column = const AND partitioning_func(partition_field, partitioning_mod) = partitioning_func(const, partitioning_mod)
  *
  * This tranformation helps because the check constraint on a table is of the form CHECK(partitioning_func(partition_field, partitioning_mod) BETWEEN X AND Y).
  */
@@ -300,9 +300,9 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 	if (node == NULL)
 		return NULL;
 
-	/* Detect partitioning_field = const. If not fall-thru.
+	/* Detect partitioning_column = const. If not fall-thru.
 	 * If detected, replace with
-	 *    partitioning_field = const AND
+	 *    partitioning_column = const AND
 	 *    partitioning_func(partition_field, partitioning_mod) = partitioning_func(const, partitioning_mod)
 	 */
 	if (IsA(node, OpExpr))
@@ -381,7 +381,7 @@ get_partitioning_info_for_partition_field_var(Var *var_expr, Query *parse, List 
 			foreach(picell, info->partitioning_info)
 			{
 				partitioning_info *pi = lfirst(picell);
-				if (strcmp(NameStr(*(pi->partitioning_field)), varname)==0)
+				if (strcmp(NameStr(*(pi->partitioning_column)), varname)==0)
 				{
 					return pi;
 				}
@@ -467,7 +467,7 @@ register_dblink_precommit_connection(PG_FUNCTION_ARGS)
 static void io_xact_callback(XactEvent event, void *arg)
 {
 	ListCell *cell;
-	
+
 	if(list_length(callbackConnections) == 0)
 		return;
 
@@ -513,4 +513,3 @@ static void io_xact_callback(XactEvent event, void *arg)
 	}
 	callbackConnections = NIL;
 }
-

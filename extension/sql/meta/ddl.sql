@@ -4,9 +4,9 @@ CREATE SEQUENCE IF NOT EXISTS default_hypertable_seq;
 CREATE OR REPLACE FUNCTION _meta.create_hypertable(
     main_schema_name        NAME,
     main_table_name         NAME,
-    time_field_name         NAME,
-    time_field_type         REGTYPE,
-    partitioning_field      NAME,
+    time_column_name        NAME,
+    time_column_type        REGTYPE,
+    partitioning_column      NAME,
     replication_factor      SMALLINT,
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
@@ -27,7 +27,7 @@ BEGIN
 
     IF associated_schema_name IS NULL THEN
         associated_schema_name = '_sysinternal';
-    END IF; 
+    END IF;
 
     IF associated_table_prefix IS NULL THEN
         associated_table_prefix = format('_hyper_%s', id);
@@ -50,9 +50,9 @@ BEGIN
         root_schema_name, root_table_name,
         distinct_schema_name, distinct_table_name,
         replication_factor,
-        placement, 
+        placement,
         chunk_size_bytes,
-        time_field_name, time_field_type,
+        time_column_name, time_column_type,
         created_on)
     VALUES (
         hypertable_name,
@@ -63,13 +63,13 @@ BEGIN
         replication_factor,
         placement,
         chunk_size_bytes,
-        time_field_name, time_field_type,
+        time_column_name, time_column_type,
         created_on
       )
     ON CONFLICT DO NOTHING RETURNING * INTO hypertable_row;
 
     IF number_partitions != 0 THEN
-        PERFORM add_equi_partition_epoch(hypertable_name, number_partitions, partitioning_field);
+        PERFORM add_equi_partition_epoch(hypertable_name, number_partitions, partitioning_column);
     END IF;
     RETURN hypertable_row;
 END

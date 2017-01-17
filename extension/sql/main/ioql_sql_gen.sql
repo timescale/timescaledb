@@ -77,13 +77,13 @@ SELECT '( ' || string_agg(get_one_field_predicate_clause(p), format(' %s ', cond
 FROM unnest(cond.predicates) AS p
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_constrained_partitioning_field_value(partitioning_field_name NAME,
+CREATE OR REPLACE FUNCTION get_constrained_partitioning_column_value(partitioning_column_name NAME,
                                                                     cond                    field_condition_type)
     RETURNS TEXT LANGUAGE SQL STABLE STRICT AS
 $BODY$
 SELECT p.constant
 FROM unnest(cond.predicates) AS p
-WHERE p.field = partitioning_field_name AND cond.conjunctive = 'AND' AND p.op = '='
+WHERE p.field = partitioning_column_name AND cond.conjunctive = 'AND' AND p.op = '='
 $BODY$;
 
 CREATE OR REPLACE FUNCTION get_partitioning_predicate(
@@ -96,7 +96,7 @@ DECLARE
     keyspace_value SMALLINT;
     field_value    TEXT;
 BEGIN
-    field_value := get_constrained_partitioning_field_value(epoch.partitioning_field, query.field_condition);
+    field_value := get_constrained_partitioning_column_value(epoch.partitioning_column, query.field_condition);
 
     EXECUTE format($$ SELECT %s(%L, %L) $$, epoch.partitioning_func, field_value, epoch.partitioning_mod)
     INTO keyspace_value;
@@ -104,7 +104,7 @@ BEGIN
     IF field_value IS NOT NULL THEN
         RETURN format('%s(%I, %L) = %L',
                       epoch.partitioning_func,
-                      epoch.partitioning_field,
+                      epoch.partitioning_column,
                       epoch.partitioning_mod,
                       keyspace_value);
     END IF;
@@ -116,7 +116,7 @@ CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(
-    get_time_predicate(get_time_field(query.hypertable_name), get_time_field_type(query.hypertable_name), query.time_condition),
+    get_time_predicate(get_time_column(query.hypertable_name), get_time_column_type(query.hypertable_name), query.time_condition),
     get_field_predicate_clause(query.field_condition),
     get_select_field_predicate(query.select_items),
     get_partitioning_predicate(query, epoch)
@@ -159,9 +159,9 @@ CREATE OR REPLACE FUNCTION get_orderby_clause_nonagg(query ioql_query)
 $BODY$
 SELECT CASE
        WHEN query.limit_by_field IS NOT NULL THEN
-           format('ORDER BY %I DESC NULLS LAST, %s', get_time_field(query.hypertable_name), (query.limit_by_field).field)
+           format('ORDER BY %I DESC NULLS LAST, %s', get_time_column(query.hypertable_name), (query.limit_by_field).field)
 	  ELSE
-           format('ORDER BY %I DESC NULLS LAST', get_time_field(query.hypertable_name))
+           format('ORDER BY %I DESC NULLS LAST', get_time_column(query.hypertable_name))
        END;
 $BODY$;
 

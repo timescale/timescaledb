@@ -204,7 +204,7 @@ BEGIN
     INTO field_exists
     FROM field f
     WHERE f.hypertable_name = epoch_row.hypertable_name
-          AND f.name = epoch_row.partitioning_field;
+          AND f.name = epoch_row.partitioning_column;
 
     IF field_exists THEN
         PERFORM _sysinternal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
@@ -237,7 +237,7 @@ BEGIN
             ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
         $$,
         schema_name, table_name,
-        epoch_row.partitioning_func, epoch_row.partitioning_field,
+        epoch_row.partitioning_func, epoch_row.partitioning_column,
         epoch_row.partitioning_mod, keyspace_start, keyspace_end);
 
 END
@@ -268,7 +268,7 @@ BEGIN
             ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s)
         $$,
             _sysinternal.time_col_name_for_crn(schema_name, table_name),
-            schema_name, table_name, 
+            schema_name, table_name,
             _sysinternal.time_literal_sql(start_time, time_col_type),
             _sysinternal.time_literal_sql(end_time, time_col_type));
     ELSIF start_time IS NOT NULL THEN
@@ -284,7 +284,7 @@ BEGIN
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s)
         $$,
-            schema_name, table_name, 
+            schema_name, table_name,
             _sysinternal.time_col_name_for_crn(schema_name, table_name),
             _sysinternal.time_literal_sql(end_time, time_col_type));
     END IF;

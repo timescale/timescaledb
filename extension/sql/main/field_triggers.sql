@@ -15,7 +15,7 @@ BEGIN
     INNER JOIN partition p ON (p.epoch_id = pe.id)
     INNER JOIN partition_replica pr ON (pr.partition_id = p.id)
     WHERE pe.hypertable_name = create_partition_constraint_for_field.hypertable_name
-          AND pe.partitioning_field = create_partition_constraint_for_field.field_name;
+          AND pe.partitioning_column = create_partition_constraint_for_field.field_name;
 END
 $BODY$;
 

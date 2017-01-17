@@ -147,10 +147,10 @@ SELECT CASE
        WHEN (query.aggregate).group_field IS NOT NULL THEN
            format('%I %s, group_time %s, %s', (query.aggregate).group_field,
                   get_field_type(query.hypertable_name, (query.aggregate).group_field),
-                  get_time_field_type(query.hypertable_name),
+                  get_time_column_type(query.hypertable_name),
                   field_list)
        ELSE
-           format('group_time %s, %s',  get_time_field_type(query.hypertable_name), field_list)
+           format('group_time %s, %s',  get_time_column_type(query.hypertable_name), field_list)
        END
 FROM
     (
@@ -217,7 +217,7 @@ DECLARE
 BEGIN
 
     select_clause :=
-    'SELECT ' || get_partial_aggregate_sql(get_time_field(query.hypertable_name), get_time_field_type(query.hypertable_name), query.select_items, query.aggregate);
+    'SELECT ' || get_partial_aggregate_sql(get_time_column(query.hypertable_name), get_time_column_type(query.hypertable_name), query.select_items, query.aggregate);
 
     RETURN base_query_raw(
         select_clause,
@@ -435,7 +435,7 @@ SELECT format('SELECT * FROM (%s) as combined_node ',
               coalesce(
                   string_agg(code_part, ' UNION ALL '),
                   format('SELECT %s WHERE FALSE',
-                         get_combine_partial_aggregate_zero_value_sql(get_time_field_type(query.hypertable_name), query.select_items, query.aggregate))
+                         get_combine_partial_aggregate_zero_value_sql(get_time_column_type(query.hypertable_name), query.select_items, query.aggregate))
               ))
 -- query.limit_rows + 1, needed since a group can span across time. +1 guarantees group was closed
 FROM
@@ -459,7 +459,7 @@ $BODY$
 SELECT (get_time_periods_limit_for_max(max_time.max_time, period_length, num_periods)).*
 FROM
     (
-        SELECT max(get_max_time_on_partition(get_time_field(epoch.hypertable_name),get_time_field_type(epoch.hypertable_name),pr, additional_constraints)) AS max_time
+        SELECT max(get_max_time_on_partition(get_time_column(epoch.hypertable_name),get_time_column_type(epoch.hypertable_name),pr, additional_constraints)) AS max_time
         FROM get_partition_replicas(epoch, replica_id) pr
     ) AS max_time
 $BODY$;
@@ -477,7 +477,7 @@ DECLARE
     time_col_type regtype;
 BEGIN
     IF query.limit_time_periods IS NOT NULL THEN
-        time_col_type := get_time_field_type(query.hypertable_name);
+        time_col_type := get_time_column_type(query.hypertable_name);
         trange := get_time_periods_limit(epoch,
                                          replica_id,
                                          combine_predicates(default_predicates(query, epoch), additional_constraints),
@@ -485,7 +485,7 @@ BEGIN
                                          query.limit_time_periods);
         additional_constraints := combine_predicates(
             format('%1$I >= %2$s AND %1$I <=%3$s',
-              get_time_field(query.hypertable_name),  
+              get_time_column(query.hypertable_name),  
               _sysinternal.time_literal_sql(trange.start_time, time_col_type),
               _sysinternal.time_literal_sql(trange.end_time, time_col_type)
             ),

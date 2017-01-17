@@ -28,12 +28,12 @@ $BODY$;
 -- Get the name of the time column for a hypertable.
 --
 -- hypertable_name - name of the hypertable.
-CREATE OR REPLACE FUNCTION get_time_field(
+CREATE OR REPLACE FUNCTION get_time_column(
     hypertable_name NAME
 )
     RETURNS NAME LANGUAGE SQL STABLE AS
 $BODY$
-    SELECT time_field_name
+    SELECT time_column_name
     FROM hypertable h
     WHERE h.name = hypertable_name;
 $BODY$;
@@ -41,12 +41,12 @@ $BODY$;
 -- Get the type of the time column for a hypertable.
 --
 -- hypertable_name - Name of the hypertable.
-CREATE OR REPLACE FUNCTION get_time_field_type(
+CREATE OR REPLACE FUNCTION get_time_column_type(
     hypertable_name NAME
 )
     RETURNS REGTYPE LANGUAGE SQL STABLE AS
 $BODY$
-    SELECT time_field_type
+    SELECT time_column_type
     FROM hypertable h
     WHERE h.name = hypertable_name;
 $BODY$;
@@ -225,7 +225,7 @@ $BODY$
 DECLARE
     time_col_name NAME;
 BEGIN
-    SELECT h.time_field_name INTO STRICT time_col_name
+    SELECT h.time_column_name INTO STRICT time_col_name
     FROM hypertable h
     INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)
     INNER JOIN partition p ON (p.epoch_id = pe.id)
@@ -249,7 +249,7 @@ $BODY$
 DECLARE
     time_col_type REGTYPE;
 BEGIN
-    SELECT h.time_field_type INTO STRICT time_col_type
+    SELECT h.time_column_type INTO STRICT time_col_type
     FROM hypertable h
     INNER JOIN partition_epoch pe ON (pe.hypertable_name = h.name)
     INNER JOIN partition p ON (p.epoch_id = pe.id)

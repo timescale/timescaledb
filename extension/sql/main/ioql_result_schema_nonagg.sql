@@ -12,9 +12,9 @@ SELECT CASE
                FROM
                    (
                        (
-                          SELECT time_field AS field_name
-                          FROM get_time_field(query.hypertable_name) time_field
-                          WHERE time_field NOT IN (
+                          SELECT time_column AS field_name
+                          FROM get_time_column(query.hypertable_name) time_column
+                          WHERE time_column NOT IN (
                             SELECT field AS field_name
                             FROM unnest(query.select_items)
                           )
