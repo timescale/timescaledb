@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION get_distinct_values_local(hypertable_name NAME, replica_id SMALLINT, field TEXT)
+CREATE OR REPLACE FUNCTION get_distinct_values_local(hypertable_name NAME, replica_id SMALLINT, column_name TEXT)
     RETURNS SETOF TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
@@ -9,8 +9,8 @@ BEGIN
         $$
             SELECT DISTINCT value
             FROM %s
-            WHERE field = %L
+            WHERE column_name = %L
         $$,
-        table_name, field);
+        table_name, column_name);
 END
 $BODY$;

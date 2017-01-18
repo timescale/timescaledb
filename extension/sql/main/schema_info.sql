@@ -1,5 +1,5 @@
 -- This file contains functions related to getting information about the
--- schema of a hypertable, including fields, their types, etc.
+-- schema of a hypertable, including columns, their types, etc.
 
 CREATE OR REPLACE FUNCTION get_distinct_table_oid(
     hypertable_name NAME,
@@ -52,100 +52,100 @@ $BODY$
 $BODY$;
 
 
--- Get the list of fields for a hypertable as an ARRAY
+-- Get the list of columns for a hypertable as an ARRAY
 --
 -- hypertable_name - Name of the hypertable
-CREATE OR REPLACE FUNCTION get_field_names(
+CREATE OR REPLACE FUNCTION get_column_names(
     hypertable_name NAME
 )
     RETURNS NAME [] LANGUAGE SQL STABLE AS
 $BODY$
 SELECT ARRAY(
     SELECT name
-    FROM field f
-    WHERE f.hypertable_name = get_field_names.hypertable_name
+    FROM hypertable_column c
+    WHERE c.hypertable_name = get_column_names.hypertable_name
     ORDER BY attnum
 );
 $BODY$;
 
--- Get the list of fields (each quoted) from a hypertable as an ARRAY
+-- Get the list of columns (each quoted) from a hypertable as an ARRAY
 --
 -- hypertable_name -- Name of the hypertable
-CREATE OR REPLACE FUNCTION get_quoted_field_names(
+CREATE OR REPLACE FUNCTION get_quoted_column_names(
     hypertable_name NAME
 )
     RETURNS TEXT [] LANGUAGE SQL STABLE AS
 $BODY$
 SELECT ARRAY(
     SELECT format('%I', name)
-    FROM field f
-    WHERE f.hypertable_name = get_quoted_field_names.hypertable_name
+    FROM hypertable_column c
+    WHERE c.hypertable_name = get_quoted_column_names.hypertable_name
     ORDER BY name
 );
 $BODY$;
 
--- Get a table of fields and their types for a hypertable
+-- Get a table of columns and their types for a hypertable
 --
 -- hypertable_name - Name of the hypertable
--- field_names - Name of the fields to fetch types for
-CREATE OR REPLACE FUNCTION get_field_names_and_types(
+-- column_names - Name of the columns to fetch types for
+CREATE OR REPLACE FUNCTION get_column_names_and_types(
     hypertable_name NAME,
-    field_names     NAME []
+    column_names    NAME []
 )
-    RETURNS TABLE(field NAME, data_type REGTYPE) LANGUAGE PLPGSQL STABLE AS
+    RETURNS TABLE(column_name NAME, data_type REGTYPE) LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     rows_returned INT;
 BEGIN
     RETURN QUERY SELECT
-                     f.name,
-                     f.data_type
-                 FROM field f
-                 INNER JOIN unnest(field_names) WITH ORDINALITY
-                     AS x(field_name, ordering) ON f.name = x.field_name
-                 WHERE f.hypertable_name = get_field_names_and_types.hypertable_name
+                     c.name,
+                     c.data_type
+                 FROM hypertable_column c
+                 INNER JOIN unnest(column_names) WITH ORDINALITY
+                     AS x(column_name, ordering) ON c.name = x.column_name
+                 WHERE c.hypertable_name = get_column_names_and_types.hypertable_name
                  ORDER BY x.ordering;
     GET DIAGNOSTICS rows_returned = ROW_COUNT;
-    IF rows_returned != cardinality(field_names) THEN
+    IF rows_returned != cardinality(column_names) THEN
         DECLARE
-            missing_field NAME;
+            missing_column NAME;
         BEGIN
-            SELECT field_name
-            INTO missing_field
-            FROM unnest(field_names) AS field_name
+            SELECT cn
+            INTO missing_column
+            FROM unnest(column_names) AS cn
             WHERE NOT EXISTS(
                 SELECT 1
-                FROM field f
-                WHERE f.hypertable_name = get_field_names_and_types.hypertable_name AND
-                      f.name = field_name
+                FROM hypertable_column c
+                WHERE c.hypertable_name = get_column_names_and_types.hypertable_name AND
+                      c.name = cn
             );
-            RAISE 'Missing field "%" in hypertable "%"', missing_field, hypertable_name
+            RAISE 'Missing column "%" in hypertable "%"', missing_column, hypertable_name
             USING ERRCODE = 'IO002';
         END;
     END IF;
 END
 $BODY$;
 
--- Get the Postgres datatype of a field in a hypertable
+-- Get the Postgres datatype of a column in a hypertable
 --
 -- hypertable_name - Name of the hypertable
--- field_name - Name of the field whose type is wanted
-CREATE OR REPLACE FUNCTION get_field_type(
+-- column_name - Name of the column whose type is wanted
+CREATE OR REPLACE FUNCTION get_column_type(
     hypertable_name NAME,
-    field_name      NAME
+    column_name     NAME
 )
     RETURNS REGTYPE LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     data_type REGTYPE;
 BEGIN
-    SELECT f.data_type
+    SELECT c.data_type
     INTO data_type
-    FROM field f
-    WHERE f.name = get_field_type.field_name AND f.hypertable_name = get_field_type.hypertable_name;
+    FROM hypertable_column c
+    WHERE c.name = get_column_type.column_name AND c.hypertable_name = get_column_type.hypertable_name;
 
     IF NOT FOUND THEN
-        RAISE 'Missing field "%" in hypertable "%"', field_name, hypertable_name
+        RAISE 'Missing column "%" in hypertable "%"', column_name, hypertable_name
         USING ERRCODE = 'IO002';
     END IF;
     RETURN data_type;

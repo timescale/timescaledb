@@ -271,10 +271,10 @@ Triggers:
 Child tables: _sysinternal._hyper_1_0_replica
 
 SELECT * FROM _sysinternal._hyper_1_0_1_distinct_data;
-   field   | value 
------------+-------
- sensor_1  | 1
- Device_id | dev1
+ column_name | value 
+-------------+-------
+ sensor_1    | 1
+ Device_id   | dev1
 (2 rows)
 
 \c Test1

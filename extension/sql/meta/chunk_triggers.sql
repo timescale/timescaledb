@@ -9,13 +9,13 @@ BEGIN
         SELECT pr.replica_id, dn.database_name
         FROM partition_replica pr
         INNER JOIN (
-          SELECT * 
-          FROM 
+          SELECT *
+          FROM
           (
             SELECT DISTINCT n.database_name
             FROM node n
             LIMIT replication_factor
-          ) AS d 
+          ) AS d
           ORDER BY random()
         ) AS dn ON TRUE
         WHERE pr.partition_id = chunk_row.partition_id;
@@ -33,7 +33,7 @@ BEGIN
           ) AS dn ON true
           WHERE pr.partition_id = chunk_row.partition_id;
       IF NOT FOUND THEN
-        RETURN query SELECT * 
+        RETURN query SELECT *
         FROM _meta.place_chunks(chunk_row, 'RANDOM', replication_factor);
       END IF;
   END IF;
@@ -44,7 +44,7 @@ CREATE OR REPLACE FUNCTION _meta.on_create_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    field_row   field;
+    column_row  hypertable_column;
     schema_name NAME;
 BEGIN
     IF TG_OP = 'DELETE' THEN

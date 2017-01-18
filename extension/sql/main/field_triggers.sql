@@ -2,9 +2,9 @@
 -- change to the underlying chunk tables.
 
 -- TODO(mat) - Doc this? Not sure I can do it justice.
-CREATE OR REPLACE FUNCTION _sysinternal.create_partition_constraint_for_field(
+CREATE OR REPLACE FUNCTION _sysinternal.create_partition_constraint_for_column(
     hypertable_name NAME,
-    field_name      NAME
+    column_name     NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -14,16 +14,16 @@ BEGIN
     FROM partition_epoch pe
     INNER JOIN partition p ON (p.epoch_id = pe.id)
     INNER JOIN partition_replica pr ON (pr.partition_id = p.id)
-    WHERE pe.hypertable_name = create_partition_constraint_for_field.hypertable_name
-          AND pe.partitioning_column = create_partition_constraint_for_field.field_name;
+    WHERE pe.hypertable_name = create_partition_constraint_for_column.hypertable_name
+          AND pe.partitioning_column = create_partition_constraint_for_column.column_name;
 END
 $BODY$;
 
--- Adds a field to a table (e.g. main table or root table)
-CREATE OR REPLACE FUNCTION _sysinternal.create_field_on_table(
+-- Adds a column to a table (e.g. main table or root table)
+CREATE OR REPLACE FUNCTION _sysinternal.create_column_on_table(
     schema_name   NAME,
     table_name    NAME,
-    field         NAME,
+    column_name   NAME,
     attnum        int2,
     data_type_oid REGTYPE,
     default_value TEXT,
@@ -46,11 +46,11 @@ BEGIN
         $$
             ALTER TABLE %1$I.%2$I ADD COLUMN %3$I %4$s %5$s %6$s
         $$,
-        schema_name, table_name, field, data_type_oid, default_constraint, null_constraint);
+        schema_name, table_name, column_name, data_type_oid, default_constraint, null_constraint);
 
     SELECT att.attnum INTO STRICT created_columns_att_num
     FROM pg_attribute att
-    WHERE att.attrelid = format('%I.%I', schema_name, table_name)::regclass AND att.attname = field
+    WHERE att.attrelid = format('%I.%I', schema_name, table_name)::regclass AND att.attname = column_name
     AND NOT attisdropped;
 
     IF created_columns_att_num IS DISTINCT FROM attnum THEN
@@ -61,11 +61,11 @@ END
 $BODY$;
 
 
--- Removes a field from a table (e.g. main table or root table)
-CREATE OR REPLACE FUNCTION _sysinternal.drop_field_on_table(
+-- Removes a column from a table (e.g. main table or root table)
+CREATE OR REPLACE FUNCTION _sysinternal.drop_column_on_table(
     schema_name   NAME,
     table_name    NAME,
-    field         NAME
+    column_name   NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
@@ -73,15 +73,15 @@ BEGIN
         $$
             ALTER TABLE IF EXISTS %1$I.%2$I DROP COLUMN %3$I
         $$,
-        schema_name, table_name, field);
+        schema_name, table_name, column_name);
 END
 $BODY$;
 
--- Changes the default of a field in a table (e.g. main table or root table)
+-- Changes the default of a column in a table (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.exec_alter_column_set_default(
-    schema_name   NAME,
-    table_name    NAME,
-    field         NAME,
+    schema_name       NAME,
+    table_name        NAME,
+    column_name       NAME,
     new_default_value TEXT
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -90,16 +90,16 @@ BEGIN
         $$
             ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I SET DEFAULT %4$L
         $$,
-        schema_name, table_name, field, new_default_value);
+        schema_name, table_name, column_name, new_default_value);
 END
 $BODY$;
 
--- Renames a field of a table (e.g. main table or root table)
+-- Renames a column of a table (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.exec_alter_table_rename_column(
     schema_name   NAME,
     table_name    NAME,
-    old_field     NAME,
-    new_field     NAME
+    old_column     NAME,
+    new_column     NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
@@ -107,15 +107,15 @@ BEGIN
         $$
             ALTER TABLE %1$I.%2$I RENAME COLUMN %3$I TO %4$I
         $$,
-        schema_name, table_name, old_field, new_field);
+        schema_name, table_name, old_column, new_column);
 END
 $BODY$;
 
--- Sets a field of a table (e.g. main table or root table) to NOT NULL
+-- Sets a column of a table (e.g. main table or root table) to NOT NULL
 CREATE OR REPLACE FUNCTION _sysinternal.exec_alter_column_set_not_null(
     schema_name   NAME,
     table_name    NAME,
-    field         NAME,
+    column_name   NAME,
     new_not_null  BOOLEAN
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -125,21 +125,21 @@ IF new_not_null THEN
     $$
         ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I SET NOT NULL
     $$,
-    schema_name, table_name, field);
+    schema_name, table_name, column_name);
 ELSE
   EXECUTE format(
     $$
         ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I DROP NOT NULL
     $$,
-    schema_name, table_name, field);
+    schema_name, table_name, column_name);
 END IF;
 END
 $BODY$;
 
--- Adds distinct values for a field to a hypertable's distinct table.
+-- Adds distinct values for a column to a hypertable's distinct table.
 CREATE OR REPLACE FUNCTION _sysinternal.populate_distinct_table(
     hypertable_name  NAME,
-    field            NAME
+    column_name      NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -161,13 +161,13 @@ BEGIN
               crn.database_name = current_database()
         LOOP
             EXECUTE format($$
-                INSERT INTO %I.%I(field, value)
+                INSERT INTO %I.%I(column_name, value)
                    SELECT DISTINCT %L, %I
                    FROM %I.%I
                 ON CONFLICT DO NOTHING
               $$,
               distinct_replica_node_row.schema_name, distinct_replica_node_row.table_name,
-              field, field,
+              column_name, column_name,
               chunk_replica_node_row.schema_name, chunk_replica_node_row.table_name
             );
         END LOOP;
@@ -175,10 +175,10 @@ BEGIN
 END
 $BODY$;
 
--- Removes distinct values for a field from a hypertable's distinct table.
+-- Removes distinct values for a column from a hypertable's distinct table.
 CREATE OR REPLACE FUNCTION _sysinternal.unpopulate_distinct_table(
     hypertable_name  NAME,
-    field            NAME
+    column_name      NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -191,18 +191,18 @@ BEGIN
           drn.database_name = current_database()
     LOOP
         EXECUTE format($$
-                DELETE FROM %I.%I WHERE field = %L
+                DELETE FROM %I.%I WHERE column_name = %L
           $$,
-          distinct_replica_node_row.schema_name, distinct_replica_node_row.table_name, field
+          distinct_replica_node_row.schema_name, distinct_replica_node_row.table_name, column_name
         );
     END LOOP;
 END
 $BODY$;
 
--- Trigger to modify a field from a hypertable.
--- Called when the user alters the main table by adding a field or changing
--- the properties of a field.
-CREATE OR REPLACE FUNCTION _sysinternal.on_modify_field()
+-- Trigger to modify a column from a hypertable.
+-- Called when the user alters the main table by adding a column or changing
+-- the properties of a column.
+CREATE OR REPLACE FUNCTION _sysinternal.on_modify_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -217,16 +217,16 @@ BEGIN
       WHERE h.name = NEW.hypertable_name;
 
       -- update root table
-      PERFORM _sysinternal.create_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
-                                                NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
+      PERFORM _sysinternal.create_column_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
+                                                  NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
       IF new.created_on <> current_database() THEN
         PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
         -- update main table on others
-        PERFORM _sysinternal.create_field_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                                  NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
+        PERFORM _sysinternal.create_column_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                                                    NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
      END IF;
 
-      PERFORM _sysinternal.create_partition_constraint_for_field(NEW.hypertable_name, NEW.name);
+      PERFORM _sysinternal.create_partition_constraint_for_column(NEW.hypertable_name, NEW.name);
       RETURN NEW;
     ELSIF TG_OP = 'UPDATE' THEN
       SELECT *
@@ -293,9 +293,9 @@ END
 $BODY$
 SET SEARCH_PATH = 'public';
 
--- Trigger to remove a field from a hypertable.
--- Called when the user alters the main table by deleting a field.
-CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_field()
+-- Trigger to remove a column from a hypertable.
+-- Called when the user alters the main table by deleting a column.
+CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -317,13 +317,13 @@ BEGIN
     END IF;
 
     -- update root table
-    PERFORM _sysinternal.drop_field_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
+    PERFORM _sysinternal.drop_column_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
                                               NEW.name);
     IF NEW.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
       -- update main table on others
-      PERFORM _sysinternal.drop_field_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                              NEW.name);
+      PERFORM _sysinternal.drop_column_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                                                NEW.name);
     END IF;
 
     RETURN NEW;

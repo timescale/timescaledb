@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.create_hypertable(
     main_schema_name        NAME,
     main_table_name         NAME,
-    time_field_name         NAME,
-    time_field_type         REGTYPE,
-    partitioning_field      NAME,
+    time_column_name         NAME,
+    time_column_type         REGTYPE,
+    partitioning_column      NAME,
     replication_factor      SMALLINT,
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
@@ -23,9 +23,9 @@ BEGIN
           format('SELECT t FROM _meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
             main_schema_name,
             main_table_name,
-            time_field_name,
-            time_field_type,
-            partitioning_field,
+            time_column_name,
+            time_column_type,
+            partitioning_column,
             replication_factor,
             number_partitions,
             associated_schema_name,
@@ -48,9 +48,9 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_hypertable(
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_hypertable(%L, %L, %L)', 
+          format('SELECT _meta.drop_hypertable(%L, %L, %L)',
             schema_name,
             table_name,
             current_database()
@@ -58,9 +58,9 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_field(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_column(
     hypertable_name NAME,
-    field_name      NAME,
+    column_name      NAME,
     attnum          INT2,
     data_type       REGTYPE,
     default_value   TEXT,
@@ -71,11 +71,11 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_field(
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_field(%L, %L, %L, %L, %L, %L, %L, %L)', 
+          format('SELECT _meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
             hypertable_name,
-            field_name,
+            column_name,
             attnum,
             data_type,
             default_value,
@@ -86,19 +86,19 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_field(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_column(
     hypertable_name NAME,
-    field_name      NAME
+    column_name      NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_field(%L, %L, %L)', 
+          format('SELECT _meta.drop_column(%L, %L, %L)',
             hypertable_name,
-            field_name,
+            column_name,
             current_database()
     ));
 END
@@ -109,14 +109,14 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_index(
     main_schema_name NAME,
     main_index_name NAME,
     definition TEXT
-)    
+)
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_index(%L, %L, %L, %L, %L)', 
+          format('SELECT _meta.add_index(%L, %L, %L, %L, %L)',
             hypertable_name,
             main_schema_name,
             main_index_name,
@@ -129,14 +129,14 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_index(
     main_schema_name NAME,
     main_index_name NAME
-)    
+)
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_index(%L, %L, %L)', 
+          format('SELECT _meta.drop_index(%L, %L, %L)',
             main_schema_name,
             main_index_name,
             current_database()
@@ -147,19 +147,19 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_table_rename_column(
     hypertable_name   NAME,
-    old_field_name    NAME,
-    new_field_name    NAME
+    old_column_name    NAME,
+    new_column_name    NAME
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_table_rename_column(%L, %L, %L, %L)', 
+          format('SELECT _meta.alter_table_rename_column(%L, %L, %L, %L)',
             hypertable_name,
-            old_field_name,
-            new_field_name,
+            old_column_name,
+            new_column_name,
             current_database()
     ));
 END
@@ -167,18 +167,18 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_default(
     hypertable_name   NAME,
-    field_name        NAME,
+    column_name        NAME,
     new_default_value TEXT
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_column_set_default(%L, %L, %L, %L)', 
+          format('SELECT _meta.alter_column_set_default(%L, %L, %L, %L)',
             hypertable_name,
-            field_name,
+            column_name,
             new_default_value,
             current_database()
     ));
@@ -187,18 +187,18 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_not_null(
     hypertable_name   NAME,
-    field_name        NAME,
+    column_name        NAME,
     new_not_null      BOOLEAN
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
 BEGIN
-    PERFORM 
+    PERFORM
     _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_column_set_not_null(%L, %L, %L, %L)', 
+          format('SELECT _meta.alter_column_set_not_null(%L, %L, %L, %L)',
             hypertable_name,
-            field_name,
+            column_name,
             new_not_null,
             current_database()
     ));
@@ -244,5 +244,3 @@ BEGIN
     RETURN chunk_row;
 END
 $BODY$;
-
-

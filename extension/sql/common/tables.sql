@@ -218,8 +218,8 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
     UNIQUE (schema_name, table_name)
 );
 
--- Represents a hypertable field.
-CREATE TABLE IF NOT EXISTS field (
+-- Represents a hypertable column.
+CREATE TABLE IF NOT EXISTS hypertable_column (
     hypertable_name NAME                NOT NULL REFERENCES hypertable (name) ON DELETE CASCADE,
     name            NAME                NOT NULL,
     attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
@@ -234,8 +234,8 @@ CREATE TABLE IF NOT EXISTS field (
 );
 
 -- TODO(mat) - Description?
-CREATE TABLE IF NOT EXISTS deleted_field (
-  LIKE field,
+CREATE TABLE IF NOT EXISTS deleted_hypertable_column (
+  LIKE hypertable_column,
   deleted_on NAME
 );
 

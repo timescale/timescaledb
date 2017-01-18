@@ -26,7 +26,7 @@ CREATE OR REPLACE FUNCTION ioql_query_nonagg_sql(query ioql_query, epoch partiti
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS $BODY$
 DECLARE
 BEGIN
-    IF query.limit_by_field IS NOT NULL THEN
+    IF query.limit_by_column IS NOT NULL THEN
         RETURN format(
             $$
                 SELECT %4$s
@@ -43,12 +43,12 @@ BEGIN
                 %6$s
             $$,
             get_result_column_def_list_nonagg(query),
-            (query.limit_by_field).field,
+            (query.limit_by_column).column_name,
             query,
             get_result_column_list_nonagg(query),
             ioql_query_nonagg_without_limit_sql(query, epoch),
             get_limit_clause(query.limit_rows),
-            (query.limit_by_field).count,
+            (query.limit_by_column).count,
 			get_time_column(query.hypertable_name)
         );
     ELSE

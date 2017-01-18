@@ -82,12 +82,12 @@ BEGIN
 END
 $BODY$;
 
--- Sets the is_distinct flag for field on a hypertable.
+-- Sets the is_distinct flag for column on a hypertable.
 -- The is_distinct flag determines whether the system keep a materialized list
--- of distinct values for the field.
+-- of distinct values for the column.
 CREATE OR REPLACE FUNCTION set_is_distinct_flag(
     main_table    REGCLASS,
-    field_name    NAME,
+    column_name    NAME,
     is_distinct   BOOLEAN
 
 )
@@ -113,7 +113,7 @@ BEGIN
     _sysinternal.meta_transaction_exec(
       format('SELECT _meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
         hypertable_row.name,
-        field_name,
+        column_name,
         is_distinct,
         current_database()
     ));

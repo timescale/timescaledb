@@ -25,7 +25,7 @@ BEGIN
     time_col_name := get_time_column(query.hypertable_name);
     time_col_type := get_time_column_type(query.hypertable_name);
 
-    IF epoch.partitioning_column = (query.limit_by_field).field THEN
+    IF epoch.partitioning_column = (query.limit_by_column).column_name THEN
         SELECT *
         INTO STRICT partition_row
         FROM partition p
@@ -37,8 +37,8 @@ BEGIN
               FROM get_distinct_values_local(%3$L, %4$L, %1$L) AS value
               WHERE get_partition_for_key(value, %5$L) BETWEEN %6$L AND %7$L
             $$,
-            (query.limit_by_field).field,
-            (query.limit_by_field).count,
+            (query.limit_by_column).column_name,
+            (query.limit_by_column).count,
             pr.hypertable_name,
             pr.replica_id,
             epoch.partitioning_mod,
@@ -51,8 +51,8 @@ BEGIN
               SELECT value, %2$L::bigint as cnt
               FROM get_distinct_values_local(%3$L, %4$L, %1$L) AS value
             $$,
-            (query.limit_by_field).field,
-            (query.limit_by_field).count,
+            (query.limit_by_column).column_name,
+            (query.limit_by_column).count,
             pr.hypertable_name,
             pr.replica_id
         );
@@ -74,7 +74,7 @@ BEGIN
         ),
         NULL,
         format('ORDER BY %I DESC NULLS LAST', time_col_name),
-        format('LIMIT (SELECT count(*) * %L FROM distinct_value)', (query.limit_by_field).count * 2)
+        format('LIMIT (SELECT count(*) * %L FROM distinct_value)', (query.limit_by_column).count * 2)
     );
 
 
@@ -88,9 +88,9 @@ BEGIN
         get_full_select_clause_nonagg(query),
         query_sql_scan_base_table,
         get_where_clause(
-            get_field_predicate_clause(query.field_condition),
-            get_select_field_predicate(query.select_items),
-            format('%s IS NOT NULL', (query.limit_by_field).field)
+            get_column_predicate_clause(query.column_condition),
+            get_select_column_predicate(query.select_items),
+            format('%s IS NOT NULL', (query.limit_by_column).column_name)
         )
     );
 
@@ -100,11 +100,11 @@ BEGIN
         'FROM %1$s',
         get_where_clause(
             default_predicates(query, epoch),
-            format('%1$I::text = dv_counts_min_time.value AND %1$I IS NOT NULL', (query.limit_by_field).field),
+            format('%1$I::text = dv_counts_min_time.value AND %1$I IS NOT NULL', (query.limit_by_column).column_name),
             format('(%I < dv_counts_min_time.min_time OR dv_counts_min_time.min_time IS NULL)', time_col_name)
         ),
         get_groupby_clause(query.aggregate),
-        'ORDER BY '||quote_ident(time_col_name)||' DESC NULLS LAST, ' || (query.limit_by_field).field,
+        'ORDER BY '||quote_ident(time_col_name)||' DESC NULLS LAST, ' || (query.limit_by_column).column_name,
         'LIMIT dv_counts_min_time.remaining_cnt');
 
     FOR crn_row IN SELECT *
@@ -127,9 +127,9 @@ BEGIN
                         )
                    $$,
                 get_full_select_clause_nonagg(query),
-                (query.limit_by_field).field,
+                (query.limit_by_column).column_name,
                 format(query_sql_scan, format('%I.%I', crn_row.schema_name, crn_row.table_name)),
-                (query.limit_by_field).count,
+                (query.limit_by_column).count,
 				time_col_name
             );
 
@@ -154,7 +154,7 @@ BEGIN
                     )
                 $$,
 
-            (query.limit_by_field).field,
+            (query.limit_by_column).column_name,
             previous_tables,
             index,
             format(query_sql_jump, format('%I.%I', crn_row.schema_name, crn_row.table_name)),
@@ -207,7 +207,7 @@ CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query,
 $BODY$
 DECLARE
 BEGIN
-    IF query.limit_by_field IS NULL THEN
+    IF query.limit_by_column IS NULL THEN
         RETURN ioql_query_local_partition_rows_regular_limit_sql(query, epoch, pr);
     ELSE
         RETURN ioql_query_local_partition_rows_limit_by_every_sql(query, epoch, pr);
@@ -226,7 +226,7 @@ DECLARE
     code TEXT;
 BEGIN
     --each partition has limited correctly, but the union of partitions needs to be re-limited.
-    IF NOT (query.limit_by_field IS NULL) THEN
+    IF NOT (query.limit_by_column IS NULL) THEN
         SELECT format(
             $$
                 SELECT %3$s
@@ -242,10 +242,10 @@ BEGIN
                 %6$s
             $$,
             get_result_column_def_list_nonagg(query),
-            (query.limit_by_field).field,
+            (query.limit_by_column).column_name,
             get_result_column_list_nonagg(query),
             string_agg(code_part, ' UNION ALL '),
-            (query.limit_by_field).count,
+            (query.limit_by_column).count,
             get_limit_clause(query.limit_rows),
 			get_time_column(query.hypertable_name)
         )

@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION _meta.create_hypertable(
     main_table_name         NAME,
     time_column_name        NAME,
     time_column_type        REGTYPE,
-    partitioning_column      NAME,
+    partitioning_column     NAME,
     replication_factor      SMALLINT,
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
@@ -76,9 +76,9 @@ END
 $BODY$;
 
 -- Adds a column to a hypertable
-CREATE OR REPLACE FUNCTION _meta.add_field(
+CREATE OR REPLACE FUNCTION _meta.add_column(
     hypertable_name NAME,
-    field_name      NAME,
+    column_name     NAME,
     attnum          INT2,
     data_type       REGTYPE,
     default_value   TEXT,
@@ -88,80 +88,80 @@ CREATE OR REPLACE FUNCTION _meta.add_field(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-SELECT 1 FROM hypertable h WHERE h.NAME = hypertable_name FOR UPDATE; --lock row to prevent concurrent field inserts; keep attnum consistent.
+SELECT 1 FROM hypertable h WHERE h.NAME = hypertable_name FOR UPDATE; --lock row to prevent concurrent column inserts; keep attnum consistent.
 
-INSERT INTO field (hypertable_name, name, attnum, data_type, default_value, not_null, is_distinct, created_on, modified_on)
-VALUES (hypertable_name, field_name, attnum, data_type, default_value, not_null, is_distinct, created_on, created_on)
+INSERT INTO hypertable_column (hypertable_name, name, attnum, data_type, default_value, not_null, is_distinct, created_on, modified_on)
+VALUES (hypertable_name, column_name, attnum, data_type, default_value, not_null, is_distinct, created_on, created_on)
 ON CONFLICT DO NOTHING;
 $BODY$;
 
 -- Drops a column from a hypertable
-CREATE OR REPLACE FUNCTION _meta.drop_field(
+CREATE OR REPLACE FUNCTION _meta.drop_column(
     hypertable_name NAME,
-    field_name      NAME,
-    modified_on      NAME
+    column_name     NAME,
+    modified_on     NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
-DELETE FROM field f
-WHERE f.hypertable_name = drop_field.hypertable_name AND f.NAME = field_name;
+DELETE FROM hypertable_column c
+WHERE c.hypertable_name = drop_column.hypertable_name AND c.NAME = column_name;
 $BODY$;
 
--- Sets the is_distinct flag for a field on a hypertable.
+-- Sets the is_distinct flag for a column on a hypertable.
 CREATE OR REPLACE FUNCTION _meta.alter_column_set_is_distinct(
     hypertable_name   NAME,
-    field_name        NAME,
+    column_name       NAME,
     new_is_distinct   BOOLEAN,
     modified_on_node  NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field
+UPDATE hypertable_column
 SET is_distinct = new_is_distinct, modified_on = modified_on_node
-WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = field_name;
+WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = column_name;
 $BODY$;
 
 -- Sets the default for a column on a hypertable.
 CREATE OR REPLACE FUNCTION _meta.alter_column_set_default(
     hypertable_name   NAME,
-    field_name        NAME,
+    column_name       NAME,
     new_default_value TEXT,
     modified_on_node  NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field
+UPDATE hypertable_column
 SET default_value = new_default_value, modified_on = modified_on_node
-WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = field_name;
+WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = column_name;
 $BODY$;
 
 -- Sets the not null flag for a column on a hypertable.
 CREATE OR REPLACE FUNCTION _meta.alter_column_set_not_null(
     hypertable_name   NAME,
-    field_name        NAME,
+    column_name       NAME,
     new_not_null      BOOLEAN,
     modified_on_node  NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field
+UPDATE hypertable_column
 SET not_null = new_not_null, modified_on = modified_on_node
-WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = field_name;
+WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = column_name;
 $BODY$;
 
 -- Renames the column on a hypertable
 CREATE OR REPLACE FUNCTION _meta.alter_table_rename_column(
     hypertable_name   NAME,
-    old_field_name    NAME,
-    new_field_name    NAME,
+    old_column_name    NAME,
+    new_column_name    NAME,
     modified_on_node  NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE field
-SET NAME = new_field_name, modified_on = modified_on_node
-WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old_field_name;
+UPDATE hypertable_column
+SET NAME = new_column_name, modified_on = modified_on_node
+WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old_column_name;
 $BODY$;
 
 -- Add an index to a hypertable

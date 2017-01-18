@@ -1,23 +1,23 @@
 --the final name of the aggregate column
 --ex avg(temperature)
 --collisions here shouldn't cause errors
-CREATE OR REPLACE FUNCTION get_result_aggregate_column_name(field_name NAME, func aggregate_function_type)
+CREATE OR REPLACE FUNCTION get_result_aggregate_column_name(column_name NAME, func aggregate_function_type)
     RETURNS NAME AS $BODY$
-SELECT format('%s(%s)', lower(func :: TEXT), substr(field_name, 1, (63 - 2) - (char_length(func :: TEXT)))) :: NAME;
+SELECT format('%s(%s)', lower(func :: TEXT), substr(column_name, 1, (63 - 2) - (char_length(func :: TEXT)))) :: NAME;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_result_field_def_item_agg(item select_item)
+CREATE OR REPLACE FUNCTION get_result_column_def_item_agg(item select_item)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN item.func = 'AVG' THEN
            format('%I double precision',
-                  get_result_aggregate_column_name(item.field, item.func))
+                  get_result_aggregate_column_name(item.column_name, item.func))
        WHEN item.func = 'COUNT' THEN
            format('%I numeric',
-                  get_result_aggregate_column_name(item.field, item.func))
+                  get_result_aggregate_column_name(item.column_name, item.func))
        ELSE
            format('%I double precision',
-                  get_result_aggregate_column_name(item.field, item.func))
+                  get_result_aggregate_column_name(item.column_name, item.func))
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -25,22 +25,22 @@ CREATE OR REPLACE FUNCTION get_result_column_def_array_agg(query ioql_query)
     RETURNS TEXT [] AS
 $BODY$
 SELECT CASE
-       WHEN (query.aggregate).group_field IS NOT NULL THEN
+       WHEN (query.aggregate).group_column IS NOT NULL THEN
            ARRAY [
-           format('%I %s', (query.aggregate).group_field,
-                  get_field_type(query.hypertable_name, (query.aggregate).group_field)),
+           format('%I %s', (query.aggregate).group_column,
+                  get_column_type(query.hypertable_name, (query.aggregate).group_column)),
            'time '|| get_time_column_type(query.hypertable_name) ] ||
-           field_array
+           column_array
        ELSE
            ARRAY ['time '|| get_time_column_type(query.hypertable_name)] ||
-           field_array
+           column_array
        END
 FROM
     (
         SELECT ARRAY(
-                   SELECT get_result_field_def_item_agg(item)
+                   SELECT get_result_column_def_item_agg(item)
                    FROM unnest(query.select_items) AS item
-               ) AS field_array
+               ) AS column_array
     ) AS x
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 

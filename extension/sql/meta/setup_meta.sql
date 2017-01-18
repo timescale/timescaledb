@@ -38,7 +38,7 @@ BEGIN
 
     FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index', 'hypertable_replica',
     'distinct_replica_node', 'partition_epoch', 'partition', 'partition_replica',
-    'chunk_replica_node', 'field', 'deleted_field', 'meta', 'default_replica_node'] :: NAME [] LOOP
+    'chunk_replica_node', 'hypertable_column', 'deleted_hypertable_column', 'meta', 'default_replica_node'] :: NAME [] LOOP
         EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_0_meta_sync_insert_%1$s ON %1$s;
@@ -58,7 +58,7 @@ BEGIN
             table_name);
     END LOOP;
 
-    FOREACH table_name IN ARRAY ARRAY ['field', 'hypertable_index', 'hypertable'] :: NAME [] LOOP
+    FOREACH table_name IN ARRAY ARRAY ['hypertable_column', 'hypertable_index', 'hypertable'] :: NAME [] LOOP
         EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_0_meta_deleted_%1$s ON %1$s
