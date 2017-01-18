@@ -28,7 +28,9 @@ BEGIN
     END IF;
     RETURN NEW;
 END
-$BODY$;
+$BODY$
+SET client_min_messages = WARNING --supress schema if exists notice.
+;
 
 CREATE OR REPLACE FUNCTION _meta.sync_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS

@@ -81,6 +81,7 @@ BEGIN
 
 END
 $BODY$
+SET client_min_messages = WARNING --suppress NOTICE on IF EXISTS schema
 SET SEARCH_PATH = 'public';
 
 

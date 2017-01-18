@@ -1,4 +1,6 @@
 \set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
 
 \o /dev/null
 \ir include/insert.sql
@@ -6,6 +8,7 @@
 \o
 \set ECHO ALL
 \c Test1
+SET client_min_messages = WARNING;
 
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));

@@ -1,13 +1,31 @@
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
  setup_meta 
 ------------
  
 (1 row)
 
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
  setup_main 
 ------------
  
 (1 row)
 
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
  setup_main 
 ------------
  
@@ -47,10 +65,20 @@ CREATE TABLE PUBLIC."testNs" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
+psql:cluster.sql:25: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
+psql:cluster.sql:29: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
+psql:cluster.sql:29: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
+psql:cluster.sql:30: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
+psql:cluster.sql:30: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
   name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 --------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
@@ -59,6 +87,8 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypert
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+psql:cluster.sql:36: ERROR:  IO110: hypertable already exists: testNs
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
  set_is_distinct_flag 
@@ -579,6 +609,8 @@ Child tables: _sysinternal._hyper_1_0_replica
 
 \c meta
 SELECT _meta.close_chunk_end(1);
+psql:cluster.sql:117: WARNING:  01000: Cannot close an empty chunk table
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
 -----------------
  

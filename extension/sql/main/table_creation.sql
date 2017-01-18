@@ -13,7 +13,9 @@ BEGIN
             CREATE SCHEMA IF NOT EXISTS %I
         $$, schema_name);
 END
-$BODY$;
+$BODY$
+SET client_min_messages = WARNING --suppress NOTICE on IF EXISTS
+;
 
 -- Creates a table for a hypertable (e.g. main table or root table)
 CREATE OR REPLACE FUNCTION _sysinternal.create_table(
@@ -289,4 +291,6 @@ BEGIN
             _sysinternal.time_literal_sql(end_time, time_col_type));
     END IF;
 END
-$BODY$;
+$BODY$
+SET client_min_messages = WARNING --supress notice by drop constraint if exists.
+;

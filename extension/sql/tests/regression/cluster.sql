@@ -1,4 +1,6 @@
 \set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
 
 \ir include/create_clustered_db.sql
 

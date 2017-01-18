@@ -1,10 +1,15 @@
 \ir include/insert_single.sql
 \set ON_ERROR_STOP 1
 \ir create_single_db.sql
+SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_meta();
  setup_meta 
 ------------

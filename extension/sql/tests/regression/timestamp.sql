@@ -44,6 +44,7 @@ INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 
 SELECT * FROM PUBLIC."testNs";
 
+SET client_min_messages = WARNING;
 
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));

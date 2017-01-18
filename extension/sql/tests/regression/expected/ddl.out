@@ -1,3 +1,21 @@
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
@@ -74,7 +92,11 @@ VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 --expect error cases
 \set ON_ERROR_STOP 0
 UPDATE "Hypertable_1" SET time = 0 WHERE TRUE;
+psql:include/ddl_ops_1.sql:27: ERROR:  IO101: UPDATEs not supported on hypertables
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM "Hypertable_1" WHERE "Device_id" = 'dev1';
+psql:include/ddl_ops_1.sql:28: ERROR:  IO101: DELETEs not currently supported on hypertables
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
@@ -229,7 +251,11 @@ DROP INDEX "ind_sensor_1";
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
+psql:include/ddl_ops_2.sql:17: ERROR:  IO101: ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
+psql:include/ddl_ops_2.sql:18: ERROR:  IO101: ALTER INDEX not supported on hypertable "Hypertable_1"
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;

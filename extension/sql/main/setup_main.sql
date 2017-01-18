@@ -101,4 +101,6 @@ BEGIN
        EXECUTE PROCEDURE _sysinternal.ddl_process_drop_table();
 
 END
-$BODY$;
+$BODY$
+SET client_min_messages = WARNING --supress notices for trigger drops
+;

@@ -5,10 +5,8 @@
 
 \o
 \c Test1
-\ir ../../setup/sql/load_kafka.sql
 select setup_kafka();
 \c test2
-\ir ../../setup/sql/load_kafka.sql
 select setup_kafka();
 
 \set ECHO ALL
