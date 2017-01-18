@@ -75,6 +75,11 @@ BEGIN
     CREATE TRIGGER trigger_on_deleted_hypertable_index AFTER INSERT OR UPDATE OR DELETE ON deleted_hypertable_index
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_hypertable_index();
 
+    DROP TRIGGER IF EXISTS trigger_on_deleted_hypertable
+    ON deleted_hypertable;
+    CREATE TRIGGER trigger_on_deleted_hypertable AFTER INSERT OR UPDATE OR DELETE ON deleted_hypertable
+    FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_hypertable();
+
     CREATE EVENT TRIGGER ddl_create_index ON ddl_command_end
         WHEN tag IN ('create index')
         EXECUTE PROCEDURE _sysinternal.ddl_process_create_index();

@@ -410,6 +410,34 @@ SELECT * FROM hypertable;
  public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |            10000
 (1 row)
 
+\dt  "public".*
+                  List of relations
+ Schema |           Name           | Type  |  Owner   
+--------+--------------------------+-------+----------
+ public | chunk                    | table | postgres
+ public | chunk_closing_test       | table | postgres
+ public | chunk_replica_node       | table | postgres
+ public | chunk_replica_node_index | table | postgres
+ public | cluster_user             | table | postgres
+ public | default_replica_node     | table | postgres
+ public | deleted_field            | table | postgres
+ public | deleted_hypertable       | table | postgres
+ public | deleted_hypertable_index | table | postgres
+ public | distinct_replica_node    | table | postgres
+ public | field                    | table | postgres
+ public | hypertable               | table | postgres
+ public | hypertable_index         | table | postgres
+ public | hypertable_replica       | table | postgres
+ public | kafka_offset_cluster     | table | postgres
+ public | kafka_offset_local       | table | postgres
+ public | kafka_offset_node        | table | postgres
+ public | meta                     | table | postgres
+ public | node                     | table | postgres
+ public | partition                | table | postgres
+ public | partition_epoch          | table | postgres
+ public | partition_replica        | table | postgres
+(22 rows)
+
 \dt+ "_sysinternal".*
                                   List of relations
     Schema    |          Name          | Type  |  Owner   |    Size    | Description 
@@ -423,6 +451,40 @@ SELECT * FROM hypertable;
 (6 rows)
 
 \c Test1
+SELECT * FROM hypertable;
+           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |            10000
+(1 row)
+
+\dt  "public".*
+                  List of relations
+ Schema |           Name           | Type  |  Owner   
+--------+--------------------------+-------+----------
+ public | chunk                    | table | postgres
+ public | chunk_closing_test       | table | postgres
+ public | chunk_replica_node       | table | postgres
+ public | chunk_replica_node_index | table | postgres
+ public | cluster_user             | table | postgres
+ public | default_replica_node     | table | postgres
+ public | deleted_field            | table | postgres
+ public | deleted_hypertable       | table | postgres
+ public | deleted_hypertable_index | table | postgres
+ public | distinct_replica_node    | table | postgres
+ public | field                    | table | postgres
+ public | hypertable               | table | postgres
+ public | hypertable_index         | table | postgres
+ public | hypertable_replica       | table | postgres
+ public | kafka_offset_cluster     | table | postgres
+ public | kafka_offset_local       | table | postgres
+ public | kafka_offset_node        | table | postgres
+ public | meta                     | table | postgres
+ public | node                     | table | postgres
+ public | partition                | table | postgres
+ public | partition_epoch          | table | postgres
+ public | partition_replica        | table | postgres
+(22 rows)
+
 \dt+ "_sysinternal".*
                                     List of relations
     Schema    |            Name            | Type  |  Owner   |    Size    | Description 

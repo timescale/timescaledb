@@ -38,6 +38,7 @@ SELECT add_node('test2' :: NAME, 'localhost');
  public | cluster_user             | table | postgres
  public | default_replica_node     | table | postgres
  public | deleted_field            | table | postgres
+ public | deleted_hypertable       | table | postgres
  public | deleted_hypertable_index | table | postgres
  public | distinct_replica_node    | table | postgres
  public | field                    | table | postgres
@@ -52,7 +53,7 @@ SELECT add_node('test2' :: NAME, 'localhost');
  public | partition                | table | postgres
  public | partition_epoch          | table | postgres
  public | partition_replica        | table | postgres
-(20 rows)
+(21 rows)
 
 \det+ public.*
                                                List of foreign tables
