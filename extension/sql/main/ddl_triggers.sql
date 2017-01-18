@@ -45,14 +45,12 @@ BEGIN
 
     hypertable_row := hypertable_from_main_table(table_oid);
 
-    PERFORM _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_index(%L, %L, %L, %L, %L)', 
+    PERFORM _iobeamdb_meta_api.add_index(
             hypertable_row.name,
             hypertable_row.main_schema_name,
             (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
-            def,
-            current_database()
-        ));
+            def        
+        );
   END LOOP;
 END
 $BODY$;
@@ -109,12 +107,10 @@ BEGIN
 
       --TODO: this ignores the concurrently and cascade/restrict modifiers
       PERFORM 
-          _sysinternal.meta_transaction_exec(
-            format('SELECT _meta.drop_index(%L, %L, %L)', 
+          _iobeamdb_meta_api.drop_index(
               info.schema_name,
-              info.object_name,
-              current_database()
-          ));
+              info.object_name
+        );
   END LOOP;
 END
 $BODY$;
@@ -170,13 +166,10 @@ BEGIN
       INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = f.attnum AND attisdropped) --do not match on att.attname here. it gets mangled 
       WHERE hypertable_name = hypertable_row.name 
     LOOP
-        PERFORM 
-          _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_field(%L, %L, %L)', 
+        PERFORM _iobeamdb_meta_api.drop_field(
             hypertable_row.name,
-            rec.name,
-            current_database()
-        ));
+            rec.name
+        );
         found_action = TRUE;
     END LOOP; 
 
@@ -187,14 +180,11 @@ BEGIN
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND f.name IS DISTINCT FROM att.attname
     LOOP
-        PERFORM 
-          _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_table_rename_column(%L, %L, %L, %L)', 
+        PERFORM _iobeamdb_meta_api.alter_table_rename_column(
             hypertable_row.name,
             rec.old_name,
-            rec.new_name,
-            current_database()
-        ));
+            rec.new_name
+        );
         found_action = TRUE;
     END LOOP;
 
@@ -205,14 +195,11 @@ BEGIN
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND _sysinternal.get_default_value_for_attribute(att) IS DISTINCT FROM f.default_value
     LOOP
-        PERFORM 
-          _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_column_set_default(%L, %L, %L, %L)', 
+        PERFORM _iobeamdb_meta_api.alter_column_set_default(
             hypertable_row.name,
             rec.name,
-            rec.new_default_value,
-            current_database()
-        ));
+            rec.new_default_value
+        );
         found_action = TRUE;
     END LOOP;
 
@@ -223,14 +210,11 @@ BEGIN
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND attnotnull != f.not_null
     LOOP
-        PERFORM 
-        _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_column_set_not_null(%L, %L, %L, %L)', 
+        PERFORM _iobeamdb_meta_api.alter_column_set_not_null(
             hypertable_row.name,
             rec.name,
-            rec.new_not_null,
-            current_database()
-        ));
+            rec.new_not_null
+        );
         found_action = TRUE;
     END LOOP;
 
@@ -278,34 +262,10 @@ BEGIN
     FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
     LOOP
         IF tg_tag = 'DROP TABLE' AND _sysinternal.is_hypertable(obj.schema_name, obj.object_name) THEN
-            PERFORM _sysinternal.drop_hypertable(obj.schema_name, obj.object_name);
+            PERFORM _iobeamdb_meta_api.drop_hypertable(obj.schema_name, obj.object_name);
         END IF;
     END LOOP;
 END
 $BODY$;
 
--- Removes a hypertable.
-CREATE OR REPLACE FUNCTION  _sysinternal.drop_hypertable(
-    schema_name TEXT,
-    hypertable_name TEXT
-    )
-    RETURNS void LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
 
-    PERFORM dblink_connect('meta_conn', get_meta_server_name());
-    PERFORM dblink_exec('meta_conn', 'BEGIN');
-
-    PERFORM 1
-    FROM  dblink(
-          'meta_conn',
-          format('SELECT _meta.drop_hypertable(%L::text, %L::text, %L::text)',
-            schema_name,
-            hypertable_name,
-            current_database()
-        )) AS t(r TEXT);
-
-    PERFORM dblink_exec('meta_conn', 'COMMIT');
-    PERFORM dblink_disconnect('meta_conn');
-END
-$BODY$;

@@ -42,10 +42,9 @@ BEGIN
        FROM pg_attribute
        WHERE attrelid = main_table AND attname = time_field_name;
 
-      SELECT (res::hypertable).*
+      SELECT *
         INTO hypertable_row
-        FROM _sysinternal.meta_transaction_exec_with_return(
-          format('SELECT t FROM _meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+        FROM  _iobeamdb_meta_api.create_hypertable(
             schema_name,
             table_name,
             time_field_name,
@@ -57,9 +56,8 @@ BEGIN
             associated_table_prefix,
             hypertable_name,
             placement,
-            chunk_size_bytes,
-            current_database()
-        )) AS res;
+            chunk_size_bytes
+        );
 
       FOR att_row IN SELECT *
        FROM pg_attribute att
@@ -72,14 +70,12 @@ BEGIN
       PERFORM 1
       FROM pg_index,
       LATERAL
-        _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_index(%L, %L,%L, %L, %L)',
+        _iobeamdb_meta_api.add_index(
             hypertable_row.name,
             hypertable_row.main_schema_name,
             (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
-            _sysinternal.get_general_index_definition(indexrelid, indrelid),
-            current_database()
-        ))
+            _sysinternal.get_general_index_definition(indexrelid, indrelid)
+        )
       WHERE indrelid = main_table;
       
       RETURN hypertable_row;

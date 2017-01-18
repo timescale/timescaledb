@@ -34,7 +34,7 @@ BEGIN;
 \COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 
-SELECT close_chunk_end(c.id)
+SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key('testNs', 'dev1') part
 INNER JOIN chunk c ON (c.partition_id = part.id);
 

@@ -195,11 +195,11 @@ $BODY$;
 -- Drops a hypertable
 CREATE OR REPLACE FUNCTION _meta.drop_hypertable(
     schema_name NAME,
-    hypertable_name NAME,
+    table_name NAME,
     modified_on NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
     SELECT set_config('io.deleting_node', modified_on, true);
-    DELETE FROM hypertable h WHERE h.main_schema_name = schema_name AND h.main_table_name = hypertable_name
+    DELETE FROM hypertable h WHERE h.main_schema_name = schema_name AND h.main_table_name = table_name
 $BODY$;

@@ -71,7 +71,7 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            ALTER TABLE %1$I.%2$I DROP COLUMN %3$I
+            ALTER TABLE IF EXISTS %1$I.%2$I DROP COLUMN %3$I
         $$,
         schema_name, table_name, field);
 END
