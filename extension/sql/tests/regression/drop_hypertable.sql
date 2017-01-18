@@ -15,9 +15,12 @@ FROM "_sysinternal"._hyper_1_0_distinct;
 
 SELECT * FROM hypertable;
 DROP TABLE "testNs";
+
 SELECT * FROM hypertable;
+\dt  "public".*
 \dt+ "_sysinternal".*
 
 \c Test1
-
+SELECT * FROM hypertable;
+\dt  "public".*
 \dt+ "_sysinternal".*

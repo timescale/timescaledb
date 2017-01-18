@@ -67,6 +67,12 @@ CREATE TABLE IF NOT EXISTS hypertable (
     UNIQUE (root_schema_name, root_table_name)
 );
 
+-- deleted_hypertable is used to avoid deadlocks when doing multinode drops.
+CREATE TABLE IF NOT EXISTS deleted_hypertable (
+  LIKE hypertable,
+  deleted_on NAME
+);
+
 -- hypertable_replica contains information on how a hypertable's data replicas
 -- are stored. A replica of the data is across all partitions and time.
 --

@@ -73,21 +73,41 @@ BEGIN
     END IF;
 
     IF TG_OP = 'DELETE' THEN
-
-        PERFORM _sysinternal.drop_root_table(OLD.root_schema_name, OLD.root_table_name);
-        PERFORM _sysinternal.drop_root_distinct_table(OLD.distinct_schema_name, OLD.distinct_table_name);
-
-        if current_setting('io.iobeam_drop', true) <> 'true' THEN
-            PERFORM set_config('io.iobeam_drop', 'true', true);
-            PERFORM _sysinternal.drop_table(OLD.main_schema_name, OLD.main_table_name);
-        END IF;
-
         RETURN OLD;
     END IF;
 
     RAISE EXCEPTION 'Only inserts and delete supported on hypertable metadata table'
         USING ERRCODE = 'IO101';
 
+END
+$BODY$
+SET SEARCH_PATH = 'public';
+
+
+/*
+    Drops public hypertable when hypertable rows deleted (row created in deleted_hypertable table).
+*/
+CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_hypertable()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    hypertable_row hypertable;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
+        USING ERRCODE = 'IO101';
+    END IF;
+    --drop index on all chunks
+
+    PERFORM _sysinternal.drop_root_table(NEW.root_schema_name, NEW.root_table_name);
+    PERFORM _sysinternal.drop_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
+
+    IF new.deleted_on <> current_database() THEN
+      PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+      EXECUTE format('DROP TABLE %I.%I', NEW.main_schema_name, NEW.main_table_name);
+    END IF;
+
+    RETURN NEW;
 END
 $BODY$
 SET SEARCH_PATH = 'public';

@@ -36,8 +36,7 @@ BEGIN
     CREATE TRIGGER trigger_create_partition AFTER INSERT OR UPDATE OR DELETE ON partition
     FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_partition();
 
-
-    FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'hypertable_index', 'deleted_hypertable_index', 'hypertable_replica',
+    FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index', 'hypertable_replica',
     'distinct_replica_node', 'partition_epoch', 'partition', 'partition_replica',
     'chunk_replica_node', 'field', 'deleted_field', 'meta', 'default_replica_node'] :: NAME [] LOOP
         EXECUTE format(
@@ -59,7 +58,7 @@ BEGIN
             table_name);
     END LOOP;
 
-    FOREACH table_name IN ARRAY ARRAY ['field', 'hypertable_index'] :: NAME [] LOOP
+    FOREACH table_name IN ARRAY ARRAY ['field', 'hypertable_index', 'hypertable'] :: NAME [] LOOP
         EXECUTE format(
             $$
                DROP TRIGGER IF EXISTS trigger_0_deleted_%1$s ON %1$s

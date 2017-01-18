@@ -254,6 +254,16 @@ BEGIN
   END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _sysinternal.is_hypertable(
+    schema_name NAME,
+    table_name  NAME
+)
+    RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+     return exists(select 1 from hypertable where main_schema_name = schema_name and  main_table_name=table_name);
+END
+$BODY$;
 
 --Handles drop table command
 CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_table()
@@ -261,13 +271,16 @@ CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_table()
 DECLARE
     obj record;
 BEGIN
+    IF current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+        RETURN;
+    END IF;
+
     FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
     LOOP
-        IF tg_tag = 'DROP TABLE' AND obj.object_name IS NOT NULL THEN
+        IF tg_tag = 'DROP TABLE' AND _sysinternal.is_hypertable(obj.schema_name, obj.object_name) THEN
             PERFORM _sysinternal.drop_hypertable(obj.schema_name, obj.object_name);
         END IF;
     END LOOP;
-
 END
 $BODY$;
 

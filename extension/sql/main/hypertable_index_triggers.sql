@@ -108,12 +108,10 @@ BEGIN
 
     IF new.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      EXECUTE format('DROP INDEX %I.%I', NEW.main_schema_name, NEW.main_index_name);
+      EXECUTE format('DROP INDEX IF EXISTS %I.%I', NEW.main_schema_name, NEW.main_index_name);
     END IF;
 
     RETURN NEW;
 END
 $BODY$
 SET SEARCH_PATH = 'public';
-
-
