@@ -1,0 +1,193 @@
+\c single
+SELECT add_cluster_user('postgres', NULL);
+ add_cluster_user 
+------------------
+ 
+(1 row)
+
+SELECT set_meta('single' :: NAME, 'fakehost');
+ set_meta 
+----------
+ 
+(1 row)
+
+SELECT add_node('single' :: NAME, 'fakehost');
+ add_node 
+----------
+ 
+(1 row)
+
+\ir include/ddl_ops_1.sql
+CREATE TABLE PUBLIC."Hypertable_1" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1,
+  humidity numeric NULL DEFAULT 0,
+  sensor_1 NUMERIC NULL DEFAULT 1,
+  sensor_2 NUMERIC NOT NULL DEFAULT 1,
+  sensor_3 NUMERIC NOT NULL DEFAULT 1,
+  sensor_4 NUMERIC NOT NULL DEFAULT 1
+);
+CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+-----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | single     |       1073741824
+(1 row)
+
+SELECT * FROM hypertable;
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
+-----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
+ public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time            | bigint          | single     |       1073741824
+(1 row)
+
+SELECT * FROM hypertable_index;
+    hypertable_name    | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
+-----------------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
+ public."Hypertable_1" | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
+(1 row)
+
+CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
+CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
+CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
+SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_1', TRUE);
+ set_is_distinct_flag 
+----------------------
+ 
+(1 row)
+
+SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
+ set_is_distinct_flag 
+----------------------
+ 
+(1 row)
+
+INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+--expect error cases
+\set ON_ERROR_STOP 0
+UPDATE "Hypertable_1" SET time = 0 WHERE TRUE;
+DELETE FROM "Hypertable_1" WHERE "Device_id" = 'dev1';
+\set ON_ERROR_STOP 1
+SELECT * FROM PUBLIC."Hypertable_1";
+        time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
+---------------------+-----------+--------+----------+----------+----------+----------+----------
+ 1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
+(1 row)
+
+EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Append  (cost=0.00..13.50 rows=352 width=204)
+   ->  Seq Scan on _hyper_1_0_replica  (cost=0.00..0.00 rows=1 width=204)
+   ->  Seq Scan on _hyper_1_1_0_partition  (cost=0.00..0.00 rows=1 width=204)
+   ->  Seq Scan on _hyper_1_1_0_1_data  (cost=0.00..13.50 rows=350 width=204)
+(4 rows)
+
+SELECT * FROM PUBLIC.default_replica_node;
+ database_name |    hypertable_name    | replica_id 
+---------------+-----------------------+------------
+ single        | public."Hypertable_1" |          0
+(1 row)
+
+\ir include/ddl_ops_2.sql
+SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
+ set_is_distinct_flag 
+----------------------
+ 
+(1 row)
+
+SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'Device_id', TRUE);
+ set_is_distinct_flag 
+----------------------
+ 
+(1 row)
+
+ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
+ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
+ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN humidity SET DEFAULT 100;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_1 DROP DEFAULT;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 SET DEFAULT NULL;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_1 SET NOT NULL;
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 DROP NOT NULL;
+ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_2 TO sensor_2_renamed;
+ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
+DROP INDEX "ind_sensor_1";
+--expect error cases
+\set ON_ERROR_STOP 0
+ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
+ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
+\set ON_ERROR_STOP 1
+--create column with same name as previously renamed one
+ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
+--create column with same name as previously dropped one
+ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
+\d+ PUBLIC."Hypertable_1"
+                                Table "public.Hypertable_1"
+      Column      |  Type   |      Modifiers       | Storage  | Stats target | Description 
+------------------+---------+----------------------+----------+--------------+-------------
+ time             | bigint  | not null             | plain    |              | 
+ Device_id        | text    | not null             | extended |              | 
+ humidity         | numeric | default 100          | main     |              | 
+ sensor_1         | numeric | not null             | main     |              | 
+ sensor_2_renamed | numeric |                      | main     |              | 
+ sensor_3_renamed | numeric | not null default 1   | main     |              | 
+ temp_f           | integer | not null default 31  | plain    |              | 
+ sensor_3         | bigint  | not null default 131 | plain    |              | 
+ sensor_4         | bigint  | not null default 131 | plain    |              | 
+Indexes:
+    "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
+    "ind_humidity" btree ("time", humidity)
+Triggers:
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
+
+\d+ "_sysinternal"."_hyper_1_root"
+                             Table "_sysinternal._hyper_1_root"
+      Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
+------------------+---------+------------------------+----------+--------------+-------------
+ time             | bigint  | not null               | plain    |              | 
+ Device_id        | text    | not null               | extended |              | 
+ humidity         | numeric | default '100'::numeric | main     |              | 
+ sensor_1         | numeric | not null               | main     |              | 
+ sensor_2_renamed | numeric |                        | main     |              | 
+ sensor_3_renamed | numeric | not null default 1     | main     |              | 
+ temp_f           | integer | not null default 31    | plain    |              | 
+ sensor_3         | bigint  | not null default 131   | plain    |              | 
+ sensor_4         | bigint  | not null default 131   | plain    |              | 
+Child tables: _sysinternal._hyper_1_0_replica
+
+\d+ _sysinternal._hyper_1_1_0_1_data
+                          Table "_sysinternal._hyper_1_1_0_1_data"
+      Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
+------------------+---------+------------------------+----------+--------------+-------------
+ time             | bigint  | not null               | plain    |              | 
+ Device_id        | text    | not null               | extended |              | 
+ humidity         | numeric | default '100'::numeric | main     |              | 
+ sensor_1         | numeric | not null               | main     |              | 
+ sensor_2_renamed | numeric |                        | main     |              | 
+ sensor_3_renamed | numeric | not null default 1     | main     |              | 
+ temp_f           | integer | not null default 31    | plain    |              | 
+ sensor_3         | bigint  | not null default 131   | plain    |              | 
+ sensor_4         | bigint  | not null default 131   | plain    |              | 
+Indexes:
+    "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
+    "3-ind_humidity" btree ("time", humidity)
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: _sysinternal._hyper_1_1_0_partition
+
+SELECT * FROM _sysinternal._hyper_1_0_1_distinct_data;
+   field   | value 
+-----------+-------
+ sensor_1  | 1
+ Device_id | dev1
+(2 rows)
+
+SELECT * FROM PUBLIC."Hypertable_1";
+        time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 
+---------------------+-----------+----------+----------+------------------+------------------+--------+----------+----------
+ 1257894000000000000 | dev1      |       70 |        1 |                2 |                3 |     31 |      131 |      131
+(1 row)
+

@@ -1,5 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS _sysinternal;
 CREATE SCHEMA IF NOT EXISTS _meta;
+CREATE SCHEMA IF NOT EXISTS _iobeamdb_meta_api;
+CREATE SCHEMA IF NOT EXISTS _iobeamdb_data_api;
 
 CREATE OR REPLACE FUNCTION _sysinternal.create_user_mapping(
     cluster_user_row cluster_user,

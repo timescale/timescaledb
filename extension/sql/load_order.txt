@@ -3,7 +3,9 @@ sql/common/tables.sql
 sql/common/cluster_setup_functions.sql
 sql/common/chunk.sql
 sql/common/hash_function.sql
-sql/common/dblink_utils.sql
+sql/common/rpc.sql
+sql/common/meta_api.sql
+sql/common/data_api.sql
 sql/meta/cluster.sql
 sql/meta/node_triggers.sql
 sql/meta/chunk_triggers.sql
@@ -37,7 +39,6 @@ sql/main/chunk_triggers.sql
 sql/main/chunk.sql
 sql/main/insert.sql
 sql/main/meta_info.sql
-sql/main/meta_commands.sql
 sql/main/ddl_util.sql
 sql/main/ddl.sql
 sql/main/ddl_triggers.sql

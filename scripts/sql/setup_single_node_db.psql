@@ -1,17 +1,12 @@
-CREATE DATABASE meta;
 CREATE DATABASE iobeam;
-
-\c meta
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-select setup_meta();
 
 \c iobeam
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+select setup_meta();
 select setup_main();
 
-\c meta
 SELECT add_cluster_user('postgres', NULL);
-SELECT set_meta('meta' :: NAME, 'localhost');
+SELECT set_meta('iobeam' :: NAME, 'localhost');
 SELECT add_node('iobeam' :: NAME, 'localhost');
 
 \c iobeam
@@ -25,6 +20,6 @@ CREATE TABLE test_hypertable (
 CREATE INDEX ON test_hypertable (time DESC NULLS LAST, device_id);
 CREATE INDEX ON test_hypertable (time DESC NULLS LAST, temp);
 
-SELECT * FROM create_hypertable('"test_hypertable"', 'time', 'device_id');
+SELECT name FROM create_hypertable('"test_hypertable"', 'time', 'device_id');
 
 

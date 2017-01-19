@@ -41,7 +41,7 @@ DECLARE
     chunk_table_name  TEXT;
 BEGIN
     SELECT *
-    INTO chunk_replica_row
+    INTO STRICT chunk_replica_row
     FROM chunk_replica_node crn
     WHERE crn.chunk_id = get_chunk_size.chunk_id;
 

@@ -73,7 +73,9 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    PERFORM close_chunk_end(chunk_row.id);
+    --This should use the non-transactional rpc because this needs to commit before we can take a lock
+    --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
+    PERFORM _iobeamdb_meta_api.close_chunk_end_immediate(chunk_row.id);
     return TRUE;
 END
 $BODY$;
@@ -104,14 +106,13 @@ BEGIN
     --the chunk. This can happen if someone closes the chunk during that short
     --time window (in which case the local get_chunk_locked might return null).
     WHILE chunk_row IS NULL LOOP
-        --this should use dblink directly and not use _sysinternal.meta_transaction_exec because we can't wait for the end
-        --of this local transaction to see the new chunk. Indeed we must see the results of _meta.get_or_create_chunk just a few
+        --this should use the non-transactional (_immediate) rpc because we can't wait for the end
+        --of this local transaction to see the new chunk. Indeed we must see the results of get_or_create_chunk just a few
         --lines down. Which means that this operation must be committed. Thus this operation is not transactional wrt this call.
         --A chunk creation will NOT be rolled back if this transaction later aborts. Not ideal, but good enough for now.
-        SELECT t.*
+        SELECT *
         INTO chunk_row
-        FROM dblink(get_meta_server_name(), format('SELECT * FROM _meta.get_or_create_chunk(%L, %L) ', partition_id, time_point))
-            AS t(id INTEGER, partition_id INTEGER, start_time BIGINT, end_time BIGINT);
+        FROM _iobeamdb_meta_api.get_or_create_chunk_immediate(partition_id, time_point);
 
         IF lock_chunk THEN
             chunk_row := _sysinternal.get_chunk_locked(partition_id, time_point);
@@ -122,17 +123,4 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION close_chunk_end(
-    chunk_id INT
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-BEGIN
-    --This should use dblink directly and not use _sysinternal.meta_transaction_exec because this needs to commit before we can take a lock
-    --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
-    PERFORM 1 FROM dblink(get_meta_server_name(),
-                   format('SELECT * FROM _meta.close_chunk_end(%L)', chunk_id)
-            ) AS t(n TEXT);
-END
-$BODY$;
+

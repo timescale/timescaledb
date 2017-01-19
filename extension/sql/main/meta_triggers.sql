@@ -9,12 +9,14 @@ BEGIN
         USING ERRCODE = 'IO101';
     END IF;
 
-    PERFORM _sysinternal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
+    IF NEW.database_name <> current_database() THEN
+        PERFORM _sysinternal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
 
-    FOR cluster_user_row IN SELECT *
-                            FROM cluster_user LOOP
-        PERFORM _sysinternal.create_user_mapping(cluster_user_row, NEW.server_name);
-    END LOOP;
+        FOR cluster_user_row IN SELECT *
+                                FROM cluster_user LOOP
+            PERFORM _sysinternal.create_user_mapping(cluster_user_row, NEW.server_name);
+        END LOOP;
+    END IF;
     RETURN NEW;
 END
 $BODY$

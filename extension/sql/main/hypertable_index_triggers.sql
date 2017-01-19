@@ -108,6 +108,7 @@ BEGIN
 
     IF new.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+      --note: index might have been deleted by field deletion ahead of time. IF EXISTS necessary
       EXECUTE format('DROP INDEX IF EXISTS %I.%I', NEW.main_schema_name, NEW.main_index_name);
     END IF;
 

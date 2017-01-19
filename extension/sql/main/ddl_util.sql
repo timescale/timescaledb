@@ -56,17 +56,15 @@ $BODY$
 DECLARE
 BEGIN
   PERFORM 
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_field(%L, %L, %L, %L, %L, %L, %L, %L)', 
+    _iobeamdb_meta_api.add_field(
             hypertable_name,
             att.attname,
             att.attnum,
             att.atttypid,
             _sysinternal.get_default_value_for_attribute(att),
             att.attnotnull,
-            FALSE,
-            current_database()
-    ));
+            FALSE
+    );
 END
 $BODY$;
 
