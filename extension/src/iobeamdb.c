@@ -67,7 +67,7 @@ hypertable_info *get_hypertable_info(Oid mainRelationOid);
 static void add_partitioning_func_qual(Query *parse, List *hypertable_info_list);
 static Node *add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context *context);
 static partitioning_info *
-get_partitioning_info_for_partition_field_var(Var *var_expr, Query *parse, List * hypertable_info_list);
+get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List * hypertable_info_list);
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func, int32 partitioning_mod);
 
@@ -280,9 +280,9 @@ get_hypertable_info(Oid mainRelationOid)
  * This function goes through the upper-level qual of a parse tree and finds quals of the form:
  * 		partitioning_column = const
  * It transforms them into the qual:
- * 		partitioning_column = const AND partitioning_func(partition_field, partitioning_mod) = partitioning_func(const, partitioning_mod)
+ * 		partitioning_column = const AND partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
  *
- * This tranformation helps because the check constraint on a table is of the form CHECK(partitioning_func(partition_field, partitioning_mod) BETWEEN X AND Y).
+ * This tranformation helps because the check constraint on a table is of the form CHECK(partitioning_func(partition_column, partitioning_mod) BETWEEN X AND Y).
  */
 static void
 add_partitioning_func_qual(Query *parse, List* hypertable_info_list)
@@ -303,7 +303,7 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 	/* Detect partitioning_column = const. If not fall-thru.
 	 * If detected, replace with
 	 *    partitioning_column = const AND
-	 *    partitioning_func(partition_field, partitioning_mod) = partitioning_func(const, partitioning_mod)
+	 *    partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
 	 */
 	if (IsA(node, OpExpr))
 	{
@@ -341,13 +341,13 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 
 					if (eq_oid == exp->opno)
 					{
-						/* I now have a var = const. Make sure var is a partitioning field */
-						partitioning_info *pi = get_partitioning_info_for_partition_field_var(var_expr,
+						/* I now have a var = const. Make sure var is a partitioning column */
+						partitioning_info *pi = get_partitioning_info_for_partition_column_var(var_expr,
 																							 context->parse,
 																							 context->hypertable_info_list);
 
 						if (pi != NULL) {
-							/* The var is a partitioning field */
+							/* The var is a partitioning column */
 							Expr * partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
 																							pi->partitioning_func,
 																							pi->partitioning_mod);
@@ -365,10 +365,10 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 								   (void *) context);
 }
 
-/* Returns the partitioning info for a var if the var is a partitioning field. If the var is not a partitioning
- * field return NULL */
+/* Returns the partitioning info for a var if the var is a partitioning column. If the var is not a partitioning
+ * column return NULL */
 static partitioning_info *
-get_partitioning_info_for_partition_field_var(Var *var_expr, Query *parse, List * hypertable_info_list) {
+get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List * hypertable_info_list) {
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char *varname = get_rte_attribute_name(rte, var_expr->varattno);
 	ListCell *hicell;
