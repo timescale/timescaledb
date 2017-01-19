@@ -12,7 +12,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_node_insert_kafka_offset_node(
 $BODY$
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        RAISE EXCEPTION 'Only inserts supported on node table'
         USING ERRCODE = 'IO101';
     END IF;
 
@@ -49,7 +49,7 @@ DECLARE
     remote_node node;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on namespace table'
+        RAISE EXCEPTION 'Only inserts supported on kafka offset table'
         USING ERRCODE = 'IO101';
     END IF;
 

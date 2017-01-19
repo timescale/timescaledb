@@ -1,6 +1,6 @@
 \c Test1
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));
                                                          json                                                          
 -----------------------------------------------------------------------------------------------------------------------
  {"timeCustom":1257987600000000000,"device_id":"dev1","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
@@ -17,10 +17,10 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs'));
 
 \set ON_ERROR_STOP 0
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'DoesNotExist'));
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'DoesNotExist'));
 \set ON_ERROR_STOP 1
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT)
                      ));
@@ -30,7 +30,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 (1 row)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT),
                                     limit_rows => 1
@@ -41,7 +41,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 (1 row)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT, 'series_1')
                      ));
@@ -55,7 +55,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 (5 rows)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT, 'series_1'),
                                     limit_rows => 1
@@ -66,7 +66,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 (1 row)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((100 * 60 * 60 * 1e9) :: BIGINT, 'series_1'),
                                     limit_time_periods => 1
@@ -81,7 +81,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 (5 rows)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0')],
                                     limit_by_field => new_limit_by_field('device_id', 1)
                      ));
@@ -92,7 +92,7 @@ FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
 (2 rows)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(namespace_name => 'testNs',
+FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0')],
                                     limit_rows => 1
                      ));

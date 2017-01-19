@@ -2,12 +2,12 @@
 -- PREFIX IO
 
 -- IO000 - GROUP: query errors
--- IO001 - namespace does not exist
+-- IO001 - hypertable does not exist
 -- IO002 - field does not exist
 
 --IO100 - GROUP: DDL errors
 --IO101 - operation not supported
---IO102 - no partitioning field for namespace
+--IO102 - no partitioning field for hypertable
 --IO103 - unknown index type
 --IO104 - illegal name/identifier.
 

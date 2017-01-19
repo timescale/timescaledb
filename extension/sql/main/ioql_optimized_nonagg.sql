@@ -22,8 +22,8 @@ DECLARE
     crn_row                   chunk_replica_node;
     partition_row             partition;
 BEGIN
-    time_col_name := get_time_field(query.namespace_name);
-    time_col_type := get_time_field_type(query.namespace_name);
+    time_col_name := get_time_field(query.hypertable_name);
+    time_col_type := get_time_field_type(query.hypertable_name);
 
     IF epoch.partitioning_field = (query.limit_by_field).field THEN
         SELECT *
@@ -247,7 +247,7 @@ BEGIN
             string_agg(code_part, ' UNION ALL '),
             (query.limit_by_field).count,
             get_limit_clause(query.limit_rows),
-			get_time_field(query.namespace_name)
+			get_time_field(query.hypertable_name)
         )
         INTO STRICT code
         FROM
@@ -265,7 +265,7 @@ BEGIN
             $$,
             string_agg(code_part, ' UNION ALL '),
             get_limit_clause(query.limit_rows),
-			get_time_field(query.namespace_name)
+			get_time_field(query.hypertable_name)
         )
         INTO STRICT code
         FROM
@@ -277,5 +277,3 @@ BEGIN
     RETURN code;
 END
 $BODY$;
-
-

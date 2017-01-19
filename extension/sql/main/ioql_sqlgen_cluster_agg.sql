@@ -13,7 +13,7 @@ SELECT format(
     get_finalize_aggregate_sql(query.select_items, query.aggregate),
     get_partial_aggregate_column_def(query),
     get_groupby_clause(query.aggregate),
-    query.namespace_name,
+    query.hypertable_name,
     query,
     epoch
 )
@@ -41,8 +41,8 @@ BEGIN
             get_limit_clause(query.limit_rows),
             (query.aggregate).group_time,
             query.limit_time_periods,
-            _sysinternal.extract_time_sql('time', get_time_field_type(query.namespace_name)),
-            _sysinternal.extract_time_sql('without_limit.time', get_time_field_type(query.namespace_name))
+            _sysinternal.extract_time_sql('time', get_time_field_type(query.hypertable_name)),
+            _sysinternal.extract_time_sql('without_limit.time', get_time_field_type(query.hypertable_name))
             );
           ELSE
         RETURN format(
@@ -60,6 +60,3 @@ BEGIN
 END;
 $BODY$
 SET constraint_exclusion = ON;
-
-
-

@@ -119,7 +119,7 @@ BEGIN
                 WHERE f.hypertable_name = get_field_names_and_types.hypertable_name AND
                       f.name = field_name
             );
-            RAISE 'Missing field "%" in namespace "%"', missing_field, hypertable_name
+            RAISE 'Missing field "%" in hypertable "%"', missing_field, hypertable_name
             USING ERRCODE = 'IO002';
         END;
     END IF;
@@ -145,7 +145,7 @@ BEGIN
     WHERE f.name = get_field_type.field_name AND f.hypertable_name = get_field_type.hypertable_name;
 
     IF NOT FOUND THEN
-        RAISE 'Missing field "%" in namespace "%"', field_name, hypertable_name
+        RAISE 'Missing field "%" in hypertable "%"', field_name, hypertable_name
         USING ERRCODE = 'IO002';
     END IF;
     RETURN data_type;

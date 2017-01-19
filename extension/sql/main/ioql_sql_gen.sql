@@ -50,7 +50,7 @@ CREATE OR REPLACE FUNCTION get_time_predicate(time_col_name NAME, time_col_type 
 $BODY$
 SELECT string_agg(clauses.val, ' AND ')
 FROM (
-       VALUES (format('%I >= ', time_col_name) ||  NULLIF(_sysinternal.time_literal_sql(cond.from_time, time_col_type), 'NULL')), 
+       VALUES (format('%I >= ', time_col_name) ||  NULLIF(_sysinternal.time_literal_sql(cond.from_time, time_col_type), 'NULL')),
               (format('%I < ', time_col_name)  ||  NULLIF(_sysinternal.time_literal_sql(cond.to_time, time_col_type), 'NULL'))
      ) AS clauses(val);
 $BODY$;
@@ -116,7 +116,7 @@ CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(
-    get_time_predicate(get_time_field(query.namespace_name), get_time_field_type(query.namespace_name), query.time_condition),
+    get_time_predicate(get_time_field(query.hypertable_name), get_time_field_type(query.hypertable_name), query.time_condition),
     get_field_predicate_clause(query.field_condition),
     get_select_field_predicate(query.select_items),
     get_partitioning_predicate(query, epoch)
@@ -159,9 +159,9 @@ CREATE OR REPLACE FUNCTION get_orderby_clause_nonagg(query ioql_query)
 $BODY$
 SELECT CASE
        WHEN query.limit_by_field IS NOT NULL THEN
-           format('ORDER BY %I DESC NULLS LAST, %s', get_time_field(query.namespace_name), (query.limit_by_field).field)
+           format('ORDER BY %I DESC NULLS LAST, %s', get_time_field(query.hypertable_name), (query.limit_by_field).field)
 	  ELSE
-           format('ORDER BY %I DESC NULLS LAST', get_time_field(query.namespace_name))
+           format('ORDER BY %I DESC NULLS LAST', get_time_field(query.hypertable_name))
        END;
 $BODY$;
 

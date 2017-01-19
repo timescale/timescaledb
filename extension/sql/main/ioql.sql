@@ -22,7 +22,7 @@ BEGIN
         --Grouptime is in usec if timestamp type used for time column in the data.
         --If time is numeric, unit used by grouptime needs to match units in the data inserted
         --(this is determined by user: inserted data can be in sec, usec, nanosec, etc.).
-        CREATE TYPE aggregate_type AS (group_time BIGINT, group_field TEXT); 
+        CREATE TYPE aggregate_type AS (group_time BIGINT, group_field TEXT);
 
         CREATE TYPE field_condition_type AS (conjunctive predicate_conjunctive, predicates field_predicate []);
 
@@ -32,19 +32,19 @@ BEGIN
         CREATE TYPE time_condition_type AS (from_time BIGINT, to_time BIGINT); --from_time inclusive; to_time exclusive
 
         CREATE TYPE ioql_query AS (
-            namespace_name     TEXT, -- NOT NULL
-            select_items       select_item [], -- NULL to return row, not null for aggregating
-            aggregate          aggregate_type, --op, group_field and group_time
-            time_condition     time_condition_type, --time limits, from and to
-            field_condition    field_condition_type, -- field predicates combined with a conjunctive (AND/OR)
-            limit_rows         INT, --regular limit (number of rows)
-            limit_time_periods INT, --limit # of time periods, only aggregates
-            limit_by_field     limit_by_field_type -- limit by every field value, only non-aggregate; field must be distinct
+            hypertable_name     TEXT, -- NOT NULL
+            select_items        select_item [], -- NULL to return row, not null for aggregating
+            aggregate           aggregate_type, --op, group_field and group_time
+            time_condition      time_condition_type, --time limits, from and to
+            field_condition     field_condition_type, -- field predicates combined with a conjunctive (AND/OR)
+            limit_rows          INT, --regular limit (number of rows)
+            limit_time_periods  INT, --limit # of time periods, only aggregates
+            limit_by_field      limit_by_field_type -- limit by every field value, only non-aggregate; field must be distinct
         );
 
         CREATE TYPE time_range AS (start_time BIGINT, end_time BIGINT);
 
-        CREATE TYPE namespace_partition_type AS (namespace_name NAME, partition_number SMALLINT, total_partitions SMALLINT);
+        CREATE TYPE hypertable_partition_type AS (hypertable_name NAME, partition_number SMALLINT, total_partitions SMALLINT);
     END IF;
 END
 $CREATETYPES$;
@@ -53,19 +53,19 @@ $CREATETYPES$;
 ---------------------------------------------
 
 CREATE OR REPLACE FUNCTION new_ioql_query(
-    namespace_name     TEXT, -- NOT NULL
-    select_items       select_item [] = NULL,
-    aggregate          aggregate_type = NULL, --op, group_field and group_time for aggregation, if NULL, not aggregating
-    time_condition     time_condition_type = NULL, --time limits, from and to
-    field_condition    field_condition_type = NULL, -- field predicates combined with a conjunctive (AND/OR)
-    limit_rows         INT = NULL, --regular limit (number of rows)
-    limit_time_periods INT = NULL, --limit # of time periods, only aggregates
-    limit_by_field     limit_by_field_type = NULL-- limit by every field value, only non-aggregate; field must be distinct
+    hypertable_name     TEXT, -- NOT NULL
+    select_items        select_item [] = NULL,
+    aggregate           aggregate_type = NULL, --op, group_field and group_time for aggregation, if NULL, not aggregating
+    time_condition      time_condition_type = NULL, --time limits, from and to
+    field_condition     field_condition_type = NULL, -- field predicates combined with a conjunctive (AND/OR)
+    limit_rows          INT = NULL, --regular limit (number of rows)
+    limit_time_periods  INT = NULL, --limit # of time periods, only aggregates
+    limit_by_field      limit_by_field_type = NULL-- limit by every field value, only non-aggregate; field must be distinct
 )
     RETURNS ioql_query AS $BODY$
 --TODO convert empty select_item to NULL?
 SELECT ROW (
-       namespace_name,
+       hypertable_name,
        select_items,
        aggregate,
        time_condition,
@@ -125,5 +125,3 @@ CREATE OR REPLACE FUNCTION new_limit_by_field(
     RETURNS limit_by_field_type AS $BODY$
 SELECT ROW (field, count) :: limit_by_field_type
 $BODY$ LANGUAGE 'sql' STABLE;
-
-

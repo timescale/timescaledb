@@ -5,8 +5,8 @@ DECLARE
     sql_code TEXT;
     inner_sql TEXT;
 BEGIN
-    --TODO : cross-epoch queries can be optimized much more than a simple limit. 
-    SELECT code_epoch.code    
+    --TODO : cross-epoch queries can be optimized much more than a simple limit.
+    SELECT code_epoch.code
     INTO inner_sql
     FROM (
       SELECT CASE WHEN  NOT query.aggregate IS NULL THEN
@@ -15,11 +15,11 @@ BEGIN
                      ioql_query_nonagg_sql(query, pe)
                   END AS code
       FROM partition_epoch pe
-      WHERE pe.hypertable_name = query.namespace_name
+      WHERE pe.hypertable_name = query.hypertable_name
     ) AS code_epoch;
 
     IF NOT FOUND THEN
-        PERFORM no_cluster_table(query); 
+        PERFORM no_cluster_table(query);
     END IF;
 
     SELECT format(
@@ -49,10 +49,6 @@ LANGUAGE plpgsql STABLE;
 CREATE OR REPLACE FUNCTION ioql_exec_query(query ioql_query)
     RETURNS TABLE(json TEXT) AS $BODY$
 BEGIN
-    --  IF to_regclass(get_cluster_name(get_namespace(query))::cstring) IS NULL THEN
-    --    RETURN QUERY SELECT * FROM no_cluster_table(query);
-    --    RETURN;
-    --  END IF;
     RETURN QUERY EXECUTE format(
         $$
     SELECT row_to_json(ans)::text
@@ -61,6 +57,3 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql STABLE;
-
-
-
