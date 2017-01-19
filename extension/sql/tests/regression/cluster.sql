@@ -24,6 +24,15 @@ CREATE TABLE PUBLIC."testNs" (
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
 
+CREATE TABLE PUBLIC."testNs2" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp DOUBLE PRECISION NULL,
+  occupied BOOLEAN NULL,
+  latitude BIGINT NULL,
+  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
+);
+
 CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
@@ -35,6 +44,7 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypert
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
 \set ON_ERROR_STOP 1
+SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id', hypertable_name=>'testNs2');
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 
