@@ -53,6 +53,37 @@ the above table for you:
 ```bash
 PGDATABASE=iobeam ./scripts/run_sql.sh setup_sample_hypertable.psql
 ```
+### Indexing data
+
+Data is indexed using normal SQL CREATE INDEX commands. For instance,
+```sql
+CREATE INDEX ON conditions (device_id, time DESC);
+```
+This can be done before or after converting the table to a hypertable.
+
+**Indexing suggestions:**
+
+Our experience has shown that some type of indexes are most-useful for time-series data.
+
+For indexing columns of a limited cardinality we suggest using an index like:
+```sql
+CREATE INDEX ON hypertable (limited-cardinality-column, time DESC);
+```
+For all other types of columns the index should be in the form:
+```sql
+CREATE INDEX ON hypertable (time DESC, column);
+```
+Having a `time DESC` column specification in the index allows for efficient queries by column-value and time. For example, the index defined above would optimize the following query:
+```sql
+SELECT * FROM conditions WHERE device_id = 'dev_1' ORDER BY time DESC LIMIT 10
+```
+
+For sparse data where a column is often NULL, we suggest adding a `WHERE column IS NOT NULL` clause to the index (unless you are often searching for missing data). For example,
+
+```sql
+CREATE INDEX ON conditions (time DESC, humidity) WHERE humdity IS NOT NULL;
+```
+this creates a more compact, and thus efficient, index.
 
 #### Inserting and Querying
 Inserting data into the hypertable is done via normal SQL INSERT commands,
