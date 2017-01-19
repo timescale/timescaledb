@@ -66,7 +66,7 @@ BEGIN
         time_column_name, time_column_type,
         created_on
       )
-    ON CONFLICT DO NOTHING RETURNING * INTO hypertable_row;
+    RETURNING * INTO hypertable_row;
 
     IF number_partitions != 0 THEN
         PERFORM add_equi_partition_epoch(hypertable_name, number_partitions, partitioning_column);

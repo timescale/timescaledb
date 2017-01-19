@@ -1,14 +1,19 @@
 \ir include/insert.sql
 \set ON_ERROR_STOP 1
 \ir create_clustered_db.sql
+SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS meta;
 DROP DATABASE IF EXISTS "Test1";
 DROP DATABASE IF EXISTS test2;
+SET client_min_messages = NOTICE;
 CREATE DATABASE meta;
 CREATE DATABASE "Test1";
 CREATE DATABASE test2;
 \c meta
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
 select setup_meta();
  setup_meta 
 ------------
@@ -17,6 +22,9 @@ select setup_meta();
 
 \c Test1
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "hstore"
 select setup_main();
  setup_main 
 ------------
@@ -25,6 +33,9 @@ select setup_main();
 
 \c test2
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "hstore"
 select setup_main();
  setup_main 
 ------------

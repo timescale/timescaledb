@@ -16,4 +16,6 @@ BEGIN
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_kafka_offset_node();
 
 END
-$BODY$;
+$BODY$
+SET client_min_messages = WARNING --suppress if trigger does not exist on drop notices
+;

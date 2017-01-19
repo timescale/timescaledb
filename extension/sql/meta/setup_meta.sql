@@ -73,4 +73,6 @@ BEGIN
     END LOOP;
 
 END
-$BODY$;
+$BODY$
+SET client_min_messages = WARNING --supress notices for trigger drops
+;

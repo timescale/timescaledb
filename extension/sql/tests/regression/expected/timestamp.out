@@ -1,3 +1,12 @@
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "hstore"
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
@@ -71,6 +80,7 @@ SELECT * FROM PUBLIC."testNs";
  2009-11-10 23:00:00 | dev2      |      1.5 |        2 |          | 
 (5 rows)
 
+SET client_min_messages = WARNING;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));
                                                           json                                                          

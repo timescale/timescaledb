@@ -9,7 +9,8 @@
 --IO101 - operation not supported
 --IO102 - no partitioning column for hypertable
 --IO103 - unknown index type
---IO104 - illegal name/identifier.
+--IO104 - illegal name/identifier
+--IO110 - hypertable already exists
 
 --IO500 - GROUP: internal error
 --IO501 - unexpected state/event

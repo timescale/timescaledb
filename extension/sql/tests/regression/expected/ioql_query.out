@@ -1,4 +1,23 @@
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+LOCATION:  CreateExtensionInternal, extension.c:1441
 \c Test1
+SET client_min_messages = WARNING;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));
                                                          json                                                          
@@ -18,6 +37,8 @@ FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));
 \set ON_ERROR_STOP 0
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'DoesNotExist'));
+psql:ioql_query.sql:18: ERROR:  IO001: Hypertable 'DoesNotExist' does not exist
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',

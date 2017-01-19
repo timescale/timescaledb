@@ -1,3 +1,12 @@
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "hstore"
 \c Test1
 \d+ "_sysinternal".*
 Index "_sysinternal.1-testNs_device_id_timeCustom_idx"

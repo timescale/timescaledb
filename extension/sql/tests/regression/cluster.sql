@@ -1,4 +1,6 @@
 \set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
 
 \ir include/create_clustered_db.sql
 
@@ -29,6 +31,11 @@ CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_column_goes_o
 
 
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
+\set ON_ERROR_STOP 1
+
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 
 \c meta

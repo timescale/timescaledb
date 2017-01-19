@@ -4,7 +4,7 @@ set -e
 UPDATE=${UPDATE:-false}
 
 golden_test() {
-	psql -h localhost -U postgres -q -X -f $1 > actual/$2
+	psql -h localhost -U postgres -q -X -f $1 > actual/$2 2>&1
 	
     if diff expected/$2 actual/$2;
 	then

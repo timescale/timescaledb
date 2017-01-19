@@ -42,22 +42,28 @@ BEGIN
        FROM pg_attribute
        WHERE attrelid = main_table AND attname = time_column_name;
 
-      SELECT *
-        INTO hypertable_row
-        FROM  _iobeamdb_meta_api.create_hypertable(
-            schema_name,
-            table_name,
-            time_column_name,
-            time_column_type,
-            partitioning_column,
-            replication_factor,
-            number_partitions,
-            associated_schema_name,
-            associated_table_prefix,
-            hypertable_name,
-            placement,
-            chunk_size_bytes
-        );
+      BEGIN 
+        SELECT *
+            INTO hypertable_row
+            FROM  _iobeamdb_meta_api.create_hypertable(
+                schema_name,
+                table_name,
+                time_column_name,
+                time_column_type,
+                partitioning_column,
+                replication_factor,
+                number_partitions,
+                associated_schema_name,
+                associated_table_prefix,
+                hypertable_name,
+                placement,
+                chunk_size_bytes
+            );
+      EXCEPTION
+        WHEN unique_violation THEN
+            RAISE EXCEPTION 'hypertable already exists: %', hypertable_name
+            USING ERRCODE = 'IO110';
+      END;
 
       FOR att_row IN SELECT *
        FROM pg_attribute att
