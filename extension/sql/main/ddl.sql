@@ -30,6 +30,7 @@ DECLARE
   schema_name      NAME;
   time_column_type REGTYPE;
   att_row          pg_attribute;
+  main_table_has_items BOOLEAN;
 BEGIN
        SELECT relname, nspname
        INTO STRICT table_name, schema_name
@@ -37,10 +38,37 @@ BEGIN
        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
        WHERE c.OID = main_table;
 
-       SELECT atttypid
-       INTO STRICT time_column_type
-       FROM pg_attribute
-       WHERE attrelid = main_table AND attname = time_column_name;
+        BEGIN
+            SELECT atttypid
+            INTO STRICT time_column_type
+            FROM pg_attribute
+            WHERE attrelid = main_table AND attname = time_column_name;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE EXCEPTION 'column "%" does not exist', time_column_name
+                USING ERRCODE = 'IO102';
+        END;
+
+        IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN 
+            RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type 
+            USING ERRCODE = 'IO102';
+        END IF; 
+
+        PERFORM atttypid
+        FROM pg_attribute
+        WHERE attrelid = main_table AND attname = partitioning_column;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'column "%" does not exist', partitioning_column
+            USING ERRCODE = 'IO102';
+        END IF;
+
+        EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
+
+        IF main_table_has_items THEN 
+            RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
+            USING ERRCODE = 'IO102';
+        END IF; 
 
       BEGIN
         SELECT *
@@ -114,6 +142,16 @@ BEGIN
     FROM _iobeamdb_catalog.hypertable h
     WHERE main_schema_name = schema_name AND
           main_table_name = table_name;
+
+    PERFORM atttypid
+    FROM pg_attribute
+    WHERE attrelid = main_table AND attname = column_name;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'column "%" does not exist', column_name
+        USING ERRCODE = 'IO100';
+    END IF;
+
 
     PERFORM
     _sysinternal.meta_transaction_exec(
