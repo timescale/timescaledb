@@ -3,11 +3,11 @@
 
 -- IO000 - GROUP: query errors
 -- IO001 - hypertable does not exist
--- IO002 - field does not exist
+-- IO002 - column does not exist
 
 --IO100 - GROUP: DDL errors
 --IO101 - operation not supported
---IO102 - no partitioning field for hypertable
+--IO102 - no partitioning column for hypertable
 --IO103 - unknown index type
 --IO104 - illegal name/identifier.
 

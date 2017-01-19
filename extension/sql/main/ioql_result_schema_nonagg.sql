@@ -1,44 +1,44 @@
---the fields (w/o time, which isn't a field) the sql will return
+--the columns (w/o time, which isn't a column) the sql will return
 --should return unquoted names
-CREATE OR REPLACE FUNCTION get_result_field_array_nonagg(query ioql_query)
+CREATE OR REPLACE FUNCTION get_result_column_array_nonagg(query ioql_query)
     RETURNS NAME [] LANGUAGE SQL STABLE AS
 $BODY$
 SELECT CASE
        WHEN query.select_items IS NULL THEN
-           get_field_names(query.hypertable_name)
+           get_column_names(query.hypertable_name)
        ELSE
            ARRAY(
                SELECT *
                FROM
                    (
                        (
-                          SELECT time_field AS field_name
-                          FROM get_time_field(query.hypertable_name) time_field
-                          WHERE time_field NOT IN (
-                            SELECT field AS field_name
+                          SELECT time_column AS column_name
+                          FROM get_time_column(query.hypertable_name) time_column
+                          WHERE time_column NOT IN (
+                            SELECT column_name
                             FROM unnest(query.select_items)
                           )
                        )
                       UNION ALL
                        (
-                           SELECT field AS field_name
+                           SELECT column_name
                            FROM unnest(query.select_items)
                        )
                        UNION ALL
                        (
                            SELECT CASE
                                   WHEN
-                                      (query.limit_by_field).field IS NOT NULL AND
+                                      (query.limit_by_column).column_name IS NOT NULL AND
                                       NOT EXISTS(
                                           SELECT 1
                                           FROM unnest(query.select_items)
-                                          WHERE field = (query.limit_by_field).field
+                                          WHERE column_name = (query.limit_by_column).column_name
                                       ) THEN
-                                      (query.limit_by_field).field
+                                      (query.limit_by_column).column_name
                                   END
                        )
                    ) AS _x
-               WHERE field_name IS NOT NULL
+               WHERE column_name IS NOT NULL
            )
        END;
 $BODY$;
@@ -55,17 +55,17 @@ $BODY$;
 CREATE OR REPLACE FUNCTION get_result_column_list_nonagg(query ioql_query)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(quote_names(get_result_field_array_nonagg(query)), ', ')
+SELECT array_to_string(quote_names(get_result_column_array_nonagg(query)), ', ')
 $BODY$;
 
---all fields and their types
-CREATE OR REPLACE FUNCTION get_result_field_def_array_nonagg(query ioql_query)
+--all columns and their types
+CREATE OR REPLACE FUNCTION get_result_column_def_array_nonagg(query ioql_query)
     RETURNS TEXT [] LANGUAGE SQL STABLE AS
 $BODY$
 SELECT ARRAY(
-    SELECT format('%I %s', field, data_type)
-    FROM get_field_names_and_types(query.hypertable_name,
-                                   get_result_field_array_nonagg(query)) AS ft(field, data_type)
+    SELECT format('%I %s', column_name, data_type)
+    FROM get_column_names_and_types(query.hypertable_name,
+                                   get_result_column_array_nonagg(query)) AS ft(column_name, data_type)
 )
 $BODY$;
 
@@ -73,5 +73,5 @@ $BODY$;
 CREATE OR REPLACE FUNCTION get_result_column_def_list_nonagg(query ioql_query)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(get_result_field_def_array_nonagg(query), ', ')
+SELECT array_to_string(get_result_column_def_array_nonagg(query), ', ')
 $BODY$;

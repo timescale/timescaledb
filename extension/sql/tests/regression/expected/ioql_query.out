@@ -83,7 +83,7 @@ FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0')],
-                                    limit_by_field => new_limit_by_field('device_id', 1)
+                                    limit_by_column => new_limit_by_column('device_id', 1)
                      ));
                                  json                                  
 -----------------------------------------------------------------------

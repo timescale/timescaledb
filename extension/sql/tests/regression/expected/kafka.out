@@ -29,30 +29,30 @@ SELECT add_node('test2' :: NAME, 'localhost');
 
 \c Test1
 \dt public.*
-                  List of relations
- Schema |           Name           | Type  |  Owner   
---------+--------------------------+-------+----------
- public | chunk                    | table | postgres
- public | chunk_replica_node       | table | postgres
- public | chunk_replica_node_index | table | postgres
- public | cluster_user             | table | postgres
- public | default_replica_node     | table | postgres
- public | deleted_field            | table | postgres
- public | deleted_hypertable       | table | postgres
- public | deleted_hypertable_index | table | postgres
- public | distinct_replica_node    | table | postgres
- public | field                    | table | postgres
- public | hypertable               | table | postgres
- public | hypertable_index         | table | postgres
- public | hypertable_replica       | table | postgres
- public | kafka_offset_cluster     | table | postgres
- public | kafka_offset_local       | table | postgres
- public | kafka_offset_node        | table | postgres
- public | meta                     | table | postgres
- public | node                     | table | postgres
- public | partition                | table | postgres
- public | partition_epoch          | table | postgres
- public | partition_replica        | table | postgres
+                   List of relations
+ Schema |           Name            | Type  |  Owner   
+--------+---------------------------+-------+----------
+ public | chunk                     | table | postgres
+ public | chunk_replica_node        | table | postgres
+ public | chunk_replica_node_index  | table | postgres
+ public | cluster_user              | table | postgres
+ public | default_replica_node      | table | postgres
+ public | deleted_hypertable        | table | postgres
+ public | deleted_hypertable_column | table | postgres
+ public | deleted_hypertable_index  | table | postgres
+ public | distinct_replica_node     | table | postgres
+ public | hypertable                | table | postgres
+ public | hypertable_column         | table | postgres
+ public | hypertable_index          | table | postgres
+ public | hypertable_replica        | table | postgres
+ public | kafka_offset_cluster      | table | postgres
+ public | kafka_offset_local        | table | postgres
+ public | kafka_offset_node         | table | postgres
+ public | meta                      | table | postgres
+ public | node                      | table | postgres
+ public | partition                 | table | postgres
+ public | partition_epoch           | table | postgres
+ public | partition_replica         | table | postgres
 (21 rows)
 
 \det+ public.*

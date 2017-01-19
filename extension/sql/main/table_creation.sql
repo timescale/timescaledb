@@ -72,9 +72,9 @@ BEGIN
     EXECUTE format(
         $$
             CREATE TABLE IF NOT EXISTS %1$I.%2$I (
-                field TEXT,
+                column_name TEXT,
                 value TEXT,
-                PRIMARY KEY(field, value)
+                PRIMARY KEY(column_name, value)
             );
         $$, schema_name, table_name);
 END
@@ -107,7 +107,7 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            CREATE TABLE IF NOT EXISTS %1$I.%2$I (PRIMARY KEY(field, value))
+            CREATE TABLE IF NOT EXISTS %1$I.%2$I (PRIMARY KEY(column_name, value))
             INHERITS(%3$I.%4$I)
         $$, schema_name, table_name, replica_schema_name, replica_table_name);
 END
@@ -186,7 +186,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_data_partition_table(
 $BODY$
 DECLARE
     epoch_row    partition_epoch;
-    field_exists BOOLEAN;
+    column_exists BOOLEAN;
 BEGIN
     SELECT *
     INTO STRICT epoch_row
@@ -201,12 +201,12 @@ BEGIN
         schema_name, table_name, parent_schema_name, parent_table_name);
 
     SELECT COUNT(*) > 0
-    INTO field_exists
-    FROM field f
-    WHERE f.hypertable_name = epoch_row.hypertable_name
-          AND f.name = epoch_row.partitioning_field;
+    INTO column_exists
+    FROM hypertable_column c
+    WHERE c.hypertable_name = epoch_row.hypertable_name
+          AND c.name = epoch_row.partitioning_column;
 
-    IF field_exists THEN
+    IF column_exists THEN
         PERFORM _sysinternal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
     END IF;
 END
@@ -237,7 +237,7 @@ BEGIN
             ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
         $$,
         schema_name, table_name,
-        epoch_row.partitioning_func, epoch_row.partitioning_field,
+        epoch_row.partitioning_func, epoch_row.partitioning_column,
         epoch_row.partitioning_mod, keyspace_start, keyspace_end);
 
 END
@@ -268,7 +268,7 @@ BEGIN
             ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s)
         $$,
             _sysinternal.time_col_name_for_crn(schema_name, table_name),
-            schema_name, table_name, 
+            schema_name, table_name,
             _sysinternal.time_literal_sql(start_time, time_col_type),
             _sysinternal.time_literal_sql(end_time, time_col_type));
     ELSIF start_time IS NOT NULL THEN
@@ -284,7 +284,7 @@ BEGIN
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s)
         $$,
-            schema_name, table_name, 
+            schema_name, table_name,
             _sysinternal.time_col_name_for_crn(schema_name, table_name),
             _sysinternal.time_literal_sql(end_time, time_col_type));
     END IF;

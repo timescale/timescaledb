@@ -34,9 +34,9 @@ CREATE TABLE PUBLIC."testNs" (
 );
 CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name |       time_field_type       | created_on | chunk_size_bytes 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------------------+------------+------------------
- testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   |                  1 | STICKY    | timeCustom      | timestamp without time zone | Test1      |       1073741824
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+-----------------------------+------------+------------------
+ testNs | public           | testNs          | testNs                 | _hyper_1                | testNs           | _hyper_1_root   | testNs               | _hyper_1_distinct   |                  1 | STICKY    | timeCustom       | timestamp without time zone | Test1      |       1073741824
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);

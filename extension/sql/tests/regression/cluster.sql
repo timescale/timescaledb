@@ -11,7 +11,7 @@ SELECT add_node('Test1' :: NAME, 'localhost');
 
 SELECT add_node('test2' :: NAME, 'localhost');
 
-\c Test1 
+\c Test1
 
 CREATE TABLE PUBLIC."testNs" (
   time BIGINT NOT NULL,
@@ -19,19 +19,19 @@ CREATE TABLE PUBLIC."testNs" (
   temp DOUBLE PRECISION NULL,
   occupied BOOLEAN NULL,
   latitude BIGINT NULL,
-  really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
+  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
 
 CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" (really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_field_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
 
 
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 
-\c meta 
+\c meta
 SELECT *
 FROM partition_replica;
 
@@ -59,7 +59,7 @@ FROM chunk;
 SELECT *
 FROM chunk_replica_node;
 SELECT *
-FROM field;
+FROM hypertable_column;
 
 \des+
 \deu+
@@ -88,7 +88,7 @@ FROM chunk;
 SELECT *
 FROM chunk_replica_node;
 SELECT *
-FROM field;
+FROM hypertable_column;
 
 \des+
 \deu+
@@ -120,5 +120,3 @@ FROM chunk;
 
 \c Test1
 \d+ "_sysinternal".*
-
-

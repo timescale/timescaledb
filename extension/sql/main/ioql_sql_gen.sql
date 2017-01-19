@@ -56,34 +56,34 @@ FROM (
 $BODY$;
 
 --TODO: Review this
-CREATE OR REPLACE FUNCTION get_select_field_predicate(items select_item [])
+CREATE OR REPLACE FUNCTION get_select_column_predicate(items select_item [])
     RETURNS TEXT LANGUAGE SQL IMMUTABLE STRICT AS
 $BODY$
-SELECT string_agg(format('%I IS NOT NULL', field), ' AND ')
+SELECT string_agg(format('%I IS NOT NULL', column_name), ' AND ')
 FROM unnest(items);
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_one_field_predicate_clause(field_pred field_predicate)
+CREATE OR REPLACE FUNCTION get_one_column_predicate_clause(column_pred column_predicate)
     RETURNS TEXT LANGUAGE SQL STABLE STRICT AS
 $BODY$
-SELECT format('(%1$I%2$s%3$L AND %1$I IS NOT NULL)', field_pred.field, field_pred.op, field_pred.constant)
+SELECT format('(%1$I%2$s%3$L AND %1$I IS NOT NULL)', column_pred.column_name, column_pred.op, column_pred.constant)
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_field_predicate_clause(cond field_condition_type)
+CREATE OR REPLACE FUNCTION get_column_predicate_clause(cond column_condition_type)
     RETURNS TEXT LANGUAGE SQL STABLE STRICT AS
 $BODY$
-SELECT '( ' || string_agg(get_one_field_predicate_clause(p), format(' %s ', cond.conjunctive)) || ' )'
+SELECT '( ' || string_agg(get_one_column_predicate_clause(p), format(' %s ', cond.conjunctive)) || ' )'
 FROM unnest(cond.predicates) AS p
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_constrained_partitioning_field_value(partitioning_field_name NAME,
-                                                                    cond                    field_condition_type)
+CREATE OR REPLACE FUNCTION get_constrained_partitioning_column_value(partitioning_column_name NAME,
+                                                                    cond                    column_condition_type)
     RETURNS TEXT LANGUAGE SQL STABLE STRICT AS
 $BODY$
 SELECT p.constant
 FROM unnest(cond.predicates) AS p
-WHERE p.field = partitioning_field_name AND cond.conjunctive = 'AND' AND p.op = '='
+WHERE p.column_name = partitioning_column_name AND cond.conjunctive = 'AND' AND p.op = '='
 $BODY$;
 
 CREATE OR REPLACE FUNCTION get_partitioning_predicate(
@@ -94,17 +94,17 @@ CREATE OR REPLACE FUNCTION get_partitioning_predicate(
 $BODY$
 DECLARE
     keyspace_value SMALLINT;
-    field_value    TEXT;
+    column_value    TEXT;
 BEGIN
-    field_value := get_constrained_partitioning_field_value(epoch.partitioning_field, query.field_condition);
+    column_value := get_constrained_partitioning_column_value(epoch.partitioning_column, query.column_condition);
 
-    EXECUTE format($$ SELECT %s(%L, %L) $$, epoch.partitioning_func, field_value, epoch.partitioning_mod)
+    EXECUTE format($$ SELECT %s(%L, %L) $$, epoch.partitioning_func, column_value, epoch.partitioning_mod)
     INTO keyspace_value;
 
-    IF field_value IS NOT NULL THEN
+    IF column_value IS NOT NULL THEN
         RETURN format('%s(%I, %L) = %L',
                       epoch.partitioning_func,
-                      epoch.partitioning_field,
+                      epoch.partitioning_column,
                       epoch.partitioning_mod,
                       keyspace_value);
     END IF;
@@ -116,9 +116,9 @@ CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(
-    get_time_predicate(get_time_field(query.hypertable_name), get_time_field_type(query.hypertable_name), query.time_condition),
-    get_field_predicate_clause(query.field_condition),
-    get_select_field_predicate(query.select_items),
+    get_time_predicate(get_time_column(query.hypertable_name), get_time_column_type(query.hypertable_name), query.time_condition),
+    get_column_predicate_clause(query.column_condition),
+    get_select_column_predicate(query.select_items),
     get_partitioning_predicate(query, epoch)
 );
 $BODY$;
@@ -146,8 +146,8 @@ $BODY$
 SELECT CASE
        WHEN agg IS NULL THEN
            NULL
-       WHEN agg.group_field IS NOT NULL THEN
-           format('GROUP BY %s, group_time', agg.group_field)
+       WHEN agg.group_column IS NOT NULL THEN
+           format('GROUP BY %s, group_time', agg.group_column)
        ELSE
            'GROUP BY group_time'
        END;
@@ -158,10 +158,10 @@ CREATE OR REPLACE FUNCTION get_orderby_clause_nonagg(query ioql_query)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT CASE
-       WHEN query.limit_by_field IS NOT NULL THEN
-           format('ORDER BY %I DESC NULLS LAST, %s', get_time_field(query.hypertable_name), (query.limit_by_field).field)
+       WHEN query.limit_by_column IS NOT NULL THEN
+           format('ORDER BY %I DESC NULLS LAST, %s', get_time_column(query.hypertable_name), (query.limit_by_column).column_name)
 	  ELSE
-           format('ORDER BY %I DESC NULLS LAST', get_time_field(query.hypertable_name))
+           format('ORDER BY %I DESC NULLS LAST', get_time_column(query.hypertable_name))
        END;
 $BODY$;
 
@@ -171,10 +171,10 @@ $BODY$
 SELECT CASE
        WHEN query.limit_rows IS NULL THEN
            NULL --no need to order if not gonna limit
-       WHEN (query.aggregate).group_field IS NOT NULL THEN
+       WHEN (query.aggregate).group_column IS NOT NULL THEN
            format('ORDER BY %s DESC NULLS LAST, %s',
                   time_col,
-                  (query.aggregate).group_field) --group field needs to be included so that 5 aggregates across partitions overlap
+                  (query.aggregate).group_column) --group column needs to be included so that 5 aggregates across partitions overlap
        ELSE
            format('ORDER BY %s DESC NULLS LAST', time_col)
        END;

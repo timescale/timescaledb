@@ -62,15 +62,15 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION add_partition_epoch(
-    hypertable_name    NAME,
-    keyspace_start     SMALLINT [],
-    partitioning_field NAME
+    hypertable_name     NAME,
+    keyspace_start      SMALLINT [],
+    partitioning_column NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 WITH epoch AS (
-    INSERT INTO partition_epoch (hypertable_name, start_time, end_time, partitioning_func, partitioning_mod, partitioning_field)
-    VALUES (hypertable_name, NULL, NULL, 'get_partition_for_key', 32768, partitioning_field)
+    INSERT INTO partition_epoch (hypertable_name, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
+    VALUES (hypertable_name, NULL, NULL, 'get_partition_for_key', 32768, partitioning_column)
     RETURNING id
 )
 INSERT INTO partition (epoch_id, keyspace_start, keyspace_end)
@@ -83,9 +83,9 @@ INSERT INTO partition (epoch_id, keyspace_start, keyspace_end)
 $BODY$;
 
 CREATE OR REPLACE FUNCTION add_equi_partition_epoch(
-    hypertable_name    NAME,
-    number_partitions  SMALLINT,
-    partitioning_field NAME
+    hypertable_name     NAME,
+    number_partitions   SMALLINT,
+    partitioning_column NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
@@ -93,6 +93,6 @@ SELECT add_partition_epoch(
     hypertable_name,
     (SELECT ARRAY(SELECT start * 32768 / (number_partitions)
                   FROM generate_series(1, number_partitions - 1) AS start) :: SMALLINT []),
-    partitioning_field
+    partitioning_column
 )
 $BODY$;

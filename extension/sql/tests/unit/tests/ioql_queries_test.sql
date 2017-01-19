@@ -27,32 +27,32 @@ BEGIN
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',limit_rows=>2), 'test_outputs', 'output_7');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    limit_by_field=>new_limit_by_field('device_id',1)), 'test_outputs', 'output_8');
+    limit_by_column=>new_limit_by_column('device_id',1)), 'test_outputs', 'output_8');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    limit_by_field=>new_limit_by_field('string_1',2)), 'test_outputs', 'output_9');
+    limit_by_column=>new_limit_by_column('string_1',2)), 'test_outputs', 'output_9');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    limit_by_field=>new_limit_by_field('string_2',1)), 'test_outputs', 'output_10');
+    limit_by_column=>new_limit_by_column('string_2',1)), 'test_outputs', 'output_10');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,NULL::aggregate_function_type)],
-    limit_by_field=>new_limit_by_field('string_2',1)), 'test_outputs', 'output_11');
+    limit_by_column=>new_limit_by_column('string_2',1)), 'test_outputs', 'output_11');
 
     /*
         Should throw error as field_only_dev2 is not distinct, bug filed
 
         PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-        limit_by_field=>new_limit_by_field('field_only_dev2',1)), 'test_outputs', 'output_12');
+        limit_by_column=>new_limit_by_column('field_only_dev2',1)), 'test_outputs', 'output_12');
     */
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     time_condition=>new_time_condition(NULL,910738800000000000),
-    limit_by_field=>new_limit_by_field('device_id',1)), 'test_outputs', 'output_13');
+    limit_by_column=>new_limit_by_column('device_id',1)), 'test_outputs', 'output_13');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,NULL::aggregate_function_type)],
     time_condition=>new_time_condition(NULL,910738800000000000),
-    limit_by_field=>new_limit_by_field('device_id',1)), 'test_outputs', 'output_14');
+    limit_by_column=>new_limit_by_column('device_id',1)), 'test_outputs', 'output_14');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     time_condition=>new_time_condition(NULL,1257987600000000000)), 'test_outputs', 'output_15');
@@ -75,92 +75,92 @@ BEGIN
     'test_outputs', 'output_20');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','=',1.5::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','=',1.5::text)])),
     'test_outputs', 'output_21');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','=',1.6::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','=',1.6::text)])),
     'test_outputs', 'output_22');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','!=',1.6::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','!=',1.6::text)])),
     'test_outputs', 'output_23');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','!=',1.5::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','!=',1.5::text)])),
     'test_outputs', 'output_24');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','>',1.4::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','>',1.4::text)])),
     'test_outputs', 'output_25');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','>',1.5::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','>',1.5::text)])),
     'test_outputs', 'output_26');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','>=',1.5::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','>=',1.5::text)])),
     'test_outputs', 'output_27');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','>=',1.51::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','>=',1.51::text)])),
     'test_outputs', 'output_28');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','<',1.6::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','<',1.6::text)])),
     'test_outputs', 'output_29');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','<',1.5::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','<',1.5::text)])),
     'test_outputs', 'output_30');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','<=',1.5::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','<=',1.5::text)])),
     'test_outputs', 'output_31');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','<=',1.49::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','<=',1.49::text)])),
     'test_outputs', 'output_32');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev1'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev1'::text)])),
     'test_outputs', 'output_33');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev2'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev2'::text)])),
     'test_outputs', 'output_34');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev3'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev3'::text)])),
     'test_outputs', 'output_35');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','!=','dev2'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','!=','dev2'::text)])),
     'test_outputs', 'output_36');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','=',1.5::text),
-    new_field_predicate('num_2','=',0.0::text)])), 'test_outputs', 'output_37');
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','=',1.5::text),
+    new_column_predicate('num_2','=',0.0::text)])), 'test_outputs', 'output_37');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('nUm_1','=',1.5::text),
-    new_field_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_38');
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('nUm_1','=',1.5::text),
+    new_column_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_38');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('num_2','=',1.0::text),
-    new_field_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_39');
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('num_2','=',1.0::text),
+    new_column_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_39');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('OR',ARRAY[new_field_predicate('nUm_1','=',1.5::text),
-    new_field_predicate('num_2','=',0.0::text)])), 'test_outputs', 'output_40');
+    column_condition=>new_column_condition('OR',ARRAY[new_column_predicate('nUm_1','=',1.5::text),
+    new_column_predicate('num_2','=',0.0::text)])), 'test_outputs', 'output_40');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('OR',ARRAY[new_field_predicate('nUm_1','=',1.5::text),
-    new_field_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_41');
+    column_condition=>new_column_condition('OR',ARRAY[new_column_predicate('nUm_1','=',1.5::text),
+    new_column_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_41');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
-    field_condition=>new_field_condition('OR',ARRAY[new_field_predicate('num_2','=',1.0::text),
-    new_field_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_42');
+    column_condition=>new_column_condition('OR',ARRAY[new_column_predicate('num_2','=',1.0::text),
+    new_column_predicate('num_2','=',2.0::text)])), 'test_outputs', 'output_42');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,'SUM'::aggregate_function_type)],
@@ -205,32 +205,32 @@ BEGIN
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,'COUNT'::aggregate_function_type)],
     aggregate=>new_aggregate(2592000000000000,NULL),
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev1'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev1'::text)])),
     'test_outputs', 'output_53');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,'COUNT'::aggregate_function_type)],
     aggregate=>new_aggregate(2592000000000000,NULL),
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev2'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev2'::text)])),
     'test_outputs', 'output_54');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,'COUNT'::aggregate_function_type)],
     aggregate=>new_aggregate(2592000000000000,NULL),
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev3'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev3'::text)])),
     'test_outputs', 'output_55');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,'COUNT'::aggregate_function_type)],
     aggregate=>new_aggregate(2592000000000000,NULL),
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','!=','dev2'::text)])),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','!=','dev2'::text)])),
     'test_outputs', 'output_56');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',
     select_items=>ARRAY[new_select_item('nUm_1'::text,'MAX'::aggregate_function_type)],
     aggregate=>new_aggregate(2592000000000000,NULL),
     time_condition=>new_time_condition(1257894000000000000,1257987600000000000),
-    field_condition=>new_field_condition('AND',ARRAY[new_field_predicate('device_id','=','dev1'::text)]),
+    column_condition=>new_column_condition('AND',ARRAY[new_column_predicate('device_id','=','dev1'::text)]),
     limit_rows=>100), 'test_outputs', 'output_57');
 
     PERFORM test_utils.test_query(new_ioql_query(hypertable_name=>'33_testNs',

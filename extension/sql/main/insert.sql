@@ -1,12 +1,12 @@
 -- This file contains functions that aid in inserting data into a hypertable.
 
--- Get a comma-separated list of fields in a hypertable.
-CREATE OR REPLACE FUNCTION _sysinternal.get_field_list(
+-- Get a comma-separated list of columns in a hypertable.
+CREATE OR REPLACE FUNCTION _sysinternal.get_column_list(
     hypertable_name NAME
 )
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(get_quoted_field_names(hypertable_name), ', ')
+SELECT array_to_string(get_quoted_column_names(hypertable_name), ', ')
 $BODY$;
 
 -- Gets the partition ID of a given epoch and data row.
@@ -33,7 +33,7 @@ BEGIN
             BETWEEN p.keyspace_start AND p.keyspace_end
         $$,
             epoch.id, epoch.partitioning_func,
-            epoch.partitioning_field,
+            epoch.partitioning_column,
             copy_record, copy_table_name, epoch.partitioning_mod)
     INTO STRICT partition_row;
 
@@ -41,15 +41,15 @@ BEGIN
 END
 $BODY$;
 
--- Gets the value of the time field from a given row.
+-- Gets the value of the time column from a given row.
 --
--- field_name - Name of time field/column to fetch
--- field_type - Type of the time record
+-- column_name - Name of time column to fetch
+-- column_type - Type of the time record
 -- copy_record - Record/row from a table
 -- copy_table_name - Name of the relation to cast the record to
-CREATE OR REPLACE FUNCTION _sysinternal.get_time_field_from_record(
-    field_name      NAME,
-    field_type      REGTYPE,
+CREATE OR REPLACE FUNCTION _sysinternal.get_time_column_from_record(
+    column_name      NAME,
+    column_type      REGTYPE,
     copy_record     anyelement,
     copy_table_name TEXT
 )
@@ -61,7 +61,7 @@ BEGIN
     EXECUTE format(
         $$
             SELECT %s FROM (SELECT (%L::%s).*) as row LIMIT 1
-        $$, _sysinternal.extract_time_sql(format('row.%I', field_name), field_type), copy_record, copy_table_name)
+        $$, _sysinternal.extract_time_sql(format('row.%I', column_name), column_type), copy_record, copy_table_name)
     INTO STRICT t;
 
     RETURN t;
@@ -89,7 +89,7 @@ DECLARE
     chunk_row                   chunk;
     crn_record                  RECORD;
     distinct_table_oid          REGCLASS;
-    distinct_field              TEXT;
+    distinct_column              TEXT;
     distinct_clauses            TEXT;
     distinct_clause_idx         INT;
 BEGIN
@@ -108,17 +108,17 @@ BEGIN
 
     point_record_query_sql := format(
         $$
-            SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s') AS time,
-                   h.time_field_name, h.time_field_type,
+            SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s') AS time,
+                   h.time_column_name, h.time_column_type,
                    p.id AS partition_id, p.keyspace_start, p.keyspace_end,
-                   pe.partitioning_func, pe.partitioning_field, pe.partitioning_mod
+                   pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
             FROM ONLY %1$s ct
             LEFT JOIN hypertable h ON (h.NAME = %2$L)
             LEFT JOIN partition_epoch pe ON (
               pe.hypertable_name = %2$L AND
-              (pe.start_time <= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint
+              (pe.start_time <= (SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
                 OR pe.start_time IS NULL) AND
-              (pe.end_time   >= (SELECT _sysinternal.get_time_field_from_record(h.time_field_name, h.time_field_type, ct, '%1$s'))::bigint
+              (pe.end_time   >= (SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
                 OR pe.end_time IS NULL)
             )
             LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
@@ -162,11 +162,11 @@ BEGIN
             INTO distinct_table_oid
             FROM get_distinct_table_oid(hypertable_name, crn_record.replica_id, crn_record.database_name);
 
-            FOR distinct_field IN
-            SELECT f.name
-            FROM field as f
-            WHERE f.is_distinct = TRUE AND f.hypertable_name = insert_data.hypertable_name
-            ORDER BY f.name
+            FOR distinct_column IN
+            SELECT c.name
+            FROM hypertable_column c
+            WHERE c.is_distinct = TRUE AND c.hypertable_name = insert_data.hypertable_name
+            ORDER BY c.name
             LOOP
                 distinct_clauses := distinct_clauses || ',' || format(
                     $$
@@ -177,7 +177,7 @@ BEGIN
                       ORDER BY value
                       ON CONFLICT DO NOTHING
                     )
-                    $$, distinct_table_oid, distinct_field, distinct_clause_idx);
+                    $$, distinct_table_oid, distinct_column, distinct_clause_idx);
                     distinct_clause_idx := distinct_clause_idx + 1;
             END LOOP;
 
@@ -195,13 +195,13 @@ BEGIN
                 $$,
                     format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
                     copy_table_oid,
-                    _sysinternal.time_literal_sql(chunk_row.start_time, point_record.time_field_type),
-                    _sysinternal.time_literal_sql(chunk_row.end_time, point_record.time_field_type),
+                    _sysinternal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
+                    _sysinternal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
                     distinct_clauses,
-                    _sysinternal.get_field_list(hypertable_name),
-                    point_record.time_field_name,
+                    _sysinternal.get_column_list(hypertable_name),
+                    point_record.time_column_name,
                     point_record.partitioning_func,
-                    point_record.partitioning_field,
+                    point_record.partitioning_column,
                     point_record.partitioning_mod,
                     point_record.keyspace_start,
                     point_record.keyspace_end

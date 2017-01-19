@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS cluster_user (
 -- Additionally, a schema for associated tables (partitioned, replicated data
 -- tables) is created.
 --
--- The name and type of the time field (used to partition on time) are defined
--- in `time_field_name` and `time_field_type`.
+-- The name and type of the time column (used to partition on time) are defined
+-- in `time_column_name` and `time_column_type`.
 CREATE TABLE IF NOT EXISTS hypertable (
     name                    NAME                  NOT NULL PRIMARY KEY CHECK (name NOT LIKE '\_%'),
     main_schema_name        NAME                  NOT NULL,
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS hypertable (
     distinct_table_name     NAME                  NOT NULL,
     replication_factor      SMALLINT              NOT NULL CHECK (replication_factor > 0),
     placement               chunk_placement_type  NOT NULL,
-    time_field_name         NAME                  NOT NULL,
-    time_field_type         REGTYPE               NOT NULL,
+    time_column_name        NAME                  NOT NULL,
+    time_column_type        REGTYPE               NOT NULL,
     created_on              NAME                  NOT NULL REFERENCES node(database_name),
     chunk_size_bytes        BIGINT                NOT NULL CHECK (chunk_size_bytes > 0),
     UNIQUE (main_schema_name, main_table_name),
@@ -129,22 +129,22 @@ CREATE TABLE IF NOT EXISTS distinct_replica_node (
 
 -- A partition_epoch represents a different partitioning of the data.
 -- It has a start and end time (data time). Data needs to be placed in the correct epoch by time.
--- Partitionings are defined by a function, field, and modulo:
---   1) partitioning_func - Takes the partitioning_field and returns a number
+-- Partitionings are defined by a function, column, and modulo:
+--   1) partitioning_func - Takes the partitioning_column and returns a number
 --      which is modulo'd to place the data correctly
 --   2) partitioning_mod - Number used in modulo operation
---   3) partitioning_field - Field in data to partition by (input to partitioning_func)
+--   3) partitioning_column - column in data to partition by (input to partitioning_func)
 --
 -- Changing a data's partitioning, and thus creating a new epoch, should be done
 -- INFREQUENTLY as it's expensive operation.
 CREATE TABLE IF NOT EXISTS partition_epoch (
-    id                 SERIAL NOT NULL  PRIMARY KEY,
-    hypertable_name    NAME   NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
-    start_time         BIGINT NULL      CHECK (start_time > 0),
-    end_time           BIGINT NULL      CHECK (end_time > 0),
-    partitioning_func  NAME   NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
-    partitioning_mod   INT    NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_field NAME   NOT NULL,
+    id                  SERIAL NOT NULL  PRIMARY KEY,
+    hypertable_name     NAME   NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
+    start_time          BIGINT NULL      CHECK (start_time > 0),
+    end_time            BIGINT NULL      CHECK (end_time > 0),
+    partitioning_func   NAME   NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
+    partitioning_mod    INT    NOT NULL  CHECK (partitioning_mod < 65536),
+    partitioning_column NAME   NOT NULL,
     UNIQUE (hypertable_name, start_time),
     UNIQUE (hypertable_name, end_time),
     CHECK (start_time < end_time)
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS partition_replica (
 );
 
 -- Represent a (replicated) chunk of data, which is data in a hypertable that is
--- both partitioned by both the partition_field and time.
+-- both partitioned by both the partition_column and time.
 --
 -- For each partition, there can be 0 or more chunks, which are replicated.
 -- At most two chunks per partition are "open-ended", i.e. having a NULL
@@ -218,8 +218,8 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
     UNIQUE (schema_name, table_name)
 );
 
--- Represents a hypertable field.
-CREATE TABLE IF NOT EXISTS field (
+-- Represents a hypertable column.
+CREATE TABLE IF NOT EXISTS hypertable_column (
     hypertable_name NAME                NOT NULL REFERENCES hypertable (name) ON DELETE CASCADE,
     name            NAME                NOT NULL,
     attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
@@ -234,8 +234,8 @@ CREATE TABLE IF NOT EXISTS field (
 );
 
 -- TODO(mat) - Description?
-CREATE TABLE IF NOT EXISTS deleted_field (
-  LIKE field,
+CREATE TABLE IF NOT EXISTS deleted_hypertable_column (
+  LIKE hypertable_column,
   deleted_on NAME
 );
 

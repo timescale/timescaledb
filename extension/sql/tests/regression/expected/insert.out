@@ -71,9 +71,9 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE 
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'_sysinternal' );
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
- testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | timeCustom      | bigint          | Test1      |       1073741824
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | timeCustom       | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
@@ -111,9 +111,9 @@ CREATE TABLE chunk_closing_test(
     );
 -- Test chunk closing/creation
 SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
-           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_field_name | time_field_type | created_on | chunk_size_bytes 
----------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+-----------------+-----------------+------------+------------------
- public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time            | bigint          | Test1      |            10000
+           name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |            10000
 (1 row)
 
 INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
@@ -245,27 +245,27 @@ btree, for table "_sysinternal._hyper_1_1_0_2_data", predicate (series_1 IS NOT 
  series_2   | double precision | series_2     | plain
 btree, for table "_sysinternal._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
 
-          Table "_sysinternal._hyper_1_0_1_distinct_data"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+            Table "_sysinternal._hyper_1_0_1_distinct_data"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Indexes:
-    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (field, value)
+    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (column_name, value)
 Inherits: _sysinternal._hyper_1_0_distinct
 
 Index "_sysinternal._hyper_1_0_1_distinct_data_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
 primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
 
-             Table "_sysinternal._hyper_1_0_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                Table "_sysinternal._hyper_1_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_1_distinct
 Child tables: _sysinternal._hyper_1_0_1_distinct_data
 
@@ -370,20 +370,20 @@ Check constraints:
 Inherits: _sysinternal._hyper_1_0_replica
 Child tables: _sysinternal._hyper_1_2_0_3_data
 
-              Table "_sysinternal._hyper_1_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                 Table "_sysinternal._hyper_1_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Indexes:
-    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (field, value)
+    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
 Child tables: _sysinternal._hyper_1_0_distinct
 
-Index "_sysinternal._hyper_1_distinct_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
+ Index "_sysinternal._hyper_1_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
 primary key, btree, for table "_sysinternal._hyper_1_distinct"
 
                          Table "_sysinternal._hyper_1_root"
@@ -397,27 +397,27 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  series_bool | boolean          |           | plain    |              | 
 Child tables: _sysinternal._hyper_1_0_replica
 
-          Table "_sysinternal._hyper_2_0_1_distinct_data"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+            Table "_sysinternal._hyper_2_0_1_distinct_data"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Indexes:
-    "_hyper_2_0_1_distinct_data_pkey" PRIMARY KEY, btree (field, value)
+    "_hyper_2_0_1_distinct_data_pkey" PRIMARY KEY, btree (column_name, value)
 Inherits: _sysinternal._hyper_2_0_distinct
 
 Index "_sysinternal._hyper_2_0_1_distinct_data_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
 primary key, btree, for table "_sysinternal._hyper_2_0_1_distinct_data"
 
-             Table "_sysinternal._hyper_2_0_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                Table "_sysinternal._hyper_2_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_2_distinct
 Child tables: _sysinternal._hyper_2_0_1_distinct_data
 
@@ -487,20 +487,20 @@ Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '16384'::smallint AND get_partition_for_key(device_id, 32768) <= '32767'::smallint)
 Inherits: _sysinternal._hyper_2_0_replica
 
-              Table "_sysinternal._hyper_2_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                 Table "_sysinternal._hyper_2_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Indexes:
-    "_hyper_2_distinct_pkey" PRIMARY KEY, btree (field, value)
+    "_hyper_2_distinct_pkey" PRIMARY KEY, btree (column_name, value)
 Child tables: _sysinternal._hyper_2_0_distinct
 
-Index "_sysinternal._hyper_2_distinct_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
+ Index "_sysinternal._hyper_2_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
 primary key, btree, for table "_sysinternal._hyper_2_distinct"
 
                    Table "_sysinternal._hyper_2_root"
@@ -513,20 +513,20 @@ Child tables: _sysinternal._hyper_2_0_replica
 
 \c test2  
 \d+ "_sysinternal".*
-             Foreign table "_sysinternal._hyper_1_0_1_distinct_data"
- Column | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
---------+------+-----------+-------------+----------+--------------+-------------
- field  | text | not null  |             | extended |              | 
- value  | text | not null  |             | extended |              | 
+               Foreign table "_sysinternal._hyper_1_0_1_distinct_data"
+   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
+-------------+------+-----------+-------------+----------+--------------+-------------
+ column_name | text | not null  |             | extended |              | 
+ value       | text | not null  |             | extended |              | 
 Server: Test1
 FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_1_distinct_data')
 Inherits: _sysinternal._hyper_1_0_distinct
 
-             Table "_sysinternal._hyper_1_0_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                Table "_sysinternal._hyper_1_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_1_distinct
 Child tables: _sysinternal._hyper_1_0_1_distinct_data
 
@@ -619,20 +619,20 @@ Check constraints:
 Inherits: _sysinternal._hyper_1_0_replica
 Child tables: _sysinternal._hyper_1_2_0_3_data
 
-              Table "_sysinternal._hyper_1_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                 Table "_sysinternal._hyper_1_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Indexes:
-    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (field, value)
+    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
 Child tables: _sysinternal._hyper_1_0_distinct
 
-Index "_sysinternal._hyper_1_distinct_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
+ Index "_sysinternal._hyper_1_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
 primary key, btree, for table "_sysinternal._hyper_1_distinct"
 
                          Table "_sysinternal._hyper_1_root"
@@ -646,20 +646,20 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  series_bool | boolean          |           | plain    |              | 
 Child tables: _sysinternal._hyper_1_0_replica
 
-             Foreign table "_sysinternal._hyper_2_0_1_distinct_data"
- Column | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
---------+------+-----------+-------------+----------+--------------+-------------
- field  | text | not null  |             | extended |              | 
- value  | text | not null  |             | extended |              | 
+               Foreign table "_sysinternal._hyper_2_0_1_distinct_data"
+   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
+-------------+------+-----------+-------------+----------+--------------+-------------
+ column_name | text | not null  |             | extended |              | 
+ value       | text | not null  |             | extended |              | 
 Server: Test1
 FDW Options: (schema_name '_sysinternal', table_name '_hyper_2_0_1_distinct_data')
 Inherits: _sysinternal._hyper_2_0_distinct
 
-             Table "_sysinternal._hyper_2_0_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                Table "_sysinternal._hyper_2_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_2_distinct
 Child tables: _sysinternal._hyper_2_0_1_distinct_data
 
@@ -735,20 +735,20 @@ Check constraints:
     "partition" CHECK (get_partition_for_key(device_id, 32768) >= '16384'::smallint AND get_partition_for_key(device_id, 32768) <= '32767'::smallint)
 Inherits: _sysinternal._hyper_2_0_replica
 
-              Table "_sysinternal._hyper_2_distinct"
- Column | Type | Modifiers | Storage  | Stats target | Description 
---------+------+-----------+----------+--------------+-------------
- field  | text | not null  | extended |              | 
- value  | text | not null  | extended |              | 
+                 Table "_sysinternal._hyper_2_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
 Indexes:
-    "_hyper_2_distinct_pkey" PRIMARY KEY, btree (field, value)
+    "_hyper_2_distinct_pkey" PRIMARY KEY, btree (column_name, value)
 Child tables: _sysinternal._hyper_2_0_distinct
 
-Index "_sysinternal._hyper_2_distinct_pkey"
- Column | Type | Definition | Storage  
---------+------+------------+----------
- field  | text | field      | extended
- value  | text | value      | extended
+ Index "_sysinternal._hyper_2_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
 primary key, btree, for table "_sysinternal._hyper_2_distinct"
 
                    Table "_sysinternal._hyper_2_root"
@@ -777,9 +777,9 @@ FROM "_sysinternal"._hyper_1_0_replica;
 
 SELECT *
 FROM "_sysinternal"._hyper_1_0_distinct;
-   field   | value 
------------+-------
- device_id | dev1
- device_id | dev20
+ column_name | value 
+-------------+-------
+ device_id   | dev1
+ device_id   | dev20
 (2 rows)
 

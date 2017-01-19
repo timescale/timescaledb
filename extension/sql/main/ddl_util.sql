@@ -1,4 +1,4 @@
-/* 
+/*
   Create the "general definition" of an index. The general definition
   is the corresponding create index command with the placeholders /*TABLE_NAME*/
   and  /*INDEX_NAME*/
@@ -41,8 +41,8 @@ CREATE OR REPLACE FUNCTION _sysinternal.get_default_value_for_attribute(
 )
     RETURNS TEXT LANGUAGE SQL VOLATILE AS
 $BODY$
-  SELECT adsrc 
-  FROM pg_attrdef def 
+  SELECT adsrc
+  FROM pg_attrdef def
   WHERE def.adrelid = att.attrelid AND def.adnum = att.attnum
 $BODY$;
 
@@ -55,8 +55,8 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_column_from_attribute(
 $BODY$
 DECLARE
 BEGIN
-  PERFORM 
-    _iobeamdb_meta_api.add_field(
+  PERFORM
+    _iobeamdb_meta_api.add_column(
             hypertable_name,
             att.attname,
             att.attnum,
@@ -67,6 +67,3 @@ BEGIN
     );
 END
 $BODY$;
-
-
-

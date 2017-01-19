@@ -13,7 +13,7 @@
 
   Because ddl commands cannot be "canceled" without an error, all comands are allowed to succeed. This is
   why the command sent to the meta node always contains a parameter for the node the ddl command was executed on
-  (so that the meta node can know that the main table on that node was already modified and does not needed to be 
+  (so that the meta node can know that the main table on that node was already modified and does not needed to be
     modified again).
 
 */
@@ -22,7 +22,7 @@
 CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_create_index()
   RETURNS event_trigger
  LANGUAGE plpgsql
-  AS 
+  AS
 $BODY$
 DECLARE
   info record;
@@ -30,16 +30,16 @@ DECLARE
   def TEXT;
   hypertable_row hypertable;
 BEGIN
-  FOR info IN SELECT * FROM pg_event_trigger_ddl_commands() 
+  FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
     LOOP
     --get table oid
-    SELECT indrelid INTO STRICT table_oid 
-    FROM pg_catalog.pg_index 
+    SELECT indrelid INTO STRICT table_oid
+    FROM pg_catalog.pg_index
     WHERE indexrelid = info.objid;
 
     IF NOT is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
       RETURN;
-    END IF; 
+    END IF;
 
     def = _sysinternal.get_general_index_definition(info.objid, table_oid);
 
@@ -49,7 +49,7 @@ BEGIN
             hypertable_row.name,
             hypertable_row.main_schema_name,
             (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
-            def        
+            def
         );
   END LOOP;
 END
@@ -59,23 +59,23 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_alter_index()
   RETURNS event_trigger
  LANGUAGE plpgsql
-  AS 
+  AS
 $BODY$
 DECLARE
   info record;
   table_oid regclass;
-BEGIN  
-  FOR info IN SELECT * FROM pg_event_trigger_ddl_commands() 
+BEGIN
+  FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
     LOOP
-      SELECT indrelid INTO STRICT table_oid 
-      FROM pg_catalog.pg_index 
+      SELECT indrelid INTO STRICT table_oid
+      FROM pg_catalog.pg_index
       WHERE indexrelid = info.objid;
 
       IF NOT is_main_table(table_oid) THEN
         RETURN;
-      END IF; 
+      END IF;
 
-      RAISE EXCEPTION 'ALTER INDEX not supported on hypertable %', table_oid 
+      RAISE EXCEPTION 'ALTER INDEX not supported on hypertable %', table_oid
       USING ERRCODE = 'IO101';
   END LOOP;
 END
@@ -86,27 +86,27 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_index()
   RETURNS event_trigger
  LANGUAGE plpgsql
-  AS 
+  AS
 $BODY$
 DECLARE
   info record;
   table_oid regclass;
   hypertable_row hypertable;
-BEGIN  
-  FOR info IN SELECT * FROM  pg_event_trigger_dropped_objects() 
+BEGIN
+  FOR info IN SELECT * FROM  pg_event_trigger_dropped_objects()
     LOOP
       SELECT  format('%I.%I', h.main_schema_name, h.main_table_name) INTO table_oid
-      FROM hypertable h 
+      FROM hypertable h
       INNER JOIN hypertable_index i ON (i.hypertable_name = h.name)
-      WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name; 
+      WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name;
 
       --if table_oid is not null, it is a main table
       IF table_oid IS NULL OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
         RETURN;
-      END IF; 
+      END IF;
 
       --TODO: this ignores the concurrently and cascade/restrict modifiers
-      PERFORM 
+      PERFORM
           _iobeamdb_meta_api.drop_index(
               info.schema_name,
               info.object_name
@@ -120,11 +120,11 @@ $BODY$;
 -- RENAME COLUMN
 -- not supported (explicit):
 -- ALTER COLUMN SET DATA TYPE
--- Other alter commands also not supported 
+-- Other alter commands also not supported
 CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_alter_table()
   RETURNS event_trigger
  LANGUAGE plpgsql
-  AS 
+  AS
 $BODY$
 DECLARE
   info record;
@@ -133,52 +133,52 @@ DECLARE
   att_row pg_attribute;
   rec record;
 BEGIN
-  FOR info IN SELECT * FROM pg_event_trigger_ddl_commands() 
+  FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
     LOOP
 
     --exit if not hypertable or inside trigger
     IF NOT is_main_table(info.objid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
       RETURN;
-    END IF; 
+    END IF;
 
     hypertable_row := hypertable_from_main_table(info.objid);
-    
+
     --Try to find what was done. If you can't find it error out.
    found_action = FALSE;
 
     --was a column added?
-    FOR att_row IN 
+    FOR att_row IN
       SELECT *
-       FROM pg_attribute att  
-       WHERE attrelid = info.objid AND 
-             attnum > 0 AND 
-             NOT attisdropped AND 
-             att.attnum NOT IN (SELECT f.attnum FROM field f WHERE hypertable_name = hypertable_row.name)
+       FROM pg_attribute att
+       WHERE attrelid = info.objid AND
+             attnum > 0 AND
+             NOT attisdropped AND
+             att.attnum NOT IN (SELECT c.attnum FROM hypertable_column c WHERE hypertable_name = hypertable_row.name)
     LOOP
         PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row);
         found_action = TRUE;
-    END LOOP; 
+    END LOOP;
 
     --was a column deleted
-    FOR rec IN 
-      SELECT name 
-      FROM field f
-      INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = f.attnum AND attisdropped) --do not match on att.attname here. it gets mangled 
-      WHERE hypertable_name = hypertable_row.name 
+    FOR rec IN
+      SELECT name
+      FROM hypertable_column c
+      INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
+      WHERE hypertable_name = hypertable_row.name
     LOOP
-        PERFORM _iobeamdb_meta_api.drop_field(
+        PERFORM _iobeamdb_meta_api.drop_column(
             hypertable_row.name,
             rec.name
         );
         found_action = TRUE;
-    END LOOP; 
+    END LOOP;
 
-    --was a column renamed 
-    FOR rec IN 
-      SELECT f.name old_name, att.attname new_name 
-      FROM field f
-      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = f.attnum AND NOT attisdropped)
-      WHERE hypertable_name = hypertable_row.name AND f.name IS DISTINCT FROM att.attname
+    --was a column renamed
+    FOR rec IN
+      SELECT c.name old_name, att.attname new_name
+      FROM hypertable_column c
+      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND NOT attisdropped)
+      WHERE hypertable_name = hypertable_row.name AND c.name IS DISTINCT FROM att.attname
     LOOP
         PERFORM _iobeamdb_meta_api.alter_table_rename_column(
             hypertable_row.name,
@@ -188,12 +188,12 @@ BEGIN
         found_action = TRUE;
     END LOOP;
 
-    --was a colum default changed 
-    FOR rec IN 
-      SELECT name, _sysinternal.get_default_value_for_attribute(att) AS new_default_value 
-      FROM field f
-      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
-      WHERE hypertable_name = hypertable_row.name AND _sysinternal.get_default_value_for_attribute(att) IS DISTINCT FROM f.default_value
+    --was a colum default changed
+    FOR rec IN
+      SELECT name, _sysinternal.get_default_value_for_attribute(att) AS new_default_value
+      FROM hypertable_column c
+      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
+      WHERE hypertable_name = hypertable_row.name AND _sysinternal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
     LOOP
         PERFORM _iobeamdb_meta_api.alter_column_set_default(
             hypertable_row.name,
@@ -203,12 +203,12 @@ BEGIN
         found_action = TRUE;
     END LOOP;
 
-    --was the not null flag changed? 
-    FOR rec IN 
-      SELECT name, attnotnull AS new_not_null 
-      FROM field f
-      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
-      WHERE hypertable_name = hypertable_row.name AND attnotnull != f.not_null
+    --was the not null flag changed?
+    FOR rec IN
+      SELECT name, attnotnull AS new_not_null
+      FROM hypertable_column c
+      LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
+      WHERE hypertable_name = hypertable_row.name AND attnotnull != c.not_null
     LOOP
         PERFORM _iobeamdb_meta_api.alter_column_set_not_null(
             hypertable_row.name,
@@ -219,11 +219,11 @@ BEGIN
     END LOOP;
 
     --type changed
-    FOR rec IN 
+    FOR rec IN
       SELECT name
-      FROM field f
-      INNER JOIN pg_attribute att ON (attrelid = info.objid AND attname = f.name AND att.attnum = f.attnum AND NOT attisdropped)
-      WHERE hypertable_name = hypertable_row.name AND att.atttypid IS DISTINCT FROM f.data_type
+      FROM hypertable_column c
+      INNER JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
+      WHERE hypertable_name = hypertable_row.name AND att.atttypid IS DISTINCT FROM c.data_type
     LOOP
       RAISE EXCEPTION 'ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable %', info.objid::regclass
       USING ERRCODE = 'IO101';
@@ -267,5 +267,3 @@ BEGIN
     END LOOP;
 END
 $BODY$;
-
-

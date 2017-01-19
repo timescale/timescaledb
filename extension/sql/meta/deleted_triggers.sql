@@ -1,4 +1,4 @@
--- Trigger to track fields and indices that are deleted on hypertables.
+-- Trigger to track columns and indices that are deleted on hypertables.
 CREATE OR REPLACE FUNCTION _meta.log_delete()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$

@@ -3,7 +3,7 @@
 
 #define HYPERTABLE_INFO_QUERY   "\
                                 SELECT  format('%%I.%%I', hr.schema_name, hr.table_name)::regclass::oid, \
-                                  pe.partitioning_field, pe.partitioning_func, pe.partitioning_mod \
+                                  pe.partitioning_column, pe.partitioning_func, pe.partitioning_mod \
                                 FROM public.hypertable h \
                                 INNER JOIN public.default_replica_node drn ON (drn.hypertable_name = h.name AND drn.database_name = current_database()) \
                                 INNER JOIN public.hypertable_replica hr ON (hr.replica_id = drn.replica_id AND hr.hypertable_name = drn.hypertable_name) \

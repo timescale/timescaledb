@@ -30,15 +30,15 @@ BEGIN
     CREATE TRIGGER trigger_main_on_create_distinct_replica_node AFTER INSERT OR UPDATE OR DELETE ON distinct_replica_node
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_distinct_replica_node();
 
-    DROP TRIGGER IF EXISTS trigger_main_on_modify_field
-    ON field;
-    CREATE TRIGGER trigger_main_on_modify_field AFTER INSERT OR UPDATE OR DELETE ON field
-    FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_modify_field();
+    DROP TRIGGER IF EXISTS trigger_main_on_modify_column
+    ON hypertable_column;
+    CREATE TRIGGER trigger_main_on_modify_column AFTER INSERT OR UPDATE OR DELETE ON hypertable_column
+    FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_modify_column();
 
-    DROP TRIGGER IF EXISTS trigger_main_on_deleted_field
-    ON deleted_field;
-    CREATE TRIGGER trigger_main_on_deleted_field AFTER INSERT OR UPDATE OR DELETE ON deleted_field
-    FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_field();
+    DROP TRIGGER IF EXISTS trigger_main_on_deleted_column
+    ON deleted_hypertable_column;
+    CREATE TRIGGER trigger_main_on_deleted_column AFTER INSERT OR UPDATE OR DELETE ON deleted_hypertable_column
+    FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_column();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_hypertable_replica
     ON hypertable_replica;
