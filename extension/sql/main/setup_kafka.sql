@@ -6,13 +6,13 @@ DECLARE
 BEGIN
 
     DROP TRIGGER IF EXISTS trigger_on_create_node_insert_kafka_offset_node
-    ON node;
-    CREATE TRIGGER trigger_on_create_node_insert_kafka_offset_node AFTER INSERT OR UPDATE OR DELETE ON node
+    ON _iobeamdb_catalog.node;
+    CREATE TRIGGER trigger_on_create_node_insert_kafka_offset_node AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.node
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_node_insert_kafka_offset_node();
 
     DROP TRIGGER IF EXISTS trigger_on_create_kafka_offset_node
-    ON kafka_offset_node;
-    CREATE TRIGGER trigger_on_create_kafka_offset_node AFTER INSERT OR UPDATE OR DELETE ON kafka_offset_node
+    ON _iobeamdb_catalog.kafka_offset_node;
+    CREATE TRIGGER trigger_on_create_kafka_offset_node AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.kafka_offset_node
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_kafka_offset_node();
 
 END

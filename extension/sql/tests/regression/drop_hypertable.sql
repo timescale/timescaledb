@@ -13,14 +13,16 @@ FROM "_sysinternal"._hyper_1_0_replica;
 SELECT *
 FROM "_sysinternal"._hyper_1_0_distinct;
 
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
 DROP TABLE "testNs";
 
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
 \dt  "public".*
+\dt  "_iobeamdb_catalog".*
 \dt+ "_sysinternal".*
 
 \c Test1
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
 \dt  "public".*
+\dt  "_iobeamdb_catalog".*
 \dt+ "_sysinternal".*

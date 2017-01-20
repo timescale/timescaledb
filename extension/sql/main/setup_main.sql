@@ -6,78 +6,78 @@ DECLARE
 BEGIN
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_chunk_replica_node_index
-    ON chunk_replica_node_index;
-    CREATE TRIGGER trigger_main_on_create_chunk_replica_node_index AFTER INSERT OR UPDATE OR DELETE ON chunk_replica_node_index
+    ON _iobeamdb_catalog.chunk_replica_node_index;
+    CREATE TRIGGER trigger_main_on_create_chunk_replica_node_index AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk_replica_node_index
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_chunk_replica_node_index();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_chunk_replica_node
-    ON chunk_replica_node;
-    CREATE TRIGGER trigger_main_on_create_chunk_replica_node AFTER INSERT OR UPDATE OR DELETE ON chunk_replica_node
+    ON _iobeamdb_catalog.chunk_replica_node;
+    CREATE TRIGGER trigger_main_on_create_chunk_replica_node AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk_replica_node
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_chunk_replica_node();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_chunk
-    ON chunk;
-    CREATE TRIGGER trigger_main_on_create_chunk AFTER INSERT OR UPDATE OR DELETE ON chunk
+    ON _iobeamdb_catalog.chunk;
+    CREATE TRIGGER trigger_main_on_create_chunk AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_chunk();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_cluster_user
-    ON cluster_user;
-    CREATE TRIGGER trigger_main_on_create_cluster_user AFTER INSERT OR UPDATE OR DELETE ON cluster_user
+    ON _iobeamdb_catalog.cluster_user;
+    CREATE TRIGGER trigger_main_on_create_cluster_user AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.cluster_user
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_cluster_user();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_distinct_replica_node
-    ON distinct_replica_node;
-    CREATE TRIGGER trigger_main_on_create_distinct_replica_node AFTER INSERT OR UPDATE OR DELETE ON distinct_replica_node
+    ON _iobeamdb_catalog.distinct_replica_node;
+    CREATE TRIGGER trigger_main_on_create_distinct_replica_node AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.distinct_replica_node
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_distinct_replica_node();
 
     DROP TRIGGER IF EXISTS trigger_main_on_modify_column
-    ON hypertable_column;
-    CREATE TRIGGER trigger_main_on_modify_column AFTER INSERT OR UPDATE OR DELETE ON hypertable_column
+    ON _iobeamdb_catalog.hypertable_column;
+    CREATE TRIGGER trigger_main_on_modify_column AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.hypertable_column
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_modify_column();
 
     DROP TRIGGER IF EXISTS trigger_main_on_deleted_column
-    ON deleted_hypertable_column;
-    CREATE TRIGGER trigger_main_on_deleted_column AFTER INSERT OR UPDATE OR DELETE ON deleted_hypertable_column
+    ON _iobeamdb_catalog.deleted_hypertable_column;
+    CREATE TRIGGER trigger_main_on_deleted_column AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.deleted_hypertable_column
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_column();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_hypertable_replica
-    ON hypertable_replica;
-    CREATE TRIGGER trigger_main_on_create_hypertable_replica AFTER INSERT OR UPDATE OR DELETE ON hypertable_replica
+    ON _iobeamdb_catalog.hypertable_replica;
+    CREATE TRIGGER trigger_main_on_create_hypertable_replica AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.hypertable_replica
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_hypertable_replica();
 
     DROP TRIGGER IF EXISTS trigger_1_main_on_create_hypertable
-    ON hypertable;
-    CREATE TRIGGER trigger_1_main_on_create_hypertable AFTER INSERT OR UPDATE OR DELETE ON hypertable
+    ON _iobeamdb_catalog.hypertable;
+    CREATE TRIGGER trigger_1_main_on_create_hypertable AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.hypertable
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_hypertable();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_meta
-    ON meta;
-    CREATE TRIGGER trigger_main_on_create_meta AFTER INSERT OR UPDATE OR DELETE ON meta
+    ON _iobeamdb_catalog.meta;
+    CREATE TRIGGER trigger_main_on_create_meta AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.meta
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_meta();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_node
-    ON node;
-    CREATE TRIGGER trigger_main_on_create_node AFTER INSERT OR UPDATE OR DELETE ON node
+    ON _iobeamdb_catalog.node;
+    CREATE TRIGGER trigger_main_on_create_node AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.node
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_node();
 
     DROP TRIGGER IF EXISTS trigger_main_on_create_partition_replica_table
-    ON partition_replica;
-    CREATE TRIGGER trigger_main_on_create_partition_replica_table AFTER INSERT OR UPDATE OR DELETE ON partition_replica
+    ON _iobeamdb_catalog.partition_replica;
+    CREATE TRIGGER trigger_main_on_create_partition_replica_table AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.partition_replica
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_create_partition_replica_table();
 
     DROP TRIGGER IF EXISTS trigger_main_on_modify_hypertable_index
-    ON hypertable_index;
-    CREATE TRIGGER trigger_main_on_modify_hypertable_index AFTER INSERT OR UPDATE OR DELETE ON hypertable_index
+    ON _iobeamdb_catalog.hypertable_index;
+    CREATE TRIGGER trigger_main_on_modify_hypertable_index AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.hypertable_index
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_modify_hypertable_index();
 
     DROP TRIGGER IF EXISTS trigger_main_on_deleted_hypertable_index
-    ON deleted_hypertable_index;
-    CREATE TRIGGER trigger_main_on_deleted_hypertable_index AFTER INSERT OR UPDATE OR DELETE ON deleted_hypertable_index
+    ON _iobeamdb_catalog.deleted_hypertable_index;
+    CREATE TRIGGER trigger_main_on_deleted_hypertable_index AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.deleted_hypertable_index
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_hypertable_index();
 
     DROP TRIGGER IF EXISTS trigger_on_deleted_hypertable
-    ON deleted_hypertable;
-    CREATE TRIGGER trigger_on_deleted_hypertable AFTER INSERT OR UPDATE OR DELETE ON deleted_hypertable
+    ON _iobeamdb_catalog.deleted_hypertable;
+    CREATE TRIGGER trigger_on_deleted_hypertable AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.deleted_hypertable
     FOR EACH ROW EXECUTE PROCEDURE _sysinternal.on_deleted_hypertable();
 
     CREATE EVENT TRIGGER ddl_create_index ON ddl_command_end

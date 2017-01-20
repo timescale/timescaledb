@@ -11,9 +11,9 @@ $BODY$
 BEGIN
     PERFORM _sysinternal.add_partition_constraint(pr.schema_name, pr.table_name, p.keyspace_start, p.keyspace_end,
                                                   p.epoch_id)
-    FROM partition_epoch pe
-    INNER JOIN partition p ON (p.epoch_id = pe.id)
-    INNER JOIN partition_replica pr ON (pr.partition_id = p.id)
+    FROM _iobeamdb_catalog.partition_epoch AS pe
+    INNER JOIN _iobeamdb_catalog.partition AS p ON (p.epoch_id = pe.id)
+    INNER JOIN _iobeamdb_catalog.partition_replica AS pr ON (pr.partition_id = p.id)
     WHERE pe.hypertable_name = create_partition_constraint_for_column.hypertable_name
           AND pe.partitioning_column = create_partition_constraint_for_column.column_name;
 END
@@ -143,19 +143,19 @@ CREATE OR REPLACE FUNCTION _sysinternal.populate_distinct_table(
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-   distinct_replica_node_row  distinct_replica_node;
-   chunk_replica_node_row     chunk_replica_node;
+   distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
+   chunk_replica_node_row     _iobeamdb_catalog.chunk_replica_node;
 BEGIN
   FOR distinct_replica_node_row IN
     SELECT *
-    FROM distinct_replica_node drn
+    FROM _iobeamdb_catalog.distinct_replica_node drn
     WHERE drn.hypertable_name = populate_distinct_table.hypertable_name AND
           drn.database_name = current_database()
     LOOP
       FOR chunk_replica_node_row IN
         SELECT crn.*
-        FROM chunk_replica_node crn
-        INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
+        FROM _iobeamdb_catalog.chunk_replica_node crn
+        INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
         WHERE pr.hypertable_name = distinct_replica_node_row.hypertable_name AND
               pr.replica_id = distinct_replica_node_row.replica_id AND
               crn.database_name = current_database()
@@ -182,11 +182,11 @@ CREATE OR REPLACE FUNCTION _sysinternal.unpopulate_distinct_table(
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-   distinct_replica_node_row  distinct_replica_node;
+   distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
 BEGIN
   FOR distinct_replica_node_row IN
     SELECT *
-    FROM distinct_replica_node drn
+    FROM _iobeamdb_catalog.distinct_replica_node drn
     WHERE drn.hypertable_name = unpopulate_distinct_table.hypertable_name AND
           drn.database_name = current_database()
     LOOP
@@ -206,14 +206,14 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_modify_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    hypertable_row hypertable;
+    hypertable_row _iobeamdb_catalog.hypertable;
     update_found   BOOLEAN = false;
 BEGIN
 
     IF TG_OP = 'INSERT' THEN
       SELECT *
       INTO STRICT hypertable_row
-      FROM hypertable AS h
+      FROM _iobeamdb_catalog.hypertable AS h
       WHERE h.name = NEW.hypertable_name;
 
       -- update root table
@@ -231,7 +231,7 @@ BEGIN
     ELSIF TG_OP = 'UPDATE' THEN
       SELECT *
       INTO STRICT hypertable_row
-      FROM hypertable AS h
+      FROM _iobeamdb_catalog.hypertable AS h
       WHERE h.name = NEW.hypertable_name;
 
       IF NEW.default_value IS DISTINCT FROM OLD.default_value THEN
@@ -299,7 +299,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    hypertable_row hypertable;
+    hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
         RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
@@ -308,7 +308,7 @@ BEGIN
 
     SELECT *
     INTO hypertable_row
-    FROM hypertable AS h
+    FROM _iobeamdb_catalog.hypertable AS h
     WHERE h.name = NEW.hypertable_name;
 
     IF hypertable_row IS NULL THEN

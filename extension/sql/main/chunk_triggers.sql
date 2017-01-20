@@ -10,7 +10,7 @@ BEGIN
 
     IF TG_OP = 'UPDATE' THEN
         PERFORM _sysinternal.set_time_constraint(crn.schema_name, crn.table_name, NEW.start_time, NEW.end_time)
-        FROM chunk_replica_node crn
+        FROM _iobeamdb_catalog.chunk_replica_node crn
         WHERE crn.chunk_id = NEW.id;
     END IF;
 
@@ -21,4 +21,3 @@ BEGIN
 END
 $BODY$
 SET SEARCH_PATH = 'public';
-

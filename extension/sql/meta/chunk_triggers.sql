@@ -1,4 +1,8 @@
-CREATE OR REPLACE FUNCTION _meta.place_chunks(chunk_row chunk, placement chunk_placement_type, replication_factor SMALLINT)
+CREATE OR REPLACE FUNCTION _meta.place_chunks(
+    chunk_row _iobeamdb_catalog.chunk,
+    placement chunk_placement_type,
+    replication_factor SMALLINT
+)
     RETURNS TABLE(replica_id SMALLINT, database_name NAME) LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -7,13 +11,13 @@ BEGIN
   IF placement = 'RANDOM' THEN
       RETURN QUERY
         SELECT pr.replica_id, dn.database_name
-        FROM partition_replica pr
+        FROM _iobeamdb_catalog.partition_replica pr
         INNER JOIN (
           SELECT *
           FROM
           (
             SELECT DISTINCT n.database_name
-            FROM node n
+            FROM _iobeamdb_catalog.node n
             LIMIT replication_factor
           ) AS d
           ORDER BY random()
@@ -22,11 +26,11 @@ BEGIN
   ELSIF placement = 'STICKY' THEN
       RETURN QUERY
           SELECT pr.replica_id, dn.database_name
-          FROM partition_replica pr
+          FROM _iobeamdb_catalog.partition_replica pr
           INNER JOIN LATERAL (
               SELECT crn.database_name
-              FROM chunk_replica_node crn
-              INNER JOIN chunk c ON (c.id = crn.chunk_id)
+              FROM _iobeamdb_catalog.chunk_replica_node crn
+              INNER JOIN _iobeamdb_catalog.chunk c ON (c.id = crn.chunk_id)
               WHERE crn.partition_replica_id = pr.id
               ORDER BY GREATEST(chunk_row.start_time, chunk_row.end_time) - GREATEST(c.start_time, c.end_time) ASC NULLS LAST
               LIMIT 1
@@ -44,7 +48,7 @@ CREATE OR REPLACE FUNCTION _meta.on_create_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    column_row  hypertable_column;
+    column_row  _iobeamdb_catalog.hypertable_column;
     schema_name NAME;
 BEGIN
     IF TG_OP = 'DELETE' THEN
@@ -75,7 +79,7 @@ BEGIN
     IF TG_OP = 'INSERT' THEN
         FOR schema_name IN
         SELECT n.schema_name
-        FROM node AS n
+        FROM _iobeamdb_catalog.node AS n
         WHERE n.database_name <> current_database()
         LOOP
             EXECUTE format(
@@ -90,15 +94,15 @@ BEGIN
 
         --do not sync data on update. synced by close_chunk logic.
 
-        INSERT INTO chunk_replica_node (chunk_id, partition_replica_id, database_name, schema_name, table_name)
+        INSERT INTO _iobeamdb_catalog.chunk_replica_node (chunk_id, partition_replica_id, database_name, schema_name, table_name)
             SELECT
                 NEW.id,
                 pr.id,
                 p.database_name,
                 pr.schema_name,
                 format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
-            FROM partition_replica pr
-            INNER JOIN hypertable h ON (h.name = pr.hypertable_name)
+            FROM _iobeamdb_catalog.partition_replica pr
+            INNER JOIN _iobeamdb_catalog.hypertable h ON (h.name = pr.hypertable_name)
             INNER JOIN _meta.place_chunks(new, h.placement, h.replication_factor) p ON (p.replica_id = pr.replica_id)
             WHERE pr.partition_id = NEW.partition_id;
     END IF;

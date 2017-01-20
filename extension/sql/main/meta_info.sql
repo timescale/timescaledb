@@ -6,7 +6,7 @@ DECLARE
 BEGIN
     SELECT m.server_name
     INTO STRICT server_name
-    FROM meta m;
+    FROM _iobeamdb_catalog.meta m;
 
     RETURN server_name;
 END
@@ -21,11 +21,8 @@ DECLARE
 BEGIN
     SELECT m.database_name
     INTO STRICT database_name
-    FROM meta m;
+    FROM _iobeamdb_catalog.meta m;
 
     RETURN database_name;
 END
 $BODY$;
-
-
-

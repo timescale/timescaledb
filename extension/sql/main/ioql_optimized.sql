@@ -14,7 +14,7 @@ BEGIN
                   ELSE
                      ioql_query_nonagg_sql(query, pe)
                   END AS code
-      FROM partition_epoch pe
+      FROM _iobeamdb_catalog.partition_epoch pe
       WHERE pe.hypertable_name = query.hypertable_name
     ) AS code_epoch;
 

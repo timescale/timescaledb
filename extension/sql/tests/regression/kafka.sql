@@ -49,4 +49,4 @@ FROM kafka_set_next_offset('topic', 0 :: SMALLINT, 100, 101);
 SELECT *
 FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
 SELECT *
-FROM kafka_offset_local;
+FROM _iobeamdb_catalog.kafka_offset_local;

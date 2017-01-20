@@ -41,13 +41,13 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
  public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
 (1 row)
 
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
          name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 -----------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
  public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
 (1 row)
 
-SELECT * FROM hypertable_index;
+SELECT * FROM _iobeamdb_catalog.hypertable_index;
     hypertable_name    | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
 -----------------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
  public."Hypertable_1" | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
@@ -94,7 +94,7 @@ EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
    ->  Seq Scan on _hyper_1_1_0_1_data  (cost=0.00..13.50 rows=350 width=204)
 (4 rows)
 
-SELECT * FROM PUBLIC.default_replica_node;
+SELECT * FROM _iobeamdb_catalog.default_replica_node;
  database_name |    hypertable_name    | replica_id 
 ---------------+-----------------------+------------
  single        | public."Hypertable_1" |          0

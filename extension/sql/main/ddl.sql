@@ -22,14 +22,14 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     placement               chunk_placement_type = 'STICKY',
     chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
 )
-    RETURNS hypertable LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  hypertable_row hypertable;
-  table_name NAME;
-  schema_name NAME;
+  hypertable_row   _iobeamdb_catalog.hypertable;
+  table_name       NAME;
+  schema_name      NAME;
   time_column_type REGTYPE;
-  att_row pg_attribute;
+  att_row          pg_attribute;
 BEGIN
        SELECT relname, nspname
        INTO STRICT table_name, schema_name
@@ -42,7 +42,7 @@ BEGIN
        FROM pg_attribute
        WHERE attrelid = main_table AND attname = time_column_name;
 
-      BEGIN 
+      BEGIN
         SELECT *
             INTO hypertable_row
             FROM  _iobeamdb_meta_api.create_hypertable(
@@ -100,9 +100,9 @@ CREATE OR REPLACE FUNCTION set_is_distinct_flag(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  table_name NAME;
-  schema_name NAME;
-  hypertable_row hypertable;
+  table_name     NAME;
+  schema_name    NAME;
+  hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     SELECT relname, nspname
     INTO STRICT table_name, schema_name
@@ -111,7 +111,7 @@ BEGIN
     WHERE c.OID = main_table;
 
     SELECT * INTO hypertable_row
-    FROM hypertable h
+    FROM _iobeamdb_catalog.hypertable h
     WHERE main_schema_name = schema_name AND
           main_table_name = table_name;
 

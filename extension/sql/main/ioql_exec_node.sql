@@ -1,4 +1,8 @@
-CREATE OR REPLACE FUNCTION ioql_exec_local_node(query ioql_query, epoch partition_epoch, replica_id SMALLINT)
+CREATE OR REPLACE FUNCTION ioql_exec_local_node(
+    query      ioql_query,
+    epoch      _iobeamdb_catalog.partition_epoch,
+    replica_id SMALLINT
+)
     --need replica since local node needs to know which tables its responsible for.
     RETURNS SETOF RECORD LANGUAGE PLPGSQL STABLE AS
 $BODY$

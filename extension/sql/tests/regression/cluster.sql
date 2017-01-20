@@ -40,33 +40,33 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 
 \c meta
 SELECT *
-FROM partition_replica;
+FROM _iobeamdb_catalog.partition_replica;
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 
 SELECT *
-FROM node;
+FROM _iobeamdb_catalog.node;
 SELECT *
-FROM meta;
+FROM _iobeamdb_catalog.meta;
 SELECT *
-FROM hypertable;
+FROM _iobeamdb_catalog.hypertable;
 SELECT *
-FROM hypertable_replica;
+FROM _iobeamdb_catalog.hypertable_replica;
 SELECT *
-FROM distinct_replica_node;
+FROM _iobeamdb_catalog.distinct_replica_node;
 SELECT *
-FROM partition_epoch;
+FROM _iobeamdb_catalog.partition_epoch;
 SELECT *
-FROM partition;
+FROM _iobeamdb_catalog.partition;
 SELECT *
-FROM partition_replica;
+FROM _iobeamdb_catalog.partition_replica;
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
 SELECT *
-FROM chunk_replica_node;
+FROM _iobeamdb_catalog.chunk_replica_node;
 SELECT *
-FROM hypertable_column;
+FROM _iobeamdb_catalog.hypertable_column;
 
 \des+
 \deu+
@@ -75,27 +75,27 @@ FROM hypertable_column;
 \c Test1
 
 SELECT *
-FROM node;
+FROM _iobeamdb_catalog.node;
 SELECT *
-FROM meta;
+FROM _iobeamdb_catalog.meta;
 SELECT *
-FROM hypertable;
+FROM _iobeamdb_catalog.hypertable;
 SELECT *
-FROM hypertable_replica;
+FROM _iobeamdb_catalog.hypertable_replica;
 SELECT *
-FROM distinct_replica_node;
+FROM _iobeamdb_catalog.distinct_replica_node;
 SELECT *
-FROM partition_epoch;
+FROM _iobeamdb_catalog.partition_epoch;
 SELECT *
-FROM partition;
+FROM _iobeamdb_catalog.partition;
 SELECT *
-FROM partition_replica;
+FROM _iobeamdb_catalog.partition_replica;
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
 SELECT *
-FROM chunk_replica_node;
+FROM _iobeamdb_catalog.chunk_replica_node;
 SELECT *
-FROM hypertable_column;
+FROM _iobeamdb_catalog.hypertable_column;
 
 \des+
 \deu+
@@ -116,14 +116,14 @@ FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 \c meta
 SELECT _meta.close_chunk_end(1);
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 10 :: BIGINT);
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
 
 \c Test1
 \d+ "_sysinternal".*

@@ -36,7 +36,7 @@ INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key('testNs', 'dev1') part
-INNER JOIN chunk c ON (c.partition_id = part.id);
+INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
 
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 1),

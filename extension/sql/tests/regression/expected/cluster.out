@@ -98,7 +98,7 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 
 \c meta
 SELECT *
-FROM partition_replica;
+FROM _iobeamdb_catalog.partition_replica;
  id | partition_id | hypertable_name | replica_id | schema_name  |       table_name       
 ----+--------------+-----------------+------------+--------------+------------------------
   1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
@@ -113,7 +113,7 @@ FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 (1 row)
 
 SELECT *
-FROM node;
+FROM _iobeamdb_catalog.node;
  database_name | schema_name  | server_name | hostname  | active | id 
 ---------------+--------------+-------------+-----------+--------+----
  Test1         | remote_Test1 | Test1       | localhost | t      |  1
@@ -121,42 +121,42 @@ FROM node;
 (2 rows)
 
 SELECT *
-FROM meta;
+FROM _iobeamdb_catalog.meta;
  database_name | hostname  | server_name 
 ---------------+-----------+-------------
  meta          | localhost | meta
 (1 row)
 
 SELECT *
-FROM hypertable;
+FROM _iobeamdb_catalog.hypertable;
   name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 --------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
  testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT *
-FROM hypertable_replica;
+FROM _iobeamdb_catalog.hypertable_replica;
  hypertable_name | replica_id | schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
 -----------------+------------+--------------+--------------------+----------------------+---------------------
  testNs          |          0 | _sysinternal | _hyper_1_0_replica | _sysinternal         | _hyper_1_0_distinct
 (1 row)
 
 SELECT *
-FROM distinct_replica_node;
+FROM _iobeamdb_catalog.distinct_replica_node;
  hypertable_name | replica_id | database_name | schema_name  |         table_name         
 -----------------+------------+---------------+--------------+----------------------------
  testNs          |          0 | Test1         | _sysinternal | _hyper_1_0_1_distinct_data
 (1 row)
 
 SELECT *
-FROM partition_epoch;
+FROM _iobeamdb_catalog.partition_epoch;
  id | hypertable_name | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_column 
 ----+-----------------+------------+----------+-----------------------+------------------+---------------------
   1 | testNs          |            |          | get_partition_for_key |            32768 | Device_id
 (1 row)
 
 SELECT *
-FROM partition;
+FROM _iobeamdb_catalog.partition;
  id | epoch_id | keyspace_start | keyspace_end 
 ----+----------+----------------+--------------
   1 |        1 |              0 |        16383
@@ -164,7 +164,7 @@ FROM partition;
 (2 rows)
 
 SELECT *
-FROM partition_replica;
+FROM _iobeamdb_catalog.partition_replica;
  id | partition_id | hypertable_name | replica_id | schema_name  |       table_name       
 ----+--------------+-----------------+------------+--------------+------------------------
   1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
@@ -172,21 +172,21 @@ FROM partition_replica;
 (2 rows)
 
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
 (1 row)
 
 SELECT *
-FROM chunk_replica_node;
+FROM _iobeamdb_catalog.chunk_replica_node;
  chunk_id | partition_replica_id | database_name | schema_name  |     table_name      
 ----------+----------------------+---------------+--------------+---------------------
         1 |                    1 | Test1         | _sysinternal | _hyper_1_1_0_1_data
 (1 row)
 
 SELECT *
-FROM hypertable_column;
+FROM _iobeamdb_catalog.hypertable_column;
  hypertable_name |                              name                               | attnum |    data_type     | default_value | is_distinct | not_null | created_on | modified_on 
 -----------------+-----------------------------------------------------------------+--------+------------------+---------------+-------------+----------+------------+-------------
  testNs          | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
@@ -217,7 +217,7 @@ FROM hypertable_column;
 *********************************************************************************************************ß
 \c Test1
 SELECT *
-FROM node;
+FROM _iobeamdb_catalog.node;
  database_name | schema_name  | server_name | hostname  | active | id 
 ---------------+--------------+-------------+-----------+--------+----
  Test1         | remote_Test1 | Test1       | localhost | t      |  1
@@ -225,42 +225,42 @@ FROM node;
 (2 rows)
 
 SELECT *
-FROM meta;
+FROM _iobeamdb_catalog.meta;
  database_name | hostname  | server_name 
 ---------------+-----------+-------------
  meta          | localhost | meta
 (1 row)
 
 SELECT *
-FROM hypertable;
+FROM _iobeamdb_catalog.hypertable;
   name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 --------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
  testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT *
-FROM hypertable_replica;
+FROM _iobeamdb_catalog.hypertable_replica;
  hypertable_name | replica_id | schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
 -----------------+------------+--------------+--------------------+----------------------+---------------------
  testNs          |          0 | _sysinternal | _hyper_1_0_replica | _sysinternal         | _hyper_1_0_distinct
 (1 row)
 
 SELECT *
-FROM distinct_replica_node;
+FROM _iobeamdb_catalog.distinct_replica_node;
  hypertable_name | replica_id | database_name | schema_name  |         table_name         
 -----------------+------------+---------------+--------------+----------------------------
  testNs          |          0 | Test1         | _sysinternal | _hyper_1_0_1_distinct_data
 (1 row)
 
 SELECT *
-FROM partition_epoch;
+FROM _iobeamdb_catalog.partition_epoch;
  id | hypertable_name | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_column 
 ----+-----------------+------------+----------+-----------------------+------------------+---------------------
   1 | testNs          |            |          | get_partition_for_key |            32768 | Device_id
 (1 row)
 
 SELECT *
-FROM partition;
+FROM _iobeamdb_catalog.partition;
  id | epoch_id | keyspace_start | keyspace_end 
 ----+----------+----------------+--------------
   1 |        1 |              0 |        16383
@@ -268,7 +268,7 @@ FROM partition;
 (2 rows)
 
 SELECT *
-FROM partition_replica;
+FROM _iobeamdb_catalog.partition_replica;
  id | partition_id | hypertable_name | replica_id | schema_name  |       table_name       
 ----+--------------+-----------------+------------+--------------+------------------------
   1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
@@ -276,21 +276,21 @@ FROM partition_replica;
 (2 rows)
 
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
 (1 row)
 
 SELECT *
-FROM chunk_replica_node;
+FROM _iobeamdb_catalog.chunk_replica_node;
  chunk_id | partition_replica_id | database_name | schema_name  |     table_name      
 ----------+----------------------+---------------+--------------+---------------------
         1 |                    1 | Test1         | _sysinternal | _hyper_1_1_0_1_data
 (1 row)
 
 SELECT *
-FROM hypertable_column;
+FROM _iobeamdb_catalog.hypertable_column;
  hypertable_name |                              name                               | attnum |    data_type     | default_value | is_distinct | not_null | created_on | modified_on 
 -----------------+-----------------------------------------------------------------+--------+------------------+---------------+-------------+----------+------------+-------------
  testNs          | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
@@ -617,7 +617,7 @@ LOCATION:  exec_stmt_raise, pl_exec.c:3165
 (1 row)
 
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
@@ -638,7 +638,7 @@ FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 (1 row)
 
 SELECT *
-FROM chunk;
+FROM _iobeamdb_catalog.chunk;
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         

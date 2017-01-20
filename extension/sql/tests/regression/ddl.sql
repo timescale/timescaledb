@@ -27,7 +27,7 @@ EXPLAIN SELECT * FROM ONLY PUBLIC."Hypertable_1";
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sysinternal"."_hyper_1_root"
 \d+ _sysinternal._hyper_1_1_0_1_data
-SELECT * FROM PUBLIC.default_replica_node;
+SELECT * FROM _iobeamdb_catalog.default_replica_node;
 
 
 \c test2

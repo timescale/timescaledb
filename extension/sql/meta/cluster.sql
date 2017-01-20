@@ -7,15 +7,15 @@ CREATE OR REPLACE FUNCTION set_meta(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    meta_row meta;
+    meta_row _iobeamdb_catalog.meta;
 BEGIN
     SELECT *
     INTO meta_row
-    FROM meta
+    FROM _iobeamdb_catalog.meta
     LIMIT 1;
 
     IF meta_row IS NULL THEN
-        INSERT INTO meta (database_name, hostname, server_name)
+        INSERT INTO _iobeamdb_catalog.meta (database_name, hostname, server_name)
         VALUES (database_name, hostname, database_name);
     ELSE
         IF meta_row.database_name <> database_name OR meta_row.hostname <> hostname THEN
@@ -40,7 +40,7 @@ BEGIN
     IF database_name = current_database() THEN
         schema_name = 'public';
     END IF;
-    INSERT INTO public.node (database_name, schema_name, server_name, hostname)
+    INSERT INTO _iobeamdb_catalog.node (database_name, schema_name, server_name, hostname)
     VALUES (database_name, schema_name, database_name, hostname)
     ON CONFLICT DO NOTHING;
 END
@@ -55,7 +55,7 @@ CREATE OR REPLACE FUNCTION add_cluster_user(
 $BODY$
 DECLARE
 BEGIN
-    INSERT INTO cluster_user (username, password)
+    INSERT INTO _iobeamdb_catalog.cluster_user (username, password)
     VALUES (username, password)
     ON CONFLICT DO NOTHING;
 END
@@ -69,11 +69,11 @@ CREATE OR REPLACE FUNCTION add_partition_epoch(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 WITH epoch AS (
-    INSERT INTO partition_epoch (hypertable_name, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
+    INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_name, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
     VALUES (hypertable_name, NULL, NULL, 'get_partition_for_key', 32768, partitioning_column)
     RETURNING id
 )
-INSERT INTO partition (epoch_id, keyspace_start, keyspace_end)
+INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end)
     SELECT
         epoch.id,
         lag(start, 1, 0)

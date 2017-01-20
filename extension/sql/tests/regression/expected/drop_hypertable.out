@@ -405,7 +405,7 @@ FROM "_sysinternal"._hyper_1_0_distinct;
  device_id   | dev20
 (2 rows)
 
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
            name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
  testNs                    | public           | testNs             | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | timeCustom       | bigint           | Test1      |       1073741824
@@ -413,39 +413,45 @@ SELECT * FROM hypertable;
 (2 rows)
 
 DROP TABLE "testNs";
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
            name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
  public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |            10000
 (1 row)
 
 \dt  "public".*
-                   List of relations
- Schema |           Name            | Type  |  Owner   
---------+---------------------------+-------+----------
- public | chunk                     | table | postgres
- public | chunk_closing_test        | table | postgres
- public | chunk_replica_node        | table | postgres
- public | chunk_replica_node_index  | table | postgres
- public | cluster_user              | table | postgres
- public | default_replica_node      | table | postgres
- public | deleted_hypertable        | table | postgres
- public | deleted_hypertable_column | table | postgres
- public | deleted_hypertable_index  | table | postgres
- public | distinct_replica_node     | table | postgres
- public | hypertable                | table | postgres
- public | hypertable_column         | table | postgres
- public | hypertable_index          | table | postgres
- public | hypertable_replica        | table | postgres
- public | kafka_offset_cluster      | table | postgres
- public | kafka_offset_local        | table | postgres
- public | kafka_offset_node         | table | postgres
- public | meta                      | table | postgres
- public | node                      | table | postgres
- public | partition                 | table | postgres
- public | partition_epoch           | table | postgres
- public | partition_replica         | table | postgres
-(22 rows)
+               List of relations
+ Schema |        Name        | Type  |  Owner   
+--------+--------------------+-------+----------
+ public | chunk_closing_test | table | postgres
+(1 row)
+
+\dt  "_iobeamdb_catalog".*
+                        List of relations
+      Schema       |           Name            | Type  |  Owner   
+-------------------+---------------------------+-------+----------
+ _iobeamdb_catalog | chunk                     | table | postgres
+ _iobeamdb_catalog | chunk_replica_node        | table | postgres
+ _iobeamdb_catalog | chunk_replica_node_index  | table | postgres
+ _iobeamdb_catalog | cluster_user              | table | postgres
+ _iobeamdb_catalog | default_replica_node      | table | postgres
+ _iobeamdb_catalog | deleted_hypertable        | table | postgres
+ _iobeamdb_catalog | deleted_hypertable_column | table | postgres
+ _iobeamdb_catalog | deleted_hypertable_index  | table | postgres
+ _iobeamdb_catalog | distinct_replica_node     | table | postgres
+ _iobeamdb_catalog | hypertable                | table | postgres
+ _iobeamdb_catalog | hypertable_column         | table | postgres
+ _iobeamdb_catalog | hypertable_index          | table | postgres
+ _iobeamdb_catalog | hypertable_replica        | table | postgres
+ _iobeamdb_catalog | kafka_offset_cluster      | table | postgres
+ _iobeamdb_catalog | kafka_offset_local        | table | postgres
+ _iobeamdb_catalog | kafka_offset_node         | table | postgres
+ _iobeamdb_catalog | meta                      | table | postgres
+ _iobeamdb_catalog | node                      | table | postgres
+ _iobeamdb_catalog | partition                 | table | postgres
+ _iobeamdb_catalog | partition_epoch           | table | postgres
+ _iobeamdb_catalog | partition_replica         | table | postgres
+(21 rows)
 
 \dt+ "_sysinternal".*
                                   List of relations
@@ -460,39 +466,45 @@ SELECT * FROM hypertable;
 (6 rows)
 
 \c Test1
-SELECT * FROM hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable;
            name            | main_schema_name |  main_table_name   | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ---------------------------+------------------+--------------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
  public.chunk_closing_test | public           | chunk_closing_test | _sysinternal           | _hyper_2                | _sysinternal     | _hyper_2_root   | _sysinternal         | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |            10000
 (1 row)
 
 \dt  "public".*
-                   List of relations
- Schema |           Name            | Type  |  Owner   
---------+---------------------------+-------+----------
- public | chunk                     | table | postgres
- public | chunk_closing_test        | table | postgres
- public | chunk_replica_node        | table | postgres
- public | chunk_replica_node_index  | table | postgres
- public | cluster_user              | table | postgres
- public | default_replica_node      | table | postgres
- public | deleted_hypertable        | table | postgres
- public | deleted_hypertable_column | table | postgres
- public | deleted_hypertable_index  | table | postgres
- public | distinct_replica_node     | table | postgres
- public | hypertable                | table | postgres
- public | hypertable_column         | table | postgres
- public | hypertable_index          | table | postgres
- public | hypertable_replica        | table | postgres
- public | kafka_offset_cluster      | table | postgres
- public | kafka_offset_local        | table | postgres
- public | kafka_offset_node         | table | postgres
- public | meta                      | table | postgres
- public | node                      | table | postgres
- public | partition                 | table | postgres
- public | partition_epoch           | table | postgres
- public | partition_replica         | table | postgres
-(22 rows)
+               List of relations
+ Schema |        Name        | Type  |  Owner   
+--------+--------------------+-------+----------
+ public | chunk_closing_test | table | postgres
+(1 row)
+
+\dt  "_iobeamdb_catalog".*
+                        List of relations
+      Schema       |           Name            | Type  |  Owner   
+-------------------+---------------------------+-------+----------
+ _iobeamdb_catalog | chunk                     | table | postgres
+ _iobeamdb_catalog | chunk_replica_node        | table | postgres
+ _iobeamdb_catalog | chunk_replica_node_index  | table | postgres
+ _iobeamdb_catalog | cluster_user              | table | postgres
+ _iobeamdb_catalog | default_replica_node      | table | postgres
+ _iobeamdb_catalog | deleted_hypertable        | table | postgres
+ _iobeamdb_catalog | deleted_hypertable_column | table | postgres
+ _iobeamdb_catalog | deleted_hypertable_index  | table | postgres
+ _iobeamdb_catalog | distinct_replica_node     | table | postgres
+ _iobeamdb_catalog | hypertable                | table | postgres
+ _iobeamdb_catalog | hypertable_column         | table | postgres
+ _iobeamdb_catalog | hypertable_index          | table | postgres
+ _iobeamdb_catalog | hypertable_replica        | table | postgres
+ _iobeamdb_catalog | kafka_offset_cluster      | table | postgres
+ _iobeamdb_catalog | kafka_offset_local        | table | postgres
+ _iobeamdb_catalog | kafka_offset_node         | table | postgres
+ _iobeamdb_catalog | meta                      | table | postgres
+ _iobeamdb_catalog | node                      | table | postgres
+ _iobeamdb_catalog | partition                 | table | postgres
+ _iobeamdb_catalog | partition_epoch           | table | postgres
+ _iobeamdb_catalog | partition_replica         | table | postgres
+(21 rows)
 
 \dt+ "_sysinternal".*
                                     List of relations

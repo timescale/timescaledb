@@ -26,18 +26,18 @@ AS
 $$
 DECLARE
 chunk_size      BIGINT;
-chunk_row       chunk;
-chunk_id        chunk.id%type;
-chunk_end_time  chunk.end_time%type;
+chunk_row       _iobeamdb_catalog.chunk;
+chunk_id        _iobeamdb_catalog.chunk.id%type;
+chunk_end_time  _iobeamdb_catalog.chunk.end_time%type;
 message         test_result;
 result          boolean;
 BEGIN
-    SELECT * FROM chunk c
+    SELECT * FROM _iobeamdb_catalog.chunk c
     INTO chunk_row
-    LEFT JOIN chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
     WHERE hypertable_name = 'public.chunk_test';
-   
+
     SELECT * FROM assert.is_not_null(chunk_row.id) INTO message, result;
 
     IF result = false THEN
@@ -64,8 +64,8 @@ BEGIN
 
     -- Insert one row. Should trigger the creation of a new chunk
     INSERT INTO chunk_test VALUES(2, 2, 'dev2');
-    
-    SELECT * FROM chunk c
+
+    SELECT * FROM _iobeamdb_catalog.chunk c
     INTO STRICT chunk_row WHERE (c.id = chunk_id);
 
     -- Check that start time is still NULL on the old chunk
@@ -85,10 +85,10 @@ BEGIN
     chunk_end_time := chunk_row.end_time;
 
     -- Query for the new chunk
-    SELECT * FROM chunk c
+    SELECT * FROM _iobeamdb_catalog.chunk c
     INTO STRICT chunk_row
-    LEFT JOIN chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
     WHERE hypertable_name = 'public.chunk_test' AND c.end_time IS NULL;
 
     -- Check that start time is the end time of the previous chunk plus one

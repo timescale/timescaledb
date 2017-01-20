@@ -14,13 +14,13 @@ CREATE OR REPLACE FUNCTION _meta.calculate_new_chunk_times(
 LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    partition_epoch_row partition_epoch;
-    chunk_row           chunk;
+    partition_epoch_row _iobeamdb_catalog.partition_epoch;
+    chunk_row           _iobeamdb_catalog.chunk;
 BEGIN
     SELECT pe.*
     INTO partition_epoch_row
-    FROM partition p
-    INNER JOIN partition_epoch pe ON (p.epoch_id = pe.id)
+    FROM _iobeamdb_catalog.partition p
+    INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (p.epoch_id = pe.id)
     WHERE p.id = partition_id
     FOR SHARE;
 
@@ -29,7 +29,7 @@ BEGIN
 
     SELECT *
     INTO chunk_row
-    FROM chunk AS c
+    FROM _iobeamdb_catalog.chunk AS c
     WHERE c.end_time < calculate_new_chunk_times."time" AND
           c.partition_id = calculate_new_chunk_times.partition_id
     ORDER BY c.end_time DESC
@@ -42,7 +42,7 @@ BEGIN
     ELSE
         SELECT *
         INTO chunk_row
-        FROM chunk AS c
+        FROM _iobeamdb_catalog.chunk AS c
         WHERE c.start_time > calculate_new_chunk_times."time" AND
               c.partition_id = calculate_new_chunk_times.partition_id
         ORDER BY c.start_time DESC
@@ -71,7 +71,7 @@ BEGIN
     INTO table_start, table_end
     FROM _meta.calculate_new_chunk_times(partition_id, time_point);
 
-    INSERT INTO chunk (partition_id, start_time, end_time)
+    INSERT INTO _iobeamdb_catalog.chunk (partition_id, start_time, end_time)
     VALUES (partition_id, table_start, table_end);
 END
 $BODY$;
@@ -81,16 +81,16 @@ CREATE OR REPLACE FUNCTION _meta.create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
-    RETURNS chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row     chunk;
-    partition_row partition;
+    chunk_row     _iobeamdb_catalog.chunk;
+    partition_row _iobeamdb_catalog.partition;
 BEGIN
     --get lock
     SELECT *
     INTO partition_row
-    FROM partition
+    FROM _iobeamdb_catalog.partition
     WHERE id = partition_id
     FOR UPDATE;
 
@@ -111,16 +111,16 @@ BEGIN
 END
 $BODY$;
 
---gets or creates chunk. Concurrent chunk creation is prevented at the 
+--gets or creates chunk. Concurrent chunk creation is prevented at the
 --partition level by taking a lock on the partition being modified.
 CREATE OR REPLACE FUNCTION _meta.get_or_create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
-    RETURNS chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row           chunk;
+    chunk_row           _iobeamdb_catalog.chunk;
     chunk_table_name    NAME;
     chunk_max_size      BIGINT;
 BEGIN
@@ -141,23 +141,23 @@ CREATE OR REPLACE FUNCTION _meta.close_chunk_end(
 $BODY$
 DECLARE
     crn_node_row     RECORD;
-    node_row         node;
+    node_row         _iobeamdb_catalog.node;
     max_time_replica BIGINT;
     max_time         BIGINT = 0;
-    chunk_row        chunk;
-    partition_row    partition;
+    chunk_row        _iobeamdb_catalog.chunk;
+    partition_row    _iobeamdb_catalog.partition;
 BEGIN
     --get chunk lock
     SELECT *
     INTO chunk_row
-    FROM chunk c
+    FROM _iobeamdb_catalog.chunk c
     WHERE c.id = chunk_id
     FOR UPDATE;
 
     --get partition lock
     SELECT *
     INTO partition_row
-    FROM partition
+    FROM _iobeamdb_catalog.partition
     WHERE id = chunk_row.partition_id
     FOR UPDATE;
 
@@ -169,7 +169,7 @@ BEGIN
     --PHASE 1: lock chunk row on all rows (prevents concurrent chunk insert)
     FOR node_row IN
     SELECT *
-    FROM public.node n
+    FROM _iobeamdb_catalog.node n
     LOOP
         PERFORM _iobeamdb_data_api.lock_for_chunk_close(node_row.database_name, chunk_id);
     END LOOP;
@@ -179,14 +179,14 @@ BEGIN
     SELECT
         crn.*,
         n.*
-    FROM chunk_replica_node crn
-    INNER JOIN node n ON (n.database_name = crn.database_name)
+    FROM _iobeamdb_catalog.chunk_replica_node crn
+    INNER JOIN _iobeamdb_catalog.node n ON (n.database_name = crn.database_name)
     WHERE crn.chunk_id = close_chunk_end.chunk_id
     LOOP
         SELECT *
         INTO max_time_replica
         FROM  _iobeamdb_data_api.max_time_for_chunk_close(
-            crn_node_row.database_name, 
+            crn_node_row.database_name,
             crn_node_row.schema_name,
             crn_node_row.table_name
         );
@@ -207,14 +207,14 @@ BEGIN
     END IF;
 
     --set time locally
-    UPDATE chunk
+    UPDATE _iobeamdb_catalog.chunk
     SET end_time = max_time
     WHERE id = chunk_id;
 
     --PHASE 3: set max_time remotely
     FOR node_row IN
     SELECT *
-    FROM node n
+    FROM _iobeamdb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         PERFORM _iobeamdb_data_api.set_end_time_for_chunk_close(

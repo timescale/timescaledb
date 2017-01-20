@@ -17,7 +17,7 @@ SELECT add_node('single' :: NAME, 'fakehost');
 
 SELECT * FROM PUBLIC."Hypertable_1";
 EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
-SELECT * FROM PUBLIC.default_replica_node;
+SELECT * FROM _iobeamdb_catalog.default_replica_node;
 
 \ir include/ddl_ops_2.sql
 

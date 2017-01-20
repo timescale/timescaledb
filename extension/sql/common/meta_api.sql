@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.create_hypertable(
     main_schema_name        NAME,
     main_table_name         NAME,
-    time_column_name         NAME,
-    time_column_type         REGTYPE,
-    partitioning_column      NAME,
+    time_column_name        NAME,
+    time_column_type        REGTYPE,
+    partitioning_column     NAME,
     replication_factor      SMALLINT,
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
@@ -12,12 +12,12 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.create_hypertable(
     placement               chunk_placement_type,
     chunk_size_bytes        BIGINT
 )
-    RETURNS hypertable LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    hypertable_row hypertable;
+    hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
-    SELECT (res::hypertable).*
+    SELECT (res::_iobeamdb_catalog.hypertable).*
         INTO hypertable_row
         FROM _sysinternal.meta_transaction_exec_with_return(
           format('SELECT t FROM _meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
@@ -60,7 +60,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_column(
     hypertable_name NAME,
-    column_name      NAME,
+    column_name     NAME,
     attnum          INT2,
     data_type       REGTYPE,
     default_value   TEXT,
@@ -88,7 +88,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_column(
     hypertable_name NAME,
-    column_name      NAME
+    column_name     NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -105,10 +105,10 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_index(
-    hypertable_name NAME,
+    hypertable_name  NAME,
     main_schema_name NAME,
-    main_index_name NAME,
-    definition TEXT
+    main_index_name  NAME,
+    definition       TEXT
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -128,7 +128,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_index(
     main_schema_name NAME,
-    main_index_name NAME
+    main_index_name  NAME
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -146,9 +146,9 @@ $BODY$;
 
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_table_rename_column(
-    hypertable_name   NAME,
-    old_column_name    NAME,
-    new_column_name    NAME
+    hypertable_name NAME,
+    old_column_name NAME,
+    new_column_name NAME
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -167,7 +167,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_default(
     hypertable_name   NAME,
-    column_name        NAME,
+    column_name       NAME,
     new_default_value TEXT
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -186,9 +186,9 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_not_null(
-    hypertable_name   NAME,
-    column_name        NAME,
-    new_not_null      BOOLEAN
+    hypertable_name NAME,
+    column_name     NAME,
+    new_not_null    BOOLEAN
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -229,14 +229,14 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.get_or_create_chunk_immediate(
     partition_id INT,
     time_point   BIGINT
 )
-    RETURNS chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row chunk;
+    chunk_row _iobeamdb_catalog.chunk;
 BEGIN
     --This should use the non-transactional rpc because this needs to see the results of this call
     --to make progress.
-    SELECT (res::chunk).* INTO chunk_row
+    SELECT (res::_iobeamdb_catalog.chunk).* INTO chunk_row
     FROM _sysinternal.meta_immediate_commit_exec_with_return(
             format('SELECT t FROM _meta.get_or_create_chunk(%L, %L) t ', partition_id, time_point)
     ) AS res;

@@ -1,4 +1,7 @@
-CREATE OR REPLACE FUNCTION ioql_query_nonagg_without_limit_sql(query ioql_query, epoch partition_epoch)
+CREATE OR REPLACE FUNCTION ioql_query_nonagg_without_limit_sql(
+    query ioql_query,
+    epoch _iobeamdb_catalog.partition_epoch
+)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS $BODY$
 --function aggregates partials across nodes.
 BEGIN
@@ -22,7 +25,10 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_nonagg_sql(query ioql_query, epoch partition_epoch)
+CREATE OR REPLACE FUNCTION ioql_query_nonagg_sql(
+    query ioql_query,
+    epoch _iobeamdb_catalog.partition_epoch
+)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS $BODY$
 DECLARE
 BEGIN

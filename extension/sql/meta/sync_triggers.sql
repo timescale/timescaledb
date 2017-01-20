@@ -12,7 +12,7 @@ DECLARE
 BEGIN
     FOR schema_name IN
     SELECT n.schema_name
-    FROM node AS n
+    FROM _iobeamdb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         EXECUTE format(
@@ -53,7 +53,7 @@ BEGIN
 
     FOR schema_name IN
     SELECT n.schema_name
-    FROM node AS n
+    FROM _iobeamdb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         EXECUTE format(
@@ -89,7 +89,7 @@ BEGIN
 
     FOR schema_name IN
     SELECT n.schema_name
-    FROM node AS n
+    FROM _iobeamdb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         EXECUTE format(

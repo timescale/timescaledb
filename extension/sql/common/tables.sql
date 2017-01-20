@@ -5,7 +5,7 @@
 -- located on at hostname. server_name is used to identify the connection.
 -- schema_name is the name of the schema used to represent the node on the meta
 -- node (it stores remote wrappers to update meta tables on data nodes).
-CREATE TABLE IF NOT EXISTS node (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.node (
     database_name NAME    NOT NULL PRIMARY KEY,
     schema_name   NAME    NOT NULL UNIQUE, --public schema of remote
     server_name   NAME    NOT NULL UNIQUE,
@@ -15,16 +15,16 @@ CREATE TABLE IF NOT EXISTS node (
 );
 
 -- Singleton (i.e. should only contain one row) holding info about meta db.
-CREATE TABLE IF NOT EXISTS meta (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.meta (
     database_name NAME NOT NULL PRIMARY KEY,
     hostname      TEXT NOT NULL,
     server_name   NAME NOT NULL
 );
 CREATE UNIQUE INDEX there_can_be_only_one_meta
-    ON meta ((1));
+    ON _iobeamdb_catalog.meta ((1));
 
 -- Users should exist an all nodes+meta in the cluster.
-CREATE TABLE IF NOT EXISTS cluster_user (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.cluster_user (
     username TEXT NOT NULL PRIMARY KEY,
     password TEXT NULL --not any more of a security hole than usual since stored in  pg_user_mapping anyway
 );
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS cluster_user (
 --
 -- The name and type of the time column (used to partition on time) are defined
 -- in `time_column_name` and `time_column_type`.
-CREATE TABLE IF NOT EXISTS hypertable (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable (
     name                    NAME                  NOT NULL PRIMARY KEY CHECK (name NOT LIKE '\_%'),
     main_schema_name        NAME                  NOT NULL,
     main_table_name         NAME                  NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS hypertable (
     placement               chunk_placement_type  NOT NULL,
     time_column_name        NAME                  NOT NULL,
     time_column_type        REGTYPE               NOT NULL,
-    created_on              NAME                  NOT NULL REFERENCES node(database_name),
+    created_on              NAME                  NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     chunk_size_bytes        BIGINT                NOT NULL CHECK (chunk_size_bytes > 0),
     UNIQUE (main_schema_name, main_table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS hypertable (
 );
 
 -- deleted_hypertable is used to avoid deadlocks when doing multinode drops.
-CREATE TABLE IF NOT EXISTS deleted_hypertable (
-  LIKE hypertable,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.deleted_hypertable (
+  LIKE _iobeamdb_catalog.hypertable,
   deleted_on NAME
 );
 
@@ -85,8 +85,8 @@ CREATE TABLE IF NOT EXISTS deleted_hypertable (
 --      Distinct values in a hypertable.
 --      Parent: hypertable's `distinct root table`
 --      Children: created by `distinct_replica_node` table
-CREATE TABLE IF NOT EXISTS hypertable_replica (
-    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_replica (
+    hypertable_name      NAME     NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
     schema_name          NAME     NOT NULL,
     table_name           NAME     NOT NULL,
@@ -100,12 +100,12 @@ CREATE TABLE IF NOT EXISTS hypertable_replica (
 -- each node. The translation from main table to replica should happen
 -- in C tranformation right after the parsing step.
 -- (Postgres RULES cannot be used, unfortunately)
-CREATE TABLE IF NOT EXISTS default_replica_node (
-    database_name        NAME NOT NULL  REFERENCES node (database_name),
-    hypertable_name      NAME     NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.default_replica_node (
+    database_name        NAME     NOT NULL  REFERENCES _iobeamdb_catalog.node(database_name),
+    hypertable_name      NAME     NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
     PRIMARY KEY (database_name, hypertable_name),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id)
+    FOREIGN KEY (hypertable_name, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica (hypertable_name, replica_id)
 );
 
 
@@ -116,15 +116,15 @@ CREATE TABLE IF NOT EXISTS default_replica_node (
 --Each row creates a table.
 --  Parent table:  hypertable_replica.distinct_table
 --  No children, created table contains data.
-CREATE TABLE IF NOT EXISTS distinct_replica_node (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.distinct_replica_node (
     hypertable_name NAME     NOT NULL,
     replica_id      SMALLINT NOT NULL,
-    database_name   NAME     NOT NULL REFERENCES node (database_name),
+    database_name   NAME     NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,
     PRIMARY KEY (hypertable_name, replica_id, database_name),
     UNIQUE (schema_name, table_name),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
+    FOREIGN KEY (hypertable_name, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
 );
 
 -- A partition_epoch represents a different partitioning of the data.
@@ -137,9 +137,9 @@ CREATE TABLE IF NOT EXISTS distinct_replica_node (
 --
 -- Changing a data's partitioning, and thus creating a new epoch, should be done
 -- INFREQUENTLY as it's expensive operation.
-CREATE TABLE IF NOT EXISTS partition_epoch (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
     id                  SERIAL NOT NULL  PRIMARY KEY,
-    hypertable_name     NAME   NOT NULL  REFERENCES hypertable (name) ON DELETE CASCADE,
+    hypertable_name     NAME   NOT NULL  REFERENCES _iobeamdb_catalog.hypertable (name) ON DELETE CASCADE,
     start_time          BIGINT NULL      CHECK (start_time > 0),
     end_time            BIGINT NULL      CHECK (end_time > 0),
     partitioning_func   NAME   NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
@@ -154,9 +154,9 @@ CREATE TABLE IF NOT EXISTS partition_epoch (
 -- For any partition the keyspace is defined as [keyspace_start, keyspace_end].
 -- For any epoch, there must be a partition that covers every element in the
 -- keyspace, i.e. from [0, partition_epoch.partitioning_mod].
-CREATE TABLE IF NOT EXISTS partition (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition (
     id             SERIAL   NOT NULL PRIMARY KEY,
-    epoch_id       INT      NOT NULL REFERENCES partition_epoch (id) ON DELETE CASCADE,
+    epoch_id       INT      NOT NULL REFERENCES _iobeamdb_catalog.partition_epoch (id) ON DELETE CASCADE,
     keyspace_start SMALLINT NOT NULL CHECK (keyspace_start >= 0), --start inclusive
     keyspace_end   SMALLINT NOT NULL CHECK (keyspace_end > 0), --end   inclusive; compatible with between operator
     UNIQUE (epoch_id, keyspace_start),
@@ -168,16 +168,16 @@ CREATE TABLE IF NOT EXISTS partition (
 --   Parent: "hypertable_replica.schema_name"."hypertable_replica.table_name"
 --   Children: "chunk_replica_node.schema_name"."chunk_replica_node.table_name"
 --TODO: trigger to verify partition_epoch hypertable name matches this hypertable_name
-CREATE TABLE IF NOT EXISTS partition_replica (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_replica (
     id              SERIAL   NOT NULL PRIMARY KEY,
-    partition_id    INT      NOT NULL REFERENCES partition (id) ON DELETE CASCADE,
+    partition_id    INT      NOT NULL REFERENCES _iobeamdb_catalog.partition (id) ON DELETE CASCADE,
     hypertable_name NAME     NOT NULL,
     replica_id      SMALLINT NOT NULL,
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,
     UNIQUE (schema_name, table_name),
     UNIQUE (partition_id, replica_id),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
+    FOREIGN KEY (hypertable_name, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
 );
 
 -- Represent a (replicated) chunk of data, which is data in a hypertable that is
@@ -191,9 +191,9 @@ CREATE TABLE IF NOT EXISTS partition_replica (
 -- one chunk for a partition can it be open-ended on BOTH start_time and end_time.
 --
 -- TODO(erik) - Describe conditions of closure.
-CREATE TABLE IF NOT EXISTS chunk (
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.chunk (
     id           SERIAL NOT NULL    PRIMARY KEY,
-    partition_id INT    NOT NULL    REFERENCES partition (id) ON DELETE CASCADE,
+    partition_id INT    NOT NULL    REFERENCES _iobeamdb_catalog.partition (id) ON DELETE CASCADE,
     start_time   BIGINT NULL        CHECK (start_time >= 0),
     end_time     BIGINT NULL        CHECK (end_time >= 0),
     UNIQUE (partition_id, start_time),
@@ -207,10 +207,10 @@ CREATE TABLE IF NOT EXISTS chunk (
 --
 -- Each row represents a table:
 --   Parent table: "partition_replica.schema_name"."partition_replica.table_name"
-CREATE TABLE IF NOT EXISTS chunk_replica_node (
-    chunk_id             INT  NOT NULL  REFERENCES chunk (id) ON DELETE CASCADE,
-    partition_replica_id INT  NOT NULL  REFERENCES partition_replica (id) ON DELETE CASCADE,
-    database_name        NAME NOT NULL  REFERENCES node (database_name),
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.chunk_replica_node (
+    chunk_id             INT  NOT NULL  REFERENCES _iobeamdb_catalog.chunk(id) ON DELETE CASCADE,
+    partition_replica_id INT  NOT NULL  REFERENCES _iobeamdb_catalog.partition_replica(id) ON DELETE CASCADE,
+    database_name        NAME NOT NULL  REFERENCES _iobeamdb_catalog.node(database_name),
     schema_name          NAME NOT NULL,
     table_name           NAME NOT NULL,
     PRIMARY KEY (chunk_id, partition_replica_id), --a single chunk, replica tuple
@@ -219,38 +219,38 @@ CREATE TABLE IF NOT EXISTS chunk_replica_node (
 );
 
 -- Represents a hypertable column.
-CREATE TABLE IF NOT EXISTS hypertable_column (
-    hypertable_name NAME                NOT NULL REFERENCES hypertable (name) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_column (
+    hypertable_name NAME                NOT NULL REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
     name            NAME                NOT NULL,
     attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
     data_type       REGTYPE             NOT NULL,
     default_value   TEXT                NULL,
     is_distinct     BOOLEAN             NOT NULL DEFAULT FALSE,
     not_null        BOOLEAN             NOT NULL,
-    created_on      NAME                NOT NULL REFERENCES node(database_name),
-    modified_on     NAME                NOT NULL REFERENCES node(database_name),
+    created_on      NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
+    modified_on     NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     PRIMARY KEY (hypertable_name, name),
     UNIQUE(hypertable_name, attnum)
 );
 
 -- TODO(mat) - Description?
-CREATE TABLE IF NOT EXISTS deleted_hypertable_column (
-  LIKE hypertable_column,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.deleted_hypertable_column (
+  LIKE _iobeamdb_catalog.hypertable_column,
   deleted_on NAME
 );
 
-CREATE TABLE IF NOT EXISTS hypertable_index (
-    hypertable_name  NAME                NOT NULL REFERENCES hypertable (name) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_index (
+    hypertable_name  NAME                NOT NULL REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
     main_schema_name NAME                NOT NULL, --schema name of main table (needed for a uniqueness constraint)
     main_index_name  NAME                NOT NULL, --index name on main table
     definition       TEXT                NOT NULL, --def with /*INDEX_NAME*/ and /*TABLE_NAME*/ placeholders
-    created_on       NAME                NOT NULL REFERENCES node(database_name),
+    created_on       NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     PRIMARY KEY (hypertable_name, main_index_name),
     UNIQUE(main_schema_name, main_index_name) --globally unique since index names globally unique
 );
 
 -- TODO(mat) - Description?
-CREATE TABLE IF NOT EXISTS deleted_hypertable_index (
-  LIKE hypertable_index,
+CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.deleted_hypertable_index (
+  LIKE _iobeamdb_catalog.hypertable_index,
   deleted_on NAME
 );

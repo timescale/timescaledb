@@ -1,4 +1,4 @@
-/* 
+/*
   creates an index on a chunk replica node.
 */
 CREATE OR REPLACE FUNCTION _sysinternal.create_chunk_replica_node_index(
@@ -15,15 +15,13 @@ DECLARE
     prefix     BIGINT;
     sql_code TEXT;
 BEGIN
-    prefix = nextval('chunk_replica_node_index_name_prefix');
+    prefix = nextval('_iobeamdb_catalog.chunk_replica_node_index_name_prefix');
     index_name := format('%s-%s', prefix, main_index_name);
 
     sql_code := _sysinternal.get_index_definition_for_table(schema_name, table_name, index_name, def);
 
-    INSERT INTO chunk_replica_node_index (schema_name, table_name, index_name, main_schema_name, main_index_name, definition) VALUES
+    INSERT INTO _iobeamdb_catalog.chunk_replica_node_index (schema_name, table_name, index_name, main_schema_name, main_index_name, definition) VALUES
         (schema_name, table_name, index_name,main_schema_name, main_index_name, sql_code)
     ON CONFLICT DO NOTHING;
 END
 $BODY$;
-
-
