@@ -16,11 +16,11 @@ BEGIN
         PERFORM _sysinternal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
 
         PERFORM _sysinternal.create_user_mapping(cluster_user, NEW.server_name)
-        FROM cluster_user;
+        FROM _iobeamdb_catalog.cluster_user;
 
         EXECUTE format(
             $$
-                IMPORT FOREIGN SCHEMA public
+                IMPORT FOREIGN SCHEMA _iobeamdb_catalog
                 FROM SERVER %I
                 INTO %I;
             $$,
@@ -44,24 +44,24 @@ BEGIN
     IF NEW.database_name <> current_database() THEN
         EXECUTE format(
             $$
-                INSERT INTO %I.node SELECT * from public.node;
+                INSERT INTO %I.node SELECT * from _iobeamdb_catalog.node;
             $$,
             NEW.schema_name);
         EXECUTE format(
             $$
-                INSERT INTO %I.cluster_user SELECT * from cluster_user;
+                INSERT INTO %I.cluster_user SELECT * from _iobeamdb_catalog.cluster_user;
             $$,
             NEW.schema_name);
         EXECUTE format(
             $$
-                INSERT INTO %I.meta SELECT * from meta;
+                INSERT INTO %I.meta SELECT * from _iobeamdb_catalog.meta;
             $$,
             NEW.schema_name);
     END IF;
 
     FOR schema_name IN
     SELECT n.schema_name
-    FROM node AS n
+    FROM _iobeamdb_catalog.node n
     WHERE n.schema_name <> NEW.schema_name AND
           n.database_name <> current_database()
     LOOP
@@ -75,7 +75,7 @@ BEGIN
     END LOOP;
 
     PERFORM _meta.assign_default_replica_node(NEW.database_name, h.name)
-    FROM hypertable h;
+    FROM _iobeamdb_catalog.hypertable h;
 
     RETURN NEW;
 END

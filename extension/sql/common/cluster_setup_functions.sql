@@ -4,7 +4,7 @@ CREATE SCHEMA IF NOT EXISTS _iobeamdb_meta_api;
 CREATE SCHEMA IF NOT EXISTS _iobeamdb_data_api;
 
 CREATE OR REPLACE FUNCTION _sysinternal.create_user_mapping(
-    cluster_user_row cluster_user,
+    cluster_user_row _iobeamdb_catalog.cluster_user,
     server_name      NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS

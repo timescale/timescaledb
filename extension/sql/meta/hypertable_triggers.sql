@@ -4,7 +4,7 @@ CREATE OR REPLACE FUNCTION _meta.on_create_hypertable()
 $BODY$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        INSERT INTO hypertable_replica
+        INSERT INTO _iobeamdb_catalog.hypertable_replica
         SELECT
             NEW.name,
             replica_id,
@@ -16,7 +16,7 @@ BEGIN
         ON CONFLICT DO NOTHING;
 
         PERFORM _meta.assign_default_replica_node(n.database_name, NEW.name)
-        FROM node n;
+        FROM _iobeamdb_catalog.node n;
         RETURN NEW;
     END IF;
 

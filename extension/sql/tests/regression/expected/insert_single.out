@@ -72,7 +72,7 @@ BEGIN;
 COMMIT;
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key('testNs', 'dev1') part
-INNER JOIN chunk c ON (c.partition_id = part.id);
+INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
  close_chunk_end_immediate 
 ---------------------------
  
@@ -108,9 +108,9 @@ SELECT * FROM chunk_closing_test;
     3 |      3 | dev3
 (3 rows)
 
-SELECT * FROM chunk c
-    LEFT JOIN chunk_replica_node crn ON (c.id = crn.chunk_id) 
-    LEFT JOIN partition_replica pr ON (crn.partition_replica_id = pr.id)
+SELECT * FROM _iobeamdb_catalog.chunk c
+    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
     WHERE hypertable_name = 'public.chunk_closing_test';
  id | partition_id | start_time | end_time | chunk_id | partition_replica_id | database_name | schema_name  |     table_name      | id | partition_id |      hypertable_name      | replica_id | schema_name  |       table_name       
 ----+--------------+------------+----------+----------+----------------------+---------------+--------------+---------------------+----+--------------+---------------------------+------------+--------------+------------------------

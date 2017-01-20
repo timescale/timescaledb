@@ -205,11 +205,13 @@ FROM
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
-CREATE OR REPLACE FUNCTION base_query_agg_partial(query                  ioql_query,
-                                                  table_oid              REGCLASS,
-                                                  epoch                  partition_epoch,
-                                                  additional_constraints TEXT,
-                                                  limit_sub              TEXT)
+CREATE OR REPLACE FUNCTION base_query_agg_partial(
+    query                  ioql_query,
+    table_oid              REGCLASS,
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    additional_constraints TEXT,
+    limit_sub              TEXT
+)
     RETURNS TEXT AS
 $BODY$
 DECLARE
@@ -239,13 +241,14 @@ LANGUAGE PLPGSQL STABLE;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_by_only_time_sql(
     query                  ioql_query,
-    epoch                  partition_epoch,
-    pr                     partition_replica,
-    additional_constraints TEXT DEFAULT NULL)
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    pr                     _iobeamdb_catalog.partition_replica,
+    additional_constraints TEXT DEFAULT NULL
+)
     RETURNS TEXT AS
 $BODY$
 DECLARE
-    crn_row         chunk_replica_node;
+    crn_row         _iobeamdb_catalog.chunk_replica_node;
     code            TEXT = '';
     index           INT = 0;
     previous_tables TEXT = NULL;
@@ -290,9 +293,10 @@ $BODY$ LANGUAGE plpgsql STABLE;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_limit_rows_by_time_and_group_sql(
     query                  ioql_query,
-    epoch                  partition_epoch,
-    pr                     partition_replica,
-    additional_constraints TEXT DEFAULT NULL)
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    pr                     _iobeamdb_catalog.partition_replica,
+    additional_constraints TEXT DEFAULT NULL
+)
     RETURNS TEXT AS
 $BODY$
 DECLARE
@@ -308,7 +312,7 @@ BEGIN
                        c.start_time,
                        crn.*
                    FROM get_local_chunk_replica_node_for_pr_time_desc(pr) crn
-                   INNER JOIN chunk c ON (c.id = crn.chunk_id)
+                   INNER JOIN _iobeamdb_catalog.chunk c ON (c.id = crn.chunk_id)
     LOOP
         IF index = 0 THEN
             --always scan first table
@@ -355,9 +359,10 @@ $BODY$ LANGUAGE plpgsql STABLE;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_no_limit_rows_sql(
     query                  ioql_query,
-    epoch                  partition_epoch,
-    pr                     partition_replica,
-    additional_constraints TEXT DEFAULT NULL)
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    pr                     _iobeamdb_catalog.partition_replica,
+    additional_constraints TEXT DEFAULT NULL
+)
     RETURNS TEXT LANGUAGE SQL AS
 $BODY$
 SELECT string_agg('(' || base_query_agg_partial(query,
@@ -371,9 +376,10 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_partition_agg_sql(
     query                  ioql_query,
-    epoch                  partition_epoch,
-    pr                     partition_replica,
-    additional_constraints TEXT DEFAULT NULL)
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    pr                     _iobeamdb_catalog.partition_replica,
+    additional_constraints TEXT DEFAULT NULL
+)
     RETURNS TEXT LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -391,12 +397,17 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_max_time_on_partition(time_col_name NAME, time_col_type regtype, part_replica partition_replica, additional_constraints TEXT)
+CREATE OR REPLACE FUNCTION get_max_time_on_partition(
+    time_col_name NAME,
+    time_col_type regtype,
+    part_replica _iobeamdb_catalog.partition_replica,
+    additional_constraints TEXT
+)
     RETURNS BIGINT AS
 $BODY$
 DECLARE
     time    BIGINT;
-    crn_row chunk_replica_node;
+    crn_row _iobeamdb_catalog.chunk_replica_node;
 BEGIN
     time := NULL;
 
@@ -425,7 +436,7 @@ $BODY$ LANGUAGE PLPGSQL STABLE;
 
 CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_ungrouped_sql(
     query                  ioql_query,
-    epoch                  partition_epoch,
+    epoch                  _iobeamdb_catalog.partition_epoch,
     replica_id             SMALLINT,
     additional_constraints TEXT DEFAULT NULL
 )
@@ -448,11 +459,13 @@ FROM
 $BODY$ LANGUAGE SQL IMMUTABLE;
 
 
-CREATE OR REPLACE FUNCTION get_time_periods_limit(epoch                  partition_epoch,
-                                                  replica_id             SMALLINT,
-                                                  additional_constraints TEXT,
-                                                  period_length          BIGINT,
-                                                  num_periods            INT)
+CREATE OR REPLACE FUNCTION get_time_periods_limit(
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    replica_id             SMALLINT,
+    additional_constraints TEXT,
+    period_length          BIGINT,
+    num_periods            INT
+)
     RETURNS time_range LANGUAGE SQL STABLE AS
 $BODY$
 -- start and end inclusive
@@ -464,10 +477,12 @@ FROM
     ) AS max_time
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_grouped_sql(query                  ioql_query,
-                                                                 epoch                  partition_epoch,
-                                                                 replica_id             SMALLINT,
-                                                                 additional_constraints TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION ioql_query_local_node_agg_grouped_sql(
+    query                  ioql_query,
+    epoch                  _iobeamdb_catalog.partition_epoch,
+    replica_id             SMALLINT,
+    additional_constraints TEXT DEFAULT NULL
+)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE

@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    cluster_user_row cluster_user;
+    cluster_user_row _iobeamdb_catalog.cluster_user;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
         RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
@@ -13,7 +13,7 @@ BEGIN
         PERFORM _sysinternal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
 
         FOR cluster_user_row IN SELECT *
-                                FROM cluster_user LOOP
+                                FROM _iobeamdb_catalog.cluster_user LOOP
             PERFORM _sysinternal.create_user_mapping(cluster_user_row, NEW.server_name);
         END LOOP;
     END IF;
@@ -21,4 +21,3 @@ BEGIN
 END
 $BODY$
 SET SEARCH_PATH = 'public';
-

@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION ioql_exec_query_nodes(
     query     ioql_query,
-    epoch     partition_epoch,
+    epoch     _iobeamdb_catalog.partition_epoch,
     columnDef TEXT
 )
     RETURNS SETOF RECORD AS
@@ -18,15 +18,15 @@ DECLARE
 BEGIN
     SELECT hr.replica_id
     INTO STRICT query_replica_id
-    FROM hypertable_replica hr
+    FROM _iobeamdb_catalog.hypertable_replica hr
     WHERE hr.hypertable_name = query.hypertable_name
     ORDER BY random()
     LIMIT 1;
 
     SELECT ARRAY(
         SELECT DISTINCT crn.database_name
-        FROM partition_replica pr
-        INNER JOIN chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
+        FROM _iobeamdb_catalog.partition_replica pr
+        INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (crn.partition_replica_id = pr.id)
         WHERE pr.hypertable_name = query.hypertable_name AND
               pr.replica_id = query_replica_id
     )
@@ -39,7 +39,7 @@ BEGIN
     SELECT
         n.server_name,
         conn IS NOT NULL
-    FROM node n
+    FROM _iobeamdb_catalog.node n
     LEFT JOIN dblink_get_connections() conn ON (n.server_name = ANY (conn))
     WHERE
         n.database_name = ANY (database_names) AND

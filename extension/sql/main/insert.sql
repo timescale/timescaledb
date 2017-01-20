@@ -15,19 +15,19 @@ $BODY$;
 -- copy_record - Record/row from a table
 -- copy_table_name - Name of the relation to cast the record to.
 CREATE OR REPLACE FUNCTION _sysinternal.get_partition_for_epoch_row(
-    epoch           partition_epoch,
+    epoch           _iobeamdb_catalog.partition_epoch,
     copy_record     anyelement,
     copy_table_name TEXT
 )
-    RETURNS partition LANGUAGE PLPGSQL STABLE AS
+    RETURNS _iobeamdb_catalog.partition LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
-    partition_row partition;
+    partition_row _iobeamdb_catalog.partition;
 BEGIN
     EXECUTE format(
         $$
             SELECT  p.*
-            FROM partition p
+            FROM _iobeamdb_catalog.partition p
             WHERE p.epoch_id = %L AND
             %s((SELECT row.%I FROM (SELECT (%L::%s).*) as row), %L)
             BETWEEN p.keyspace_start AND p.keyspace_end
@@ -86,10 +86,10 @@ $BODY$
 DECLARE
     point_record_query_sql      TEXT;
     point_record                RECORD;
-    chunk_row                   chunk;
+    chunk_row                   _iobeamdb_catalog.chunk;
     crn_record                  RECORD;
     distinct_table_oid          REGCLASS;
-    distinct_column              TEXT;
+    distinct_column             TEXT;
     distinct_clauses            TEXT;
     distinct_clause_idx         INT;
 BEGIN
@@ -113,8 +113,8 @@ BEGIN
                    p.id AS partition_id, p.keyspace_start, p.keyspace_end,
                    pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
             FROM ONLY %1$s ct
-            LEFT JOIN hypertable h ON (h.NAME = %2$L)
-            LEFT JOIN partition_epoch pe ON (
+            LEFT JOIN _iobeamdb_catalog.hypertable h ON (h.NAME = %2$L)
+            LEFT JOIN _iobeamdb_catalog.partition_epoch pe ON (
               pe.hypertable_name = %2$L AND
               (pe.start_time <= (SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
                 OR pe.start_time IS NULL) AND
@@ -151,8 +151,8 @@ BEGIN
             crn.table_name,
             pr.hypertable_name,
             pr.replica_id
-        FROM chunk_replica_node crn
-        INNER JOIN partition_replica pr ON (pr.id = crn.partition_replica_id)
+        FROM _iobeamdb_catalog.chunk_replica_node crn
+        INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
         WHERE (crn.chunk_id = chunk_row.id)
         LOOP
             distinct_clauses := '';
@@ -164,7 +164,7 @@ BEGIN
 
             FOR distinct_column IN
             SELECT c.name
-            FROM hypertable_column c
+            FROM _iobeamdb_catalog.hypertable_column c
             WHERE c.is_distinct = TRUE AND c.hypertable_name = insert_data.hypertable_name
             ORDER BY c.name
             LOOP

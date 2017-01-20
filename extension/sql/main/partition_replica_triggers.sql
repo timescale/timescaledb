@@ -8,8 +8,8 @@ BEGIN
             hr.schema_name, hr.table_name,
             p.keyspace_start, p.keyspace_end,
             p.epoch_id)
-        FROM hypertable_replica hr
-        CROSS JOIN partition p
+        FROM _iobeamdb_catalog.hypertable_replica hr
+        CROSS JOIN _iobeamdb_catalog.partition p
         WHERE hr.hypertable_name = NEW.hypertable_name AND
             hr.replica_id = NEW.replica_id AND
             p.id = NEW.partition_id;

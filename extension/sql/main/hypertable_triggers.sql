@@ -27,7 +27,7 @@ BEGIN
     EXECUTE format(
         $$
             SELECT insert_data(
-                (SELECT name FROM hypertable
+                (SELECT name FROM _iobeamdb_catalog.hypertable
                 WHERE main_schema_name = %1$L AND main_table_name = %2$L)
                 , %3$L)
         $$, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_RELID);
@@ -40,7 +40,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    remote_node node;
+    remote_node _iobeamdb_catalog.node;
 BEGIN
 
     IF TG_OP = 'INSERT' THEN
@@ -92,7 +92,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    hypertable_row hypertable;
+    hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
         RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME

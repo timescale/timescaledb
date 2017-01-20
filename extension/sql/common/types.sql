@@ -1,3 +1,5 @@
+CREATE SCHEMA IF NOT EXISTS _iobeamdb_catalog;
+
 DO
 $BODY$
 BEGIN

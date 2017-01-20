@@ -30,7 +30,9 @@ $BODY$
 SELECT format('SELECT %s', get_result_column_list_nonagg(query));
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_from_clause(crn chunk_replica_node)
+CREATE OR REPLACE FUNCTION get_from_clause(
+    crn _iobeamdb_catalog.chunk_replica_node
+)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT format('FROM %I.%I', crn.schema_name, crn.table_name);
@@ -88,7 +90,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION get_partitioning_predicate(
     query ioql_query,
-    epoch partition_epoch
+    epoch _iobeamdb_catalog.partition_epoch
 )
     RETURNS TEXT LANGUAGE PLPGSQL IMMUTABLE STRICT AS
 $BODY$
@@ -112,7 +114,10 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION default_predicates(query ioql_query, epoch partition_epoch)
+CREATE OR REPLACE FUNCTION default_predicates(
+    query ioql_query,
+    epoch _iobeamdb_catalog.partition_epoch
+)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT combine_predicates(

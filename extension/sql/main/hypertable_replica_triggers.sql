@@ -2,12 +2,12 @@ CREATE OR REPLACE FUNCTION _sysinternal.on_create_hypertable_replica()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    hypertable_row hypertable;
+    hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP = 'INSERT' THEN
         SELECT *
         INTO STRICT hypertable_row
-        FROM hypertable AS h
+        FROM _iobeamdb_catalog.hypertable AS h
         WHERE h.name = NEW.hypertable_name;
 
         PERFORM _sysinternal.create_replica_table(NEW.schema_name, NEW.table_name, hypertable_row.root_schema_name,

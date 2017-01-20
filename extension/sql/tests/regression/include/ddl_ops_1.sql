@@ -11,8 +11,8 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-SELECT * FROM hypertable;
-SELECT * FROM hypertable_index;
+SELECT * FROM _iobeamdb_catalog.hypertable;
+SELECT * FROM _iobeamdb_catalog.hypertable_index;
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");

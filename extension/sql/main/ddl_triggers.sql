@@ -25,10 +25,10 @@ CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_create_index()
   AS
 $BODY$
 DECLARE
-  info record;
-  table_oid regclass;
-  def TEXT;
-  hypertable_row hypertable;
+  info           record;
+  table_oid      regclass;
+  def            TEXT;
+  hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
   FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
     LOOP
@@ -89,15 +89,15 @@ CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_index()
   AS
 $BODY$
 DECLARE
-  info record;
-  table_oid regclass;
-  hypertable_row hypertable;
+  info           record;
+  table_oid      regclass;
+  hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
   FOR info IN SELECT * FROM  pg_event_trigger_dropped_objects()
     LOOP
       SELECT  format('%I.%I', h.main_schema_name, h.main_table_name) INTO table_oid
-      FROM hypertable h
-      INNER JOIN hypertable_index i ON (i.hypertable_name = h.name)
+      FROM _iobeamdb_catalog.hypertable h
+      INNER JOIN _iobeamdb_catalog.hypertable_index i ON (i.hypertable_name = h.name)
       WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name;
 
       --if table_oid is not null, it is a main table
@@ -127,11 +127,11 @@ CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_alter_table()
   AS
 $BODY$
 DECLARE
-  info record;
-  hypertable_row hypertable;
-  found_action BOOLEAN;
-  att_row pg_attribute;
-  rec record;
+  info           record;
+  hypertable_row _iobeamdb_catalog.hypertable;
+  found_action   BOOLEAN;
+  att_row        pg_attribute;
+  rec            record;
 BEGIN
   FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
     LOOP
@@ -153,7 +153,7 @@ BEGIN
        WHERE attrelid = info.objid AND
              attnum > 0 AND
              NOT attisdropped AND
-             att.attnum NOT IN (SELECT c.attnum FROM hypertable_column c WHERE hypertable_name = hypertable_row.name)
+             att.attnum NOT IN (SELECT c.attnum FROM _iobeamdb_catalog.hypertable_column c WHERE hypertable_name = hypertable_row.name)
     LOOP
         PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row);
         found_action = TRUE;
@@ -162,7 +162,7 @@ BEGIN
     --was a column deleted
     FOR rec IN
       SELECT name
-      FROM hypertable_column c
+      FROM _iobeamdb_catalog.hypertable_column c
       INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
       WHERE hypertable_name = hypertable_row.name
     LOOP
@@ -176,7 +176,7 @@ BEGIN
     --was a column renamed
     FOR rec IN
       SELECT c.name old_name, att.attname new_name
-      FROM hypertable_column c
+      FROM _iobeamdb_catalog.hypertable_column c
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND c.name IS DISTINCT FROM att.attname
     LOOP
@@ -191,7 +191,7 @@ BEGIN
     --was a colum default changed
     FOR rec IN
       SELECT name, _sysinternal.get_default_value_for_attribute(att) AS new_default_value
-      FROM hypertable_column c
+      FROM _iobeamdb_catalog.hypertable_column c
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND _sysinternal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
     LOOP
@@ -206,7 +206,7 @@ BEGIN
     --was the not null flag changed?
     FOR rec IN
       SELECT name, attnotnull AS new_not_null
-      FROM hypertable_column c
+      FROM _iobeamdb_catalog.hypertable_column c
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND attnotnull != c.not_null
     LOOP
@@ -221,7 +221,7 @@ BEGIN
     --type changed
     FOR rec IN
       SELECT name
-      FROM hypertable_column c
+      FROM _iobeamdb_catalog.hypertable_column c
       INNER JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
       WHERE hypertable_name = hypertable_row.name AND att.atttypid IS DISTINCT FROM c.data_type
     LOOP
@@ -245,7 +245,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.is_hypertable(
     RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-     return exists(select 1 from hypertable where main_schema_name = schema_name and  main_table_name=table_name);
+     return exists(select 1 from _iobeamdb_catalog.hypertable where main_schema_name = schema_name and  main_table_name=table_name);
 END
 $BODY$;
 

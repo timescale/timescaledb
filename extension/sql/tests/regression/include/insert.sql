@@ -36,7 +36,7 @@ COMMIT;
 
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key('testNs', 'dev1') part
-INNER JOIN chunk c ON (c.partition_id = part.id);
+INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
 
 \c Test1
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
@@ -63,7 +63,7 @@ INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
 INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
 INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
 SELECT * FROM chunk_closing_test;
-SELECT * FROM chunk c
-    LEFT JOIN chunk_replica_node crn ON (c.id = crn.chunk_id) 
-    LEFT JOIN partition_replica pr ON (crn.partition_replica_id = pr.id)
+SELECT * FROM _iobeamdb_catalog.chunk c
+    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
     WHERE hypertable_name = 'public.chunk_closing_test';

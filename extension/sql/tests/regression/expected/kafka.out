@@ -38,38 +38,16 @@ SELECT add_node('test2' :: NAME, 'localhost');
 
 \c Test1
 \dt public.*
-                   List of relations
- Schema |           Name            | Type  |  Owner   
---------+---------------------------+-------+----------
- public | chunk                     | table | postgres
- public | chunk_replica_node        | table | postgres
- public | chunk_replica_node_index  | table | postgres
- public | cluster_user              | table | postgres
- public | default_replica_node      | table | postgres
- public | deleted_hypertable        | table | postgres
- public | deleted_hypertable_column | table | postgres
- public | deleted_hypertable_index  | table | postgres
- public | distinct_replica_node     | table | postgres
- public | hypertable                | table | postgres
- public | hypertable_column         | table | postgres
- public | hypertable_index          | table | postgres
- public | hypertable_replica        | table | postgres
- public | kafka_offset_cluster      | table | postgres
- public | kafka_offset_local        | table | postgres
- public | kafka_offset_node         | table | postgres
- public | meta                      | table | postgres
- public | node                      | table | postgres
- public | partition                 | table | postgres
- public | partition_epoch           | table | postgres
- public | partition_replica         | table | postgres
-(21 rows)
+      List of relations
+ Schema | Name | Type | Owner 
+--------+------+------+-------
+(0 rows)
 
 \det+ public.*
-                                               List of foreign tables
- Schema |           Table           | Server |                       FDW Options                       | Description 
---------+---------------------------+--------+---------------------------------------------------------+-------------
- public | kafka_offset_remote_test2 | test2  | (schema_name 'public', table_name 'kafka_offset_local') | 
-(1 row)
+               List of foreign tables
+ Schema | Table | Server | FDW Options | Description 
+--------+-------+--------+-------------+-------------
+(0 rows)
 
 SELECT *
 FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
@@ -143,7 +121,7 @@ FROM kafka_get_start_and_next_offset('topic', 0 :: SMALLINT, 0);
 (1 row)
 
 SELECT *
-FROM kafka_offset_local;
+FROM _iobeamdb_catalog.kafka_offset_local;
  topic  | partition_number | start_offset | next_offset | database_name 
 --------+------------------+--------------+-------------+---------------
  topic  |                0 |            0 |         100 | Test1

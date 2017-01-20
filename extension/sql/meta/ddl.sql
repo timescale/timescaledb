@@ -1,4 +1,4 @@
-CREATE SEQUENCE IF NOT EXISTS default_hypertable_seq;
+CREATE SEQUENCE IF NOT EXISTS _iobeamdb_catalog.default_hypertable_seq;
 
 -- Creates a hypertable.
 CREATE OR REPLACE FUNCTION _meta.create_hypertable(
@@ -16,14 +16,14 @@ CREATE OR REPLACE FUNCTION _meta.create_hypertable(
     chunk_size_bytes        BIGINT,
     created_on              NAME
 )
-    RETURNS hypertable LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    id INTEGER;
-    hypertable_row hypertable;
+    id             INTEGER;
+    hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
 
-    id :=  nextval('default_hypertable_seq');
+    id :=  nextval('_iobeamdb_catalog.default_hypertable_seq');
 
     IF associated_schema_name IS NULL THEN
         associated_schema_name = '_sysinternal';
@@ -36,14 +36,14 @@ BEGIN
     IF number_partitions IS NULL THEN
         SELECT COUNT(*)
         INTO number_partitions
-        FROM node;
+        FROM _iobeamdb_catalog.node;
     END IF;
 
     IF hypertable_name IS NULL THEN
       hypertable_name = format('%I.%I', main_schema_name, main_table_name);
     END IF;
 
-    INSERT INTO hypertable (
+    INSERT INTO _iobeamdb_catalog.hypertable (
         name,
         main_schema_name, main_table_name,
         associated_schema_name, associated_table_prefix,
@@ -88,9 +88,9 @@ CREATE OR REPLACE FUNCTION _meta.add_column(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-SELECT 1 FROM hypertable h WHERE h.NAME = hypertable_name FOR UPDATE; --lock row to prevent concurrent column inserts; keep attnum consistent.
+SELECT 1 FROM _iobeamdb_catalog.hypertable h WHERE h.NAME = hypertable_name FOR UPDATE; --lock row to prevent concurrent column inserts; keep attnum consistent.
 
-INSERT INTO hypertable_column (hypertable_name, name, attnum, data_type, default_value, not_null, is_distinct, created_on, modified_on)
+INSERT INTO _iobeamdb_catalog.hypertable_column (hypertable_name, name, attnum, data_type, default_value, not_null, is_distinct, created_on, modified_on)
 VALUES (hypertable_name, column_name, attnum, data_type, default_value, not_null, is_distinct, created_on, created_on)
 ON CONFLICT DO NOTHING;
 $BODY$;
@@ -104,7 +104,7 @@ CREATE OR REPLACE FUNCTION _meta.drop_column(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
-DELETE FROM hypertable_column c
+DELETE FROM _iobeamdb_catalog.hypertable_column c
 WHERE c.hypertable_name = drop_column.hypertable_name AND c.NAME = column_name;
 $BODY$;
 
@@ -117,7 +117,7 @@ CREATE OR REPLACE FUNCTION _meta.alter_column_set_is_distinct(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE hypertable_column
+UPDATE _iobeamdb_catalog.hypertable_column
 SET is_distinct = new_is_distinct, modified_on = modified_on_node
 WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = column_name;
 $BODY$;
@@ -131,7 +131,7 @@ CREATE OR REPLACE FUNCTION _meta.alter_column_set_default(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE hypertable_column
+UPDATE _iobeamdb_catalog.hypertable_column
 SET default_value = new_default_value, modified_on = modified_on_node
 WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = column_name;
 $BODY$;
@@ -145,7 +145,7 @@ CREATE OR REPLACE FUNCTION _meta.alter_column_set_not_null(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE hypertable_column
+UPDATE _iobeamdb_catalog.hypertable_column
 SET not_null = new_not_null, modified_on = modified_on_node
 WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = column_name;
 $BODY$;
@@ -159,7 +159,7 @@ CREATE OR REPLACE FUNCTION _meta.alter_table_rename_column(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-UPDATE hypertable_column
+UPDATE _iobeamdb_catalog.hypertable_column
 SET NAME = new_column_name, modified_on = modified_on_node
 WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old_column_name;
 $BODY$;
@@ -174,7 +174,7 @@ CREATE OR REPLACE FUNCTION _meta.add_index(
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-INSERT INTO hypertable_index (hypertable_name, main_schema_name, main_index_name, definition, created_on)
+INSERT INTO _iobeamdb_catalog.hypertable_index (hypertable_name, main_schema_name, main_index_name, definition, created_on)
 VALUES (hypertable_name, main_schema_name, main_index_name, definition, created_on)
 ON CONFLICT DO NOTHING;
 $BODY$;
@@ -188,7 +188,7 @@ CREATE OR REPLACE FUNCTION _meta.drop_index(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
-DELETE FROM hypertable_index i
+DELETE FROM _iobeamdb_catalog.hypertable_index i
 WHERE i.main_index_name = drop_index.main_index_name AND i.main_schema_name = drop_index.main_schema_name;
 $BODY$;
 
@@ -201,5 +201,5 @@ CREATE OR REPLACE FUNCTION _meta.drop_hypertable(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
     SELECT set_config('io.deleting_node', modified_on, true);
-    DELETE FROM hypertable h WHERE h.main_schema_name = schema_name AND h.main_table_name = table_name
+    DELETE FROM _iobeamdb_catalog.hypertable h WHERE h.main_schema_name = schema_name AND h.main_table_name = table_name
 $BODY$;

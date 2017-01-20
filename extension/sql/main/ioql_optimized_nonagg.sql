@@ -3,9 +3,11 @@
 -- The quey plan for this query is as follows:
 --   1) Scan the top 10000 rows of table and try to fulfil the query with those items.
 --   2) Then for every by_every item not fulfilled, try to scan for it, using its index.
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every_sql(query ioql_query,
-                                                                              epoch partition_epoch,
-                                                                              pr    partition_replica)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_limit_by_every_sql(
+    query ioql_query,
+    epoch _iobeamdb_catalog.partition_epoch,
+    pr    _iobeamdb_catalog.partition_replica
+)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -19,8 +21,8 @@ DECLARE
     query_sql_scan_base_table TEXT = '';
     query_sql_scan            TEXT = '';
     query_sql_jump            TEXT = '';
-    crn_row                   chunk_replica_node;
-    partition_row             partition;
+    crn_row                   _iobeamdb_catalog.chunk_replica_node;
+    partition_row             _iobeamdb_catalog.partition;
 BEGIN
     time_col_name := get_time_column(query.hypertable_name);
     time_col_type := get_time_column_type(query.hypertable_name);
@@ -28,7 +30,7 @@ BEGIN
     IF epoch.partitioning_column = (query.limit_by_column).column_name THEN
         SELECT *
         INTO STRICT partition_row
-        FROM partition p
+        FROM _iobeamdb_catalog.partition p
         WHERE p.id = pr.partition_id;
 
         distinct_value_sql = format(
@@ -170,9 +172,11 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql(query ioql_query,
-                                                                             epoch partition_epoch,
-                                                                             pr    partition_replica)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_regular_limit_sql(
+    query ioql_query,
+    epoch _iobeamdb_catalog.partition_epoch,
+    pr    _iobeamdb_catalog.partition_replica
+)
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 SELECT format(
@@ -201,8 +205,11 @@ HAVING string_agg(code, ' UNION ALL ') IS NOT NULL
 $BODY$
 SET constraint_exclusion = ON;
 
-CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(query ioql_query, epoch partition_epoch,
-                                                               pr    partition_replica)
+CREATE OR REPLACE FUNCTION ioql_query_local_partition_rows_sql(
+    query ioql_query,
+    epoch _iobeamdb_catalog.partition_epoch,
+    pr    _iobeamdb_catalog.partition_replica
+)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
@@ -217,9 +224,11 @@ $BODY$;
 
 --------------- NODE FUNCTIONS ------------
 
-CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(query      ioql_query,
-                                                            epoch      partition_epoch,
-                                                            replica_id SMALLINT)
+CREATE OR REPLACE FUNCTION ioql_query_local_node_nonagg_sql(
+    query      ioql_query,
+    epoch      _iobeamdb_catalog.partition_epoch,
+    replica_id SMALLINT
+)
     RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE

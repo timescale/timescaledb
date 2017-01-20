@@ -192,7 +192,7 @@ hypertable_info *
 get_hypertable_info(Oid mainRelationOid)
 {
 	Oid namespace = get_rel_namespace(mainRelationOid);
-	Oid hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("public", false));
+	Oid hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_iobeamdb_catalog", false));
 	char *tableName = get_rel_name(mainRelationOid);
 	char *schemaName = get_namespace_name(namespace);
 	StringInfo sql = makeStringInfo();
@@ -204,9 +204,9 @@ get_hypertable_info(Oid mainRelationOid)
 		hypertable_meta == InvalidOid
 		|| namespace == PG_CATALOG_NAMESPACE
 		|| mainRelationOid == hypertable_meta
-		|| mainRelationOid ==  get_relname_relid("hypertable_replica", get_namespace_oid("public", false))
-		|| mainRelationOid ==  get_relname_relid("partition_epoch", get_namespace_oid("public", false))
-		|| mainRelationOid ==  get_relname_relid("default_replica_node", get_namespace_oid("public", false))
+		|| mainRelationOid ==  get_relname_relid("hypertable_replica", get_namespace_oid("_iobeamdb_catalog", false))
+		|| mainRelationOid ==  get_relname_relid("partition_epoch", get_namespace_oid("_iobeamdb_catalog", false))
+		|| mainRelationOid ==  get_relname_relid("default_replica_node", get_namespace_oid("_iobeamdb_catalog", false))
 	   )
 	{
 		return NULL;

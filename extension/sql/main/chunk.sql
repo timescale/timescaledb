@@ -9,7 +9,7 @@ BEGIN
     --take an update lock on the chunk row
     --this conflicts, by design, with the lock taken when inserting on the node getting the insert command (not the node with the chunk table)
     PERFORM *
-    FROM chunk c
+    FROM _iobeamdb_catalog.chunk c
     WHERE c.id = chunk_id
     FOR UPDATE;
 END
@@ -33,7 +33,7 @@ BEGIN
     _sysinternal.extract_time_sql(
         format('%I', _sysinternal.time_col_name_for_crn(schema_name, table_name)),
         _sysinternal.time_col_type_for_crn(schema_name, table_name)
-    ), 
+    ),
     schema_name, table_name)
     INTO max_time;
 
@@ -49,7 +49,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.set_end_time_for_chunk_close(
 $BODY$
 DECLARE
 BEGIN
-    UPDATE chunk
+    UPDATE _iobeamdb_catalog.chunk
     SET end_time = max_time
     WHERE id = chunk_id;
 END
@@ -58,7 +58,7 @@ $BODY$;
 --closes the given chunk if it is over the size limit set for the hypertable
 --it belongs to.
 CREATE OR REPLACE FUNCTION _sysinternal.close_chunk_if_needed(
-    chunk_row chunk
+    chunk_row _iobeamdb_catalog.chunk
 )
     RETURNS boolean LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -88,10 +88,10 @@ CREATE OR REPLACE FUNCTION get_or_create_chunk(
     time_point   BIGINT,
     lock_chunk   boolean = FALSE
 )
-    RETURNS chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row chunk;
+    chunk_row _iobeamdb_catalog.chunk;
 BEGIN
 
     IF lock_chunk THEN
@@ -101,7 +101,7 @@ BEGIN
     END IF;
 
     --Create a new chunk in case no chunk was returned.
-    --We need to do this in a retry loop in case the chunk returned by the 
+    --We need to do this in a retry loop in case the chunk returned by the
     --meta node RPC changes between the RPC call and the local lock on
     --the chunk. This can happen if someone closes the chunk during that short
     --time window (in which case the local get_chunk_locked might return null).
@@ -122,5 +122,3 @@ BEGIN
     RETURN chunk_row;
 END
 $BODY$;
-
-

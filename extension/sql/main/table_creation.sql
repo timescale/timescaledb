@@ -125,11 +125,11 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_remote_table(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    node_row node;
+    node_row _iobeamdb_catalog.node;
 BEGIN
     SELECT *
     INTO STRICT node_row
-    FROM node n
+    FROM _iobeamdb_catalog.node n
     WHERE n.database_name = create_remote_table.database_name;
 
     EXECUTE format(
@@ -187,12 +187,12 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_data_partition_table(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    epoch_row    partition_epoch;
+    epoch_row     _iobeamdb_catalog.partition_epoch;
     column_exists BOOLEAN;
 BEGIN
     SELECT *
     INTO STRICT epoch_row
-    FROM partition_epoch pe
+    FROM _iobeamdb_catalog.partition_epoch pe
     WHERE pe.id = epoch_id;
 
     EXECUTE format(
@@ -204,7 +204,7 @@ BEGIN
 
     SELECT COUNT(*) > 0
     INTO column_exists
-    FROM hypertable_column c
+    FROM _iobeamdb_catalog.hypertable_column c
     WHERE c.hypertable_name = epoch_row.hypertable_name
           AND c.name = epoch_row.partitioning_column;
 
@@ -213,8 +213,6 @@ BEGIN
     END IF;
 END
 $BODY$;
-
-CREATE SEQUENCE IF NOT EXISTS pidx_index_name_seq;
 
 CREATE OR REPLACE FUNCTION _sysinternal.add_partition_constraint(
     schema_name    NAME,
@@ -226,11 +224,11 @@ CREATE OR REPLACE FUNCTION _sysinternal.add_partition_constraint(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    epoch_row partition_epoch;
+    epoch_row _iobeamdb_catalog.partition_epoch;
 BEGIN
     SELECT *
     INTO STRICT epoch_row
-    FROM partition_epoch pe
+    FROM _iobeamdb_catalog.partition_epoch pe
     WHERE pe.id = epoch_id;
 
     EXECUTE format(
