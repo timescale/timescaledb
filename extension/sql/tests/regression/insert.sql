@@ -12,3 +12,9 @@ SELECT *
 FROM "_sysinternal"._hyper_1_0_replica;
 SELECT *
 FROM "_sysinternal"._hyper_1_0_distinct;
+SELECT * FROM _iobeamdb_catalog.chunk;
+SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
+SELECT * FROM _iobeamdb_catalog.partition_replica;
+select * from public.chunk_closing_test;
+
+

@@ -20,9 +20,9 @@ SELECT add_node('test2' :: NAME, 'localhost');
 \ir include/ddl_ops_1.sql
 
 SELECT * FROM PUBLIC."Hypertable_1";
-EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
+EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
 SELECT * FROM ONLY PUBLIC."Hypertable_1";
-EXPLAIN SELECT * FROM ONLY PUBLIC."Hypertable_1";
+EXPLAIN (costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sysinternal"."_hyper_1_root"
@@ -39,7 +39,7 @@ SELECT * FROM _iobeamdb_catalog.default_replica_node;
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_sysinternal"."_hyper_1_root"
-SELECT * FROM _sysinternal._hyper_1_0_1_distinct_data;
+SELECT * FROM _sysinternal._hyper_1_0_2_distinct_data;
 
 
 \c Test1

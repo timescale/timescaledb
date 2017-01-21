@@ -145,7 +145,7 @@ SELECT *
 FROM _iobeamdb_catalog.distinct_replica_node;
  hypertable_name | replica_id | database_name | schema_name  |         table_name         
 -----------------+------------+---------------+--------------+----------------------------
- testNs          |          0 | Test1         | _sysinternal | _hyper_1_0_1_distinct_data
+ testNs          |          0 | test2         | _sysinternal | _hyper_1_0_2_distinct_data
 (1 row)
 
 SELECT *
@@ -182,7 +182,7 @@ SELECT *
 FROM _iobeamdb_catalog.chunk_replica_node;
  chunk_id | partition_replica_id | database_name | schema_name  |     table_name      
 ----------+----------------------+---------------+--------------+---------------------
-        1 |                    1 | Test1         | _sysinternal | _hyper_1_1_0_1_data
+        1 |                    1 | test2         | _sysinternal | _hyper_1_1_0_1_data
 (1 row)
 
 SELECT *
@@ -249,7 +249,7 @@ SELECT *
 FROM _iobeamdb_catalog.distinct_replica_node;
  hypertable_name | replica_id | database_name | schema_name  |         table_name         
 -----------------+------------+---------------+--------------+----------------------------
- testNs          |          0 | Test1         | _sysinternal | _hyper_1_0_1_distinct_data
+ testNs          |          0 | test2         | _sysinternal | _hyper_1_0_2_distinct_data
 (1 row)
 
 SELECT *
@@ -286,7 +286,7 @@ SELECT *
 FROM _iobeamdb_catalog.chunk_replica_node;
  chunk_id | partition_replica_id | database_name | schema_name  |     table_name      
 ----------+----------------------+---------------+--------------+---------------------
-        1 |                    1 | Test1         | _sysinternal | _hyper_1_1_0_1_data
+        1 |                    1 | test2         | _sysinternal | _hyper_1_1_0_1_data
 (1 row)
 
 SELECT *
@@ -318,49 +318,14 @@ FROM _iobeamdb_catalog.hypertable_column;
 (2 rows)
 
 \d+ "_sysinternal".*
-Index "_sysinternal.1-testNs_Device_id_time_idx"
-  Column   |  Type  | Definition  | Storage  
------------+--------+-------------+----------
- Device_id | text   | "Device_id" | extended
- time      | bigint | "time"      | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate ("Device_id" IS NOT NULL)
-
-                                 Index "_sysinternal.2-testNs_really_long_column_goes_on_and_on_and_on_and_on_and__i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | plain
- time                                                            | bigint | "time"                                                          | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL)
-
-   Index "_sysinternal.3-testNs_temp_time_idx"
- Column |       Type       | Definition | Storage 
---------+------------------+------------+---------
- temp   | double precision | temp       | plain
- time   | bigint           | "time"     | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (temp IS NOT NULL)
-
-                                 Index "_sysinternal.4-testNs_time_really_long_column_goes_on_and_on_and_on_and_on_i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- time                                                            | bigint | "time"                                                          | plain
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL)
-
-            Table "_sysinternal._hyper_1_0_1_distinct_data"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (column_name, value)
+               Foreign table "_sysinternal._hyper_1_0_2_distinct_data"
+   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
+-------------+------+-----------+-------------+----------+--------------+-------------
+ column_name | text | not null  |             | extended |              | 
+ value       | text | not null  |             | extended |              | 
+Server: test2
+FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_2_distinct_data')
 Inherits: _sysinternal._hyper_1_0_distinct
-
-Index "_sysinternal._hyper_1_0_1_distinct_data_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
 
                 Table "_sysinternal._hyper_1_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
@@ -368,7 +333,7 @@ primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_1_distinct
-Child tables: _sysinternal._hyper_1_0_1_distinct_data
+Child tables: _sysinternal._hyper_1_0_2_distinct_data
 
                                                 Table "_sysinternal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -383,22 +348,19 @@ Inherits: _sysinternal._hyper_1_root
 Child tables: _sysinternal._hyper_1_1_0_partition,
               _sysinternal._hyper_1_2_0_partition
 
-                                                Table "_sysinternal._hyper_1_1_0_1_data"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Indexes:
-    "1-testNs_Device_id_time_idx" btree ("Device_id", "time" DESC NULLS LAST) WHERE "Device_id" IS NOT NULL
-    "2-testNs_really_long_column_goes_on_and_on_and_on_and_on_and__i" btree (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a, "time" DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL
-    "3-testNs_temp_time_idx" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
-    "4-testNs_time_really_long_column_goes_on_and_on_and_on_and_on_i" btree ("time" DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL
+                                                   Foreign table "_sysinternal._hyper_1_1_0_1_data"
+                             Column                              |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+-------------+----------+--------------+-------------
+ time                                                            | bigint           | not null  |             | plain    |              | 
+ Device_id                                                       | text             | not null  |             | extended |              | 
+ temp                                                            | double precision |           |             | plain    |              | 
+ occupied                                                        | boolean          |           |             | plain    |              | 
+ latitude                                                        | bigint           |           |             | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Server: test2
+FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
 Inherits: _sysinternal._hyper_1_1_0_partition
 
                                               Table "_sysinternal._hyper_1_1_0_partition"
@@ -470,49 +432,14 @@ FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 
 \c Test1
 \d+ "_sysinternal".*
-Index "_sysinternal.1-testNs_Device_id_time_idx"
-  Column   |  Type  | Definition  | Storage  
------------+--------+-------------+----------
- Device_id | text   | "Device_id" | extended
- time      | bigint | "time"      | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate ("Device_id" IS NOT NULL)
-
-                                 Index "_sysinternal.2-testNs_really_long_column_goes_on_and_on_and_on_and_on_and__i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | plain
- time                                                            | bigint | "time"                                                          | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL)
-
-   Index "_sysinternal.3-testNs_temp_time_idx"
- Column |       Type       | Definition | Storage 
---------+------------------+------------+---------
- temp   | double precision | temp       | plain
- time   | bigint           | "time"     | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (temp IS NOT NULL)
-
-                                 Index "_sysinternal.4-testNs_time_really_long_column_goes_on_and_on_and_on_and_on_i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- time                                                            | bigint | "time"                                                          | plain
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL)
-
-            Table "_sysinternal._hyper_1_0_1_distinct_data"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (column_name, value)
+               Foreign table "_sysinternal._hyper_1_0_2_distinct_data"
+   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
+-------------+------+-----------+-------------+----------+--------------+-------------
+ column_name | text | not null  |             | extended |              | 
+ value       | text | not null  |             | extended |              | 
+Server: test2
+FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_2_distinct_data')
 Inherits: _sysinternal._hyper_1_0_distinct
-
-Index "_sysinternal._hyper_1_0_1_distinct_data_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
 
                 Table "_sysinternal._hyper_1_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
@@ -520,7 +447,7 @@ primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_1_distinct
-Child tables: _sysinternal._hyper_1_0_1_distinct_data
+Child tables: _sysinternal._hyper_1_0_2_distinct_data
 
                                                 Table "_sysinternal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -535,22 +462,19 @@ Inherits: _sysinternal._hyper_1_root
 Child tables: _sysinternal._hyper_1_1_0_partition,
               _sysinternal._hyper_1_2_0_partition
 
-                                                Table "_sysinternal._hyper_1_1_0_1_data"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Indexes:
-    "1-testNs_Device_id_time_idx" btree ("Device_id", "time" DESC NULLS LAST) WHERE "Device_id" IS NOT NULL
-    "2-testNs_really_long_column_goes_on_and_on_and_on_and_on_and__i" btree (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a, "time" DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL
-    "3-testNs_temp_time_idx" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
-    "4-testNs_time_really_long_column_goes_on_and_on_and_on_and_on_i" btree ("time" DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL
+                                                   Foreign table "_sysinternal._hyper_1_1_0_1_data"
+                             Column                              |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+-------------+----------+--------------+-------------
+ time                                                            | bigint           | not null  |             | plain    |              | 
+ Device_id                                                       | text             | not null  |             | extended |              | 
+ temp                                                            | double precision |           |             | plain    |              | 
+ occupied                                                        | boolean          |           |             | plain    |              | 
+ latitude                                                        | bigint           |           |             | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Server: test2
+FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
 Inherits: _sysinternal._hyper_1_1_0_partition
 
                                               Table "_sysinternal._hyper_1_1_0_partition"
@@ -646,49 +570,14 @@ FROM _iobeamdb_catalog.chunk;
 
 \c Test1
 \d+ "_sysinternal".*
-Index "_sysinternal.1-testNs_Device_id_time_idx"
-  Column   |  Type  | Definition  | Storage  
------------+--------+-------------+----------
- Device_id | text   | "Device_id" | extended
- time      | bigint | "time"      | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate ("Device_id" IS NOT NULL)
-
-                                 Index "_sysinternal.2-testNs_really_long_column_goes_on_and_on_and_on_and_on_and__i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | plain
- time                                                            | bigint | "time"                                                          | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL)
-
-   Index "_sysinternal.3-testNs_temp_time_idx"
- Column |       Type       | Definition | Storage 
---------+------------------+------------+---------
- temp   | double precision | temp       | plain
- time   | bigint           | "time"     | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (temp IS NOT NULL)
-
-                                 Index "_sysinternal.4-testNs_time_really_long_column_goes_on_and_on_and_on_and_on_i"
-                             Column                              |  Type  |                           Definition                            | Storage 
------------------------------------------------------------------+--------+-----------------------------------------------------------------+---------
- time                                                            | bigint | "time"                                                          | plain
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | plain
-btree, for table "_sysinternal._hyper_1_1_0_1_data", predicate (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL)
-
-            Table "_sysinternal._hyper_1_0_1_distinct_data"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (column_name, value)
+               Foreign table "_sysinternal._hyper_1_0_2_distinct_data"
+   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
+-------------+------+-----------+-------------+----------+--------------+-------------
+ column_name | text | not null  |             | extended |              | 
+ value       | text | not null  |             | extended |              | 
+Server: test2
+FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_2_distinct_data')
 Inherits: _sysinternal._hyper_1_0_distinct
-
-Index "_sysinternal._hyper_1_0_1_distinct_data_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
 
                 Table "_sysinternal._hyper_1_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
@@ -696,7 +585,7 @@ primary key, btree, for table "_sysinternal._hyper_1_0_1_distinct_data"
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Inherits: _sysinternal._hyper_1_distinct
-Child tables: _sysinternal._hyper_1_0_1_distinct_data
+Child tables: _sysinternal._hyper_1_0_2_distinct_data
 
                                                 Table "_sysinternal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -711,22 +600,19 @@ Inherits: _sysinternal._hyper_1_root
 Child tables: _sysinternal._hyper_1_1_0_partition,
               _sysinternal._hyper_1_2_0_partition
 
-                                                Table "_sysinternal._hyper_1_1_0_1_data"
-                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
------------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
- time                                                            | bigint           | not null  | plain    |              | 
- Device_id                                                       | text             | not null  | extended |              | 
- temp                                                            | double precision |           | plain    |              | 
- occupied                                                        | boolean          |           | plain    |              | 
- latitude                                                        | bigint           |           | plain    |              | 
- really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Indexes:
-    "1-testNs_Device_id_time_idx" btree ("Device_id", "time" DESC NULLS LAST) WHERE "Device_id" IS NOT NULL
-    "2-testNs_really_long_column_goes_on_and_on_and_on_and_on_and__i" btree (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a, "time" DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL
-    "3-testNs_temp_time_idx" btree (temp, "time" DESC NULLS LAST) WHERE temp IS NOT NULL
-    "4-testNs_time_really_long_column_goes_on_and_on_and_on_and_on_i" btree ("time" DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a IS NOT NULL
+                                                   Foreign table "_sysinternal._hyper_1_1_0_1_data"
+                             Column                              |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+-------------+----------+--------------+-------------
+ time                                                            | bigint           | not null  |             | plain    |              | 
+ Device_id                                                       | text             | not null  |             | extended |              | 
+ temp                                                            | double precision |           |             | plain    |              | 
+ occupied                                                        | boolean          |           |             | plain    |              | 
+ latitude                                                        | bigint           |           |             | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Server: test2
+FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
 Inherits: _sysinternal._hyper_1_1_0_partition
 
                                               Table "_sysinternal._hyper_1_1_0_partition"

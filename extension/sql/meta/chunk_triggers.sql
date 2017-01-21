@@ -9,18 +9,35 @@ DECLARE
 BEGIN
   PERFORM setseed(chunk_row.id::double precision/2147483647::double precision);
   IF placement = 'RANDOM' THEN
+      --place randomly on nodes with the same number of crns (in the same epoch) already on that node
+      --but prefer nodes with less crns on them.
       RETURN QUERY
         SELECT pr.replica_id, dn.database_name
         FROM _iobeamdb_catalog.partition_replica pr
         INNER JOIN (
-          SELECT *
+          SELECT d.database_name
           FROM
           (
-            SELECT DISTINCT n.database_name
+            SELECT DISTINCT ON (n.database_name) n.database_name, crns_already_on_node.crn_cnt AS current_crn_count
             FROM _iobeamdb_catalog.node n
-            LIMIT replication_factor
+            , LATERAL (
+                SELECT count(*) AS crn_cnt
+                FROM _iobeamdb_catalog.chunk_replica_node crn
+                INNER JOIN _iobeamdb_catalog.chunk c ON (c.id = crn.chunk_id)
+                INNER JOIN _iobeamdb_catalog.partition p ON (p.id = c.partition_id)
+                INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.id=p.epoch_id)
+                WHERE crn.database_name = n.database_name
+                      AND pe.id = (
+                        SELECT my_pe.id
+                        FROM _iobeamdb_catalog.chunk my_c
+                        INNER JOIN _iobeamdb_catalog.partition my_p ON (my_p.id = my_c.partition_id)
+                        INNER JOIN _iobeamdb_catalog.partition_epoch my_pe ON (my_pe.id=my_p.epoch_id)
+                        WHERE my_c.id = chunk_row.id
+                    )
+            ) AS crns_already_on_node
           ) AS d
-          ORDER BY random()
+          ORDER BY (current_crn_count + random()) ASC 
+          LIMIT replication_factor
         ) AS dn ON TRUE
         WHERE pr.partition_id = chunk_row.partition_id;
   ELSIF placement = 'STICKY' THEN

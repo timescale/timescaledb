@@ -64,42 +64,35 @@ FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                      ));
 
 \echo 'The rest of the queries will be the same in output between UTC and EST'
-
+--have to set the timezones on both Test1 and test2. Have to also kill ongoing dblinks as their sessions cache the timezone setting.
 SET timezone = 'UTC';
+ALTER DATABASE test2 SET timezone ='UTC';
+SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
                      ));
+
 SET timezone = 'EST';
+ALTER DATABASE test2 SET timezone ='EST';
+SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
                                     aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
                      ));
-
-
 
 SET timezone = 'UTC';
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
-                     ));
-SET timezone = 'EST';
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
-                     ));
-
-
-SET timezone = 'UTC';
+ALTER DATABASE test2 SET timezone ='UTC';
+SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
                   ));
 SET timezone = 'EST';
+ALTER DATABASE test2 SET timezone ='EST';
+SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
@@ -107,6 +100,8 @@ FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
 
 
 SET timezone = 'UTC';
+ALTER DATABASE test2 SET timezone ='UTC';
+SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
@@ -114,6 +109,8 @@ FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     limit_time_periods => 2
                   ));
 SET timezone = 'EST';
+ALTER DATABASE test2 SET timezone ='EST';
+SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
                                     select_items => ARRAY [new_select_item('series_0', 'SUM')],
