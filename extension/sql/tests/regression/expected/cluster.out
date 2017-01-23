@@ -67,17 +67,27 @@ CREATE TABLE PUBLIC."testNs" (
 );
 psql:cluster.sql:25: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
+CREATE TABLE PUBLIC."testNs2" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp DOUBLE PRECISION NULL,
+  occupied BOOLEAN NULL,
+  latitude BIGINT NULL,
+  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
+);
+psql:cluster.sql:34: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-psql:cluster.sql:29: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:38: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
-psql:cluster.sql:29: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:38: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-psql:cluster.sql:30: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:39: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
-psql:cluster.sql:30: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:39: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
   name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
@@ -87,9 +97,15 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypert
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
-psql:cluster.sql:36: ERROR:  IO110: hypertable already exists: testNs
+psql:cluster.sql:45: ERROR:  IO110: hypertable already exists: testNs
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
+SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id', hypertable_name=>'testNs2');
+  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs2 | public           | testNs2         | _sysinternal           | _hyper_3                | _sysinternal     | _hyper_3_root   | _sysinternal         | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+(1 row)
+
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
  set_is_distinct_flag 
 ----------------------
@@ -103,7 +119,9 @@ FROM _iobeamdb_catalog.partition_replica;
 ----+--------------+-----------------+------------+--------------+------------------------
   1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
   2 |            2 | testNs          |          0 | _sysinternal | _hyper_1_2_0_partition
-(2 rows)
+  3 |            3 | testNs2         |          0 | _sysinternal | _hyper_3_3_0_partition
+  4 |            4 | testNs2         |          0 | _sysinternal | _hyper_3_4_0_partition
+(4 rows)
 
 SELECT *
 FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
@@ -129,17 +147,19 @@ FROM _iobeamdb_catalog.meta;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable;
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
-(1 row)
+  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs  | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ testNs2 | public           | testNs2         | _sysinternal           | _hyper_3                | _sysinternal     | _hyper_3_root   | _sysinternal         | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+(2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
  hypertable_name | replica_id | schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
 -----------------+------------+--------------+--------------------+----------------------+---------------------
  testNs          |          0 | _sysinternal | _hyper_1_0_replica | _sysinternal         | _hyper_1_0_distinct
-(1 row)
+ testNs2         |          0 | _sysinternal | _hyper_3_0_replica | _sysinternal         | _hyper_3_0_distinct
+(2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.distinct_replica_node;
@@ -153,7 +173,8 @@ FROM _iobeamdb_catalog.partition_epoch;
  id | hypertable_name | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_column 
 ----+-----------------+------------+----------+-----------------------+------------------+---------------------
   1 | testNs          |            |          | get_partition_for_key |            32768 | Device_id
-(1 row)
+  2 | testNs2         |            |          | get_partition_for_key |            32768 | Device_id
+(2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.partition;
@@ -161,7 +182,9 @@ FROM _iobeamdb_catalog.partition;
 ----+----------+----------------+--------------
   1 |        1 |              0 |        16383
   2 |        1 |          16384 |        32767
-(2 rows)
+  3 |        2 |              0 |        16383
+  4 |        2 |          16384 |        32767
+(4 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
@@ -169,7 +192,9 @@ FROM _iobeamdb_catalog.partition_replica;
 ----+--------------+-----------------+------------+--------------+------------------------
   1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
   2 |            2 | testNs          |          0 | _sysinternal | _hyper_1_2_0_partition
-(2 rows)
+  3 |            3 | testNs2         |          0 | _sysinternal | _hyper_3_3_0_partition
+  4 |            4 | testNs2         |          0 | _sysinternal | _hyper_3_4_0_partition
+(4 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.chunk;
@@ -194,8 +219,14 @@ FROM _iobeamdb_catalog.hypertable_column;
  testNs          | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
  testNs          | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
  testNs          | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
+ testNs2         | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
+ testNs2         | Device_id                                                       |      2 | text             |               | f           | t        | Test1      | Test1
+ testNs2         | temp                                                            |      3 | double precision |               | f           | f        | Test1      | Test1
+ testNs2         | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
+ testNs2         | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
+ testNs2         | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
  testNs          | Device_id                                                       |      2 | text             |               | t           | t        | Test1      | Test1
-(6 rows)
+(12 rows)
 
 \des+
                                                      List of foreign servers
@@ -233,17 +264,19 @@ FROM _iobeamdb_catalog.meta;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable;
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
-(1 row)
+  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs  | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ testNs2 | public           | testNs2         | _sysinternal           | _hyper_3                | _sysinternal     | _hyper_3_root   | _sysinternal         | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+(2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
  hypertable_name | replica_id | schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
 -----------------+------------+--------------+--------------------+----------------------+---------------------
  testNs          |          0 | _sysinternal | _hyper_1_0_replica | _sysinternal         | _hyper_1_0_distinct
-(1 row)
+ testNs2         |          0 | _sysinternal | _hyper_3_0_replica | _sysinternal         | _hyper_3_0_distinct
+(2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.distinct_replica_node;
@@ -257,7 +290,8 @@ FROM _iobeamdb_catalog.partition_epoch;
  id | hypertable_name | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_column 
 ----+-----------------+------------+----------+-----------------------+------------------+---------------------
   1 | testNs          |            |          | get_partition_for_key |            32768 | Device_id
-(1 row)
+  2 | testNs2         |            |          | get_partition_for_key |            32768 | Device_id
+(2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.partition;
@@ -265,7 +299,9 @@ FROM _iobeamdb_catalog.partition;
 ----+----------+----------------+--------------
   1 |        1 |              0 |        16383
   2 |        1 |          16384 |        32767
-(2 rows)
+  3 |        2 |              0 |        16383
+  4 |        2 |          16384 |        32767
+(4 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
@@ -273,7 +309,9 @@ FROM _iobeamdb_catalog.partition_replica;
 ----+--------------+-----------------+------------+--------------+------------------------
   1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
   2 |            2 | testNs          |          0 | _sysinternal | _hyper_1_2_0_partition
-(2 rows)
+  3 |            3 | testNs2         |          0 | _sysinternal | _hyper_3_3_0_partition
+  4 |            4 | testNs2         |          0 | _sysinternal | _hyper_3_4_0_partition
+(4 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.chunk;
@@ -298,8 +336,14 @@ FROM _iobeamdb_catalog.hypertable_column;
  testNs          | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
  testNs          | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
  testNs          | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
+ testNs2         | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
+ testNs2         | Device_id                                                       |      2 | text             |               | f           | t        | Test1      | Test1
+ testNs2         | temp                                                            |      3 | double precision |               | f           | f        | Test1      | Test1
+ testNs2         | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
+ testNs2         | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
+ testNs2         | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
  testNs          | Device_id                                                       |      2 | text             |               | t           | t        | Test1      | Test1
-(6 rows)
+(12 rows)
 
 \des+
                                                      List of foreign servers
@@ -417,6 +461,79 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _sysinternal._hyper_1_0_replica
 
+                Table "_sysinternal._hyper_3_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
+Inherits: _sysinternal._hyper_3_distinct
+
+                                                Table "_sysinternal._hyper_3_0_replica"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Inherits: _sysinternal._hyper_3_root
+Child tables: _sysinternal._hyper_3_3_0_partition,
+              _sysinternal._hyper_3_4_0_partition
+
+                                              Table "_sysinternal._hyper_3_3_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: _sysinternal._hyper_3_0_replica
+
+                                              Table "_sysinternal._hyper_3_4_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: _sysinternal._hyper_3_0_replica
+
+                 Table "_sysinternal._hyper_3_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
+Indexes:
+    "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
+Child tables: _sysinternal._hyper_3_0_distinct
+
+ Index "_sysinternal._hyper_3_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
+primary key, btree, for table "_sysinternal._hyper_3_distinct"
+
+                                                   Table "_sysinternal._hyper_3_root"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Child tables: _sysinternal._hyper_3_0_replica
+
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
 --\det "_sys_1_testNs".*
@@ -531,9 +648,82 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _sysinternal._hyper_1_0_replica
 
+                Table "_sysinternal._hyper_3_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
+Inherits: _sysinternal._hyper_3_distinct
+
+                                                Table "_sysinternal._hyper_3_0_replica"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Inherits: _sysinternal._hyper_3_root
+Child tables: _sysinternal._hyper_3_3_0_partition,
+              _sysinternal._hyper_3_4_0_partition
+
+                                              Table "_sysinternal._hyper_3_3_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: _sysinternal._hyper_3_0_replica
+
+                                              Table "_sysinternal._hyper_3_4_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: _sysinternal._hyper_3_0_replica
+
+                 Table "_sysinternal._hyper_3_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
+Indexes:
+    "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
+Child tables: _sysinternal._hyper_3_0_distinct
+
+ Index "_sysinternal._hyper_3_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
+primary key, btree, for table "_sysinternal._hyper_3_distinct"
+
+                                                   Table "_sysinternal._hyper_3_root"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Child tables: _sysinternal._hyper_3_0_replica
+
 \c meta
 SELECT _meta.close_chunk_end(1);
-psql:cluster.sql:117: WARNING:  01000: Cannot close an empty chunk table
+psql:cluster.sql:127: WARNING:  01000: Cannot close an empty chunk table
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
 -----------------
@@ -668,4 +858,77 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _sysinternal._hyper_1_0_replica
+
+                Table "_sysinternal._hyper_3_0_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
+Inherits: _sysinternal._hyper_3_distinct
+
+                                                Table "_sysinternal._hyper_3_0_replica"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Inherits: _sysinternal._hyper_3_root
+Child tables: _sysinternal._hyper_3_3_0_partition,
+              _sysinternal._hyper_3_4_0_partition
+
+                                              Table "_sysinternal._hyper_3_3_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+Inherits: _sysinternal._hyper_3_0_replica
+
+                                              Table "_sysinternal._hyper_3_4_0_partition"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: _sysinternal._hyper_3_0_replica
+
+                 Table "_sysinternal._hyper_3_distinct"
+   Column    | Type | Modifiers | Storage  | Stats target | Description 
+-------------+------+-----------+----------+--------------+-------------
+ column_name | text | not null  | extended |              | 
+ value       | text | not null  | extended |              | 
+Indexes:
+    "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
+Child tables: _sysinternal._hyper_3_0_distinct
+
+ Index "_sysinternal._hyper_3_distinct_pkey"
+   Column    | Type | Definition  | Storage  
+-------------+------+-------------+----------
+ column_name | text | column_name | extended
+ value       | text | value       | extended
+primary key, btree, for table "_sysinternal._hyper_3_distinct"
+
+                                                   Table "_sysinternal._hyper_3_root"
+                             Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
+-----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
+ time                                                            | bigint           | not null  | plain    |              | 
+ Device_id                                                       | text             | not null  | extended |              | 
+ temp                                                            | double precision |           | plain    |              | 
+ occupied                                                        | boolean          |           | plain    |              | 
+ latitude                                                        | bigint           |           | plain    |              | 
+ really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
+Child tables: _sysinternal._hyper_3_0_replica
 

@@ -7,9 +7,7 @@
 
 --IO100 - GROUP: DDL errors
 --IO101 - operation not supported
---IO102 - no partitioning column for hypertable
---IO103 - unknown index type
---IO104 - illegal name/identifier
+--IO102 - bad hypertable definition
 --IO110 - hypertable already exists
 
 --IO500 - GROUP: internal error
