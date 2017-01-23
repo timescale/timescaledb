@@ -1,4 +1,5 @@
 CREATE SEQUENCE IF NOT EXISTS _iobeamdb_catalog.default_hypertable_seq;
+SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_hypertable_seq', '');
 
 -- Creates a hypertable.
 CREATE OR REPLACE FUNCTION _meta.create_hypertable(

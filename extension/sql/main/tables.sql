@@ -1,4 +1,5 @@
 CREATE SEQUENCE IF NOT EXISTS _iobeamdb_catalog.chunk_replica_node_index_name_prefix;
+SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.chunk_replica_node_index_name_prefix', '');
 
 /*
   Keeps track of indexes on local chunk_replica_nodes.
@@ -14,3 +15,6 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.chunk_replica_node_index (
     FOREIGN KEY (schema_name, table_name) REFERENCES _iobeamdb_catalog.chunk_replica_node (schema_name, table_name),
     FOREIGN KEY (main_schema_name, main_index_name) REFERENCES _iobeamdb_catalog.hypertable_index (main_schema_name, main_index_name) ON DELETE CASCADE
 );
+SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.chunk_replica_node_index', '');
+
+
