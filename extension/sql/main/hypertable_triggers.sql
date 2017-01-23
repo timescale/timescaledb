@@ -54,6 +54,7 @@ BEGIN
         PERFORM _sysinternal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
 
         IF NEW.created_on <> current_database() THEN
+           PERFORM _sysinternal.create_schema(NEW.main_schema_name);
            PERFORM _sysinternal.create_table(NEW.main_schema_name, NEW.main_table_name);
         END IF;
 
