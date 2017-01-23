@@ -39,7 +39,8 @@ BEGIN
             column_condition    column_condition_type, -- column predicates combined with a conjunctive (AND/OR)
             limit_rows          INT, --regular limit (number of rows)
             limit_time_periods  INT, --limit # of time periods, only aggregates
-            limit_by_column      limit_by_column_type -- limit by every column value, only non-aggregate; column must be distinct
+            limit_by_column      limit_by_column_type, -- limit by every column value, only non-aggregate; column must be distinct
+            timezone            TEXT
         );
 
         CREATE TYPE time_range AS (start_time BIGINT, end_time BIGINT);
@@ -72,7 +73,8 @@ SELECT ROW (
        column_condition,
        limit_rows,
        limit_time_periods,
-       limit_by_column
+       limit_by_column,
+       current_setting('timezone')
 ) :: ioql_query;
 $BODY$ LANGUAGE 'sql' STABLE;
 

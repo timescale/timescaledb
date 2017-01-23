@@ -26,13 +26,13 @@ SELECT CASE
        END;
 $BODY$ LANGUAGE SQL IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION get_partial_aggregate_sql(time_col_name NAME, time_col_type regtype, items select_item [], agg aggregate_type)
+CREATE OR REPLACE FUNCTION get_partial_aggregate_sql(time_col_name NAME, time_col_type regtype, items select_item [], agg aggregate_type, timezone TEXT)
     RETURNS TEXT AS $BODY$
 SELECT CASE
        WHEN agg.group_column IS NOT NULL THEN
-           format('%s, %s as group_time, %s', agg.group_column, get_time_clause(time_col_name, time_col_type, agg.group_time), column_list)
+           format('%s, %s as group_time, %s', agg.group_column, get_time_clause(time_col_name, time_col_type, agg.group_time, timezone), column_list)
        ELSE
-           format('%s as group_time, %s', get_time_clause(time_col_name, time_col_type, agg.group_time), column_list)
+           format('%s as group_time, %s', get_time_clause(time_col_name, time_col_type, agg.group_time, timezone), column_list)
        END
 FROM
     (
@@ -219,7 +219,7 @@ DECLARE
 BEGIN
 
     select_clause :=
-    'SELECT ' || get_partial_aggregate_sql(get_time_column(query.hypertable_name), get_time_column_type(query.hypertable_name), query.select_items, query.aggregate);
+    'SELECT ' || get_partial_aggregate_sql(get_time_column(query.hypertable_name), get_time_column_type(query.hypertable_name), query.select_items, query.aggregate, query.timezone);
 
     RETURN base_query_raw(
         select_clause,

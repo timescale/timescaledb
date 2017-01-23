@@ -66,7 +66,7 @@ DECLARE
     chunk_size      BIGINT;
     chunk_max_size  BIGINT;
 BEGIN
-    chunk_size := _sysinternal.get_chunk_size(chunk_row.id);
+    chunk_size := _iobeamdb_data_api.get_chunk_size(chunk_row.id);
     chunk_max_size := _sysinternal.get_chunk_max_size(chunk_row.id);
 
     IF chunk_row.end_time IS NOT NULL OR (NOT chunk_size >= chunk_max_size) THEN
