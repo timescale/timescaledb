@@ -4,7 +4,7 @@ set -e
 UPDATE=${UPDATE:-false}
 
 golden_test() {
-	psql -h localhost -U postgres -q -X -f $1 > actual/$2 2>&1
+	psql -h localhost -U postgres -q -X -f $1 2>&1 | tee actual/$2
 	
     if diff expected/$2 actual/$2;
 	then
@@ -24,7 +24,14 @@ golden_test() {
 mkdir -p actual
 rm -fr actual/*
 
-for file in *.sql
+
+if [ "$#" -ne 0 ]; then
+    tests="$@"
+else
+    tests=`ls -1 *.sql`
+fi
+
+for file in $tests
 do
 prefix="${file%%.*}"
 echo "Running test '$prefix'"
