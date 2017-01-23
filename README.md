@@ -1,3 +1,8 @@
+### Prerequisites
+
+You'll need to install [Docker](https://docs.docker.com/engine/installation/),
+which is the current way to run the database.
+
 ### Building and running in Docker
 
 The `Makefile` included in this repo has convenient commands for building,
@@ -14,7 +19,7 @@ make stop-docker
 With the Docker image running you can run the tests (see Testing) or create
 your own single-node cluster.
 
-### Getting started
+### Setting up a local single node database
 After starting the Docker image, you can start a local single node database:
 ```bash
 make setup-single-node-db
@@ -25,24 +30,33 @@ This will set up a database named `iobeam` which can be accessed with:
 psql -U postgres -h localhost -d iobeam
 ```
 
-#### Creating a hypertable
-To create our specialized time-series table, called a **hypertable**, you
-start with a regular SQL table. For example, here's one for tracking
-temperature and humidity from a collection of devices over time:
+#### Creating a table
+Our specialized time-series table, which is the main abstraction for querying
+all your space-time partitions, is called a **hypertable**.
+
+To create a hypertable, you start with a regular SQL table, and then convert it
+into a hypertable via the function `create_hypertable()` (which
+  is loaded when you install the extension).
+
+For example, let's create a hypertable for tracking
+temperature and humidity across a collection of devices over time.
+
+First, create a regular SQL table:
 ```sql
 CREATE TABLE conditions (
   time BIGINT NOT NULL,
   device_id TEXT NOT NULL,
-  temp DOUBLE PRECISION NULL,
+  temperature DOUBLE PRECISION NULL,
   humidity DOUBLE PRECISION NULL
 );
 ```
 
-This can be turned into a hypertable using the provided function
-`create_hypertable()` that is loaded when you initialize the cluster:
+Next, convert it into a hypertable using the provided function
+`create_hypertable()`:
 ```sql
 SELECT name FROM create_hypertable('"conditions"', 'time', 'device_id');
 ```
+
 Now, a hypertable that is partitioned on time (using the values in the
 `time` column) and on `device_id` has been created.
 
@@ -53,6 +67,18 @@ the above table for you:
 ```bash
 PGDATABASE=iobeam ./scripts/run_sql.sh setup_sample_hypertable.psql
 ```
+
+#### Inserting and Querying
+Inserting data into the hypertable is done via normal SQL INSERT commands,
+e.g. using millisecond timestamps:
+```sql
+INSERT INTO conditions(time,device_id,temperature,humidity)
+VALUES(1484850291000, 'office', 70.0, 50.0);
+```
+
+Similarly, querying data is done via normal SQL SELECT commands. Updating
+and deleting individual rows is currently _not_ supported.
+
 ### Indexing data
 
 Data is indexed using normal SQL CREATE INDEX commands. For instance,
@@ -63,15 +89,18 @@ This can be done before or after converting the table to a hypertable.
 
 **Indexing suggestions:**
 
-Our experience has shown that some type of indexes are most-useful for time-series data.
+Our experience has shown that different types of indexes are most-useful for
+time-series data, depending on your data.
 
-For indexing columns of a limited cardinality we suggest using an index like:
+For indexing columns with discrete (limited-cardinality) values (e.g., where you are most likely
+  to use an "equals" or "not equals" comparator) we suggest using an index like this (using our hypertable `conditions` for the example):
 ```sql
-CREATE INDEX ON hypertable (limited-cardinality-column, time DESC);
+CREATE INDEX ON conditions (device_id, time DESC);
 ```
-For all other types of columns the index should be in the form:
+For all other types of columns, i.e., columns with continuous values (e.g., where you are most likely to use a
+"less than" or "greater than" comparator) the index should be in the form:
 ```sql
-CREATE INDEX ON hypertable (time DESC, column);
+CREATE INDEX ON conditions (time DESC, temperature);
 ```
 Having a `time DESC` column specification in the index allows for efficient queries by column-value and time. For example, the index defined above would optimize the following query:
 ```sql
@@ -81,26 +110,12 @@ SELECT * FROM conditions WHERE device_id = 'dev_1' ORDER BY time DESC LIMIT 10
 For sparse data where a column is often NULL, we suggest adding a `WHERE column IS NOT NULL` clause to the index (unless you are often searching for missing data). For example,
 
 ```sql
-CREATE INDEX ON conditions (time DESC, humidity) WHERE humdity IS NOT NULL;
+CREATE INDEX ON conditions (time DESC, humidity) WHERE humidity IS NOT NULL;
 ```
 this creates a more compact, and thus efficient, index.
 
-#### Inserting and Querying
-Inserting data into the hypertable is done via normal SQL INSERT commands,
-e.g. using millisecond timestamps:
-```sql
-INSERT INTO conditions(time,device_id,temp,humidity)
-VALUES(1484850291000, 'office', 70.0, 50.0);
-```
-
-Similarly, querying data is done via normal SQL SELECT commands. Updating
-and deleting individual rows is currently _not_ supported.
-
 ### Examples
-
- * [DDL Operations](extension/sql/tests/regression/ddl.sql)
- * [Insert Operations](extension/sql/tests/regression/insert.sql)
- * [Querying With Ioql](extension/sql/tests/regression/query.sql)
+TODO PROVIDE EXAMPLES
 
 ### Testing
 There are four commands to run tests:
