@@ -57,7 +57,3 @@ sql/main/ioql_optimized_nonagg.sql
 sql/main/ioql_sqlgen_cluster_nonagg.sql
 sql/main/ioql_optimized.sql
 sql/main/setup_main.sql
-sql/main/kafka_offset_table.sql
-sql/main/kafka_offset_node_trigger.sql
-sql/main/kafka_offset_functions.sql
-sql/main/setup_kafka.sql

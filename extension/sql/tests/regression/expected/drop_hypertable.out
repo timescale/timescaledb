@@ -374,15 +374,12 @@ SELECT * FROM _iobeamdb_catalog.hypertable;
  _iobeamdb_catalog | hypertable_column         | table | postgres
  _iobeamdb_catalog | hypertable_index          | table | postgres
  _iobeamdb_catalog | hypertable_replica        | table | postgres
- _iobeamdb_catalog | kafka_offset_cluster      | table | postgres
- _iobeamdb_catalog | kafka_offset_local        | table | postgres
- _iobeamdb_catalog | kafka_offset_node         | table | postgres
  _iobeamdb_catalog | meta                      | table | postgres
  _iobeamdb_catalog | node                      | table | postgres
  _iobeamdb_catalog | partition                 | table | postgres
  _iobeamdb_catalog | partition_epoch           | table | postgres
  _iobeamdb_catalog | partition_replica         | table | postgres
-(21 rows)
+(18 rows)
 
 \dt+ "_sysinternal".*
                                     List of relations
@@ -431,15 +428,12 @@ SELECT * FROM _iobeamdb_catalog.hypertable;
  _iobeamdb_catalog | hypertable_column         | table | postgres
  _iobeamdb_catalog | hypertable_index          | table | postgres
  _iobeamdb_catalog | hypertable_replica        | table | postgres
- _iobeamdb_catalog | kafka_offset_cluster      | table | postgres
- _iobeamdb_catalog | kafka_offset_local        | table | postgres
- _iobeamdb_catalog | kafka_offset_node         | table | postgres
  _iobeamdb_catalog | meta                      | table | postgres
  _iobeamdb_catalog | node                      | table | postgres
  _iobeamdb_catalog | partition                 | table | postgres
  _iobeamdb_catalog | partition_epoch           | table | postgres
  _iobeamdb_catalog | partition_replica         | table | postgres
-(21 rows)
+(18 rows)
 
 \dt+ "_sysinternal".*
                                   List of relations

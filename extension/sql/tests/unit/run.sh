@@ -24,7 +24,6 @@ if [ $RESET_POSTGRES_DB == "true" ]; then
 
     for node in $NODES; do
         $DB_SETUPDIR/setup_node.sh $node
-        $DB_SETUPDIR/setup_kafka.sh $node
         $DB_SETUPDIR/add_node.sh $node $POSTGRES_HOST
     done
 
