@@ -1,7 +1,7 @@
 -- This file contains functions related to getting information about the
 -- schema of a hypertable, including columns, their types, etc.
 
-CREATE OR REPLACE FUNCTION get_distinct_table_oid(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_distinct_table_oid(
     hypertable_name NAME,
     replica_id      SMALLINT,
     database_name   NAME
@@ -16,13 +16,13 @@ WHERE drn.hypertable_name = get_distinct_table_oid.hypertable_name AND
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_distinct_local_table_oid(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_distinct_local_table_oid(
     hypertable_name NAME,
     replica_id      SMALLINT
 )
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
-SELECT get_distinct_table_oid(hypertable_name, replica_id, current_database())
+SELECT _iobeamdb_internal.get_distinct_table_oid(hypertable_name, replica_id, current_database())
 $BODY$;
 
 -- Get the name of the time column for a hypertable.
@@ -55,7 +55,7 @@ $BODY$;
 -- Get the list of columns for a hypertable as an ARRAY
 --
 -- hypertable_name - Name of the hypertable
-CREATE OR REPLACE FUNCTION get_column_names(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_names(
     hypertable_name NAME
 )
     RETURNS NAME [] LANGUAGE SQL STABLE AS
@@ -71,7 +71,7 @@ $BODY$;
 -- Get the list of columns (each quoted) from a hypertable as an ARRAY
 --
 -- hypertable_name -- Name of the hypertable
-CREATE OR REPLACE FUNCTION get_quoted_column_names(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_quoted_column_names(
     hypertable_name NAME
 )
     RETURNS TEXT [] LANGUAGE SQL STABLE AS
@@ -88,7 +88,7 @@ $BODY$;
 --
 -- hypertable_name - Name of the hypertable
 -- column_names - Name of the columns to fetch types for
-CREATE OR REPLACE FUNCTION get_column_names_and_types(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_names_and_types(
     hypertable_name NAME,
     column_names    NAME []
 )
@@ -130,7 +130,7 @@ $BODY$;
 --
 -- hypertable_name - Name of the hypertable
 -- column_name - Name of the column whose type is wanted
-CREATE OR REPLACE FUNCTION get_column_type(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_type(
     hypertable_name NAME,
     column_name     NAME
 )
@@ -152,7 +152,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION get_partition_for_epoch(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_partition_for_epoch(
     epoch     _iobeamdb_catalog.partition_epoch,
     key_value TEXT
 )
@@ -174,6 +174,7 @@ BEGIN
 END
 $BODY$;
 
+-- TODO Only used in tests -- okay to put in _iobeamdb_internal?
 CREATE OR REPLACE FUNCTION get_open_partition_for_key(
     hypertable_name NAME,
     key_value       TEXT
@@ -182,13 +183,14 @@ CREATE OR REPLACE FUNCTION get_open_partition_for_key(
 $BODY$
 SELECT p.*
 FROM _iobeamdb_catalog.partition_epoch pe,
-        get_partition_for_epoch(pe, key_value) p
+     _iobeamdb_internal.get_partition_for_epoch(pe, key_value) p
 WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
       end_time IS NULL
 $BODY$;
 
--- Check if a given table OID is a main table for a hypertable
-CREATE OR REPLACE FUNCTION is_main_table(
+-- Check if a given table OID is a main table (i.e. the table a user
+-- targets for SQL operations) for a hypertable
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_main_table(
     table_oid regclass
 )
     RETURNS bool LANGUAGE SQL STABLE AS
@@ -201,7 +203,7 @@ $BODY$;
 
 
 -- Get a hypertable given its main table OID
-CREATE OR REPLACE FUNCTION hypertable_from_main_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.hypertable_from_main_table(
     table_oid regclass
 )
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE SQL STABLE AS

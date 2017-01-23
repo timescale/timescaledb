@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_list(
 )
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(get_quoted_column_names(hypertable_name), ', ')
+SELECT array_to_string(_iobeamdb_internal.get_quoted_column_names(hypertable_name), ', ')
 $BODY$;
 
 -- Gets the partition ID of a given epoch and data row.
@@ -77,7 +77,7 @@ $BODY$;
 --
 -- hypertable_name - Name of the hypertable the data belongs to
 -- copy_table_oid -- OID of the table to fetch rows from
-CREATE OR REPLACE FUNCTION insert_data(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.insert_data(
     hypertable_name NAME,
     copy_table_oid  REGCLASS
 )
@@ -160,8 +160,10 @@ BEGIN
 
             SELECT *
             INTO distinct_table_oid
-            FROM get_distinct_table_oid(hypertable_name, crn_record.replica_id, crn_record.database_name);
+            FROM _iobeamdb_internal.get_distinct_table_oid(hypertable_name, crn_record.replica_id, crn_record.database_name);
 
+            -- Generate clauses to insert new distinct column values into the
+            -- correct distinct tables
             FOR distinct_column IN
             SELECT c.name
             FROM _iobeamdb_catalog.hypertable_column c

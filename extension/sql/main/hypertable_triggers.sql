@@ -26,7 +26,7 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            SELECT insert_data(
+            SELECT _iobeamdb_internal.insert_data(
                 (SELECT name FROM _iobeamdb_catalog.hypertable
                 WHERE main_schema_name = %1$L AND main_table_name = %2$L)
                 , %3$L)

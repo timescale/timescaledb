@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION get_meta_server_name()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_meta_server_name()
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -13,7 +13,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION get_meta_database_name()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_meta_database_name()
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE

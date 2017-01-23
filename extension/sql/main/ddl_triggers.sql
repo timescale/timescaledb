@@ -37,13 +37,13 @@ BEGIN
     FROM pg_catalog.pg_index
     WHERE indexrelid = info.objid;
 
-    IF NOT is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+    IF NOT _iobeamdb_internal.is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
       RETURN;
     END IF;
 
     def = _iobeamdb_internal.get_general_index_definition(info.objid, table_oid);
 
-    hypertable_row := hypertable_from_main_table(table_oid);
+    hypertable_row := _iobeamdb_internal.hypertable_from_main_table(table_oid);
 
     PERFORM _iobeamdb_meta_api.add_index(
             hypertable_row.name,
@@ -71,7 +71,7 @@ BEGIN
       FROM pg_catalog.pg_index
       WHERE indexrelid = info.objid;
 
-      IF NOT is_main_table(table_oid) THEN
+      IF NOT _iobeamdb_internal.is_main_table(table_oid) THEN
         RETURN;
       END IF;
 
@@ -137,11 +137,11 @@ BEGIN
     LOOP
 
     --exit if not hypertable or inside trigger
-    IF NOT is_main_table(info.objid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+    IF NOT _iobeamdb_internal.is_main_table(info.objid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
       RETURN;
     END IF;
 
-    hypertable_row := hypertable_from_main_table(info.objid);
+    hypertable_row := _iobeamdb_internal.hypertable_from_main_table(info.objid);
 
     --Try to find what was done. If you can't find it error out.
    found_action = FALSE;
