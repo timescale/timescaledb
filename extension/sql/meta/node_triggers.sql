@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _meta.on_create_node()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -13,9 +13,9 @@ BEGIN
         NEW.schema_name);
 
     IF NEW.database_name <> current_database() THEN
-        PERFORM _sysinternal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
+        PERFORM _iobeamdb_internal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
 
-        PERFORM _sysinternal.create_user_mapping(cluster_user, NEW.server_name)
+        PERFORM _iobeamdb_internal.create_user_mapping(cluster_user, NEW.server_name)
         FROM _iobeamdb_catalog.cluster_user;
 
         EXECUTE format(
@@ -32,7 +32,7 @@ $BODY$
 SET client_min_messages = WARNING --supress schema if exists notice.
 ;
 
-CREATE OR REPLACE FUNCTION _meta.sync_node()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.sync_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -74,7 +74,7 @@ BEGIN
         USING NEW;
     END LOOP;
 
-    PERFORM _meta.assign_default_replica_node(NEW.database_name, h.name)
+    PERFORM _iobeamdb_meta.assign_default_replica_node(NEW.database_name, h.name)
     FROM _iobeamdb_catalog.hypertable h;
 
     RETURN NEW;

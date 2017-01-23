@@ -3,7 +3,7 @@
   is the corresponding create index command with the placeholders /*TABLE_NAME*/
   and  /*INDEX_NAME*/
 */
-CREATE OR REPLACE FUNCTION _sysinternal.get_general_index_definition(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_general_index_definition(
   index_oid regclass,
   table_oid regclass
 )
@@ -36,7 +36,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.get_default_value_for_attribute(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_default_value_for_attribute(
   att pg_attribute
 )
     RETURNS TEXT LANGUAGE SQL VOLATILE AS
@@ -47,7 +47,7 @@ $BODY$
 $BODY$;
 
 --create the hypertable column based on a pg_attribute (table column) entry.
-CREATE OR REPLACE FUNCTION _sysinternal.create_column_from_attribute(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_column_from_attribute(
   hypertable_name NAME,
   att pg_attribute
 )
@@ -61,7 +61,7 @@ BEGIN
             att.attname,
             att.attnum,
             att.atttypid,
-            _sysinternal.get_default_value_for_attribute(att),
+            _iobeamdb_internal.get_default_value_for_attribute(att),
             att.attnotnull,
             FALSE
     );

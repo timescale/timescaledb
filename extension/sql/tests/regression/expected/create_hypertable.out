@@ -67,9 +67,9 @@ create table test_schema.test_table(time bigint, temp float8, device_id text);
 (1 row)
 
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id');
-          name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-------------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- test_schema.test_table | test_schema      | test_table      | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+          name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+------------------------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ test_schema.test_table | test_schema      | test_table      | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 \C test2

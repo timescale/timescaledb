@@ -19,7 +19,7 @@
 */
 
 --Handles ddl create index commands on hypertables
-CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_create_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_create_index()
   RETURNS event_trigger
  LANGUAGE plpgsql
   AS
@@ -41,7 +41,7 @@ BEGIN
       RETURN;
     END IF;
 
-    def = _sysinternal.get_general_index_definition(info.objid, table_oid);
+    def = _iobeamdb_internal.get_general_index_definition(info.objid, table_oid);
 
     hypertable_row := hypertable_from_main_table(table_oid);
 
@@ -56,7 +56,7 @@ END
 $BODY$;
 
 --Handles ddl alter index commands on hypertables
-CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_alter_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_alter_index()
   RETURNS event_trigger
  LANGUAGE plpgsql
   AS
@@ -83,7 +83,7 @@ $BODY$;
 
 
 --Handles ddl drop index commands on hypertables
-CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_drop_index()
   RETURNS event_trigger
  LANGUAGE plpgsql
   AS
@@ -121,7 +121,7 @@ $BODY$;
 -- not supported (explicit):
 -- ALTER COLUMN SET DATA TYPE
 -- Other alter commands also not supported
-CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_alter_table()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_alter_table()
   RETURNS event_trigger
  LANGUAGE plpgsql
   AS
@@ -155,7 +155,7 @@ BEGIN
              NOT attisdropped AND
              att.attnum NOT IN (SELECT c.attnum FROM _iobeamdb_catalog.hypertable_column c WHERE hypertable_name = hypertable_row.name)
     LOOP
-        PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row);
+        PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.name, att_row);
         found_action = TRUE;
     END LOOP;
 
@@ -190,10 +190,10 @@ BEGIN
 
     --was a colum default changed
     FOR rec IN
-      SELECT name, _sysinternal.get_default_value_for_attribute(att) AS new_default_value
+      SELECT name, _iobeamdb_internal.get_default_value_for_attribute(att) AS new_default_value
       FROM _iobeamdb_catalog.hypertable_column c
       LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
-      WHERE hypertable_name = hypertable_row.name AND _sysinternal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
+      WHERE hypertable_name = hypertable_row.name AND _iobeamdb_internal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
     LOOP
         PERFORM _iobeamdb_meta_api.alter_column_set_default(
             hypertable_row.name,
@@ -238,7 +238,7 @@ BEGIN
   END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.is_hypertable(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_hypertable(
     schema_name NAME,
     table_name  NAME
 )
@@ -250,7 +250,7 @@ END
 $BODY$;
 
 --Handles drop table command
-CREATE OR REPLACE FUNCTION _sysinternal.ddl_process_drop_table()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_drop_table()
         RETURNS event_trigger LANGUAGE plpgsql AS $BODY$
 DECLARE
     obj record;
@@ -261,7 +261,7 @@ BEGIN
 
     FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
     LOOP
-        IF tg_tag = 'DROP TABLE' AND _sysinternal.is_hypertable(obj.schema_name, obj.object_name) THEN
+        IF tg_tag = 'DROP TABLE' AND _iobeamdb_internal.is_hypertable(obj.schema_name, obj.object_name) THEN
             PERFORM _iobeamdb_meta_api.drop_hypertable(obj.schema_name, obj.object_name);
         END IF;
     END LOOP;

@@ -1,7 +1,7 @@
 -- This file contains functions that aid in inserting data into a hypertable.
 
 -- Get a comma-separated list of columns in a hypertable.
-CREATE OR REPLACE FUNCTION _sysinternal.get_column_list(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_list(
     hypertable_name NAME
 )
     RETURNS TEXT LANGUAGE SQL STABLE AS
@@ -14,7 +14,7 @@ $BODY$;
 -- epoch - The epoch whose partition ID we want
 -- copy_record - Record/row from a table
 -- copy_table_name - Name of the relation to cast the record to.
-CREATE OR REPLACE FUNCTION _sysinternal.get_partition_for_epoch_row(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_partition_for_epoch_row(
     epoch           _iobeamdb_catalog.partition_epoch,
     copy_record     anyelement,
     copy_table_name TEXT
@@ -47,7 +47,7 @@ $BODY$;
 -- column_type - Type of the time record
 -- copy_record - Record/row from a table
 -- copy_table_name - Name of the relation to cast the record to
-CREATE OR REPLACE FUNCTION _sysinternal.get_time_column_from_record(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_time_column_from_record(
     column_name      NAME,
     column_type      REGTYPE,
     copy_record     anyelement,
@@ -61,7 +61,7 @@ BEGIN
     EXECUTE format(
         $$
             SELECT %s FROM (SELECT (%L::%s).*) as row LIMIT 1
-        $$, _sysinternal.extract_time_sql(format('row.%I', column_name), column_type), copy_record, copy_table_name)
+        $$, _iobeamdb_internal.extract_time_sql(format('row.%I', column_name), column_type), copy_record, copy_table_name)
     INTO STRICT t;
 
     RETURN t;
@@ -108,7 +108,7 @@ BEGIN
 
     point_record_query_sql := format(
         $$
-            SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s') AS time,
+            SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s') AS time,
                    h.time_column_name, h.time_column_type,
                    p.id AS partition_id, p.keyspace_start, p.keyspace_end,
                    pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
@@ -116,12 +116,12 @@ BEGIN
             LEFT JOIN _iobeamdb_catalog.hypertable h ON (h.NAME = %2$L)
             LEFT JOIN _iobeamdb_catalog.partition_epoch pe ON (
               pe.hypertable_name = %2$L AND
-              (pe.start_time <= (SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
+              (pe.start_time <= (SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
                 OR pe.start_time IS NULL) AND
-              (pe.end_time   >= (SELECT _sysinternal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
+              (pe.end_time   >= (SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
                 OR pe.end_time IS NULL)
             )
-            LEFT JOIN _sysinternal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
+            LEFT JOIN _iobeamdb_internal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
             LIMIT 1
         $$, copy_table_oid, hypertable_name);
 
@@ -138,7 +138,7 @@ BEGIN
         chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time);
 
         --Check if the chunk should be closed (must be done without lock on chunk).
-        PERFORM _sysinternal.close_chunk_if_needed(chunk_row);
+        PERFORM _iobeamdb_internal.close_chunk_if_needed(chunk_row);
 
         --Get a chunk with lock
         chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time, TRUE);
@@ -195,10 +195,10 @@ BEGIN
                 $$,
                     format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
                     copy_table_oid,
-                    _sysinternal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
-                    _sysinternal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
+                    _iobeamdb_internal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
+                    _iobeamdb_internal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
                     distinct_clauses,
-                    _sysinternal.get_column_list(hypertable_name),
+                    _iobeamdb_internal.get_column_list(hypertable_name),
                     point_record.time_column_name,
                     point_record.partitioning_func,
                     point_record.partitioning_column,

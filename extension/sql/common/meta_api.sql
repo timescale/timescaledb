@@ -19,8 +19,8 @@ DECLARE
 BEGIN
     SELECT (res::_iobeamdb_catalog.hypertable).*
         INTO hypertable_row
-        FROM _sysinternal.meta_transaction_exec_with_return(
-          format('SELECT t FROM _meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+        FROM _iobeamdb_internal.meta_transaction_exec_with_return(
+          format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
             main_schema_name,
             main_table_name,
             time_column_name,
@@ -49,8 +49,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_hypertable(%L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.drop_hypertable(%L, %L, %L)',
             schema_name,
             table_name,
             current_database()
@@ -72,8 +72,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
             hypertable_name,
             column_name,
             attnum,
@@ -95,8 +95,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_column(%L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.drop_column(%L, %L, %L)',
             hypertable_name,
             column_name,
             current_database()
@@ -115,8 +115,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.add_index(%L, %L, %L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.add_index(%L, %L, %L, %L, %L)',
             hypertable_name,
             main_schema_name,
             main_index_name,
@@ -135,8 +135,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.drop_index(%L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.drop_index(%L, %L, %L)',
             main_schema_name,
             main_index_name,
             current_database()
@@ -155,8 +155,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_table_rename_column(%L, %L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.alter_table_rename_column(%L, %L, %L, %L)',
             hypertable_name,
             old_column_name,
             new_column_name,
@@ -175,8 +175,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_column_set_default(%L, %L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.alter_column_set_default(%L, %L, %L, %L)',
             hypertable_name,
             column_name,
             new_default_value,
@@ -195,8 +195,8 @@ $BODY$
 DECLARE
 BEGIN
     PERFORM
-    _sysinternal.meta_transaction_exec(
-          format('SELECT _meta.alter_column_set_not_null(%L, %L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+          format('SELECT _iobeamdb_meta.alter_column_set_not_null(%L, %L, %L, %L)',
             hypertable_name,
             column_name,
             new_not_null,
@@ -219,8 +219,8 @@ DECLARE
 BEGIN
     --This should use the non-transactional rpc because this needs to commit before we can take a lock
     --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
-    PERFORM _sysinternal.meta_immediate_commit_exec_with_return(
-        format('SELECT * FROM _meta.close_chunk_end(%L)', chunk_id)
+    PERFORM _iobeamdb_internal.meta_immediate_commit_exec_with_return(
+        format('SELECT * FROM _iobeamdb_meta.close_chunk_end(%L)', chunk_id)
     );
 END
 $BODY$;
@@ -237,8 +237,8 @@ BEGIN
     --This should use the non-transactional rpc because this needs to see the results of this call
     --to make progress.
     SELECT (res::_iobeamdb_catalog.chunk).* INTO chunk_row
-    FROM _sysinternal.meta_immediate_commit_exec_with_return(
-            format('SELECT t FROM _meta.get_or_create_chunk(%L, %L) t ', partition_id, time_point)
+    FROM _iobeamdb_internal.meta_immediate_commit_exec_with_return(
+            format('SELECT t FROM _iobeamdb_meta.get_or_create_chunk(%L, %L) t ', partition_id, time_point)
     ) AS res;
 
     RETURN chunk_row;

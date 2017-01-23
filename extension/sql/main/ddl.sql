@@ -49,10 +49,10 @@ BEGIN
                 USING ERRCODE = 'IO102';
         END;
 
-        IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN 
-            RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type 
+        IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
+            RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type
             USING ERRCODE = 'IO102';
-        END IF; 
+        END IF;
 
         PERFORM atttypid
         FROM pg_attribute
@@ -65,10 +65,10 @@ BEGIN
 
         EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
 
-        IF main_table_has_items THEN 
+        IF main_table_has_items THEN
             RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
             USING ERRCODE = 'IO102';
-        END IF; 
+        END IF;
 
       BEGIN
         SELECT *
@@ -97,7 +97,7 @@ BEGIN
        FROM pg_attribute att
        WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
       LOOP
-        PERFORM  _sysinternal.create_column_from_attribute(hypertable_row.name, att_row);
+        PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.name, att_row);
       END LOOP;
 
 
@@ -108,7 +108,7 @@ BEGIN
             hypertable_row.name,
             hypertable_row.main_schema_name,
             (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
-            _sysinternal.get_general_index_definition(indexrelid, indrelid)
+            _iobeamdb_internal.get_general_index_definition(indexrelid, indrelid)
         )
       WHERE indrelid = main_table;
 
@@ -154,8 +154,8 @@ BEGIN
 
 
     PERFORM
-    _sysinternal.meta_transaction_exec(
-      format('SELECT _meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
+    _iobeamdb_internal.meta_transaction_exec(
+      format('SELECT _iobeamdb_meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
         hypertable_row.name,
         column_name,
         is_distinct,

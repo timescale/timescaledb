@@ -1,7 +1,7 @@
 /*
     Creates tables (and associated indexes) for chunk_replica_node rows.
 */
-CREATE OR REPLACE FUNCTION _sysinternal.on_create_chunk_replica_node()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk_replica_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -21,21 +21,21 @@ BEGIN
         WHERE c.id = NEW.chunk_id;
 
         IF NEW.database_name = current_database() THEN
-            PERFORM _sysinternal.create_local_data_table(NEW.schema_name, NEW.table_name,
+            PERFORM _iobeamdb_internal.create_local_data_table(NEW.schema_name, NEW.table_name,
                                                          partition_replica_row.schema_name,
                                                          partition_replica_row.table_name);
 
-            PERFORM _sysinternal.create_chunk_replica_node_index(NEW.schema_name, NEW.table_name,
+            PERFORM _iobeamdb_internal.create_chunk_replica_node_index(NEW.schema_name, NEW.table_name,
                                     h.main_schema_name, h.main_index_name, h.definition)
             FROM _iobeamdb_catalog.hypertable_index h
             WHERE h.hypertable_name = partition_replica_row.hypertable_name;
         ELSE
-            PERFORM _sysinternal.create_remote_table(NEW.schema_name, NEW.table_name,
+            PERFORM _iobeamdb_internal.create_remote_table(NEW.schema_name, NEW.table_name,
                                                      partition_replica_row.schema_name, partition_replica_row.table_name,
                                                      NEW.database_name);
         END IF;
 
-        PERFORM _sysinternal.set_time_constraint(NEW.schema_name, NEW.table_name, chunk_row.start_time, chunk_row.end_time);
+        PERFORM _iobeamdb_internal.set_time_constraint(NEW.schema_name, NEW.table_name, chunk_row.start_time, chunk_row.end_time);
 
         RETURN NEW;
     END IF;

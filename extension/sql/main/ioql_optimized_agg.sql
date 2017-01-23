@@ -421,7 +421,7 @@ BEGIN
                 %4$s
                 ORDER BY time DESC NULLS LAST
                 LIMIT 1
-            $$,  _sysinternal.extract_time_sql(format('%I',time_col_name), time_col_type), crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
+            $$,  _iobeamdb_internal.extract_time_sql(format('%I',time_col_name), time_col_type), crn_row.schema_name, crn_row.table_name, get_where_clause(additional_constraints))
         INTO time;
 
         IF time IS NOT NULL THEN
@@ -501,8 +501,8 @@ BEGIN
         additional_constraints := combine_predicates(
             format('%1$I >= %2$s AND %1$I <=%3$s',
               get_time_column(query.hypertable_name),
-              _sysinternal.time_literal_sql(trange.start_time, time_col_type),
-              _sysinternal.time_literal_sql(trange.end_time, time_col_type)
+              _iobeamdb_internal.time_literal_sql(trange.start_time, time_col_type),
+              _iobeamdb_internal.time_literal_sql(trange.end_time, time_col_type)
             ),
             additional_constraints);
     END IF;

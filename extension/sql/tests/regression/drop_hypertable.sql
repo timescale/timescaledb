@@ -5,13 +5,13 @@
 \set ECHO ALL
 
 \c Test1
-\d+ "_sysinternal".*
+\d+ "_iobeamdb_internal".*
 
 \c test2
 SELECT *
-FROM "_sysinternal"._hyper_1_0_replica;
+FROM "_iobeamdb_internal"._hyper_1_0_replica;
 SELECT *
-FROM "_sysinternal"._hyper_1_0_distinct;
+FROM "_iobeamdb_internal"._hyper_1_0_distinct;
 
 SELECT * FROM _iobeamdb_catalog.hypertable;
 DROP TABLE "testNs";
@@ -19,10 +19,10 @@ DROP TABLE "testNs";
 SELECT * FROM _iobeamdb_catalog.hypertable;
 \dt  "public".*
 \dt  "_iobeamdb_catalog".*
-\dt+ "_sysinternal".*
+\dt+ "_iobeamdb_internal".*
 
 \c Test1
 SELECT * FROM _iobeamdb_catalog.hypertable;
 \dt  "public".*
 \dt  "_iobeamdb_catalog".*
-\dt+ "_sysinternal".*
+\dt+ "_iobeamdb_internal".*

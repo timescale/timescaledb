@@ -2,7 +2,7 @@
   Trigger to create/drop indexes on chunk tables when the corresponding
   chunk_replica_node_index row is created/deleted.
 */
-CREATE OR REPLACE FUNCTION _sysinternal.on_create_chunk_replica_node_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk_replica_node_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -12,7 +12,7 @@ BEGIN
         USING ERRCODE = 'IO101';
     END IF;
 
-    IF TG_OP = 'INSERT' THEN 
+    IF TG_OP = 'INSERT' THEN
       EXECUTE NEW.definition;
       RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN

@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _sysinternal.on_create_chunk()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -9,7 +9,7 @@ BEGIN
     END IF;
 
     IF TG_OP = 'UPDATE' THEN
-        PERFORM _sysinternal.set_time_constraint(crn.schema_name, crn.table_name, NEW.start_time, NEW.end_time)
+        PERFORM _iobeamdb_internal.set_time_constraint(crn.schema_name, crn.table_name, NEW.start_time, NEW.end_time)
         FROM _iobeamdb_catalog.chunk_replica_node crn
         WHERE crn.chunk_id = NEW.id;
     END IF;

@@ -5,7 +5,7 @@
 --will never be disjoint in terms of time. Therefore you will have:
 --     <---current open ended start_time table --| existing closed tables | -- current open ended end_time table --->
 --Should not be called directly. Requires a lock on partition (prevents simultaneous inserts)
-CREATE OR REPLACE FUNCTION _meta.calculate_new_chunk_times(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.calculate_new_chunk_times(
         partition_id INT,
         "time"       BIGINT,
     OUT table_start  BIGINT,
@@ -57,7 +57,7 @@ END
 $BODY$;
 
 --creates chunk. Must be called after aquiring a lock on partition.
-CREATE OR REPLACE FUNCTION _meta.create_chunk_unlocked(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_chunk_unlocked(
     partition_id INT,
     time_point   BIGINT
 )
@@ -69,7 +69,7 @@ DECLARE
 BEGIN
     SELECT *
     INTO table_start, table_end
-    FROM _meta.calculate_new_chunk_times(partition_id, time_point);
+    FROM _iobeamdb_meta.calculate_new_chunk_times(partition_id, time_point);
 
     INSERT INTO _iobeamdb_catalog.chunk (partition_id, start_time, end_time)
     VALUES (partition_id, table_start, table_end);
@@ -77,7 +77,7 @@ END
 $BODY$;
 
 --creates and returns a new chunk, taking a lock on the partition being modified.
-CREATE OR REPLACE FUNCTION _meta.create_chunk(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
@@ -95,11 +95,11 @@ BEGIN
     FOR UPDATE;
 
     --recheck:
-    chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+    chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
 
     IF chunk_row IS NULL THEN
-        PERFORM _meta.create_chunk_unlocked(partition_id, time_point);
-        chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+        PERFORM _iobeamdb_meta.create_chunk_unlocked(partition_id, time_point);
+        chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
     END IF;
 
     IF chunk_row IS NULL THEN --recheck
@@ -113,7 +113,7 @@ $BODY$;
 
 --gets or creates chunk. Concurrent chunk creation is prevented at the
 --partition level by taking a lock on the partition being modified.
-CREATE OR REPLACE FUNCTION _meta.get_or_create_chunk(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.get_or_create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
@@ -124,17 +124,17 @@ DECLARE
     chunk_table_name    NAME;
     chunk_max_size      BIGINT;
 BEGIN
-    chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+    chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
 
     IF chunk_row IS NULL THEN
-        chunk_row := _meta.create_chunk(partition_id, time_point);
+        chunk_row := _iobeamdb_meta.create_chunk(partition_id, time_point);
     END IF;
 
     RETURN chunk_row;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _meta.close_chunk_end(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.close_chunk_end(
     chunk_id INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS

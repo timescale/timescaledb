@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _meta.on_create_chunk_replica_node_meta()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_chunk_replica_node_meta()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

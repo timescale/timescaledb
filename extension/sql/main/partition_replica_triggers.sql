@@ -1,9 +1,9 @@
-CREATE OR REPLACE FUNCTION _sysinternal.on_create_partition_replica_table()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_partition_replica_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        PERFORM _sysinternal.create_data_partition_table(
+        PERFORM _iobeamdb_internal.create_data_partition_table(
             NEW.schema_name, NEW.table_name,
             hr.schema_name, hr.table_name,
             p.keyspace_start, p.keyspace_end,

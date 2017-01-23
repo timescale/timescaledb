@@ -47,8 +47,8 @@ BEGIN
             get_limit_clause(query.limit_rows),
             (query.aggregate).group_time,
             query.limit_time_periods,
-            _sysinternal.extract_time_sql('time', get_time_column_type(query.hypertable_name)),
-            _sysinternal.extract_time_sql('without_limit.time', get_time_column_type(query.hypertable_name))
+            _iobeamdb_internal.extract_time_sql('time', get_time_column_type(query.hypertable_name)),
+            _iobeamdb_internal.extract_time_sql('without_limit.time', get_time_column_type(query.hypertable_name))
             );
           ELSE
         RETURN format(

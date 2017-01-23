@@ -2,7 +2,7 @@ CREATE SEQUENCE IF NOT EXISTS _iobeamdb_catalog.default_hypertable_seq;
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_hypertable_seq', '');
 
 -- Creates a hypertable.
-CREATE OR REPLACE FUNCTION _meta.create_hypertable(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_hypertable(
     main_schema_name        NAME,
     main_table_name         NAME,
     time_column_name        NAME,
@@ -27,7 +27,7 @@ BEGIN
     id :=  nextval('_iobeamdb_catalog.default_hypertable_seq');
 
     IF associated_schema_name IS NULL THEN
-        associated_schema_name = '_sysinternal';
+        associated_schema_name = '_iobeamdb_internal';
     END IF;
 
     IF associated_table_prefix IS NULL THEN
@@ -77,7 +77,7 @@ END
 $BODY$;
 
 -- Adds a column to a hypertable
-CREATE OR REPLACE FUNCTION _meta.add_column(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.add_column(
     hypertable_name NAME,
     column_name     NAME,
     attnum          INT2,
@@ -97,7 +97,7 @@ ON CONFLICT DO NOTHING;
 $BODY$;
 
 -- Drops a column from a hypertable
-CREATE OR REPLACE FUNCTION _meta.drop_column(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_column(
     hypertable_name NAME,
     column_name     NAME,
     modified_on     NAME
@@ -110,7 +110,7 @@ WHERE c.hypertable_name = drop_column.hypertable_name AND c.NAME = column_name;
 $BODY$;
 
 -- Sets the is_distinct flag for a column on a hypertable.
-CREATE OR REPLACE FUNCTION _meta.alter_column_set_is_distinct(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.alter_column_set_is_distinct(
     hypertable_name   NAME,
     column_name       NAME,
     new_is_distinct   BOOLEAN,
@@ -124,7 +124,7 @@ WHERE hypertable_name = alter_column_set_is_distinct.hypertable_name AND name = 
 $BODY$;
 
 -- Sets the default for a column on a hypertable.
-CREATE OR REPLACE FUNCTION _meta.alter_column_set_default(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.alter_column_set_default(
     hypertable_name   NAME,
     column_name       NAME,
     new_default_value TEXT,
@@ -138,7 +138,7 @@ WHERE hypertable_name = alter_column_set_default.hypertable_name AND name = colu
 $BODY$;
 
 -- Sets the not null flag for a column on a hypertable.
-CREATE OR REPLACE FUNCTION _meta.alter_column_set_not_null(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.alter_column_set_not_null(
     hypertable_name   NAME,
     column_name       NAME,
     new_not_null      BOOLEAN,
@@ -152,7 +152,7 @@ WHERE hypertable_name = alter_column_set_not_null.hypertable_name AND name = col
 $BODY$;
 
 -- Renames the column on a hypertable
-CREATE OR REPLACE FUNCTION _meta.alter_table_rename_column(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.alter_table_rename_column(
     hypertable_name   NAME,
     old_column_name    NAME,
     new_column_name    NAME,
@@ -166,7 +166,7 @@ WHERE hypertable_name = alter_table_rename_column.hypertable_name AND name = old
 $BODY$;
 
 -- Add an index to a hypertable
-CREATE OR REPLACE FUNCTION _meta.add_index(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.add_index(
     hypertable_name NAME,
     main_schema_name NAME,
     main_index_name NAME,
@@ -181,7 +181,7 @@ ON CONFLICT DO NOTHING;
 $BODY$;
 
 -- Drops the index for a hypertable
-CREATE OR REPLACE FUNCTION _meta.drop_index(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_index(
     main_schema_name NAME,
     main_index_name NAME,
     modified_on NAME
@@ -194,7 +194,7 @@ WHERE i.main_index_name = drop_index.main_index_name AND i.main_schema_name = dr
 $BODY$;
 
 -- Drops a hypertable
-CREATE OR REPLACE FUNCTION _meta.drop_hypertable(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_hypertable(
     schema_name NAME,
     table_name NAME,
     modified_on NAME

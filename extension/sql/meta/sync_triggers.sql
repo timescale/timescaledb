@@ -4,7 +4,7 @@
 -- are actually FDW to the remote tables.
 
 -- Trigger to sync inserts on meta node to data nodes.
-CREATE OR REPLACE FUNCTION _sysinternal.sync_insert()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.sync_insert()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -29,7 +29,7 @@ END
 $BODY$;
 
 -- Trigger to sync updates on meta node to data nodes.
-CREATE OR REPLACE FUNCTION _sysinternal.sync_update()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.sync_update()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -72,7 +72,7 @@ END
 $BODY$;
 
 -- Trigger to sync deletes on meta node to data nodes.
-CREATE OR REPLACE FUNCTION _sysinternal.sync_delete()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.sync_delete()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

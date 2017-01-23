@@ -216,7 +216,7 @@ $BODY$;
 -- Get the name of the time column for a chunk_replica_node.
 --
 -- schema_name, table_name - name of the schema and table for the table represented by the crn.
-CREATE OR REPLACE FUNCTION _sysinternal.time_col_name_for_crn(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.time_col_name_for_crn(
     schema_name NAME,
     table_name  NAME
 )
@@ -240,7 +240,7 @@ $BODY$;
 -- Get the type of the time column for a chunk_replica_node.
 --
 -- schema_name, table_name - name of the schema and table for the table represented by the crn.
-CREATE OR REPLACE FUNCTION _sysinternal.time_col_type_for_crn(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.time_col_type_for_crn(
     schema_name NAME,
     table_name  NAME
 )
