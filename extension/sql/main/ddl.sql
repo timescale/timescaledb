@@ -22,7 +22,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     placement               chunk_placement_type = 'STICKY',
     chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
 )
-    RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
   hypertable_row   _iobeamdb_catalog.hypertable;
@@ -89,7 +89,7 @@ BEGIN
             );
       EXCEPTION
         WHEN unique_violation THEN
-            RAISE EXCEPTION 'hypertable already exists: %', hypertable_name
+            RAISE EXCEPTION 'hypertable % already exists', main_table
             USING ERRCODE = 'IO110';
       END;
 
@@ -111,8 +111,6 @@ BEGIN
             _iobeamdb_internal.get_general_index_definition(indexrelid, indrelid)
         )
       WHERE indrelid = main_table;
-
-      RETURN hypertable_row;
 END
 $BODY$;
 

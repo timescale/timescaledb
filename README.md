@@ -1,7 +1,10 @@
 ### Prerequisites
 
-You'll need to install [Docker](https://docs.docker.com/engine/installation/),
+You'll need to install and run [Docker](https://docs.docker.com/engine/installation/),
 which is the current way to run the database.
+
+You need to install the [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides)(psql).
+
 
 ### Building and running in Docker
 
@@ -10,7 +13,7 @@ starting, and stopping a Docker image of **iobeamdb**:
 ```bash
 # To build the image
 make build-docker
-# To start the image using docker run. 
+# To start the image using docker run.
 # This creates a docker container named `iobeamdb`
 # with a data volume mount inside the `data` subdirectory.
 make docker-run
@@ -48,7 +51,7 @@ temperature and humidity across a collection of devices over time.
 First, create a regular SQL table:
 ```sql
 CREATE TABLE conditions (
-  time BIGINT NOT NULL,
+  time TIMESTAMP WITH TIME ZONE NOT NULL,
   device_id TEXT NOT NULL,
   temperature DOUBLE PRECISION NULL,
   humidity DOUBLE PRECISION NULL
@@ -58,7 +61,7 @@ CREATE TABLE conditions (
 Next, convert it into a hypertable using the provided function
 `create_hypertable()`:
 ```sql
-SELECT name FROM create_hypertable('"conditions"', 'time', 'device_id');
+SELECT create_hypertable('"conditions"', 'time', 'device_id');
 ```
 
 Now, a hypertable that is partitioned on time (using the values in the
@@ -77,7 +80,7 @@ Inserting data into the hypertable is done via normal SQL INSERT commands,
 e.g. using millisecond timestamps:
 ```sql
 INSERT INTO conditions(time,device_id,temperature,humidity)
-VALUES(1484850291000, 'office', 70.0, 50.0);
+VALUES(NOW(), 'office', 70.0, 50.0);
 ```
 
 Similarly, querying data is done via normal SQL SELECT commands. Updating

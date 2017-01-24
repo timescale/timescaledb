@@ -39,6 +39,6 @@ test-docker: build-docker start-test-docker test-all stop-test-docker
 
 # Setting up a single node database
 setup-single-node-db:
-	PGDATABASE=test ./scripts/run_sql.sh setup_single_node_db.psql
+	@PGDATABASE=postgres ./scripts/run_sql.sh setup_single_node_db.psql
 
 .PHONY: build-docker start-docker stop-docker test-regression test-unit test-all test all setup-single-node-db
