@@ -30,9 +30,6 @@ if [ $RESET_POSTGRES_DB == "true" ]; then
     ./setup/add_test_inputs.sh
     ./setup/add_test_outputs.sh
     psql -U $POSTGRES_USER -h $POSTGRES_HOST -v ON_ERROR_STOP=1 -d $INSTALL_DB -f ../../plpgunit/install/1.install-unit-test.sql
-
-    ./setup/add_test_utils.sh
-
 fi
 
 if [ "$#" -ne 0 ]; then

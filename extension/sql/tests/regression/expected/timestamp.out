@@ -33,6 +33,17 @@ SELECT add_node('test2' :: NAME, 'localhost');
 (1 row)
 
 \c Test1
+-- Utility function for grouping/slotting time with a given interval.
+CREATE OR REPLACE FUNCTION date_group(
+    field           timestamp,
+    group_interval  interval
+)
+    RETURNS timestamp LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT to_timestamp((EXTRACT(EPOCH from $1)::int /
+        EXTRACT(EPOCH from group_interval)::int) *
+        EXTRACT(EPOCH from group_interval)::int)::timestamp;
+$BODY$;
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" TIMESTAMP NOT NULL,
   device_id TEXT NOT NULL,
@@ -81,39 +92,22 @@ SELECT * FROM PUBLIC."testNs";
 (5 rows)
 
 SET client_min_messages = WARNING;
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs'));
-                                                          json                                                          
-------------------------------------------------------------------------------------------------------------------------
- {"timeCustom":"2009-11-12T01:00:00","device_id":"dev1","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-12T01:00:00","device_id":"dev1","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:02","device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
-(5 rows)
-
 \echo 'The next 2 queries will differ in output between UTC and EST since the mod is on the 100th hour UTC'
 The next 2 queries will differ in output between UTC and EST since the mod is on the 100th hour UTC
 SET timezone = 'UTC';
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((100 * 60 * 60 * 1e6) :: BIGINT)
-                     ));
-                        json                        
-----------------------------------------------------
- {"time":"2009-11-10T08:00:00","sum(series_0)":8.5}
+SELECT date_group("timeCustom", '100 days') AS time, sum(series_0)
+FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
+        time         | sum 
+---------------------+-----
+ 2009-09-13 00:00:00 | 8.5
 (1 row)
 
 SET timezone = 'EST';
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((100 * 60 * 60 * 1e6) :: BIGINT)
-                     ));
-                        json                        
-----------------------------------------------------
- {"time":"2009-11-10T03:00:00","sum(series_0)":8.5}
+SELECT date_group("timeCustom", '100 days') AS time, sum(series_0)
+FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
+        time         | sum 
+---------------------+-----
+ 2009-09-12 19:00:00 | 8.5
 (1 row)
 
 \echo 'The rest of the queries will be the same in output between UTC and EST'
@@ -124,18 +118,14 @@ ALTER DATABASE test2 SET timezone ='UTC';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
  dblink_disconnect 
 -------------------
- OK
-(1 row)
+(0 rows)
 
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
-                     ));
-                        json                        
-----------------------------------------------------
- {"time":"2009-11-10T23:00:00","sum(series_0)":5.5}
- {"time":"2009-11-12T01:00:00","sum(series_0)":3}
+SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
+FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
+        time         | sum 
+---------------------+-----
+ 2009-11-10 00:00:00 | 5.5
+ 2009-11-12 00:00:00 |   3
 (2 rows)
 
 SET timezone = 'EST';
@@ -143,18 +133,14 @@ ALTER DATABASE test2 SET timezone ='EST';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
  dblink_disconnect 
 -------------------
- OK
-(1 row)
+(0 rows)
 
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT)
-                     ));
-                        json                        
-----------------------------------------------------
- {"time":"2009-11-10T23:00:00","sum(series_0)":5.5}
- {"time":"2009-11-12T01:00:00","sum(series_0)":3}
+SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
+FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
+        time         | sum 
+---------------------+-----
+ 2009-11-09 19:00:00 | 5.5
+ 2009-11-11 19:00:00 |   3
 (2 rows)
 
 SET timezone = 'UTC';
@@ -162,18 +148,17 @@ ALTER DATABASE test2 SET timezone ='UTC';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
  dblink_disconnect 
 -------------------
- OK
-(1 row)
+(0 rows)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
-                  ));
-                                                          json                                                          
-------------------------------------------------------------------------------------------------------------------------
- {"timeCustom":"2009-11-10T23:00:02","device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+FROM PUBLIC."testNs"
+WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
+AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 2009-11-10 23:00:02 | dev1      |      2.5 |        3 |          | 
+ 2009-11-10 23:00:00 | dev2      |      1.5 |        1 |          | 
+ 2009-11-10 23:00:00 | dev2      |      1.5 |        2 |          | 
 (3 rows)
 
 SET timezone = 'EST';
@@ -181,18 +166,17 @@ ALTER DATABASE test2 SET timezone ='EST';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
  dblink_disconnect 
 -------------------
- OK
-(1 row)
+(0 rows)
 
 SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    time_condition=>new_time_condition(1257894000000000,1257987600000000) --microseconds
-                  ));
-                                                          json                                                          
-------------------------------------------------------------------------------------------------------------------------
- {"timeCustom":"2009-11-10T23:00:02","device_id":"dev1","series_0":2.5,"series_1":3,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":1,"series_2":null,"series_bool":null}
- {"timeCustom":"2009-11-10T23:00:00","device_id":"dev2","series_0":1.5,"series_1":2,"series_2":null,"series_bool":null}
+FROM PUBLIC."testNs"
+WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
+AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 2009-11-10 23:00:02 | dev1      |      2.5 |        3 |          | 
+ 2009-11-10 23:00:00 | dev2      |      1.5 |        1 |          | 
+ 2009-11-10 23:00:00 | dev2      |      1.5 |        2 |          | 
 (3 rows)
 
 SET timezone = 'UTC';
@@ -200,36 +184,28 @@ ALTER DATABASE test2 SET timezone ='UTC';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
  dblink_disconnect 
 -------------------
- OK
-(1 row)
+(0 rows)
 
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT),
-                                    limit_time_periods => 2
-                  ));
-                       json                       
---------------------------------------------------
- {"time":"2009-11-12T01:00:00","sum(series_0)":3}
-(1 row)
+SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
+FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
+        time         | sum 
+---------------------+-----
+ 2009-11-10 00:00:00 | 5.5
+ 2009-11-12 00:00:00 |   3
+(2 rows)
 
 SET timezone = 'EST';
 ALTER DATABASE test2 SET timezone ='EST';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
  dblink_disconnect 
 -------------------
- OK
-(1 row)
+(0 rows)
 
-SELECT *
-FROM ioql_exec_query(new_ioql_query(hypertable_name => 'testNs',
-                                    select_items => ARRAY [new_select_item('series_0', 'SUM')],
-                                    aggregate => new_aggregate((1 * 60 * 60 * 1e6) :: BIGINT),
-                                    limit_time_periods => 2
-                  ));
-                       json                       
---------------------------------------------------
- {"time":"2009-11-12T01:00:00","sum(series_0)":3}
-(1 row)
+SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
+FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
+        time         | sum 
+---------------------+-----
+ 2009-11-09 19:00:00 | 5.5
+ 2009-11-11 19:00:00 |   3
+(2 rows)
 
