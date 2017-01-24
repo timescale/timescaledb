@@ -207,7 +207,7 @@ $BODY$;
 
 -- Drop chunks older than the given timestamp. If a hypertable name is given,
 -- drop only chunks associated with this table.
-CREATE OR REPLACE FUNCTION _meta.drop_chunks_older_than(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_chunks_older_than(
     older_than_time     BIGINT,
     main_table_name     NAME = NULL,
     main_schema_name    NAME = NULL

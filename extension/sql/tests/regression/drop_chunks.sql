@@ -66,7 +66,7 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 \dt "_sysinternal".*
 
 \c meta
-SELECT _meta.drop_chunks_older_than(2);
+SELECT _iobeamdb_meta.drop_chunks_older_than(2);
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
@@ -100,7 +100,7 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 \dt "_sysinternal".*
 
 \c meta
-SELECT _meta.drop_chunks_older_than(3, 'drop_chunk_test1');
+SELECT _iobeamdb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
