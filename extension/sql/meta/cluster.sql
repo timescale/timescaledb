@@ -40,9 +40,16 @@ BEGIN
     IF database_name = current_database() THEN
         schema_name = 'public';
     END IF;
+
+    BEGIN
     INSERT INTO _iobeamdb_catalog.node (database_name, schema_name, server_name, hostname)
-    VALUES (database_name, schema_name, database_name, hostname)
-    ON CONFLICT DO NOTHING;
+    VALUES (database_name, schema_name, database_name, hostname);
+    EXCEPTION
+        WHEN SQLSTATE '42710' THEN
+            RAISE EXCEPTION 'Node % already exists', database_name
+            USING ERRCODE = 'IO120';
+    END;
+
 END
 $BODY$;
 
@@ -56,8 +63,11 @@ $BODY$
 DECLARE
 BEGIN
     INSERT INTO _iobeamdb_catalog.cluster_user (username, password)
-    VALUES (username, password)
-    ON CONFLICT DO NOTHING;
+    VALUES (username, password);
+EXCEPTION 
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'User % already exists', username
+            USING ERRCODE = 'IO130';
 END
 $BODY$;
 

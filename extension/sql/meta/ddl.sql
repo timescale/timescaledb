@@ -92,8 +92,7 @@ $BODY$
 SELECT 1 FROM _iobeamdb_catalog.hypertable h WHERE h.NAME = hypertable_name FOR UPDATE; --lock row to prevent concurrent column inserts; keep attnum consistent.
 
 INSERT INTO _iobeamdb_catalog.hypertable_column (hypertable_name, name, attnum, data_type, default_value, not_null, is_distinct, created_on, modified_on)
-VALUES (hypertable_name, column_name, attnum, data_type, default_value, not_null, is_distinct, created_on, created_on)
-ON CONFLICT DO NOTHING;
+VALUES (hypertable_name, column_name, attnum, data_type, default_value, not_null, is_distinct, created_on, created_on);
 $BODY$;
 
 -- Drops a column from a hypertable
@@ -176,8 +175,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.add_index(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 INSERT INTO _iobeamdb_catalog.hypertable_index (hypertable_name, main_schema_name, main_index_name, definition, created_on)
-VALUES (hypertable_name, main_schema_name, main_index_name, definition, created_on)
-ON CONFLICT DO NOTHING;
+VALUES (hypertable_name, main_schema_name, main_index_name, definition, created_on);
 $BODY$;
 
 -- Drops the index for a hypertable

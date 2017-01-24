@@ -23,6 +23,12 @@ SELECT add_cluster_user('postgres', NULL);
  
 (1 row)
 
+-- Expect error when adding user again
+\set ON_ERROR_STOP 0
+SELECT add_cluster_user('postgres', NULL);
+psql:ddl_errors.sql:16: ERROR:  IO130: User postgres already exists
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+\set ON_ERROR_STOP 1
 SELECT set_meta('meta' :: NAME, 'localhost');
  set_meta 
 ----------
@@ -41,6 +47,15 @@ SELECT add_node('test2' :: NAME, 'localhost');
  
 (1 row)
 
+-- Expect error when adding node again
+\set ON_ERROR_STOP 0
+SELECT add_node('test2' :: NAME, 'localhost');
+psql:ddl_errors.sql:25: ERROR:  IO120: Node test2 already exists
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+SELECT add_node('test2' :: NAME, 'otherhost');
+psql:ddl_errors.sql:26: ERROR:  IO120: Node test2 already exists
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+\set ON_ERROR_STOP 1
 \c Test1
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
@@ -50,22 +65,22 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id');
-psql:ddl_errors.sql:27: ERROR:  42P01: relation "public.Hypertable_1_mispelled" does not exist
+psql:ddl_errors.sql:39: ERROR:  42P01: relation "public.Hypertable_1_mispelled" does not exist
 LINE 1: SELECT * FROM create_hypertable('"public"."Hypertable_1_misp...
                                         ^
 LOCATION:  RangeVarGetRelidExtended, namespace.c:415
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id');
-psql:ddl_errors.sql:28: ERROR:  IO102: column "time_mispelled" does not exist
+psql:ddl_errors.sql:40: ERROR:  IO102: column "time_mispelled" does not exist
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id');
-psql:ddl_errors.sql:29: ERROR:  IO102: illegal type for time column "Device_id": text
+psql:ddl_errors.sql:41: ERROR:  IO102: illegal type for time column "Device_id": text
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled');
-psql:ddl_errors.sql:30: ERROR:  IO102: column "Device_id_mispelled" does not exist
+psql:ddl_errors.sql:42: ERROR:  IO102: column "Device_id_mispelled" does not exist
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 INSERT INTO PUBLIC."Hypertable_1" VALUES(1,'dev_1', 3); 
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-psql:ddl_errors.sql:34: ERROR:  IO102: the table being converted to a hypertable must be empty
+psql:ddl_errors.sql:46: ERROR:  IO102: the table being converted to a hypertable must be empty
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM  PUBLIC."Hypertable_1" ;
 \set ON_ERROR_STOP 1
@@ -77,13 +92,13 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-psql:ddl_errors.sql:42: ERROR:  IO110: hypertable "Hypertable_1" already exists
+psql:ddl_errors.sql:54: ERROR:  IO110: hypertable "Hypertable_1" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT set_is_distinct_flag('"public"."Hypertable_1_misspelled"', 'mispelled', true);
-psql:ddl_errors.sql:43: ERROR:  42P01: relation "public.Hypertable_1_misspelled" does not exist
+psql:ddl_errors.sql:55: ERROR:  42P01: relation "public.Hypertable_1_misspelled" does not exist
 LINE 1: SELECT set_is_distinct_flag('"public"."Hypertable_1_misspell...
                                     ^
 LOCATION:  RangeVarGetRelidExtended, namespace.c:415
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'mispelled', true);
-psql:ddl_errors.sql:44: ERROR:  IO100: column "mispelled" does not exist
+psql:ddl_errors.sql:56: ERROR:  IO100: column "mispelled" does not exist
 LOCATION:  exec_stmt_raise, pl_exec.c:3165

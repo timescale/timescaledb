@@ -10,5 +10,4 @@ FROM _iobeamdb_catalog.hypertable_replica hr
 WHERE hr.hypertable_name = assign_default_replica_node.hypertable_name
 ORDER BY RANDOM()
 LIMIT 1
-ON CONFLICT DO NOTHING;
 $BODY$;
