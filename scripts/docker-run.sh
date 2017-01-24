@@ -1,10 +1,22 @@
 #!/bin/bash
+if [[ -z "$IMAGE_NAME" ]]; then
+  echo "The IMAGE_NAME must be set"
+  exit 1
+fi
 
-IMAGE_NAME=${IOBEAMDB_DOCKER_IMAGE:-registry.iobeam.com/iobeam/postgres-9.5-wale:master}
 DOCKER_HOST=${DOCKER_HOST:-localhost}
+CONTAINER_NAME=${CONTAINER_NAME:-iobeamdb}
+DATA_DIR=${DATA_DIR-$PWD/data}
 
-docker run -d --name iobeamdb -p 5432:5432 -e POSTGRES_DB=test  -m 4g \
-  -e "NO_BACKUPS=1" \
+VOLUME_MOUNT=""
+if [[ -n "$DATA_DIR" ]]; then
+  VOLUME_MOUNT="-v $DATA_DIR:/var/lib/postgresql/data"
+fi
+docker run -d \
+  --name $CONTAINER_NAME $VOLUME_MOUNT \
+  -p 5432:5432 \
+  -m 4g \
+  -e PGDATA=/var/lib/postgresql/data/iobeam \
   $IMAGE_NAME postgres \
   -csynchronous_commit=off -cwal_writer_delay=1000 \
   -cmax_locks_per_transaction=1000 \
