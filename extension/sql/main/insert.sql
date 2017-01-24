@@ -24,19 +24,25 @@ $BODY$
 DECLARE
     partition_row _iobeamdb_catalog.partition;
 BEGIN
-    EXECUTE format(
-        $$
-            SELECT  p.*
-            FROM _iobeamdb_catalog.partition p
-            WHERE p.epoch_id = %L AND
-            %s((SELECT row.%I FROM (SELECT (%L::%s).*) as row), %L)
-            BETWEEN p.keyspace_start AND p.keyspace_end
-        $$,
-            epoch.id, epoch.partitioning_func,
-            epoch.partitioning_column,
-            copy_record, copy_table_name, epoch.partitioning_mod)
-    INTO STRICT partition_row;
-
+    IF epoch.partitioning_func IS NULL THEN
+        SELECT  p.*
+        FROM _iobeamdb_catalog.partition p
+        WHERE p.epoch_id = epoch.id
+        INTO STRICT partition_row;
+    ELSE
+        EXECUTE format(
+            $$
+                SELECT  p.*
+                FROM _iobeamdb_catalog.partition p
+                WHERE p.epoch_id = %L AND
+                %s((SELECT row.%I FROM (SELECT (%L::%s).*) as row)::TEXT, %L)
+                BETWEEN p.keyspace_start AND p.keyspace_end
+            $$,
+                epoch.id, epoch.partitioning_func,
+                epoch.partitioning_column,
+                copy_record, copy_table_name, epoch.partitioning_mod)
+        INTO STRICT partition_row;
+    END IF;
     RETURN partition_row;
 END
 $BODY$;
@@ -184,30 +190,45 @@ BEGIN
             END LOOP;
 
             PERFORM set_config('io.ignore_delete_in_trigger', 'true', true);
-            EXECUTE format(
-                $$
-                WITH selected AS
-                (
-                    DELETE FROM ONLY %2$s
-                    WHERE (%7$I >= %3$s OR %3$s IS NULL) AND (%7$I <= %4$s OR %4$s IS NULL) AND
-                          (%8$s(%9$I, %10$L) BETWEEN %11$L AND %12$L)
-                    RETURNING *
-                )%5$s
-                INSERT INTO %1$s (%6$s) SELECT %6$s FROM selected;
-                $$,
-                    format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
-                    copy_table_oid,
-                    _iobeamdb_internal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
-                    _iobeamdb_internal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
-                    distinct_clauses,
-                    _iobeamdb_internal.get_column_list(hypertable_id),
-                    point_record.time_column_name,
-                    point_record.partitioning_func,
-                    point_record.partitioning_column,
-                    point_record.partitioning_mod,
-                    point_record.keyspace_start,
-                    point_record.keyspace_end
-                );
+
+            DECLARE
+                partition_constraint_where_clause   TEXT = '';
+            BEGIN
+                IF point_record.partitioning_column IS NOT NULL THEN
+                    --if we are inserting across more than one partition,
+                    --construct a WHERE clause constraint that SELECTs only
+                    --values from copy table that match the current partition
+                    partition_constraint_where_clause := format(
+                        $$
+                        WHERE (%1$I >= %2$s OR %2$s IS NULL) AND (%1$I <= %3$s OR %3$s IS NULL) AND
+                          (%4$s(%5$I::TEXT, %6$L) BETWEEN %7$L AND %8$L)
+                        $$,
+                        point_record.time_column_name,
+                        _iobeamdb_internal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
+                        _iobeamdb_internal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
+                        point_record.partitioning_func,
+                        point_record.partitioning_column,
+                        point_record.partitioning_mod,
+                        point_record.keyspace_start,
+                        point_record.keyspace_end
+                    );
+                END IF;
+                EXECUTE format(
+                    $$
+                    WITH selected AS
+                    (
+                        DELETE FROM ONLY %1$s %2$s
+                        RETURNING *
+                    )%3$s
+                    INSERT INTO %4$s (%5$s) SELECT %5$s FROM selected;
+                    $$,
+                        copy_table_oid,
+                        partition_constraint_where_clause,
+                        distinct_clauses,
+                        format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
+                        _iobeamdb_internal.get_column_list(hypertable_id)
+                    );
+            END;
         END LOOP;
 
         EXECUTE point_record_query_sql

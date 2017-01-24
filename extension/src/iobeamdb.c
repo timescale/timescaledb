@@ -241,18 +241,30 @@ get_hypertable_info(Oid mainRelationOid)
 		for (j = 0; j < total_rows; j++)
 		{
 			HeapTuple tuple = SPI_tuptable->vals[j];
-			Name partitioning_column = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
-			Name partitioning_func =  DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
-			int32 partitioning_mod =  DatumGetInt32(SPI_getbinval(tuple, tupdesc, 4, &isnull));
+			Name partitioning_func, partitioning_column;
+			int32 partitioning_mod;
+
 			partitioning_info* info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
 
-			info->partitioning_column = SPI_palloc(sizeof(NameData));
-			memcpy(info->partitioning_column, partitioning_column,  sizeof(NameData));
+			partitioning_column = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
 
-			info->partitioning_func = SPI_palloc(sizeof(NameData));
-			memcpy(info->partitioning_func, partitioning_func,  sizeof(NameData));
+			if (!isnull) {
+				info->partitioning_column = SPI_palloc(sizeof(NameData));
+				memcpy(info->partitioning_column, partitioning_column,  sizeof(NameData));
+			}
 
-			info->partitioning_mod = partitioning_mod;
+			partitioning_func = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
+
+			if (!isnull) {
+				info->partitioning_func = SPI_palloc(sizeof(NameData));
+				memcpy(info->partitioning_func, partitioning_func,  sizeof(NameData));
+			}
+
+			partitioning_mod =  DatumGetInt32(SPI_getbinval(tuple, tupdesc, 4, &isnull));
+
+			if (!isnull) {
+				info->partitioning_mod = partitioning_mod;
+			}
 
 			partitioning_info_array[j] = info;
 		}
@@ -346,7 +358,9 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 																							 context->parse,
 																							 context->hypertable_info_list);
 
-						if (pi != NULL) {
+						if (pi != NULL
+							&& pi->partitioning_column != NULL
+							&& pi->partitioning_func != NULL) {
 							/* The var is a partitioning column */
 							Expr * partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
 																							pi->partitioning_func,

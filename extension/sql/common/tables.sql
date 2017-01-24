@@ -152,9 +152,9 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
     hypertable_id       INTEGER NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
     start_time          BIGINT  NULL      CHECK (start_time > 0),
     end_time            BIGINT  NULL      CHECK (end_time > 0),
-    partitioning_func   NAME    NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
+    partitioning_func   NAME    NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
     partitioning_mod    INT     NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_column NAME    NOT NULL,
+    partitioning_column NAME    NULL,
     UNIQUE (hypertable_id, start_time),
     UNIQUE (hypertable_id, end_time),
     CHECK (start_time < end_time)

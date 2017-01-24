@@ -74,16 +74,17 @@ $BODY$;
 CREATE OR REPLACE FUNCTION add_partition_epoch(
     hypertable_id       INTEGER,
     keyspace_start      SMALLINT [],
-    partitioning_column NAME
+    partitioning_column NAME,
+    partitioning_func   TEXT
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
-WITH epoch AS (
-    INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
-    VALUES (hypertable_id, NULL, NULL, 'get_partition_for_key', 32768, partitioning_column)
-    RETURNING id
-)
-INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end)
+    WITH epoch AS (
+        INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
+        VALUES (hypertable_id, NULL, NULL, partitioning_func, 32768, partitioning_column)
+        RETURNING id
+    )
+    INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end)
     SELECT
         epoch.id,
         lag(start, 1, 0)
@@ -95,7 +96,8 @@ $BODY$;
 CREATE OR REPLACE FUNCTION add_equi_partition_epoch(
     hypertable_id       INTEGER,
     number_partitions   SMALLINT,
-    partitioning_column NAME
+    partitioning_column NAME,
+    partitioning_func   TEXT
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
@@ -103,6 +105,7 @@ SELECT add_partition_epoch(
     hypertable_id,
     (SELECT ARRAY(SELECT start * 32768 / (number_partitions)
                   FROM generate_series(1, number_partitions - 1) AS start) :: SMALLINT []),
-    partitioning_column
+    partitioning_column,
+    partitioning_func
 )
 $BODY$;

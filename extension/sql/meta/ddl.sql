@@ -19,8 +19,9 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_hypertable(
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    id             INTEGER;
-    hypertable_row _iobeamdb_catalog.hypertable;
+    id                  INTEGER;
+    hypertable_row      _iobeamdb_catalog.hypertable;
+    partitioning_func   TEXT = 'get_partition_for_key';
 BEGIN
 
     id :=  nextval('_iobeamdb_catalog.default_hypertable_seq');
@@ -33,7 +34,15 @@ BEGIN
         associated_table_prefix = format('_hyper_%s', id);
     END IF;
 
-    IF number_partitions IS NULL THEN
+    IF partitioning_column IS NULL THEN
+        IF number_partitions IS NULL THEN
+            number_partitions := 1;
+            partitioning_func := NULL;
+        ELSIF number_partitions <> 1 THEN
+            RAISE EXCEPTION 'The number of partitions must be 1 without a partitioning column'
+            USING ERRCODE ='IO101';
+        END IF;
+    ELSIF number_partitions IS NULL THEN
         SELECT COUNT(*)
         INTO number_partitions
         FROM _iobeamdb_catalog.node;
@@ -63,7 +72,7 @@ BEGIN
     RETURNING * INTO hypertable_row;
 
     IF number_partitions != 0 THEN
-        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column);
+        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column, partitioning_func);
     END IF;
     RETURN hypertable_row;
 END

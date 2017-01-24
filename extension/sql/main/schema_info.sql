@@ -60,15 +60,21 @@ $BODY$
 DECLARE
     partition_row _iobeamdb_catalog.partition;
 BEGIN
-    EXECUTE format(
-        $$
-            SELECT  p.*
-            FROM  _iobeamdb_catalog.partition p
-            WHERE p.epoch_id = %L AND
-            %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end
-        $$, epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
-    INTO STRICT partition_row;
-
+    IF epoch.partitioning_column IS NULL THEN
+        SELECT p.*
+        FROM  _iobeamdb_catalog.partition p
+        WHERE p.epoch_id = epoch.id
+        INTO STRICT partition_row;
+    ELSE
+        EXECUTE format(
+            $$
+                SELECT p.*
+                FROM  _iobeamdb_catalog.partition p
+                WHERE p.epoch_id = %L AND
+                %s(%L::TEXT, %L) BETWEEN p.keyspace_start AND p.keyspace_end
+            $$, epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
+        INTO STRICT partition_row;
+    END IF;
     RETURN partition_row;
 END
 $BODY$;

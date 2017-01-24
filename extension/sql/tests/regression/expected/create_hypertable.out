@@ -80,3 +80,20 @@ select * from create_hypertable('test_schema.test_table', 'time', 'device_id');
  test_schema | test_table | table | postgres
 (1 row)
 
+--test partitioning in only time dimension
+create table test_schema.test_1dim(time timestamp, temp float);
+select create_hypertable('test_schema.test_1dim', 'time');
+       test2
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+\dt "test_schema".*
+              List of relations
+   Schema    |    Name    | Type  |  Owner   
+-------------+------------+-------+----------
+ test_schema | test_1dim  | table | postgres
+ test_schema | test_table | table | postgres
+(2 rows)
+
