@@ -10,11 +10,15 @@ starting, and stopping a Docker image of **iobeamdb**:
 ```bash
 # To build the image
 make build-docker
-# To start the image (will stop any running instances first)
-make start-docker
-# To stop the image
-make stop-docker
+# To start the image using docker run. 
+# This creates a docker container named `iobeamdb`
+# with a data volume mount inside the `data` subdirectory.
+make docker-run
+# To stop the container
+docker stop iobeamdb
 ```
+
+You can then run any other docker command on the container named `iobeamdb`.
 
 With the Docker image running you can run the tests (see Testing) or create
 your own single-node cluster.

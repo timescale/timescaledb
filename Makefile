@@ -16,11 +16,14 @@ install:
 build-docker:
 	@docker build . -t $(IMAGE_NAME)
 
-start-docker: stop-docker
-	@IOBEAMDB_DOCKER_IMAGE=$(IMAGE_NAME) ./scripts/start-docker.sh
+docker-run:
+	@IMAGE_NAME=$(IMAGE_NAME) ./scripts/docker-run.sh
 
-stop-docker:
-	@docker rm -f iobeamdb || :
+start-test-docker:
+	@IMAGE_NAME=$(IMAGE_NAME) CONTAINER_NAME=iobeamdb_testing ./scripts/start-test-docker.sh 
+
+stop-test-docker: 
+	@docker rm -f iobeamdb_testing
 
 # Targets for tests
 test-regression:
@@ -32,7 +35,7 @@ test-unit:
 test-all: test-regression test-unit
 	@echo Running all tests
 
-test-docker: build-docker start-docker test-all stop-docker
+test-docker: build-docker start-test-docker test-all stop-test-docker
 
 # Setting up a single node database
 setup-single-node-db:
