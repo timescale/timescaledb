@@ -19,7 +19,7 @@ BEGIN
 
     IF conn_exists IS NULL OR NOT conn_exists THEN
         --tells c code to commit in precommit.
-        PERFORM dblink_connect(conn_name, get_meta_server_name());
+        PERFORM dblink_connect(conn_name, _iobeamdb_internal.get_meta_server_name());
         PERFORM dblink_exec(conn_name, 'BEGIN');
         PERFORM _iobeamdb_internal.register_dblink_precommit_connection(conn_name);
     END IF;
@@ -37,7 +37,7 @@ $BODY$
 DECLARE
     conn_name TEXT;
 BEGIN
-    IF get_meta_database_name() <> current_database() THEN
+    IF _iobeamdb_internal.get_meta_database_name() <> current_database() THEN
         SELECT _iobeamdb_internal.meta_transaction_start() INTO conn_name;
         PERFORM * FROM dblink(conn_name, sql_code) AS t(r TEXT);
     ELSE
@@ -56,7 +56,7 @@ DECLARE
     conn_name TEXT;
     return_value TEXT;
 BEGIN
-    IF get_meta_database_name() <> current_database() THEN
+    IF _iobeamdb_internal.get_meta_database_name() <> current_database() THEN
         SELECT _iobeamdb_internal.meta_transaction_start() INTO conn_name;
         SELECT t.r INTO return_value FROM dblink(conn_name, sql_code) AS t(r TEXT);
     ELSE
@@ -76,8 +76,9 @@ $BODY$
 DECLARE
     return_value TEXT;
 BEGIN
-    IF get_meta_database_name() <> current_database() THEN
-        SELECT t.r INTO return_value FROM dblink(get_meta_server_name(), sql_code) AS t(r TEXT);
+    IF _iobeamdb_internal.get_meta_database_name() <> current_database() THEN
+        SELECT t.r INTO return_value
+        FROM dblink(_iobeamdb_internal.get_meta_server_name(), sql_code) AS t(r TEXT);
     ELSE
         EXECUTE sql_code INTO return_value;
     END IF;
