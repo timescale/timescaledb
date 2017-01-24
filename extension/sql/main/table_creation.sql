@@ -93,16 +93,32 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_local_data_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
-    parent_table_name  NAME
+    parent_table_name  NAME,
+    tablespace_name    NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
+DECLARE
+    tablespace_oid  pg_catalog.pg_tablespace.oid%type;
+    tablespace_clause TEXT = '';
 BEGIN
+    SELECT t.oid
+    INTO tablespace_oid
+    FROM pg_catalog.pg_tablespace t
+    WHERE t.spcname = tablespace_name;
+
+    IF tablespace_oid IS NOT NULL THEN
+        tablespace_clause := format('TABLESPACE %s', tablespace_name);
+    ELSIF tablespace_name IS NOT NULL THEN
+        RAISE EXCEPTION 'No tablespace % in database %', tablespace_name, current_database()
+        USING ERRCODE = 'IO501';
+    END IF;
+
     EXECUTE format(
         $$
-            CREATE TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%3$I.%4$I);
+            CREATE TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%3$I.%4$I) %5$s;
         $$,
-        schema_name, table_name, parent_schema_name, parent_table_name);
+        schema_name, table_name, parent_schema_name, parent_table_name, tablespace_clause);
 END
 $BODY$;
 

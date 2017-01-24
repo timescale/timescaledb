@@ -31,6 +31,7 @@ sql/main/hypertable_replica_triggers.sql
 sql/main/field_triggers.sql
 sql/main/partitioning.sql
 sql/main/schema_info.sql
+sql/main/partition_triggers.sql
 sql/main/partition_replica_triggers.sql
 sql/main/chunk_replica_node_index.sql
 sql/main/chunk_replica_node_index_triggers.sql

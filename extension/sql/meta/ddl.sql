@@ -14,6 +14,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_hypertable(
     associated_table_prefix NAME,
     placement               _iobeamdb_catalog.chunk_placement_type,
     chunk_size_bytes        BIGINT,
+    tablespace              NAME,
     created_on              NAME
 )
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
@@ -72,7 +73,8 @@ BEGIN
     RETURNING * INTO hypertable_row;
 
     IF number_partitions != 0 THEN
-        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column, partitioning_func_schema, partitioning_func);
+        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column, 
+                                         partitioning_func_schema, partitioning_func, tablespace);
     END IF;
     RETURN hypertable_row;
 END

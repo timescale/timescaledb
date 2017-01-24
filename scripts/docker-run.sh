@@ -7,6 +7,7 @@ fi
 DOCKER_HOST=${DOCKER_HOST:-localhost}
 CONTAINER_NAME=${CONTAINER_NAME:-iobeamdb}
 DATA_DIR=${DATA_DIR-$PWD/data}
+BIN_CMD=${BIN_CMD:-postgres}
 
 VOLUME_MOUNT=""
 if [[ -n "$DATA_DIR" ]]; then
@@ -17,7 +18,7 @@ docker run -d \
   -p 5432:5432 \
   -m 4g \
   -e PGDATA=/var/lib/postgresql/data/iobeam \
-  $IMAGE_NAME postgres \
+  $IMAGE_NAME $BIN_CMD \
   -csynchronous_commit=off -cwal_writer_delay=1000 \
   -cmax_locks_per_transaction=1000 \
   -cshared_preload_libraries=pg_stat_statements,dblink,iobeamdb \

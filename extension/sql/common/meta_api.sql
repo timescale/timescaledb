@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.create_hypertable(
     associated_schema_name  NAME,
     associated_table_prefix NAME,
     placement               _iobeamdb_catalog.chunk_placement_type,
-    chunk_size_bytes        BIGINT
+    chunk_size_bytes        BIGINT,
+    tablespace              NAME
 )
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -19,7 +20,7 @@ BEGIN
     SELECT (res::_iobeamdb_catalog.hypertable).*
         INTO hypertable_row
         FROM _iobeamdb_internal.meta_transaction_exec_with_return(
-            format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+            format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
                 main_schema_name,
                 main_table_name,
                 time_column_name,
@@ -31,6 +32,7 @@ BEGIN
                 associated_table_prefix,
                 placement,
                 chunk_size_bytes,
+                tablespace,
                 current_database()
             )
         ) AS res;

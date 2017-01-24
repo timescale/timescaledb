@@ -4,6 +4,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_chunk_replica_node()
 $BODY$
 DECLARE
     partition_replica_row _iobeamdb_catalog.partition_replica;
+    partition             _iobeamdb_catalog.partition;
     chunk_row             _iobeamdb_catalog.chunk;
     kind                  pg_class.relkind%type;
 BEGIN
@@ -14,6 +15,11 @@ BEGIN
         WHERE p.id = NEW.partition_replica_id;
 
         SELECT *
+        INTO STRICT partition
+        FROM _iobeamdb_catalog.partition AS p
+        WHERE p.id = partition_replica_row.partition_id;
+
+        SELECT *
         INTO STRICT chunk_row
         FROM _iobeamdb_catalog.chunk AS c
         WHERE c.id = NEW.chunk_id;
@@ -21,7 +27,8 @@ BEGIN
         IF NEW.database_name = current_database() THEN
             PERFORM _iobeamdb_internal.create_local_data_table(NEW.schema_name, NEW.table_name,
                                                          partition_replica_row.schema_name,
-                                                         partition_replica_row.table_name);
+                                                         partition_replica_row.table_name,
+                                                         partition.tablespace);
 
             PERFORM _iobeamdb_internal.create_chunk_replica_node_index(NEW.schema_name, NEW.table_name,
                                     h.main_schema_name, h.main_index_name, h.definition)

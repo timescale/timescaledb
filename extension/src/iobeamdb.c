@@ -108,13 +108,12 @@ iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 	if (IobeamLoaded())
 	{
+		change_table_name_context context;
 		char* printParse = GetConfigOptionByName("io.print_parse", NULL, true);
 		/* set to false to not print all internal actions */
 		SetConfigOption("io.print_parse", "false", PGC_USERSET, PGC_S_SESSION);
 
-
 		/* replace call to main table with call to the replica table */
-		change_table_name_context context;
 		context.hypertable_info = NIL;
 		change_table_name_walker((Node *) parse, &context);
 		if (list_length(context.hypertable_info) > 0)

@@ -26,15 +26,24 @@ DECLARE
     hypertable_row   _iobeamdb_catalog.hypertable;
     table_name       NAME;
     schema_name      NAME;
+    tablespace_oid   OID;
+    tablespace_name  NAME;
     time_column_type REGTYPE;
     att_row          pg_attribute;
     main_table_has_items BOOLEAN;
 BEGIN
-    SELECT relname, nspname
-    INTO STRICT table_name, schema_name
+    SELECT relname, nspname, reltablespace
+    INTO STRICT table_name, schema_name, tablespace_oid
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
+
+    --tables that don't have an associated tablespace has reltablespace OID set to 0
+    --in pg_class and there is no matching row in pg_tablespace
+    SELECT spcname
+    INTO tablespace_name
+    FROM pg_tablespace t
+    WHERE t.OID = tablespace_oid;
 
     BEGIN
         SELECT atttypid
@@ -84,7 +93,8 @@ BEGIN
             associated_schema_name,
             associated_table_prefix,
             placement,
-            chunk_size_bytes
+            chunk_size_bytes,
+            tablespace_name
         );
     EXCEPTION
         WHEN unique_violation THEN

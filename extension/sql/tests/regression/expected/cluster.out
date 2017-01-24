@@ -165,12 +165,12 @@ FROM _iobeamdb_catalog.partition_epoch;
 
 SELECT *
 FROM _iobeamdb_catalog.partition;
- id | epoch_id | keyspace_start | keyspace_end 
-----+----------+----------------+--------------
-  1 |        1 |              0 |        16383
-  2 |        1 |          16384 |        32767
-  3 |        2 |              0 |        16383
-  4 |        2 |          16384 |        32767
+ id | epoch_id | keyspace_start | keyspace_end | tablespace 
+----+----------+----------------+--------------+------------
+  1 |        1 |              0 |        16383 | 
+  2 |        1 |          16384 |        32767 | 
+  3 |        2 |              0 |        16383 | 
+  4 |        2 |          16384 |        32767 | 
 (4 rows)
 
 SELECT *
@@ -275,12 +275,12 @@ FROM _iobeamdb_catalog.partition_epoch;
 
 SELECT *
 FROM _iobeamdb_catalog.partition;
- id | epoch_id | keyspace_start | keyspace_end 
-----+----------+----------------+--------------
-  1 |        1 |              0 |        16383
-  2 |        1 |          16384 |        32767
-  3 |        2 |              0 |        16383
-  4 |        2 |          16384 |        32767
+ id | epoch_id | keyspace_start | keyspace_end | tablespace 
+----+----------+----------------+--------------+------------
+  1 |        1 |              0 |        16383 | 
+  2 |        1 |          16384 |        32767 | 
+  3 |        2 |              0 |        16383 | 
+  4 |        2 |          16384 |        32767 | 
 (4 rows)
 
 SELECT *
