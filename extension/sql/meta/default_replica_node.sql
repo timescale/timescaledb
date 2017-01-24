@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _meta.assign_default_replica_node(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.assign_default_replica_node(
   database_name NAME,
   hypertable_name NAME
 )

@@ -60,7 +60,7 @@ BEGIN
     -- Remember this chunk's ID
     chunk_id := chunk_row.id;
 
-    SELECT _sysinternal.get_local_chunk_size(chunk_row.id) INTO chunk_size;
+    SELECT _iobeamdb_internal.get_local_chunk_size(chunk_row.id) INTO chunk_size;
 
     -- Insert one row. Should trigger the creation of a new chunk
     INSERT INTO chunk_test VALUES(2, 2, 'dev2');

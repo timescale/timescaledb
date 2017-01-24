@@ -53,7 +53,7 @@ SELECT *
 FROM _iobeamdb_catalog.partition_replica;
 
 SELECT *
-FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 
 SELECT *
 FROM _iobeamdb_catalog.node;
@@ -109,7 +109,7 @@ FROM _iobeamdb_catalog.hypertable_column;
 
 \des+
 \deu+
-\d+ "_sysinternal".*
+\d+ "_iobeamdb_internal".*
 
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
@@ -119,21 +119,21 @@ FROM _iobeamdb_catalog.hypertable_column;
 \c meta
 
 SELECT *
-FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 \c Test1
-\d+ "_sysinternal".*
+\d+ "_iobeamdb_internal".*
 
 \c meta
-SELECT _meta.close_chunk_end(1);
+SELECT _iobeamdb_meta.close_chunk_end(1);
 SELECT *
 FROM _iobeamdb_catalog.chunk;
 
 SELECT *
-FROM _meta.get_or_create_chunk(1, 10 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 10 :: BIGINT);
 SELECT *
-FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 SELECT *
 FROM _iobeamdb_catalog.chunk;
 
 \c Test1
-\d+ "_sysinternal".*
+\d+ "_iobeamdb_internal".*

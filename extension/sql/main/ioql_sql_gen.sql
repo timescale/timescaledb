@@ -1,4 +1,9 @@
-CREATE OR REPLACE FUNCTION get_time_clause(time_col_name NAME, time_col_type regtype, group_time BIGINT, timezone TEXT)
+CREATE OR REPLACE FUNCTION get_time_clause(
+    time_col_name NAME,
+    time_col_type regtype,
+    group_time    BIGINT,
+    timezone      TEXT
+)
     RETURNS TEXT LANGUAGE SQL IMMUTABLE AS
 $BODY$
 SELECT CASE
@@ -14,13 +19,13 @@ SELECT CASE
             )', time_col_name, group_time) --group time is given in us
        WHEN time_col_type IN ('TIMESTAMP'::REGTYPE) THEN
            --The postgres manual states:
-           --     Conversions between timestamp without time zone and timestamp with time zone normally assume that the timestamp 
+           --     Conversions between timestamp without time zone and timestamp with time zone normally assume that the timestamp
            --     without time zone value should be taken or given as timezone local time
            --
            --We follow this convention: data is read as if on the localtime of the local server
            --but given back in the local time of the querying server.
            --
-           --This converts the timestamp to a timestampz (using local timezone setting), 
+           --This converts the timestamp to a timestampz (using local timezone setting),
            --then converts to epoch in UTC time. Finally it then converts back to a timestamp
            --using the timezone setting requested by the query.
            --A consequence is that the mod is taken with respect to UTC time.
@@ -60,8 +65,8 @@ CREATE OR REPLACE FUNCTION get_time_predicate(time_col_name NAME, time_col_type 
 $BODY$
 SELECT string_agg(clauses.val, ' AND ')
 FROM (
-       VALUES (format('%I >= ', time_col_name) ||  NULLIF(_sysinternal.time_literal_sql(cond.from_time, time_col_type), 'NULL')),
-              (format('%I < ', time_col_name)  ||  NULLIF(_sysinternal.time_literal_sql(cond.to_time, time_col_type), 'NULL'))
+       VALUES (format('%I >= ', time_col_name) ||  NULLIF(_iobeamdb_internal.time_literal_sql(cond.from_time, time_col_type), 'NULL')),
+              (format('%I < ', time_col_name)  ||  NULLIF(_iobeamdb_internal.time_literal_sql(cond.to_time, time_col_type), 'NULL'))
      ) AS clauses(val);
 $BODY$;
 

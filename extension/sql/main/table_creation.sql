@@ -2,7 +2,7 @@
 -- hypertables.
 
 -- Creates a new schema if it does not exist.
-CREATE OR REPLACE FUNCTION _sysinternal.create_schema(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_schema(
     schema_name NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -18,7 +18,7 @@ SET client_min_messages = WARNING --suppress NOTICE on IF EXISTS
 ;
 
 -- Creates a table for a hypertable (e.g. main table or root table)
-CREATE OR REPLACE FUNCTION _sysinternal.create_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -34,7 +34,7 @@ END
 $BODY$;
 
 -- Drop main table if it exists.
-CREATE OR REPLACE FUNCTION _sysinternal.drop_main_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_main_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -49,7 +49,7 @@ END
 $BODY$;
 
 -- Drops root table
-CREATE OR REPLACE FUNCTION _sysinternal.drop_root_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_root_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -64,7 +64,7 @@ END
 $BODY$;
 
 -- Creates a root distinct table for a hypertable.
-CREATE OR REPLACE FUNCTION _sysinternal.create_root_distinct_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_root_distinct_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -83,7 +83,7 @@ END
 $BODY$;
 
 -- Drops root distinct table
-CREATE OR REPLACE FUNCTION _sysinternal.drop_root_distinct_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_root_distinct_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -98,7 +98,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_local_distinct_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_local_distinct_table(
     schema_name         NAME,
     table_name          NAME,
     replica_schema_name NAME,
@@ -115,7 +115,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_remote_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_remote_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -141,7 +141,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_local_data_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_local_data_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -158,7 +158,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_replica_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_replica_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -175,7 +175,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.create_data_partition_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_data_partition_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -209,12 +209,12 @@ BEGIN
           AND c.name = epoch_row.partitioning_column;
 
     IF column_exists THEN
-        PERFORM _sysinternal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
+        PERFORM _iobeamdb_internal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
     END IF;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.add_partition_constraint(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.add_partition_constraint(
     schema_name    NAME,
     table_name     NAME,
     keyspace_start SMALLINT,
@@ -243,7 +243,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.set_time_constraint(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.set_time_constraint(
     schema_name NAME,
     table_name  NAME,
     start_time  BIGINT,
@@ -254,7 +254,7 @@ $BODY$
 DECLARE
   time_col_type regtype;
 BEGIN
-    time_col_type := _sysinternal.time_col_type_for_crn(schema_name, table_name);
+    time_col_type := _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name);
 
     EXECUTE format(
         $$
@@ -267,26 +267,26 @@ BEGIN
             $$
             ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s)
         $$,
-            _sysinternal.time_col_name_for_crn(schema_name, table_name),
+            _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
             schema_name, table_name,
-            _sysinternal.time_literal_sql(start_time, time_col_type),
-            _sysinternal.time_literal_sql(end_time, time_col_type));
+            _iobeamdb_internal.time_literal_sql(start_time, time_col_type),
+            _iobeamdb_internal.time_literal_sql(end_time, time_col_type));
     ELSIF start_time IS NOT NULL THEN
         EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %s)
         $$,
             schema_name, table_name,
-            _sysinternal.time_col_name_for_crn(schema_name, table_name),
-            _sysinternal.time_literal_sql(start_time, time_col_type));
+            _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
+            _iobeamdb_internal.time_literal_sql(start_time, time_col_type));
         ELSIF end_time IS NOT NULL THEN
         EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s)
         $$,
             schema_name, table_name,
-            _sysinternal.time_col_name_for_crn(schema_name, table_name),
-            _sysinternal.time_literal_sql(end_time, time_col_type));
+            _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
+            _iobeamdb_internal.time_literal_sql(end_time, time_col_type));
     END IF;
 END
 $BODY$

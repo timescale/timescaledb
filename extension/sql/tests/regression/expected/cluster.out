@@ -90,9 +90,9 @@ LOCATION:  truncate_identifier, scansup.c:205
 psql:cluster.sql:39: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
---------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+--------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs | public           | testNs          | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -101,9 +101,9 @@ psql:cluster.sql:45: ERROR:  IO110: hypertable already exists: testNs
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id', hypertable_name=>'testNs2');
-  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
----------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs2 | public           | testNs2         | _sysinternal           | _hyper_3                | _sysinternal     | _hyper_3_root   | _sysinternal         | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs2 | public           | testNs2         | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   | _iobeamdb_internal   | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
@@ -115,16 +115,16 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
 \c meta
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
- id | partition_id | hypertable_name | replica_id | schema_name  |       table_name       
-----+--------------+-----------------+------------+--------------+------------------------
-  1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
-  2 |            2 | testNs          |          0 | _sysinternal | _hyper_1_2_0_partition
-  3 |            3 | testNs2         |          0 | _sysinternal | _hyper_3_3_0_partition
-  4 |            4 | testNs2         |          0 | _sysinternal | _hyper_3_4_0_partition
+ id | partition_id | hypertable_name | replica_id |    schema_name     |       table_name       
+----+--------------+-----------------+------------+--------------------+------------------------
+  1 |            1 | testNs          |          0 | _iobeamdb_internal | _hyper_1_1_0_partition
+  2 |            2 | testNs          |          0 | _iobeamdb_internal | _hyper_1_2_0_partition
+  3 |            3 | testNs2         |          0 | _iobeamdb_internal | _hyper_3_3_0_partition
+  4 |            4 | testNs2         |          0 | _iobeamdb_internal | _hyper_3_4_0_partition
 (4 rows)
 
 SELECT *
-FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
@@ -147,25 +147,25 @@ FROM _iobeamdb_catalog.meta;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable;
-  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
----------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs  | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
- testNs2 | public           | testNs2         | _sysinternal           | _hyper_3                | _sysinternal     | _hyper_3_root   | _sysinternal         | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs  | public           | testNs          | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ testNs2 | public           | testNs2         | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   | _iobeamdb_internal   | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
- hypertable_name | replica_id | schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
------------------+------------+--------------+--------------------+----------------------+---------------------
- testNs          |          0 | _sysinternal | _hyper_1_0_replica | _sysinternal         | _hyper_1_0_distinct
- testNs2         |          0 | _sysinternal | _hyper_3_0_replica | _sysinternal         | _hyper_3_0_distinct
+ hypertable_name | replica_id |    schema_name     |     table_name     | distinct_schema_name | distinct_table_name 
+-----------------+------------+--------------------+--------------------+----------------------+---------------------
+ testNs          |          0 | _iobeamdb_internal | _hyper_1_0_replica | _iobeamdb_internal   | _hyper_1_0_distinct
+ testNs2         |          0 | _iobeamdb_internal | _hyper_3_0_replica | _iobeamdb_internal   | _hyper_3_0_distinct
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.distinct_replica_node;
- hypertable_name | replica_id | database_name | schema_name  |         table_name         
------------------+------------+---------------+--------------+----------------------------
- testNs          |          0 | test2         | _sysinternal | _hyper_1_0_2_distinct_data
+ hypertable_name | replica_id | database_name |    schema_name     |         table_name         
+-----------------+------------+---------------+--------------------+----------------------------
+ testNs          |          0 | test2         | _iobeamdb_internal | _hyper_1_0_2_distinct_data
 (1 row)
 
 SELECT *
@@ -188,12 +188,12 @@ FROM _iobeamdb_catalog.partition;
 
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
- id | partition_id | hypertable_name | replica_id | schema_name  |       table_name       
-----+--------------+-----------------+------------+--------------+------------------------
-  1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
-  2 |            2 | testNs          |          0 | _sysinternal | _hyper_1_2_0_partition
-  3 |            3 | testNs2         |          0 | _sysinternal | _hyper_3_3_0_partition
-  4 |            4 | testNs2         |          0 | _sysinternal | _hyper_3_4_0_partition
+ id | partition_id | hypertable_name | replica_id |    schema_name     |       table_name       
+----+--------------+-----------------+------------+--------------------+------------------------
+  1 |            1 | testNs          |          0 | _iobeamdb_internal | _hyper_1_1_0_partition
+  2 |            2 | testNs          |          0 | _iobeamdb_internal | _hyper_1_2_0_partition
+  3 |            3 | testNs2         |          0 | _iobeamdb_internal | _hyper_3_3_0_partition
+  4 |            4 | testNs2         |          0 | _iobeamdb_internal | _hyper_3_4_0_partition
 (4 rows)
 
 SELECT *
@@ -205,9 +205,9 @@ FROM _iobeamdb_catalog.chunk;
 
 SELECT *
 FROM _iobeamdb_catalog.chunk_replica_node;
- chunk_id | partition_replica_id | database_name | schema_name  |     table_name      
-----------+----------------------+---------------+--------------+---------------------
-        1 |                    1 | test2         | _sysinternal | _hyper_1_1_0_1_data
+ chunk_id | partition_replica_id | database_name |    schema_name     |     table_name      
+----------+----------------------+---------------+--------------------+---------------------
+        1 |                    1 | test2         | _iobeamdb_internal | _hyper_1_1_0_1_data
 (1 row)
 
 SELECT *
@@ -264,25 +264,25 @@ FROM _iobeamdb_catalog.meta;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable;
-  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
----------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs  | public           | testNs          | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
- testNs2 | public           | testNs2         | _sysinternal           | _hyper_3                | _sysinternal     | _hyper_3_root   | _sysinternal         | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+---------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ testNs  | public           | testNs          | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ testNs2 | public           | testNs2         | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   | _iobeamdb_internal   | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
- hypertable_name | replica_id | schema_name  |     table_name     | distinct_schema_name | distinct_table_name 
------------------+------------+--------------+--------------------+----------------------+---------------------
- testNs          |          0 | _sysinternal | _hyper_1_0_replica | _sysinternal         | _hyper_1_0_distinct
- testNs2         |          0 | _sysinternal | _hyper_3_0_replica | _sysinternal         | _hyper_3_0_distinct
+ hypertable_name | replica_id |    schema_name     |     table_name     | distinct_schema_name | distinct_table_name 
+-----------------+------------+--------------------+--------------------+----------------------+---------------------
+ testNs          |          0 | _iobeamdb_internal | _hyper_1_0_replica | _iobeamdb_internal   | _hyper_1_0_distinct
+ testNs2         |          0 | _iobeamdb_internal | _hyper_3_0_replica | _iobeamdb_internal   | _hyper_3_0_distinct
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.distinct_replica_node;
- hypertable_name | replica_id | database_name | schema_name  |         table_name         
------------------+------------+---------------+--------------+----------------------------
- testNs          |          0 | test2         | _sysinternal | _hyper_1_0_2_distinct_data
+ hypertable_name | replica_id | database_name |    schema_name     |         table_name         
+-----------------+------------+---------------+--------------------+----------------------------
+ testNs          |          0 | test2         | _iobeamdb_internal | _hyper_1_0_2_distinct_data
 (1 row)
 
 SELECT *
@@ -305,12 +305,12 @@ FROM _iobeamdb_catalog.partition;
 
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
- id | partition_id | hypertable_name | replica_id | schema_name  |       table_name       
-----+--------------+-----------------+------------+--------------+------------------------
-  1 |            1 | testNs          |          0 | _sysinternal | _hyper_1_1_0_partition
-  2 |            2 | testNs          |          0 | _sysinternal | _hyper_1_2_0_partition
-  3 |            3 | testNs2         |          0 | _sysinternal | _hyper_3_3_0_partition
-  4 |            4 | testNs2         |          0 | _sysinternal | _hyper_3_4_0_partition
+ id | partition_id | hypertable_name | replica_id |    schema_name     |       table_name       
+----+--------------+-----------------+------------+--------------------+------------------------
+  1 |            1 | testNs          |          0 | _iobeamdb_internal | _hyper_1_1_0_partition
+  2 |            2 | testNs          |          0 | _iobeamdb_internal | _hyper_1_2_0_partition
+  3 |            3 | testNs2         |          0 | _iobeamdb_internal | _hyper_3_3_0_partition
+  4 |            4 | testNs2         |          0 | _iobeamdb_internal | _hyper_3_4_0_partition
 (4 rows)
 
 SELECT *
@@ -322,9 +322,9 @@ FROM _iobeamdb_catalog.chunk;
 
 SELECT *
 FROM _iobeamdb_catalog.chunk_replica_node;
- chunk_id | partition_replica_id | database_name | schema_name  |     table_name      
-----------+----------------------+---------------+--------------+---------------------
-        1 |                    1 | test2         | _sysinternal | _hyper_1_1_0_1_data
+ chunk_id | partition_replica_id | database_name |    schema_name     |     table_name      
+----------+----------------------+---------------+--------------------+---------------------
+        1 |                    1 | test2         | _iobeamdb_internal | _hyper_1_1_0_1_data
 (1 row)
 
 SELECT *
@@ -361,25 +361,25 @@ FROM _iobeamdb_catalog.hypertable_column;
  test2  | postgres  | ("user" 'postgres', password '')
 (2 rows)
 
-\d+ "_sysinternal".*
-               Foreign table "_sysinternal._hyper_1_0_2_distinct_data"
+\d+ "_iobeamdb_internal".*
+            Foreign table "_iobeamdb_internal._hyper_1_0_2_distinct_data"
    Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
 -------------+------+-----------+-------------+----------+--------------+-------------
  column_name | text | not null  |             | extended |              | 
  value       | text | not null  |             | extended |              | 
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_2_distinct_data')
-Inherits: _sysinternal._hyper_1_0_distinct
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_0_2_distinct_data')
+Inherits: _iobeamdb_internal._hyper_1_0_distinct
 
-                Table "_sysinternal._hyper_1_0_distinct"
+             Table "_iobeamdb_internal._hyper_1_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
-Inherits: _sysinternal._hyper_1_distinct
-Child tables: _sysinternal._hyper_1_0_2_distinct_data
+Inherits: _iobeamdb_internal._hyper_1_distinct
+Child tables: _iobeamdb_internal._hyper_1_0_2_distinct_data
 
-                                                Table "_sysinternal._hyper_1_0_replica"
+                                             Table "_iobeamdb_internal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -388,11 +388,11 @@ Child tables: _sysinternal._hyper_1_0_2_distinct_data
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Inherits: _sysinternal._hyper_1_root
-Child tables: _sysinternal._hyper_1_1_0_partition,
-              _sysinternal._hyper_1_2_0_partition
+Inherits: _iobeamdb_internal._hyper_1_root
+Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
+              _iobeamdb_internal._hyper_1_2_0_partition
 
-                                                   Foreign table "_sysinternal._hyper_1_1_0_1_data"
+                                                Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
                              Column                              |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+-------------+----------+--------------+-------------
  time                                                            | bigint           | not null  |             | plain    |              | 
@@ -404,10 +404,10 @@ Child tables: _sysinternal._hyper_1_1_0_partition,
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
-Inherits: _sysinternal._hyper_1_1_0_partition
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
+Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
-                                              Table "_sysinternal._hyper_1_1_0_partition"
+                                           Table "_iobeamdb_internal._hyper_1_1_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -418,10 +418,10 @@ Inherits: _sysinternal._hyper_1_1_0_partition
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sysinternal._hyper_1_0_replica
-Child tables: _sysinternal._hyper_1_1_0_1_data
+Inherits: _iobeamdb_internal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
 
-                                              Table "_sysinternal._hyper_1_2_0_partition"
+                                           Table "_iobeamdb_internal._hyper_1_2_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -432,25 +432,25 @@ Child tables: _sysinternal._hyper_1_1_0_1_data
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _sysinternal._hyper_1_0_replica
+Inherits: _iobeamdb_internal._hyper_1_0_replica
 
-                 Table "_sysinternal._hyper_1_distinct"
+              Table "_iobeamdb_internal._hyper_1_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Indexes:
     "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _sysinternal._hyper_1_0_distinct
+Child tables: _iobeamdb_internal._hyper_1_0_distinct
 
- Index "_sysinternal._hyper_1_distinct_pkey"
+Index "_iobeamdb_internal._hyper_1_distinct_pkey"
    Column    | Type | Definition  | Storage  
 -------------+------+-------------+----------
  column_name | text | column_name | extended
  value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_1_distinct"
+primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
 
-                                                   Table "_sysinternal._hyper_1_root"
+                                                Table "_iobeamdb_internal._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -459,16 +459,16 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
-                Table "_sysinternal._hyper_3_0_distinct"
+             Table "_iobeamdb_internal._hyper_3_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
-Inherits: _sysinternal._hyper_3_distinct
+Inherits: _iobeamdb_internal._hyper_3_distinct
 
-                                                Table "_sysinternal._hyper_3_0_replica"
+                                             Table "_iobeamdb_internal._hyper_3_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -477,11 +477,11 @@ Inherits: _sysinternal._hyper_3_distinct
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Inherits: _sysinternal._hyper_3_root
-Child tables: _sysinternal._hyper_3_3_0_partition,
-              _sysinternal._hyper_3_4_0_partition
+Inherits: _iobeamdb_internal._hyper_3_root
+Child tables: _iobeamdb_internal._hyper_3_3_0_partition,
+              _iobeamdb_internal._hyper_3_4_0_partition
 
-                                              Table "_sysinternal._hyper_3_3_0_partition"
+                                           Table "_iobeamdb_internal._hyper_3_3_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -492,9 +492,9 @@ Child tables: _sysinternal._hyper_3_3_0_partition,
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sysinternal._hyper_3_0_replica
+Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-                                              Table "_sysinternal._hyper_3_4_0_partition"
+                                           Table "_iobeamdb_internal._hyper_3_4_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -505,25 +505,25 @@ Inherits: _sysinternal._hyper_3_0_replica
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _sysinternal._hyper_3_0_replica
+Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-                 Table "_sysinternal._hyper_3_distinct"
+              Table "_iobeamdb_internal._hyper_3_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Indexes:
     "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _sysinternal._hyper_3_0_distinct
+Child tables: _iobeamdb_internal._hyper_3_0_distinct
 
- Index "_sysinternal._hyper_3_distinct_pkey"
+Index "_iobeamdb_internal._hyper_3_distinct_pkey"
    Column    | Type | Definition  | Storage  
 -------------+------+-------------+----------
  column_name | text | column_name | extended
  value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_3_distinct"
+primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
 
-                                                   Table "_sysinternal._hyper_3_root"
+                                                Table "_iobeamdb_internal._hyper_3_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -532,7 +532,7 @@ primary key, btree, for table "_sysinternal._hyper_3_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Child tables: _sysinternal._hyper_3_0_replica
+Child tables: _iobeamdb_internal._hyper_3_0_replica
 
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
@@ -541,32 +541,32 @@ Child tables: _sysinternal._hyper_3_0_replica
 --test idempotence
 \c meta
 SELECT *
-FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
 (1 row)
 
 \c Test1
-\d+ "_sysinternal".*
-               Foreign table "_sysinternal._hyper_1_0_2_distinct_data"
+\d+ "_iobeamdb_internal".*
+            Foreign table "_iobeamdb_internal._hyper_1_0_2_distinct_data"
    Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
 -------------+------+-----------+-------------+----------+--------------+-------------
  column_name | text | not null  |             | extended |              | 
  value       | text | not null  |             | extended |              | 
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_2_distinct_data')
-Inherits: _sysinternal._hyper_1_0_distinct
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_0_2_distinct_data')
+Inherits: _iobeamdb_internal._hyper_1_0_distinct
 
-                Table "_sysinternal._hyper_1_0_distinct"
+             Table "_iobeamdb_internal._hyper_1_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
-Inherits: _sysinternal._hyper_1_distinct
-Child tables: _sysinternal._hyper_1_0_2_distinct_data
+Inherits: _iobeamdb_internal._hyper_1_distinct
+Child tables: _iobeamdb_internal._hyper_1_0_2_distinct_data
 
-                                                Table "_sysinternal._hyper_1_0_replica"
+                                             Table "_iobeamdb_internal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -575,11 +575,11 @@ Child tables: _sysinternal._hyper_1_0_2_distinct_data
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Inherits: _sysinternal._hyper_1_root
-Child tables: _sysinternal._hyper_1_1_0_partition,
-              _sysinternal._hyper_1_2_0_partition
+Inherits: _iobeamdb_internal._hyper_1_root
+Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
+              _iobeamdb_internal._hyper_1_2_0_partition
 
-                                                   Foreign table "_sysinternal._hyper_1_1_0_1_data"
+                                                Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
                              Column                              |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+-------------+----------+--------------+-------------
  time                                                            | bigint           | not null  |             | plain    |              | 
@@ -591,10 +591,10 @@ Child tables: _sysinternal._hyper_1_1_0_partition,
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
-Inherits: _sysinternal._hyper_1_1_0_partition
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
+Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
-                                              Table "_sysinternal._hyper_1_1_0_partition"
+                                           Table "_iobeamdb_internal._hyper_1_1_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -605,10 +605,10 @@ Inherits: _sysinternal._hyper_1_1_0_partition
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sysinternal._hyper_1_0_replica
-Child tables: _sysinternal._hyper_1_1_0_1_data
+Inherits: _iobeamdb_internal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
 
-                                              Table "_sysinternal._hyper_1_2_0_partition"
+                                           Table "_iobeamdb_internal._hyper_1_2_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -619,25 +619,25 @@ Child tables: _sysinternal._hyper_1_1_0_1_data
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _sysinternal._hyper_1_0_replica
+Inherits: _iobeamdb_internal._hyper_1_0_replica
 
-                 Table "_sysinternal._hyper_1_distinct"
+              Table "_iobeamdb_internal._hyper_1_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Indexes:
     "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _sysinternal._hyper_1_0_distinct
+Child tables: _iobeamdb_internal._hyper_1_0_distinct
 
- Index "_sysinternal._hyper_1_distinct_pkey"
+Index "_iobeamdb_internal._hyper_1_distinct_pkey"
    Column    | Type | Definition  | Storage  
 -------------+------+-------------+----------
  column_name | text | column_name | extended
  value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_1_distinct"
+primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
 
-                                                   Table "_sysinternal._hyper_1_root"
+                                                Table "_iobeamdb_internal._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -646,16 +646,16 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
-                Table "_sysinternal._hyper_3_0_distinct"
+             Table "_iobeamdb_internal._hyper_3_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
-Inherits: _sysinternal._hyper_3_distinct
+Inherits: _iobeamdb_internal._hyper_3_distinct
 
-                                                Table "_sysinternal._hyper_3_0_replica"
+                                             Table "_iobeamdb_internal._hyper_3_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -664,11 +664,11 @@ Inherits: _sysinternal._hyper_3_distinct
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Inherits: _sysinternal._hyper_3_root
-Child tables: _sysinternal._hyper_3_3_0_partition,
-              _sysinternal._hyper_3_4_0_partition
+Inherits: _iobeamdb_internal._hyper_3_root
+Child tables: _iobeamdb_internal._hyper_3_3_0_partition,
+              _iobeamdb_internal._hyper_3_4_0_partition
 
-                                              Table "_sysinternal._hyper_3_3_0_partition"
+                                           Table "_iobeamdb_internal._hyper_3_3_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -679,9 +679,9 @@ Child tables: _sysinternal._hyper_3_3_0_partition,
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sysinternal._hyper_3_0_replica
+Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-                                              Table "_sysinternal._hyper_3_4_0_partition"
+                                           Table "_iobeamdb_internal._hyper_3_4_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -692,25 +692,25 @@ Inherits: _sysinternal._hyper_3_0_replica
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _sysinternal._hyper_3_0_replica
+Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-                 Table "_sysinternal._hyper_3_distinct"
+              Table "_iobeamdb_internal._hyper_3_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Indexes:
     "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _sysinternal._hyper_3_0_distinct
+Child tables: _iobeamdb_internal._hyper_3_0_distinct
 
- Index "_sysinternal._hyper_3_distinct_pkey"
+Index "_iobeamdb_internal._hyper_3_distinct_pkey"
    Column    | Type | Definition  | Storage  
 -------------+------+-------------+----------
  column_name | text | column_name | extended
  value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_3_distinct"
+primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
 
-                                                   Table "_sysinternal._hyper_3_root"
+                                                Table "_iobeamdb_internal._hyper_3_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -719,10 +719,10 @@ primary key, btree, for table "_sysinternal._hyper_3_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Child tables: _sysinternal._hyper_3_0_replica
+Child tables: _iobeamdb_internal._hyper_3_0_replica
 
 \c meta
-SELECT _meta.close_chunk_end(1);
+SELECT _iobeamdb_meta.close_chunk_end(1);
 psql:cluster.sql:127: WARNING:  01000: Cannot close an empty chunk table
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
@@ -738,14 +738,14 @@ FROM _iobeamdb_catalog.chunk;
 (1 row)
 
 SELECT *
-FROM _meta.get_or_create_chunk(1, 10 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 10 :: BIGINT);
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
 (1 row)
 
 SELECT *
-FROM _meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
+FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
  id | partition_id | start_time | end_time 
 ----+--------------+------------+----------
   1 |            1 |            |         
@@ -759,25 +759,25 @@ FROM _iobeamdb_catalog.chunk;
 (1 row)
 
 \c Test1
-\d+ "_sysinternal".*
-               Foreign table "_sysinternal._hyper_1_0_2_distinct_data"
+\d+ "_iobeamdb_internal".*
+            Foreign table "_iobeamdb_internal._hyper_1_0_2_distinct_data"
    Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
 -------------+------+-----------+-------------+----------+--------------+-------------
  column_name | text | not null  |             | extended |              | 
  value       | text | not null  |             | extended |              | 
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_0_2_distinct_data')
-Inherits: _sysinternal._hyper_1_0_distinct
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_0_2_distinct_data')
+Inherits: _iobeamdb_internal._hyper_1_0_distinct
 
-                Table "_sysinternal._hyper_1_0_distinct"
+             Table "_iobeamdb_internal._hyper_1_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
-Inherits: _sysinternal._hyper_1_distinct
-Child tables: _sysinternal._hyper_1_0_2_distinct_data
+Inherits: _iobeamdb_internal._hyper_1_distinct
+Child tables: _iobeamdb_internal._hyper_1_0_2_distinct_data
 
-                                                Table "_sysinternal._hyper_1_0_replica"
+                                             Table "_iobeamdb_internal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -786,11 +786,11 @@ Child tables: _sysinternal._hyper_1_0_2_distinct_data
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Inherits: _sysinternal._hyper_1_root
-Child tables: _sysinternal._hyper_1_1_0_partition,
-              _sysinternal._hyper_1_2_0_partition
+Inherits: _iobeamdb_internal._hyper_1_root
+Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
+              _iobeamdb_internal._hyper_1_2_0_partition
 
-                                                   Foreign table "_sysinternal._hyper_1_1_0_1_data"
+                                                Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
                              Column                              |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+-------------+----------+--------------+-------------
  time                                                            | bigint           | not null  |             | plain    |              | 
@@ -802,10 +802,10 @@ Child tables: _sysinternal._hyper_1_1_0_partition,
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
-Inherits: _sysinternal._hyper_1_1_0_partition
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
+Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
-                                              Table "_sysinternal._hyper_1_1_0_partition"
+                                           Table "_iobeamdb_internal._hyper_1_1_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -816,10 +816,10 @@ Inherits: _sysinternal._hyper_1_1_0_partition
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sysinternal._hyper_1_0_replica
-Child tables: _sysinternal._hyper_1_1_0_1_data
+Inherits: _iobeamdb_internal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
 
-                                              Table "_sysinternal._hyper_1_2_0_partition"
+                                           Table "_iobeamdb_internal._hyper_1_2_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -830,25 +830,25 @@ Child tables: _sysinternal._hyper_1_1_0_1_data
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _sysinternal._hyper_1_0_replica
+Inherits: _iobeamdb_internal._hyper_1_0_replica
 
-                 Table "_sysinternal._hyper_1_distinct"
+              Table "_iobeamdb_internal._hyper_1_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Indexes:
     "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _sysinternal._hyper_1_0_distinct
+Child tables: _iobeamdb_internal._hyper_1_0_distinct
 
- Index "_sysinternal._hyper_1_distinct_pkey"
+Index "_iobeamdb_internal._hyper_1_distinct_pkey"
    Column    | Type | Definition  | Storage  
 -------------+------+-------------+----------
  column_name | text | column_name | extended
  value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_1_distinct"
+primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
 
-                                                   Table "_sysinternal._hyper_1_root"
+                                                Table "_iobeamdb_internal._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -857,16 +857,16 @@ primary key, btree, for table "_sysinternal._hyper_1_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
-                Table "_sysinternal._hyper_3_0_distinct"
+             Table "_iobeamdb_internal._hyper_3_0_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
-Inherits: _sysinternal._hyper_3_distinct
+Inherits: _iobeamdb_internal._hyper_3_distinct
 
-                                                Table "_sysinternal._hyper_3_0_replica"
+                                             Table "_iobeamdb_internal._hyper_3_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -875,11 +875,11 @@ Inherits: _sysinternal._hyper_3_distinct
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Inherits: _sysinternal._hyper_3_root
-Child tables: _sysinternal._hyper_3_3_0_partition,
-              _sysinternal._hyper_3_4_0_partition
+Inherits: _iobeamdb_internal._hyper_3_root
+Child tables: _iobeamdb_internal._hyper_3_3_0_partition,
+              _iobeamdb_internal._hyper_3_4_0_partition
 
-                                              Table "_sysinternal._hyper_3_3_0_partition"
+                                           Table "_iobeamdb_internal._hyper_3_3_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -890,9 +890,9 @@ Child tables: _sysinternal._hyper_3_3_0_partition,
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Inherits: _sysinternal._hyper_3_0_replica
+Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-                                              Table "_sysinternal._hyper_3_4_0_partition"
+                                           Table "_iobeamdb_internal._hyper_3_4_0_partition"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -903,25 +903,25 @@ Inherits: _sysinternal._hyper_3_0_replica
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _sysinternal._hyper_3_0_replica
+Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-                 Table "_sysinternal._hyper_3_distinct"
+              Table "_iobeamdb_internal._hyper_3_distinct"
    Column    | Type | Modifiers | Storage  | Stats target | Description 
 -------------+------+-----------+----------+--------------+-------------
  column_name | text | not null  | extended |              | 
  value       | text | not null  | extended |              | 
 Indexes:
     "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _sysinternal._hyper_3_0_distinct
+Child tables: _iobeamdb_internal._hyper_3_0_distinct
 
- Index "_sysinternal._hyper_3_distinct_pkey"
+Index "_iobeamdb_internal._hyper_3_distinct_pkey"
    Column    | Type | Definition  | Storage  
 -------------+------+-------------+----------
  column_name | text | column_name | extended
  value       | text | value       | extended
-primary key, btree, for table "_sysinternal._hyper_3_distinct"
+primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
 
-                                                   Table "_sysinternal._hyper_3_root"
+                                                Table "_iobeamdb_internal._hyper_3_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
  time                                                            | bigint           | not null  | plain    |              | 
@@ -930,5 +930,5 @@ primary key, btree, for table "_sysinternal._hyper_3_distinct"
  occupied                                                        | boolean          |           | plain    |              | 
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
-Child tables: _sysinternal._hyper_3_0_replica
+Child tables: _iobeamdb_internal._hyper_3_0_replica
 

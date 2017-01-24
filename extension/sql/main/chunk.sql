@@ -1,5 +1,5 @@
 
-CREATE OR REPLACE FUNCTION _sysinternal.lock_for_chunk_close(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.lock_for_chunk_close(
     chunk_id INTEGER
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -16,7 +16,7 @@ END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION _sysinternal.max_time_for_chunk_close(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.max_time_for_chunk_close(
     schema_name NAME,
     table_name  NAME
 )
@@ -30,9 +30,9 @@ BEGIN
             SELECT max(%s)
             FROM %I.%I
         $$,
-    _sysinternal.extract_time_sql(
-        format('%I', _sysinternal.time_col_name_for_crn(schema_name, table_name)),
-        _sysinternal.time_col_type_for_crn(schema_name, table_name)
+    _iobeamdb_internal.extract_time_sql(
+        format('%I', _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name)),
+        _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name)
     ),
     schema_name, table_name)
     INTO max_time;
@@ -41,7 +41,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.set_end_time_for_chunk_close(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.set_end_time_for_chunk_close(
     chunk_id INTEGER,
     max_time BIGINT
 )
@@ -57,7 +57,7 @@ $BODY$;
 
 --closes the given chunk if it is over the size limit set for the hypertable
 --it belongs to.
-CREATE OR REPLACE FUNCTION _sysinternal.close_chunk_if_needed(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.close_chunk_if_needed(
     chunk_row _iobeamdb_catalog.chunk
 )
     RETURNS boolean LANGUAGE PLPGSQL VOLATILE AS
@@ -67,7 +67,7 @@ DECLARE
     chunk_max_size  BIGINT;
 BEGIN
     chunk_size := _iobeamdb_data_api.get_chunk_size(chunk_row.id);
-    chunk_max_size := _sysinternal.get_chunk_max_size(chunk_row.id);
+    chunk_max_size := _iobeamdb_internal.get_chunk_max_size(chunk_row.id);
 
     IF chunk_row.end_time IS NOT NULL OR (NOT chunk_size >= chunk_max_size) THEN
         RETURN FALSE;
@@ -95,9 +95,9 @@ DECLARE
 BEGIN
 
     IF lock_chunk THEN
-        chunk_row := _sysinternal.get_chunk_locked(partition_id, time_point);
+        chunk_row := _iobeamdb_internal.get_chunk_locked(partition_id, time_point);
     ELSE
-        chunk_row := _sysinternal.get_chunk(partition_id, time_point);
+        chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
     END IF;
 
     --Create a new chunk in case no chunk was returned.
@@ -115,7 +115,7 @@ BEGIN
         FROM _iobeamdb_meta_api.get_or_create_chunk_immediate(partition_id, time_point);
 
         IF lock_chunk THEN
-            chunk_row := _sysinternal.get_chunk_locked(partition_id, time_point);
+            chunk_row := _iobeamdb_internal.get_chunk_locked(partition_id, time_point);
         END IF;
     END LOOP;
 

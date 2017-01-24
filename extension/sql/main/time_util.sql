@@ -5,7 +5,7 @@
 -- Converting from timestamps to internal representation is conversion to epoch (in microseconds).
 
 -- Gets the sql code for extracting the internal (bigint) time value from the identifier with the given column_type.
-CREATE OR REPLACE FUNCTION  _sysinternal.extract_time_sql(
+CREATE OR REPLACE FUNCTION  _iobeamdb_internal.extract_time_sql(
     identifier      text,
     column_type      REGTYPE
 )
@@ -23,7 +23,7 @@ END
 $BODY$;
 
 -- Gets the sql code for representing the literal for the given time value (in the internal representation) as the column_type.
-CREATE OR REPLACE FUNCTION  _sysinternal.time_literal_sql(
+CREATE OR REPLACE FUNCTION  _iobeamdb_internal.time_literal_sql(
     time_value      BIGINT,
     column_type      REGTYPE
 )

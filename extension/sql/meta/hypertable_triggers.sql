@@ -1,5 +1,5 @@
 -- Trigger on the meta node for when a new hypertable is added.
-CREATE OR REPLACE FUNCTION _meta.on_create_hypertable()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -15,7 +15,7 @@ BEGIN
         FROM generate_series(0, NEW.replication_factor - 1) AS replica_id
         ON CONFLICT DO NOTHING;
 
-        PERFORM _meta.assign_default_replica_node(n.database_name, NEW.name)
+        PERFORM _iobeamdb_meta.assign_default_replica_node(n.database_name, NEW.name)
         FROM _iobeamdb_catalog.node n;
         RETURN NEW;
     END IF;

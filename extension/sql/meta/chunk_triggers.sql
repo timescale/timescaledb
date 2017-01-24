@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _meta.place_chunks(
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.place_chunks(
     chunk_row _iobeamdb_catalog.chunk,
     placement chunk_placement_type,
     replication_factor SMALLINT
@@ -36,7 +36,7 @@ BEGIN
                     )
             ) AS crns_already_on_node
           ) AS d
-          ORDER BY (current_crn_count + random()) ASC 
+          ORDER BY (current_crn_count + random()) ASC
           LIMIT replication_factor
         ) AS dn ON TRUE
         WHERE pr.partition_id = chunk_row.partition_id;
@@ -55,13 +55,13 @@ BEGIN
           WHERE pr.partition_id = chunk_row.partition_id;
       IF NOT FOUND THEN
         RETURN query SELECT *
-        FROM _meta.place_chunks(chunk_row, 'RANDOM', replication_factor);
+        FROM _iobeamdb_meta.place_chunks(chunk_row, 'RANDOM', replication_factor);
       END IF;
   END IF;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _meta.on_create_chunk()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -132,7 +132,7 @@ BEGIN
                 format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
             FROM _iobeamdb_catalog.partition_replica pr
             INNER JOIN _iobeamdb_catalog.hypertable h ON (h.name = pr.hypertable_name)
-            INNER JOIN _meta.place_chunks(new, h.placement, h.replication_factor) p ON (p.replica_id = pr.replica_id)
+            INNER JOIN _iobeamdb_meta.place_chunks(new, h.placement, h.replication_factor) p ON (p.replica_id = pr.replica_id)
             WHERE pr.partition_id = NEW.partition_id;
     END IF;
 

@@ -6,8 +6,8 @@ CREATE OR REPLACE FUNCTION _iobeamdb_data_api.lock_for_chunk_close(
 $BODY$
 DECLARE
 BEGIN
-     PERFORM _meta.node_transaction_exec_with_return(n.database_name, n.server_name,
-            format('SELECT * FROM _sysinternal.lock_for_chunk_close(%L)', chunk_id)
+     PERFORM _iobeamdb_meta.node_transaction_exec_with_return(n.database_name, n.server_name,
+            format('SELECT * FROM _iobeamdb_internal.lock_for_chunk_close(%L)', chunk_id)
      )
      FROM _iobeamdb_catalog.node n
      WHERE n.database_name = node_database_name;
@@ -24,8 +24,8 @@ $BODY$
 DECLARE
     max_time BIGINT;
 BEGIN
-     SELECT _meta.node_transaction_exec_with_return(n.database_name, n.server_name,
-            format('SELECT * FROM _sysinternal.max_time_for_chunk_close(%L, %L)',
+     SELECT _iobeamdb_meta.node_transaction_exec_with_return(n.database_name, n.server_name,
+            format('SELECT * FROM _iobeamdb_internal.max_time_for_chunk_close(%L, %L)',
                 max_time_for_chunk_close.schema_name,
                 max_time_for_chunk_close.table_name
             )
@@ -47,8 +47,8 @@ CREATE OR REPLACE FUNCTION _iobeamdb_data_api.set_end_time_for_chunk_close(
 $BODY$
 DECLARE
 BEGIN
-     PERFORM _meta.node_transaction_exec_with_return(n.database_name, n.server_name,
-            format('SELECT * FROM _sysinternal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)
+     PERFORM _iobeamdb_meta.node_transaction_exec_with_return(n.database_name, n.server_name,
+            format('SELECT * FROM _iobeamdb_internal.set_end_time_for_chunk_close(%L, %L)', chunk_id, max_time)
      )
      FROM _iobeamdb_catalog.node n
      WHERE n.database_name = node_database_name;
@@ -63,8 +63,8 @@ $BODY$
 DECLARE
     chunk_size BIGINT;
 BEGIN
-     SELECT _sysinternal.node_immediate_commit_exec_with_return(n.database_name, n.server_name,
-            format('SELECT * FROM _sysinternal.get_local_chunk_size(%L)', get_chunk_size.chunk_id)
+     SELECT _iobeamdb_internal.node_immediate_commit_exec_with_return(n.database_name, n.server_name,
+            format('SELECT * FROM _iobeamdb_internal.get_local_chunk_size(%L)', get_chunk_size.chunk_id)
      )::BIGINT
      INTO STRICT chunk_size
      FROM _iobeamdb_catalog.chunk_replica_node crn
@@ -76,4 +76,3 @@ BEGIN
     RETURN chunk_size;
 END
 $BODY$;
-

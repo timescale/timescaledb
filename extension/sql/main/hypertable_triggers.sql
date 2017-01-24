@@ -2,7 +2,7 @@
 -- well as triggers for newly created hypertables.
 
 -- Trigger to prevent unsupported operations on the main table.
-CREATE OR REPLACE FUNCTION _sysinternal.on_unsupported_main_table()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_unsupported_main_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -20,7 +20,7 @@ $BODY$;
 -- Trigger function to move INSERT'd data on the main table to child tables.
 -- After data is inserted on the main table, it is placed in the correct
 -- partition tables based on its partition key and time.
-CREATE OR REPLACE FUNCTION _sysinternal.on_modify_main_table()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_modify_main_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -36,7 +36,7 @@ END
 $BODY$;
 
 -- Trigger for handling the addition of new hypertables.
-CREATE OR REPLACE FUNCTION _sysinternal.on_create_hypertable()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -50,24 +50,24 @@ BEGIN
                 CREATE SCHEMA IF NOT EXISTS %I
             $$, NEW.associated_schema_name);
 
-        PERFORM _sysinternal.create_table(NEW.root_schema_name, NEW.root_table_name);
-        PERFORM _sysinternal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
+        PERFORM _iobeamdb_internal.create_table(NEW.root_schema_name, NEW.root_table_name);
+        PERFORM _iobeamdb_internal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
 
         IF NEW.created_on <> current_database() THEN
-           PERFORM _sysinternal.create_schema(NEW.main_schema_name);
-           PERFORM _sysinternal.create_table(NEW.main_schema_name, NEW.main_table_name);
+           PERFORM _iobeamdb_internal.create_schema(NEW.main_schema_name);
+           PERFORM _iobeamdb_internal.create_table(NEW.main_schema_name, NEW.main_table_name);
         END IF;
 
         -- UPDATE not supported, so do them before action
         EXECUTE format(
             $$
                 CREATE TRIGGER modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
-                FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table();
+                FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table();
             $$, NEW.main_schema_name, NEW.main_table_name);
         EXECUTE format(
             $$
                 CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
-                FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table();
+                FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table();
             $$, NEW.main_schema_name, NEW.main_table_name);
 
         RETURN NEW;
@@ -89,7 +89,7 @@ SET SEARCH_PATH = 'public';
 /*
     Drops public hypertable when hypertable rows deleted (row created in deleted_hypertable table).
 */
-CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_hypertable()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_deleted_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -101,8 +101,8 @@ BEGIN
     END IF;
     --drop index on all chunks
 
-    PERFORM _sysinternal.drop_root_table(NEW.root_schema_name, NEW.root_table_name);
-    PERFORM _sysinternal.drop_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
+    PERFORM _iobeamdb_internal.drop_root_table(NEW.root_schema_name, NEW.root_table_name);
+    PERFORM _iobeamdb_internal.drop_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
 
     IF new.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);

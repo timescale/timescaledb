@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _meta.on_create_partition()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_partition()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN

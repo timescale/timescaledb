@@ -2,7 +2,7 @@
     Convert a general index definition to a create index sql command
     for a particular table and index name.
  */
-CREATE OR REPLACE FUNCTION _sysinternal.get_index_definition_for_table(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_index_definition_for_table(
     schema_name NAME,
     table_name  NAME,
     index_name NAME,
@@ -23,7 +23,7 @@ $BODY$;
 /*
     Creates an index on all chunk_replica_nodes for a hypertable.
 */
-CREATE OR REPLACE FUNCTION _sysinternal.create_index_on_all_chunk_replica_nodes(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_index_on_all_chunk_replica_nodes(
     hypertable_name  NAME,
     main_schema_name NAME,
     main_index_name  NAME,
@@ -33,7 +33,7 @@ CREATE OR REPLACE FUNCTION _sysinternal.create_index_on_all_chunk_replica_nodes(
 $BODY$
 DECLARE
 BEGIN
-    PERFORM _sysinternal.create_chunk_replica_node_index(crn.schema_name, crn.table_name, main_schema_name, main_index_name, definition)
+    PERFORM _iobeamdb_internal.create_chunk_replica_node_index(crn.schema_name, crn.table_name, main_schema_name, main_index_name, definition)
     FROM _iobeamdb_catalog.chunk_replica_node crn
     INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
     WHERE pr.hypertable_name = create_index_on_all_chunk_replica_nodes.hypertable_name AND
@@ -41,7 +41,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _sysinternal.drop_chunk_replica_node_index(
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_chunk_replica_node_index(
     main_schema_name     NAME,
     main_index_name      NAME
 )
@@ -55,7 +55,7 @@ $BODY$;
 /*
     Creates indexes on chunk tables when hypertable_index rows created.
 */
-CREATE OR REPLACE FUNCTION _sysinternal.on_modify_hypertable_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_modify_hypertable_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -71,7 +71,7 @@ BEGIN
     END IF;
 
     --create index on all chunks
-    PERFORM _sysinternal.create_index_on_all_chunk_replica_nodes(NEW.hypertable_name, NEW.main_schema_name, NEW.main_index_name, NEW.definition);
+    PERFORM _iobeamdb_internal.create_index_on_all_chunk_replica_nodes(NEW.hypertable_name, NEW.main_schema_name, NEW.main_index_name, NEW.definition);
 
     IF new.created_on <> current_database() THEN
       --create index on main table
@@ -81,7 +81,7 @@ BEGIN
       WHERE h.name = NEW.hypertable_name;
 
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      EXECUTE _sysinternal.get_index_definition_for_table(hypertable_row.main_schema_name, hypertable_row.main_table_name, NEW.main_index_name, NEW.definition);
+      EXECUTE _iobeamdb_internal.get_index_definition_for_table(hypertable_row.main_schema_name, hypertable_row.main_table_name, NEW.main_index_name, NEW.definition);
     END IF;
 
     RETURN NEW;
@@ -93,7 +93,7 @@ SET SEARCH_PATH = 'public';
 /*
     Drops indexes on chunk tables when hypertable_index rows deleted (row created in deleted_hypertable_index table).
 */
-CREATE OR REPLACE FUNCTION _sysinternal.on_deleted_hypertable_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_deleted_hypertable_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -104,7 +104,7 @@ BEGIN
         USING ERRCODE = 'IO101';
     END IF;
     --drop index on all chunks
-    PERFORM _sysinternal.drop_chunk_replica_node_index(NEW.main_schema_name, NEW.main_index_name);
+    PERFORM _iobeamdb_internal.drop_chunk_replica_node_index(NEW.main_schema_name, NEW.main_index_name);
 
     IF new.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);

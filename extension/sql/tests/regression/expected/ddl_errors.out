@@ -70,9 +70,9 @@ LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM  PUBLIC."Hypertable_1" ;
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
------------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+-----------------------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ public."Hypertable_1" | public           | Hypertable_1    | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 \set ON_ERROR_STOP 0

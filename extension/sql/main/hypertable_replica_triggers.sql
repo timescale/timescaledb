@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _sysinternal.on_create_hypertable_replica()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_hypertable_replica()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -10,10 +10,10 @@ BEGIN
         FROM _iobeamdb_catalog.hypertable AS h
         WHERE h.name = NEW.hypertable_name;
 
-        PERFORM _sysinternal.create_replica_table(NEW.schema_name, NEW.table_name, hypertable_row.root_schema_name,
-                                                  hypertable_row.root_table_name);
-        PERFORM _sysinternal.create_replica_table(NEW.distinct_schema_name, NEW.distinct_table_name,
-                                                  hypertable_row.distinct_schema_name, hypertable_row.distinct_table_name);
+        PERFORM _iobeamdb_internal.create_replica_table(NEW.schema_name, NEW.table_name, hypertable_row.root_schema_name,
+                                                        hypertable_row.root_table_name);
+        PERFORM _iobeamdb_internal.create_replica_table(NEW.distinct_schema_name, NEW.distinct_table_name,
+                                                        hypertable_row.distinct_schema_name, hypertable_row.distinct_table_name);
         RETURN NEW;
     END IF;
 

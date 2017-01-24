@@ -55,15 +55,15 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
------------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+-----------------------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ public."Hypertable_1" | public           | Hypertable_1    | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable;
-         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
------------------------+------------------+-----------------+------------------------+-------------------------+------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- public."Hypertable_1" | public           | Hypertable_1    | _sysinternal           | _hyper_1                | _sysinternal     | _hyper_1_root   | _sysinternal         | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+-----------------------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+ public."Hypertable_1" | public           | Hypertable_1    | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable_index;
@@ -143,11 +143,11 @@ Indexes:
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
 
-\d+ "_sysinternal"."_hyper_1_root"
-                              Table "_sysinternal._hyper_1_root"
+\d+ "_iobeamdb_internal"."_hyper_1_root"
+                           Table "_iobeamdb_internal._hyper_1_root"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
 -----------+---------+--------------------------------+----------+--------------+-------------
  time      | bigint  | not null                       | plain    |              | 
@@ -158,10 +158,10 @@ Triggers:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
-\d+ _sysinternal._hyper_1_1_0_1_data
-                              Foreign table "_sysinternal._hyper_1_1_0_1_data"
+\d+ _iobeamdb_internal._hyper_1_1_0_1_data
+                           Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
   Column   |  Type   |           Modifiers            | FDW Options | Storage  | Stats target | Description 
 -----------+---------+--------------------------------+-------------+----------+--------------+-------------
  time      | bigint  | not null                       |             | plain    |              | 
@@ -175,8 +175,8 @@ Child tables: _sysinternal._hyper_1_0_replica
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
-Inherits: _sysinternal._hyper_1_1_0_partition
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
+Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
 SELECT * FROM _iobeamdb_catalog.default_replica_node;
  database_name |    hypertable_name    | replica_id 
@@ -204,11 +204,11 @@ Indexes:
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
 
-\d+ "_sysinternal"."_hyper_1_root"
-                              Table "_sysinternal._hyper_1_root"
+\d+ "_iobeamdb_internal"."_hyper_1_root"
+                           Table "_iobeamdb_internal._hyper_1_root"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
 -----------+---------+--------------------------------+----------+--------------+-------------
  time      | bigint  | not null                       | plain    |              | 
@@ -219,7 +219,7 @@ Triggers:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
 \ir include/ddl_ops_2.sql
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
@@ -275,11 +275,11 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
 
-\d+ "_sysinternal"."_hyper_1_root"
-                             Table "_sysinternal._hyper_1_root"
+\d+ "_iobeamdb_internal"."_hyper_1_root"
+                          Table "_iobeamdb_internal._hyper_1_root"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -291,9 +291,9 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
-SELECT * FROM _sysinternal._hyper_1_0_2_distinct_data;
+SELECT * FROM _iobeamdb_internal._hyper_1_0_2_distinct_data;
  column_name | value 
 -------------+-------
  sensor_1    | 1
@@ -318,11 +318,11 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _sysinternal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
 
-\d+ "_sysinternal"."_hyper_1_root"
-                             Table "_sysinternal._hyper_1_root"
+\d+ "_iobeamdb_internal"."_hyper_1_root"
+                          Table "_iobeamdb_internal._hyper_1_root"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -334,10 +334,10 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _sysinternal._hyper_1_0_replica
+Child tables: _iobeamdb_internal._hyper_1_0_replica
 
-\d+ _sysinternal._hyper_1_1_0_1_data
-                             Foreign table "_sysinternal._hyper_1_1_0_1_data"
+\d+ _iobeamdb_internal._hyper_1_1_0_1_data
+                          Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
       Column      |  Type   |       Modifiers        | FDW Options | Storage  | Stats target | Description 
 ------------------+---------+------------------------+-------------+----------+--------------+-------------
  time             | bigint  | not null               |             | plain    |              | 
@@ -352,8 +352,8 @@ Child tables: _sysinternal._hyper_1_0_replica
 Check constraints:
     "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
-FDW Options: (schema_name '_sysinternal', table_name '_hyper_1_1_0_1_data')
-Inherits: _sysinternal._hyper_1_1_0_partition
+FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
+Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 
