@@ -23,6 +23,8 @@ golden_test() {
 
 mkdir -p actual
 rm -fr actual/*
+mkdir -p dump
+rm -fr dump/*
 
 
 if [ "$#" -ne 0 ]; then
