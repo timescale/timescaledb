@@ -15,16 +15,6 @@ WHERE drn.hypertable_name = get_distinct_table_oid.hypertable_name AND
       drn.database_name = get_distinct_table_oid.database_name;
 $BODY$;
 
-
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_distinct_local_table_oid(
-    hypertable_name NAME,
-    replica_id      SMALLINT
-)
-    RETURNS REGCLASS LANGUAGE SQL STABLE AS
-$BODY$
-SELECT _iobeamdb_internal.get_distinct_table_oid(hypertable_name, replica_id, current_database())
-$BODY$;
-
 -- Get the name of the time column for a hypertable.
 --
 -- hypertable_name - name of the hypertable.
@@ -51,23 +41,6 @@ $BODY$
     WHERE h.name = hypertable_name;
 $BODY$;
 
-
--- Get the list of columns for a hypertable as an ARRAY
---
--- hypertable_name - Name of the hypertable
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_names(
-    hypertable_name NAME
-)
-    RETURNS NAME [] LANGUAGE SQL STABLE AS
-$BODY$
-SELECT ARRAY(
-    SELECT name
-    FROM _iobeamdb_catalog.hypertable_column c
-    WHERE c.hypertable_name = get_column_names.hypertable_name
-    ORDER BY attnum
-);
-$BODY$;
-
 -- Get the list of columns (each quoted) from a hypertable as an ARRAY
 --
 -- hypertable_name -- Name of the hypertable
@@ -82,74 +55,6 @@ SELECT ARRAY(
     WHERE c.hypertable_name = get_quoted_column_names.hypertable_name
     ORDER BY name
 );
-$BODY$;
-
--- Get a table of columns and their types for a hypertable
---
--- hypertable_name - Name of the hypertable
--- column_names - Name of the columns to fetch types for
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_names_and_types(
-    hypertable_name NAME,
-    column_names    NAME []
-)
-    RETURNS TABLE(column_name NAME, data_type REGTYPE) LANGUAGE PLPGSQL STABLE AS
-$BODY$
-DECLARE
-    rows_returned INT;
-BEGIN
-    RETURN QUERY SELECT
-                     c.name,
-                     c.data_type
-                 FROM _iobeamdb_catalog.hypertable_column c
-                 INNER JOIN unnest(column_names) WITH ORDINALITY
-                     AS x(column_name, ordering) ON c.name = x.column_name
-                 WHERE c.hypertable_name = get_column_names_and_types.hypertable_name
-                 ORDER BY x.ordering;
-    GET DIAGNOSTICS rows_returned = ROW_COUNT;
-    IF rows_returned != cardinality(column_names) THEN
-        DECLARE
-            missing_column NAME;
-        BEGIN
-            SELECT cn
-            INTO missing_column
-            FROM unnest(column_names) AS cn
-            WHERE NOT EXISTS(
-                SELECT 1
-                FROM _iobeamdb_catalog.hypertable_column c
-                WHERE c.hypertable_name = get_column_names_and_types.hypertable_name AND
-                      c.name = cn
-            );
-            RAISE 'Missing column "%" in hypertable "%"', missing_column, hypertable_name
-            USING ERRCODE = 'IO002';
-        END;
-    END IF;
-END
-$BODY$;
-
--- Get the Postgres datatype of a column in a hypertable
---
--- hypertable_name - Name of the hypertable
--- column_name - Name of the column whose type is wanted
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_type(
-    hypertable_name NAME,
-    column_name     NAME
-)
-    RETURNS REGTYPE LANGUAGE PLPGSQL STABLE AS
-$BODY$
-DECLARE
-    data_type REGTYPE;
-BEGIN
-    SELECT c.data_type
-    INTO data_type
-    FROM _iobeamdb_catalog.hypertable_column c
-    WHERE c.name = get_column_type.column_name AND c.hypertable_name = get_column_type.hypertable_name;
-
-    IF NOT FOUND THEN
-        RAISE 'Missing column "%" in hypertable "%"', column_name, hypertable_name
-        USING ERRCODE = 'IO002';
-    END IF;
-    RETURN data_type;
-END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_partition_for_epoch(
