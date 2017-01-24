@@ -8,11 +8,11 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_distinct_table_oid(
 )
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
-SELECT format('%I.%I', drn.schema_name, drn.table_name) :: REGCLASS
-FROM _iobeamdb_catalog.distinct_replica_node AS drn
-WHERE drn.hypertable_name = get_distinct_table_oid.hypertable_name AND
-      drn.replica_id = get_distinct_table_oid.replica_id AND
-      drn.database_name = get_distinct_table_oid.database_name;
+    SELECT format('%I.%I', drn.schema_name, drn.table_name) :: REGCLASS
+    FROM _iobeamdb_catalog.distinct_replica_node AS drn
+    WHERE drn.hypertable_name = get_distinct_table_oid.hypertable_name AND
+          drn.replica_id = get_distinct_table_oid.replica_id AND
+          drn.database_name = get_distinct_table_oid.database_name;
 $BODY$;
 
 -- Get the name of the time column for a hypertable.
@@ -49,12 +49,12 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_quoted_column_names(
 )
     RETURNS TEXT [] LANGUAGE SQL STABLE AS
 $BODY$
-SELECT ARRAY(
-    SELECT format('%I', name)
-    FROM _iobeamdb_catalog.hypertable_column c
-    WHERE c.hypertable_name = get_quoted_column_names.hypertable_name
-    ORDER BY name
-);
+    SELECT ARRAY(
+        SELECT format('%I', name)
+        FROM _iobeamdb_catalog.hypertable_column c
+        WHERE c.hypertable_name = get_quoted_column_names.hypertable_name
+        ORDER BY name
+    );
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_partition_for_epoch(
@@ -66,13 +66,13 @@ $BODY$
 DECLARE
     partition_row _iobeamdb_catalog.partition;
 BEGIN
-    EXECUTE format($$
-    SELECT  p.*
-    FROM  _iobeamdb_catalog.partition p
-    WHERE p.epoch_id = %L AND
-    %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end
-  $$,
-                   epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
+    EXECUTE format(
+        $$
+            SELECT  p.*
+            FROM  _iobeamdb_catalog.partition p
+            WHERE p.epoch_id = %L AND
+            %s(%L, %L) BETWEEN p.keyspace_start AND p.keyspace_end
+        $$, epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
     INTO STRICT partition_row;
 
     RETURN partition_row;
@@ -86,11 +86,11 @@ CREATE OR REPLACE FUNCTION get_open_partition_for_key(
 )
     RETURNS _iobeamdb_catalog.partition LANGUAGE SQL STABLE AS
 $BODY$
-SELECT p.*
-FROM _iobeamdb_catalog.partition_epoch pe,
-     _iobeamdb_internal.get_partition_for_epoch(pe, key_value) p
-WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
-      end_time IS NULL
+    SELECT p.*
+    FROM _iobeamdb_catalog.partition_epoch pe,
+         _iobeamdb_internal.get_partition_for_epoch(pe, key_value) p
+    WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
+          end_time IS NULL
 $BODY$;
 
 -- Check if a given table OID is a main table (i.e. the table a user
@@ -100,10 +100,10 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_main_table(
 )
     RETURNS bool LANGUAGE SQL STABLE AS
 $BODY$
-  SELECT EXISTS(SELECT 1 FROM _iobeamdb_catalog.hypertable WHERE main_table_name = relname AND main_schema_name = nspname)
-  FROM pg_class c
-  INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-  WHERE c.OID = table_oid;
+    SELECT EXISTS(SELECT 1 FROM _iobeamdb_catalog.hypertable WHERE main_table_name = relname AND main_schema_name = nspname)
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    WHERE c.OID = table_oid;
 $BODY$;
 
 
@@ -113,11 +113,11 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.hypertable_from_main_table(
 )
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE SQL STABLE AS
 $BODY$
-  SELECT h.*
-  FROM pg_class c
-  INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-  INNER JOIN _iobeamdb_catalog.hypertable h ON (h.main_table_name = c.relname AND h.main_schema_name = n.nspname)
-  WHERE c.OID = table_oid;
+    SELECT h.*
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    INNER JOIN _iobeamdb_catalog.hypertable h ON (h.main_table_name = c.relname AND h.main_schema_name = n.nspname)
+    WHERE c.OID = table_oid;
 $BODY$;
 
 -- Get the name of the time column for a chunk_replica_node.
