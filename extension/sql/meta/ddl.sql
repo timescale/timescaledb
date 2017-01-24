@@ -203,3 +203,31 @@ $BODY$
     SELECT set_config('io.deleting_node', modified_on, true);
     DELETE FROM _iobeamdb_catalog.hypertable h WHERE h.main_schema_name = schema_name AND h.main_table_name = table_name
 $BODY$;
+
+-- Drop chunks older than the given timestamp. If a hypertable name is given,
+-- drop only chunks associated with this table.
+CREATE OR REPLACE FUNCTION _meta.drop_chunks_older_than(
+    older_than_time     BIGINT,
+    main_table_name     NAME = NULL,
+    main_schema_name    NAME = NULL
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+BEGIN
+    EXECUTE format(
+        $$
+        DELETE FROM _iobeamdb_catalog.chunk c
+        USING _iobeamdb_catalog.chunk_replica_node crn,
+        _iobeamdb_catalog.partition_replica pr,
+        _iobeamdb_catalog.hypertable h
+        WHERE pr.id = crn.partition_replica_id
+        AND pr.hypertable_name = h.name
+        AND c.id = crn.chunk_id
+        AND c.end_time < %1$L
+        AND (%2$L IS NULL OR h.main_schema_name = %2$L)
+        AND (%3$L IS NULL OR h.main_table_name = %3$L)
+        $$, older_than_time, main_schema_name, main_table_name
+    );
+END
+$BODY$;

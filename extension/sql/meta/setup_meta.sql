@@ -36,6 +36,8 @@ BEGIN
     CREATE TRIGGER trigger_meta_create_partition AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.partition
     FOR EACH ROW EXECUTE PROCEDURE _meta.on_create_partition();
 
+    --Setup sync triggers for tables that are mirrored on data nodes. Exclude 'chunk' table,
+    --because it has its own sync trigger in chunk_triggers.sql
     FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'meta', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index',
     'hypertable_column', 'deleted_hypertable_column', 'hypertable_replica', 'default_replica_node', 'partition_epoch',
     'partition', 'partition_replica', 'distinct_replica_node', 'chunk_replica_node'] :: NAME [] LOOP

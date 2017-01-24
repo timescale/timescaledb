@@ -7,6 +7,7 @@ $BODY$
 DECLARE
     partition_replica_row _iobeamdb_catalog.partition_replica;
     chunk_row             _iobeamdb_catalog.chunk;
+    kind                  pg_class.relkind%type;
 BEGIN
     IF TG_OP = 'INSERT' THEN
         SELECT *
@@ -40,6 +41,32 @@ BEGIN
     END IF;
 
     IF TG_OP = 'DELETE' THEN
+        --when deleting the chunk replica row from the metadata table,
+        --also DROP the actual chunk replica table that holds data.
+        --Note that the table could already be deleted in case this
+        --trigger fires as a result of a DROP TABLE on the hypertable
+        --that this chunk belongs to.
+        SELECT c.relkind INTO kind
+        FROM pg_class c
+        WHERE relname = OLD.table_name AND relnamespace = OLD.schema_name::regnamespace;
+
+        IF kind IS NULL THEN
+            RETURN OLD;
+        END IF;
+
+        IF kind = 'f' THEN
+            EXECUTE format(
+                $$
+                DROP FOREIGN TABLE %I.%I
+                $$, OLD.schema_name, OLD.table_name
+            );
+        ELSE
+            EXECUTE format(
+                $$
+                DROP TABLE %I.%I
+                $$, OLD.schema_name, OLD.table_name
+            );
+        END IF;
         RETURN OLD;
     END IF;
 

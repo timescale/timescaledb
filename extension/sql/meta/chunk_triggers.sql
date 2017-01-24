@@ -65,10 +65,22 @@ CREATE OR REPLACE FUNCTION _meta.on_create_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    column_row  _iobeamdb_catalog.hypertable_column;
     schema_name NAME;
 BEGIN
     IF TG_OP = 'DELETE' THEN
+        FOR schema_name IN
+        SELECT n.schema_name
+        FROM _iobeamdb_catalog.node AS n
+        LOOP
+            EXECUTE format(
+                $$
+                DELETE FROM %I.%I WHERE id = %L
+                $$,
+                schema_name,
+                TG_TABLE_NAME,
+                OLD.id
+            );
+        END LOOP;
         RETURN OLD;
     END IF;
 
