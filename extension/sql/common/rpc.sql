@@ -31,7 +31,9 @@ $BODY$;
 --This should be called to execute code on a meta node. It is not necessary to
 --call _iobeamdb_internal.meta_transaction_start() beforehand. The code excuted by this function
 --will be automatically committed when the local transaction commits (in pre-commit).
-CREATE OR REPLACE FUNCTION  _iobeamdb_internal.meta_transaction_exec(sql_code text)
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.meta_transaction_exec(
+    sql_code text
+)
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -49,7 +51,9 @@ $BODY$;
 --This should be called to execute code on a meta node with a text return. It is not necessary to
 --call _iobeamdb_internal.meta_transaction_start() beforehand. The code excuted by this function
 --will be automatically committed when the local transaction commits (in pre-commit).
-CREATE OR REPLACE FUNCTION  _iobeamdb_internal.meta_transaction_exec_with_return(sql_code text)
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.meta_transaction_exec_with_return(
+    sql_code text
+)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -70,7 +74,9 @@ $BODY$;
 --This should be called to execute code on a meta node in a way that doesn't wait for the local commit.
 --i.e. This command is committed on meta right away w/o waiting for the local commit.
 --A consequence is that the remote command will not be rolled back if the local transaction is.
-CREATE OR REPLACE FUNCTION  _iobeamdb_internal.meta_immediate_commit_exec_with_return(sql_code text)
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.meta_immediate_commit_exec_with_return(
+    sql_code text
+)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -85,10 +91,6 @@ BEGIN
     RETURN return_value;
 END
 $BODY$;
-
-
-
-
 
 --Called by _iobeamdb_meta.node_transaction_exec_with_return to start a transaction. Should not be called directly.
 --Returns the dblink connection name for the started transaction.
@@ -122,7 +124,11 @@ $BODY$;
 --This should be called to execute code on a meta node with a text return. It is not necessary to
 --call _iobeamdb_internal.node_transaction_start() beforehand. The code excuted by this function
 --will be automatically committed when the local transaction commits (in pre-commit).
-CREATE OR REPLACE FUNCTION  _iobeamdb_meta.node_transaction_exec_with_return(database_name NAME, server_name NAME, sql_code text)
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.node_transaction_exec_with_return(
+    database_name NAME,
+    server_name   NAME,
+    sql_code      TEXT
+)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -143,8 +149,11 @@ $BODY$;
 --This should be called to execute code on a data node in a way that doesn't wait for the local commit.
 --i.e. This command is committed on meta right away w/o waiting for the local commit.
 --A consequence is that the remote command will not be rolled back if the local transaction is.
-CREATE OR REPLACE FUNCTION  _iobeamdb_internal.node_immediate_commit_exec_with_return(database_name NAME, server_name NAME,
-                                                                                sql_code text)
+CREATE OR REPLACE FUNCTION  _iobeamdb_internal.node_immediate_commit_exec_with_return(
+    database_name NAME,
+    server_name   NAME,
+    sql_code      TEXT
+)
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE

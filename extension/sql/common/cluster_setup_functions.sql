@@ -10,12 +10,10 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_user_mapping(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-
     EXECUTE format(
         $$
             CREATE USER MAPPING FOR %1$I SERVER %2$I OPTIONS (user '%1$s', password '%3$s')
-        $$,
-        cluster_user_row.username, server_name, cluster_user_row.password);
+        $$, cluster_user_row.username, server_name, cluster_user_row.password);
 END
 $BODY$;
 
@@ -30,7 +28,6 @@ BEGIN
     EXECUTE format(
         $$
             CREATE SERVER %I FOREIGN DATA WRAPPER postgres_fdw OPTIONS(host '%s', dbname '%s') ;
-        $$,
-        server_name, hostname, database_name);
+        $$, server_name, hostname, database_name);
 END
 $BODY$;

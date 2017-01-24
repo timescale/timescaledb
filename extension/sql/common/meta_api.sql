@@ -20,21 +20,22 @@ BEGIN
     SELECT (res::_iobeamdb_catalog.hypertable).*
         INTO hypertable_row
         FROM _iobeamdb_internal.meta_transaction_exec_with_return(
-          format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
-            main_schema_name,
-            main_table_name,
-            time_column_name,
-            time_column_type,
-            partitioning_column,
-            replication_factor,
-            number_partitions,
-            associated_schema_name,
-            associated_table_prefix,
-            hypertable_name,
-            placement,
-            chunk_size_bytes,
-            current_database()
-        )) AS res;
+            format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+                main_schema_name,
+                main_table_name,
+                time_column_name,
+                time_column_type,
+                partitioning_column,
+                replication_factor,
+                number_partitions,
+                associated_schema_name,
+                associated_table_prefix,
+                hypertable_name,
+                placement,
+                chunk_size_bytes,
+                current_database()
+            )
+        ) AS res;
 
     RETURN hypertable_row;
 END
@@ -46,15 +47,15 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_hypertable(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.drop_hypertable(%L, %L, %L)',
+        format('SELECT _iobeamdb_meta.drop_hypertable(%L, %L, %L)',
             schema_name,
             table_name,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -69,11 +70,10 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_column(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
+        format('SELECT _iobeamdb_meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
             hypertable_name,
             column_name,
             attnum,
@@ -82,7 +82,8 @@ BEGIN
             not_null,
             is_distinct,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -92,15 +93,15 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_column(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.drop_column(%L, %L, %L)',
+        format('SELECT _iobeamdb_meta.drop_column(%L, %L, %L)',
             hypertable_name,
             column_name,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -110,19 +111,19 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_index(
     main_index_name  NAME,
     definition       TEXT
 )
-RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.add_index(%L, %L, %L, %L, %L)',
+        format('SELECT _iobeamdb_meta.add_index(%L, %L, %L, %L, %L)',
             hypertable_name,
             main_schema_name,
             main_index_name,
             definition,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -130,17 +131,17 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_index(
     main_schema_name NAME,
     main_index_name  NAME
 )
-RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.drop_index(%L, %L, %L)',
+        format('SELECT _iobeamdb_meta.drop_index(%L, %L, %L)',
             main_schema_name,
             main_index_name,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -150,18 +151,18 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_table_rename_column(
     old_column_name NAME,
     new_column_name NAME
 )
-RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.alter_table_rename_column(%L, %L, %L, %L)',
+        format('SELECT _iobeamdb_meta.alter_table_rename_column(%L, %L, %L, %L)',
             hypertable_name,
             old_column_name,
             new_column_name,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -170,18 +171,18 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_default(
     column_name       NAME,
     new_default_value TEXT
 )
-RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.alter_column_set_default(%L, %L, %L, %L)',
+        format('SELECT _iobeamdb_meta.alter_column_set_default(%L, %L, %L, %L)',
             hypertable_name,
             column_name,
             new_default_value,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
@@ -192,30 +193,25 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_not_null(
 )
 RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-          format('SELECT _iobeamdb_meta.alter_column_set_not_null(%L, %L, %L, %L)',
+        format('SELECT _iobeamdb_meta.alter_column_set_not_null(%L, %L, %L, %L)',
             hypertable_name,
             column_name,
             new_not_null,
             current_database()
-    ));
+        )
+    );
 END
 $BODY$;
 
-
-
-
 -- *immediate functions are not transactional.
-
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.close_chunk_end_immediate(
     chunk_id INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
     --This should use the non-transactional rpc because this needs to commit before we can take a lock
     --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
@@ -238,7 +234,7 @@ BEGIN
     --to make progress.
     SELECT (res::_iobeamdb_catalog.chunk).* INTO chunk_row
     FROM _iobeamdb_internal.meta_immediate_commit_exec_with_return(
-            format('SELECT t FROM _iobeamdb_meta.get_or_create_chunk(%L, %L) t ', partition_id, time_point)
+        format('SELECT t FROM _iobeamdb_meta.get_or_create_chunk(%L, %L) t ', partition_id, time_point)
     ) AS res;
 
     RETURN chunk_row;

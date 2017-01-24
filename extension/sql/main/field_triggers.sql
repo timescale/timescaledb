@@ -32,12 +32,12 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_column_on_table(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  null_constraint         TEXT := 'NOT NULL';
-  default_constraint      TEXT := '';
-  created_columns_att_num INT2;
+    null_constraint         TEXT := 'NOT NULL';
+    default_constraint      TEXT := '';
+    created_columns_att_num INT2;
 BEGIN
     IF NOT not_null THEN
-      null_constraint = 'NULL';
+        null_constraint = 'NULL';
     END IF;
 
     default_constraint = 'DEFAULT '|| default_value;
@@ -54,8 +54,8 @@ BEGIN
     AND NOT attisdropped;
 
     IF created_columns_att_num IS DISTINCT FROM attnum THEN
-      RAISE EXCEPTION 'Inconsistent state: the attnum of newly created colum does not match (% vs %)', attnum, created_columns_att_num
-      USING ERRCODE = 'IO501';
+        RAISE EXCEPTION 'Inconsistent state: the attnum of newly created colum does not match (% vs %)', attnum, created_columns_att_num
+        USING ERRCODE = 'IO501';
     END IF;
 END
 $BODY$;
@@ -72,8 +72,7 @@ BEGIN
     EXECUTE format(
         $$
             ALTER TABLE IF EXISTS %1$I.%2$I DROP COLUMN %3$I
-        $$,
-        schema_name, table_name, column_name);
+        $$, schema_name, table_name, column_name);
 END
 $BODY$;
 
@@ -89,8 +88,7 @@ BEGIN
     EXECUTE format(
         $$
             ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I SET DEFAULT %4$L
-        $$,
-        schema_name, table_name, column_name, new_default_value);
+        $$, schema_name, table_name, column_name, new_default_value);
 END
 $BODY$;
 
@@ -106,8 +104,7 @@ BEGIN
     EXECUTE format(
         $$
             ALTER TABLE %1$I.%2$I RENAME COLUMN %3$I TO %4$I
-        $$,
-        schema_name, table_name, old_column, new_column);
+        $$, schema_name, table_name, old_column, new_column);
 END
 $BODY$;
 
@@ -120,19 +117,17 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.exec_alter_column_set_not_null(
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-IF new_not_null THEN
-  EXECUTE format(
-    $$
-        ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I SET NOT NULL
-    $$,
-    schema_name, table_name, column_name);
-ELSE
-  EXECUTE format(
-    $$
-        ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I DROP NOT NULL
-    $$,
-    schema_name, table_name, column_name);
-END IF;
+    IF new_not_null THEN
+        EXECUTE format(
+            $$
+                ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I SET NOT NULL
+            $$, schema_name, table_name, column_name);
+    ELSE
+        EXECUTE format(
+            $$
+                ALTER TABLE %1$I.%2$I ALTER COLUMN %3$I DROP NOT NULL
+            $$, schema_name, table_name, column_name);
+    END IF;
 END
 $BODY$;
 
@@ -143,35 +138,39 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.populate_distinct_table(
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-   distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
-   chunk_replica_node_row     _iobeamdb_catalog.chunk_replica_node;
+    distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
+    chunk_replica_node_row     _iobeamdb_catalog.chunk_replica_node;
 BEGIN
-  FOR distinct_replica_node_row IN
-    SELECT *
-    FROM _iobeamdb_catalog.distinct_replica_node drn
-    WHERE drn.hypertable_name = populate_distinct_table.hypertable_name AND
-          drn.database_name = current_database()
-    LOOP
-      FOR chunk_replica_node_row IN
-        SELECT crn.*
-        FROM _iobeamdb_catalog.chunk_replica_node crn
-        INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-        WHERE pr.hypertable_name = distinct_replica_node_row.hypertable_name AND
-              pr.replica_id = distinct_replica_node_row.replica_id AND
-              crn.database_name = current_database()
+    FOR distinct_replica_node_row IN
+        SELECT *
+        FROM _iobeamdb_catalog.distinct_replica_node drn
+        WHERE drn.hypertable_name = populate_distinct_table.hypertable_name AND
+              drn.database_name = current_database()
         LOOP
-            EXECUTE format($$
-                INSERT INTO %I.%I(column_name, value)
-                   SELECT DISTINCT %L, %I
-                   FROM %I.%I
-                ON CONFLICT DO NOTHING
-              $$,
-              distinct_replica_node_row.schema_name, distinct_replica_node_row.table_name,
-              column_name, column_name,
-              chunk_replica_node_row.schema_name, chunk_replica_node_row.table_name
-            );
+            FOR chunk_replica_node_row IN
+                SELECT crn.*
+                FROM _iobeamdb_catalog.chunk_replica_node crn
+                INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
+                WHERE pr.hypertable_name = distinct_replica_node_row.hypertable_name AND
+                      pr.replica_id = distinct_replica_node_row.replica_id AND
+                      crn.database_name = current_database()
+                LOOP
+                    EXECUTE format(
+                        $$
+                            INSERT INTO %I.%I(column_name, value)
+                            SELECT DISTINCT %L, %I
+                            FROM %I.%I
+                            ON CONFLICT DO NOTHING
+                        $$,
+                        distinct_replica_node_row.schema_name,
+                        distinct_replica_node_row.table_name,
+                        column_name,
+                        column_name,
+                        chunk_replica_node_row.schema_name,
+                        chunk_replica_node_row.table_name
+                    );
+                END LOOP;
         END LOOP;
-    END LOOP;
 END
 $BODY$;
 
@@ -182,20 +181,23 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.unpopulate_distinct_table(
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-   distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
+    distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
 BEGIN
-  FOR distinct_replica_node_row IN
-    SELECT *
-    FROM _iobeamdb_catalog.distinct_replica_node drn
-    WHERE drn.hypertable_name = unpopulate_distinct_table.hypertable_name AND
-          drn.database_name = current_database()
-    LOOP
-        EXECUTE format($$
-                DELETE FROM %I.%I WHERE column_name = %L
-          $$,
-          distinct_replica_node_row.schema_name, distinct_replica_node_row.table_name, column_name
-        );
-    END LOOP;
+    FOR distinct_replica_node_row IN
+        SELECT *
+        FROM _iobeamdb_catalog.distinct_replica_node drn
+        WHERE drn.hypertable_name = unpopulate_distinct_table.hypertable_name AND
+              drn.database_name = current_database()
+        LOOP
+            EXECUTE format(
+                $$
+                    DELETE FROM %I.%I WHERE column_name = %L
+                $$,
+                distinct_replica_node_row.schema_name,
+                distinct_replica_node_row.table_name,
+                column_name
+            );
+        END LOOP;
 END
 $BODY$;
 
@@ -211,83 +213,92 @@ DECLARE
 BEGIN
 
     IF TG_OP = 'INSERT' THEN
-      SELECT *
-      INTO STRICT hypertable_row
-      FROM _iobeamdb_catalog.hypertable AS h
-      WHERE h.name = NEW.hypertable_name;
+        SELECT *
+        INTO STRICT hypertable_row
+        FROM _iobeamdb_catalog.hypertable AS h
+        WHERE h.name = NEW.hypertable_name;
 
-      -- update root table
-      PERFORM _iobeamdb_internal.create_column_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
-                                                  NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
-      IF new.created_on <> current_database() THEN
-        PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-        -- update main table on others
-        PERFORM _iobeamdb_internal.create_column_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                                    NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
-     END IF;
+        -- update root table
+        PERFORM _iobeamdb_internal.create_column_on_table(
+            hypertable_row.root_schema_name, hypertable_row.root_table_name,
+            NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
+        IF new.created_on <> current_database() THEN
+            PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+            -- update main table on others
+            PERFORM _iobeamdb_internal.create_column_on_table(
+                hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
+        END IF;
 
-      PERFORM _iobeamdb_internal.create_partition_constraint_for_column(NEW.hypertable_name, NEW.name);
-      RETURN NEW;
+        PERFORM _iobeamdb_internal.create_partition_constraint_for_column(NEW.hypertable_name, NEW.name);
+        RETURN NEW;
     ELSIF TG_OP = 'UPDATE' THEN
-      SELECT *
-      INTO STRICT hypertable_row
-      FROM _iobeamdb_catalog.hypertable AS h
-      WHERE h.name = NEW.hypertable_name;
+        SELECT *
+        INTO STRICT hypertable_row
+        FROM _iobeamdb_catalog.hypertable AS h
+        WHERE h.name = NEW.hypertable_name;
 
-      IF NEW.default_value IS DISTINCT FROM OLD.default_value THEN
-        update_found = TRUE;
-        -- update root table
-        PERFORM _iobeamdb_internal.exec_alter_column_set_default(hypertable_row.root_schema_name, hypertable_row.root_table_name,
-                                              NEW.name, NEW.default_value);
-        IF NEW.modified_on <> current_database() THEN
-          PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-          -- update main table on others
-          PERFORM _iobeamdb_internal.exec_alter_column_set_default(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                              NEW.name, NEW.default_value);
-        END IF;
-      END IF;
-      IF NEW.not_null IS DISTINCT FROM OLD.not_null THEN
-        update_found = TRUE;
-        -- update root table
-        PERFORM _iobeamdb_internal.exec_alter_column_set_not_null(hypertable_row.root_schema_name, hypertable_row.root_table_name,
-                                              NEW.name, NEW.not_null);
-        IF NEW.modified_on <> current_database() THEN
-          PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-          -- update main table on others
-          PERFORM _iobeamdb_internal.exec_alter_column_set_not_null(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                              NEW.name, NEW.not_null);
-        END IF;
-      END IF;
-      IF NEW.name IS DISTINCT FROM OLD.name THEN
-        update_found = TRUE;
-        -- update root table
-        PERFORM _iobeamdb_internal.exec_alter_table_rename_column(hypertable_row.root_schema_name, hypertable_row.root_table_name,
-                                              OLD.name, NEW.name);
-        IF NEW.modified_on <> current_database() THEN
-          PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-          -- update main table on others
-          PERFORM _iobeamdb_internal.exec_alter_table_rename_column(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                              OLD.name, NEW.name);
-        END IF;
-      END IF;
+        IF NEW.default_value IS DISTINCT FROM OLD.default_value THEN
+            update_found = TRUE;
+            -- update root table
+            PERFORM _iobeamdb_internal.exec_alter_column_set_default(
+                hypertable_row.root_schema_name, hypertable_row.root_table_name,
+                NEW.name, NEW.default_value);
 
-      IF NEW.is_distinct IS DISTINCT FROM OLD.is_distinct THEN
-          update_found = TRUE;
-          IF NEW.is_distinct THEN
-            PERFORM  _iobeamdb_internal.populate_distinct_table(NEW.hypertable_name, NEW.name);
-          ELSE
-            PERFORM  _iobeamdb_internal.unpopulate_distinct_table(NEW.hypertable_name, NEW.name);
-          END IF;
-      END IF;
+            IF NEW.modified_on <> current_database() THEN
+                PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+                -- update main table on others
+                PERFORM _iobeamdb_internal.exec_alter_column_set_default(
+                    hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                    NEW.name, NEW.default_value);
+            END IF;
+        END IF;
+        IF NEW.not_null IS DISTINCT FROM OLD.not_null THEN
+            update_found = TRUE;
+            -- update root table
+            PERFORM _iobeamdb_internal.exec_alter_column_set_not_null(
+                hypertable_row.root_schema_name, hypertable_row.root_table_name,
+                NEW.name, NEW.not_null);
+            IF NEW.modified_on <> current_database() THEN
+                PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+                -- update main table on others
+                PERFORM _iobeamdb_internal.exec_alter_column_set_not_null(
+                    hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                    NEW.name, NEW.not_null);
+            END IF;
+        END IF;
+        IF NEW.name IS DISTINCT FROM OLD.name THEN
+            update_found = TRUE;
+            -- update root table
+            PERFORM _iobeamdb_internal.exec_alter_table_rename_column(
+                hypertable_row.root_schema_name, hypertable_row.root_table_name,
+                OLD.name, NEW.name);
+            IF NEW.modified_on <> current_database() THEN
+                PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+                -- update main table on others
+                PERFORM _iobeamdb_internal.exec_alter_table_rename_column(
+                    hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                    OLD.name, NEW.name);
+            END IF;
+        END IF;
 
-      IF NOT update_found THEN
-        RAISE EXCEPTION 'Invalid update type on %', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
-      END IF;
-      RETURN NEW;
+        IF NEW.is_distinct IS DISTINCT FROM OLD.is_distinct THEN
+            update_found = TRUE;
+            IF NEW.is_distinct THEN
+                PERFORM  _iobeamdb_internal.populate_distinct_table(NEW.hypertable_name, NEW.name);
+            ELSE
+                PERFORM  _iobeamdb_internal.unpopulate_distinct_table(NEW.hypertable_name, NEW.name);
+            END IF;
+        END IF;
+
+        IF NOT update_found THEN
+            RAISE EXCEPTION 'Invalid update type on %', TG_TABLE_NAME
+            USING ERRCODE = 'IO101';
+        END IF;
+        RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
-      --handled by deleted log
-      RETURN OLD;
+        --handled by deleted log
+        RETURN OLD;
     END IF;
 END
 $BODY$
@@ -317,13 +328,13 @@ BEGIN
     END IF;
 
     -- update root table
-    PERFORM _iobeamdb_internal.drop_column_on_table(hypertable_row.root_schema_name, hypertable_row.root_table_name,
-                                              NEW.name);
+    PERFORM _iobeamdb_internal.drop_column_on_table(
+        hypertable_row.root_schema_name, hypertable_row.root_table_name, NEW.name);
     IF NEW.deleted_on <> current_database() THEN
-      PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      -- update main table on others
-      PERFORM _iobeamdb_internal.drop_column_on_table(hypertable_row.main_schema_name, hypertable_row.main_table_name,
-                                                NEW.name);
+        PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+        -- update main table on others
+        PERFORM _iobeamdb_internal.drop_column_on_table(
+            hypertable_row.main_schema_name, hypertable_row.main_table_name, NEW.name);
     END IF;
 
     RETURN NEW;

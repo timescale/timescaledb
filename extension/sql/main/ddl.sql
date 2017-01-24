@@ -25,92 +25,91 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  hypertable_row   _iobeamdb_catalog.hypertable;
-  table_name       NAME;
-  schema_name      NAME;
-  time_column_type REGTYPE;
-  att_row          pg_attribute;
-  main_table_has_items BOOLEAN;
+    hypertable_row   _iobeamdb_catalog.hypertable;
+    table_name       NAME;
+    schema_name      NAME;
+    time_column_type REGTYPE;
+    att_row          pg_attribute;
+    main_table_has_items BOOLEAN;
 BEGIN
-       SELECT relname, nspname
-       INTO STRICT table_name, schema_name
-       FROM pg_class c
-       INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-       WHERE c.OID = main_table;
+    SELECT relname, nspname
+    INTO STRICT table_name, schema_name
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    WHERE c.OID = main_table;
 
-        BEGIN
-            SELECT atttypid
-            INTO STRICT time_column_type
-            FROM pg_attribute
-            WHERE attrelid = main_table AND attname = time_column_name;
-        EXCEPTION
-            WHEN NO_DATA_FOUND THEN
-                RAISE EXCEPTION 'column "%" does not exist', time_column_name
-                USING ERRCODE = 'IO102';
-        END;
-
-        IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
-            RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type
-            USING ERRCODE = 'IO102';
-        END IF;
-
-        PERFORM atttypid
+    BEGIN
+        SELECT atttypid
+        INTO STRICT time_column_type
         FROM pg_attribute
-        WHERE attrelid = main_table AND attname = partitioning_column;
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'column "%" does not exist', partitioning_column
+        WHERE attrelid = main_table AND attname = time_column_name;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'column "%" does not exist', time_column_name
             USING ERRCODE = 'IO102';
-        END IF;
+    END;
 
-        EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
+    IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
+        RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type
+        USING ERRCODE = 'IO102';
+    END IF;
 
-        IF main_table_has_items THEN
-            RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
-            USING ERRCODE = 'IO102';
-        END IF;
+    PERFORM atttypid
+    FROM pg_attribute
+    WHERE attrelid = main_table AND attname = partitioning_column;
 
-      BEGIN
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'column "%" does not exist', partitioning_column
+        USING ERRCODE = 'IO102';
+    END IF;
+
+    EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
+
+    IF main_table_has_items THEN
+        RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
+        USING ERRCODE = 'IO102';
+    END IF;
+
+    BEGIN
         SELECT *
-            INTO hypertable_row
-            FROM  _iobeamdb_meta_api.create_hypertable(
-                schema_name,
-                table_name,
-                time_column_name,
-                time_column_type,
-                partitioning_column,
-                replication_factor,
-                number_partitions,
-                associated_schema_name,
-                associated_table_prefix,
-                hypertable_name,
-                placement,
-                chunk_size_bytes
-            );
-      EXCEPTION
+        INTO hypertable_row
+        FROM  _iobeamdb_meta_api.create_hypertable(
+            schema_name,
+            table_name,
+            time_column_name,
+            time_column_type,
+            partitioning_column,
+            replication_factor,
+            number_partitions,
+            associated_schema_name,
+            associated_table_prefix,
+            hypertable_name,
+            placement,
+            chunk_size_bytes
+        );
+    EXCEPTION
         WHEN unique_violation THEN
             RAISE EXCEPTION 'hypertable % already exists', main_table
             USING ERRCODE = 'IO110';
-      END;
+    END;
 
-      FOR att_row IN SELECT *
-       FROM pg_attribute att
-       WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
-      LOOP
-        PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.name, att_row);
-      END LOOP;
+    FOR att_row IN SELECT *
+    FROM pg_attribute att
+    WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
+        LOOP
+            PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.name, att_row);
+        END LOOP;
 
 
-      PERFORM 1
-      FROM pg_index,
-      LATERAL
-        _iobeamdb_meta_api.add_index(
-            hypertable_row.name,
-            hypertable_row.main_schema_name,
-            (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
-            _iobeamdb_internal.get_general_index_definition(indexrelid, indrelid)
-        )
-      WHERE indrelid = main_table;
+    PERFORM 1
+    FROM pg_index,
+    LATERAL _iobeamdb_meta_api.add_index(
+        hypertable_row.name,
+        hypertable_row.main_schema_name,
+        (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
+        _iobeamdb_internal.get_general_index_definition(indexrelid, indrelid)
+    )
+    WHERE indrelid = main_table;
 END
 $BODY$;
 
@@ -126,9 +125,9 @@ CREATE OR REPLACE FUNCTION set_is_distinct_flag(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  table_name     NAME;
-  schema_name    NAME;
-  hypertable_row _iobeamdb_catalog.hypertable;
+    table_name     NAME;
+    schema_name    NAME;
+    hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     SELECT relname, nspname
     INTO STRICT table_name, schema_name
@@ -151,13 +150,13 @@ BEGIN
     END IF;
 
 
-    PERFORM
-    _iobeamdb_internal.meta_transaction_exec(
-      format('SELECT _iobeamdb_meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
-        hypertable_row.name,
-        column_name,
-        is_distinct,
-        current_database()
-    ));
+    PERFORM _iobeamdb_internal.meta_transaction_exec(
+        format('SELECT _iobeamdb_meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
+            hypertable_row.name,
+            column_name,
+            is_distinct,
+            current_database()
+        )
+    );
 END
 $BODY$;
