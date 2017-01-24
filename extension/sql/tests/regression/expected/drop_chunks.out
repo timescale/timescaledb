@@ -65,11 +65,23 @@ WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.d
 ----------+--------------+-----------------+--------------+-------------+------------+----------
 (0 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                       List of relations
+       Schema       |          Name          | Type  |  Owner   
+--------------------+------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_distinct    | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica     | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct      | table | postgres
+ _iobeamdb_internal | _hyper_1_root          | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct    | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica     | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct      | table | postgres
+ _iobeamdb_internal | _hyper_2_root          | table | postgres
+(12 rows)
 
 SELECT get_partition_for_key('dev1', 32768);
  get_partition_for_key 
@@ -133,11 +145,31 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (12 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                         List of relations
+       Schema       |            Name            | Type  |  Owner   
+--------------------+----------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_1_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_1_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_4_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_5_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_6_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_1_root              | table | postgres
+ _iobeamdb_internal | _hyper_2_0_1_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_7_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_8_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_9_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_2_root              | table | postgres
+(20 rows)
 
 \c test2
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
@@ -178,11 +210,31 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (12 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                         List of relations
+       Schema       |            Name            | Type  |  Owner   
+--------------------+----------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_2_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_1_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_1_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_2_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_3_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_1_root              | table | postgres
+ _iobeamdb_internal | _hyper_2_0_2_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_10_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_11_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_12_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_2_root              | table | postgres
+(20 rows)
 
 \c meta
 SELECT _iobeamdb_meta.drop_chunks_older_than(2);
@@ -225,7 +277,7 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (10 rows)
 
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
       List of relations
  Schema | Name | Type | Owner 
 --------+------+------+-------
@@ -266,11 +318,30 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (10 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                         List of relations
+       Schema       |            Name            | Type  |  Owner   
+--------------------+----------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_1_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_1_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_4_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_5_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_6_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_1_root              | table | postgres
+ _iobeamdb_internal | _hyper_2_0_1_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_8_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_9_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_2_root              | table | postgres
+(19 rows)
 
 \c test2
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
@@ -307,11 +378,30 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (10 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                         List of relations
+       Schema       |            Name            | Type  |  Owner   
+--------------------+----------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_2_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_1_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_2_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_3_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_1_root              | table | postgres
+ _iobeamdb_internal | _hyper_2_0_2_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_10_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_11_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_12_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_2_root              | table | postgres
+(19 rows)
 
 \c meta
 SELECT _iobeamdb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
@@ -352,7 +442,7 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (9 rows)
 
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
       List of relations
  Schema | Name | Type | Owner 
 --------+------+------+-------
@@ -391,11 +481,30 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (9 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                         List of relations
+       Schema       |            Name            | Type  |  Owner   
+--------------------+----------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_1_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_1_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_4_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_5_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_6_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_1_root              | table | postgres
+ _iobeamdb_internal | _hyper_2_0_1_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_8_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_9_data        | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_2_root              | table | postgres
+(19 rows)
 
 \c test2
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
@@ -430,9 +539,27 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
        12 |                    4 | test2         | _iobeamdb_internal | _hyper_2_4_0_12_data
 (9 rows)
 
-\dt "_sysinternal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
+\dt "_iobeamdb_internal".*
+                         List of relations
+       Schema       |            Name            | Type  |  Owner   
+--------------------+----------------------------+-------+----------
+ _iobeamdb_internal | _hyper_1_0_2_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_1_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_1_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_3_data        | table | postgres
+ _iobeamdb_internal | _hyper_1_1_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_2_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_1_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_1_root              | table | postgres
+ _iobeamdb_internal | _hyper_2_0_2_distinct_data | table | postgres
+ _iobeamdb_internal | _hyper_2_0_distinct        | table | postgres
+ _iobeamdb_internal | _hyper_2_0_replica         | table | postgres
+ _iobeamdb_internal | _hyper_2_3_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_10_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_11_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_12_data       | table | postgres
+ _iobeamdb_internal | _hyper_2_4_0_partition     | table | postgres
+ _iobeamdb_internal | _hyper_2_distinct          | table | postgres
+ _iobeamdb_internal | _hyper_2_root              | table | postgres
+(18 rows)
 

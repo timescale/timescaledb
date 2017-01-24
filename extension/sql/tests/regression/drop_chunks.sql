@@ -26,7 +26,7 @@ INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 SELECT get_partition_for_key('dev1', 32768);
 SELECT get_partition_for_key('dev7', 32768);
@@ -52,7 +52,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c test2
 
@@ -63,7 +63,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c meta
 SELECT _iobeamdb_meta.drop_chunks_older_than(2);
@@ -75,7 +75,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c Test1
 
@@ -86,7 +86,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c test2
 
@@ -97,7 +97,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c meta
 SELECT _iobeamdb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
@@ -109,7 +109,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c Test1
 
@@ -120,7 +120,7 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
 
 \c test2
 
@@ -131,4 +131,4 @@ INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_repl
 WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
-\dt "_sysinternal".*
+\dt "_iobeamdb_internal".*
