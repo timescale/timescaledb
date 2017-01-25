@@ -2,15 +2,17 @@
 -- well as triggers for newly created hypertables.
 
 -- Trigger to prevent unsupported operations on the main table.
+-- Our C code should rewrite a DELETE or UPDATE to apply to the replica and not main table.
+-- The only exception is if we use ONLY, which should be an error.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_unsupported_main_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'UPDATEs not supported on hypertables'
+        RAISE EXCEPTION 'UPDATE ONLY not supported on hypertables'
         USING ERRCODE = 'IO101';
     ELSIF TG_OP = 'DELETE' AND current_setting('io.ignore_delete_in_trigger', true) <> 'true' THEN
-        RAISE EXCEPTION 'DELETEs not currently supported on hypertables'
+        RAISE EXCEPTION 'DELETE ONLY not currently supported on hypertables'
         USING ERRCODE = 'IO101';
     END IF;
     RETURN NEW;

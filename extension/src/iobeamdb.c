@@ -113,15 +113,12 @@ iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 
 		/* replace call to main table with call to the replica table */
-		if (parse->commandType ==  CMD_SELECT)
+		change_table_name_context context;
+		context.hypertable_info = NIL;
+		change_table_name_walker((Node *) parse, &context);
+		if (list_length(context.hypertable_info) > 0)
 		{
-			change_table_name_context context;
-			context.hypertable_info = NIL;
-			change_table_name_walker((Node *) parse, &context);
-			if (list_length(context.hypertable_info) > 0)
-			{
-				add_partitioning_func_qual(parse, context.hypertable_info);
-			}
+			add_partitioning_func_qual(parse, context.hypertable_info);
 		}
 
 		if (printParse != NULL && strcmp(printParse, "true") == 0)

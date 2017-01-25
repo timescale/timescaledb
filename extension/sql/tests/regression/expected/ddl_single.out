@@ -72,11 +72,11 @@ INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 --expect error cases
 \set ON_ERROR_STOP 0
-UPDATE "Hypertable_1" SET time = 0 WHERE TRUE;
-psql:include/ddl_ops_1.sql:27: ERROR:  IO101: UPDATEs not supported on hypertables
+UPDATE ONLY "Hypertable_1" SET time = 0 WHERE TRUE;
+psql:include/ddl_ops_1.sql:27: ERROR:  IO101: UPDATE ONLY not supported on hypertables
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
-DELETE FROM "Hypertable_1" WHERE "Device_id" = 'dev1';
-psql:include/ddl_ops_1.sql:28: ERROR:  IO101: DELETEs not currently supported on hypertables
+DELETE FROM ONLY "Hypertable_1" WHERE "Device_id" = 'dev1';
+psql:include/ddl_ops_1.sql:28: ERROR:  IO101: DELETE ONLY not currently supported on hypertables
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM PUBLIC."Hypertable_1";
