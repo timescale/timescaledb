@@ -8,11 +8,23 @@
 \o
 \set ECHO ALL
 \c meta
+
 SELECT add_cluster_user('postgres', NULL);
+
+-- Expect error when adding user again
+\set ON_ERROR_STOP 0
+SELECT add_cluster_user('postgres', NULL);
+\set ON_ERROR_STOP 1
 
 SELECT set_meta('meta' :: NAME, 'localhost');
 SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
+
+-- Expect error when adding node again
+\set ON_ERROR_STOP 0
+SELECT add_node('test2' :: NAME, 'localhost');
+SELECT add_node('test2' :: NAME, 'otherhost');
+\set ON_ERROR_STOP 1
 
 \c Test1
 

@@ -12,8 +12,7 @@ BEGIN
             format('%s_%s_replica', NEW.associated_table_prefix, replica_id),
             NEW.associated_schema_name,
             format('%s_%s_distinct', NEW.associated_table_prefix, replica_id)
-        FROM generate_series(0, NEW.replication_factor - 1) AS replica_id
-        ON CONFLICT DO NOTHING;
+        FROM generate_series(0, NEW.replication_factor - 1) AS replica_id;
 
         PERFORM _iobeamdb_meta.assign_default_replica_node(n.database_name, NEW.name)
         FROM _iobeamdb_catalog.node n;
