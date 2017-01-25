@@ -90,20 +90,20 @@ LOCATION:  truncate_identifier, scansup.c:205
 psql:cluster.sql:39: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
-  name  | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
---------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs | public           | testNs          | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ create_hypertable 
+-------------------
+ 
 (1 row)
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id', hypertable_name=>'testNs');
-psql:cluster.sql:45: ERROR:  IO110: hypertable already exists: testNs
+psql:cluster.sql:45: ERROR:  IO110: hypertable "testNs" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id', hypertable_name=>'testNs2');
-  name   | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
----------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- testNs2 | public           | testNs2         | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   | _iobeamdb_internal   | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ create_hypertable 
+-------------------
+ 
 (1 row)
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);

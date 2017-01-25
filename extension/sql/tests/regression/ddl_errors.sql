@@ -39,5 +39,6 @@ DELETE FROM  PUBLIC."Hypertable_1" ;
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 SELECT set_is_distinct_flag('"public"."Hypertable_1_misspelled"', 'mispelled', true);
 SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'mispelled', true);

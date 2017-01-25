@@ -2,9 +2,17 @@ CREATE DATABASE iobeam;
 
 \c iobeam
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+
+\o /dev/null
+\echo 'Set up database as meta node...'
 select setup_meta();
+\echo 'Set up database as data node...'
 select setup_main();
 
 SELECT add_cluster_user('postgres', NULL);
+
+\echo 'Adding database to the single-node cluster...'
 SELECT set_meta('iobeam' :: NAME, 'localhost');
 SELECT add_node('iobeam' :: NAME, 'localhost');
+
+\echo 'Success'

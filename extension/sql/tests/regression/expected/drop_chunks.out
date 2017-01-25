@@ -45,15 +45,15 @@ SELECT add_node('test2' :: NAME, 'localhost');
 CREATE TABLE drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE drop_chunk_test2(time bigint, temp float8, device_id text);
 SELECT create_hypertable('drop_chunk_test1', 'time', 'device_id', chunk_size_bytes => 10000);
-                                                                                  create_hypertable                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (public.drop_chunk_test1,public,drop_chunk_test1,_iobeamdb_internal,_hyper_1,_iobeamdb_internal,_hyper_1_root,_iobeamdb_internal,_hyper_1_distinct,1,STICKY,time,bigint,Test1,10000)
+ create_hypertable 
+-------------------
+ 
 (1 row)
 
 SELECT create_hypertable('drop_chunk_test2', 'time', 'device_id', chunk_size_bytes => 10000);
-                                                                                  create_hypertable                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (public.drop_chunk_test2,public,drop_chunk_test2,_iobeamdb_internal,_hyper_2,_iobeamdb_internal,_hyper_2_root,_iobeamdb_internal,_hyper_2_distinct,1,STICKY,time,bigint,Test1,10000)
+ create_hypertable 
+-------------------
+ 
 (1 row)
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
