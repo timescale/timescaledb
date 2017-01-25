@@ -43,8 +43,8 @@ BEGIN
             hypertable_row := _iobeamdb_internal.hypertable_from_main_table(table_oid);
 
             PERFORM _iobeamdb_meta_api.add_index(
-                hypertable_row.name,
-                hypertable_row.main_schema_name,
+                hypertable_row.id,
+                hypertable_row.schema_name,
                 (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
                 def
             );
@@ -87,9 +87,9 @@ DECLARE
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_dropped_objects()
         LOOP
-            SELECT  format('%I.%I', h.main_schema_name, h.main_table_name) INTO table_oid
+            SELECT  format('%I.%I', h.schema_name, h.table_name) INTO table_oid
             FROM _iobeamdb_catalog.hypertable h
-            INNER JOIN _iobeamdb_catalog.hypertable_index i ON (i.hypertable_name = h.name)
+            INNER JOIN _iobeamdb_catalog.hypertable_index i ON (i.hypertable_id = h.id)
             WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name;
 
             --if table_oid is not null, it is a main table
@@ -137,9 +137,9 @@ BEGIN
             WHERE attrelid = info.objid AND
                   attnum > 0 AND
                   NOT attisdropped AND
-                  att.attnum NOT IN (SELECT c.attnum FROM _iobeamdb_catalog.hypertable_column c WHERE hypertable_name = hypertable_row.name)
+                  att.attnum NOT IN (SELECT c.attnum FROM _iobeamdb_catalog.hypertable_column c WHERE hypertable_id = hypertable_row.id)
                 LOOP
-                    PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.name, att_row);
+                    PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.id, att_row);
                     found_action = TRUE;
                 END LOOP;
 
@@ -148,9 +148,9 @@ BEGIN
             SELECT name
             FROM _iobeamdb_catalog.hypertable_column c
             INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
-            WHERE hypertable_name = hypertable_row.name
+            WHERE hypertable_id = hypertable_row.id
                 LOOP
-                    PERFORM _iobeamdb_meta_api.drop_column(hypertable_row.name, rec.name);
+                    PERFORM _iobeamdb_meta_api.drop_column(hypertable_row.id, rec.name);
                     found_action = TRUE;
                 END LOOP;
 
@@ -159,10 +159,10 @@ BEGIN
             SELECT c.name old_name, att.attname new_name
             FROM _iobeamdb_catalog.hypertable_column c
             LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND NOT attisdropped)
-            WHERE hypertable_name = hypertable_row.name AND c.name IS DISTINCT FROM att.attname
+            WHERE hypertable_id = hypertable_row.id AND c.name IS DISTINCT FROM att.attname
                 LOOP
                     PERFORM _iobeamdb_meta_api.alter_table_rename_column(
-                        hypertable_row.name,
+                        hypertable_row.id,
                         rec.old_name,
                         rec.new_name
                     );
@@ -174,10 +174,10 @@ BEGIN
             SELECT name, _iobeamdb_internal.get_default_value_for_attribute(att) AS new_default_value
             FROM _iobeamdb_catalog.hypertable_column c
             LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
-            WHERE hypertable_name = hypertable_row.name AND _iobeamdb_internal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
+            WHERE hypertable_id = hypertable_row.id AND _iobeamdb_internal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
                 LOOP
                     PERFORM _iobeamdb_meta_api.alter_column_set_default(
-                        hypertable_row.name,
+                        hypertable_row.id,
                         rec.name,
                         rec.new_default_value
                     );
@@ -189,10 +189,10 @@ BEGIN
               SELECT name, attnotnull AS new_not_null
               FROM _iobeamdb_catalog.hypertable_column c
               LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
-              WHERE hypertable_name = hypertable_row.name AND attnotnull != c.not_null
+              WHERE hypertable_id = hypertable_row.id AND attnotnull != c.not_null
                 LOOP
                     PERFORM _iobeamdb_meta_api.alter_column_set_not_null(
-                        hypertable_row.name,
+                        hypertable_row.id,
                         rec.name,
                         rec.new_not_null
                     );
@@ -204,7 +204,7 @@ BEGIN
             SELECT name
             FROM _iobeamdb_catalog.hypertable_column c
             INNER JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
-            WHERE hypertable_name = hypertable_row.name AND att.atttypid IS DISTINCT FROM c.data_type
+            WHERE hypertable_id = hypertable_row.id AND att.atttypid IS DISTINCT FROM c.data_type
                 LOOP
                     RAISE EXCEPTION 'ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable %', info.objid::regclass
                     USING ERRCODE = 'IO101';
@@ -225,7 +225,10 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_hypertable(
     RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-     return exists(select 1 from _iobeamdb_catalog.hypertable where main_schema_name = schema_name and  main_table_name=table_name);
+     RETURN EXISTS(
+         SELECT 1 FROM _iobeamdb_catalog.hypertable h
+         WHERE h.schema_name = is_hypertable.schema_name AND h.table_name = is_hypertable.table_name
+     );
 END
 $BODY$;
 

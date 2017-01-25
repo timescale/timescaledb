@@ -8,7 +8,7 @@ BEGIN
         SELECT *
         INTO STRICT hypertable_row
         FROM _iobeamdb_catalog.hypertable AS h
-        WHERE h.name = NEW.hypertable_name;
+        WHERE h.id = NEW.hypertable_id;
 
         PERFORM _iobeamdb_internal.create_replica_table(NEW.schema_name, NEW.table_name, hypertable_row.root_schema_name,
                                                         hypertable_row.root_table_name);

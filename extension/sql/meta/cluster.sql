@@ -64,7 +64,7 @@ DECLARE
 BEGIN
     INSERT INTO _iobeamdb_catalog.cluster_user (username, password)
     VALUES (username, password);
-EXCEPTION 
+EXCEPTION
     WHEN unique_violation THEN
         RAISE EXCEPTION 'User % already exists', username
             USING ERRCODE = 'IO130';
@@ -72,15 +72,15 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION add_partition_epoch(
-    hypertable_name     NAME,
+    hypertable_id       INTEGER,
     keyspace_start      SMALLINT [],
     partitioning_column NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 WITH epoch AS (
-    INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_name, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
-    VALUES (hypertable_name, NULL, NULL, 'get_partition_for_key', 32768, partitioning_column)
+    INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
+    VALUES (hypertable_id, NULL, NULL, 'get_partition_for_key', 32768, partitioning_column)
     RETURNING id
 )
 INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end)
@@ -93,14 +93,14 @@ INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end)
 $BODY$;
 
 CREATE OR REPLACE FUNCTION add_equi_partition_epoch(
-    hypertable_name     NAME,
+    hypertable_id       INTEGER,
     number_partitions   SMALLINT,
     partitioning_column NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 SELECT add_partition_epoch(
-    hypertable_name,
+    hypertable_id,
     (SELECT ARRAY(SELECT start * 32768 / (number_partitions)
                   FROM generate_series(1, number_partitions - 1) AS start) :: SMALLINT []),
     partitioning_column

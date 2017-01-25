@@ -205,7 +205,7 @@ BEGIN
     SELECT COUNT(*) > 0
     INTO column_exists
     FROM _iobeamdb_catalog.hypertable_column c
-    WHERE c.hypertable_name = epoch_row.hypertable_name
+    WHERE c.hypertable_id = epoch_row.hypertable_id
           AND c.name = epoch_row.partitioning_column;
 
     IF column_exists THEN

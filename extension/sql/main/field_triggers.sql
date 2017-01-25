@@ -3,8 +3,8 @@
 
 -- TODO(mat) - Doc this? Not sure I can do it justice.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_partition_constraint_for_column(
-    hypertable_name NAME,
-    column_name     NAME
+    hypertable_id INTEGER,
+    column_name   NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -14,7 +14,7 @@ BEGIN
     FROM _iobeamdb_catalog.partition_epoch AS pe
     INNER JOIN _iobeamdb_catalog.partition AS p ON (p.epoch_id = pe.id)
     INNER JOIN _iobeamdb_catalog.partition_replica AS pr ON (pr.partition_id = p.id)
-    WHERE pe.hypertable_name = create_partition_constraint_for_column.hypertable_name
+    WHERE pe.hypertable_id = create_partition_constraint_for_column.hypertable_id
           AND pe.partitioning_column = create_partition_constraint_for_column.column_name;
 END
 $BODY$;
@@ -133,8 +133,8 @@ $BODY$;
 
 -- Adds distinct values for a column to a hypertable's distinct table.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.populate_distinct_table(
-    hypertable_name  NAME,
-    column_name      NAME
+    hypertable_id INTEGER,
+    column_name   NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -144,14 +144,14 @@ BEGIN
     FOR distinct_replica_node_row IN
         SELECT *
         FROM _iobeamdb_catalog.distinct_replica_node drn
-        WHERE drn.hypertable_name = populate_distinct_table.hypertable_name AND
+        WHERE drn.hypertable_id = populate_distinct_table.hypertable_id AND
               drn.database_name = current_database()
         LOOP
             FOR chunk_replica_node_row IN
                 SELECT crn.*
                 FROM _iobeamdb_catalog.chunk_replica_node crn
                 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-                WHERE pr.hypertable_name = distinct_replica_node_row.hypertable_name AND
+                WHERE pr.hypertable_id = distinct_replica_node_row.hypertable_id AND
                       pr.replica_id = distinct_replica_node_row.replica_id AND
                       crn.database_name = current_database()
                 LOOP
@@ -176,8 +176,8 @@ $BODY$;
 
 -- Removes distinct values for a column from a hypertable's distinct table.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.unpopulate_distinct_table(
-    hypertable_name  NAME,
-    column_name      NAME
+    hypertable_id INTEGER,
+    column_name   NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -186,7 +186,7 @@ BEGIN
     FOR distinct_replica_node_row IN
         SELECT *
         FROM _iobeamdb_catalog.distinct_replica_node drn
-        WHERE drn.hypertable_name = unpopulate_distinct_table.hypertable_name AND
+        WHERE drn.hypertable_id = unpopulate_distinct_table.hypertable_id AND
               drn.database_name = current_database()
         LOOP
             EXECUTE format(
@@ -216,7 +216,7 @@ BEGIN
         SELECT *
         INTO STRICT hypertable_row
         FROM _iobeamdb_catalog.hypertable AS h
-        WHERE h.name = NEW.hypertable_name;
+        WHERE h.id = NEW.hypertable_id;
 
         -- update root table
         PERFORM _iobeamdb_internal.create_column_on_table(
@@ -226,17 +226,17 @@ BEGIN
             PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
             -- update main table on others
             PERFORM _iobeamdb_internal.create_column_on_table(
-                hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                hypertable_row.schema_name, hypertable_row.table_name,
                 NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
         END IF;
 
-        PERFORM _iobeamdb_internal.create_partition_constraint_for_column(NEW.hypertable_name, NEW.name);
+        PERFORM _iobeamdb_internal.create_partition_constraint_for_column(NEW.hypertable_id, NEW.name);
         RETURN NEW;
     ELSIF TG_OP = 'UPDATE' THEN
         SELECT *
         INTO STRICT hypertable_row
         FROM _iobeamdb_catalog.hypertable AS h
-        WHERE h.name = NEW.hypertable_name;
+        WHERE h.id = NEW.hypertable_id;
 
         IF NEW.default_value IS DISTINCT FROM OLD.default_value THEN
             update_found = TRUE;
@@ -249,7 +249,7 @@ BEGIN
                 PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
                 -- update main table on others
                 PERFORM _iobeamdb_internal.exec_alter_column_set_default(
-                    hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                    hypertable_row.schema_name, hypertable_row.table_name,
                     NEW.name, NEW.default_value);
             END IF;
         END IF;
@@ -263,7 +263,7 @@ BEGIN
                 PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
                 -- update main table on others
                 PERFORM _iobeamdb_internal.exec_alter_column_set_not_null(
-                    hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                    hypertable_row.schema_name, hypertable_row.table_name,
                     NEW.name, NEW.not_null);
             END IF;
         END IF;
@@ -277,7 +277,7 @@ BEGIN
                 PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
                 -- update main table on others
                 PERFORM _iobeamdb_internal.exec_alter_table_rename_column(
-                    hypertable_row.main_schema_name, hypertable_row.main_table_name,
+                    hypertable_row.schema_name, hypertable_row.table_name,
                     OLD.name, NEW.name);
             END IF;
         END IF;
@@ -285,9 +285,9 @@ BEGIN
         IF NEW.is_distinct IS DISTINCT FROM OLD.is_distinct THEN
             update_found = TRUE;
             IF NEW.is_distinct THEN
-                PERFORM  _iobeamdb_internal.populate_distinct_table(NEW.hypertable_name, NEW.name);
+                PERFORM  _iobeamdb_internal.populate_distinct_table(NEW.hypertable_id, NEW.name);
             ELSE
-                PERFORM  _iobeamdb_internal.unpopulate_distinct_table(NEW.hypertable_name, NEW.name);
+                PERFORM  _iobeamdb_internal.unpopulate_distinct_table(NEW.hypertable_id, NEW.name);
             END IF;
         END IF;
 
@@ -320,7 +320,7 @@ BEGIN
     SELECT *
     INTO hypertable_row
     FROM _iobeamdb_catalog.hypertable AS h
-    WHERE h.name = NEW.hypertable_name;
+    WHERE h.id = NEW.hypertable_id;
 
     IF hypertable_row IS NULL THEN
         --presumably hypertable has been dropped and this is part of cascade
@@ -334,7 +334,7 @@ BEGIN
         PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
         -- update main table on others
         PERFORM _iobeamdb_internal.drop_column_on_table(
-            hypertable_row.main_schema_name, hypertable_row.main_table_name, NEW.name);
+            hypertable_row.schema_name, hypertable_row.table_name, NEW.name);
     END IF;
 
     RETURN NEW;

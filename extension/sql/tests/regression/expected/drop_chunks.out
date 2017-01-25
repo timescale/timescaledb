@@ -56,13 +56,14 @@ SELECT create_hypertable('drop_chunk_test2', 'time', 'device_id', chunk_size_byt
  
 (1 row)
 
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id | hypertable_name | chunk_schema | chunk_table | start_time | end_time 
-----------+--------------+-----------------+--------------+-------------+------------+----------
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id | chunk_schema | chunk_table | start_time | end_time 
+----------+--------------+---------------+--------------+-------------+------------+----------
 (0 rows)
 
 \dt "_iobeamdb_internal".*
@@ -107,25 +108,26 @@ INSERT INTO drop_chunk_test2 VALUES(3, 3.0, 'dev1');
 INSERT INTO drop_chunk_test2 VALUES(4, 4.0, 'dev7');
 INSERT INTO drop_chunk_test2 VALUES(5, 5.0, 'dev7');
 INSERT INTO drop_chunk_test2 VALUES(6, 6.0, 'dev7');
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        1 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_1_data  |            |        1
-        2 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        7 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_7_data  |            |        1
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        1 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_1_data  |            |        1
+        2 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        7 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_7_data  |            |        1
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (12 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -172,25 +174,26 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 (20 rows)
 
 \c test2
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        1 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_1_data  |            |        1
-        2 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        7 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_7_data  |            |        1
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        1 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_1_data  |            |        1
+        2 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        7 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_7_data  |            |        1
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (12 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -243,23 +246,24 @@ SELECT _iobeamdb_meta.drop_chunks_older_than(2);
  
 (1 row)
 
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        2 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        2 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (10 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -284,23 +288,24 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 (0 rows)
 
 \c Test1
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        2 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        2 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (10 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -344,23 +349,24 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 (19 rows)
 
 \c test2
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        2 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        2 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_2_data  |          2 |        2
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (10 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -410,22 +416,23 @@ SELECT _iobeamdb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
  
 (1 row)
 
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (9 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -449,22 +456,23 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 (0 rows)
 
 \c Test1
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (9 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
@@ -507,22 +515,23 @@ SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 (19 rows)
 
 \c test2
-SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_name, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
 INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
 INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-WHERE hypertable_name = 'public.drop_chunk_test1' OR hypertable_name = 'public.drop_chunk_test2';
- chunk_id | partition_id |     hypertable_name     |    chunk_schema    |     chunk_table      | start_time | end_time 
-----------+--------------+-------------------------+--------------------+----------------------+------------+----------
-        3 |            1 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
-        4 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
-        5 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
-        6 |            2 | public.drop_chunk_test1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
-        8 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
-        9 |            3 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
-       10 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
-       11 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
-       12 |            4 | public.drop_chunk_test2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
+INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+ chunk_id | partition_id | hypertable_id |    chunk_schema    |     chunk_table      | start_time | end_time 
+----------+--------------+---------------+--------------------+----------------------+------------+----------
+        3 |            1 |             1 | _iobeamdb_internal | _hyper_1_1_0_3_data  |          3 |         
+        4 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_4_data  |            |        4
+        5 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_5_data  |          5 |        5
+        6 |            2 |             1 | _iobeamdb_internal | _hyper_1_2_0_6_data  |          6 |         
+        8 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_8_data  |          2 |        2
+        9 |            3 |             2 | _iobeamdb_internal | _hyper_2_3_0_9_data  |          3 |         
+       10 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_10_data |            |        4
+       11 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_11_data |          5 |        5
+       12 |            4 |             2 | _iobeamdb_internal | _hyper_2_4_0_12_data |          6 |         
 (9 rows)
 
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;

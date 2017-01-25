@@ -42,15 +42,15 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable;
-         name          | main_schema_name | main_table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
------------------------+------------------+-----------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
- public."Hypertable_1" | public           | Hypertable_1    | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
+ id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+--------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 | public      | Hypertable_1 | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable_index;
-    hypertable_name    | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
------------------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
- public."Hypertable_1" | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
+ hypertable_id | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
+---------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
+             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
 (1 row)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
@@ -95,9 +95,9 @@ EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
 (4 rows)
 
 SELECT * FROM _iobeamdb_catalog.default_replica_node;
- database_name |    hypertable_name    | replica_id 
----------------+-----------------------+------------
- single        | public."Hypertable_1" |          0
+ database_name | hypertable_id | replica_id 
+---------------+---------------+------------
+ single        |             1 |          0
 (1 row)
 
 \ir include/ddl_ops_2.sql

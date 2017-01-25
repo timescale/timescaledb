@@ -2,57 +2,51 @@
 -- schema of a hypertable, including columns, their types, etc.
 
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_distinct_table_oid(
-    hypertable_name NAME,
-    replica_id      SMALLINT,
-    database_name   NAME
+    hypertable_id INTEGER,
+    replica_id    SMALLINT,
+    database_name NAME
 )
     RETURNS REGCLASS LANGUAGE SQL STABLE AS
 $BODY$
     SELECT format('%I.%I', drn.schema_name, drn.table_name) :: REGCLASS
     FROM _iobeamdb_catalog.distinct_replica_node AS drn
-    WHERE drn.hypertable_name = get_distinct_table_oid.hypertable_name AND
+    WHERE drn.hypertable_id = get_distinct_table_oid.hypertable_id AND
           drn.replica_id = get_distinct_table_oid.replica_id AND
           drn.database_name = get_distinct_table_oid.database_name;
 $BODY$;
 
 -- Get the name of the time column for a hypertable.
---
--- hypertable_name - name of the hypertable.
 CREATE OR REPLACE FUNCTION get_time_column(
-    hypertable_name NAME
+    hypertable_id INTEGER
 )
     RETURNS NAME LANGUAGE SQL STABLE AS
 $BODY$
     SELECT time_column_name
     FROM _iobeamdb_catalog.hypertable h
-    WHERE h.name = hypertable_name;
+    WHERE h.id = hypertable_id;
 $BODY$;
 
 -- Get the type of the time column for a hypertable.
---
--- hypertable_name - Name of the hypertable.
 CREATE OR REPLACE FUNCTION get_time_column_type(
-    hypertable_name NAME
+    hypertable_id INTEGER
 )
     RETURNS REGTYPE LANGUAGE SQL STABLE AS
 $BODY$
     SELECT time_column_type
     FROM _iobeamdb_catalog.hypertable h
-    WHERE h.name = hypertable_name;
+    WHERE h.id = hypertable_id;
 $BODY$;
 
 -- Get the list of columns (each quoted) from a hypertable as an ARRAY
---
--- hypertable_name -- Name of the hypertable
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_quoted_column_names(
-    hypertable_name NAME
+    hypertable_id INTEGER
 )
     RETURNS TEXT [] LANGUAGE SQL STABLE AS
 $BODY$
     SELECT ARRAY(
         SELECT format('%I', name)
         FROM _iobeamdb_catalog.hypertable_column c
-        WHERE c.hypertable_name = get_quoted_column_names.hypertable_name
+        WHERE c.hypertable_id = get_quoted_column_names.hypertable_id
         ORDER BY name
     );
 $BODY$;
@@ -81,15 +75,15 @@ $BODY$;
 
 -- TODO Only used in tests -- okay to put in _iobeamdb_internal?
 CREATE OR REPLACE FUNCTION get_open_partition_for_key(
-    hypertable_name NAME,
-    key_value       TEXT
+    hypertable_id INTEGER,
+    key_value     TEXT
 )
     RETURNS _iobeamdb_catalog.partition LANGUAGE SQL STABLE AS
 $BODY$
     SELECT p.*
     FROM _iobeamdb_catalog.partition_epoch pe,
          _iobeamdb_internal.get_partition_for_epoch(pe, key_value) p
-    WHERE pe.hypertable_name = get_open_partition_for_key.hypertable_name AND
+    WHERE pe.hypertable_id = get_open_partition_for_key.hypertable_id AND
           end_time IS NULL
 $BODY$;
 
@@ -100,7 +94,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_main_table(
 )
     RETURNS bool LANGUAGE SQL STABLE AS
 $BODY$
-    SELECT EXISTS(SELECT 1 FROM _iobeamdb_catalog.hypertable WHERE main_table_name = relname AND main_schema_name = nspname)
+    SELECT EXISTS(SELECT 1 FROM _iobeamdb_catalog.hypertable WHERE table_name = relname AND schema_name = nspname)
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = table_oid;
@@ -116,7 +110,7 @@ $BODY$
     SELECT h.*
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    INNER JOIN _iobeamdb_catalog.hypertable h ON (h.main_table_name = c.relname AND h.main_schema_name = n.nspname)
+    INNER JOIN _iobeamdb_catalog.hypertable h ON (h.table_name = c.relname AND h.schema_name = n.nspname)
     WHERE c.OID = table_oid;
 $BODY$;
 
@@ -134,7 +128,7 @@ DECLARE
 BEGIN
     SELECT h.time_column_name INTO STRICT time_col_name
     FROM _iobeamdb_catalog.hypertable h
-    INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.hypertable_name = h.name)
+    INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id)
     INNER JOIN _iobeamdb_catalog.partition p ON (p.epoch_id = pe.id)
     INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = p.id)
     INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (crn.chunk_id = c.id)
@@ -158,7 +152,7 @@ DECLARE
 BEGIN
     SELECT h.time_column_type INTO STRICT time_col_type
     FROM _iobeamdb_catalog.hypertable h
-    INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.hypertable_name = h.name)
+    INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id)
     INNER JOIN _iobeamdb_catalog.partition p ON (p.epoch_id = pe.id)
     INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = p.id)
     INNER JOIN _iobeamdb_catalog.chunk_replica_node crn ON (crn.chunk_id = c.id)

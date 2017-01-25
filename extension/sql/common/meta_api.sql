@@ -8,7 +8,6 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.create_hypertable(
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
     associated_table_prefix NAME,
-    hypertable_name         NAME,
     placement               chunk_placement_type,
     chunk_size_bytes        BIGINT
 )
@@ -20,7 +19,7 @@ BEGIN
     SELECT (res::_iobeamdb_catalog.hypertable).*
         INTO hypertable_row
         FROM _iobeamdb_internal.meta_transaction_exec_with_return(
-            format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
+            format('SELECT t FROM _iobeamdb_meta.create_hypertable(%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) t ',
                 main_schema_name,
                 main_table_name,
                 time_column_name,
@@ -30,7 +29,6 @@ BEGIN
                 number_partitions,
                 associated_schema_name,
                 associated_table_prefix,
-                hypertable_name,
                 placement,
                 chunk_size_bytes,
                 current_database()
@@ -60,7 +58,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_column(
-    hypertable_name NAME,
+    hypertable_id   INTEGER,
     column_name     NAME,
     attnum          INT2,
     data_type       REGTYPE,
@@ -74,7 +72,7 @@ BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
-            hypertable_name,
+            hypertable_id,
             column_name,
             attnum,
             data_type,
@@ -88,7 +86,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.drop_column(
-    hypertable_name NAME,
+    hypertable_id   INTEGER,
     column_name     NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -97,7 +95,7 @@ BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.drop_column(%L, %L, %L)',
-            hypertable_name,
+            hypertable_id,
             column_name,
             current_database()
         )
@@ -106,7 +104,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_index(
-    hypertable_name  NAME,
+    hypertable_id    INTEGER,
     main_schema_name NAME,
     main_index_name  NAME,
     definition       TEXT
@@ -117,7 +115,7 @@ BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.add_index(%L, %L, %L, %L, %L)',
-            hypertable_name,
+            hypertable_id,
             main_schema_name,
             main_index_name,
             definition,
@@ -147,7 +145,7 @@ $BODY$;
 
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_table_rename_column(
-    hypertable_name NAME,
+    hypertable_id   INTEGER,
     old_column_name NAME,
     new_column_name NAME
 )
@@ -157,7 +155,7 @@ BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.alter_table_rename_column(%L, %L, %L, %L)',
-            hypertable_name,
+            hypertable_id,
             old_column_name,
             new_column_name,
             current_database()
@@ -167,7 +165,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_default(
-    hypertable_name   NAME,
+    hypertable_id     INTEGER,
     column_name       NAME,
     new_default_value TEXT
 )
@@ -177,7 +175,7 @@ BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.alter_column_set_default(%L, %L, %L, %L)',
-            hypertable_name,
+            hypertable_id,
             column_name,
             new_default_value,
             current_database()
@@ -187,7 +185,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.alter_column_set_not_null(
-    hypertable_name NAME,
+    hypertable_id   INTEGER,
     column_name     NAME,
     new_not_null    BOOLEAN
 )
@@ -197,7 +195,7 @@ BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.alter_column_set_not_null(%L, %L, %L, %L)',
-            hypertable_name,
+            hypertable_id,
             column_name,
             new_not_null,
             current_database()

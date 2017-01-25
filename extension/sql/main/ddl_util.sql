@@ -48,14 +48,14 @@ $BODY$;
 
 --create the hypertable column based on a pg_attribute (table column) entry.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_column_from_attribute(
-    hypertable_name NAME,
-    att             pg_attribute
+    hypertable_id INTEGER,
+    att           pg_attribute
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
     PERFORM _iobeamdb_meta_api.add_column(
-        hypertable_name,
+        hypertable_id,
         att.attname,
         att.attnum,
         att.atttypid,

@@ -74,7 +74,7 @@ BEGIN
         USING NEW;
     END LOOP;
 
-    PERFORM _iobeamdb_meta.assign_default_replica_node(NEW.database_name, h.name)
+    PERFORM _iobeamdb_meta.assign_default_replica_node(NEW.database_name, h.id)
     FROM _iobeamdb_catalog.hypertable h;
 
     RETURN NEW;

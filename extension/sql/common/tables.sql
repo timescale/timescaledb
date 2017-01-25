@@ -51,9 +51,9 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.cluster_user', '')
 -- The name and type of the time column (used to partition on time) are defined
 -- in `time_column_name` and `time_column_type`.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable (
-    name                    NAME                  NOT NULL PRIMARY KEY CHECK (name NOT LIKE '\_%'),
-    main_schema_name        NAME                  NOT NULL,
-    main_table_name         NAME                  NOT NULL,
+    id                      SERIAL                PRIMARY KEY,
+    schema_name             NAME                  NOT NULL,
+    table_name              NAME                  NOT NULL,
     associated_schema_name  NAME                  NOT NULL,
     associated_table_prefix NAME                  NOT NULL,
     root_schema_name        NAME                  NOT NULL,
@@ -66,11 +66,12 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable (
     time_column_type        REGTYPE               NOT NULL,
     created_on              NAME                  NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     chunk_size_bytes        BIGINT                NOT NULL CHECK (chunk_size_bytes > 0),
-    UNIQUE (main_schema_name, main_table_name),
+    UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     UNIQUE (root_schema_name, root_table_name)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.hypertable', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.hypertable','id'), '');
 
 -- deleted_hypertable is used to avoid deadlocks when doing multinode drops.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.deleted_hypertable (
@@ -92,13 +93,13 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.deleted_hypertable
 --      Parent: hypertable's `distinct root table`
 --      Children: created by `distinct_replica_node` table
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_replica (
-    hypertable_name      NAME     NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
+    hypertable_id        INTEGER  NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
     schema_name          NAME     NOT NULL,
     table_name           NAME     NOT NULL,
     distinct_schema_name NAME     NOT NULL,
     distinct_table_name  NAME     NOT NULL,
-    PRIMARY KEY (hypertable_name, replica_id),
+    PRIMARY KEY (hypertable_id, replica_id),
     UNIQUE (schema_name, table_name)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.hypertable_replica', '');
@@ -109,10 +110,10 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.hypertable_replica
 -- (Postgres RULES cannot be used, unfortunately)
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.default_replica_node (
     database_name        NAME     NOT NULL  REFERENCES _iobeamdb_catalog.node(database_name),
-    hypertable_name      NAME     NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
+    hypertable_id        INTEGER  NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
-    PRIMARY KEY (database_name, hypertable_name),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica (hypertable_name, replica_id)
+    PRIMARY KEY (database_name, hypertable_id),
+    FOREIGN KEY (hypertable_id, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica(hypertable_id, replica_id)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_replica_node', '');
 
@@ -125,14 +126,14 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_replica_no
 --  Parent table:  hypertable_replica.distinct_table
 --  No children, created table contains data.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.distinct_replica_node (
-    hypertable_name NAME     NOT NULL,
+    hypertable_id   INTEGER  NOT NULL,  -- TODO shouldn't this reference hypertable?
     replica_id      SMALLINT NOT NULL,
     database_name   NAME     NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,
-    PRIMARY KEY (hypertable_name, replica_id, database_name),
+    PRIMARY KEY (hypertable_id, replica_id, database_name),
     UNIQUE (schema_name, table_name),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
+    FOREIGN KEY (hypertable_id, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica(hypertable_id, replica_id) ON DELETE CASCADE
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.distinct_replica_node', '');
 
@@ -147,15 +148,15 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.distinct_replica_n
 -- Changing a data's partitioning, and thus creating a new epoch, should be done
 -- INFREQUENTLY as it's expensive operation.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
-    id                  SERIAL NOT NULL  PRIMARY KEY,
-    hypertable_name     NAME   NOT NULL  REFERENCES _iobeamdb_catalog.hypertable (name) ON DELETE CASCADE,
-    start_time          BIGINT NULL      CHECK (start_time > 0),
-    end_time            BIGINT NULL      CHECK (end_time > 0),
-    partitioning_func   NAME   NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
-    partitioning_mod    INT    NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_column NAME   NOT NULL,
-    UNIQUE (hypertable_name, start_time),
-    UNIQUE (hypertable_name, end_time),
+    id                  SERIAL  NOT NULL  PRIMARY KEY,
+    hypertable_id       INTEGER NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
+    start_time          BIGINT  NULL      CHECK (start_time > 0),
+    end_time            BIGINT  NULL      CHECK (end_time > 0),
+    partitioning_func   NAME    NOT NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
+    partitioning_mod    INT     NOT NULL  CHECK (partitioning_mod < 65536),
+    partitioning_column NAME    NOT NULL,
+    UNIQUE (hypertable_id, start_time),
+    UNIQUE (hypertable_id, end_time),
     CHECK (start_time < end_time)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition_epoch', '');
@@ -180,17 +181,17 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_cat
 --Each row creates a table:
 --   Parent: "hypertable_replica.schema_name"."hypertable_replica.table_name"
 --   Children: "chunk_replica_node.schema_name"."chunk_replica_node.table_name"
---TODO: trigger to verify partition_epoch hypertable name matches this hypertable_name
+--TODO: trigger to verify partition_epoch hypertable id matches this hypertable_id
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_replica (
     id              SERIAL   NOT NULL PRIMARY KEY,
-    partition_id    INT      NOT NULL REFERENCES _iobeamdb_catalog.partition (id) ON DELETE CASCADE,
-    hypertable_name NAME     NOT NULL,
+    partition_id    INTEGER  NOT NULL REFERENCES _iobeamdb_catalog.partition(id) ON DELETE CASCADE,
+    hypertable_id   INTEGER  NOT NULL,  -- TODO shouldn't this reference hypertable?
     replica_id      SMALLINT NOT NULL,
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,
     UNIQUE (schema_name, table_name),
     UNIQUE (partition_id, replica_id),
-    FOREIGN KEY (hypertable_name, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica (hypertable_name, replica_id) ON DELETE CASCADE
+    FOREIGN KEY (hypertable_id, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica(hypertable_id, replica_id) ON DELETE CASCADE
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition_replica', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.partition_replica','id'), '');
@@ -238,7 +239,7 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.chunk_replica_node
 
 -- Represents a hypertable column.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_column (
-    hypertable_name NAME                NOT NULL REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
+    hypertable_id   INTEGER             NOT NULL REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
     name            NAME                NOT NULL,
     attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
     data_type       REGTYPE             NOT NULL,
@@ -247,8 +248,8 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_column (
     not_null        BOOLEAN             NOT NULL,
     created_on      NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     modified_on     NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
-    PRIMARY KEY (hypertable_name, name),
-    UNIQUE(hypertable_name, attnum)
+    PRIMARY KEY (hypertable_id, name),
+    UNIQUE(hypertable_id, attnum)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.hypertable_column', '');
 
@@ -260,12 +261,12 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.deleted_hypertable_column (
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.deleted_hypertable_column', '');
 
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_index (
-    hypertable_name  NAME                NOT NULL REFERENCES _iobeamdb_catalog.hypertable(name) ON DELETE CASCADE,
+    hypertable_id    INTEGER             NOT NULL REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
     main_schema_name NAME                NOT NULL, --schema name of main table (needed for a uniqueness constraint)
     main_index_name  NAME                NOT NULL, --index name on main table
     definition       TEXT                NOT NULL, --def with /*INDEX_NAME*/ and /*TABLE_NAME*/ placeholders
     created_on       NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
-    PRIMARY KEY (hypertable_name, main_index_name),
+    PRIMARY KEY (hypertable_id, main_index_name),
     UNIQUE(main_schema_name, main_index_name) --globally unique since index names globally unique
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.hypertable_index', '');

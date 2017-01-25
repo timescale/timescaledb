@@ -36,7 +36,8 @@ BEGIN
     INTO chunk_row
     LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
     LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    WHERE hypertable_name = 'public.chunk_test';
+    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test';
 
     SELECT * FROM assert.is_not_null(chunk_row.id) INTO message, result;
 
@@ -89,7 +90,8 @@ BEGIN
     INTO STRICT chunk_row
     LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
     LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    WHERE hypertable_name = 'public.chunk_test' AND c.end_time IS NULL;
+    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test' AND c.end_time IS NULL;
 
     -- Check that start time is the end time of the previous chunk plus one
     SELECT * FROM assert.is_equal(chunk_row.start_time, chunk_end_time + 1::BIGINT) INTO message, result;

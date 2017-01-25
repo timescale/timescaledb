@@ -10,7 +10,7 @@ BEGIN
             p.epoch_id)
         FROM _iobeamdb_catalog.hypertable_replica hr
         CROSS JOIN _iobeamdb_catalog.partition p
-        WHERE hr.hypertable_name = NEW.hypertable_name AND
+        WHERE hr.hypertable_id = NEW.hypertable_id AND
             hr.replica_id = NEW.replica_id AND
             p.id = NEW.partition_id;
 

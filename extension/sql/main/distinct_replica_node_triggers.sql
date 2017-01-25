@@ -11,7 +11,7 @@ BEGIN
         SELECT *
         INTO STRICT hypertable_replica_row
         FROM _iobeamdb_catalog.hypertable_replica AS h
-        WHERE h.hypertable_name = NEW.hypertable_name AND
+        WHERE h.hypertable_id = NEW.hypertable_id AND
               h.replica_id = NEW.replica_id;
 
         IF NEW.database_name = current_database() THEN

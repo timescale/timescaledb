@@ -28,7 +28,7 @@ BEGIN
             PERFORM _iobeamdb_internal.create_chunk_replica_node_index(NEW.schema_name, NEW.table_name,
                                     h.main_schema_name, h.main_index_name, h.definition)
             FROM _iobeamdb_catalog.hypertable_index h
-            WHERE h.hypertable_name = partition_replica_row.hypertable_name;
+            WHERE h.hypertable_id = partition_replica_row.hypertable_id;
         ELSE
             PERFORM _iobeamdb_internal.create_remote_table(NEW.schema_name, NEW.table_name,
                                                      partition_replica_row.schema_name, partition_replica_row.table_name,
