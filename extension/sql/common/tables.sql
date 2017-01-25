@@ -150,14 +150,14 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.distinct_replica_n
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
     id                  SERIAL  NOT NULL  PRIMARY KEY,
     hypertable_id       INTEGER NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
-    start_time          BIGINT  NULL      CHECK (start_time > 0),
-    end_time            BIGINT  NULL      CHECK (end_time > 0),
+    start_time          BIGINT  NULL      CHECK (start_time >= 0),
+    end_time            BIGINT  NULL      CHECK (end_time >= 0),
     partitioning_func   NAME    NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
     partitioning_mod    INT     NOT NULL  CHECK (partitioning_mod < 65536),
     partitioning_column NAME    NULL,
     UNIQUE (hypertable_id, start_time),
     UNIQUE (hypertable_id, end_time),
-    CHECK (start_time < end_time)
+    CHECK (start_time <= end_time)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition_epoch', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.partition_epoch','id'), '');
