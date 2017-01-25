@@ -1,4 +1,4 @@
-/* 
+/*
   Trigger to create/drop indexes on chunk tables when the corresponding
   chunk_replica_node_index row is created/deleted.
 */
@@ -13,11 +13,11 @@ BEGIN
     END IF;
 
     IF TG_OP = 'INSERT' THEN
-      EXECUTE NEW.definition;
-      RETURN NEW;
+        EXECUTE NEW.definition;
+        RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
-      EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.schema_name, OLD.index_name);
-      RETURN OLD;
+        EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.schema_name, OLD.index_name);
+        RETURN OLD;
     END IF;
 END
 $BODY$

@@ -153,8 +153,8 @@ $BODY$;
 -- Renames the column on a hypertable
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.alter_table_rename_column(
     hypertable_name   NAME,
-    old_column_name    NAME,
-    new_column_name    NAME,
+    old_column_name   NAME,
+    new_column_name   NAME,
     modified_on_node  NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
@@ -166,11 +166,11 @@ $BODY$;
 
 -- Add an index to a hypertable
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.add_index(
-    hypertable_name NAME,
+    hypertable_name  NAME,
     main_schema_name NAME,
-    main_index_name NAME,
-    definition TEXT,
-    created_on NAME
+    main_index_name  NAME,
+    definition       TEXT,
+    created_on       NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
@@ -181,8 +181,8 @@ $BODY$;
 -- Drops the index for a hypertable
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_index(
     main_schema_name NAME,
-    main_index_name NAME,
-    modified_on NAME
+    main_index_name  NAME,
+    modified_on      NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
@@ -194,7 +194,7 @@ $BODY$;
 -- Drops a hypertable
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_hypertable(
     schema_name NAME,
-    table_name NAME,
+    table_name  NAME,
     modified_on NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
@@ -206,9 +206,9 @@ $BODY$;
 -- Drop chunks older than the given timestamp. If a hypertable name is given,
 -- drop only chunks associated with this table.
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.drop_chunks_older_than(
-    older_than_time     BIGINT,
-    main_table_name     NAME = NULL,
-    main_schema_name    NAME = NULL
+    older_than_time  BIGINT,
+    main_table_name  NAME = NULL,
+    main_schema_name NAME = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$

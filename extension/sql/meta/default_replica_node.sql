@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.assign_default_replica_node(
-  database_name NAME,
+  database_name   NAME,
   hypertable_name NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS

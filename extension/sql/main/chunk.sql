@@ -30,11 +30,13 @@ BEGIN
             SELECT max(%s)
             FROM %I.%I
         $$,
-    _iobeamdb_internal.extract_time_sql(
-        format('%I', _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name)),
-        _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name)
-    ),
-    schema_name, table_name)
+        _iobeamdb_internal.extract_time_sql(
+            format('%I', _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name)),
+            _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name)
+        ),
+        schema_name,
+        table_name
+    )
     INTO max_time;
 
     RETURN max_time;
