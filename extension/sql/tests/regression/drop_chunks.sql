@@ -15,10 +15,10 @@ SELECT add_node('Test1' :: NAME, 'localhost');
 SELECT add_node('test2' :: NAME, 'localhost');
 
 \c Test1
-CREATE TABLE drop_chunk_test1(time bigint, temp float8, device_id text);
-CREATE TABLE drop_chunk_test2(time bigint, temp float8, device_id text);
-SELECT create_hypertable('drop_chunk_test1', 'time', 'device_id', chunk_size_bytes => 10000);
-SELECT create_hypertable('drop_chunk_test2', 'time', 'device_id', chunk_size_bytes => 10000);
+CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
+CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test1', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT create_hypertable('public.drop_chunk_test2', 'time', 'device_id', chunk_size_bytes => 10000);
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c
@@ -29,22 +29,22 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 
 \dt "_iobeamdb_internal".*
 
-SELECT get_partition_for_key('dev1', 32768);
-SELECT get_partition_for_key('dev7', 32768);
+SELECT  _iobeamdb_catalog.get_partition_for_key('dev1', 32768);
+SELECT  _iobeamdb_catalog.get_partition_for_key('dev7', 32768);
 
-INSERT INTO drop_chunk_test1 VALUES(1, 1.0, 'dev1');
-INSERT INTO drop_chunk_test1 VALUES(2, 2.0, 'dev1');
-INSERT INTO drop_chunk_test1 VALUES(3, 3.0, 'dev1');
-INSERT INTO drop_chunk_test1 VALUES(4, 4.0, 'dev7');
-INSERT INTO drop_chunk_test1 VALUES(5, 5.0, 'dev7');
-INSERT INTO drop_chunk_test1 VALUES(6, 6.0, 'dev7');
+INSERT INTO PUBLIC.drop_chunk_test1 VALUES(1, 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test1 VALUES(2, 2.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test1 VALUES(3, 3.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test1 VALUES(4, 4.0, 'dev7');
+INSERT INTO PUBLIC.drop_chunk_test1 VALUES(5, 5.0, 'dev7');
+INSERT INTO PUBLIC.drop_chunk_test1 VALUES(6, 6.0, 'dev7');
 
-INSERT INTO drop_chunk_test2 VALUES(1, 1.0, 'dev1');
-INSERT INTO drop_chunk_test2 VALUES(2, 2.0, 'dev1');
-INSERT INTO drop_chunk_test2 VALUES(3, 3.0, 'dev1');
-INSERT INTO drop_chunk_test2 VALUES(4, 4.0, 'dev7');
-INSERT INTO drop_chunk_test2 VALUES(5, 5.0, 'dev7');
-INSERT INTO drop_chunk_test2 VALUES(6, 6.0, 'dev7');
+INSERT INTO PUBLIC.drop_chunk_test2 VALUES(1, 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test2 VALUES(2, 2.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test2 VALUES(3, 3.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test2 VALUES(4, 4.0, 'dev7');
+INSERT INTO PUBLIC.drop_chunk_test2 VALUES(5, 5.0, 'dev7');
+INSERT INTO PUBLIC.drop_chunk_test2 VALUES(6, 6.0, 'dev7');
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _iobeamdb_catalog.chunk c

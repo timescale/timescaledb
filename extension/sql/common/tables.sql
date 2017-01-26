@@ -7,7 +7,7 @@
 -- node (it stores remote wrappers to update meta tables on data nodes).
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.node (
     database_name NAME    NOT NULL PRIMARY KEY,
-    schema_name   NAME    NOT NULL UNIQUE, --public schema of remote
+    schema_name   NAME    NOT NULL UNIQUE, --the schema name with remote tables to _iobeamdb_catalog schema of the node
     server_name   NAME    NOT NULL UNIQUE,
     hostname      TEXT    NOT NULL,
     active        BOOLEAN NOT NULL DEFAULT TRUE,
@@ -51,21 +51,21 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.cluster_user', '')
 -- The name and type of the time column (used to partition on time) are defined
 -- in `time_column_name` and `time_column_type`.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable (
-    id                      SERIAL                PRIMARY KEY,
-    schema_name             NAME                  NOT NULL,
-    table_name              NAME                  NOT NULL,
-    associated_schema_name  NAME                  NOT NULL,
-    associated_table_prefix NAME                  NOT NULL,
-    root_schema_name        NAME                  NOT NULL,
-    root_table_name         NAME                  NOT NULL,
-    distinct_schema_name    NAME                  NOT NULL,
-    distinct_table_name     NAME                  NOT NULL,
-    replication_factor      SMALLINT              NOT NULL CHECK (replication_factor > 0),
-    placement               chunk_placement_type  NOT NULL,
-    time_column_name        NAME                  NOT NULL,
-    time_column_type        REGTYPE               NOT NULL,
-    created_on              NAME                  NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
-    chunk_size_bytes        BIGINT                NOT NULL CHECK (chunk_size_bytes > 0),
+    id                      SERIAL                                  PRIMARY KEY,
+    schema_name             NAME                                    NOT NULL,
+    table_name              NAME                                    NOT NULL,
+    associated_schema_name  NAME                                    NOT NULL,
+    associated_table_prefix NAME                                    NOT NULL,
+    root_schema_name        NAME                                    NOT NULL,
+    root_table_name         NAME                                    NOT NULL,
+    distinct_schema_name    NAME                                    NOT NULL,
+    distinct_table_name     NAME                                    NOT NULL,
+    replication_factor      SMALLINT                                NOT NULL CHECK (replication_factor > 0),
+    placement               _iobeamdb_catalog.chunk_placement_type  NOT NULL,
+    time_column_name        NAME                                    NOT NULL,
+    time_column_type        REGTYPE                                 NOT NULL,
+    created_on              NAME                                    NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
+    chunk_size_bytes        BIGINT                                  NOT NULL CHECK (chunk_size_bytes > 0),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     UNIQUE (root_schema_name, root_table_name)
@@ -148,16 +148,18 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.distinct_replica_n
 -- Changing a data's partitioning, and thus creating a new epoch, should be done
 -- INFREQUENTLY as it's expensive operation.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
-    id                  SERIAL  NOT NULL  PRIMARY KEY,
-    hypertable_id       INTEGER NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
-    start_time          BIGINT  NULL      CHECK (start_time >= 0),
-    end_time            BIGINT  NULL      CHECK (end_time >= 0),
-    partitioning_func   NAME    NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
-    partitioning_mod    INT     NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_column NAME    NULL,
+    id                          SERIAL  NOT NULL  PRIMARY KEY,
+    hypertable_id               INTEGER NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
+    start_time                  BIGINT  NULL      CHECK (start_time >= 0),
+    end_time                    BIGINT  NULL      CHECK (end_time >= 0),
+    partitioning_func_schema    NAME    NULL,  
+    partitioning_func           NAME    NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
+    partitioning_mod            INT     NOT NULL  CHECK (partitioning_mod < 65536),
+    partitioning_column         NAME    NULL,
     UNIQUE (hypertable_id, start_time),
     UNIQUE (hypertable_id, end_time),
-    CHECK (start_time <= end_time)
+    CHECK (start_time <= end_time),
+    CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL))
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition_epoch', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.partition_epoch','id'), '');

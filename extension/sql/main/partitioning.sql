@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION get_partition_for_key(
+CREATE OR REPLACE FUNCTION _iobeamdb_catalog.get_partition_for_key(
     key TEXT,
     mod_factor INT
 )

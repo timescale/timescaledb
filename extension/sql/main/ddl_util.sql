@@ -12,6 +12,7 @@ $BODY$
 DECLARE
     def TEXT;
     c   INTEGER;
+    index_name TEXT;
 BEGIN
     --get definition text
     def = pg_get_indexdef(index_oid);
@@ -25,12 +26,18 @@ BEGIN
     def = replace(def,  'ON '||table_oid::TEXT || ' USING', 'ON /*TABLE_NAME*/ USING');
 
     --replace index name with /*INDEX_NAME*/
+
+    SELECT relname 
+    INTO STRICT index_name --index name in def is never schema qualified
+    FROM pg_class
+    WHERE OID = index_oid;
+
     SELECT count(*) INTO c
-    FROM regexp_matches(def, 'CREATE INDEX '||  index_oid || ' ON', 'g');
+    FROM regexp_matches(def, 'CREATE INDEX '||  format('%I', index_name) || ' ON', 'g');
     IF c <> 1 THEN
         RAISE EXCEPTION 'Cannot process index with definition (no index name match) %', def;
     END IF;
-    def = replace(def, 'CREATE INDEX '||  index_oid || ' ON', 'CREATE INDEX /*INDEX_NAME*/ ON');
+    def = replace(def, 'CREATE INDEX '|| format('%I', index_name) || ' ON', 'CREATE INDEX /*INDEX_NAME*/ ON');
 
     RETURN def;
 END

@@ -81,8 +81,7 @@ BEGIN
 
     RETURN NEW;
 END
-$BODY$
-SET SEARCH_PATH = 'public';
+$BODY$;
 
 
 /*
@@ -108,5 +107,4 @@ BEGIN
 
     RETURN NEW;
 END
-$BODY$
-SET SEARCH_PATH = 'public';
+$BODY$;

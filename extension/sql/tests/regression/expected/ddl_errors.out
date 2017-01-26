@@ -4,17 +4,17 @@ psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 \c meta
 SELECT add_cluster_user('postgres', NULL);
@@ -92,7 +92,7 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-psql:ddl_errors.sql:54: ERROR:  IO110: hypertable "Hypertable_1" already exists
+psql:ddl_errors.sql:54: ERROR:  IO110: hypertable public."Hypertable_1" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT set_is_distinct_flag('"public"."Hypertable_1_misspelled"', 'mispelled', true);
 psql:ddl_errors.sql:55: ERROR:  42P01: relation "public.Hypertable_1_misspelled" does not exist

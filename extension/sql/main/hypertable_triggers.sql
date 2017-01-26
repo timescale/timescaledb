@@ -78,8 +78,7 @@ BEGIN
     PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$
-SET client_min_messages = WARNING --suppress NOTICE on IF EXISTS schema
-SET SEARCH_PATH = 'public';
+SET client_min_messages = WARNING; --suppress NOTICE on IF EXISTS schema
 
 
 /*
@@ -107,4 +106,4 @@ BEGIN
     RETURN NEW;
 END
 $BODY$
-SET SEARCH_PATH = 'public';
+;

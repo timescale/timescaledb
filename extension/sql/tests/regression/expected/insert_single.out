@@ -244,7 +244,7 @@ Indexes:
     "4-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
-    "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint)
 Inherits: "testNs"._hyper_1_1_0_partition
 
@@ -264,7 +264,7 @@ Indexes:
     "8-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
     "9-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
 Check constraints:
-    "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint)
 Inherits: "testNs"._hyper_1_1_0_partition
 
@@ -278,7 +278,7 @@ Inherits: "testNs"._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key(device_id, 32768) >= '0'::smallint AND get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
 Inherits: "testNs"._hyper_1_0_replica
 Child tables: "testNs"._hyper_1_1_0_1_data,
               "testNs"._hyper_1_1_0_2_data

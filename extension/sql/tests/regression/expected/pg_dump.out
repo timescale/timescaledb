@@ -4,17 +4,17 @@ psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 \c postgres
 \! pg_dump -h localhost -U postgres -Fc Test1 > dump/Test1.sql

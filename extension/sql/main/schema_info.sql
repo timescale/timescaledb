@@ -71,8 +71,8 @@ BEGIN
                 SELECT p.*
                 FROM  _iobeamdb_catalog.partition p
                 WHERE p.epoch_id = %L AND
-                %s(%L::TEXT, %L) BETWEEN p.keyspace_start AND p.keyspace_end
-            $$, epoch.id, epoch.partitioning_func, key_value, epoch.partitioning_mod)
+                %I.%I(%L::TEXT, %L) BETWEEN p.keyspace_start AND p.keyspace_end
+            $$, epoch.id, epoch.partitioning_func_schema, epoch.partitioning_func, key_value, epoch.partitioning_mod)
         INTO STRICT partition_row;
     END IF;
     RETURN partition_row;

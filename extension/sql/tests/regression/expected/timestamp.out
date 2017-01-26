@@ -1,12 +1,12 @@
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "hstore"
-psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
@@ -66,7 +66,7 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 (1 row)
 
 \c Test1
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 1),
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 2),
 ('2009-11-10T23:00:02+00:00', 'dev1', 2.5, 3);
@@ -78,7 +78,7 @@ INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
  
 (1 row)
 
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 1),
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 2);
 SELECT * FROM PUBLIC."testNs";

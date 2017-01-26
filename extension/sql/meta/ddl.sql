@@ -12,16 +12,17 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_hypertable(
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
     associated_table_prefix NAME,
-    placement               chunk_placement_type,
+    placement               _iobeamdb_catalog.chunk_placement_type,
     chunk_size_bytes        BIGINT,
     created_on              NAME
 )
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    id                  INTEGER;
-    hypertable_row      _iobeamdb_catalog.hypertable;
-    partitioning_func   TEXT = 'get_partition_for_key';
+    id                       INTEGER;
+    hypertable_row           _iobeamdb_catalog.hypertable;
+    partitioning_func        _iobeamdb_catalog.partition_epoch.partitioning_func%TYPE = 'get_partition_for_key';
+    partitioning_func_schema _iobeamdb_catalog.partition_epoch.partitioning_func_schema%TYPE = '_iobeamdb_catalog';
 BEGIN
 
     id :=  nextval('_iobeamdb_catalog.default_hypertable_seq');
@@ -38,6 +39,7 @@ BEGIN
         IF number_partitions IS NULL THEN
             number_partitions := 1;
             partitioning_func := NULL;
+            partitioning_func_schema := NULL;
         ELSIF number_partitions <> 1 THEN
             RAISE EXCEPTION 'The number of partitions must be 1 without a partitioning column'
             USING ERRCODE ='IO101';
@@ -72,7 +74,7 @@ BEGIN
     RETURNING * INTO hypertable_row;
 
     IF number_partitions != 0 THEN
-        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column, partitioning_func);
+        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column, partitioning_func_schema, partitioning_func);
     END IF;
     RETURN hypertable_row;
 END

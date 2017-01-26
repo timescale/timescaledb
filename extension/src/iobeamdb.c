@@ -47,6 +47,7 @@ typedef struct hypertable_info
 typedef struct partitioning_info
 {
 	Name partitioning_column;
+	Name partitioning_func_schema;
 	Name partitioning_func;
 	int32 partitioning_mod;
 } partitioning_info;
@@ -69,7 +70,7 @@ static Node *add_partitioning_func_qual_mutator(Node *node, add_partitioning_fun
 static partitioning_info *
 get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List * hypertable_info_list);
 static Expr *
-create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func, int32 partitioning_mod);
+create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod);
 
 void
 _PG_init(void)
@@ -238,7 +239,7 @@ get_hypertable_info(Oid mainRelationOid)
 		for (j = 0; j < total_rows; j++)
 		{
 			HeapTuple tuple = SPI_tuptable->vals[j];
-			Name partitioning_func, partitioning_column;
+			Name partitioning_func_schema, partitioning_func, partitioning_column;
 			int32 partitioning_mod;
 
 			partitioning_info* info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
@@ -250,14 +251,20 @@ get_hypertable_info(Oid mainRelationOid)
 				memcpy(info->partitioning_column, partitioning_column,  sizeof(NameData));
 			}
 
-			partitioning_func = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
+			partitioning_func_schema = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
+			if (!isnull) {
+				info->partitioning_func_schema = SPI_palloc(sizeof(NameData));
+				memcpy(info->partitioning_func_schema, partitioning_func_schema,  sizeof(NameData));
+			}
+
+			partitioning_func = DatumGetName(SPI_getbinval(tuple, tupdesc, 4, &isnull));
 
 			if (!isnull) {
 				info->partitioning_func = SPI_palloc(sizeof(NameData));
 				memcpy(info->partitioning_func, partitioning_func,  sizeof(NameData));
 			}
 
-			partitioning_mod =  DatumGetInt32(SPI_getbinval(tuple, tupdesc, 4, &isnull));
+			partitioning_mod =  DatumGetInt32(SPI_getbinval(tuple, tupdesc, 5, &isnull));
 
 			if (!isnull) {
 				info->partitioning_mod = partitioning_mod;
@@ -360,6 +367,7 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 							&& pi->partitioning_func != NULL) {
 							/* The var is a partitioning column */
 							Expr * partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
+																							pi->partitioning_func_schema,
 																							pi->partitioning_func,
 																							pi->partitioning_mod);
 
@@ -407,10 +415,10 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List
  * This function makes a copy of all nodes given in input.
  * */
 static Expr *
-create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func, int32 partitioning_mod)
+create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod)
 {
 	Expr *op_expr;
-	List *func_name = list_make1(makeString(NameStr(*(partitioning_func))));
+	List *func_name = list_make2(makeString(NameStr(*(partitioning_func_schema))), makeString(NameStr(*(partitioning_func))));
 	Var *var_for_fn_call;
 	Const *const_for_fn_call;
 	Const *mod_const_var_call;

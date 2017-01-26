@@ -4,17 +4,17 @@ psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 \c meta
 SELECT add_cluster_user('postgres', NULL);
@@ -87,14 +87,14 @@ SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
  
 (1 row)
 
-INSERT INTO "Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+INSERT INTO PUBLIC."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 --expect error cases
 \set ON_ERROR_STOP 0
-UPDATE ONLY "Hypertable_1" SET time = 0 WHERE TRUE;
+UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 psql:include/ddl_ops_1.sql:27: ERROR:  IO101: UPDATE ONLY not supported on hypertables
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
-DELETE FROM ONLY "Hypertable_1" WHERE "Device_id" = 'dev1';
+DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 psql:include/ddl_ops_1.sql:28: ERROR:  IO101: DELETE ONLY not currently supported on hypertables
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
@@ -143,8 +143,8 @@ Indexes:
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
 
 \d+ "_iobeamdb_internal"."_hyper_1_root"
                            Table "_iobeamdb_internal._hyper_1_root"
@@ -173,7 +173,7 @@ Child tables: _iobeamdb_internal._hyper_1_0_replica
  sensor_3  | numeric | not null default 1             |             | main     |              | 
  sensor_4  | numeric | not null default 1             |             | main     |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
@@ -318,8 +318,8 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
 
 \d+ "_iobeamdb_internal"."_hyper_1_root"
                           Table "_iobeamdb_internal._hyper_1_root"
@@ -350,7 +350,7 @@ Child tables: _iobeamdb_internal._hyper_1_0_replica
  sensor_3         | bigint  | not null default 131   |             | plain    |              | 
  sensor_4         | bigint  | not null default 131   |             | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
