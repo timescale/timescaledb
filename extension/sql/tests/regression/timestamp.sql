@@ -35,7 +35,7 @@ CREATE TABLE PUBLIC."testNs" (
   series_bool BOOLEAN NULL
 );
 CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
@@ -47,7 +47,7 @@ INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-10T23:00:02+00:00', 'dev1', 2.5, 3);
 
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key('testNs', 'dev1') part
+FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
 
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES

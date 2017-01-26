@@ -64,6 +64,6 @@ $BODY$
     SELECT h.chunk_size_bytes
     FROM _iobeamdb_catalog.chunk_replica_node crn
     INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-    INNER JOIN _iobeamdb_catalog.hypertable h ON (h.name = pr.hypertable_name)
+    INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
     WHERE (crn.chunk_id = get_chunk_max_size.chunk_id);
 $BODY$;

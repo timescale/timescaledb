@@ -2,11 +2,11 @@
 
 -- Get a comma-separated list of columns in a hypertable.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_column_list(
-    hypertable_name NAME
+    hypertable_id INTEGER
 )
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
-SELECT array_to_string(_iobeamdb_internal.get_quoted_column_names(hypertable_name), ', ')
+SELECT array_to_string(_iobeamdb_internal.get_quoted_column_names(hypertable_id), ', ')
 $BODY$;
 
 -- Gets the partition ID of a given epoch and data row.
@@ -75,10 +75,10 @@ $BODY$;
 -- and a trigger that executes after the statement will call this function to
 -- place the data appropriately.
 --
--- hypertable_name - Name of the hypertable the data belongs to
--- copy_table_oid -- OID of the table to fetch rows from
+-- hypertable_id - ID of the hypertable the data belongs to
+-- copy_table_oid - OID of the table to fetch rows from
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.insert_data(
-    hypertable_name NAME,
+    hypertable_id   INTEGER,
     copy_table_oid  REGCLASS
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -113,9 +113,9 @@ BEGIN
                    p.id AS partition_id, p.keyspace_start, p.keyspace_end,
                    pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
             FROM ONLY %1$s ct
-            LEFT JOIN _iobeamdb_catalog.hypertable h ON (h.NAME = %2$L)
+            LEFT JOIN _iobeamdb_catalog.hypertable h ON (h.id = %2$L)
             LEFT JOIN _iobeamdb_catalog.partition_epoch pe ON (
-              pe.hypertable_name = %2$L AND
+              pe.hypertable_id = %2$L AND
               (pe.start_time <= (SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
                 OR pe.start_time IS NULL) AND
               (pe.end_time   >= (SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
@@ -123,7 +123,7 @@ BEGIN
             )
             LEFT JOIN _iobeamdb_internal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
             LIMIT 1
-        $$, copy_table_oid, hypertable_name);
+        $$, copy_table_oid, hypertable_id);
 
     EXECUTE point_record_query_sql
     INTO STRICT point_record;
@@ -149,7 +149,7 @@ BEGIN
             crn.database_name,
             crn.schema_name,
             crn.table_name,
-            pr.hypertable_name,
+            pr.hypertable_id,
             pr.replica_id
         FROM _iobeamdb_catalog.chunk_replica_node crn
         INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
@@ -160,14 +160,14 @@ BEGIN
 
             SELECT *
             INTO distinct_table_oid
-            FROM _iobeamdb_internal.get_distinct_table_oid(hypertable_name, crn_record.replica_id, crn_record.database_name);
+            FROM _iobeamdb_internal.get_distinct_table_oid(hypertable_id, crn_record.replica_id, crn_record.database_name);
 
             -- Generate clauses to insert new distinct column values into the
             -- correct distinct tables
             FOR distinct_column IN
             SELECT c.name
             FROM _iobeamdb_catalog.hypertable_column c
-            WHERE c.is_distinct = TRUE AND c.hypertable_name = insert_data.hypertable_name
+            WHERE c.is_distinct = TRUE AND c.hypertable_id = insert_data.hypertable_id
             ORDER BY c.name
             LOOP
                 distinct_clauses := distinct_clauses || ',' || format(
@@ -200,7 +200,7 @@ BEGIN
                     _iobeamdb_internal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
                     _iobeamdb_internal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
                     distinct_clauses,
-                    _iobeamdb_internal.get_column_list(hypertable_name),
+                    _iobeamdb_internal.get_column_list(hypertable_id),
                     point_record.time_column_name,
                     point_record.partitioning_func,
                     point_record.partitioning_column,

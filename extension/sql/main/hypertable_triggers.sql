@@ -27,8 +27,8 @@ BEGIN
     EXECUTE format(
         $$
             SELECT _iobeamdb_internal.insert_data(
-                (SELECT name FROM _iobeamdb_catalog.hypertable
-                WHERE main_schema_name = %1$L AND main_table_name = %2$L)
+                (SELECT id FROM _iobeamdb_catalog.hypertable h
+                WHERE h.schema_name = %1$L AND h.table_name = %2$L)
                 , %3$L)
         $$, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_RELID);
     RETURN NEW;
@@ -54,8 +54,8 @@ BEGIN
         PERFORM _iobeamdb_internal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
 
         IF NEW.created_on <> current_database() THEN
-           PERFORM _iobeamdb_internal.create_schema(NEW.main_schema_name);
-           PERFORM _iobeamdb_internal.create_table(NEW.main_schema_name, NEW.main_table_name);
+           PERFORM _iobeamdb_internal.create_schema(NEW.schema_name);
+           PERFORM _iobeamdb_internal.create_table(NEW.schema_name, NEW.table_name);
         END IF;
 
         -- UPDATE not supported, so do them before action
@@ -63,12 +63,12 @@ BEGIN
             $$
                 CREATE TRIGGER modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table();
-            $$, NEW.main_schema_name, NEW.main_table_name);
+            $$, NEW.schema_name, NEW.table_name);
         EXECUTE format(
             $$
                 CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table();
-            $$, NEW.main_schema_name, NEW.main_table_name);
+            $$, NEW.schema_name, NEW.table_name);
 
         RETURN NEW;
     END IF;
@@ -106,7 +106,7 @@ BEGIN
 
     IF new.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      EXECUTE format('DROP TABLE %I.%I', NEW.main_schema_name, NEW.main_table_name);
+      EXECUTE format('DROP TABLE %I.%I', NEW.schema_name, NEW.table_name);
     END IF;
 
     RETURN NEW;

@@ -131,7 +131,7 @@ BEGIN
                 pr.schema_name,
                 format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
             FROM _iobeamdb_catalog.partition_replica pr
-            INNER JOIN _iobeamdb_catalog.hypertable h ON (h.name = pr.hypertable_name)
+            INNER JOIN _iobeamdb_catalog.hypertable h ON (h.id = pr.hypertable_id)
             INNER JOIN _iobeamdb_meta.place_chunks(new, h.placement, h.replication_factor) p ON (p.replica_id = pr.replica_id)
             WHERE pr.partition_id = NEW.partition_id;
     END IF;

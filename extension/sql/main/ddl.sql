@@ -9,7 +9,6 @@
 -- number_partitions - (Optional) Number of partitions for data
 -- associated_schema_name - (Optional) Schema for internal hypertable tables
 -- associated_table_prefix - (Optional) Prefix for internal hypertable table names
--- hypertable_name - (Optional) Name for the hypertable, if different than the main table name
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -18,7 +17,6 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       SMALLINT = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    hypertable_name         NAME = NULL,
     placement               chunk_placement_type = 'STICKY',
     chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
 )
@@ -83,7 +81,6 @@ BEGIN
             number_partitions,
             associated_schema_name,
             associated_table_prefix,
-            hypertable_name,
             placement,
             chunk_size_bytes
         );
@@ -97,15 +94,15 @@ BEGIN
     FROM pg_attribute att
     WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
         LOOP
-            PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.name, att_row);
+            PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.id, att_row);
         END LOOP;
 
 
     PERFORM 1
     FROM pg_index,
     LATERAL _iobeamdb_meta_api.add_index(
-        hypertable_row.name,
-        hypertable_row.main_schema_name,
+        hypertable_row.id,
+        hypertable_row.schema_name,
         (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
         _iobeamdb_internal.get_general_index_definition(indexrelid, indrelid)
     )
@@ -125,20 +122,19 @@ CREATE OR REPLACE FUNCTION set_is_distinct_flag(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    table_name     NAME;
-    schema_name    NAME;
+    t_name         NAME;
+    s_name         NAME;
     hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     SELECT relname, nspname
-    INTO STRICT table_name, schema_name
+    INTO STRICT t_name, s_name
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
     SELECT * INTO hypertable_row
     FROM _iobeamdb_catalog.hypertable h
-    WHERE main_schema_name = schema_name AND
-          main_table_name = table_name;
+    WHERE h.schema_name = s_name AND h.table_name = t_name;
 
     PERFORM atttypid
     FROM pg_attribute
@@ -152,7 +148,7 @@ BEGIN
 
     PERFORM _iobeamdb_internal.meta_transaction_exec(
         format('SELECT _iobeamdb_meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
-            hypertable_row.name,
+            hypertable_row.id,
             column_name,
             is_distinct,
             current_database()

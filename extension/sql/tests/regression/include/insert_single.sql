@@ -24,7 +24,7 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE 
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', hypertable_name=>'testNs', associated_schema_name=>'testNs' );
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 
 SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
@@ -33,7 +33,7 @@ BEGIN;
 COMMIT;
 
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key('testNs', 'dev1') part
+FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
 
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
@@ -61,4 +61,5 @@ SELECT * FROM chunk_closing_test;
 SELECT * FROM _iobeamdb_catalog.chunk c
     LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
     LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    WHERE hypertable_name = 'public.chunk_closing_test';
+    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';

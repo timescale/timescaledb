@@ -21,6 +21,6 @@ echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER and with db $INSTALL_D
 
 cd $DIR
 psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB_MAIN -v ON_ERROR_STOP=1  <<EOF
-    SELECT _iobeamdb_internal.insert_data('33_testNs', '$1');
+    SELECT _iobeamdb_internal.insert_data((SELECT id FROM _iobeamdb_catalog.hypertable h WHERE h.table_name = '33_testNs'), '$1');
 EOF
 cd $PWD

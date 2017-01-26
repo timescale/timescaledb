@@ -24,7 +24,7 @@ $BODY$;
     Creates an index on all chunk_replica_nodes for a hypertable.
 */
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_index_on_all_chunk_replica_nodes(
-    hypertable_name  NAME,
+    hypertable_id    INTEGER,
     main_schema_name NAME,
     main_index_name  NAME,
     definition       TEXT
@@ -36,7 +36,7 @@ BEGIN
     PERFORM _iobeamdb_internal.create_chunk_replica_node_index(crn.schema_name, crn.table_name, main_schema_name, main_index_name, definition)
     FROM _iobeamdb_catalog.chunk_replica_node crn
     INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-    WHERE pr.hypertable_name = create_index_on_all_chunk_replica_nodes.hypertable_name AND
+    WHERE pr.hypertable_id = create_index_on_all_chunk_replica_nodes.hypertable_id AND
           crn.database_name = current_database();
 END
 $BODY$;
@@ -71,17 +71,17 @@ BEGIN
     END IF;
 
     --create index on all chunks
-    PERFORM _iobeamdb_internal.create_index_on_all_chunk_replica_nodes(NEW.hypertable_name, NEW.main_schema_name, NEW.main_index_name, NEW.definition);
+    PERFORM _iobeamdb_internal.create_index_on_all_chunk_replica_nodes(NEW.hypertable_id, NEW.main_schema_name, NEW.main_index_name, NEW.definition);
 
     IF new.created_on <> current_database() THEN
       --create index on main table
       SELECT *
       INTO STRICT hypertable_row
       FROM _iobeamdb_catalog.hypertable AS h
-      WHERE h.name = NEW.hypertable_name;
+      WHERE h.id = NEW.hypertable_id;
 
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      EXECUTE _iobeamdb_internal.get_index_definition_for_table(hypertable_row.main_schema_name, hypertable_row.main_table_name, NEW.main_index_name, NEW.definition);
+      EXECUTE _iobeamdb_internal.get_index_definition_for_table(hypertable_row.schema_name, hypertable_row.table_name, NEW.main_index_name, NEW.definition);
     END IF;
 
     RETURN NEW;
