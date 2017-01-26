@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_partition_replica_table()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_partition_replica_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -17,12 +17,8 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
     RAISE EXCEPTION 'Only inserts and deletes supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+    USING ERRCODE = 'IO101';
 
 END
 $BODY$

@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_partition()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_partition()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -22,12 +22,7 @@ BEGIN
     RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
     RAISE EXCEPTION 'Only inserts and deletes supported on % name ', TG_TABLE_NAME
-         USING ERRCODE = 'IO101';
-
+    USING ERRCODE = 'IO101';
 END
 $BODY$;

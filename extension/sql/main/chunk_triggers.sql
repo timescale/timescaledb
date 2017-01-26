@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk()
+-- TODO(rrk) - Why have this trigger for INSERTs/DELETEs? Nothing is actually done.
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

@@ -1,7 +1,5 @@
-/*
-    Creates tables (and associated indexes) for chunk_replica_node rows.
-*/
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk_replica_node()
+-- Creates/drops tables (and associated indexes) for chunk_replica_node rows.
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_chunk_replica_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

@@ -1,7 +1,7 @@
 /*
   Creates tables for distinct_replica_node rows.
 */
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_distinct_replica_node()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_distinct_replica_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -26,14 +26,8 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
     RAISE EXCEPTION 'Only inserts and deletes supported on % table', TG_TABLE_NAME
     USING ERRCODE = 'IO101';
-
-    RETURN NEW;
 END
 $BODY$
 SET SEARCH_PATH = 'public';

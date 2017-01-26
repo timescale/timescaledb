@@ -204,7 +204,7 @@ $BODY$;
 -- Trigger to modify a column from a hypertable.
 -- Called when the user alters the main table by adding a column or changing
 -- the properties of a column.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_modify_column()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -306,7 +306,7 @@ SET SEARCH_PATH = 'public';
 
 -- Trigger to remove a column from a hypertable.
 -- Called when the user alters the main table by deleting a column.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_deleted_column()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_deleted_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

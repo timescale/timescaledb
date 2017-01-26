@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_chunk_replica_node_meta()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_chunk_replica_node_meta()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -20,12 +20,8 @@ BEGIN
     RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
     RAISE EXCEPTION 'Only inserts and deletes supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+    USING ERRCODE = 'IO101';
 
 END
 $BODY$

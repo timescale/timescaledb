@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_node()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN

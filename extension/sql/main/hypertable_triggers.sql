@@ -38,7 +38,7 @@ END
 $BODY$;
 
 -- Trigger for handling the addition of new hypertables.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_hypertable()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -75,12 +75,8 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
     RAISE EXCEPTION 'Only inserts and delete supported on hypertable metadata table'
-        USING ERRCODE = 'IO101';
+    USING ERRCODE = 'IO101';
 
 END
 $BODY$
@@ -91,7 +87,7 @@ SET SEARCH_PATH = 'public';
 /*
     Drops public hypertable when hypertable rows deleted (row created in deleted_hypertable table).
 */
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_deleted_hypertable()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_deleted_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

@@ -55,7 +55,7 @@ $BODY$;
 /*
     Creates indexes on chunk tables when hypertable_index rows created.
 */
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_modify_hypertable_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_hypertable_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -64,10 +64,6 @@ BEGIN
     IF TG_OP = 'UPDATE' THEN
         RAISE EXCEPTION 'Only inserts/deletes supported on % table', TG_TABLE_NAME
         USING ERRCODE = 'IO101';
-    END IF;
-
-    IF TG_OP = 'DELETE' THEN
-      RETURN OLD; --handled by deleted_hypertable_index table
     END IF;
 
     --create index on all chunks
@@ -93,7 +89,7 @@ SET SEARCH_PATH = 'public';
 /*
     Drops indexes on chunk tables when hypertable_index rows deleted (row created in deleted_hypertable_index table).
 */
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_deleted_hypertable_index()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_deleted_hypertable_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

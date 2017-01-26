@@ -1,8 +1,7 @@
-/*
-  Trigger to create/drop indexes on chunk tables when the corresponding
-  chunk_replica_node_index row is created/deleted.
-*/
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk_replica_node_index()
+-- Trigger to create/drop indexes on chunk tables when the corresponding
+-- chunk_replica_node_index row is created/deleted.
+-- (UPDATEs will error)
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_chunk_replica_node_index()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

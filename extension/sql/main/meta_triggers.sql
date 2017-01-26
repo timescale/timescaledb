@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_meta()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_meta()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

@@ -126,7 +126,7 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_replica_no
 --  Parent table:  hypertable_replica.distinct_table
 --  No children, created table contains data.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.distinct_replica_node (
-    hypertable_id   INTEGER  NOT NULL,  -- TODO shouldn't this reference hypertable?
+    hypertable_id   INTEGER  NOT NULL,
     replica_id      SMALLINT NOT NULL,
     database_name   NAME     NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     schema_name     NAME     NOT NULL,
@@ -185,7 +185,7 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_cat
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_replica (
     id              SERIAL   NOT NULL PRIMARY KEY,
     partition_id    INTEGER  NOT NULL REFERENCES _iobeamdb_catalog.partition(id) ON DELETE CASCADE,
-    hypertable_id   INTEGER  NOT NULL,  -- TODO shouldn't this reference hypertable?
+    hypertable_id   INTEGER  NOT NULL,
     replica_id      SMALLINT NOT NULL,
     schema_name     NAME     NOT NULL,
     table_name      NAME     NOT NULL,

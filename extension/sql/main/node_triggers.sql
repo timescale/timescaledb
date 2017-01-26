@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_node()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

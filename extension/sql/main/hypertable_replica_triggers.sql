@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_hypertable_replica()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_hypertable_replica()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -17,11 +17,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
-    RAISE EXCEPTION 'Only inserts and deletets supported on hypertable_replica table, got %', TG_OP
+    RAISE EXCEPTION 'Only inserts and deletes supported on hypertable_replica table, got %', TG_OP
     USING ERRCODE = 'IO101';
 
     RETURN NEW;
