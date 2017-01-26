@@ -231,15 +231,16 @@ BEGIN
     FROM _iobeamdb_catalog.partition_epoch pe
     WHERE pe.id = epoch_id;
 
-    EXECUTE format(
-        $$
-            ALTER TABLE %1$I.%2$I
-            ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
-        $$,
-        schema_name, table_name,
-        epoch_row.partitioning_func, epoch_row.partitioning_column,
-        epoch_row.partitioning_mod, keyspace_start, keyspace_end);
-
+    IF epoch_row.partitioning_column IS NOT NULL THEN
+        EXECUTE format(
+            $$
+                ALTER TABLE %1$I.%2$I
+                ADD CONSTRAINT partition CHECK(%3$s(%4$I::text, %5$L) BETWEEN %6$L AND %7$L)
+            $$,
+            schema_name, table_name,
+            epoch_row.partitioning_func, epoch_row.partitioning_column,
+            epoch_row.partitioning_mod, keyspace_start, keyspace_end);
+    END IF;
 END
 $BODY$;
 

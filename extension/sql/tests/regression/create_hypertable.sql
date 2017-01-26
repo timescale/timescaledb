@@ -22,3 +22,9 @@ select * from create_hypertable('test_schema.test_table', 'time', 'device_id');
 
 \C test2
 \dt "test_schema".*
+
+--test partitioning in only time dimension
+create table test_schema.test_1dim(time timestamp, temp float);
+select create_hypertable('test_schema.test_1dim', 'time');
+
+\dt "test_schema".*

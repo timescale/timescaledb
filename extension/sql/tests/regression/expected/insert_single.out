@@ -333,3 +333,22 @@ SELECT * FROM "testNs";
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
 (10 rows)
 
+--test that we can insert data into a 1-dimensional table (only time partitioning)
+CREATE TABLE "1dim"(time timestamp, temp float);
+SELECT create_hypertable('"1dim"', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "1dim" VALUES('2017-01-20T09:00:01', 22.5);
+INSERT INTO "1dim" VALUES('2017-01-20T09:00:21', 21.2);
+INSERT INTO "1dim" VALUES('2017-01-20T09:00:47', 25.1);
+SELECT * FROM "1dim";
+        time         | temp 
+---------------------+------
+ 2017-01-20 09:00:01 | 22.5
+ 2017-01-20 09:00:21 | 21.2
+ 2017-01-20 09:00:47 | 25.1
+(3 rows)
+

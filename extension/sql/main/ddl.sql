@@ -12,7 +12,7 @@
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
-    partitioning_column     NAME,
+    partitioning_column     NAME = NULL,
     replication_factor      SMALLINT = 1,
     number_partitions       SMALLINT = NULL,
     associated_schema_name  NAME = NULL,
@@ -46,19 +46,21 @@ BEGIN
             RAISE EXCEPTION 'column "%" does not exist', time_column_name
             USING ERRCODE = 'IO102';
     END;
-
+    
     IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
         RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type
         USING ERRCODE = 'IO102';
     END IF;
 
-    PERFORM atttypid
-    FROM pg_attribute
-    WHERE attrelid = main_table AND attname = partitioning_column;
+    IF partitioning_column IS NOT NULL THEN
+        PERFORM atttypid
+        FROM pg_attribute
+        WHERE attrelid = main_table AND attname = partitioning_column;
 
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'column "%" does not exist', partitioning_column
-        USING ERRCODE = 'IO102';
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'column "%" does not exist', partitioning_column
+            USING ERRCODE = 'IO102';
+        END IF;
     END IF;
 
     EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
