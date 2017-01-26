@@ -83,8 +83,8 @@ INSERT INTO conditions(time,device_id,temperature,humidity)
 VALUES(NOW(), 'office', 70.0, 50.0);
 ```
 
-Similarly, querying data is done via normal SQL SELECT commands. Updating
-and deleting individual rows is currently _not_ supported.
+Similarly, querying data is done via normal SQL SELECT commands.
+SQL UPDATE and DELETE commands also work as expected.
 
 ### Indexing data
 

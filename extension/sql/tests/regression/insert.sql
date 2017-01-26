@@ -15,4 +15,7 @@ FROM "_iobeamdb_internal"._hyper_1_0_distinct;
 SELECT * FROM _iobeamdb_catalog.chunk;
 SELECT * FROM _iobeamdb_catalog.chunk_replica_node;
 SELECT * FROM _iobeamdb_catalog.partition_replica;
-select * from public.chunk_closing_test;
+SELECT * FROM chunk_closing_test;
+SELECT * FROM ONLY chunk_closing_test;
+SELECT * FROM "testNs";
+SELECT * FROM ONLY "testNs";
