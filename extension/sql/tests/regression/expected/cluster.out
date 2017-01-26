@@ -345,6 +345,17 @@ FROM _iobeamdb_catalog.hypertable_column;
              1 | Device_id                                                       |      2 | text             |               | t           | t        | Test1      | Test1
 (12 rows)
 
+\set ON_ERROR_STOP 0
+UPDATE _iobeamdb_catalog.cluster_user SET password = 'foo';
+psql:cluster.sql:111: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+UPDATE _iobeamdb_catalog.node SET active = FALSE;
+psql:cluster.sql:112: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+DELETE FROM _iobeamdb_catalog.meta WHERE TRUE;
+psql:cluster.sql:113: ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+\set ON_ERROR_STOP 1
 \des+
                                                      List of foreign servers
  Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |            FDW Options             | Description 
@@ -723,7 +734,7 @@ Child tables: _iobeamdb_internal._hyper_3_0_replica
 
 \c meta
 SELECT _iobeamdb_meta.close_chunk_end(1);
-psql:cluster.sql:127: WARNING:  01000: Cannot close an empty chunk table
+psql:cluster.sql:133: WARNING:  01000: Cannot close an empty chunk table
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
 -----------------

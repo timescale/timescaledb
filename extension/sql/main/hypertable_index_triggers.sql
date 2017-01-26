@@ -62,8 +62,7 @@ DECLARE
   hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'Only inserts/deletes supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
 
     --create index on all chunks
@@ -96,8 +95,7 @@ DECLARE
     hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
     --drop index on all chunks
     PERFORM _iobeamdb_internal.drop_chunk_replica_node_index(NEW.main_schema_name, NEW.main_index_name);

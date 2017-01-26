@@ -5,8 +5,7 @@ DECLARE
     cluster_user_row _iobeamdb_catalog.cluster_user;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
 
     IF NEW.database_name <> current_database() THEN

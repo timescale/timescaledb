@@ -8,8 +8,7 @@ DECLARE
     meta_row _iobeamdb_catalog.meta;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on cluster_user table'
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
 
     --NOTE:  creating the role should be done outside this purview. Permissions are complex and should be set by the DBA

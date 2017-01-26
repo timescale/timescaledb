@@ -1,6 +1,7 @@
 sql/common/types.sql
 sql/common/tables.sql
 sql/common/cluster_setup_functions.sql
+sql/common/errors.sql
 sql/common/chunk.sql
 sql/common/hash_function.sql
 sql/common/rpc.sql

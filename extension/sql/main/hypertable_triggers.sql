@@ -75,9 +75,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    RAISE EXCEPTION 'Only inserts and delete supported on hypertable metadata table'
-    USING ERRCODE = 'IO101';
-
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$
 SET client_min_messages = WARNING --suppress NOTICE on IF EXISTS schema
@@ -94,8 +92,7 @@ DECLARE
     hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
     --drop index on all chunks
 

@@ -6,11 +6,6 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_chunk_replica_node_index
 $BODY$
 DECLARE
 BEGIN
-    IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'Only inserts/deletes supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
-    END IF;
-
     IF TG_OP = 'INSERT' THEN
         EXECUTE NEW.definition;
         RETURN NEW;
@@ -18,6 +13,8 @@ BEGIN
         EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.schema_name, OLD.index_name);
         RETURN OLD;
     END IF;
+
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$
 SET SEARCH_PATH = 'public';

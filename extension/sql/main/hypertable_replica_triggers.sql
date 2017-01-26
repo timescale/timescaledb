@@ -17,10 +17,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    RAISE EXCEPTION 'Only inserts and deletes supported on hypertable_replica table, got %', TG_OP
-    USING ERRCODE = 'IO101';
-
-    RETURN NEW;
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$
 SET SEARCH_PATH = 'public';

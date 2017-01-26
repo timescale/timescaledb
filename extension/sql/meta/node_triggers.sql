@@ -3,9 +3,9 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_node()
 $BODY$
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on node table'
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
+
     EXECUTE format(
         $$
             CREATE SCHEMA IF NOT EXISTS %I;

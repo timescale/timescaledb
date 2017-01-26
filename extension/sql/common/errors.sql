@@ -14,3 +14,16 @@
 --IO500 - GROUP: internal error
 --IO501 - unexpected state/event
 --IO502 - communication/remote error
+
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_trigger_error(
+    tg_op     TEXT,
+    tg_schema NAME,
+    tg_table  NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RAISE EXCEPTION 'Operation % not supported on %.%', tg_op, tg_schema, tg_table
+    USING ERRCODE = 'IO101';
+END
+$BODY$;
