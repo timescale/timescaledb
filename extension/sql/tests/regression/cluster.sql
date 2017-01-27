@@ -13,6 +13,13 @@ SELECT add_node('Test1' :: NAME, 'localhost');
 
 SELECT add_node('test2' :: NAME, 'localhost');
 
+
+\set ON_ERROR_STOP 0
+SELECT add_node('should_fail' :: NAME, 'localhost', -1);
+SELECT add_node('should_fail' :: NAME, '!@#€%&%&(%#&())', 5432);
+
+\set ON_ERROR_STOP 1
+
 \c Test1
 
 CREATE TABLE PUBLIC."testNs" (
@@ -134,6 +141,7 @@ SELECT *
 FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 SELECT *
 FROM _iobeamdb_catalog.chunk;
+
 
 \c Test1
 \d+ "_iobeamdb_internal".*

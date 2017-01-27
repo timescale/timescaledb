@@ -56,6 +56,16 @@ SELECT add_node('test2' :: NAME, 'localhost');
  
 (1 row)
 
+\set ON_ERROR_STOP 0
+SELECT add_node('should_fail' :: NAME, 'localhost', -1);
+psql:cluster.sql:18: ERROR:  08001: could not connect to server "should_fail"
+DETAIL:  invalid port number: "-1"
+LOCATION:  connect_pg_server, connection.c:241
+SELECT add_node('should_fail' :: NAME, '!@#€%&%&(%#&())', 5432);
+psql:cluster.sql:19: ERROR:  08001: could not connect to server "should_fail"
+DETAIL:  could not translate host name "!@#€%&%&(%#&())" to address: Name or service not known
+LOCATION:  connect_pg_server, connection.c:241
+\set ON_ERROR_STOP 1
 \c Test1
 CREATE TABLE PUBLIC."testNs" (
   time BIGINT NOT NULL,
@@ -65,7 +75,7 @@ CREATE TABLE PUBLIC."testNs" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:25: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:32: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE TABLE PUBLIC."testNs2" (
   time BIGINT NOT NULL,
@@ -75,19 +85,19 @@ CREATE TABLE PUBLIC."testNs2" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:34: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:41: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-psql:cluster.sql:38: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:45: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
-psql:cluster.sql:38: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:45: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-psql:cluster.sql:39: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:46: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
-psql:cluster.sql:39: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:46: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
  create_hypertable 
@@ -97,7 +107,7 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
-psql:cluster.sql:45: ERROR:  IO110: hypertable public."testNs" already exists
+psql:cluster.sql:52: ERROR:  IO110: hypertable public."testNs" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id');
@@ -126,17 +136,17 @@ FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 
 SELECT *
 FROM _iobeamdb_catalog.node;
- database_name | schema_name  | server_name | hostname  | active | id 
----------------+--------------+-------------+-----------+--------+----
- Test1         | remote_Test1 | Test1       | localhost | t      |  1
- test2         | remote_test2 | test2       | localhost | t      |  2
+ database_name |  schema_name   | server_name | hostname  | port | active | id 
+---------------+----------------+-------------+-----------+------+--------+----
+ Test1         | remote_1_Test1 | Test1       | localhost | 5432 | t      |  1
+ test2         | remote_2_test2 | test2       | localhost | 5432 | t      |  2
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.meta;
- database_name | hostname  | server_name 
----------------+-----------+-------------
- meta          | localhost | meta
+ database_name | hostname  | port | server_name 
+---------------+-----------+------+-------------
+ meta          | localhost | 5432 | meta
 (1 row)
 
 SELECT *
@@ -216,11 +226,11 @@ FROM _iobeamdb_catalog.hypertable_column;
 (12 rows)
 
 \des+
-                                                     List of foreign servers
- Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |            FDW Options             | Description 
--------+----------+----------------------+-------------------+------+---------+------------------------------------+-------------
- Test1 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'Test1') | 
- test2 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'test2') | 
+                                                           List of foreign servers
+ Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |                   FDW Options                   | Description 
+-------+----------+----------------------+-------------------+------+---------+-------------------------------------------------+-------------
+ Test1 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'Test1', port '5432') | 
+ test2 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'test2', port '5432') | 
 (2 rows)
 
 \deu+
@@ -236,17 +246,17 @@ FROM _iobeamdb_catalog.hypertable_column;
 \c Test1
 SELECT *
 FROM _iobeamdb_catalog.node;
- database_name | schema_name  | server_name | hostname  | active | id 
----------------+--------------+-------------+-----------+--------+----
- Test1         | remote_Test1 | Test1       | localhost | t      |  1
- test2         | remote_test2 | test2       | localhost | t      |  2
+ database_name |  schema_name   | server_name | hostname  | port | active | id 
+---------------+----------------+-------------+-----------+------+--------+----
+ Test1         | remote_1_Test1 | Test1       | localhost | 5432 | t      |  1
+ test2         | remote_2_test2 | test2       | localhost | 5432 | t      |  2
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.meta;
- database_name | hostname  | server_name 
----------------+-----------+-------------
- meta          | localhost | meta
+ database_name | hostname  | port | server_name 
+---------------+-----------+------+-------------
+ meta          | localhost | 5432 | meta
 (1 row)
 
 SELECT *
@@ -327,24 +337,24 @@ FROM _iobeamdb_catalog.hypertable_column;
 
 \set ON_ERROR_STOP 0
 UPDATE _iobeamdb_catalog.cluster_user SET password = 'foo';
-psql:cluster.sql:105: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
+psql:cluster.sql:112: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 UPDATE _iobeamdb_catalog.node SET active = FALSE;
-psql:cluster.sql:106: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
+psql:cluster.sql:113: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM _iobeamdb_catalog.meta WHERE TRUE;
-psql:cluster.sql:107: ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
+psql:cluster.sql:114: ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 TRUNCATE TABLE _iobeamdb_catalog.meta;
-psql:cluster.sql:108: ERROR:  IO101: Operation TRUNCATE not supported on _iobeamdb_catalog.meta
+psql:cluster.sql:115: ERROR:  IO101: Operation TRUNCATE not supported on _iobeamdb_catalog.meta
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 \des+
-                                                     List of foreign servers
- Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |            FDW Options             | Description 
--------+----------+----------------------+-------------------+------+---------+------------------------------------+-------------
- meta  | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'meta')  | 
- test2 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'test2') | 
+                                                           List of foreign servers
+ Name  |  Owner   | Foreign-data wrapper | Access privileges | Type | Version |                   FDW Options                   | Description 
+-------+----------+----------------------+-------------------+------+---------+-------------------------------------------------+-------------
+ meta  | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'meta', port '5432')  | 
+ test2 | postgres | postgres_fdw         |                   |      |         | (host 'localhost', dbname 'test2', port '5432') | 
 (2 rows)
 
 \deu+
@@ -604,7 +614,7 @@ Child tables: _iobeamdb_internal._hyper_3_0_replica
 
 \c meta
 SELECT _iobeamdb_meta.close_chunk_end(1);
-psql:cluster.sql:127: WARNING:  01000: Cannot close an empty chunk table
+psql:cluster.sql:134: WARNING:  01000: Cannot close an empty chunk table
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
 -----------------
@@ -767,11 +777,11 @@ CREATE TABLE PUBLIC."testNsOnMeta" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:150: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:158: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNsOnMeta"', 'time', 'Device_id');
-psql:cluster.sql:153: ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
+psql:cluster.sql:161: ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 DROP TABLE PUBLIC."testNsOnMeta";

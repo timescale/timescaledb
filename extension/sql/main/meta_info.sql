@@ -3,9 +3,10 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_meta_server_name()
 $BODY$
 DECLARE
     server_name  TEXT;
+    port         INT;
 BEGIN
-    SELECT m.server_name
-    INTO STRICT server_name
+    SELECT m.server_name, m.port
+    INTO STRICT server_name, port
     FROM _iobeamdb_catalog.meta m;
 
     RETURN server_name;

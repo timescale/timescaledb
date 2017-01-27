@@ -2,7 +2,8 @@
 -- Sets a database and hostname as a meta node.
 CREATE OR REPLACE FUNCTION set_meta(
     database_name NAME,
-    hostname      TEXT
+    hostname      TEXT,
+    port          INT = 5432
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -15,8 +16,8 @@ BEGIN
     LIMIT 1;
 
     IF meta_row IS NULL THEN
-        INSERT INTO _iobeamdb_catalog.meta (database_name, hostname, server_name)
-        VALUES (database_name, hostname, database_name);
+        INSERT INTO _iobeamdb_catalog.meta (database_name, hostname, port, server_name)
+        VALUES (database_name, hostname, port, database_name);
     ELSE
         IF meta_row.database_name <> database_name OR meta_row.hostname <> hostname THEN
             RAISE EXCEPTION 'Changing meta info is not supported'
@@ -29,21 +30,28 @@ $BODY$;
 -- Adds a new node to the cluster, with its database name and hostname.
 CREATE OR REPLACE FUNCTION add_node(
     database_name NAME,
-    hostname      TEXT
+    hostname      TEXT,
+    port          INT = 5432
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     schema_name NAME;
+    new_id      REGCLASS;
 BEGIN
-    schema_name := format('remote_%s', database_name);
+
+    BEGIN
+
+    new_id := nextval(pg_get_serial_sequence('_iobeamdb_catalog.node', 'id'));
+    schema_name := format('remote_%s_%s', new_id, database_name);
+
     IF database_name = current_database() THEN
         schema_name = '_iobeamdb_catalog';
     END IF;
 
-    BEGIN
-    INSERT INTO _iobeamdb_catalog.node (database_name, schema_name, server_name, hostname)
-    VALUES (database_name, schema_name, database_name, hostname);
+    INSERT INTO _iobeamdb_catalog.node (database_name, schema_name, server_name, hostname, port, id)
+    VALUES (database_name, schema_name, database_name, hostname, port, new_id);
+
     EXCEPTION
         WHEN SQLSTATE '42710' THEN
             RAISE EXCEPTION 'Node % already exists', database_name

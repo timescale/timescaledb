@@ -20,6 +20,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_server(
     server_name   NAME,
     hostname      NAME,
+    port          INT,
     database_name NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -27,7 +28,7 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            CREATE SERVER %I FOREIGN DATA WRAPPER postgres_fdw OPTIONS(host '%s', dbname '%s') ;
-        $$, server_name, hostname, database_name);
+            CREATE SERVER %I FOREIGN DATA WRAPPER postgres_fdw OPTIONS(host '%s', dbname '%s', port '%s');
+        $$, server_name, hostname, database_name, port);
 END
 $BODY$;
