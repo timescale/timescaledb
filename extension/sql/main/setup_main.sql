@@ -3,6 +3,7 @@ CREATE OR REPLACE FUNCTION setup_main()
     RETURNS void LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
+    table_name NAME;
 BEGIN
 
     DROP TRIGGER IF EXISTS trigger_main_on_change_chunk_replica_node_index
@@ -101,6 +102,20 @@ BEGIN
     CREATE TRIGGER trigger_on_change_deleted_hypertable
     AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.deleted_hypertable
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_internal.on_change_deleted_hypertable();
+
+    -- No support for TRUNCATE currently, so have a trigger to prevent it on
+    -- all meta tables.
+    FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'node', 'meta', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index',
+    'hypertable_column', 'deleted_hypertable_column', 'hypertable_replica', 'default_replica_node', 'partition_epoch',
+    'partition', 'partition_replica', 'distinct_replica_node', 'chunk_replica_node'] :: NAME [] LOOP
+        EXECUTE format(
+            $$
+                DROP TRIGGER IF EXISTS trigger_block_truncate ON _iobeamdb_catalog.%1$s;
+                CREATE TRIGGER trigger_block_truncate
+                BEFORE TRUNCATE ON _iobeamdb_catalog.%1$s
+                FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_truncate_block();
+            $$, table_name);
+    END LOOP;
 
     CREATE EVENT TRIGGER ddl_create_index ON ddl_command_end
         WHEN tag IN ('create index')

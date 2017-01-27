@@ -6,10 +6,10 @@ DECLARE
     table_name NAME;
 BEGIN
 
-    -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_meta_on_change_chunk_replica_node
     ON _iobeamdb_catalog.chunk_replica_node;
     CREATE TRIGGER trigger_meta_on_change_chunk_replica_node
+    -- no DELETE: it would be a no-op
     AFTER INSERT OR UPDATE ON _iobeamdb_catalog.chunk_replica_node
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_chunk_replica_node_meta();
 
@@ -19,10 +19,10 @@ BEGIN
     AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_chunk();
 
-    -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_2_meta_change_hypertable
     ON _iobeamdb_catalog.hypertable;
     CREATE TRIGGER trigger_2_meta_change_hypertable
+    -- no DELETE: it would be a no-op
     AFTER INSERT OR UPDATE ON _iobeamdb_catalog.hypertable
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_hypertable();
 
@@ -38,11 +38,10 @@ BEGIN
     AFTER INSERT ON _iobeamdb_catalog.node
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.sync_node();
 
-    -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_meta_change_partition
     ON _iobeamdb_catalog.partition;
     CREATE TRIGGER trigger_meta_change_partition
-
+    -- no DELETE: it would be a no-op
     AFTER INSERT OR UPDATE ON _iobeamdb_catalog.partition
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_partition();
 
@@ -68,6 +67,13 @@ BEGIN
                 FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_internal.sync_delete();
             $$,
             table_name);
+        EXECUTE format(
+            $$
+                DROP TRIGGER IF EXISTS trigger_block_truncate ON _iobeamdb_catalog.%1$s;
+                CREATE TRIGGER trigger_block_truncate
+                BEFORE TRUNCATE ON _iobeamdb_catalog.%1$s
+                FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_truncate_block();
+            $$, table_name);
     END LOOP;
 
     FOREACH table_name IN ARRAY ARRAY ['hypertable_column', 'hypertable_index', 'hypertable'] :: NAME [] LOOP
