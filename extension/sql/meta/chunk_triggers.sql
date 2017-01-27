@@ -61,7 +61,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_chunk()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_chunk()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

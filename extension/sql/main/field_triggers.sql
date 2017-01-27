@@ -204,7 +204,7 @@ $BODY$;
 -- Trigger to modify a column from a hypertable.
 -- Called when the user alters the main table by adding a column or changing
 -- the properties of a column.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_modify_column()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -296,25 +296,22 @@ BEGIN
             USING ERRCODE = 'IO101';
         END IF;
         RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN
-        --handled by deleted log
-        RETURN OLD;
     END IF;
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$
 SET SEARCH_PATH = 'public';
 
 -- Trigger to remove a column from a hypertable.
 -- Called when the user alters the main table by deleting a column.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_deleted_column()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_deleted_column()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     hypertable_row _iobeamdb_catalog.hypertable;
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        RAISE EXCEPTION 'Only inserts supported on % table', TG_TABLE_NAME
-        USING ERRCODE = 'IO101';
+        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
 
     SELECT *

@@ -6,35 +6,45 @@ DECLARE
     table_name NAME;
 BEGIN
 
-    DROP TRIGGER IF EXISTS trigger_meta_on_create_chunk_replica_node
+    -- no DELETE: it would be a no-op
+    DROP TRIGGER IF EXISTS trigger_meta_on_change_chunk_replica_node
     ON _iobeamdb_catalog.chunk_replica_node;
-    CREATE TRIGGER trigger_meta_on_create_chunk_replica_node AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk_replica_node
-    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_create_chunk_replica_node_meta();
+    CREATE TRIGGER trigger_meta_on_change_chunk_replica_node
+    AFTER INSERT OR UPDATE ON _iobeamdb_catalog.chunk_replica_node
+    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_chunk_replica_node_meta();
 
-    DROP TRIGGER IF EXISTS trigger_meta_on_create_chunk
+    DROP TRIGGER IF EXISTS trigger_meta_on_change_chunk
     ON _iobeamdb_catalog.chunk;
-    CREATE TRIGGER trigger_meta_on_create_chunk AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk
-    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_create_chunk();
+    CREATE TRIGGER trigger_meta_on_change_chunk
+    AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.chunk
+    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_chunk();
 
-    DROP TRIGGER IF EXISTS trigger_2_meta_create_hypertable
+    -- no DELETE: it would be a no-op
+    DROP TRIGGER IF EXISTS trigger_2_meta_change_hypertable
     ON _iobeamdb_catalog.hypertable;
-    CREATE TRIGGER trigger_2_meta_create_hypertable AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.hypertable
-    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_create_hypertable();
+    CREATE TRIGGER trigger_2_meta_change_hypertable
+    AFTER INSERT OR UPDATE ON _iobeamdb_catalog.hypertable
+    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_hypertable();
 
-    DROP TRIGGER IF EXISTS trigger_meta_create_node
+    DROP TRIGGER IF EXISTS trigger_meta_change_node
     ON _iobeamdb_catalog.node;
-    CREATE TRIGGER trigger_meta_create_node BEFORE INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.node
-    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_create_node();
+    CREATE TRIGGER trigger_meta_change_node
+    BEFORE INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.node
+    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_node();
 
     DROP TRIGGER IF EXISTS trigger_meta_sync_node
     ON _iobeamdb_catalog.node;
-    CREATE TRIGGER trigger_meta_sync_node AFTER INSERT ON _iobeamdb_catalog.node
+    CREATE TRIGGER trigger_meta_sync_node
+    AFTER INSERT ON _iobeamdb_catalog.node
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.sync_node();
 
-    DROP TRIGGER IF EXISTS trigger_meta_create_partition
+    -- no DELETE: it would be a no-op
+    DROP TRIGGER IF EXISTS trigger_meta_change_partition
     ON _iobeamdb_catalog.partition;
-    CREATE TRIGGER trigger_meta_create_partition AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.partition
-    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_create_partition();
+    CREATE TRIGGER trigger_meta_change_partition
+
+    AFTER INSERT OR UPDATE ON _iobeamdb_catalog.partition
+    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_meta.on_change_partition();
 
     --Setup sync triggers for tables that are mirrored on data nodes. Exclude 'chunk' table,
     --because it has its own sync trigger in chunk_triggers.sql

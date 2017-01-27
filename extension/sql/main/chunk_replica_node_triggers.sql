@@ -1,7 +1,5 @@
-/*
-    Creates tables (and associated indexes) for chunk_replica_node rows.
-*/
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_create_chunk_replica_node()
+-- Creates/drops tables (and associated indexes) for chunk_replica_node rows.
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_chunk_replica_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -38,9 +36,7 @@ BEGIN
         PERFORM _iobeamdb_internal.set_time_constraint(NEW.schema_name, NEW.table_name, chunk_row.start_time, chunk_row.end_time);
 
         RETURN NEW;
-    END IF;
-
-    IF TG_OP = 'DELETE' THEN
+    ELSIF TG_OP = 'DELETE' THEN
         --when deleting the chunk replica row from the metadata table,
         --also DROP the actual chunk replica table that holds data.
         --Note that the table could already be deleted in case this
@@ -70,9 +66,7 @@ BEGIN
         RETURN OLD;
     END IF;
 
-    RAISE EXCEPTION 'Only inserts and deletes supported on % table', TG_TABLE_NAME
-    USING ERRCODE = 'IO101';
-
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$
 SET SEARCH_PATH = 'public';

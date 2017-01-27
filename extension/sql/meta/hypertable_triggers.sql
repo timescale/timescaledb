@@ -1,5 +1,5 @@
 -- Trigger on the meta node for when a new hypertable is added.
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_create_hypertable()
+CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
@@ -19,13 +19,6 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-
-    RAISE EXCEPTION 'Only inserts and deletes supported on hypertable name '
-    USING ERRCODE = 'IO101';
-
-    RETURN NEW;
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$;
