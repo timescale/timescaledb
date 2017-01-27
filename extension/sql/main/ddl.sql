@@ -46,7 +46,7 @@ BEGIN
             RAISE EXCEPTION 'column "%" does not exist', time_column_name
             USING ERRCODE = 'IO102';
     END;
-    
+
     IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
         RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type
         USING ERRCODE = 'IO102';
@@ -90,6 +90,9 @@ BEGIN
         WHEN unique_violation THEN
             RAISE EXCEPTION 'hypertable % already exists', main_table
             USING ERRCODE = 'IO110';
+        WHEN foreign_key_violation THEN
+            RAISE EXCEPTION 'database not configured for hypertable storage (not setup as a data-node)'
+            USING ERRCODE = 'IO101';
     END;
 
     FOR att_row IN SELECT *

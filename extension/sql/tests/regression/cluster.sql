@@ -143,3 +143,19 @@ FROM _iobeamdb_catalog.chunk;
 
 \c Test1
 \d+ "_iobeamdb_internal".*
+
+\c meta
+-- reject creating hypertables on meta node
+CREATE TABLE PUBLIC."testNsOnMeta" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp DOUBLE PRECISION NULL,
+  occupied BOOLEAN NULL,
+  latitude BIGINT NULL,
+  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
+);
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."testNsOnMeta"', 'time', 'Device_id');
+\set ON_ERROR_STOP 1
+DROP TABLE PUBLIC."testNsOnMeta";
