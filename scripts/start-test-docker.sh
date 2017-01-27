@@ -1,5 +1,9 @@
 #!/bin/bash
 
+set -e
+
+. `dirname $0`/test-docker-config.sh
+
 if [[ -z "$CONTAINER_NAME" ]]; then
   echo "The CONTAINER_NAME must be set"
   exit 1

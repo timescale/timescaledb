@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 if [[ -z "$IMAGE_NAME" ]]; then
   echo "The IMAGE_NAME must be set"
   exit 1
@@ -8,6 +10,7 @@ DOCKER_HOST=${DOCKER_HOST:-localhost}
 CONTAINER_NAME=${CONTAINER_NAME:-iobeamdb}
 DATA_DIR=${DATA_DIR-$PWD/data}
 BIN_CMD=${BIN_CMD:-postgres}
+PGPORT=${PGPORT:=5432}
 
 VOLUME_MOUNT=""
 if [[ -n "$DATA_DIR" ]]; then
@@ -15,7 +18,7 @@ if [[ -n "$DATA_DIR" ]]; then
 fi
 docker run -d \
   --name $CONTAINER_NAME $VOLUME_MOUNT \
-  -p 5432:5432 \
+  -p ${PGPORT}:5432 \
   -m 4g \
   -e PGDATA=/var/lib/postgresql/data/iobeam \
   $IMAGE_NAME $BIN_CMD \
@@ -29,9 +32,12 @@ docker run -d \
   -clog_line_prefix="%m [%p]: [%l-1] %u@%d" \
   -clog_error_verbosity=VERBOSE
 
+set +e
 for i in {1..10}; do 
   sleep 2
-  pg_isready -h $DOCKER_HOST -p 5432
+
+  pg_isready -h $DOCKER_HOST
+
   if [[ $? == 0 ]] ; then
     exit 0
   fi
