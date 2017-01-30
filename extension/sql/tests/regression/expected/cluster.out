@@ -943,3 +943,21 @@ primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _iobeamdb_internal._hyper_3_0_replica
 
+\c meta
+-- reject creating hypertables on meta node
+CREATE TABLE PUBLIC."testNsOnMeta" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp DOUBLE PRECISION NULL,
+  occupied BOOLEAN NULL,
+  latitude BIGINT NULL,
+  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
+);
+psql:cluster.sql:156: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+LOCATION:  truncate_identifier, scansup.c:205
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."testNsOnMeta"', 'time', 'Device_id');
+psql:cluster.sql:159: ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+\set ON_ERROR_STOP 1
+DROP TABLE PUBLIC."testNsOnMeta";
