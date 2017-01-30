@@ -46,8 +46,6 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id');
 
-SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
-
 \c meta
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
@@ -63,8 +61,6 @@ SELECT *
 FROM _iobeamdb_catalog.hypertable;
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
-SELECT *
-FROM _iobeamdb_catalog.distinct_replica_node;
 SELECT *
 FROM _iobeamdb_catalog.partition_epoch;
 SELECT *
@@ -93,8 +89,6 @@ FROM _iobeamdb_catalog.hypertable;
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
 SELECT *
-FROM _iobeamdb_catalog.distinct_replica_node;
-SELECT *
 FROM _iobeamdb_catalog.partition_epoch;
 SELECT *
 FROM _iobeamdb_catalog.partition;
@@ -121,7 +115,6 @@ TRUNCATE TABLE _iobeamdb_catalog.meta;
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
 --\det "_sys_1_testNs".*
---\d+ "testNs".distinct
 --test idempotence
 \c meta
 

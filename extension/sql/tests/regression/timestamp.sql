@@ -37,8 +37,6 @@ CREATE TABLE PUBLIC."testNs" (
 CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 
-SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
-
 
 \c Test1
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES

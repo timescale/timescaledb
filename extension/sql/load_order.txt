@@ -28,7 +28,6 @@ sql/main/meta_triggers.sql
 sql/main/hypertable_triggers.sql
 sql/main/hypertable_index_triggers.sql
 sql/main/hypertable_replica_triggers.sql
-sql/main/distinct_replica_node_triggers.sql
 sql/main/field_triggers.sql
 sql/main/partitioning.sql
 sql/main/schema_info.sql

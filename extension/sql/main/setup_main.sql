@@ -31,13 +31,6 @@ BEGIN
     AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.cluster_user
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_internal.on_change_cluster_user();
 
-    DROP TRIGGER IF EXISTS trigger_main_on_change_distinct_replica_node
-    ON _iobeamdb_catalog.distinct_replica_node;
-    CREATE TRIGGER trigger_main_on_change_distinct_replica_node
-    -- no DELETE: it would be a no-op
-    AFTER INSERT OR UPDATE ON _iobeamdb_catalog.distinct_replica_node
-    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_internal.on_change_distinct_replica_node();
-
     DROP TRIGGER IF EXISTS trigger_main_on_change_column
     ON _iobeamdb_catalog.hypertable_column;
     CREATE TRIGGER trigger_main_on_change_column
@@ -107,7 +100,7 @@ BEGIN
     -- all meta tables.
     FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'node', 'meta', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index',
     'hypertable_column', 'deleted_hypertable_column', 'hypertable_replica', 'default_replica_node', 'partition_epoch',
-    'partition', 'partition_replica', 'distinct_replica_node', 'chunk_replica_node'] :: NAME [] LOOP
+    'partition', 'partition_replica', 'chunk_replica_node'] :: NAME [] LOOP
         EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_block_truncate ON _iobeamdb_catalog.%1$s;

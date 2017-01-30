@@ -35,14 +35,11 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.cluster_user', '')
 
 -- The hypertable is an abstraction that represents a replicated table that is
 -- partitioned on 2 dimensions: time and another (user-)chosen one.
--- This abstraction also tracks the distinct value set of any columns marked as `distinct`.
 --
 -- Each row, representing a hypertable, creates 3 tables:
 --    1) main table - an alias to the 0'th replica for now. Represents the
 --       hypertable to the user for insertion and modification.
 --    2) root table - ancesstor of all the data tables (across replicas).
---       Should not be queryable for data (TODO).
---    3) distinct root table - ancestor of all distinct tables (across replicas).
 --       Should not be queryable for data (TODO).
 --
 -- Additionally, a schema for associated tables (partitioned, replicated data
@@ -58,8 +55,6 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable (
     associated_table_prefix NAME                                    NOT NULL,
     root_schema_name        NAME                                    NOT NULL,
     root_table_name         NAME                                    NOT NULL,
-    distinct_schema_name    NAME                                    NOT NULL,
-    distinct_table_name     NAME                                    NOT NULL,
     replication_factor      SMALLINT                                NOT NULL CHECK (replication_factor > 0),
     placement               _iobeamdb_catalog.chunk_placement_type  NOT NULL,
     time_column_name        NAME                                    NOT NULL,
@@ -83,22 +78,16 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.deleted_hypertable
 -- hypertable_replica contains information on how a hypertable's data replicas
 -- are stored. A replica of the data is across all partitions and time.
 --
--- Each row identifies 2 tables for each hypertable + replica_id combination:
---   1) data replica table (schema_name.table_name) -
+-- Each row identifies a table for each hypertable + replica_id combination:
+--   - data replica table (schema_name.table_name) -
 --      All the data for a hypertable.
 --      Parent: hypertable's `root table`
 --      Children: hypertable's `partition_replica` tables
---   2) distinct replica tables (distinct_schema_name.distinct_table_name) -
---      Distinct values in a hypertable.
---      Parent: hypertable's `distinct root table`
---      Children: created by `distinct_replica_node` table
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_replica (
     hypertable_id        INTEGER  NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
     replica_id           SMALLINT NOT NULL  CHECK (replica_id >= 0),
     schema_name          NAME     NOT NULL,
     table_name           NAME     NOT NULL,
-    distinct_schema_name NAME     NOT NULL,
-    distinct_table_name  NAME     NOT NULL,
     PRIMARY KEY (hypertable_id, replica_id),
     UNIQUE (schema_name, table_name)
 );
@@ -116,26 +105,6 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.default_replica_node (
     FOREIGN KEY (hypertable_id, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica(hypertable_id, replica_id)
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_replica_node', '');
-
-
---there should be one distinct_replica_node for each node with a chunk from that replica
---so there can be multiple rows for one hypertable-replica on different nodes.
---that way writes are local. Optimized reads are also local for many queries.
---But, some read queries are cross-node.
---Each row creates a table.
---  Parent table:  hypertable_replica.distinct_table
---  No children, created table contains data.
-CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.distinct_replica_node (
-    hypertable_id   INTEGER  NOT NULL,
-    replica_id      SMALLINT NOT NULL,
-    database_name   NAME     NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
-    schema_name     NAME     NOT NULL,
-    table_name      NAME     NOT NULL,
-    PRIMARY KEY (hypertable_id, replica_id, database_name),
-    UNIQUE (schema_name, table_name),
-    FOREIGN KEY (hypertable_id, replica_id) REFERENCES _iobeamdb_catalog.hypertable_replica(hypertable_id, replica_id) ON DELETE CASCADE
-);
-SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.distinct_replica_node', '');
 
 -- A partition_epoch represents a different partitioning of the data.
 -- It has a start and end time (data time). Data needs to be placed in the correct epoch by time.
@@ -246,7 +215,6 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable_column (
     attnum          INT2                NOT NULL, --MUST match pg_attribute.attnum on main table. SHOULD match on root/hierarchy table as well.
     data_type       REGTYPE             NOT NULL,
     default_value   TEXT                NULL,
-    is_distinct     BOOLEAN             NOT NULL DEFAULT FALSE,
     not_null        BOOLEAN             NOT NULL,
     created_on      NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),
     modified_on     NAME                NOT NULL REFERENCES _iobeamdb_catalog.node(database_name),

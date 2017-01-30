@@ -63,58 +63,6 @@ BEGIN
 END
 $BODY$;
 
--- Creates a root distinct table for a hypertable.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_root_distinct_table(
-    schema_name NAME,
-    table_name  NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            CREATE TABLE IF NOT EXISTS %1$I.%2$I (
-                column_name TEXT,
-                value TEXT,
-                PRIMARY KEY(column_name, value)
-            );
-        $$, schema_name, table_name);
-END
-$BODY$;
-
--- Drops root distinct table
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_root_distinct_table(
-    schema_name NAME,
-    table_name  NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            DROP TABLE %1$I.%2$I CASCADE;
-        $$, schema_name, table_name);
-END
-$BODY$;
-
-
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_local_distinct_table(
-    schema_name         NAME,
-    table_name          NAME,
-    replica_schema_name NAME,
-    replica_table_name  NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            CREATE TABLE IF NOT EXISTS %1$I.%2$I (PRIMARY KEY(column_name, value))
-            INHERITS(%3$I.%4$I)
-        $$, schema_name, table_name, replica_schema_name, replica_table_name);
-END
-$BODY$;
-
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_remote_table(
     schema_name        NAME,
     table_name         NAME,

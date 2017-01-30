@@ -54,7 +54,6 @@ BEGIN
         schema_name, table_name,
         associated_schema_name, associated_table_prefix,
         root_schema_name, root_table_name,
-        distinct_schema_name, distinct_table_name,
         replication_factor,
         placement,
         chunk_size_bytes,
@@ -64,7 +63,6 @@ BEGIN
         schema_name, table_name,
         associated_schema_name, associated_table_prefix,
         associated_schema_name, format('%s_root', associated_table_prefix),
-        associated_schema_name, format('%s_distinct', associated_table_prefix),
         replication_factor,
         placement,
         chunk_size_bytes,
@@ -88,15 +86,14 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.add_column(
     data_type     REGTYPE,
     default_value TEXT,
     not_null      BOOLEAN,
-    is_distinct   BOOLEAN,
     created_on    NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
 SELECT 1 FROM _iobeamdb_catalog.hypertable h WHERE h.id = hypertable_id FOR UPDATE; --lock row to prevent concurrent column inserts; keep attnum consistent.
 
-INSERT INTO _iobeamdb_catalog.hypertable_column (hypertable_id, name, attnum, data_type, default_value, not_null, is_distinct, created_on, modified_on)
-VALUES (hypertable_id, column_name, attnum, data_type, default_value, not_null, is_distinct, created_on, created_on);
+INSERT INTO _iobeamdb_catalog.hypertable_column (hypertable_id, name, attnum, data_type, default_value, not_null, created_on, modified_on)
+VALUES (hypertable_id, column_name, attnum, data_type, default_value, not_null, created_on, created_on);
 $BODY$;
 
 -- Drops a column from a hypertable
@@ -110,20 +107,6 @@ $BODY$
 SELECT set_config('io.deleting_node', modified_on, true);
 DELETE FROM _iobeamdb_catalog.hypertable_column c
 WHERE c.hypertable_id = drop_column.hypertable_id AND c.NAME = column_name;
-$BODY$;
-
--- Sets the is_distinct flag for a column on a hypertable.
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.alter_column_set_is_distinct(
-    hypertable_id     INTEGER,
-    column_name       NAME,
-    new_is_distinct   BOOLEAN,
-    modified_on_node  NAME
-)
-    RETURNS VOID LANGUAGE SQL VOLATILE AS
-$BODY$
-UPDATE _iobeamdb_catalog.hypertable_column
-SET is_distinct = new_is_distinct, modified_on = modified_on_node
-WHERE hypertable_id = alter_column_set_is_distinct.hypertable_id AND name = column_name;
 $BODY$;
 
 -- Sets the default for a column on a hypertable.

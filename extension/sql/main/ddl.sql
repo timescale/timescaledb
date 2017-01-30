@@ -115,49 +115,4 @@ BEGIN
 END
 $BODY$;
 
--- Sets the is_distinct flag for column on a hypertable.
--- The is_distinct flag determines whether the system keep a materialized list
--- of distinct values for the column.
-CREATE OR REPLACE FUNCTION set_is_distinct_flag(
-    main_table    REGCLASS,
-    column_name    NAME,
-    is_distinct   BOOLEAN
 
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    t_name         NAME;
-    s_name         NAME;
-    hypertable_row _iobeamdb_catalog.hypertable;
-BEGIN
-    SELECT relname, nspname
-    INTO STRICT t_name, s_name
-    FROM pg_class c
-    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    WHERE c.OID = main_table;
-
-    SELECT * INTO hypertable_row
-    FROM _iobeamdb_catalog.hypertable h
-    WHERE h.schema_name = s_name AND h.table_name = t_name;
-
-    PERFORM atttypid
-    FROM pg_attribute
-    WHERE attrelid = main_table AND attname = column_name;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'column "%" does not exist', column_name
-        USING ERRCODE = 'IO100';
-    END IF;
-
-
-    PERFORM _iobeamdb_internal.meta_transaction_exec(
-        format('SELECT _iobeamdb_meta.alter_column_set_is_distinct(%L, %L, %L, %L)',
-            hypertable_row.id,
-            column_name,
-            is_distinct,
-            current_database()
-        )
-    );
-END
-$BODY$;

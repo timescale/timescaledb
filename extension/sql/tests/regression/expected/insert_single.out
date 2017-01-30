@@ -61,12 +61,6 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 
  
 (1 row)
 
-SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
 BEGIN;
 \COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
@@ -113,11 +107,11 @@ SELECT * FROM _iobeamdb_catalog.chunk c
     LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
     LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
- id | partition_id | start_time | end_time | chunk_id | partition_replica_id | database_name |    schema_name     |     table_name      | id | partition_id | hypertable_id | replica_id |    schema_name     |       table_name       | id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+--------------+------------+----------+----------+----------------------+---------------+--------------------+---------------------+----+--------------+---------------+------------+--------------------+------------------------+----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
-  3 |            2 |            |        1 |        3 |                    2 | single        | _iobeamdb_internal | _hyper_2_2_0_3_data |  2 |            2 |             2 |          0 | _iobeamdb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   | _iobeamdb_internal   | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | single     |            10000
-  4 |            2 |          2 |        2 |        4 |                    2 | single        | _iobeamdb_internal | _hyper_2_2_0_4_data |  2 |            2 |             2 |          0 | _iobeamdb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   | _iobeamdb_internal   | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | single     |            10000
-  5 |            2 |          3 |          |        5 |                    2 | single        | _iobeamdb_internal | _hyper_2_2_0_5_data |  2 |            2 |             2 |          0 | _iobeamdb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   | _iobeamdb_internal   | _hyper_2_distinct   |                  1 | STICKY    | time             | bigint           | single     |            10000
+ id | partition_id | start_time | end_time | chunk_id | partition_replica_id | database_name |    schema_name     |     table_name      | id | partition_id | hypertable_id | replica_id |    schema_name     |       table_name       | id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+--------------+------------+----------+----------+----------------------+---------------+--------------------+---------------------+----+--------------+---------------+------------+--------------------+------------------------+----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  3 |            2 |            |        1 |        3 |                    2 | single        | _iobeamdb_internal | _hyper_2_2_0_3_data |  2 |            2 |             2 |          0 | _iobeamdb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+  4 |            2 |          2 |        2 |        4 |                    2 | single        | _iobeamdb_internal | _hyper_2_2_0_4_data |  2 |            2 |             2 |          0 | _iobeamdb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+  5 |            2 |          3 |          |        5 |                    2 | single        | _iobeamdb_internal | _hyper_2_2_0_5_data |  2 |            2 |             2 |          0 | _iobeamdb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (3 rows)
 
 \c single
@@ -192,30 +186,6 @@ btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
  series_2   | double precision | series_2     | plain
 btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
 
-               Table "testNs._hyper_1_0_1_distinct_data"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_0_1_distinct_data_pkey" PRIMARY KEY, btree (column_name, value)
-Inherits: "testNs"._hyper_1_0_distinct
-
-Index "testNs._hyper_1_0_1_distinct_data_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "testNs._hyper_1_0_1_distinct_data"
-
-                   Table "testNs._hyper_1_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: "testNs"._hyper_1_distinct
-Child tables: "testNs"._hyper_1_0_1_distinct_data
-
                          Table "testNs._hyper_1_0_replica"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
@@ -283,22 +253,6 @@ Inherits: "testNs"._hyper_1_0_replica
 Child tables: "testNs"._hyper_1_1_0_1_data,
               "testNs"._hyper_1_1_0_2_data
 
-                    Table "testNs._hyper_1_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: "testNs"._hyper_1_0_distinct
-
-    Index "testNs._hyper_1_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "testNs._hyper_1_distinct"
-
                             Table "testNs._hyper_1_root"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
@@ -309,14 +263,6 @@ primary key, btree, for table "testNs._hyper_1_distinct"
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Child tables: "testNs"._hyper_1_0_replica
-
-SELECT *
-FROM "testNs"._hyper_1_0_distinct;
- column_name | value 
--------------+-------
- device_id   | dev1
- device_id   | dev20
-(2 rows)
 
 SELECT * FROM "testNs";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 

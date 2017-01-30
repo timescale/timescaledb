@@ -94,10 +94,6 @@ DECLARE
     point_record                RECORD;
     chunk_row                   _iobeamdb_catalog.chunk;
     crn_record                  RECORD;
-    distinct_table_oid          REGCLASS;
-    distinct_column             TEXT;
-    distinct_clauses            TEXT;
-    distinct_clause_idx         INT;
 BEGIN
     --This guard protects against calling insert_data() twice in the same transaction,
     --which might otherwise cause a deadlock in case the second insert_data() involves a chunk
@@ -161,34 +157,6 @@ BEGIN
         INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
         WHERE (crn.chunk_id = chunk_row.id)
         LOOP
-            distinct_clauses := '';
-            distinct_clause_idx := 0;
-
-            SELECT *
-            INTO distinct_table_oid
-            FROM _iobeamdb_internal.get_distinct_table_oid(hypertable_id, crn_record.replica_id, crn_record.database_name);
-
-            -- Generate clauses to insert new distinct column values into the
-            -- correct distinct tables
-            FOR distinct_column IN
-            SELECT c.name
-            FROM _iobeamdb_catalog.hypertable_column c
-            WHERE c.is_distinct = TRUE AND c.hypertable_id = insert_data.hypertable_id
-            ORDER BY c.name
-            LOOP
-                distinct_clauses := distinct_clauses || ',' || format(
-                    $$
-                    insert_distinct_%3$s AS (
-                      INSERT INTO  %1$s as distinct_table
-                      SELECT DISTINCT %2$L, selected.%2$I as value
-                      FROM selected
-                      ORDER BY value
-                      ON CONFLICT DO NOTHING
-                    )
-                    $$, distinct_table_oid, distinct_column, distinct_clause_idx);
-                    distinct_clause_idx := distinct_clause_idx + 1;
-            END LOOP;
-
             PERFORM set_config('io.ignore_delete_in_trigger', 'true', true);
 
             DECLARE
@@ -220,12 +188,11 @@ BEGIN
                     (
                         DELETE FROM ONLY %1$s %2$s
                         RETURNING *
-                    )%3$s
-                    INSERT INTO %4$s (%5$s) SELECT %5$s FROM selected;
+                    )
+                    INSERT INTO %3$s (%4$s) SELECT %4$s FROM selected;
                     $$,
                         copy_table_oid,
                         partition_constraint_where_clause,
-                        distinct_clauses,
                         format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
                         _iobeamdb_internal.get_column_list(hypertable_id)
                     );

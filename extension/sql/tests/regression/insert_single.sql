@@ -5,8 +5,6 @@
 
 \c single
 \d+ "testNs".*
-SELECT *
-FROM "testNs"._hyper_1_0_distinct;
 SELECT * FROM "testNs";
 
 --test that we can insert data into a 1-dimensional table (only time partitioning)

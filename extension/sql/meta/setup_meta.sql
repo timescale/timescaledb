@@ -49,7 +49,7 @@ BEGIN
     --because it has its own sync trigger in chunk_triggers.sql
     FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'meta', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index',
     'hypertable_column', 'deleted_hypertable_column', 'hypertable_replica', 'default_replica_node', 'partition_epoch',
-    'partition', 'partition_replica', 'distinct_replica_node', 'chunk_replica_node'] :: NAME [] LOOP
+    'partition', 'partition_replica', 'chunk_replica_node'] :: NAME [] LOOP
         EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_0_meta_sync_insert_%1$s ON _iobeamdb_catalog.%1$s;

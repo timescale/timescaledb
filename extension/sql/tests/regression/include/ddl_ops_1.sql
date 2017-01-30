@@ -17,8 +17,6 @@ SELECT * FROM _iobeamdb_catalog.hypertable_index;
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
 CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_1', TRUE);
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
 
 INSERT INTO PUBLIC."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);

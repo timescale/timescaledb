@@ -53,7 +53,6 @@ BEGIN
             $$, NEW.associated_schema_name);
 
         PERFORM _iobeamdb_internal.create_table(NEW.root_schema_name, NEW.root_table_name);
-        PERFORM _iobeamdb_internal.create_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
 
         IF NEW.created_on <> current_database() THEN
            PERFORM _iobeamdb_internal.create_schema(NEW.schema_name);
@@ -96,7 +95,6 @@ BEGIN
     --drop index on all chunks
 
     PERFORM _iobeamdb_internal.drop_root_table(NEW.root_schema_name, NEW.root_table_name);
-    PERFORM _iobeamdb_internal.drop_root_distinct_table(NEW.distinct_schema_name, NEW.distinct_table_name);
 
     IF new.deleted_on <> current_database() THEN
       PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);

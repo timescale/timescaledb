@@ -131,76 +131,6 @@ BEGIN
 END
 $BODY$;
 
--- Adds distinct values for a column to a hypertable's distinct table.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.populate_distinct_table(
-    hypertable_id INTEGER,
-    column_name   NAME
-) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
-    chunk_replica_node_row     _iobeamdb_catalog.chunk_replica_node;
-BEGIN
-    FOR distinct_replica_node_row IN
-        SELECT *
-        FROM _iobeamdb_catalog.distinct_replica_node drn
-        WHERE drn.hypertable_id = populate_distinct_table.hypertable_id AND
-              drn.database_name = current_database()
-        LOOP
-            FOR chunk_replica_node_row IN
-                SELECT crn.*
-                FROM _iobeamdb_catalog.chunk_replica_node crn
-                INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-                WHERE pr.hypertable_id = distinct_replica_node_row.hypertable_id AND
-                      pr.replica_id = distinct_replica_node_row.replica_id AND
-                      crn.database_name = current_database()
-                LOOP
-                    EXECUTE format(
-                        $$
-                            INSERT INTO %I.%I(column_name, value)
-                            SELECT DISTINCT %L, %I
-                            FROM %I.%I
-                            ON CONFLICT DO NOTHING
-                        $$,
-                        distinct_replica_node_row.schema_name,
-                        distinct_replica_node_row.table_name,
-                        column_name,
-                        column_name,
-                        chunk_replica_node_row.schema_name,
-                        chunk_replica_node_row.table_name
-                    );
-                END LOOP;
-        END LOOP;
-END
-$BODY$;
-
--- Removes distinct values for a column from a hypertable's distinct table.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.unpopulate_distinct_table(
-    hypertable_id INTEGER,
-    column_name   NAME
-) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    distinct_replica_node_row  _iobeamdb_catalog.distinct_replica_node;
-BEGIN
-    FOR distinct_replica_node_row IN
-        SELECT *
-        FROM _iobeamdb_catalog.distinct_replica_node drn
-        WHERE drn.hypertable_id = unpopulate_distinct_table.hypertable_id AND
-              drn.database_name = current_database()
-        LOOP
-            EXECUTE format(
-                $$
-                    DELETE FROM %I.%I WHERE column_name = %L
-                $$,
-                distinct_replica_node_row.schema_name,
-                distinct_replica_node_row.table_name,
-                column_name
-            );
-        END LOOP;
-END
-$BODY$;
-
 -- Trigger to modify a column from a hypertable.
 -- Called when the user alters the main table by adding a column or changing
 -- the properties of a column.
@@ -279,15 +209,6 @@ BEGIN
                 PERFORM _iobeamdb_internal.exec_alter_table_rename_column(
                     hypertable_row.schema_name, hypertable_row.table_name,
                     OLD.name, NEW.name);
-            END IF;
-        END IF;
-
-        IF NEW.is_distinct IS DISTINCT FROM OLD.is_distinct THEN
-            update_found = TRUE;
-            IF NEW.is_distinct THEN
-                PERFORM  _iobeamdb_internal.populate_distinct_table(NEW.hypertable_id, NEW.name);
-            ELSE
-                PERFORM  _iobeamdb_internal.unpopulate_distinct_table(NEW.hypertable_id, NEW.name);
             END IF;
         END IF;
 
