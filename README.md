@@ -42,7 +42,7 @@ Our specialized time-series table, which is the main abstraction for querying
 all your space-time partitions, is called a **hypertable**.
 
 To create a hypertable, you start with a regular SQL table, and then convert it
-into a hypertable via the function `create_hypertable()` (which
+into a hypertable via the function `create_hypertable()`([API Definition](extension/sql/main/ddl.sql)) (which
   is loaded when you install the extension).
 
 For example, let's create a hypertable for tracking
