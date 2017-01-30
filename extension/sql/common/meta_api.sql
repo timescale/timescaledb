@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.create_hypertable(
     number_partitions       SMALLINT,
     associated_schema_name  NAME,
     associated_table_prefix NAME,
-    placement               chunk_placement_type,
+    placement               _iobeamdb_catalog.chunk_placement_type,
     chunk_size_bytes        BIGINT
 )
     RETURNS _iobeamdb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS

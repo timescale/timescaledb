@@ -9,22 +9,22 @@ LOCATION:  CreateExtensionInternal, extension.c:1441
  
 (1 row)
 
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:16: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
  setup_main 
 ------------
  
 (1 row)
 
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:20: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
  setup_main 
 ------------
@@ -97,7 +97,7 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
-psql:cluster.sql:45: ERROR:  IO110: hypertable "testNs" already exists
+psql:cluster.sql:45: ERROR:  IO110: hypertable public."testNs" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id');
@@ -170,10 +170,10 @@ FROM _iobeamdb_catalog.distinct_replica_node;
 
 SELECT *
 FROM _iobeamdb_catalog.partition_epoch;
- id | hypertable_id | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_column 
-----+---------------+------------+----------+-----------------------+------------------+---------------------
-  1 |             1 |            |          | get_partition_for_key |            32768 | Device_id
-  2 |             3 |            |          | get_partition_for_key |            32768 | Device_id
+ id | hypertable_id | start_time | end_time | partitioning_func_schema |   partitioning_func   | partitioning_mod | partitioning_column 
+----+---------------+------------+----------+--------------------------+-----------------------+------------------+---------------------
+  1 |             1 |            |          | _iobeamdb_catalog        | get_partition_for_key |            32768 | Device_id
+  2 |             3 |            |          | _iobeamdb_catalog        | get_partition_for_key |            32768 | Device_id
 (2 rows)
 
 SELECT *
@@ -287,10 +287,10 @@ FROM _iobeamdb_catalog.distinct_replica_node;
 
 SELECT *
 FROM _iobeamdb_catalog.partition_epoch;
- id | hypertable_id | start_time | end_time |   partitioning_func   | partitioning_mod | partitioning_column 
-----+---------------+------------+----------+-----------------------+------------------+---------------------
-  1 |             1 |            |          | get_partition_for_key |            32768 | Device_id
-  2 |             3 |            |          | get_partition_for_key |            32768 | Device_id
+ id | hypertable_id | start_time | end_time | partitioning_func_schema |   partitioning_func   | partitioning_mod | partitioning_column 
+----+---------------+------------+----------+--------------------------+-----------------------+------------------+---------------------
+  1 |             1 |            |          | _iobeamdb_catalog        | get_partition_for_key |            32768 | Device_id
+  2 |             3 |            |          | _iobeamdb_catalog        | get_partition_for_key |            32768 | Device_id
 (2 rows)
 
 SELECT *
@@ -413,7 +413,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
  latitude                                                        | bigint           |           |             | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           |             | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
@@ -428,7 +428,7 @@ Inherits: _iobeamdb_internal._hyper_1_1_0_partition
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
 
@@ -442,7 +442,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 
               Table "_iobeamdb_internal._hyper_1_distinct"
@@ -502,7 +502,7 @@ Child tables: _iobeamdb_internal._hyper_3_3_0_partition,
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
                                            Table "_iobeamdb_internal._hyper_3_4_0_partition"
@@ -515,7 +515,7 @@ Inherits: _iobeamdb_internal._hyper_3_0_replica
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
               Table "_iobeamdb_internal._hyper_3_distinct"
@@ -600,7 +600,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
  latitude                                                        | bigint           |           |             | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           |             | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
@@ -615,7 +615,7 @@ Inherits: _iobeamdb_internal._hyper_1_1_0_partition
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
 
@@ -629,7 +629,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 
               Table "_iobeamdb_internal._hyper_1_distinct"
@@ -689,7 +689,7 @@ Child tables: _iobeamdb_internal._hyper_3_3_0_partition,
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
                                            Table "_iobeamdb_internal._hyper_3_4_0_partition"
@@ -702,7 +702,7 @@ Inherits: _iobeamdb_internal._hyper_3_0_replica
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
               Table "_iobeamdb_internal._hyper_3_distinct"
@@ -811,7 +811,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
  latitude                                                        | bigint           |           |             | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           |             | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
@@ -826,7 +826,7 @@ Inherits: _iobeamdb_internal._hyper_1_1_0_partition
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
 
@@ -840,7 +840,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 
               Table "_iobeamdb_internal._hyper_1_distinct"
@@ -900,7 +900,7 @@ Child tables: _iobeamdb_internal._hyper_3_3_0_partition,
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '0'::smallint AND get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
                                            Table "_iobeamdb_internal._hyper_3_4_0_partition"
@@ -913,7 +913,7 @@ Inherits: _iobeamdb_internal._hyper_3_0_replica
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Check constraints:
-    "partition" CHECK (get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
               Table "_iobeamdb_internal._hyper_3_distinct"

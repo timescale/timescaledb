@@ -41,7 +41,7 @@ SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
 
 
 \c Test1
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 1),
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 2),
 ('2009-11-10T23:00:02+00:00', 'dev1', 2.5, 3);
@@ -50,7 +50,7 @@ SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
 
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 1),
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 2);
 

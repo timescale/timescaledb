@@ -18,5 +18,4 @@ BEGIN
     END IF;
     RETURN NEW;
 END
-$BODY$
-SET SEARCH_PATH = 'public';
+$BODY$;

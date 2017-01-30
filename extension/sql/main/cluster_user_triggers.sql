@@ -31,5 +31,4 @@ BEGIN
     RETURN NEW;
 
 END
-$BODY$
-SET SEARCH_PATH = 'public';
+$BODY$;

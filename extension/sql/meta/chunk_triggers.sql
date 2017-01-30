@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.place_chunks(
     chunk_row          _iobeamdb_catalog.chunk,
-    placement          chunk_placement_type,
+    placement          _iobeamdb_catalog.chunk_placement_type,
     replication_factor SMALLINT
 )
     RETURNS TABLE(replica_id SMALLINT, database_name NAME) LANGUAGE PLPGSQL AS

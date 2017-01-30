@@ -13,7 +13,10 @@ CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 select setup_meta();
 
 \c Test1
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+CREATE SCHEMA io_test;
+CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
+ALTER DATABASE "Test1" SET search_path = "io_test";
+SET search_path = 'io_test';
 select setup_main();
 
 \c test2

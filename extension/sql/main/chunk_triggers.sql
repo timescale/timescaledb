@@ -11,5 +11,4 @@ BEGIN
     END IF;
     PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
-$BODY$
-SET SEARCH_PATH = 'public';
+$BODY$;

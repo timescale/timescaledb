@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       SMALLINT = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    placement               chunk_placement_type = 'STICKY',
+    placement               _iobeamdb_catalog.chunk_placement_type = 'STICKY',
     chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS

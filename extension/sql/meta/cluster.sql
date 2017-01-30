@@ -38,7 +38,7 @@ DECLARE
 BEGIN
     schema_name := format('remote_%s', database_name);
     IF database_name = current_database() THEN
-        schema_name = 'public';
+        schema_name = '_iobeamdb_catalog';
     END IF;
 
     BEGIN
@@ -72,16 +72,18 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION add_partition_epoch(
-    hypertable_id       INTEGER,
-    keyspace_start      SMALLINT [],
-    partitioning_column NAME,
-    partitioning_func   TEXT
+    hypertable_id               INTEGER,
+    keyspace_start              SMALLINT [],
+    partitioning_column         NAME,
+    partitioning_func_schema    NAME,
+    partitioning_func           NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
     WITH epoch AS (
-        INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, partitioning_func, partitioning_mod, partitioning_column)
-        VALUES (hypertable_id, NULL, NULL, partitioning_func, 32768, partitioning_column)
+        INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, partitioning_func_schema, 
+            partitioning_func, partitioning_mod, partitioning_column)
+        VALUES (hypertable_id, NULL, NULL, partitioning_func_schema, partitioning_func, 32768, partitioning_column)
         RETURNING id
     )
     INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end)
@@ -94,10 +96,11 @@ $BODY$
 $BODY$;
 
 CREATE OR REPLACE FUNCTION add_equi_partition_epoch(
-    hypertable_id       INTEGER,
-    number_partitions   SMALLINT,
-    partitioning_column NAME,
-    partitioning_func   TEXT
+    hypertable_id               INTEGER,
+    number_partitions           SMALLINT,
+    partitioning_column         NAME,
+    partitioning_func_schema    NAME,
+    partitioning_func           NAME
 )
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
@@ -106,6 +109,7 @@ SELECT add_partition_epoch(
     (SELECT ARRAY(SELECT start * 32768 / (number_partitions)
                   FROM generate_series(1, number_partitions - 1) AS start) :: SMALLINT []),
     partitioning_column,
+    partitioning_func_schema,
     partitioning_func
 )
 $BODY$;

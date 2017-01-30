@@ -5,7 +5,7 @@
 
 \o
 \set ECHO ALL
-\c Test1
+\c test2
 
 SELECT * FROM "testNs";
 

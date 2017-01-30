@@ -1,14 +1,14 @@
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:16: NOTICE:  installing required extension "hstore"
-psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:20: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
 \c Test1
-SELECT * FROM "testNs";
+SELECT * FROM PUBLIC."testNs";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
@@ -23,7 +23,7 @@ SELECT * FROM "testNs";
  1257894000000000000 | dev20     |      1.5 |        2 |          | 
 (10 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs";
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs";
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -45,7 +45,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs";
 
 \echo "The following queries should NOT scan testNs._hyper_1_1_0_partition"
 "The following queries should NOT scan testNs._hyper_1_1_0_partition"
-EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE device_id = 'dev20';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 'dev20';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -63,7 +63,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE device_id = 'dev20'
                Index Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
 (13 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE device_id = 'dev'||'20';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 'dev'||'20';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -81,7 +81,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE device_id = 'dev'||
                Index Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
 (13 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE 'dev'||'20' = device_id;
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE 'dev'||'20' = device_id;
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append

@@ -35,10 +35,10 @@ BEGIN
                 SELECT  p.*
                 FROM _iobeamdb_catalog.partition p
                 WHERE p.epoch_id = %L AND
-                %s((SELECT row.%I FROM (SELECT (%L::%s).*) as row)::TEXT, %L)
+                %I.%I((SELECT row.%I FROM (SELECT (%L::%s).*) as row)::TEXT, %L)
                 BETWEEN p.keyspace_start AND p.keyspace_end
             $$,
-                epoch.id, epoch.partitioning_func,
+                epoch.id, epoch.partitioning_func_schema, epoch.partitioning_func,
                 epoch.partitioning_column,
                 copy_record, copy_table_name, epoch.partitioning_mod)
         INTO STRICT partition_row;
@@ -117,7 +117,7 @@ BEGIN
             SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s') AS time,
                    h.time_column_name, h.time_column_type,
                    p.id AS partition_id, p.keyspace_start, p.keyspace_end,
-                   pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
+                   pe.partitioning_func_schema, pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
             FROM ONLY %1$s ct
             LEFT JOIN _iobeamdb_catalog.hypertable h ON (h.id = %2$L)
             LEFT JOIN _iobeamdb_catalog.partition_epoch pe ON (
@@ -201,11 +201,12 @@ BEGIN
                     partition_constraint_where_clause := format(
                         $$
                         WHERE (%1$I >= %2$s OR %2$s IS NULL) AND (%1$I <= %3$s OR %3$s IS NULL) AND
-                          (%4$s(%5$I::TEXT, %6$L) BETWEEN %7$L AND %8$L)
+                          (%4$I.%5$I(%6$I::TEXT, %7$L) BETWEEN %8$L AND %9$L)
                         $$,
                         point_record.time_column_name,
                         _iobeamdb_internal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
                         _iobeamdb_internal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
+                        point_record.partitioning_func_schema,
                         point_record.partitioning_func,
                         point_record.partitioning_column,
                         point_record.partitioning_mod,
