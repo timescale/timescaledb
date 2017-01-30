@@ -27,3 +27,11 @@ BEGIN
     USING ERRCODE = 'IO101';
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_truncate_block()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+END
+$BODY$;

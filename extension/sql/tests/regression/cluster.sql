@@ -111,6 +111,7 @@ FROM _iobeamdb_catalog.hypertable_column;
 UPDATE _iobeamdb_catalog.cluster_user SET password = 'foo';
 UPDATE _iobeamdb_catalog.node SET active = FALSE;
 DELETE FROM _iobeamdb_catalog.meta WHERE TRUE;
+TRUNCATE TABLE _iobeamdb_catalog.meta;
 \set ON_ERROR_STOP 1
 
 \des+
