@@ -10,8 +10,7 @@ build-image: Dockerfile
 	@docker build . -t $(IMAGE_NAME)
 
 start-container:
-	-docker rm -f $(CONTAINER_NAME)
-	@IMAGE_NAME=$(IMAGE_NAME) DATA_DIR="" CONTAINER_NAME=$(CONTAINER_NAME) PGPORT=$(PGPORT) ./scripts/docker-run.sh
+	@IMAGE_NAME=$(IMAGE_NAME) CONTAINER_NAME=$(CONTAINER_NAME) PGPORT=$(PGPORT) ./scripts/docker-run.sh
 
 start-test-container:
 	@IMAGE_NAME=$(IMAGE_NAME) CONTAINER_NAME=$(TEST_CONTAINER_NAME) \

@@ -4,7 +4,7 @@
 - A standard PostgreSQL installation with development environment (header files), or
 - Docker (see separate build and run instructions)
 
-### Build and install
+### Build and install with local PostgreSQL
 
 ```bash
 # To build the extension
@@ -14,14 +14,14 @@ make
 make install
 
 # To run tests (needs running Postgres server with preloaded extension)
-make checkinstall
+make installcheck
 ```
 
 ### Build and run in Docker
 
 ```
 # To build a Docker image
-make -f docker.mk build
+make -f docker.mk build-image
 
 # To run a container 
 make -f docker.mk run
@@ -31,7 +31,7 @@ make -f docker test
 ```
 
 ### Setting up a local single node database
-After starting the Docker image, you can start a local single node database:
+After starting the Docker image or local PostgreSQL server, you can initiate a local single node database:
 ```bash
 psql -U postgres -h localhost < scripts/sql/setup_single_node_db.psql
 ```
@@ -76,7 +76,7 @@ Now, a hypertable that is partitioned on time (using the values in the
 You can also run the following command from inside the repo to create
 the above table for you:
 ```bash
-PGDATABASE=iobeam ./scripts/run_sql.sh setup_sample_hypertable.psql
+./scripts/run_sql.sh setup_sample_hypertable.psql
 ```
 
 #### Inserting and Querying
