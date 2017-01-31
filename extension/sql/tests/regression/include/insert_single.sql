@@ -26,8 +26,6 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHER
 
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 
-SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
-
 BEGIN;
 \COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;

@@ -61,9 +61,9 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable;
- id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+-------------+--------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | Hypertable_1 | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+--------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 | public      | Hypertable_1 | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable_index;
@@ -75,27 +75,15 @@ SELECT * FROM _iobeamdb_catalog.hypertable_index;
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
 CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_1', TRUE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', TRUE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
 INSERT INTO PUBLIC."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 --expect error cases
 \set ON_ERROR_STOP 0
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
-psql:include/ddl_ops_1.sql:27: ERROR:  IO101: UPDATE ONLY not supported on hypertables
+psql:include/ddl_ops_1.sql:25: ERROR:  IO101: UPDATE ONLY not supported on hypertables
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
-psql:include/ddl_ops_1.sql:28: ERROR:  IO101: DELETE ONLY not currently supported on hypertables
+psql:include/ddl_ops_1.sql:26: ERROR:  IO101: DELETE ONLY not currently supported on hypertables
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM PUBLIC."Hypertable_1";
@@ -222,18 +210,6 @@ Triggers:
 Child tables: _iobeamdb_internal._hyper_1_0_replica
 
 \ir include/ddl_ops_2.sql
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'Device_id', TRUE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;
@@ -248,10 +224,10 @@ DROP INDEX "ind_sensor_1";
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
-psql:include/ddl_ops_2.sql:17: ERROR:  IO101: ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:15: ERROR:  IO101: ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:18: ERROR:  IO101: ALTER INDEX not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:16: ERROR:  IO101: ALTER INDEX not supported on hypertable "Hypertable_1"
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 --create column with same name as previously renamed one
@@ -292,13 +268,6 @@ Triggers:
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
 Child tables: _iobeamdb_internal._hyper_1_0_replica
-
-SELECT * FROM _iobeamdb_internal._hyper_1_0_2_distinct_data;
- column_name | value 
--------------+-------
- sensor_1    | 1
- Device_id   | dev1
-(2 rows)
 
 \c Test1
 \d+ PUBLIC."Hypertable_1"

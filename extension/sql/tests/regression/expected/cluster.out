@@ -106,12 +106,6 @@ SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id');
  
 (1 row)
 
-SELECT set_is_distinct_flag('"public"."testNs"', 'Device_id', TRUE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
 \c meta
 SELECT *
 FROM _iobeamdb_catalog.partition_replica;
@@ -147,26 +141,19 @@ FROM _iobeamdb_catalog.meta;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+-------------+------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | testNs     | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
-  3 | public      | testNs2    | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   | _iobeamdb_internal   | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 | public      | testNs     | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  3 | public      | testNs2    | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
- hypertable_id | replica_id |    schema_name     |     table_name     | distinct_schema_name | distinct_table_name 
----------------+------------+--------------------+--------------------+----------------------+---------------------
-             1 |          0 | _iobeamdb_internal | _hyper_1_0_replica | _iobeamdb_internal   | _hyper_1_0_distinct
-             3 |          0 | _iobeamdb_internal | _hyper_3_0_replica | _iobeamdb_internal   | _hyper_3_0_distinct
+ hypertable_id | replica_id |    schema_name     |     table_name     
+---------------+------------+--------------------+--------------------
+             1 |          0 | _iobeamdb_internal | _hyper_1_0_replica
+             3 |          0 | _iobeamdb_internal | _hyper_3_0_replica
 (2 rows)
-
-SELECT *
-FROM _iobeamdb_catalog.distinct_replica_node;
- hypertable_id | replica_id | database_name |    schema_name     |         table_name         
----------------+------------+---------------+--------------------+----------------------------
-             1 |          0 | test2         | _iobeamdb_internal | _hyper_1_0_2_distinct_data
-(1 row)
 
 SELECT *
 FROM _iobeamdb_catalog.partition_epoch;
@@ -212,20 +199,20 @@ FROM _iobeamdb_catalog.chunk_replica_node;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_column;
- hypertable_id |                              name                               | attnum |    data_type     | default_value | is_distinct | not_null | created_on | modified_on 
----------------+-----------------------------------------------------------------+--------+------------------+---------------+-------------+----------+------------+-------------
-             1 | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
-             1 | temp                                                            |      3 | double precision |               | f           | f        | Test1      | Test1
-             1 | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
-             1 | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
-             1 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
-             3 | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
-             3 | Device_id                                                       |      2 | text             |               | f           | t        | Test1      | Test1
-             3 | temp                                                            |      3 | double precision |               | f           | f        | Test1      | Test1
-             3 | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
-             3 | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
-             3 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
-             1 | Device_id                                                       |      2 | text             |               | t           | t        | Test1      | Test1
+ hypertable_id |                              name                               | attnum |    data_type     | default_value | not_null | created_on | modified_on 
+---------------+-----------------------------------------------------------------+--------+------------------+---------------+----------+------------+-------------
+             1 | time                                                            |      1 | bigint           |               | t        | Test1      | Test1
+             1 | Device_id                                                       |      2 | text             |               | t        | Test1      | Test1
+             1 | temp                                                            |      3 | double precision |               | f        | Test1      | Test1
+             1 | occupied                                                        |      4 | boolean          |               | f        | Test1      | Test1
+             1 | latitude                                                        |      5 | bigint           |               | f        | Test1      | Test1
+             1 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f        | Test1      | Test1
+             3 | time                                                            |      1 | bigint           |               | t        | Test1      | Test1
+             3 | Device_id                                                       |      2 | text             |               | t        | Test1      | Test1
+             3 | temp                                                            |      3 | double precision |               | f        | Test1      | Test1
+             3 | occupied                                                        |      4 | boolean          |               | f        | Test1      | Test1
+             3 | latitude                                                        |      5 | bigint           |               | f        | Test1      | Test1
+             3 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f        | Test1      | Test1
 (12 rows)
 
 \des+
@@ -264,26 +251,19 @@ FROM _iobeamdb_catalog.meta;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | distinct_schema_name | distinct_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+-------------+------------+------------------------+-------------------------+--------------------+-----------------+----------------------+---------------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | testNs     | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   | _iobeamdb_internal   | _hyper_1_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
-  3 | public      | testNs2    | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   | _iobeamdb_internal   | _hyper_3_distinct   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 | public      | testNs     | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  3 | public      | testNs2    | _iobeamdb_internal     | _hyper_3                | _iobeamdb_internal | _hyper_3_root   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
 (2 rows)
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_replica;
- hypertable_id | replica_id |    schema_name     |     table_name     | distinct_schema_name | distinct_table_name 
----------------+------------+--------------------+--------------------+----------------------+---------------------
-             1 |          0 | _iobeamdb_internal | _hyper_1_0_replica | _iobeamdb_internal   | _hyper_1_0_distinct
-             3 |          0 | _iobeamdb_internal | _hyper_3_0_replica | _iobeamdb_internal   | _hyper_3_0_distinct
+ hypertable_id | replica_id |    schema_name     |     table_name     
+---------------+------------+--------------------+--------------------
+             1 |          0 | _iobeamdb_internal | _hyper_1_0_replica
+             3 |          0 | _iobeamdb_internal | _hyper_3_0_replica
 (2 rows)
-
-SELECT *
-FROM _iobeamdb_catalog.distinct_replica_node;
- hypertable_id | replica_id | database_name |    schema_name     |         table_name         
----------------+------------+---------------+--------------------+----------------------------
-             1 |          0 | test2         | _iobeamdb_internal | _hyper_1_0_2_distinct_data
-(1 row)
 
 SELECT *
 FROM _iobeamdb_catalog.partition_epoch;
@@ -329,34 +309,34 @@ FROM _iobeamdb_catalog.chunk_replica_node;
 
 SELECT *
 FROM _iobeamdb_catalog.hypertable_column;
- hypertable_id |                              name                               | attnum |    data_type     | default_value | is_distinct | not_null | created_on | modified_on 
----------------+-----------------------------------------------------------------+--------+------------------+---------------+-------------+----------+------------+-------------
-             1 | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
-             1 | temp                                                            |      3 | double precision |               | f           | f        | Test1      | Test1
-             1 | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
-             1 | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
-             1 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
-             3 | time                                                            |      1 | bigint           |               | f           | t        | Test1      | Test1
-             3 | Device_id                                                       |      2 | text             |               | f           | t        | Test1      | Test1
-             3 | temp                                                            |      3 | double precision |               | f           | f        | Test1      | Test1
-             3 | occupied                                                        |      4 | boolean          |               | f           | f        | Test1      | Test1
-             3 | latitude                                                        |      5 | bigint           |               | f           | f        | Test1      | Test1
-             3 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f           | f        | Test1      | Test1
-             1 | Device_id                                                       |      2 | text             |               | t           | t        | Test1      | Test1
+ hypertable_id |                              name                               | attnum |    data_type     | default_value | not_null | created_on | modified_on 
+---------------+-----------------------------------------------------------------+--------+------------------+---------------+----------+------------+-------------
+             1 | time                                                            |      1 | bigint           |               | t        | Test1      | Test1
+             1 | Device_id                                                       |      2 | text             |               | t        | Test1      | Test1
+             1 | temp                                                            |      3 | double precision |               | f        | Test1      | Test1
+             1 | occupied                                                        |      4 | boolean          |               | f        | Test1      | Test1
+             1 | latitude                                                        |      5 | bigint           |               | f        | Test1      | Test1
+             1 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f        | Test1      | Test1
+             3 | time                                                            |      1 | bigint           |               | t        | Test1      | Test1
+             3 | Device_id                                                       |      2 | text             |               | t        | Test1      | Test1
+             3 | temp                                                            |      3 | double precision |               | f        | Test1      | Test1
+             3 | occupied                                                        |      4 | boolean          |               | f        | Test1      | Test1
+             3 | latitude                                                        |      5 | bigint           |               | f        | Test1      | Test1
+             3 | really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a |      6 | bigint           |               | f        | Test1      | Test1
 (12 rows)
 
 \set ON_ERROR_STOP 0
 UPDATE _iobeamdb_catalog.cluster_user SET password = 'foo';
-psql:cluster.sql:111: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
+psql:cluster.sql:105: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 UPDATE _iobeamdb_catalog.node SET active = FALSE;
-psql:cluster.sql:112: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
+psql:cluster.sql:106: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM _iobeamdb_catalog.meta WHERE TRUE;
-psql:cluster.sql:113: ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
+psql:cluster.sql:107: ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 TRUNCATE TABLE _iobeamdb_catalog.meta;
-psql:cluster.sql:114: ERROR:  IO101: Operation TRUNCATE not supported on _iobeamdb_catalog.meta
+psql:cluster.sql:108: ERROR:  IO101: Operation TRUNCATE not supported on _iobeamdb_catalog.meta
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 \des+
@@ -376,23 +356,6 @@ LOCATION:  exec_stmt_raise, pl_exec.c:3165
 (2 rows)
 
 \d+ "_iobeamdb_internal".*
-            Foreign table "_iobeamdb_internal._hyper_1_0_2_distinct_data"
-   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------+------+-----------+-------------+----------+--------------+-------------
- column_name | text | not null  |             | extended |              | 
- value       | text | not null  |             | extended |              | 
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_0_2_distinct_data')
-Inherits: _iobeamdb_internal._hyper_1_0_distinct
-
-             Table "_iobeamdb_internal._hyper_1_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: _iobeamdb_internal._hyper_1_distinct
-Child tables: _iobeamdb_internal._hyper_1_0_2_distinct_data
-
                                              Table "_iobeamdb_internal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -448,22 +411,6 @@ Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 
-              Table "_iobeamdb_internal._hyper_1_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _iobeamdb_internal._hyper_1_0_distinct
-
-Index "_iobeamdb_internal._hyper_1_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
-
                                                 Table "_iobeamdb_internal._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -474,13 +421,6 @@ primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _iobeamdb_internal._hyper_1_0_replica
-
-             Table "_iobeamdb_internal._hyper_3_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: _iobeamdb_internal._hyper_3_distinct
 
                                              Table "_iobeamdb_internal._hyper_3_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -520,22 +460,6 @@ Inherits: _iobeamdb_internal._hyper_3_0_replica
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
-
-              Table "_iobeamdb_internal._hyper_3_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _iobeamdb_internal._hyper_3_0_distinct
-
-Index "_iobeamdb_internal._hyper_3_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
 
                                                 Table "_iobeamdb_internal._hyper_3_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -551,7 +475,6 @@ Child tables: _iobeamdb_internal._hyper_3_0_replica
 --\d+ "_sys_1_testNs"."_sys_1_testNs_1_0_partition"
 --\d+ "_sys_1_testNs"."_sys_1_testNs_2_0_partition"
 --\det "_sys_1_testNs".*
---\d+ "testNs".distinct
 --test idempotence
 \c meta
 SELECT *
@@ -563,23 +486,6 @@ FROM _iobeamdb_meta.get_or_create_chunk(1, 1257894000000000000 :: BIGINT);
 
 \c Test1
 \d+ "_iobeamdb_internal".*
-            Foreign table "_iobeamdb_internal._hyper_1_0_2_distinct_data"
-   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------+------+-----------+-------------+----------+--------------+-------------
- column_name | text | not null  |             | extended |              | 
- value       | text | not null  |             | extended |              | 
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_0_2_distinct_data')
-Inherits: _iobeamdb_internal._hyper_1_0_distinct
-
-             Table "_iobeamdb_internal._hyper_1_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: _iobeamdb_internal._hyper_1_distinct
-Child tables: _iobeamdb_internal._hyper_1_0_2_distinct_data
-
                                              Table "_iobeamdb_internal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -635,22 +541,6 @@ Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 
-              Table "_iobeamdb_internal._hyper_1_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _iobeamdb_internal._hyper_1_0_distinct
-
-Index "_iobeamdb_internal._hyper_1_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
-
                                                 Table "_iobeamdb_internal._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -661,13 +551,6 @@ primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _iobeamdb_internal._hyper_1_0_replica
-
-             Table "_iobeamdb_internal._hyper_3_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: _iobeamdb_internal._hyper_3_distinct
 
                                              Table "_iobeamdb_internal._hyper_3_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -708,22 +591,6 @@ Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-              Table "_iobeamdb_internal._hyper_3_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _iobeamdb_internal._hyper_3_0_distinct
-
-Index "_iobeamdb_internal._hyper_3_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
-
                                                 Table "_iobeamdb_internal._hyper_3_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -737,7 +604,7 @@ Child tables: _iobeamdb_internal._hyper_3_0_replica
 
 \c meta
 SELECT _iobeamdb_meta.close_chunk_end(1);
-psql:cluster.sql:134: WARNING:  01000: Cannot close an empty chunk table
+psql:cluster.sql:127: WARNING:  01000: Cannot close an empty chunk table
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
 -----------------
@@ -774,23 +641,6 @@ FROM _iobeamdb_catalog.chunk;
 
 \c Test1
 \d+ "_iobeamdb_internal".*
-            Foreign table "_iobeamdb_internal._hyper_1_0_2_distinct_data"
-   Column    | Type | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------+------+-----------+-------------+----------+--------------+-------------
- column_name | text | not null  |             | extended |              | 
- value       | text | not null  |             | extended |              | 
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_0_2_distinct_data')
-Inherits: _iobeamdb_internal._hyper_1_0_distinct
-
-             Table "_iobeamdb_internal._hyper_1_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: _iobeamdb_internal._hyper_1_distinct
-Child tables: _iobeamdb_internal._hyper_1_0_2_distinct_data
-
                                              Table "_iobeamdb_internal._hyper_1_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -846,22 +696,6 @@ Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 
-              Table "_iobeamdb_internal._hyper_1_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_1_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _iobeamdb_internal._hyper_1_0_distinct
-
-Index "_iobeamdb_internal._hyper_1_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
-
                                                 Table "_iobeamdb_internal._hyper_1_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -872,13 +706,6 @@ primary key, btree, for table "_iobeamdb_internal._hyper_1_distinct"
  latitude                                                        | bigint           |           | plain    |              | 
  really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a | bigint           |           | plain    |              | 
 Child tables: _iobeamdb_internal._hyper_1_0_replica
-
-             Table "_iobeamdb_internal._hyper_3_0_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Inherits: _iobeamdb_internal._hyper_3_distinct
 
                                              Table "_iobeamdb_internal._hyper_3_0_replica"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -919,22 +746,6 @@ Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_3_0_replica
 
-              Table "_iobeamdb_internal._hyper_3_distinct"
-   Column    | Type | Modifiers | Storage  | Stats target | Description 
--------------+------+-----------+----------+--------------+-------------
- column_name | text | not null  | extended |              | 
- value       | text | not null  | extended |              | 
-Indexes:
-    "_hyper_3_distinct_pkey" PRIMARY KEY, btree (column_name, value)
-Child tables: _iobeamdb_internal._hyper_3_0_distinct
-
-Index "_iobeamdb_internal._hyper_3_distinct_pkey"
-   Column    | Type | Definition  | Storage  
--------------+------+-------------+----------
- column_name | text | column_name | extended
- value       | text | value       | extended
-primary key, btree, for table "_iobeamdb_internal._hyper_3_distinct"
-
                                                 Table "_iobeamdb_internal._hyper_3_root"
                              Column                              |       Type       | Modifiers | Storage  | Stats target | Description 
 -----------------------------------------------------------------+------------------+-----------+----------+--------------+-------------
@@ -956,11 +767,11 @@ CREATE TABLE PUBLIC."testNsOnMeta" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:157: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+psql:cluster.sql:150: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNsOnMeta"', 'time', 'Device_id');
-psql:cluster.sql:160: ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
+psql:cluster.sql:153: ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 DROP TABLE PUBLIC."testNsOnMeta";

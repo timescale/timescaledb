@@ -67,8 +67,7 @@ BEGIN
         att.attnum,
         att.atttypid,
         _iobeamdb_internal.get_default_value_for_attribute(att),
-        att.attnotnull,
-        FALSE
+        att.attnotnull
     );
 END
 $BODY$;

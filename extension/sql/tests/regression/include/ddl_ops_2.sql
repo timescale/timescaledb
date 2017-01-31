@@ -1,5 +1,3 @@
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'sensor_2', FALSE);
-SELECT set_is_distinct_flag('"public"."Hypertable_1"', 'Device_id', TRUE);
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;

@@ -1,20 +1,6 @@
 -- This file contains functions related to getting information about the
 -- schema of a hypertable, including columns, their types, etc.
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_distinct_table_oid(
-    hypertable_id INTEGER,
-    replica_id    SMALLINT,
-    database_name NAME
-)
-    RETURNS REGCLASS LANGUAGE SQL STABLE AS
-$BODY$
-    SELECT format('%I.%I', drn.schema_name, drn.table_name) :: REGCLASS
-    FROM _iobeamdb_catalog.distinct_replica_node AS drn
-    WHERE drn.hypertable_id = get_distinct_table_oid.hypertable_id AND
-          drn.replica_id = get_distinct_table_oid.replica_id AND
-          drn.database_name = get_distinct_table_oid.database_name;
-$BODY$;
-
 -- Get the name of the time column for a hypertable.
 CREATE OR REPLACE FUNCTION get_time_column(
     hypertable_id INTEGER

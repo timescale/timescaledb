@@ -10,8 +10,6 @@
 \c test2
 SELECT *
 FROM "_iobeamdb_internal"._hyper_1_0_replica;
-SELECT *
-FROM "_iobeamdb_internal"._hyper_1_0_distinct;
 
 SELECT * FROM _iobeamdb_catalog.hypertable;
 DROP TABLE "testNs";

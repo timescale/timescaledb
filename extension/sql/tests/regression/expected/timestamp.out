@@ -59,12 +59,6 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 
  
 (1 row)
 
-SELECT set_is_distinct_flag('"public"."testNs"', 'device_id', TRUE);
- set_is_distinct_flag 
-----------------------
- 
-(1 row)
-
 \c Test1
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 1),

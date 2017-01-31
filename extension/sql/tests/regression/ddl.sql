@@ -39,7 +39,6 @@ SELECT * FROM _iobeamdb_catalog.default_replica_node;
 
 \d+ PUBLIC."Hypertable_1"
 \d+ "_iobeamdb_internal"."_hyper_1_root"
-SELECT * FROM _iobeamdb_internal._hyper_1_0_2_distinct_data;
 
 
 \c Test1

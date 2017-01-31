@@ -63,22 +63,20 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.add_column(
     attnum          INT2,
     data_type       REGTYPE,
     default_value   TEXT,
-    not_null        BOOLEAN,
-    is_distinct     BOOLEAN
+    not_null        BOOLEAN
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
     PERFORM
     _iobeamdb_internal.meta_transaction_exec(
-        format('SELECT _iobeamdb_meta.add_column(%L, %L, %L, %L, %L, %L, %L, %L)',
+        format('SELECT _iobeamdb_meta.add_column(%L, %L, %L, %L, %L, %L, %L)',
             hypertable_id,
             column_name,
             attnum,
             data_type,
             default_value,
             not_null,
-            is_distinct,
             current_database()
         )
     );
