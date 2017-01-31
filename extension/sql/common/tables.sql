@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.node (
     schema_name   NAME    NOT NULL UNIQUE, --the schema name with remote tables to _iobeamdb_catalog schema of the node
     server_name   NAME    NOT NULL UNIQUE,
     hostname      TEXT    NOT NULL,
+    port          INT     NOT NULL CONSTRAINT valid_port CHECK (port >= 0 AND port <= 65535),
     active        BOOLEAN NOT NULL DEFAULT TRUE,
     id            SERIAL  NOT NULL UNIQUE -- id for node. used in naming
 );
@@ -20,6 +21,7 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_cat
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.meta (
     database_name NAME NOT NULL PRIMARY KEY,
     hostname      TEXT NOT NULL,
+    port          INT  NOT NULL,
     server_name   NAME NOT NULL
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.meta', '');

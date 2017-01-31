@@ -13,7 +13,7 @@ BEGIN
         NEW.schema_name);
 
     IF NEW.database_name <> current_database() THEN
-        PERFORM _iobeamdb_internal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
+        PERFORM _iobeamdb_internal.create_server(NEW.server_name, NEW.hostname, NEW.port, NEW.database_name);
 
         PERFORM _iobeamdb_internal.create_user_mapping(cluster_user, NEW.server_name)
         FROM _iobeamdb_catalog.cluster_user;

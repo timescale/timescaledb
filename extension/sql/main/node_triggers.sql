@@ -9,7 +9,7 @@ BEGIN
     END IF;
 
     IF NEW.database_name <> current_database() THEN
-        PERFORM _iobeamdb_internal.create_server(NEW.server_name, NEW.hostname, NEW.database_name);
+        PERFORM _iobeamdb_internal.create_server(NEW.server_name, NEW.hostname, NEW.port, NEW.database_name);
 
         FOR cluster_user_row IN SELECT *
                                 FROM _iobeamdb_catalog.cluster_user LOOP
