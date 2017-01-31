@@ -1,2 +1,7 @@
-extension/sql/tests/unit/testoutputs.tmp
-data/
+/sql/tests/unit/testoutputs.tmp
+/sql/iobeamdb--*.sql
+/data/
+/src/*.o
+/src/*.so
+/.vscode/
+/iobeamdb.so

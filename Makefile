@@ -1,44 +1,62 @@
+EXTENSION = iobeamdb
+SQL_FILES = $(shell cat sql/load_order.txt)
 
-IMAGE_NAME = iobeamdb
-MAKE = make
+EXT_VERSION = 1.0
+EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 
-all: test-docker
+DATA = $(EXT_SQL_FILE)
+MODULE_big = $(EXTENSION)
 
-# Targets for installing the extension without using Docker
-clean:
-	$(MAKE) -C ./extension clean
-	@rm -f ./extension/iobeamdb--*.sql
+SRCS = src/iobeamdb.c src/murmur3.c src/pgmurmur3.c
+OBJS = $(SRCS:.c=.o)
 
-install:
-	$(MAKE) -C ./extension install
+MKFILE_PATH := $(abspath $(MAKEFILE_LIST))
+CURRENT_DIR = $(dir $(MKFILE_PATH))
 
-# Targets for building/running Docker images
-build-docker:
-	@docker build . -t $(IMAGE_NAME)
+TEST_PGPORT ?= 5432
+TEST_PGHOST ?= localhost
+TEST_PGUSER ?= postgres
+TESTS = $(sort $(wildcard test/sql/*.sql))
+USE_MODULE_DB=true
+REGRESS = $(patsubst test/sql/%.sql,%,$(TESTS))
+REGRESS_OPTS = \
+	--inputdir=test \
+	--outputdir=test \
+	--launcher=test/runner.sh \
+	--host=$(TEST_PGHOST) \
+	--port=$(TEST_PGPORT) \
+	--user=$(TEST_PGUSER) \
+	--load-language=plpgsql \
+	--load-extension=dblink \
+	--load-extension=postgres_fdw \
+	--load-extension=hstore \
+	--load-extension=iobeamdb
 
-docker-run:
-	@IMAGE_NAME=$(IMAGE_NAME) ./scripts/docker-run.sh
+PG_CONFIG = pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
 
-start-test-docker:
-	@ . scripts/test-docker-config.sh && IMAGE_NAME=$(IMAGE_NAME) CONTAINER_NAME=iobeamdb_testing ./scripts/start-test-docker.sh
+EXTRA_CLEAN = $(EXT_SQL_FILE)
 
-stop-test-docker: 
-	@docker rm -f iobeamdb_testing
+include $(PGXS)
+override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0
+override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/
 
-# Targets for tests
-test-regression:
-	@ . scripts/test-docker-config.sh && cd extension/sql/tests/regression && ./run.sh
+all: $(EXT_SQL_FILE)
 
-test-unit:
-	@ . scripts/test-docker-config.sh && cd extension/sql/tests/unit && ./run.sh
+$(EXT_SQL_FILE): $(SQL_FILES)
+	@cat $^ > $@
 
-test-all: test-regression test-unit
-	@echo Running all tests
+check-sql-files:
+	@echo $(SQL_FILES)
 
-test-docker: build-docker start-test-docker test-all stop-test-docker
+install: $(EXT_SQL_FILE)
 
-# Setting up a single node database
-setup-single-node-db:
-	@PGDATABASE=postgres ./scripts/run_sql.sh setup_single_node_db.psql
+package: clean $(EXT_SQL_FILE)
+	@mkdir -p package/lib
+	@mkdir -p package/extension
+	$(install_sh) -m 755 $(EXTENSION).so 'package/lib/$(EXTENSION).so'
+	$(install_sh) -m 644 $(EXTENSION).control 'package/extension/'
+	$(install_sh) -m 644 $(EXT_SQL_FILE)  'package/extension/'
 
-.PHONY: build-docker start-docker stop-docker test-regression test-unit test-all test all setup-single-node-db
+.PHONY: check-sql-files all
+

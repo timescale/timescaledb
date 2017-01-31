@@ -1,21 +1,48 @@
+\set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
+\o /dev/null
+\ir include/create_clustered_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS meta;
+DROP DATABASE IF EXISTS "Test1";
+DROP DATABASE IF EXISTS test2;
+SET client_min_messages = NOTICE;
+CREATE DATABASE meta;
+CREATE DATABASE "Test1";
+CREATE DATABASE test2;
+\c meta
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+select setup_meta();
+\c Test1
+CREATE SCHEMA io_test;
+CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+ALTER DATABASE "Test1" SET search_path = "io_test";
+SET search_path = 'io_test';
+select setup_main();
+\c test2
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+select setup_main();
+\o
+\set ECHO ALL
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
