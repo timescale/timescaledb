@@ -1,9 +1,24 @@
+\set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
+\o /dev/null
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+SELECT setup_meta();
+SELECT setup_main();
+\o
+\set ECHO ALL
 \c single
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 

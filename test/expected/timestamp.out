@@ -1,12 +1,37 @@
+\set ON_ERROR_STOP 1
+\o /dev/null
+\ir include/create_clustered_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS meta;
+DROP DATABASE IF EXISTS "Test1";
+DROP DATABASE IF EXISTS test2;
+SET client_min_messages = NOTICE;
+CREATE DATABASE meta;
+CREATE DATABASE "Test1";
+CREATE DATABASE test2;
+\c meta
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
+select setup_meta();
+\c Test1
+CREATE SCHEMA io_test;
+CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
+ALTER DATABASE "Test1" SET search_path = "io_test";
+SET search_path = 'io_test';
+select setup_main();
+\c test2
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
+select setup_main();
+\o
+\set ECHO ALL
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
@@ -76,13 +101,13 @@ INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 1),
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 2);
 SELECT * FROM PUBLIC."testNs";
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
----------------------+-----------+----------+----------+----------+-------------
- 2009-11-12 01:00:00 | dev1      |      1.5 |        1 |          | 
- 2009-11-12 01:00:00 | dev1      |      1.5 |        2 |          | 
- 2009-11-10 23:00:02 | dev1      |      2.5 |        3 |          | 
- 2009-11-10 23:00:00 | dev2      |      1.5 |        1 |          | 
- 2009-11-10 23:00:00 | dev2      |      1.5 |        2 |          | 
+        timeCustom        | device_id | series_0 | series_1 | series_2 | series_bool 
+--------------------------+-----------+----------+----------+----------+-------------
+ Thu Nov 12 01:00:00 2009 | dev1      |      1.5 |        1 |          | 
+ Thu Nov 12 01:00:00 2009 | dev1      |      1.5 |        2 |          | 
+ Tue Nov 10 23:00:02 2009 | dev1      |      2.5 |        3 |          | 
+ Tue Nov 10 23:00:00 2009 | dev2      |      1.5 |        1 |          | 
+ Tue Nov 10 23:00:00 2009 | dev2      |      1.5 |        2 |          | 
 (5 rows)
 
 SET client_min_messages = WARNING;
@@ -91,17 +116,17 @@ The next 2 queries will differ in output between UTC and EST since the mod is on
 SET timezone = 'UTC';
 SELECT date_group("timeCustom", '100 days') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
-        time         | sum 
----------------------+-----
- 2009-09-13 00:00:00 | 8.5
+           time           | sum 
+--------------------------+-----
+ Sun Sep 13 00:00:00 2009 | 8.5
 (1 row)
 
 SET timezone = 'EST';
 SELECT date_group("timeCustom", '100 days') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
-        time         | sum 
----------------------+-----
- 2009-09-12 19:00:00 | 8.5
+           time           | sum 
+--------------------------+-----
+ Sat Sep 12 19:00:00 2009 | 8.5
 (1 row)
 
 \echo 'The rest of the queries will be the same in output between UTC and EST'
@@ -116,10 +141,10 @@ SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
-        time         | sum 
----------------------+-----
- 2009-11-10 00:00:00 | 5.5
- 2009-11-12 00:00:00 |   3
+           time           | sum 
+--------------------------+-----
+ Tue Nov 10 00:00:00 2009 | 5.5
+ Thu Nov 12 00:00:00 2009 |   3
 (2 rows)
 
 SET timezone = 'EST';
@@ -131,10 +156,10 @@ SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
-        time         | sum 
----------------------+-----
- 2009-11-09 19:00:00 | 5.5
- 2009-11-11 19:00:00 |   3
+           time           | sum 
+--------------------------+-----
+ Mon Nov 09 19:00:00 2009 | 5.5
+ Wed Nov 11 19:00:00 2009 |   3
 (2 rows)
 
 SET timezone = 'UTC';
@@ -148,11 +173,11 @@ SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
 AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
----------------------+-----------+----------+----------+----------+-------------
- 2009-11-10 23:00:02 | dev1      |      2.5 |        3 |          | 
- 2009-11-10 23:00:00 | dev2      |      1.5 |        1 |          | 
- 2009-11-10 23:00:00 | dev2      |      1.5 |        2 |          | 
+        timeCustom        | device_id | series_0 | series_1 | series_2 | series_bool 
+--------------------------+-----------+----------+----------+----------+-------------
+ Tue Nov 10 23:00:02 2009 | dev1      |      2.5 |        3 |          | 
+ Tue Nov 10 23:00:00 2009 | dev2      |      1.5 |        1 |          | 
+ Tue Nov 10 23:00:00 2009 | dev2      |      1.5 |        2 |          | 
 (3 rows)
 
 SET timezone = 'EST';
@@ -166,11 +191,11 @@ SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
 AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
----------------------+-----------+----------+----------+----------+-------------
- 2009-11-10 23:00:02 | dev1      |      2.5 |        3 |          | 
- 2009-11-10 23:00:00 | dev2      |      1.5 |        1 |          | 
- 2009-11-10 23:00:00 | dev2      |      1.5 |        2 |          | 
+        timeCustom        | device_id | series_0 | series_1 | series_2 | series_bool 
+--------------------------+-----------+----------+----------+----------+-------------
+ Tue Nov 10 23:00:02 2009 | dev1      |      2.5 |        3 |          | 
+ Tue Nov 10 23:00:00 2009 | dev2      |      1.5 |        1 |          | 
+ Tue Nov 10 23:00:00 2009 | dev2      |      1.5 |        2 |          | 
 (3 rows)
 
 SET timezone = 'UTC';
@@ -182,10 +207,10 @@ SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
-        time         | sum 
----------------------+-----
- 2009-11-10 00:00:00 | 5.5
- 2009-11-12 00:00:00 |   3
+           time           | sum 
+--------------------------+-----
+ Tue Nov 10 00:00:00 2009 | 5.5
+ Thu Nov 12 00:00:00 2009 |   3
 (2 rows)
 
 SET timezone = 'EST';
@@ -197,9 +222,9 @@ SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
-        time         | sum 
----------------------+-----
- 2009-11-09 19:00:00 | 5.5
- 2009-11-11 19:00:00 |   3
+           time           | sum 
+--------------------------+-----
+ Mon Nov 09 19:00:00 2009 | 5.5
+ Wed Nov 11 19:00:00 2009 |   3
 (2 rows)
 

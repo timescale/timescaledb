@@ -1,21 +1,48 @@
+\set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
+\o /dev/null
+\ir include/create_clustered_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS meta;
+DROP DATABASE IF EXISTS "Test1";
+DROP DATABASE IF EXISTS test2;
+SET client_min_messages = NOTICE;
+CREATE DATABASE meta;
+CREATE DATABASE "Test1";
+CREATE DATABASE test2;
+\c meta
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+select setup_meta();
+\c Test1
+CREATE SCHEMA io_test;
+CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+ALTER DATABASE "Test1" SET search_path = "io_test";
+SET search_path = 'io_test';
+select setup_main();
+\c test2
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+select setup_main();
+\o
+\set ECHO ALL
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
@@ -26,7 +53,7 @@ SELECT add_cluster_user('postgres', NULL);
 -- Expect error when adding user again
 \set ON_ERROR_STOP 0
 SELECT add_cluster_user('postgres', NULL);
-psql:ddl_errors.sql:16: ERROR:  IO130: User postgres already exists
+ERROR:  IO130: User postgres already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT set_meta('meta' :: NAME, 'localhost');
@@ -50,10 +77,10 @@ SELECT add_node('test2' :: NAME, 'localhost');
 -- Expect error when adding node again
 \set ON_ERROR_STOP 0
 SELECT add_node('test2' :: NAME, 'localhost');
-psql:ddl_errors.sql:25: ERROR:  IO120: Node test2 already exists
+ERROR:  IO120: Node test2 already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT add_node('test2' :: NAME, 'otherhost');
-psql:ddl_errors.sql:26: ERROR:  IO120: Node test2 already exists
+ERROR:  IO120: Node test2 already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 \c Test1
@@ -65,22 +92,22 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id');
-psql:ddl_errors.sql:39: ERROR:  42P01: relation "public.Hypertable_1_mispelled" does not exist
+ERROR:  42P01: relation "public.Hypertable_1_mispelled" does not exist
 LINE 1: SELECT * FROM create_hypertable('"public"."Hypertable_1_misp...
                                         ^
 LOCATION:  RangeVarGetRelidExtended, namespace.c:415
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id');
-psql:ddl_errors.sql:40: ERROR:  IO102: column "time_mispelled" does not exist
+ERROR:  IO102: column "time_mispelled" does not exist
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id');
-psql:ddl_errors.sql:41: ERROR:  IO102: illegal type for time column "Device_id": text
+ERROR:  IO102: illegal type for time column "Device_id": text
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled');
-psql:ddl_errors.sql:42: ERROR:  IO102: column "Device_id_mispelled" does not exist
+ERROR:  IO102: column "Device_id_mispelled" does not exist
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 INSERT INTO PUBLIC."Hypertable_1" VALUES(1,'dev_1', 3); 
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-psql:ddl_errors.sql:46: ERROR:  IO102: the table being converted to a hypertable must be empty
+ERROR:  IO102: the table being converted to a hypertable must be empty
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM  PUBLIC."Hypertable_1" ;
 \set ON_ERROR_STOP 1
@@ -92,5 +119,5 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-psql:ddl_errors.sql:54: ERROR:  IO110: hypertable public."Hypertable_1" already exists
+ERROR:  IO110: hypertable public."Hypertable_1" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165

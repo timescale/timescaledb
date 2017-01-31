@@ -1,36 +1,61 @@
+\set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
+\ir include/create_clustered_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS meta;
+DROP DATABASE IF EXISTS "Test1";
+DROP DATABASE IF EXISTS test2;
+SET client_min_messages = NOTICE;
+CREATE DATABASE meta;
+CREATE DATABASE "Test1";
+CREATE DATABASE test2;
+\c meta
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+select setup_meta();
  setup_meta 
 ------------
  
 (1 row)
 
+\c Test1
+CREATE SCHEMA io_test;
+CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+ALTER DATABASE "Test1" SET search_path = "io_test";
+SET search_path = 'io_test';
+select setup_main();
  setup_main 
 ------------
  
 (1 row)
 
+\c test2
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
+select setup_main();
  setup_main 
 ------------
  
 (1 row)
 
+\set ECHO ALL
 \c meta
 SELECT add_cluster_user('postgres', NULL);
  add_cluster_user 
@@ -58,12 +83,8 @@ SELECT add_node('test2' :: NAME, 'localhost');
 
 \set ON_ERROR_STOP 0
 SELECT add_node('should_fail' :: NAME, 'localhost', -1);
-psql:cluster.sql:18: ERROR:  08001: could not connect to server "should_fail"
+ERROR:  08001: could not connect to server "should_fail"
 DETAIL:  invalid port number: "-1"
-LOCATION:  connect_pg_server, connection.c:241
-SELECT add_node('should_fail' :: NAME, '!@#€%&%&(%#&())', 5432);
-psql:cluster.sql:19: ERROR:  08001: could not connect to server "should_fail"
-DETAIL:  could not translate host name "!@#€%&%&(%#&())" to address: Name or service not known
 LOCATION:  connect_pg_server, connection.c:241
 \set ON_ERROR_STOP 1
 \c Test1
@@ -75,7 +96,7 @@ CREATE TABLE PUBLIC."testNs" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:32: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE TABLE PUBLIC."testNs2" (
   time BIGINT NOT NULL,
@@ -85,19 +106,19 @@ CREATE TABLE PUBLIC."testNs2" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:41: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" ("Device_id", time DESC NULLS LAST) WHERE "Device_id" IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (temp, time DESC NULLS LAST) WHERE temp IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" (really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on, time DESC NULLS LAST) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-psql:cluster.sql:45: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
-psql:cluster.sql:45: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 CREATE INDEX ON PUBLIC."testNs" (time DESC NULLS LAST, really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on) WHERE really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on IS NOT NULL;
-psql:cluster.sql:46: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
-psql:cluster.sql:46: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
  create_hypertable 
@@ -107,7 +128,7 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNs"', 'time', 'Device_id');
-psql:cluster.sql:52: ERROR:  IO110: hypertable public."testNs" already exists
+ERROR:  IO110: hypertable public."testNs" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."testNs2"', 'time', 'Device_id');
@@ -337,16 +358,16 @@ FROM _iobeamdb_catalog.hypertable_column;
 
 \set ON_ERROR_STOP 0
 UPDATE _iobeamdb_catalog.cluster_user SET password = 'foo';
-psql:cluster.sql:112: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
+ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.cluster_user
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 UPDATE _iobeamdb_catalog.node SET active = FALSE;
-psql:cluster.sql:113: ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
+ERROR:  IO101: Operation UPDATE not supported on _iobeamdb_catalog.node
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 DELETE FROM _iobeamdb_catalog.meta WHERE TRUE;
-psql:cluster.sql:114: ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
+ERROR:  IO101: Operation DELETE not supported on _iobeamdb_catalog.meta
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 TRUNCATE TABLE _iobeamdb_catalog.meta;
-psql:cluster.sql:115: ERROR:  IO101: Operation TRUNCATE not supported on _iobeamdb_catalog.meta
+ERROR:  IO101: Operation TRUNCATE not supported on _iobeamdb_catalog.meta
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 \des+
@@ -614,7 +635,7 @@ Child tables: _iobeamdb_internal._hyper_3_0_replica
 
 \c meta
 SELECT _iobeamdb_meta.close_chunk_end(1);
-psql:cluster.sql:134: WARNING:  01000: Cannot close an empty chunk table
+WARNING:  01000: Cannot close an empty chunk table
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
  close_chunk_end 
 -----------------
@@ -777,11 +798,11 @@ CREATE TABLE PUBLIC."testNsOnMeta" (
   latitude BIGINT NULL,
   really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on BIGINT NULL
 );
-psql:cluster.sql:158: NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
+NOTICE:  42622: identifier "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_and_on_and_on" will be truncated to "really_long_column_goes_on_and_on_and_on_and_on_and_on_and_on_a"
 LOCATION:  truncate_identifier, scansup.c:205
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."testNsOnMeta"', 'time', 'Device_id');
-psql:cluster.sql:161: ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
+ERROR:  IO101: database not configured for hypertable storage (not setup as a data-node)
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 DROP TABLE PUBLIC."testNsOnMeta";

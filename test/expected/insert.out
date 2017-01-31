@@ -1,3 +1,5 @@
+\set ON_ERROR_STOP 1
+\set ECHO ALL
 \ir include/insert.sql
 \set ON_ERROR_STOP 1
 \ir create_clustered_db.sql

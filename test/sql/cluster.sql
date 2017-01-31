@@ -16,7 +16,6 @@ SELECT add_node('test2' :: NAME, 'localhost');
 
 \set ON_ERROR_STOP 0
 SELECT add_node('should_fail' :: NAME, 'localhost', -1);
-SELECT add_node('should_fail' :: NAME, '!@#€%&%&(%#&())', 5432);
 
 \set ON_ERROR_STOP 1
 

@@ -1,12 +1,92 @@
+\set ON_ERROR_STOP 1
+\o /dev/null
+\ir include/insert.sql
+\set ON_ERROR_STOP 1
+\ir create_clustered_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS meta;
+DROP DATABASE IF EXISTS "Test1";
+DROP DATABASE IF EXISTS test2;
+SET client_min_messages = NOTICE;
+CREATE DATABASE meta;
+CREATE DATABASE "Test1";
+CREATE DATABASE test2;
+\c meta
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
+select setup_meta();
+\c Test1
+CREATE SCHEMA io_test;
+CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
+ALTER DATABASE "Test1" SET search_path = "io_test";
+SET search_path = 'io_test';
+select setup_main();
+\c test2
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
+select setup_main();
+\c meta
+SELECT add_cluster_user('postgres', NULL);
+SELECT set_meta('meta' :: NAME, 'localhost');
+SELECT add_node('Test1' :: NAME, 'localhost');
+SELECT add_node('test2' :: NAME, 'localhost');
+\c Test1
+CREATE TABLE PUBLIC."testNs" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'_iobeamdb_internal' );
+\c Test1
+BEGIN;
+\COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COMMIT;
+SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
+FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
+INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
+\c Test1
+INSERT INTO public."testNs"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev20', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+\c test2
+INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev20', 1.5, 2);
+\c test2
+CREATE TABLE chunk_closing_test(
+        time       BIGINT,
+        metric     INTEGER,
+        device_id  TEXT
+    );
+-- Test chunk closing/creation
+SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
+INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
+INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
+SELECT * FROM chunk_closing_test;
+SELECT * FROM _iobeamdb_catalog.chunk c
+    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
+\o
+\set ECHO ALL
 \c Test1
 \d+ "_iobeamdb_internal".*
 Index "_iobeamdb_internal.1-testNs_device_id_timeCustom_idx"

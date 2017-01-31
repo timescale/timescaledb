@@ -1,40 +1,44 @@
 ### Prerequisites
 
-You'll need to install and run [Docker](https://docs.docker.com/engine/installation/),
-which is the current way to run the database.
+- The [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
+- A standard PostgreSQL installation with development environment (header files), or
+- Docker (see separate build and run instructions)
 
-You need to install the [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides)(psql).
+### Build and install
 
-
-### Building and running in Docker
-
-The `Makefile` included in this repo has convenient commands for building,
-starting, and stopping a Docker image of **iobeamdb**:
 ```bash
-# To build the image
-make build-docker
-# To start the image using docker run.
-# This creates a docker container named `iobeamdb`
-# with a data volume mount inside the `data` subdirectory.
-make docker-run
-# To stop the container
-docker stop iobeamdb
+# To build the extension
+make 
+
+# To install 
+make install
+
+# To run tests (needs running Postgres server with preloaded extension)
+make checkinstall
 ```
 
-You can then run any other docker command on the container named `iobeamdb`.
+### Build and run in Docker
 
-With the Docker image running you can run the tests (see Testing) or create
-your own single-node cluster.
+```
+# To build a Docker image
+make -f docker.mk build
+
+# To run a container 
+make -f docker.mk run
+
+# To run tests
+make -f docker test
+```
 
 ### Setting up a local single node database
 After starting the Docker image, you can start a local single node database:
 ```bash
-make setup-single-node-db
+psql -U postgres -h localhost < scripts/sql/setup_single_node_db.psql
 ```
 
-This will set up a database named `iobeam` which can be accessed with:
+This will set up a database named `iobeamdb` which can be accessed with:
 ```bash
-psql -U postgres -h localhost -d iobeam
+psql -U postgres -h localhost -d iobeamdb
 ```
 
 #### Creating a table
@@ -123,16 +127,3 @@ this creates a more compact, and thus efficient, index.
 
 ### Examples
 TODO PROVIDE EXAMPLES
-
-### Testing
-There are four commands to run tests:
-```bash
-# Build and run a docker image and run all tests in that image
-make test-docker
-# Run all tests (no image built)
-make test-all
-# Run regression tests (no image built)
-make test-regression
-# Run unit tests (no image built)
-make test-unit
-```
