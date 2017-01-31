@@ -20,17 +20,17 @@ docker-run:
 	@IMAGE_NAME=$(IMAGE_NAME) ./scripts/docker-run.sh
 
 start-test-docker:
-	@IMAGE_NAME=$(IMAGE_NAME) CONTAINER_NAME=iobeamdb_testing ./scripts/start-test-docker.sh 
+	@ . scripts/test-docker-config.sh && IMAGE_NAME=$(IMAGE_NAME) CONTAINER_NAME=iobeamdb_testing ./scripts/start-test-docker.sh
 
 stop-test-docker: 
 	@docker rm -f iobeamdb_testing
 
 # Targets for tests
 test-regression:
-	@cd extension/sql/tests/regression; ./run.sh
+	@ . scripts/test-docker-config.sh && cd extension/sql/tests/regression && ./run.sh
 
 test-unit:
-	@cd extension/sql/tests/unit; ./run.sh
+	@ . scripts/test-docker-config.sh && cd extension/sql/tests/unit && ./run.sh
 
 test-all: test-regression test-unit
 	@echo Running all tests
