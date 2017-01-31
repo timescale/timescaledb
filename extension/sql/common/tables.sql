@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition (
     epoch_id       INT      NOT NULL REFERENCES _iobeamdb_catalog.partition_epoch (id) ON DELETE CASCADE,
     keyspace_start SMALLINT NOT NULL CHECK (keyspace_start >= 0), --start inclusive
     keyspace_end   SMALLINT NOT NULL CHECK (keyspace_end > 0), --end   inclusive; compatible with between operator
+    tablespace     NAME     NULL,
     UNIQUE (epoch_id, keyspace_start),
     CHECK (keyspace_end > keyspace_start)
 );

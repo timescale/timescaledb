@@ -70,6 +70,11 @@ BEGIN
     AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.node
     FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_internal.on_change_node();
 
+    DROP TRIGGER IF EXISTS trigger_main_on_change_partition
+    ON _iobeamdb_catalog.partition;
+    CREATE TRIGGER trigger_main_on_change_partition AFTER INSERT OR UPDATE OR DELETE ON _iobeamdb_catalog.partition
+    FOR EACH ROW EXECUTE PROCEDURE _iobeamdb_internal.on_change_partition();
+
     -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_main_on_change_partition_replica_table
     ON _iobeamdb_catalog.partition_replica;

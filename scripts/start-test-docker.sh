@@ -16,4 +16,13 @@ if [[ -n $matching ]]; then
   docker rm $matching 
 fi
 
-CONTAINER_NAME=$CONTAINER_NAME DATA_DIR="" IMAGE_NAME=$IMAGE_NAME $(dirname $0)/docker-run.sh
+CONTAINER_NAME=$CONTAINER_NAME \
+DATA_DIR="" \
+IMAGE_NAME=$IMAGE_NAME \
+$(dirname $0)/docker-run.sh
+
+# Create data directories for tablespaces tests
+docker exec -i $CONTAINER_NAME /bin/bash << 'EOF'
+mkdir -p /var/lib/postgresql/data/tests/tspace{1,2}
+chown postgres:postgres /var/lib/postgresql/data/tests/tspace{1,2}
+EOF
