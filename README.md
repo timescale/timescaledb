@@ -33,12 +33,12 @@ make -f docker test
 ### Setting up a local single node database
 After starting the Docker image or local PostgreSQL server, you can initiate a local single node database:
 ```bash
-psql -U postgres -h localhost < scripts/sql/setup_single_node_db.psql
+DB_NAME=iobeamdb ./scripts/setup-db.sh
 ```
 
 This will set up a database named `iobeamdb` which can be accessed with:
 ```bash
-psql -U postgres -h localhost -d iobeamdb
+psql -U postgres -d iobeamdb
 ```
 
 #### Creating a table
