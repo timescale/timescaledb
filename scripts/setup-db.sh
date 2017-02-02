@@ -8,7 +8,7 @@ if [[ -z "$DB_NAME" ]]; then
 fi
 
 # Create data directories for tablespaces tests
-psql -U postgres -v ON_ERROR_STOP=1 << EOF
+psql -h localhost -U postgres -v ON_ERROR_STOP=1 << EOF
 \echo 'Creating database: ${DB_NAME}'
 CREATE DATABASE ${DB_NAME};
 
