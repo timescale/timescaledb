@@ -4,31 +4,38 @@
 - A standard PostgreSQL installation with development environment (header files), or
 - Docker (see separate build and run instructions)
 
-### Build and install with local PostgreSQL
+### Installation
+
+#### Option 1: Build and install with local PostgreSQL
 
 ```bash
 # To build the extension
-make 
+make
 
-# To install 
+# To install
 make install
 
 # To run tests (needs running Postgres server with preloaded extension)
 make installcheck
 ```
 
-### Build and run in Docker
+#### Option 2: Build and run in Docker
 
-```
+```bash
 # To build a Docker image
 make -f docker.mk build-image
 
-# To run a container 
+# To run a container
 make -f docker.mk run
 
 # To run tests
 make -f docker test
 ```
+
+### Sample datasets
+To help you quickly get started, we have created some sample datasets. See
+[Using our samples](docs/UsingSamples.md) for further instructions.
+
 
 ### Setting up a local single node database
 After starting the Docker image or local PostgreSQL server, you can initiate a local single node database:
@@ -38,7 +45,7 @@ DB_NAME=iobeamdb ./scripts/setup-db.sh
 
 This will set up a database named `iobeamdb` which can be accessed with:
 ```bash
-psql -U postgres -d iobeamdb
+psql -U postgres -d iobeamdb -h localhost
 ```
 
 #### Creating a table
