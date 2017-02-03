@@ -1,9 +1,11 @@
 
 -- Sets a database and hostname as a meta node.
 CREATE OR REPLACE FUNCTION set_meta(
-    database_name NAME,
-    hostname      TEXT,
-    port          INT = 5432
+    hostname      TEXT = gethostname(),
+    port          INT  = inet_server_port(),
+    database_name NAME = current_database(),
+    username      TEXT = current_user,
+    password      TEXT = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -16,6 +18,8 @@ BEGIN
     LIMIT 1;
 
     IF meta_row IS NULL THEN
+        PERFORM add_cluster_user(username, password);
+        PERFORM _iobeamdb_internal.setup_meta();
         INSERT INTO _iobeamdb_catalog.meta (database_name, hostname, port, server_name)
         VALUES (database_name, hostname, port, database_name);
     ELSE
@@ -31,7 +35,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION add_node(
     database_name NAME,
     hostname      TEXT,
-    port          INT = 5432
+    port          INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -39,7 +43,6 @@ DECLARE
     schema_name NAME;
     new_id      REGCLASS;
 BEGIN
-
     BEGIN
 
     new_id := nextval(pg_get_serial_sequence('_iobeamdb_catalog.node', 'id'));
@@ -57,14 +60,13 @@ BEGIN
             RAISE EXCEPTION 'Node % already exists', database_name
             USING ERRCODE = 'IO120';
     END;
-
 END
 $BODY$;
 
 -- Adds new user credentials for the cluster.
 CREATE OR REPLACE FUNCTION add_cluster_user(
-    username TEXT,
-    password TEXT
+    username TEXT = current_user,
+    password TEXT = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -76,6 +78,34 @@ EXCEPTION
     WHEN unique_violation THEN
         RAISE EXCEPTION 'User % already exists', username
             USING ERRCODE = 'IO130';
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION setup_single_node(
+    database NAME = current_database(),
+    username TEXT = current_user,
+    password TEXT = NULL,
+    hostname TEXT = gethostname(),
+    port     INT  = inet_server_port()
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    meta_row _iobeamdb_catalog.meta;
+BEGIN
+    SELECT *
+    INTO meta_row
+    FROM _iobeamdb_catalog.meta
+    LIMIT 1;
+
+    IF meta_row IS NULL THEN
+        PERFORM set_meta(hostname, port, database, username, password);
+        PERFORM _iobeamdb_internal.setup_main();
+        PERFORM add_node(database, hostname, port);
+    ELSE
+        RAISE EXCEPTION 'The node is already configured'
+        USING ERRCODE = 'IO501';
+    END IF;
 END
 $BODY$;
 

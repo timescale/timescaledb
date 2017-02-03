@@ -15,29 +15,10 @@ psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extensi
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-SELECT setup_meta();
-SELECT setup_main();
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \o
 \set ECHO ALL
 \c single
-SELECT add_cluster_user('postgres', NULL);
- add_cluster_user 
-------------------
- 
-(1 row)
-
-SELECT set_meta('single' :: NAME, 'fakehost');
- set_meta 
-----------
- 
-(1 row)
-
-SELECT add_node('single' :: NAME, 'fakehost');
- add_node 
-----------
- 
-(1 row)
-
 \ir include/ddl_ops_1.sql
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,

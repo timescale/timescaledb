@@ -10,15 +10,15 @@ CREATE DATABASE test2;
 
 \c meta
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-select setup_meta();
+select set_meta('localhost');
 
 \c Test1
 CREATE SCHEMA io_test;
 CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
 ALTER DATABASE "Test1" SET search_path = "io_test";
 SET search_path = 'io_test';
-select setup_main();
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
 
 \c test2
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-select setup_main();
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');

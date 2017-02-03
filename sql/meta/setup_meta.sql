@@ -1,5 +1,5 @@
 -- Initializes a meta node in the cluster
-CREATE OR REPLACE FUNCTION setup_meta()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.setup_meta()
     RETURNS void LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE

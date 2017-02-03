@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include "postgres.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_namespace.h"
@@ -530,4 +532,33 @@ static void io_xact_callback(XactEvent event, void *arg)
 			elog(ERROR, "unkown xact event: %d", event);
 	}
 	callbackConnections = NIL;
+}
+
+/* Function to get the local hostname. */
+PG_FUNCTION_INFO_V1(pg_gethostname);
+Datum
+pg_gethostname(PG_FUNCTION_ARGS)
+{
+	text *t;
+	long hostname_max_len = sysconf(_SC_HOST_NAME_MAX);
+	size_t length;
+
+	if (hostname_max_len == -1)
+	{
+		PG_RETURN_TEXT_P(NULL);
+	}
+
+	t = (text *) palloc(VARHDRSZ + hostname_max_len + 1);
+	SET_VARSIZE(t, VARHDRSZ);
+	memset(VARDATA(t), '\0', hostname_max_len + 1);
+
+	if (gethostname((char *)VARDATA(t), hostname_max_len) == -1)
+	{
+		PG_RETURN_TEXT_P(NULL);
+	}
+
+	length = strnlen((char *)VARDATA(t), hostname_max_len);
+	SET_VARSIZE(t, VARHDRSZ + length);
+
+	PG_RETURN_TEXT_P(t);
 }

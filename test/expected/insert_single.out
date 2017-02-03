@@ -12,38 +12,14 @@ CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
-SELECT setup_meta();
- setup_meta 
-------------
- 
-(1 row)
-
-SELECT setup_main();
- setup_main 
-------------
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+ setup_single_node 
+-------------------
  
 (1 row)
 
 \c single
 \set ECHO ALL
-SELECT add_cluster_user('postgres', NULL);
- add_cluster_user 
-------------------
- 
-(1 row)
-
-SELECT set_meta('single' :: NAME, 'fakehost');--fakehost makes sure there is no network communication
- set_meta 
-----------
- 
-(1 row)
-
-SELECT add_node('single' :: NAME, 'fakehost');
- add_node 
-----------
- 
-(1 row)
-
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,

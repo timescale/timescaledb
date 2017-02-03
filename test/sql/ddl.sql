@@ -7,13 +7,6 @@
 
 \o
 \set ECHO ALL
-\c meta
-SELECT add_cluster_user('postgres', NULL);
-
-SELECT set_meta('meta' :: NAME, 'localhost');
-SELECT add_node('Test1' :: NAME, 'localhost');
-SELECT add_node('test2' :: NAME, 'localhost');
-
 \c Test1
 
 

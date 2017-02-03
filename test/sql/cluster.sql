@@ -6,17 +6,8 @@
 
 \set ECHO ALL
 \c meta
-SELECT add_cluster_user('postgres', NULL);
-
-SELECT set_meta('meta' :: NAME, 'localhost');
-SELECT add_node('Test1' :: NAME, 'localhost');
-
-SELECT add_node('test2' :: NAME, 'localhost');
-
-
 \set ON_ERROR_STOP 0
 SELECT add_node('should_fail' :: NAME, 'localhost', -1);
-
 \set ON_ERROR_STOP 1
 
 \c Test1

@@ -18,9 +18,9 @@ psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-select setup_meta();
- setup_meta 
-------------
+select set_meta('localhost');
+ set_meta 
+----------
  
 (1 row)
 
@@ -35,9 +35,9 @@ psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 ALTER DATABASE "Test1" SET search_path = "io_test";
 SET search_path = 'io_test';
-select setup_main();
- setup_main 
-------------
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
+ join_cluster 
+--------------
  
 (1 row)
 
@@ -49,38 +49,14 @@ psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-select setup_main();
- setup_main 
-------------
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
+ join_cluster 
+--------------
  
 (1 row)
 
 \set ECHO ALL
 \c meta
-SELECT add_cluster_user('postgres', NULL);
- add_cluster_user 
-------------------
- 
-(1 row)
-
-SELECT set_meta('meta' :: NAME, 'localhost');
- set_meta 
-----------
- 
-(1 row)
-
-SELECT add_node('Test1' :: NAME, 'localhost');
- add_node 
-----------
- 
-(1 row)
-
-SELECT add_node('test2' :: NAME, 'localhost');
- add_node 
-----------
- 
-(1 row)
-
 \set ON_ERROR_STOP 0
 SELECT add_node('should_fail' :: NAME, 'localhost', -1);
 ERROR:  08001: could not connect to server "should_fail"

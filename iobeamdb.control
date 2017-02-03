@@ -1,5 +1,5 @@
 # iobeamdb extension
-comment = 'iobeamdb extensioon'
+comment = 'iobeamdb extension'
 default_version = '1.0'
 module_pathname = '$libdir/iobeamdb'
 requires = 'dblink, postgres_fdw, hstore'
