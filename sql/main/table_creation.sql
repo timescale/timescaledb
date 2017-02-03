@@ -227,10 +227,14 @@ BEGIN
         $$,
             schema_name, table_name);
 
+    --check constraints added with NOT VALID to prevent constly checks of what's already there.
+    --such constraints check new entries but not old ones
+    --TODO a background task should VALIDATE them later
+    --TODO initial constraints on new tables don't need NOT VALID
     IF start_time IS NOT NULL AND end_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s)
+            ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s) NOT VALID
         $$,
             _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
             schema_name, table_name,
@@ -239,7 +243,7 @@ BEGIN
     ELSIF start_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %s)
+            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %s) NOT VALID
         $$,
             schema_name, table_name,
             _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
@@ -247,8 +251,8 @@ BEGIN
         ELSIF end_time IS NOT NULL THEN
         EXECUTE format(
             $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s)
-        $$,
+            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s) NOT VALID
+            $$,
             schema_name, table_name,
             _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
             _iobeamdb_internal.time_literal_sql(end_time, time_col_type));
