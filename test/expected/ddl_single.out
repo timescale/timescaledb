@@ -142,7 +142,8 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _iobeamdb_internal._hyper_1_0_replica
+Child tables: _copy_temp_1,
+              _iobeamdb_internal._hyper_1_0_replica
 
 \d+ _iobeamdb_internal._hyper_1_1_0_1_data
                        Table "_iobeamdb_internal._hyper_1_1_0_1_data"

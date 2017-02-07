@@ -131,8 +131,9 @@ BEGIN
         $$, copy_table_oid, hypertable_id, 
         _iobeamdb_internal.extract_time_sql(format('ct.%I', hypertable_row.time_column_name), hypertable_row.time_column_type));
 
+    --can be inserting empty set so not strict.
     EXECUTE point_record_query_sql
-    INTO STRICT point_record;
+    INTO point_record;
 
     IF point_record.time IS NOT NULL AND point_record.partition_id IS NULL THEN
         RAISE EXCEPTION 'Should never happen: could not find partition for insert'
@@ -205,5 +206,20 @@ BEGIN
             USING ERRCODE = 'IO501';
         END IF;
     END LOOP;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.insert_trigger_on_copy_table()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            SELECT _iobeamdb_internal.insert_data(
+                (SELECT id FROM _iobeamdb_catalog.hypertable h
+                WHERE h.id = %1$L::int)
+                , %2$L)
+        $$,  TG_ARGV[0], TG_RELID);
+    RETURN NEW;
 END
 $BODY$;

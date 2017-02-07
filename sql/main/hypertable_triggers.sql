@@ -70,6 +70,7 @@ BEGIN
                 CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table();
             $$, NEW.schema_name, NEW.table_name);
+          
 
         RETURN NEW;
     END IF;
