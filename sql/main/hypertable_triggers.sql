@@ -19,21 +19,13 @@ BEGIN
 END
 $BODY$;
 
--- Trigger function to move INSERT'd data on the main table to child tables.
--- After data is inserted on the main table, it is placed in the correct
--- partition tables based on its partition key and time.
+--Trigger for when stuff is inserted into main table (error because everything should go through a temp table)
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_modify_main_table()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
-BEGIN
-    EXECUTE format(
-        $$
-            SELECT _iobeamdb_internal.insert_data(
-                (SELECT id FROM _iobeamdb_catalog.hypertable h
-                WHERE h.schema_name = %1$L AND h.table_name = %2$L)
-                , %3$L)
-        $$, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_RELID);
-    RETURN NEW;
+BEGIN 
+    RAISE EXCEPTION 'Should never be inserting data directly into main table'
+    USING ERRCODE = 'IO501';
 END
 $BODY$;
 

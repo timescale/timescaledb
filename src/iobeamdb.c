@@ -219,7 +219,6 @@ change_table_name_walker(Node *node, void *context)
 
 	if (IsA(node, RangeTblEntry))
 	{
-		//elog(WARNING, "Here1");
 		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
 		change_table_name_context* ctx = (change_table_name_context *)context;
 		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
@@ -356,6 +355,7 @@ get_hypertable_info(Oid mainRelationOid)
 	return NULL;
 }
 
+/* Make a RangeVar from a regclass Oid */
 RangeVar *
 makeRangeVarFromRelid(Oid relid) {
 	Oid namespace = get_rel_namespace(relid);
@@ -365,7 +365,10 @@ makeRangeVarFromRelid(Oid relid) {
 	return makeRangeVar(schemaName, tableName,-1);
 }
 
-
+/* Creates a temp table for INSERT and COPY commands. This table
+ * stores the data until it is distributed to the appropriate chunks.
+ * The copy table uses ON COMMIT DELETE ROWS and inherits from the root table.
+ * */
 Oid create_copy_table(hypertable_info *hinfo) {
 	/* Inserting into a hypertable transformed into inserting
 	 * into a "copy" temporary table that has a trigger
@@ -704,6 +707,7 @@ pg_gethostname(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(t);
 }
 
+/* Calls the default ProcessUtility */
 void
 prev_ProcessUtility(Node *parsetree,
 						const char *queryString,
@@ -724,7 +728,7 @@ prev_ProcessUtility(Node *parsetree,
 
 }
 
-
+/* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table. */
 void iobeamdb_ProcessUtility(Node *parsetree,
 							 const char *queryString,
 							 ProcessUtilityContext context,
@@ -732,7 +736,7 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 							 DestReceiver *dest,
 							 char *completionTag)
 {
-	if (IsA(parsetree, CopyStmt))
+	if (IobeamLoaded() && IsA(parsetree, CopyStmt))
 	{
 		CopyStmt *copystmt = (CopyStmt *) parsetree;
 		Oid relId = RangeVarGetRelid(copystmt->relation, NoLock, true);

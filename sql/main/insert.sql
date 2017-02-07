@@ -215,10 +215,7 @@ $BODY$
 BEGIN
     EXECUTE format(
         $$
-            SELECT _iobeamdb_internal.insert_data(
-                (SELECT id FROM _iobeamdb_catalog.hypertable h
-                WHERE h.id = %1$L::int)
-                , %2$L)
+            SELECT _iobeamdb_internal.insert_data(%1$L, %2$L)
         $$,  TG_ARGV[0], TG_RELID);
     RETURN NEW;
 END
