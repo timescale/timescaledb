@@ -217,7 +217,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.set_time_constraint(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-  time_col_type regtype;
+    time_col_type regtype;
 BEGIN
     time_col_type := _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name);
 
