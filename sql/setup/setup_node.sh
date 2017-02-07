@@ -26,7 +26,7 @@ DROP DATABASE IF EXISTS "$INSTALL_DB";
 CREATE DATABASE "$INSTALL_DB";
 \c "$INSTALL_DB"
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-SELECT setup_main();
+SELECT _iobeamdb_internal.setup_main();
 EOF
 
 cd $PWD

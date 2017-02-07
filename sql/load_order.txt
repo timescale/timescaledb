@@ -7,6 +7,7 @@ sql/common/hash_function.sql
 sql/common/rpc.sql
 sql/common/meta_api.sql
 sql/common/data_api.sql
+sql/common/utils.sql
 sql/meta/cluster.sql
 sql/meta/node_triggers.sql
 sql/meta/chunk_triggers.sql
@@ -22,6 +23,7 @@ sql/meta/ddl.sql
 sql/main/time_util.sql
 sql/main/table_creation.sql
 sql/main/tables.sql
+sql/main/cluster.sql
 sql/main/cluster_user_triggers.sql
 sql/main/node_triggers.sql
 sql/main/meta_triggers.sql

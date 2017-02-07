@@ -21,7 +21,7 @@ psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-select setup_meta();
+select set_meta('localhost');
 \c Test1
 CREATE SCHEMA io_test;
 CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
@@ -33,7 +33,7 @@ psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 ALTER DATABASE "Test1" SET search_path = "io_test";
 SET search_path = 'io_test';
-select setup_main();
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
 \c test2
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
@@ -42,12 +42,7 @@ psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required ext
 LOCATION:  CreateExtensionInternal, extension.c:1441
 psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-select setup_main();
-\c meta
-SELECT add_cluster_user('postgres', NULL);
-SELECT set_meta('meta' :: NAME, 'localhost');
-SELECT add_node('Test1' :: NAME, 'localhost');
-SELECT add_node('test2' :: NAME, 'localhost');
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
 \c Test1
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,

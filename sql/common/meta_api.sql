@@ -238,3 +238,29 @@ BEGIN
     RETURN chunk_row;
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _iobeamdb_meta_api.join_cluster(
+    meta_database   NAME,
+    meta_hostname   TEXT,
+    meta_port       INT,
+    node_database   NAME,
+    node_hostname   TEXT,
+    node_port       INT,
+    username        TEXT,
+    password        TEXT
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    sql_stmt TEXT;
+BEGIN
+    sql_stmt := format('SELECT add_node(%L, %L, %L)', node_database, node_hostname, node_port);
+
+    IF meta_database = current_database() THEN
+        EXECUTE sql_stmt;
+    ELSE
+        PERFORM * FROM dblink(format('host=%s port=%s dbname=%s user=%s password=%s',
+                                     meta_hostname, meta_port, meta_database, username, password), sql_stmt) AS r(t TEXT);
+    END IF;
+END
+$BODY$;

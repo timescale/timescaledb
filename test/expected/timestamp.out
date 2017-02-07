@@ -14,7 +14,7 @@ CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-select setup_meta();
+select set_meta('localhost');
 \c Test1
 CREATE SCHEMA io_test;
 CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
@@ -23,40 +23,15 @@ psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension 
 psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
 ALTER DATABASE "Test1" SET search_path = "io_test";
 SET search_path = 'io_test';
-select setup_main();
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
 \c test2
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
-select setup_main();
+select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
 \o
 \set ECHO ALL
-\c meta
-SELECT add_cluster_user('postgres', NULL);
- add_cluster_user 
-------------------
- 
-(1 row)
-
-SELECT set_meta('meta' :: NAME, 'localhost');
- set_meta 
-----------
- 
-(1 row)
-
-SELECT add_node('Test1' :: NAME, 'localhost');
- add_node 
-----------
- 
-(1 row)
-
-SELECT add_node('test2' :: NAME, 'localhost');
- add_node 
-----------
- 
-(1 row)
-
 \c Test1
 -- Utility function for grouping/slotting time with a given interval.
 CREATE OR REPLACE FUNCTION date_group(

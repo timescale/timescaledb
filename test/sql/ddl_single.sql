@@ -8,10 +8,6 @@
 \o
 \set ECHO ALL
 \c single
-SELECT add_cluster_user('postgres', NULL);
-
-SELECT set_meta('single' :: NAME, 'fakehost');
-SELECT add_node('single' :: NAME, 'fakehost');
 
 \ir include/ddl_ops_1.sql
 

@@ -5,10 +5,6 @@
 \c single
 
 \set ECHO ALL
-SELECT add_cluster_user('postgres', NULL);
-
-SELECT set_meta('single' :: NAME, 'fakehost');--fakehost makes sure there is no network communication
-SELECT add_node('single' :: NAME, 'fakehost');
 
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,

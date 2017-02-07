@@ -1,5 +1,5 @@
 -- Initializes a data node in the cluster.
-CREATE OR REPLACE FUNCTION setup_main()
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.setup_main()
     RETURNS void LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -139,3 +139,15 @@ END
 $BODY$
 SET client_min_messages = WARNING --supress notices for trigger drops
 ;
+
+-- Run setup_main() above with immediate effect by calling through dblink().
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.setup_main_immmediate(
+    database    NAME,
+    username    TEXT,
+    password    TEXT
+)
+    RETURNS TEXT LANGUAGE SQL AS
+$BODY$
+    SELECT * FROM dblink(format('dbname=%s user=%s password=%s', database, username, password),
+                                'SELECT _iobeamdb_internal.setup_main()') AS r(t TEXT);
+$BODY$;
