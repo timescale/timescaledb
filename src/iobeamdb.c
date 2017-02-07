@@ -41,6 +41,9 @@ PG_MODULE_MAGIC;
 static planner_hook_type prev_planner_hook = NULL;
 static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 
+/* cached plans */
+static  SPIPlanPtr hypertable_info_plan = NULL;
+
 /* variables */ 
 static bool isLoaded = false;
 
@@ -88,6 +91,8 @@ static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod);
 Oid create_copy_table(hypertable_info *hinfo);
 RangeVar* makeRangeVarFromRelid(Oid relid);
+SPIPlanPtr get_hypertable_info_plan(void);
+
 	
 void iobeamdb_ProcessUtility(Node *parsetree,
 							 const char *queryString,
@@ -117,10 +122,33 @@ _PG_init(void)
 	RegisterXactCallback(io_xact_callback, NULL);
 }
 
+SPIPlanPtr get_hypertable_info_plan() 
+{
+	if (hypertable_info_plan != NULL) {
+		return hypertable_info_plan;
+	}
+	Oid hypertable_info_plan_args[2]={TEXTOID, TEXTOID};
+	SPI_connect();
+	hypertable_info_plan = SPI_prepare(HYPERTABLE_INFO_QUERY, 2, hypertable_info_plan_args);
+	if (NULL == hypertable_info_plan)
+	{
+		elog(ERROR, "Could not prepare plan");
+	}
+	if (SPI_keepplan(hypertable_info_plan) != 0) 
+	{
+		elog(ERROR, "Could not keep plan");
+	}
+	SPI_finish();
+
+	return hypertable_info_plan;
+}
+
+
 void
 _PG_fini(void)
 {
 	planner_hook = prev_planner_hook;
+	ProcessUtility_hook = prev_ProcessUtility_hook; 
 }
 
 bool
@@ -234,32 +262,28 @@ get_hypertable_info(Oid mainRelationOid)
 	Oid hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_iobeamdb_catalog", false));
 	char *tableName = get_rel_name(mainRelationOid);
 	char *schemaName = get_namespace_name(namespace);
-	StringInfo sql = makeStringInfo();
+	Datum args[2] = {CStringGetTextDatum(schemaName), CStringGetTextDatum(tableName)};
 	int ret;
+	SPIPlanPtr plan = get_hypertable_info_plan();
 
 
 	/* prevents infinite recursion, don't check hypertable meta tables */
 	if (
 		hypertable_meta == InvalidOid
 		|| namespace == PG_CATALOG_NAMESPACE
-		|| mainRelationOid == hypertable_meta
-		|| mainRelationOid ==  get_relname_relid("hypertable_replica", get_namespace_oid("_iobeamdb_catalog", false))
-		|| mainRelationOid ==  get_relname_relid("partition_epoch", get_namespace_oid("_iobeamdb_catalog", false))
-		|| mainRelationOid ==  get_relname_relid("default_replica_node", get_namespace_oid("_iobeamdb_catalog", false))
+		|| namespace ==  get_namespace_oid("_iobeamdb_catalog", false)	
 	   )
 	{
 		return NULL;
 	}
 
-	appendStringInfo(sql, HYPERTABLE_INFO_QUERY, schemaName, tableName);
 
 	SPI_connect();
 
-	ret = SPI_execute(sql->data, true, 0);
-
+	ret = SPI_execute_plan(plan, args, NULL, true, 0);	
 	if (ret <= 0)
 	{
-		elog(ERROR, "Got an SPI error");
+		elog(ERROR, "Got an SPI error %d %d", ret, SPI_ERROR_ARGUMENT);
 	}
 
 	if (SPI_processed > 0)
