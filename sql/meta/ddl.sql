@@ -221,3 +221,33 @@ BEGIN
     );
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION drop_chunks(
+    older_than TIMESTAMPTZ,
+    table_name  NAME = NULL,
+    schema_name NAME = NULL
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    older_than_internal BIGINT;
+BEGIN
+    SELECT (EXTRACT(epoch FROM older_than)*1e6)::BIGINT INTO older_than_internal;
+    PERFORM _iobeamdb_meta.drop_chunks_older_than(older_than_internal, table_name, schema_name);
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION drop_chunks(
+    older_than  INTERVAL,
+    table_name  NAME = NULL,
+    schema_name NAME = NULL
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    older_than_ts TIMESTAMPTZ;
+BEGIN
+    older_than_ts := now() - older_than;
+    PERFORM drop_chunks(older_than_ts, table_name, schema_name);
+END
+$BODY$;
