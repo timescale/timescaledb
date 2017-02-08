@@ -151,8 +151,23 @@ BEGIN
     SELECT *
     INTO chunk_row
     FROM _iobeamdb_catalog.chunk c
-    WHERE c.id = chunk_id
+    WHERE c.id = chunk_id AND end_time IS NULL
     FOR UPDATE;
+
+    IF chunk_row IS NULL THEN 
+        --should only happen if the chunk was already closed
+        SELECT *
+        INTO chunk_row
+        FROM _iobeamdb_catalog.chunk c
+        WHERE c.id = chunk_id AND end_time IS NOT NULL;
+
+        IF chunk_row IS NULL THEN 
+            RAISE EXCEPTION 'Should never happen: chunk not found in close.'
+            USING ERRCODE = 'IO501';
+        END IF;
+
+        RETURN;
+    END IF;
 
     --get partition lock
     SELECT *
@@ -160,12 +175,7 @@ BEGIN
     FROM _iobeamdb_catalog.partition
     WHERE id = chunk_row.partition_id
     FOR UPDATE;
-
-    -- the chunk is already closed if its end time is set
-    IF chunk_row.end_time IS NOT NULL THEN
-        RETURN;
-    END IF;
-
+        
     --PHASE 1: lock chunk row on all rows (prevents concurrent chunk insert)
     FOR node_row IN
     SELECT *

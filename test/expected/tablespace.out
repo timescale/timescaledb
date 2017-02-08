@@ -145,7 +145,8 @@ Child tables: _iobeamdb_internal._hyper_1_2_0_2_data
  time      | timestamp without time zone |           | plain    |              | 
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
-Child tables: _iobeamdb_internal._hyper_1_0_replica
+Child tables: _copy_temp_1,
+              _iobeamdb_internal._hyper_1_0_replica
 
 --cleanup
 drop table test_tspace;

@@ -193,7 +193,7 @@ Indexes:
     "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint)
+    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint) NOT VALID
 Inherits: "testNs"._hyper_1_1_0_partition
 
                          Table "testNs._hyper_1_1_0_2_data"
@@ -213,7 +213,7 @@ Indexes:
     "9-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint)
+    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint) NOT VALID
 Inherits: "testNs"._hyper_1_1_0_partition
 
                        Table "testNs._hyper_1_1_0_partition"

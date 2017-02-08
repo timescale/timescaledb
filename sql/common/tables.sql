@@ -51,7 +51,7 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.cluster_user', '')
 -- in `time_column_name` and `time_column_type`.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.hypertable (
     id                      SERIAL                                  PRIMARY KEY,
-    schema_name             NAME                                    NOT NULL,
+    schema_name             NAME                                    NOT NULL CHECK (schema_name != '_iobeamdb_catalog'),
     table_name              NAME                                    NOT NULL,
     associated_schema_name  NAME                                    NOT NULL,
     associated_table_prefix NAME                                    NOT NULL,

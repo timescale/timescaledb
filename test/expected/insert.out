@@ -185,7 +185,7 @@ Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
  series_bool | boolean          |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint)
+    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint) NOT VALID
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
@@ -201,7 +201,7 @@ Inherits: _iobeamdb_internal._hyper_1_1_0_partition
  series_bool | boolean          |           |             | plain    |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint)
+    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint) NOT VALID
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_2_data')
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
@@ -283,7 +283,7 @@ Child tables: _iobeamdb_internal._hyper_2_3_0_partition,
  device_id | text    |           |             | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" <= '1'::bigint)
+    "time_range" CHECK ("time" <= '1'::bigint) NOT VALID
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_2_3_0_4_data')
 Inherits: _iobeamdb_internal._hyper_2_3_0_partition
@@ -296,7 +296,7 @@ Inherits: _iobeamdb_internal._hyper_2_3_0_partition
  device_id | text    |           |             | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint)
+    "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint) NOT VALID
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_2_3_0_5_data')
 Inherits: _iobeamdb_internal._hyper_2_3_0_partition
@@ -309,7 +309,7 @@ Inherits: _iobeamdb_internal._hyper_2_3_0_partition
  device_id | text    |           |             | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" >= '3'::bigint)
+    "time_range" CHECK ("time" >= '3'::bigint) NOT VALID
 Server: test2
 FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_2_3_0_6_data')
 Inherits: _iobeamdb_internal._hyper_2_3_0_partition
@@ -447,7 +447,7 @@ Indexes:
     "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint)
+    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint) NOT VALID
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
                    Table "_iobeamdb_internal._hyper_1_1_0_2_data"
@@ -467,7 +467,7 @@ Indexes:
     "9-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint)
+    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint) NOT VALID
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
 
                  Table "_iobeamdb_internal._hyper_1_1_0_partition"
@@ -543,7 +543,7 @@ Child tables: _iobeamdb_internal._hyper_2_3_0_partition,
  device_id | text    |           | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" <= '1'::bigint)
+    "time_range" CHECK ("time" <= '1'::bigint) NOT VALID
 Inherits: _iobeamdb_internal._hyper_2_3_0_partition
 
              Table "_iobeamdb_internal._hyper_2_3_0_5_data"
@@ -554,7 +554,7 @@ Inherits: _iobeamdb_internal._hyper_2_3_0_partition
  device_id | text    |           | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint)
+    "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint) NOT VALID
 Inherits: _iobeamdb_internal._hyper_2_3_0_partition
 
              Table "_iobeamdb_internal._hyper_2_3_0_6_data"
@@ -565,7 +565,7 @@ Inherits: _iobeamdb_internal._hyper_2_3_0_partition
  device_id | text    |           | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" >= '3'::bigint)
+    "time_range" CHECK ("time" >= '3'::bigint) NOT VALID
 Inherits: _iobeamdb_internal._hyper_2_3_0_partition
 
             Table "_iobeamdb_internal._hyper_2_3_0_partition"

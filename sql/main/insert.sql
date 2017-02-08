@@ -94,6 +94,10 @@ DECLARE
     point_record                RECORD;
     chunk_row                   _iobeamdb_catalog.chunk;
     crn_record                  RECORD;
+    hypertable_row              RECORD;
+    partition_constraint_where_clause   TEXT = '';
+    column_list TEXT = '';
+    insert_sql TEXT ='';
 BEGIN
     --This guard protects against calling insert_data() twice in the same transaction,
     --which might otherwise cause a deadlock in case the second insert_data() involves a chunk
@@ -107,28 +111,29 @@ BEGIN
     END IF;
 
     PERFORM set_config('io.insert_data_guard', 'on', true);
+    PERFORM set_config('io.ignore_delete_in_trigger', 'true', true);
+
+    SELECT * INTO hypertable_row FROM _iobeamdb_catalog.hypertable h WHERE h.id = hypertable_id;
+    column_list :=  _iobeamdb_internal.get_column_list(hypertable_id);
 
     point_record_query_sql := format(
         $$
-            SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s') AS time,
-                   h.time_column_name, h.time_column_type,
+            SELECT %3$s AS time,
                    p.id AS partition_id, p.keyspace_start, p.keyspace_end,
                    pe.partitioning_func_schema, pe.partitioning_func, pe.partitioning_column, pe.partitioning_mod
-            FROM ONLY %1$s ct
-            LEFT JOIN _iobeamdb_catalog.hypertable h ON (h.id = %2$L)
+            FROM (SELECT * FROM ONLY %1$s LIMIT 1) ct
             LEFT JOIN _iobeamdb_catalog.partition_epoch pe ON (
               pe.hypertable_id = %2$L AND
-              (pe.start_time <= (SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
-                OR pe.start_time IS NULL) AND
-              (pe.end_time   >= (SELECT _iobeamdb_internal.get_time_column_from_record(h.time_column_name, h.time_column_type, ct, '%1$s'))::bigint
-                OR pe.end_time IS NULL)
+              (pe.start_time <= %3$s OR pe.start_time IS NULL) AND
+              (pe.end_time   >= %3$s OR pe.end_time IS NULL)
             )
-            LEFT JOIN _iobeamdb_internal.get_partition_for_epoch_row(pe, ct, '%1$s') AS p ON(true)
-            LIMIT 1
-        $$, copy_table_oid, hypertable_id);
+            LEFT JOIN _iobeamdb_internal.get_partition_for_epoch_row(pe, ct::%1$s, '%1$s') AS p ON(true)
+        $$, copy_table_oid, hypertable_id, 
+        _iobeamdb_internal.extract_time_sql(format('ct.%I', hypertable_row.time_column_name), hypertable_row.time_column_type));
 
+    --can be inserting empty set so not strict.
     EXECUTE point_record_query_sql
-    INTO STRICT point_record;
+    INTO point_record;
 
     IF point_record.time IS NOT NULL AND point_record.partition_id IS NULL THEN
         RAISE EXCEPTION 'Should never happen: could not find partition for insert'
@@ -145,59 +150,53 @@ BEGIN
         --Get a chunk with lock
         chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time, TRUE);
 
-        --Do insert on all chunk replicas
-        FOR crn_record IN
-        SELECT
-            crn.database_name,
-            crn.schema_name,
-            crn.table_name,
-            pr.hypertable_id,
-            pr.replica_id
-        FROM _iobeamdb_catalog.chunk_replica_node crn
-        INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.id = crn.partition_replica_id)
-        WHERE (crn.chunk_id = chunk_row.id)
-        LOOP
-            PERFORM set_config('io.ignore_delete_in_trigger', 'true', true);
+        IF point_record.partitioning_column IS NOT NULL THEN
+            --if we are inserting across more than one partition,
+            --construct a WHERE clause constraint that SELECTs only
+            --values from copy table that match the current partition
+            partition_constraint_where_clause := format(
+                $$
+                WHERE (%1$I >= %2$s OR %2$s IS NULL) AND (%1$I <= %3$s OR %3$s IS NULL) AND
+                  (%4$I.%5$I(%6$I::TEXT, %7$L) BETWEEN %8$L AND %9$L)
+                $$,
+                hypertable_row.time_column_name,
+                _iobeamdb_internal.time_literal_sql(chunk_row.start_time, hypertable_row.time_column_type),
+                _iobeamdb_internal.time_literal_sql(chunk_row.end_time, hypertable_row.time_column_type),
+                point_record.partitioning_func_schema,
+                point_record.partitioning_func,
+                point_record.partitioning_column,
+                point_record.partitioning_mod,
+                point_record.keyspace_start,
+                point_record.keyspace_end
+            );
+        END IF;
 
-            DECLARE
-                partition_constraint_where_clause   TEXT = '';
-            BEGIN
-                IF point_record.partitioning_column IS NOT NULL THEN
-                    --if we are inserting across more than one partition,
-                    --construct a WHERE clause constraint that SELECTs only
-                    --values from copy table that match the current partition
-                    partition_constraint_where_clause := format(
-                        $$
-                        WHERE (%1$I >= %2$s OR %2$s IS NULL) AND (%1$I <= %3$s OR %3$s IS NULL) AND
-                          (%4$I.%5$I(%6$I::TEXT, %7$L) BETWEEN %8$L AND %9$L)
-                        $$,
-                        point_record.time_column_name,
-                        _iobeamdb_internal.time_literal_sql(chunk_row.start_time, point_record.time_column_type),
-                        _iobeamdb_internal.time_literal_sql(chunk_row.end_time, point_record.time_column_type),
-                        point_record.partitioning_func_schema,
-                        point_record.partitioning_func,
-                        point_record.partitioning_column,
-                        point_record.partitioning_mod,
-                        point_record.keyspace_start,
-                        point_record.keyspace_end
-                    );
-                END IF;
-                EXECUTE format(
-                    $$
-                    WITH selected AS
-                    (
-                        DELETE FROM ONLY %1$s %2$s
-                        RETURNING *
-                    )
-                    INSERT INTO %3$s (%4$s) SELECT %4$s FROM selected;
-                    $$,
-                        copy_table_oid,
-                        partition_constraint_where_clause,
-                        format('%I.%I', crn_record.schema_name, crn_record.table_name) :: REGCLASS,
-                        _iobeamdb_internal.get_column_list(hypertable_id)
-                    );
-            END;
-        END LOOP;
+        --Do insert on all chunk replicas
+
+       SELECT string_agg(insert_stmt, ',')
+       INTO insert_sql
+       FROM (
+            SELECT format('i_%s AS (INSERT INTO %I.%I (%s) SELECT * FROM selected)',
+                row_number() OVER(), crn.schema_name, crn.table_name, column_list) insert_stmt
+            FROM _iobeamdb_catalog.chunk_replica_node crn
+            WHERE (crn.chunk_id = chunk_row.id)
+       ) AS parts;
+
+       EXECUTE format(
+            $$
+            WITH selected AS
+            (
+                DELETE FROM ONLY %1$s %2$s  
+                RETURNING %4$s
+            ), 
+            %3$s
+            SELECT 1
+            $$,
+                copy_table_oid,
+                partition_constraint_where_clause,
+                insert_sql,
+                column_list
+            );
 
         EXECUTE point_record_query_sql
         INTO point_record;
@@ -207,5 +206,17 @@ BEGIN
             USING ERRCODE = 'IO501';
         END IF;
     END LOOP;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _iobeamdb_internal.insert_trigger_on_copy_table()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    EXECUTE format(
+        $$
+            SELECT _iobeamdb_internal.insert_data(%1$L, %2$L)
+        $$,  TG_ARGV[0], TG_RELID);
+    RETURN NEW;
 END
 $BODY$;
