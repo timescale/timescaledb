@@ -100,3 +100,6 @@ ALTER DATABASE test2 SET timezone ='EST';
 SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
+
+-- check time conversion
+SELECT _iobeamdb_internal.time_value_to_timestamp(1486480176236538);
