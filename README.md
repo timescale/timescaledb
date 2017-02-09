@@ -39,10 +39,10 @@ run an initialization function.
 
 ```sql
 # Install the extension
-CREATE database test;
+CREATE DATABASE test;
 \c test
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-select setup_single_node();
+SELECT setup_single_node();
 ```
 
 For convenience, this can also be done in one step by running a script from
@@ -57,18 +57,19 @@ This extension allows creating time-series optimized data tables,
 called **hypertables**.
 
 ### Creating (hyper)tables
-To create a hypertable, you start with a regular SQL table, and then convert it
-into a hypertable via the function `create_hypertable()`([API Definition](extension/sql/main/ddl.sql)).
+To create a hypertable, you start with a regular SQL table, and then convert
+it into a hypertable via the function
+`create_hypertable()`([API Definition](extension/sql/main/ddl.sql)).
 
 The following example creates a hypertable for tracking
 temperature and humidity across a collection of devices over time.
 
 ```sql
 CREATE TABLE conditions (
-  time TIMESTAMP WITH TIME ZONE NOT NULL,
-  device_id TEXT NOT NULL,
-  temperature DOUBLE PRECISION NULL,
-  humidity DOUBLE PRECISION NULL
+  time        TIMESTAMP WITH TIME ZONE NOT NULL,
+  device_id   TEXT                     NOT NULL,
+  temperature DOUBLE PRECISION         NULL,
+  humidity    DOUBLE PRECISION         NULL
 );
 ```
 
