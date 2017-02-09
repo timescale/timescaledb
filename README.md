@@ -1,12 +1,12 @@
-### Prerequisites
+## Prerequisites
 
 - The [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
 - A standard PostgreSQL installation with development environment (header files), or
 - Docker (see separate build and run instructions)
 
-### Installation
+## Installation
 
-#### Option 1: Build and install with local PostgreSQL
+### Option 1: Build and install with local PostgreSQL
 
 ```bash
 # To build the extension
@@ -19,7 +19,7 @@ make install
 make installcheck
 ```
 
-#### Option 2: Build and run in Docker
+### Option 2: Build and run in Docker
 
 ```bash
 # To build a Docker image
@@ -29,37 +29,40 @@ make -f docker.mk build-image
 make -f docker.mk run
 
 # To run tests
-make -f docker test
+make -f docker.mk test
 ```
 
-### Sample datasets
-To help you quickly get started, we have created some sample datasets. See
-[Using our samples](docs/UsingSamples.md) for further instructions.
+### Setting up your database
 
+When creating a new database, it is necessary to install the extension and
+run an initialization function.
 
-### Setting up a local single node database
-After starting the Docker image or local PostgreSQL server, you can initiate a local single node database:
+```sql
+# Install the extension
+CREATE database test;
+\c test
+CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+select setup_single_node();
+```
+
+For convenience, this can also be done in one step by running a script from
+the command-line:
 ```bash
 DB_NAME=iobeamdb ./scripts/setup-db.sh
 ```
 
-This will set up a database named `iobeamdb` which can be accessed with:
-```bash
-psql -U postgres -d iobeamdb -h localhost
-```
+## Working with time-series data
 
-#### Creating a table
-Our specialized time-series table, which is the main abstraction for querying
-all your space-time partitions, is called a **hypertable**.
+This extension allows creating time-series optimized data tables,
+called **hypertables**.
 
+### Creating (hyper)tables
 To create a hypertable, you start with a regular SQL table, and then convert it
-into a hypertable via the function `create_hypertable()`([API Definition](extension/sql/main/ddl.sql)) (which
-  is loaded when you install the extension).
+into a hypertable via the function `create_hypertable()`([API Definition](extension/sql/main/ddl.sql)).
 
-For example, let's create a hypertable for tracking
+The following example creates a hypertable for tracking
 temperature and humidity across a collection of devices over time.
 
-First, create a regular SQL table:
 ```sql
 CREATE TABLE conditions (
   time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -69,37 +72,33 @@ CREATE TABLE conditions (
 );
 ```
 
-Next, convert it into a hypertable using the provided function
+Next, make it a hypertable using the provided function
 `create_hypertable()`:
 ```sql
 SELECT create_hypertable('"conditions"', 'time', 'device_id');
 ```
 
-Now, a hypertable that is partitioned on time (using the values in the
-`time` column) and on `device_id` has been created.
-
-**Note:**
-
-You can also run the following command from inside the repo to create
-the above table for you:
-```bash
-./scripts/run_sql.sh setup_sample_hypertable.psql
+The hypertable will partition its data along two dimensions: time (using the values in the
+`time` column) and space on `device_id`. Note, however, that space partitioning
+is optional, so one can also do:
+```sql
+SELECT create_hypertable('"conditions"', 'time');
 ```
 
-#### Inserting and Querying
-Inserting data into the hypertable is done via normal SQL INSERT commands,
+### Inserting and Querying
+Inserting data into the hypertable is done via normal SQL `INSERT` commands,
 e.g. using millisecond timestamps:
 ```sql
 INSERT INTO conditions(time,device_id,temperature,humidity)
 VALUES(NOW(), 'office', 70.0, 50.0);
 ```
 
-Similarly, querying data is done via normal SQL SELECT commands.
-SQL UPDATE and DELETE commands also work as expected.
+Similarly, querying data is done via normal SQL `SELECT` commands.
+SQL `UPDATE` and `DELETE` commands also work as expected.
 
 ### Indexing data
 
-Data is indexed using normal SQL CREATE INDEX commands. For instance,
+Data is indexed using normal SQL `CREATE INDEX` commands. For instance,
 ```sql
 CREATE INDEX ON conditions (device_id, time DESC);
 ```
@@ -132,5 +131,25 @@ CREATE INDEX ON conditions (time DESC, humidity) WHERE humidity IS NOT NULL;
 ```
 this creates a more compact, and thus efficient, index.
 
-### Examples
-TODO PROVIDE EXAMPLES
+### Dropping old data using a retention policy
+
+Hypertables allow dropping old data at almost no cost using a built-in API that
+makes it easy to implement retention policies. To drop data older than three months
+from the table `temperature_data`:
+```sql
+SELECT drop_chunks(interval '3 months', 'temperature_data');
+```
+
+This works at the level of table chunks, so if a chunk covers 24 hours of data
+the table might retain up to that amount of additional data (above the three months).
+One can also drop chunks from all hypertables in the database by simply doing:
+```sql
+SELECT drop_chunks(interval '3 months');
+```
+
+For automatic data retention, the above calls can be added to, e.g., a CRON job
+on the database host.
+
+## Sample datasets
+To help you quickly get started, we have created some sample datasets. See
+[Using our samples](docs/UsingSamples.md) for further instructions.
