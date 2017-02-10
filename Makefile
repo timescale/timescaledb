@@ -7,7 +7,7 @@ EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 DATA = $(EXT_SQL_FILE)
 MODULE_big = $(EXTENSION)
 
-SRCS = src/iobeamdb.c src/murmur3.c src/pgmurmur3.c
+SRCS = src/iobeamdb.c src/murmur3.c src/pgmurmur3.c src/utils.c
 OBJS = $(SRCS:.c=.o)
 
 MKFILE_PATH := $(abspath $(MAKEFILE_LIST))
