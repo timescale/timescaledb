@@ -1,10 +1,22 @@
+iobeam is an open-source database designed to make SQL scalable for
+time-series data. It is engineered up from PostgreSQL, providing automatic
+partitioning across time and space (partitioning key), as well as full
+SQL support.
+
+iobeam is packaged as a PostgreSQL extension and set of scripts.
+
+
 ## Prerequisites
 
 - The [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
-- A standard PostgreSQL installation with development environment (header files), or
-- Docker (see separate build and run instructions)
 
-## Installation
+And either:
+
+- *Option 1* - A standard PostgreSQL installation with development environment (header files), OR
+
+- *Option 2* - [Docker](https://docs.docker.com/engine/installation/) (see separate build and run instructions)
+
+## Installation (from source)
 
 ### Option 1: Build and install with local PostgreSQL
 
@@ -32,31 +44,63 @@ make -f docker.mk run
 make -f docker.mk test
 ```
 
-### Setting up your database
+You should now have Postgres running locally, accessible with
+the following command:
 
-When creating a new database, it is necessary to install the extension and
-run an initialization function.
+```bash
+psql -U postgres -h localhost
+```
+
+Next, we'll install our extension and create an initial database.
+
+### Setting up your initial database
+You again have two options for setting up your initial database:
+
+1. *Empty Database* - To set up a new, empty database, please follow the instructions below.
+
+2. *Database with pre-loaded sample data* - To help you quickly get started, we have also created some sample datasets. See
+[Using our Sample Datasets](docs/UsingSamples.md) for further instructions. (Includes installing our extension.)
+
+#### Setting up an empty database
+
+When creating a new database, it is necessary to install the extension and then run an initialization function.
+
+```bash
+# Connect to Postgres
+psql -U postgres -h localhost
+```
 
 ```sql
-# Install the extension
-CREATE DATABASE test;
-\c test
+-- Install the extension
+CREATE database tutorial;
+\c tutorial
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-SELECT setup_single_node();
+
+-- Run initialization function
+select setup_single_node();
 ```
 
 For convenience, this can also be done in one step by running a script from
 the command-line:
 ```bash
-DB_NAME=iobeamdb ./scripts/setup-db.sh
+DB_NAME=tutorial ./scripts/setup-db.sh
 ```
+
+#### Accessing your new database
+You should now have a brand new time-series database running in Postgres.
+
+```bash
+# To access your new database
+psql -U postgres -h localhost -d tutorial
+```
+
+Next let's load some data.
 
 ## Working with time-series data
 
-This extension allows creating time-series optimized data tables,
-called **hypertables**.
+One of the core ideas of our time-series database are time-series optimized data tables, called **hypertables**.
 
-### Creating (hyper)tables
+### Creating a (hyper)table
 To create a hypertable, you start with a regular SQL table, and then convert
 it into a hypertable via the function
 `create_hypertable()`([API Definition](extension/sql/main/ddl.sql)).
@@ -65,6 +109,7 @@ The following example creates a hypertable for tracking
 temperature and humidity across a collection of devices over time.
 
 ```sql
+-- We start by creating a regular SQL table
 CREATE TABLE conditions (
   time        TIMESTAMP WITH TIME ZONE NOT NULL,
   device_id   TEXT                     NOT NULL,
@@ -74,7 +119,7 @@ CREATE TABLE conditions (
 ```
 
 Next, make it a hypertable using the provided function
-`create_hypertable()`:
+`create_hypertable()` (with `device_id` as the partition key):
 ```sql
 SELECT create_hypertable('"conditions"', 'time', 'device_id');
 ```
@@ -136,21 +181,18 @@ this creates a more compact, and thus efficient, index.
 
 Hypertables allow dropping old data at almost no cost using a built-in API that
 makes it easy to implement retention policies. To drop data older than three months
-from the table `temperature_data`:
+from the table `conditions`:
 ```sql
-SELECT drop_chunks(interval '3 months', 'temperature_data');
+SELECT drop_chunks(interval '3 months', 'conditions');
 ```
 
 This works at the level of table chunks, so if a chunk covers 24 hours of data
 the table might retain up to that amount of additional data (above the three months).
+
 One can also drop chunks from all hypertables in the database by simply doing:
 ```sql
 SELECT drop_chunks(interval '3 months');
 ```
 
-For automatic data retention, the above calls can be added to, e.g., a CRON job
-on the database host.
-
-## Sample datasets
-To help you quickly get started, we have created some sample datasets. See
-[Using our samples](docs/UsingSamples.md) for further instructions.
+For automatic data retention, the above calls can be added to (for example)
+a CRON job on the database host.

@@ -1,3 +1,4 @@
+*~
 /sql/tests/unit/testoutputs.tmp
 /sql/iobeamdb--*.sql
 /data/
@@ -5,3 +6,4 @@
 /src/*.so
 /.vscode/
 /iobeamdb.so
+*.bak
