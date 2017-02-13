@@ -1,4 +1,4 @@
-
+/* -*- Mode: C; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- */
 #include "pgmurmur3.h"
 
 #include "utils/builtins.h"

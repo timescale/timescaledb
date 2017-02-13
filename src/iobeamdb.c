@@ -1,3 +1,4 @@
+/* -*- Mode: C; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- */
 #include <unistd.h>
 
 #include "postgres.h"
@@ -44,7 +45,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 /* cached plans */
 static  SPIPlanPtr hypertable_info_plan = NULL;
 
-/* variables */ 
+/* variables */
 static bool isLoaded = false;
 
 /* definitions */
@@ -93,7 +94,7 @@ Oid create_copy_table(hypertable_info *hinfo);
 RangeVar* makeRangeVarFromRelid(Oid relid);
 SPIPlanPtr get_hypertable_info_plan(void);
 
-	
+
 void iobeamdb_ProcessUtility(Node *parsetree,
 							 const char *queryString,
 							 ProcessUtilityContext context,
@@ -101,11 +102,11 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 							 DestReceiver *dest,
 							 char *completionTag);
 void prev_ProcessUtility(Node *parsetree,
-							 const char *queryString,
-							 ProcessUtilityContext context,
-							 ParamListInfo params,
-							 DestReceiver *dest,
-							 char *completionTag);
+						 const char *queryString,
+						 ProcessUtilityContext context,
+						 ParamListInfo params,
+						 DestReceiver *dest,
+						 char *completionTag);
 
 
 
@@ -117,27 +118,32 @@ _PG_init(void)
 	planner_hook = iobeamdb_planner;
 
 	prev_ProcessUtility_hook = ProcessUtility_hook;
- 	ProcessUtility_hook = iobeamdb_ProcessUtility;
+	ProcessUtility_hook = iobeamdb_ProcessUtility;
 
 	RegisterXactCallback(io_xact_callback, NULL);
 }
 
-SPIPlanPtr get_hypertable_info_plan() 
+SPIPlanPtr get_hypertable_info_plan()
 {
+	Oid hypertable_info_plan_args[2] = {TEXTOID, TEXTOID};
+
 	if (hypertable_info_plan != NULL) {
 		return hypertable_info_plan;
 	}
-	Oid hypertable_info_plan_args[2]={TEXTOID, TEXTOID};
+
 	SPI_connect();
 	hypertable_info_plan = SPI_prepare(HYPERTABLE_INFO_QUERY, 2, hypertable_info_plan_args);
+
 	if (NULL == hypertable_info_plan)
 	{
 		elog(ERROR, "Could not prepare plan");
 	}
-	if (SPI_keepplan(hypertable_info_plan) != 0) 
+
+	if (SPI_keepplan(hypertable_info_plan) != 0)
 	{
 		elog(ERROR, "Could not keep plan");
 	}
+
 	SPI_finish();
 
 	return hypertable_info_plan;
@@ -148,7 +154,7 @@ void
 _PG_fini(void)
 {
 	planner_hook = prev_planner_hook;
-	ProcessUtility_hook = prev_ProcessUtility_hook; 
+	ProcessUtility_hook = prev_ProcessUtility_hook;
 }
 
 bool
@@ -157,6 +163,7 @@ IobeamLoaded(void)
 	if (!isLoaded)
 	{
 		Oid id = get_extension_oid("iobeamdb", true);
+
 		if (id != InvalidOid)
 		{
 			isLoaded = true;
@@ -268,10 +275,10 @@ get_hypertable_info(Oid mainRelationOid)
 
 	/* prevents infinite recursion, don't check hypertable meta tables */
 	if (
-		hypertable_meta == InvalidOid
-		|| namespace == PG_CATALOG_NAMESPACE
-		|| namespace ==  get_namespace_oid("_iobeamdb_catalog", false)	
-	   )
+			hypertable_meta == InvalidOid
+			|| namespace == PG_CATALOG_NAMESPACE
+			|| namespace ==  get_namespace_oid("_iobeamdb_catalog", false)
+		)
 	{
 		return NULL;
 	}
@@ -279,7 +286,8 @@ get_hypertable_info(Oid mainRelationOid)
 
 	SPI_connect();
 
-	ret = SPI_execute_plan(plan, args, NULL, true, 0);	
+	ret = SPI_execute_plan(plan, args, NULL, true, 0);
+
 	if (ret <= 0)
 	{
 		elog(ERROR, "Got an SPI error %d %d", ret, SPI_ERROR_ARGUMENT);
@@ -318,6 +326,7 @@ get_hypertable_info(Oid mainRelationOid)
 			}
 
 			partitioning_func_schema = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
+
 			if (!isnull) {
 				info->partitioning_func_schema = SPI_palloc(sizeof(NameData));
 				memcpy(info->partitioning_func_schema, partitioning_func_schema,  sizeof(NameData));
@@ -342,16 +351,18 @@ get_hypertable_info(Oid mainRelationOid)
 		SPI_finish();
 
 		partitioning_info_list = NIL;
+
 		for (j = 0; j < total_rows; j++)
 		{
 			partitioning_info_list = lappend(partitioning_info_list, partitioning_info_array[j]);
 		}
 		pfree(partitioning_info_array);
-
 		hinfo->partitioning_info = partitioning_info_list;
+
 		return hinfo;
 	}
 	SPI_finish();
+
 	return NULL;
 }
 
@@ -376,25 +387,28 @@ Oid create_copy_table(hypertable_info *hinfo) {
 	 * */
 	Oid copy_table_relid;
 	ObjectAddress copyTableRelationAddr;
-
 	StringInfo temp_table_name = makeStringInfo();
-	appendStringInfo(temp_table_name, "_copy_temp_%d", hinfo->hypertable_id);
-
 	StringInfo hypertable_id_arg = makeStringInfo();
+	RangeVar *parent, *rel;
+	CreateStmt *create;
+	CreateTrigStmt *createTrig;
+
+	appendStringInfo(temp_table_name, "_copy_temp_%d", hinfo->hypertable_id);
 	appendStringInfo(hypertable_id_arg, "%d", hinfo->hypertable_id);
 
-	RangeVar *parent = makeRangeVarFromRelid(hinfo->root_oid);
+	parent = makeRangeVarFromRelid(hinfo->root_oid);
 
-	RangeVar *rel = makeRangeVar("pg_temp",temp_table_name->data,-1);
+	rel = makeRangeVar("pg_temp", temp_table_name->data,-1);
 	rel->relpersistence = RELPERSISTENCE_TEMP;
 
-	RangeVarGetAndCheckCreationNamespace(rel, NoLock,
-										 &copy_table_relid);
+	RangeVarGetAndCheckCreationNamespace(rel, NoLock, &copy_table_relid);
+
 	if (OidIsValid(copy_table_relid)) {
 		return copy_table_relid;
 	}
 
-	CreateStmt *create = makeNode(CreateStmt);
+	create = makeNode(CreateStmt);
+
 	/*
 	 * Create the target relation by faking up a CREATE TABLE parsetree and
 	 * passing it to DefineRelation.
@@ -411,7 +425,7 @@ Oid create_copy_table(hypertable_info *hinfo) {
 
 	copyTableRelationAddr = DefineRelation(create, RELKIND_RELATION, InvalidOid, NULL);
 
-	CreateTrigStmt *createTrig = makeNode(CreateTrigStmt);
+	createTrig = makeNode(CreateTrigStmt);
 	createTrig->trigname = "insert_trigger";
 	createTrig->relation =  rel;
 	createTrig->funcname =  list_make2(makeString("_iobeamdb_internal"), makeString("insert_trigger_on_copy_table"));
@@ -422,7 +436,7 @@ Oid create_copy_table(hypertable_info *hinfo) {
 	createTrig->columns = NIL;
 	createTrig->whenClause = NULL;
 	createTrig->isconstraint  = FALSE;
-	createTrig->deferrable	 = FALSE;
+	createTrig->deferrable   = FALSE;
 	createTrig->initdeferred  = FALSE;
 	createTrig->constrrel = NULL;
 
@@ -439,9 +453,9 @@ Oid create_copy_table(hypertable_info *hinfo) {
  * the query contains equivalence qualifiers on the space partition key.
  *
  * This function goes through the upper-level qual of a parse tree and finds quals of the form:
- * 		partitioning_column = const
+ *              partitioning_column = const
  * It transforms them into the qual:
- * 		partitioning_column = const AND partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
+ *              partitioning_column = const AND partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
  *
  * This tranformation helps because the check constraint on a table is of the form CHECK(partitioning_func(partition_column, partitioning_mod) BETWEEN X AND Y).
  */
@@ -451,7 +465,6 @@ add_partitioning_func_qual(Query *parse, List* hypertable_info_list)
 	add_partitioning_func_qual_context context;
 	context.parse = parse;
 	context.hypertable_info_list = hypertable_info_list;
-
 	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
 }
 
@@ -469,6 +482,7 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 	if (IsA(node, OpExpr))
 	{
 		OpExpr *exp = (OpExpr *) node;
+
 		if (list_length(exp->args) == 2)
 		{
 			//only look at var op const or const op var;
@@ -504,8 +518,8 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 					{
 						/* I now have a var = const. Make sure var is a partitioning column */
 						partitioning_info *pi = get_partitioning_info_for_partition_column_var(var_expr,
-																							 context->parse,
-																							 context->hypertable_info_list);
+																							   context->parse,
+																							   context->hypertable_info_list);
 
 						if (pi != NULL
 							&& pi->partitioning_column != NULL
@@ -536,6 +550,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char *varname = get_rte_attribute_name(rte, var_expr->varattno);
 	ListCell *hicell;
+
 	foreach(hicell, hypertable_info_list)
 	{
 		hypertable_info *info = lfirst(hicell);
@@ -632,7 +647,7 @@ static void io_xact_callback(XactEvent event, void *arg)
 {
 	ListCell *cell;
 
-	if(list_length(callbackConnections) == 0)
+	if (list_length(callbackConnections) == 0)
 		return;
 
 	switch (event)
@@ -710,17 +725,18 @@ pg_gethostname(PG_FUNCTION_ARGS)
 /* Calls the default ProcessUtility */
 void
 prev_ProcessUtility(Node *parsetree,
-						const char *queryString,
-						ProcessUtilityContext context,
-						ParamListInfo params,
-						DestReceiver *dest,
-						char *completionTag)
+					const char *queryString,
+					ProcessUtilityContext context,
+					ParamListInfo params,
+					DestReceiver *dest,
+					char *completionTag)
 {
 	if (prev_ProcessUtility_hook != NULL)
 	{
 		/* Call any earlier hooks */
 		(prev_ProcessUtility_hook)(parsetree, queryString, context, params, dest, completionTag);
-	} else
+	}
+	else
 	{
 		/* Call the standard */
 		standard_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
@@ -740,7 +756,7 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 	{
 		CopyStmt *copystmt = (CopyStmt *) parsetree;
 		Oid relId = RangeVarGetRelid(copystmt->relation, NoLock, true);
-		if (OidIsValid(relId)) { 
+		if (OidIsValid(relId)) {
 			hypertable_info* hinfo = get_hypertable_info(relId);
 			if (hinfo != NULL)
 			{
@@ -749,9 +765,8 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 		}
 		prev_ProcessUtility((Node *)copystmt, queryString, context, params, dest, completionTag);
 	}
-	else 
+	else
 	{
 		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
 	}
 }
-
