@@ -248,7 +248,7 @@ BEGIN
             schema_name, table_name,
             _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
             _iobeamdb_internal.time_literal_sql(start_time, time_col_type));
-        ELSIF end_time IS NOT NULL THEN
+    ELSIF end_time IS NOT NULL THEN
         EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s) NOT VALID
