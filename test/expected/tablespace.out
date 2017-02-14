@@ -1,5 +1,4 @@
 \set ON_ERROR_STOP 1
-\set VERBOSITY verbose
 \set SHOW_CONTEXT never
 \ir include/create_clustered_db.sql
 SET client_min_messages = WARNING;
@@ -12,12 +11,9 @@ CREATE DATABASE "Test1";
 CREATE DATABASE test2;
 \c meta
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
 select set_meta('localhost');
  set_meta 
 ----------
@@ -27,12 +23,9 @@ select set_meta('localhost');
 \c Test1
 CREATE SCHEMA io_test;
 CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
 ALTER DATABASE "Test1" SET search_path = "io_test";
 SET search_path = 'io_test';
 select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
@@ -43,12 +36,9 @@ select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_
 
 \c test2
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
 select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
  join_cluster 
 --------------
@@ -57,6 +47,11 @@ select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_
 
 \set ECHO ALL
 \c Test1
+\set ON_ERROR_STOP 0
+SET client_min_messages = WARNING;
+drop tablespace if exists tspace1;
+SET client_min_messages = NOTICE;
+\set VERBOSITY verbose
 --test hypertable with tables space
 create tablespace tspace1 location :TEST_TABLESPACE_PATH;
 create table test_tspace(time timestamp, temp float, device_id text) tablespace tspace1;

@@ -1,12 +1,19 @@
 
 \set ON_ERROR_STOP 1
-\set VERBOSITY verbose
 \set SHOW_CONTEXT never
 
 \ir include/create_clustered_db.sql
 
 \set ECHO ALL
 \c Test1
+
+\set ON_ERROR_STOP 0
+
+SET client_min_messages = WARNING;
+drop tablespace if exists tspace1;
+SET client_min_messages = NOTICE;
+
+\set VERBOSITY verbose
 
 --test hypertable with tables space
 create tablespace tspace1 location :TEST_TABLESPACE_PATH;

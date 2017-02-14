@@ -101,5 +101,58 @@ SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 
--- check time conversion
-SELECT _iobeamdb_internal.time_value_to_timestamp(1486480176236538);
+------------------------------------
+-- Test time conversion functions --
+------------------------------------
+\set ON_ERROR_STOP 0
+
+SET timezone = 'UTC';
+ALTER DATABASE test2 SET timezone ='UTC';
+
+-- Conversion to timestamp using Postgres built-in function taking double
+SELECT to_timestamp(1486480176.236538); 
+
+-- extension-specific version taking microsecond UNIX timestamp
+SELECT _iobeamdb_internal.to_timestamp(1486480176236538); 
+
+-- Should be the inverse of the statement above.
+SELECT _iobeamdb_internal.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
+
+-- In UNIX microseconds, BIGINT MAX is smaller than internal date upper bound
+-- and should therefore be OK. Further, converting to the internal postgres
+-- epoch cannot overflow a 64-bit INTEGER since the postgres epoch is at a
+-- later date compared to the UNIX epoch, and is therefore represented by a 
+-- smaller number
+SELECT _iobeamdb_internal.to_timestamp(9223372036854775807);
+
+-- Julian day zero is -210866803200000000 microseconds from UNIX epoch
+SELECT _iobeamdb_internal.to_timestamp(-210866803200000000);
+
+-- Going beyond Julian day zero should give out-of-range error
+SELECT _iobeamdb_internal.to_timestamp(-210866803200000001);
+
+-- Lower bound on date (should return the Julian day zero UNIX timestamp above)
+SELECT _iobeamdb_internal.to_unix_microseconds('4714-11-24 00:00:00+00 BC');
+
+-- Going beyond lower bound on date should return out-of-range
+SELECT _iobeamdb_internal.to_unix_microseconds('4714-11-23 23:59:59.999999+00 BC');
+
+-- The upper bound for Postgres TIMESTAMPTZ
+SELECT timestamp '294276-12-31 23:59:59.999999+00';
+
+-- Going beyond the upper bound, should fail
+SELECT timestamp '294276-12-31 23:59:59.999999+00' + interval '1 us';
+
+-- Cannot represent the upper bound timestamp with a UNIX microsecond timestamp
+-- since the Postgres epoch is at a later date than the UNIX epoch.
+SELECT _iobeamdb_internal.to_unix_microseconds('294276-12-31 23:59:59.999999+00');
+
+-- Subtracting the difference between the two epochs (10957 days) should bring
+-- us within range.
+SELECT timestamp '294276-12-31 23:59:59.999999+00' - interval '10957 days';
+
+SELECT _iobeamdb_internal.to_unix_microseconds('294247-01-01 23:59:59.999999');
+
+-- Adding one microsecond should take us out-of-range again
+SELECT timestamp '294247-01-01 23:59:59.999999' + interval '1 us';
+SELECT _iobeamdb_internal.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');
