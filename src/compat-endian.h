@@ -11,7 +11,7 @@
 
 #elif defined(__APPLE__)
 
-// Mac OS X / Darwin
+/*	Mac OS X / Darwin */
 #include <libkern/OSByteOrder.h>
 #define bswap_32(x) OSSwapInt32(x)
 #define bswap_64(x) OSSwapInt64(x)
@@ -27,7 +27,11 @@
 
 #ifdef WORDS_BIGENDIAN
 
-static inline uint16_t compat_bswap16(uint16_t v) { return (v << 8) | (v >> 8); }
+static inline uint16_t
+compat_bswap16(uint16_t v)
+{
+	return (v << 8) | (v >> 8);
+}
 #define bswap_16(v) compat_bswap16(v)
 
 #define htobe16(x) ((uint16_t)(x))
@@ -44,7 +48,7 @@ static inline uint16_t compat_bswap16(uint16_t v) { return (v << 8) | (v >> 8); 
 #define le32toh(x) bswap_32(x)
 #define le64toh(x) bswap_64(x)
 
-#else /* !WORDS_BIGENDIAN */
+#else							/* !WORDS_BIGENDIAN */
 
 #define htobe16(x) bswap_16(x)
 #define htobe32(x) bswap_32(x)
@@ -60,9 +64,8 @@ static inline uint16_t compat_bswap16(uint16_t v) { return (v << 8) | (v >> 8); 
 #define le32toh(x) ((uint32_t)(x))
 #define le64toh(x) ((uint64_t)(x))
 
-#endif /* !WORDS_BIGENDIAN */
+#endif   /* !WORDS_BIGENDIAN */
 
-#endif /* _NEED_ENDIAN_COMPAT */
+#endif   /* _NEED_ENDIAN_COMPAT */
 
 #endif
-

@@ -2,6 +2,8 @@
 #include <unistd.h>
 
 #include "postgres.h"
+#include "funcapi.h"
+#include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_type.h"
@@ -17,6 +19,8 @@
 #include "utils/lsyscache.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
+#include "utils/rel.h"
+#include "utils/int8.h"
 #include "executor/spi.h"
 #include "commands/extension.h"
 #include "commands/tablecmds.h"
@@ -33,10 +37,27 @@
 
 
 #include "iobeamdb.h"
+#include "insert.h"
+#include "cache.h"
+#include "errors.h"
+#include "utils.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
+#define HYPERTABLE_INFO_QUERY   "\
+                                SELECT  format('%I.%I', hr.schema_name, hr.table_name)::regclass::oid, \
+                                  pe.partitioning_column, pe.partitioning_func_schema, pe.partitioning_func, pe.partitioning_mod, \
+                                  format('%I.%I', h.root_schema_name, h.root_table_name)::regclass::oid, \
+                                  h.id \
+                                FROM _iobeamdb_catalog.hypertable h \
+                                INNER JOIN _iobeamdb_catalog.default_replica_node drn ON (drn.hypertable_id = h.id AND drn.database_name = current_database()) \
+                                INNER JOIN _iobeamdb_catalog.hypertable_replica hr ON (hr.replica_id = drn.replica_id AND hr.hypertable_id = drn.hypertable_id) \
+                                INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id) \
+                                WHERE h.schema_name = $1 AND h.table_name = $2"
+
+void _PG_init(void);
+void _PG_fini(void);
 
 /* Postgres hook interface */
 static planner_hook_type prev_planner_hook = NULL;
@@ -90,8 +111,6 @@ static partitioning_info *
 get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List * hypertable_info_list);
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod);
-Oid create_copy_table(hypertable_info *hinfo);
-RangeVar* makeRangeVarFromRelid(Oid relid);
 SPIPlanPtr get_hypertable_info_plan(void);
 
 
@@ -108,12 +127,24 @@ void prev_ProcessUtility(Node *parsetree,
 						 DestReceiver *dest,
 						 char *completionTag);
 
+extern void _hypertable_cache_init(void);
+extern void _hypertable_cache_fini(void);
 
+extern void _chunk_cache_init(void);
+extern void _chunk_cache_fini(void);
+
+extern void _cache_invalidate_init(void);
+extern void _cache_invalidate_fini(void);
+extern void _cache_invalidate_extload(void);
 
 void
 _PG_init(void)
 {
 	elog(INFO, "iobeamdb loaded");
+	_hypertable_cache_init();
+	_chunk_cache_init();
+	_cache_invalidate_init();
+	
 	prev_planner_hook = planner_hook;
 	planner_hook = iobeamdb_planner;
 
@@ -121,6 +152,17 @@ _PG_init(void)
 	ProcessUtility_hook = iobeamdb_ProcessUtility;
 
 	RegisterXactCallback(io_xact_callback, NULL);
+	
+}
+
+void
+_PG_fini(void)
+{
+	planner_hook = prev_planner_hook;
+	ProcessUtility_hook = prev_ProcessUtility_hook;
+	_cache_invalidate_fini();
+	_hypertable_cache_fini();
+	_chunk_cache_fini();	
 }
 
 SPIPlanPtr get_hypertable_info_plan()
@@ -149,27 +191,68 @@ SPIPlanPtr get_hypertable_info_plan()
 	return hypertable_info_plan;
 }
 
-
-void
-_PG_fini(void)
-{
-	planner_hook = prev_planner_hook;
-	ProcessUtility_hook = prev_ProcessUtility_hook;
-}
-
 bool
 IobeamLoaded(void)
 {
 	if (!isLoaded)
 	{
+		if(!IsTransactionState())
+		{
+			return false;
+		}
 		Oid id = get_extension_oid("iobeamdb", true);
 
-		if (id != InvalidOid)
+		if (id != InvalidOid && !(creating_extension && id == CurrentExtensionObject))
 		{
 			isLoaded = true;
+			_cache_invalidate_extload();
 		}
 	}
 	return isLoaded;
+}
+
+
+/*
+ * Change all main tables to one of the replicas in the parse tree.
+ *
+ */
+static bool
+change_table_name_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, RangeTblEntry))
+	{
+		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
+		change_table_name_context* ctx = (change_table_name_context *)context;
+		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
+		{
+			hypertable_info* hinfo = get_hypertable_info(rangeTableEntry->relid);
+			if (hinfo != NULL)
+			{
+				ctx->hypertable_info = lappend(ctx->hypertable_info, hinfo);
+				rangeTableEntry->relid = hinfo->replica_oid;
+			}
+		} else if (rangeTableEntry->rtekind == RTE_RELATION && ctx->parse->commandType == CMD_INSERT){
+			hypertable_info* hinfo = get_hypertable_info(rangeTableEntry->relid);
+			if (hinfo != NULL)
+			{
+				rangeTableEntry->relid = create_copy_table(hinfo->hypertable_id, hinfo->root_oid);
+			}
+		}
+		return false;
+	}
+
+	if (IsA(node, Query))
+	{
+		return query_tree_walker((Query *) node, change_table_name_walker,
+								 context, QTW_EXAMINE_RTES);
+	}
+
+	return expression_tree_walker(node,  change_table_name_walker, context);
 }
 
 PlannedStmt *
@@ -210,49 +293,6 @@ iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	}
 
 	return rv;
-}
-
-/*
- * Change all main tables to one of the replicas in the parse tree.
- *
- */
-bool
-change_table_name_walker(Node *node, void *context)
-{
-	if (node == NULL)
-	{
-		return false;
-	}
-
-	if (IsA(node, RangeTblEntry))
-	{
-		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
-		change_table_name_context* ctx = (change_table_name_context *)context;
-		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
-		{
-			hypertable_info* hinfo = get_hypertable_info(rangeTableEntry->relid);
-			if (hinfo != NULL)
-			{
-				ctx->hypertable_info = lappend(ctx->hypertable_info, hinfo);
-				rangeTableEntry->relid = hinfo->replica_oid;
-			}
-		} else if (rangeTableEntry->rtekind == RTE_RELATION && ctx->parse->commandType == CMD_INSERT){
-			hypertable_info* hinfo = get_hypertable_info(rangeTableEntry->relid);
-			if (hinfo != NULL)
-			{
-				rangeTableEntry->relid = create_copy_table(hinfo);
-			}
-		}
-		return false;
-	}
-
-	if (IsA(node, Query))
-	{
-		return query_tree_walker((Query *) node, change_table_name_walker,
-								 context, QTW_EXAMINE_RTES);
-	}
-
-	return expression_tree_walker(node,  change_table_name_walker, context);
 }
 
 /*
@@ -366,87 +406,14 @@ get_hypertable_info(Oid mainRelationOid)
 	return NULL;
 }
 
-/* Make a RangeVar from a regclass Oid */
-RangeVar *
-makeRangeVarFromRelid(Oid relid) {
-	Oid namespace = get_rel_namespace(relid);
-	char *tableName = get_rel_name(relid);
-	char *schemaName = get_namespace_name(namespace);
 
-	return makeRangeVar(schemaName, tableName,-1);
-}
 
-/* Creates a temp table for INSERT and COPY commands. This table
- * stores the data until it is distributed to the appropriate chunks.
- * The copy table uses ON COMMIT DELETE ROWS and inherits from the root table.
- * */
-Oid create_copy_table(hypertable_info *hinfo) {
-	/* Inserting into a hypertable transformed into inserting
-	 * into a "copy" temporary table that has a trigger
-	 * which calls insert_data afterwords
-	 * */
-	Oid copy_table_relid;
-	ObjectAddress copyTableRelationAddr;
+char * copy_table_name(int32 hypertable_id) {
 	StringInfo temp_table_name = makeStringInfo();
-	StringInfo hypertable_id_arg = makeStringInfo();
-	RangeVar *parent, *rel;
-	CreateStmt *create;
-	CreateTrigStmt *createTrig;
-
-	appendStringInfo(temp_table_name, "_copy_temp_%d", hinfo->hypertable_id);
-	appendStringInfo(hypertable_id_arg, "%d", hinfo->hypertable_id);
-
-	parent = makeRangeVarFromRelid(hinfo->root_oid);
-
-	rel = makeRangeVar("pg_temp", temp_table_name->data,-1);
-	rel->relpersistence = RELPERSISTENCE_TEMP;
-
-	RangeVarGetAndCheckCreationNamespace(rel, NoLock, &copy_table_relid);
-
-	if (OidIsValid(copy_table_relid)) {
-		return copy_table_relid;
-	}
-
-	create = makeNode(CreateStmt);
-
-	/*
-	 * Create the target relation by faking up a CREATE TABLE parsetree and
-	 * passing it to DefineRelation.
-	 */
-	create->relation = rel;
-	create->tableElts = NIL;
-	create->inhRelations =  list_make1(parent);
-	create->ofTypename = NULL;
-	create->constraints = NIL;
-	create->options = NIL;
-	create->oncommit = ONCOMMIT_DELETE_ROWS;
-	create->tablespacename = NULL;
-	create->if_not_exists = false;
-
-	copyTableRelationAddr = DefineRelation(create, RELKIND_RELATION, InvalidOid, NULL);
-
-	createTrig = makeNode(CreateTrigStmt);
-	createTrig->trigname = "insert_trigger";
-	createTrig->relation =  rel;
-	createTrig->funcname =  list_make2(makeString("_iobeamdb_internal"), makeString("insert_trigger_on_copy_table"));
-	createTrig->args = list_make1(makeString(hypertable_id_arg->data));
-	createTrig->row = false;
-	createTrig->timing = TRIGGER_TYPE_AFTER;
-	createTrig->events = TRIGGER_TYPE_INSERT;
-	createTrig->columns = NIL;
-	createTrig->whenClause = NULL;
-	createTrig->isconstraint  = FALSE;
-	createTrig->deferrable   = FALSE;
-	createTrig->initdeferred  = FALSE;
-	createTrig->constrrel = NULL;
-
-	CreateTrigger(createTrig, NULL, copyTableRelationAddr.objectId, 0,0,0, false);
-
-	/* make trigger visible*/
-	CommandCounterIncrement();
-
-	return copyTableRelationAddr.objectId;
+	appendStringInfo(temp_table_name, "_copy_temp_%d", hypertable_id);
+	return temp_table_name->data;
 }
+
 
 /*
  * This function does a transformation that allows postgres's native constraint exclusion to exclude space partititions when
@@ -753,7 +720,6 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 							 DestReceiver *dest,
 							 char *completionTag)
 {
-
 	if (!IobeamLoaded()){
 		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
 		return;
@@ -767,7 +733,7 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 			hypertable_info* hinfo = get_hypertable_info(relId);
 			if (hinfo != NULL)
 			{
-				copystmt->relation =  makeRangeVarFromRelid(create_copy_table(hinfo));
+				copystmt->relation =  makeRangeVarFromRelid(create_copy_table(hinfo->hypertable_id, hinfo->root_oid));
 			}
 		}
 		prev_ProcessUtility((Node *)copystmt, queryString, context, params, dest, completionTag);
@@ -792,3 +758,5 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 
 	prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);	
 }
+
+

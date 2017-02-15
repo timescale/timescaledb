@@ -1,5 +1,7 @@
+sql/common/schemas.sql
 sql/common/types.sql
 sql/common/tables.sql
+sql/common/cache.sql
 sql/common/cluster_setup_functions.sql
 sql/common/errors.sql
 sql/common/chunk.sql

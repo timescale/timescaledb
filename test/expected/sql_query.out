@@ -98,20 +98,20 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 
  Append
    ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-         Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_0_replica.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+         Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND (_iobeamdb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '28646'::smallint))
    ->  Seq Scan on "testNs"._hyper_1_1_0_partition
          Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
-         Filter: ((_hyper_1_1_0_partition.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+         Filter: ((_hyper_1_1_0_partition.device_id = 'dev20'::text) AND (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_partition.device_id, 32768) = '28646'::smallint))
    ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_1_data
          Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
          Recheck Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_1_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         Filter: (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_1_data.device_id, 32768) = '28646'::smallint)
          ->  Bitmap Index Scan on "1-testNs_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
    ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_2_data
          Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
          Recheck Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_2_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         Filter: (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_2_data.device_id, 32768) = '28646'::smallint)
          ->  Bitmap Index Scan on "6-testNs_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
 (19 rows)
@@ -122,20 +122,20 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 
  Append
    ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-         Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_0_replica.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+         Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND (_iobeamdb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '28646'::smallint))
    ->  Seq Scan on "testNs"._hyper_1_1_0_partition
          Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
-         Filter: ((_hyper_1_1_0_partition.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+         Filter: ((_hyper_1_1_0_partition.device_id = 'dev20'::text) AND (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_partition.device_id, 32768) = '28646'::smallint))
    ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_1_data
          Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
          Recheck Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_1_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         Filter: (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_1_data.device_id, 32768) = '28646'::smallint)
          ->  Bitmap Index Scan on "1-testNs_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
    ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_2_data
          Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
          Recheck Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_2_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         Filter: (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_2_data.device_id, 32768) = '28646'::smallint)
          ->  Bitmap Index Scan on "6-testNs_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
 (19 rows)
@@ -146,20 +146,20 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE 'dev'||'20' 
  Append
    ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-         Filter: (('dev20'::text = _hyper_1_0_replica.device_id) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_0_replica.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+         Filter: (('dev20'::text = _hyper_1_0_replica.device_id) AND (_iobeamdb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '28646'::smallint))
    ->  Seq Scan on "testNs"._hyper_1_1_0_partition
          Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
-         Filter: (('dev20'::text = _hyper_1_1_0_partition.device_id) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+         Filter: (('dev20'::text = _hyper_1_1_0_partition.device_id) AND (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_partition.device_id, 32768) = '28646'::smallint))
    ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_1_data
          Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
          Recheck Cond: ('dev20'::text = _hyper_1_1_0_1_data.device_id)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_1_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         Filter: (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_1_data.device_id, 32768) = '28646'::smallint)
          ->  Bitmap Index Scan on "1-testNs_device_id_timeCustom_idx"
                Index Cond: ('dev20'::text = _hyper_1_1_0_1_data.device_id)
    ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_2_data
          Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
          Recheck Cond: ('dev20'::text = _hyper_1_1_0_2_data.device_id)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_2_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         Filter: (_iobeamdb_catalog.get_partition_for_key(_hyper_1_1_0_2_data.device_id, 32768) = '28646'::smallint)
          ->  Bitmap Index Scan on "6-testNs_device_id_timeCustom_idx"
                Index Cond: ('dev20'::text = _hyper_1_1_0_2_data.device_id)
 (19 rows)

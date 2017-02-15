@@ -11,7 +11,7 @@ BEGIN
     IF TG_OP = 'UPDATE' THEN
         RAISE EXCEPTION 'UPDATE ONLY not supported on hypertables'
         USING ERRCODE = 'IO101';
-    ELSIF TG_OP = 'DELETE' AND current_setting('io.ignore_delete_in_trigger', true) <> 'true' THEN
+    ELSIF TG_OP = 'DELETE' AND current_setting('io.ignore_delete_in_trigger', true) IS DISTINCT FROM 'true' THEN
         RAISE EXCEPTION 'DELETE ONLY not currently supported on hypertables'
         USING ERRCODE = 'IO101';
     END IF;
@@ -62,8 +62,6 @@ BEGIN
                 CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table();
             $$, NEW.schema_name, NEW.table_name);
-          
-
         RETURN NEW;
     END IF;
 

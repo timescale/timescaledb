@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
     CHECK (num_partitions <= partitioning_mod),
     CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL))
 );
+CREATE INDEX ON  _iobeamdb_catalog.partition_epoch(hypertable_id, start_time, end_time);
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition_epoch', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.partition_epoch','id'), '');
 

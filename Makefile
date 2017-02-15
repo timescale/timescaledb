@@ -7,7 +7,18 @@ EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 DATA = $(EXT_SQL_FILE)
 MODULE_big = $(EXTENSION)
 
-SRCS = src/iobeamdb.c src/murmur3.c src/pgmurmur3.c src/utils.c
+SRCS = \
+	src/iobeamdb.c \
+	src/murmur3.c \
+	src/pgmurmur3.c \
+	src/utils.c \
+	src/metadata_queries.c \
+	src/cache.c \
+	src/cache_invalidate.c \
+	src/hypertable_cache.c \
+	src/chunk_cache.c \
+	src/insert.c
+
 OBJS = $(SRCS:.c=.o)
 
 MKFILE_PATH := $(abspath $(MAKEFILE_LIST))
@@ -57,6 +68,13 @@ package: clean $(EXT_SQL_FILE)
 	$(install_sh) -m 755 $(EXTENSION).so 'package/lib/$(EXTENSION).so'
 	$(install_sh) -m 644 $(EXTENSION).control 'package/extension/'
 	$(install_sh) -m 644 $(EXT_SQL_FILE)  'package/extension/'
+
+typedef.list: clean $(OBJS)
+	./generate_typedef.sh 
+
+pgindent: typedef.list
+	pgindent --typedef=typedef.list
+
 
 .PHONY: check-sql-files all
 
