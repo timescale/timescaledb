@@ -9,7 +9,7 @@
 
 \set ON_ERROR_STOP 0
 
-SET client_min_messages = WARNING;
+SET client_min_messages = ERROR;
 drop tablespace if exists tspace1;
 SET client_min_messages = NOTICE;
 

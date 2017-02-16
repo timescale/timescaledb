@@ -60,7 +60,7 @@ $BODY$;
 --closes the given chunk if it is over the size limit set for the hypertable
 --it belongs to.
 CREATE OR REPLACE FUNCTION _iobeamdb_internal.close_chunk_if_needed(
-    chunk_row _iobeamdb_catalog.chunk
+    chunk_id INTEGER
 )
     RETURNS boolean LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -68,17 +68,19 @@ DECLARE
     chunk_size      BIGINT;
     chunk_max_size  BIGINT;
 BEGIN
-    chunk_size := _iobeamdb_data_api.get_chunk_size(chunk_row.id);
-    chunk_max_size := _iobeamdb_internal.get_chunk_max_size(chunk_row.id);
+    chunk_size := _iobeamdb_data_api.get_chunk_size(chunk_id);
+    chunk_max_size := _iobeamdb_internal.get_chunk_max_size(chunk_id);
 
-    IF chunk_row.end_time IS NOT NULL OR (NOT chunk_size >= chunk_max_size) THEN
-        RETURN FALSE;
+    IF chunk_size >= chunk_max_size THEN
+        --This should use the non-transactional rpc because this needs to 
+        --commit before we can take a lock for writing on the closed chunk.
+        --That means this operation is not transactional with the insert 
+        --and will not be rolled back.
+        PERFORM _iobeamdb_meta_api.close_chunk_end_immediate(chunk_id);
+        RETURN TRUE;
     END IF;
 
-    --This should use the non-transactional rpc because this needs to commit before we can take a lock
-    --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
-    PERFORM _iobeamdb_meta_api.close_chunk_end_immediate(chunk_row.id);
-    return TRUE;
+    RETURN FALSE;
 END
 $BODY$;
 
