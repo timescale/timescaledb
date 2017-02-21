@@ -2,48 +2,22 @@
 \set VERBOSITY verbose
 \set SHOW_CONTEXT never
 \o /dev/null
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS meta;
-DROP DATABASE IF EXISTS "Test1";
-DROP DATABASE IF EXISTS test2;
+DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
-CREATE DATABASE meta;
-CREATE DATABASE "Test1";
-CREATE DATABASE test2;
-\c meta
+CREATE DATABASE single;
+\c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-select set_meta('localhost');
-\c Test1
-CREATE SCHEMA io_test;
-CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-ALTER DATABASE "Test1" SET search_path = "io_test";
-SET search_path = 'io_test';
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c test2
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \o
 \set ECHO ALL
-\c Test1
 \ir include/ddl_ops_1.sql
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
@@ -65,13 +39,13 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 SELECT * FROM _iobeamdb_catalog.hypertable;
  id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ----+-------------+--------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | Hypertable_1 | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | Test1      |       1073741824
+  1 | public      | Hypertable_1 | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
 (1 row)
 
 SELECT * FROM _iobeamdb_catalog.hypertable_index;
  hypertable_id | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
 ---------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
-             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | Test1
+             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
 (1 row)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
@@ -95,14 +69,13 @@ SELECT * FROM PUBLIC."Hypertable_1";
 (1 row)
 
 EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
-                QUERY PLAN                 
--------------------------------------------
+                QUERY PLAN                
+------------------------------------------
  Append
    ->  Seq Scan on _hyper_1_0_replica
    ->  Seq Scan on _hyper_1_1_0_partition
-   ->  Seq Scan on _hyper_1_2_0_partition
-   ->  Foreign Scan on _hyper_1_1_0_1_data
-(5 rows)
+   ->  Seq Scan on _hyper_1_1_0_1_data
+(4 rows)
 
 SELECT * FROM ONLY PUBLIC."Hypertable_1";
  time | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
@@ -115,68 +88,6 @@ EXPLAIN (costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
  Seq Scan on "Hypertable_1"
 (1 row)
 
-\d+ PUBLIC."Hypertable_1"
-                                 Table "public.Hypertable_1"
-  Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
------------+---------+--------------------------------+----------+--------------+-------------
- time      | bigint  | not null                       | plain    |              | 
- Device_id | text    | not null                       | extended |              | 
- temp_c    | integer | not null default '-1'::integer | plain    |              | 
- humidity  | numeric | default 0                      | main     |              | 
- sensor_1  | numeric | default 1                      | main     |              | 
- sensor_2  | numeric | not null default 1             | main     |              | 
- sensor_3  | numeric | not null default 1             | main     |              | 
- sensor_4  | numeric | not null default 1             | main     |              | 
-Indexes:
-    "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
-    "ind_humidity" btree ("time", humidity)
-    "ind_sensor_1" btree ("time", sensor_1)
-Triggers:
-    insert_trigger AFTER INSERT ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
-
-\d+ "_iobeamdb_internal"."_hyper_1_root"
-                           Table "_iobeamdb_internal._hyper_1_root"
-  Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
------------+---------+--------------------------------+----------+--------------+-------------
- time      | bigint  | not null                       | plain    |              | 
- Device_id | text    | not null                       | extended |              | 
- temp_c    | integer | not null default '-1'::integer | plain    |              | 
- humidity  | numeric | default 0                      | main     |              | 
- sensor_1  | numeric | default 1                      | main     |              | 
- sensor_2  | numeric | not null default 1             | main     |              | 
- sensor_3  | numeric | not null default 1             | main     |              | 
- sensor_4  | numeric | not null default 1             | main     |              | 
-Child tables: _copy_temp_1,
-              _iobeamdb_internal._hyper_1_0_replica
-
-\d+ _iobeamdb_internal._hyper_1_1_0_1_data
-                           Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
-  Column   |  Type   |           Modifiers            | FDW Options | Storage  | Stats target | Description 
------------+---------+--------------------------------+-------------+----------+--------------+-------------
- time      | bigint  | not null                       |             | plain    |              | 
- Device_id | text    | not null                       |             | extended |              | 
- temp_c    | integer | not null default '-1'::integer |             | plain    |              | 
- humidity  | numeric | default 0                      |             | main     |              | 
- sensor_1  | numeric | default 1                      |             | main     |              | 
- sensor_2  | numeric | not null default 1             |             | main     |              | 
- sensor_3  | numeric | not null default 1             |             | main     |              | 
- sensor_4  | numeric | not null default 1             |             | main     |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
-Inherits: _iobeamdb_internal._hyper_1_1_0_partition
-
-SELECT * FROM _iobeamdb_catalog.default_replica_node;
- database_name | hypertable_id | replica_id 
----------------+---------------+------------
- Test1         |             1 |          0
- test2         |             1 |          0
-(2 rows)
-
-\c test2
 \d+ PUBLIC."Hypertable_1"
                                  Table "public.Hypertable_1"
   Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
@@ -210,7 +121,35 @@ Triggers:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Child tables: _iobeamdb_internal._hyper_1_0_replica
+Child tables: _copy_temp_1,
+              _iobeamdb_internal._hyper_1_0_replica
+
+\d+ _iobeamdb_internal._hyper_1_1_0_1_data
+                        Table "_iobeamdb_internal._hyper_1_1_0_1_data"
+  Column   |  Type   |           Modifiers            | Storage  | Stats target | Description 
+-----------+---------+--------------------------------+----------+--------------+-------------
+ time      | bigint  | not null                       | plain    |              | 
+ Device_id | text    | not null                       | extended |              | 
+ temp_c    | integer | not null default '-1'::integer | plain    |              | 
+ humidity  | numeric | default 0                      | main     |              | 
+ sensor_1  | numeric | default 1                      | main     |              | 
+ sensor_2  | numeric | not null default 1             | main     |              | 
+ sensor_3  | numeric | not null default 1             | main     |              | 
+ sensor_4  | numeric | not null default 1             | main     |              | 
+Indexes:
+    "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
+    "2-Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
+    "3-ind_humidity" btree ("time", humidity)
+    "4-ind_sensor_1" btree ("time", sensor_1)
+Check constraints:
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: _iobeamdb_internal._hyper_1_1_0_partition
+
+SELECT * FROM _iobeamdb_catalog.default_replica_node;
+ database_name | hypertable_id | replica_id 
+---------------+---------------+------------
+ single        |             1 |          0
+(1 row)
 
 \ir include/ddl_ops_2.sql
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
@@ -270,62 +209,8 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _iobeamdb_internal._hyper_1_0_replica
-
-\c Test1
-\d+ PUBLIC."Hypertable_1"
-                                 Table "public.Hypertable_1"
-      Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
-------------------+---------+------------------------+----------+--------------+-------------
- time             | bigint  | not null               | plain    |              | 
- Device_id        | text    | not null               | extended |              | 
- humidity         | numeric | default '100'::numeric | main     |              | 
- sensor_1         | numeric | not null               | main     |              | 
- sensor_2_renamed | numeric |                        | main     |              | 
- sensor_3_renamed | numeric | not null default 1     | main     |              | 
- temp_f           | integer | not null default 31    | plain    |              | 
- sensor_3         | bigint  | not null default 131   | plain    |              | 
- sensor_4         | bigint  | not null default 131   | plain    |              | 
-Indexes:
-    "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "ind_humidity" btree ("time", humidity)
-Triggers:
-    insert_trigger AFTER INSERT ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON public."Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
-
-\d+ "_iobeamdb_internal"."_hyper_1_root"
-                          Table "_iobeamdb_internal._hyper_1_root"
-      Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
-------------------+---------+------------------------+----------+--------------+-------------
- time             | bigint  | not null               | plain    |              | 
- Device_id        | text    | not null               | extended |              | 
- humidity         | numeric | default '100'::numeric | main     |              | 
- sensor_1         | numeric | not null               | main     |              | 
- sensor_2_renamed | numeric |                        | main     |              | 
- sensor_3_renamed | numeric | not null default 1     | main     |              | 
- temp_f           | integer | not null default 31    | plain    |              | 
- sensor_3         | bigint  | not null default 131   | plain    |              | 
- sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _iobeamdb_internal._hyper_1_0_replica
-
-\d+ _iobeamdb_internal._hyper_1_1_0_1_data
-                          Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
-      Column      |  Type   |       Modifiers        | FDW Options | Storage  | Stats target | Description 
-------------------+---------+------------------------+-------------+----------+--------------+-------------
- time             | bigint  | not null               |             | plain    |              | 
- Device_id        | text    | not null               |             | extended |              | 
- humidity         | numeric | default '100'::numeric |             | main     |              | 
- sensor_1         | numeric | not null               |             | main     |              | 
- sensor_2_renamed | numeric |                        |             | main     |              | 
- sensor_3_renamed | numeric | not null default 1     |             | main     |              | 
- temp_f           | integer | not null default 31    |             | plain    |              | 
- sensor_3         | bigint  | not null default 131   |             | plain    |              | 
- sensor_4         | bigint  | not null default 131   |             | plain    |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '16383'::smallint)
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
-Inherits: _iobeamdb_internal._hyper_1_1_0_partition
+Child tables: _copy_temp_1,
+              _iobeamdb_internal._hyper_1_0_replica
 
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 

@@ -2,65 +2,30 @@
 \set VERBOSITY verbose
 \set SHOW_CONTEXT never
 \o /dev/null
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS meta;
-DROP DATABASE IF EXISTS "Test1";
-DROP DATABASE IF EXISTS test2;
+DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
-CREATE DATABASE meta;
-CREATE DATABASE "Test1";
-CREATE DATABASE test2;
-\c meta
+CREATE DATABASE single;
+\c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "dblink"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "postgres_fdw"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:12: NOTICE:  00000: installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  00000: installing required extension "hstore"
 LOCATION:  CreateExtensionInternal, extension.c:1441
-select set_meta('localhost');
-\c Test1
-CREATE SCHEMA io_test;
-CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:17: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-ALTER DATABASE "Test1" SET search_path = "io_test";
-SET search_path = 'io_test';
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c test2
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "dblink"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "postgres_fdw"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-psql:include/create_clustered_db.sql:23: NOTICE:  00000: installing required extension "hstore"
-LOCATION:  CreateExtensionInternal, extension.c:1441
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \o
 \set ECHO ALL
-\c meta
+\c single
 -- Expect error when adding user again
 \set ON_ERROR_STOP 0
 SELECT add_cluster_user();
 ERROR:  IO130: User postgres already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
-\c meta
 -- Expect error when adding node again
-\set ON_ERROR_STOP 0
-SELECT add_node('test2' :: NAME, 'localhost', 5432);
-ERROR:  IO120: Node test2 already exists
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
-SELECT add_node('test2' :: NAME, 'otherhost', 5432);
-ERROR:  IO120: Node test2 already exists
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
-\set ON_ERROR_STOP 1
-\c Test1
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
   "Device_id" TEXT NOT NULL,
@@ -96,5 +61,5 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
-ERROR:  IO110: hypertable public."Hypertable_1" already exists
+ERROR:  IO110: hypertable "Hypertable_1" already exists
 LOCATION:  exec_stmt_raise, pl_exec.c:3165

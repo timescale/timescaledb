@@ -1,38 +1,19 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS meta;
-DROP DATABASE IF EXISTS "Test1";
-DROP DATABASE IF EXISTS test2;
+DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
-CREATE DATABASE meta;
-CREATE DATABASE "Test1";
-CREATE DATABASE test2;
-\c meta
+CREATE DATABASE single;
+\c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-select set_meta('localhost');
-\c Test1
-CREATE SCHEMA io_test;
-CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
-ALTER DATABASE "Test1" SET search_path = "io_test";
-SET search_path = 'io_test';
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c test2
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \o
 \set ECHO ALL
-\c Test1
+\c single
 -- Utility function for grouping/slotting time with a given interval.
 CREATE OR REPLACE FUNCTION date_group(
     field           timestamp,
@@ -59,7 +40,7 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 
  
 (1 row)
 
-\c Test1
+\c single
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 1),
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 2),

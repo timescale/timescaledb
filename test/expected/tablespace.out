@@ -1,52 +1,23 @@
 \set ON_ERROR_STOP 1
 \set SHOW_CONTEXT never
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS meta;
-DROP DATABASE IF EXISTS "Test1";
-DROP DATABASE IF EXISTS test2;
+DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
-CREATE DATABASE meta;
-CREATE DATABASE "Test1";
-CREATE DATABASE test2;
-\c meta
+CREATE DATABASE single;
+\c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-select set_meta('localhost');
- set_meta 
-----------
- 
-(1 row)
-
-\c Test1
-CREATE SCHEMA io_test;
-CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
-ALTER DATABASE "Test1" SET search_path = "io_test";
-SET search_path = 'io_test';
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
- join_cluster 
---------------
- 
-(1 row)
-
-\c test2
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
- join_cluster 
---------------
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+ setup_single_node 
+-------------------
  
 (1 row)
 
 \set ECHO ALL
-\c Test1
+\c single
 \set ON_ERROR_STOP 0
 SET client_min_messages = WARNING;
 drop tablespace if exists tspace1;
@@ -64,17 +35,16 @@ select create_hypertable('test_tspace', 'time', 'device_id');
 select * from _iobeamdb_catalog.partition p INNER JOIN _iobeamdb_catalog.partition_replica pr ON (pr.partition_id = p.id);
  id | epoch_id | keyspace_start | keyspace_end | tablespace | id | partition_id | hypertable_id | replica_id |    schema_name     |       table_name       
 ----+----------+----------------+--------------+------------+----+--------------+---------------+------------+--------------------+------------------------
-  1 |        1 |              0 |        16383 | tspace1    |  1 |            1 |             1 |          0 | _iobeamdb_internal | _hyper_1_1_0_partition
-  2 |        1 |          16384 |        32767 | tspace1    |  2 |            2 |             1 |          0 | _iobeamdb_internal | _hyper_1_2_0_partition
-(2 rows)
+  1 |        1 |              0 |        32767 | tspace1    |  1 |            1 |             1 |          0 | _iobeamdb_internal | _hyper_1_1_0_partition
+(1 row)
 
 insert into test_tspace values ('2017-01-20T09:00:01', 24.3, 'dev1');
 insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
 \dt test_tspace
             List of relations
- Schema  |    Name     | Type  |  Owner   
----------+-------------+-------+----------
- io_test | test_tspace | table | postgres
+ Schema |    Name     | Type  |  Owner   
+--------+-------------+-------+----------
+ public | test_tspace | table | postgres
 (1 row)
 
 --verify that the table chunk has the correct tablespace
@@ -86,20 +56,18 @@ insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
 Inherits: _iobeamdb_internal._hyper_1_root
-Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
-              _iobeamdb_internal._hyper_1_2_0_partition
+Child tables: _iobeamdb_internal._hyper_1_1_0_partition
 
-                          Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
-  Column   |            Type             | Modifiers | FDW Options | Storage  | Stats target | Description 
------------+-----------------------------+-----------+-------------+----------+--------------+-------------
- time      | timestamp without time zone |           |             | plain    |              | 
- temp      | double precision            |           |             | plain    |              | 
- device_id | text                        |           |             | extended |              | 
+                       Table "_iobeamdb_internal._hyper_1_1_0_1_data"
+  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
+-----------+-----------------------------+-----------+----------+--------------+-------------
+ time      | timestamp without time zone |           | plain    |              | 
+ temp      | double precision            |           | plain    |              | 
+ device_id | text                        |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_1_0_partition
+Tablespace: "tspace1"
 
                       Table "_iobeamdb_internal._hyper_1_1_0_partition"
   Column   |            Type             | Modifiers | Storage  | Stats target | Description 
@@ -108,31 +76,9 @@ Inherits: _iobeamdb_internal._hyper_1_1_0_partition
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_1_0_replica
 Child tables: _iobeamdb_internal._hyper_1_1_0_1_data
-
-                       Table "_iobeamdb_internal._hyper_1_2_0_2_data"
-  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
------------+-----------------------------+-----------+----------+--------------+-------------
- time      | timestamp without time zone |           | plain    |              | 
- temp      | double precision            |           | plain    |              | 
- device_id | text                        |           | extended |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_1_2_0_partition
-Tablespace: "tspace1"
-
-                      Table "_iobeamdb_internal._hyper_1_2_0_partition"
-  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
------------+-----------------------------+-----------+----------+--------------+-------------
- time      | timestamp without time zone |           | plain    |              | 
- temp      | double precision            |           | plain    |              | 
- device_id | text                        |           | extended |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_1_0_replica
-Child tables: _iobeamdb_internal._hyper_1_2_0_2_data
 
                           Table "_iobeamdb_internal._hyper_1_root"
   Column   |            Type             | Modifiers | Storage  | Stats target | Description 
@@ -145,4 +91,10 @@ Child tables: _copy_temp_1,
 
 --cleanup
 drop table test_tspace;
+NOTICE:  00000: drop cascades to 4 other objects
+DETAIL:  drop cascades to table _iobeamdb_internal._hyper_1_0_replica
+drop cascades to table _iobeamdb_internal._hyper_1_1_0_partition
+drop cascades to table _iobeamdb_internal._hyper_1_1_0_1_data
+drop cascades to table _copy_temp_1
+LOCATION:  reportDependentObjects, dependency.c:1011
 drop tablespace tspace1;

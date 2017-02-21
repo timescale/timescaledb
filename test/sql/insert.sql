@@ -1,12 +1,8 @@
 \set ON_ERROR_STOP 1
 
 \set ECHO ALL
-\ir include/insert.sql
+\ir include/insert_two_partitions.sql
 
-\c Test1
-\d+ "_iobeamdb_internal".*
-
-\c test2
 \d+ "_iobeamdb_internal".*
 SELECT *
 FROM "_iobeamdb_internal"._hyper_1_0_replica;
