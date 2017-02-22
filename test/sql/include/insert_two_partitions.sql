@@ -1,8 +1,8 @@
 \set ON_ERROR_STOP 1
 
-\ir create_clustered_db.sql
+\ir create_single_db.sql
 
-\c Test1
+\c single
 
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,
@@ -20,7 +20,6 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHER
 
 SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_iobeamdb_internal'::text, number_partitions => 2::smallint );
 
-\c Test1
 BEGIN;
 \COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
@@ -29,19 +28,15 @@ SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
 
-\c Test1
 INSERT INTO public."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev20', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 
-\c test2
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
 
-
-\c test2
 CREATE TABLE chunk_closing_test(
         time       BIGINT,
         metric     INTEGER,
