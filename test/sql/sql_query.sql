@@ -1,11 +1,11 @@
 \set ON_ERROR_STOP 1
 
 \o /dev/null
-\ir include/insert.sql
+\ir include/insert_single.sql
 
 \o
 \set ECHO ALL
-\c Test1
+\c single
 
 SELECT * FROM PUBLIC."testNs";
 

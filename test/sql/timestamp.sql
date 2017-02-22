@@ -1,11 +1,11 @@
 \set ON_ERROR_STOP 1
 
 \o /dev/null
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 
 \o
 \set ECHO ALL
-\c Test1
+\c single
 
 -- Utility function for grouping/slotting time with a given interval.
 CREATE OR REPLACE FUNCTION date_group(
@@ -31,7 +31,7 @@ CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE 
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 
 
-\c Test1
+\c single
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 1),
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 2),

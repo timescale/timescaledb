@@ -1,11 +1,10 @@
 \set ON_ERROR_STOP 1
 
 \o /dev/null
-\ir include/insert.sql
+\ir include/insert_two_partitions.sql
 
 \o
 \set ECHO ALL
-\c test2
 
 SELECT * FROM "testNs";
 

@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
-\ir include/insert.sql
+\ir include/insert_two_partitions.sql
 \set ON_ERROR_STOP 1
 \ir create_clustered_db.sql
 SET client_min_messages = WARNING;
@@ -46,7 +46,7 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE s
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'_iobeamdb_internal' );
+SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_iobeamdb_internal'::text, number_partitions => 2::smallint );
 \c Test1
 BEGIN;
 \COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
@@ -82,7 +82,6 @@ SELECT * FROM _iobeamdb_catalog.chunk c
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
 \o
 \set ECHO ALL
-\c test2
 SELECT * FROM "testNs";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------

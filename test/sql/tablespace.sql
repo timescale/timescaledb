@@ -2,10 +2,10 @@
 \set ON_ERROR_STOP 1
 \set SHOW_CONTEXT never
 
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 
 \set ECHO ALL
-\c Test1
+\c single
 
 \set ON_ERROR_STOP 0
 

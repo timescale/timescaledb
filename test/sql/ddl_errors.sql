@@ -3,25 +3,18 @@
 \set SHOW_CONTEXT never
 
 \o /dev/null
-\ir include/create_clustered_db.sql
+\ir include/create_single_db.sql
 
 \o
 \set ECHO ALL
-\c meta
+\c single
 
 -- Expect error when adding user again
 \set ON_ERROR_STOP 0
 SELECT add_cluster_user();
 \set ON_ERROR_STOP 1
 
-\c meta
 -- Expect error when adding node again
-\set ON_ERROR_STOP 0
-SELECT add_node('test2' :: NAME, 'localhost', 5432);
-SELECT add_node('test2' :: NAME, 'otherhost', 5432);
-\set ON_ERROR_STOP 1
-
-\c Test1
 
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,

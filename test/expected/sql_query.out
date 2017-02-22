@@ -1,38 +1,20 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
-\ir include/insert.sql
+\ir include/insert_single.sql
 \set ON_ERROR_STOP 1
-\ir create_clustered_db.sql
+\ir create_single_db.sql
 SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS meta;
-DROP DATABASE IF EXISTS "Test1";
-DROP DATABASE IF EXISTS test2;
+DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
-CREATE DATABASE meta;
-CREATE DATABASE "Test1";
-CREATE DATABASE test2;
-\c meta
+CREATE DATABASE single;
+\c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-select set_meta('localhost');
-\c Test1
-CREATE SCHEMA io_test;
-CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
-ALTER DATABASE "Test1" SET search_path = "io_test";
-SET search_path = 'io_test';
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c test2
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c Test1
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+\c single
+\set ECHO ALL
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
@@ -46,24 +28,20 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE s
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'_iobeamdb_internal' );
-\c Test1
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 BEGIN;
-\COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+\COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
-\c Test1
-INSERT INTO public."testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev20', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
-\c test2
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
-\c test2
 CREATE TABLE chunk_closing_test(
         time       BIGINT,
         metric     INTEGER,
@@ -82,7 +60,7 @@ SELECT * FROM _iobeamdb_catalog.chunk c
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
 \o
 \set ECHO ALL
-\c Test1
+\c single
 SELECT * FROM PUBLIC."testNs";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
@@ -91,32 +69,26 @@ SELECT * FROM PUBLIC."testNs";
  1257894000000001000 | dev1      |      2.5 |        3 |          | 
  1257894001000000000 | dev1      |      3.5 |        4 |          | 
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257894000000000000 | dev20     |      1.5 |        1 |          | 
  1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894000000000000 | dev20     |      1.5 |        2 |          | 
  1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev20     |      1.5 |        1 |          | 
- 1257894000000000000 | dev20     |      1.5 |        2 |          | 
 (10 rows)
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs";
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_0_replica
+   ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_1_0_partition
+   ->  Seq Scan on "testNs"._hyper_1_1_0_partition
          Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_2_0_partition
-         Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-   ->  Foreign Scan on _iobeamdb_internal._hyper_1_1_0_1_data
+   ->  Seq Scan on "testNs"._hyper_1_1_0_1_data
          Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
-         Remote SQL: SELECT "timeCustom", device_id, series_0, series_1, series_2, series_bool FROM _iobeamdb_internal._hyper_1_1_0_1_data
-   ->  Foreign Scan on _iobeamdb_internal._hyper_1_1_0_2_data
+   ->  Seq Scan on "testNs"._hyper_1_1_0_2_data
          Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
-         Remote SQL: SELECT "timeCustom", device_id, series_0, series_1, series_2, series_bool FROM _iobeamdb_internal._hyper_1_1_0_2_data
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_2_0_3_data
-         Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
-(15 rows)
+(9 rows)
 
 \echo "The following queries should NOT scan testNs._hyper_1_1_0_partition"
 "The following queries should NOT scan testNs._hyper_1_1_0_partition"
@@ -124,55 +96,73 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_0_replica
+   ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
          Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_0_replica.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_2_0_partition
-         Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         Filter: ((_hyper_1_2_0_partition.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_2_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
-   ->  Bitmap Heap Scan on _iobeamdb_internal._hyper_1_2_0_3_data
-         Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
-         Recheck Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_2_0_3_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+   ->  Seq Scan on "testNs"._hyper_1_1_0_partition
+         Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
+         Filter: ((_hyper_1_1_0_partition.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+   ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_1_data
+         Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
+         Recheck Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
+         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_1_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
          ->  Bitmap Index Scan on "1-testNs_device_id_timeCustom_idx"
-               Index Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
-(13 rows)
+               Index Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
+   ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_2_data
+         Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
+         Recheck Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
+         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_2_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         ->  Bitmap Index Scan on "6-testNs_device_id_timeCustom_idx"
+               Index Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
+(19 rows)
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 'dev'||'20';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_0_replica
+   ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
          Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_0_replica.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_2_0_partition
-         Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         Filter: ((_hyper_1_2_0_partition.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_2_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
-   ->  Bitmap Heap Scan on _iobeamdb_internal._hyper_1_2_0_3_data
-         Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
-         Recheck Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_2_0_3_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+   ->  Seq Scan on "testNs"._hyper_1_1_0_partition
+         Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
+         Filter: ((_hyper_1_1_0_partition.device_id = 'dev20'::text) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+   ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_1_data
+         Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
+         Recheck Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
+         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_1_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
          ->  Bitmap Index Scan on "1-testNs_device_id_timeCustom_idx"
-               Index Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
-(13 rows)
+               Index Cond: (_hyper_1_1_0_1_data.device_id = 'dev20'::text)
+   ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_2_data
+         Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
+         Recheck Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
+         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_2_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         ->  Bitmap Index Scan on "6-testNs_device_id_timeCustom_idx"
+               Index Cond: (_hyper_1_1_0_2_data.device_id = 'dev20'::text)
+(19 rows)
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE 'dev'||'20' = device_id;
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_0_replica
+   ->  Seq Scan on "testNs"._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
          Filter: (('dev20'::text = _hyper_1_0_replica.device_id) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_0_replica.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
-   ->  Seq Scan on _iobeamdb_internal._hyper_1_2_0_partition
-         Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         Filter: (('dev20'::text = _hyper_1_2_0_partition.device_id) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_2_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
-   ->  Bitmap Heap Scan on _iobeamdb_internal._hyper_1_2_0_3_data
-         Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
-         Recheck Cond: ('dev20'::text = _hyper_1_2_0_3_data.device_id)
-         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_2_0_3_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+   ->  Seq Scan on "testNs"._hyper_1_1_0_partition
+         Output: _hyper_1_1_0_partition."timeCustom", _hyper_1_1_0_partition.device_id, _hyper_1_1_0_partition.series_0, _hyper_1_1_0_partition.series_1, _hyper_1_1_0_partition.series_2, _hyper_1_1_0_partition.series_bool
+         Filter: (('dev20'::text = _hyper_1_1_0_partition.device_id) AND ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_partition.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint))
+   ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_1_data
+         Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
+         Recheck Cond: ('dev20'::text = _hyper_1_1_0_1_data.device_id)
+         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_1_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
          ->  Bitmap Index Scan on "1-testNs_device_id_timeCustom_idx"
-               Index Cond: ('dev20'::text = _hyper_1_2_0_3_data.device_id)
-(13 rows)
+               Index Cond: ('dev20'::text = _hyper_1_1_0_1_data.device_id)
+   ->  Bitmap Heap Scan on "testNs"._hyper_1_1_0_2_data
+         Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
+         Recheck Cond: ('dev20'::text = _hyper_1_1_0_2_data.device_id)
+         Filter: ((((_iobeamdb_internal.murmur3_hash_string(_hyper_1_1_0_2_data.device_id, 1) & 2147483647) % 32768))::smallint = '28646'::smallint)
+         ->  Bitmap Index Scan on "6-testNs_device_id_timeCustom_idx"
+               Index Cond: ('dev20'::text = _hyper_1_1_0_2_data.device_id)
+(19 rows)
 
 --TODO: handle this later?
 --EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE device_id IN ('dev20', 'dev21');

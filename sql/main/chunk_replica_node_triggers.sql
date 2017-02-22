@@ -49,10 +49,13 @@ BEGIN
         --Note that the table could already be deleted in case this
         --trigger fires as a result of a DROP TABLE on the hypertable
         --that this chunk belongs to.
-        SELECT c.relkind INTO kind
-        FROM pg_class c
-        WHERE relname = OLD.table_name AND relnamespace = OLD.schema_name::regnamespace;
-
+        
+        EXECUTE format(
+                $$
+                SELECT c.relkind FROM pg_class c WHERE relname = '%I' AND relnamespace = '%I'::regnamespace
+                $$, OLD.table_name, OLD.schema_name
+        ) INTO kind;
+        
         IF kind IS NULL THEN
             RETURN OLD;
         END IF;

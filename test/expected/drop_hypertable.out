@@ -1,38 +1,20 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
-\ir include/insert.sql
+\ir include/insert_single.sql
 \set ON_ERROR_STOP 1
-\ir create_clustered_db.sql
+\ir create_single_db.sql
 SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS meta;
-DROP DATABASE IF EXISTS "Test1";
-DROP DATABASE IF EXISTS test2;
+DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
-CREATE DATABASE meta;
-CREATE DATABASE "Test1";
-CREATE DATABASE test2;
-\c meta
+CREATE DATABASE single;
+\c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:12: NOTICE:  installing required extension "hstore"
-select set_meta('localhost');
-\c Test1
-CREATE SCHEMA io_test;
-CREATE EXTENSION IF NOT EXISTS iobeamdb SCHEMA io_test CASCADE;
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:17: NOTICE:  installing required extension "hstore"
-ALTER DATABASE "Test1" SET search_path = "io_test";
-SET search_path = 'io_test';
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c test2
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "dblink"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_clustered_db.sql:23: NOTICE:  installing required extension "hstore"
-select join_cluster(meta_database => 'meta', meta_hostname => 'localhost', node_hostname => 'localhost');
-\c Test1
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+\c single
+\set ECHO ALL
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
@@ -46,24 +28,20 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE s
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'_iobeamdb_internal' );
-\c Test1
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
 BEGIN;
-\COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+\COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
-\c Test1
-INSERT INTO public."testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev20', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
-\c test2
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
-\c test2
 CREATE TABLE chunk_closing_test(
         time       BIGINT,
         metric     INTEGER,
@@ -82,147 +60,8 @@ SELECT * FROM _iobeamdb_catalog.chunk c
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
 \o
 \set ECHO ALL
-\c Test1
+\c single
 \d+ "_iobeamdb_internal".*
-Index "_iobeamdb_internal.1-testNs_device_id_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage  
-------------+--------+--------------+----------
- device_id  | text   | device_id    | extended
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "_iobeamdb_internal._hyper_1_2_0_3_data", predicate (device_id IS NOT NULL)
-
-Index "_iobeamdb_internal.2-testNs_timeCustom_series_0_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_0   | double precision | series_0     | plain
-btree, for table "_iobeamdb_internal._hyper_1_2_0_3_data", predicate (series_0 IS NOT NULL)
-
-Index "_iobeamdb_internal.3-testNs_timeCustom_series_1_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_1   | double precision | series_1     | plain
-btree, for table "_iobeamdb_internal._hyper_1_2_0_3_data", predicate (series_1 IS NOT NULL)
-
-Index "_iobeamdb_internal.4-testNs_timeCustom_series_2_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_2   | double precision | series_2     | plain
-btree, for table "_iobeamdb_internal._hyper_1_2_0_3_data", predicate (series_2 IS NOT NULL)
-
-Index "_iobeamdb_internal.5-testNs_timeCustom_series_bool_idx"
-   Column    |  Type   |  Definition  | Storage 
--------------+---------+--------------+---------
- timeCustom  | bigint  | "timeCustom" | plain
- series_bool | boolean | series_bool  | plain
-btree, for table "_iobeamdb_internal._hyper_1_2_0_3_data", predicate (series_bool IS NOT NULL)
-
-                   Table "_iobeamdb_internal._hyper_1_0_replica"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Inherits: _iobeamdb_internal._hyper_1_root
-Child tables: _iobeamdb_internal._hyper_1_1_0_partition,
-              _iobeamdb_internal._hyper_1_2_0_partition
-
-                      Foreign table "_iobeamdb_internal._hyper_1_1_0_1_data"
-   Column    |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------+------------------+-----------+-------------+----------+--------------+-------------
- timeCustom  | bigint           | not null  |             | plain    |              | 
- device_id   | text             | not null  |             | extended |              | 
- series_0    | double precision |           |             | plain    |              | 
- series_1    | double precision |           |             | plain    |              | 
- series_2    | double precision |           |             | plain    |              | 
- series_bool | boolean          |           |             | plain    |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint) NOT VALID
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_1_data')
-Inherits: _iobeamdb_internal._hyper_1_1_0_partition
-
-                      Foreign table "_iobeamdb_internal._hyper_1_1_0_2_data"
-   Column    |       Type       | Modifiers | FDW Options | Storage  | Stats target | Description 
--------------+------------------+-----------+-------------+----------+--------------+-------------
- timeCustom  | bigint           | not null  |             | plain    |              | 
- device_id   | text             | not null  |             | extended |              | 
- series_0    | double precision |           |             | plain    |              | 
- series_1    | double precision |           |             | plain    |              | 
- series_2    | double precision |           |             | plain    |              | 
- series_bool | boolean          |           |             | plain    |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint) NOT VALID
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_1_1_0_2_data')
-Inherits: _iobeamdb_internal._hyper_1_1_0_partition
-
-                 Table "_iobeamdb_internal._hyper_1_1_0_partition"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-Inherits: _iobeamdb_internal._hyper_1_0_replica
-Child tables: _iobeamdb_internal._hyper_1_1_0_1_data,
-              _iobeamdb_internal._hyper_1_1_0_2_data
-
-                   Table "_iobeamdb_internal._hyper_1_2_0_3_data"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "1-testNs_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-testNs_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "3-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "4-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_1_2_0_partition
-
-                 Table "_iobeamdb_internal._hyper_1_2_0_partition"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_1_0_replica
-Child tables: _iobeamdb_internal._hyper_1_2_0_3_data
-
-                      Table "_iobeamdb_internal._hyper_1_root"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Child tables: _iobeamdb_internal._hyper_1_0_replica
-
               Table "_iobeamdb_internal._hyper_2_0_replica"
   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
@@ -230,70 +69,53 @@ Child tables: _iobeamdb_internal._hyper_1_0_replica
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Inherits: _iobeamdb_internal._hyper_2_root
-Child tables: _iobeamdb_internal._hyper_2_3_0_partition,
-              _iobeamdb_internal._hyper_2_4_0_partition
+Child tables: _iobeamdb_internal._hyper_2_2_0_partition
 
-                Foreign table "_iobeamdb_internal._hyper_2_3_0_4_data"
-  Column   |  Type   | Modifiers | FDW Options | Storage  | Stats target | Description 
------------+---------+-----------+-------------+----------+--------------+-------------
- time      | bigint  |           |             | plain    |              | 
- metric    | integer |           |             | plain    |              | 
- device_id | text    |           |             | extended |              | 
+             Table "_iobeamdb_internal._hyper_2_2_0_3_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+-----------+---------+-----------+----------+--------------+-------------
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" <= '1'::bigint) NOT VALID
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_2_3_0_4_data')
-Inherits: _iobeamdb_internal._hyper_2_3_0_partition
+Inherits: _iobeamdb_internal._hyper_2_2_0_partition
 
-                Foreign table "_iobeamdb_internal._hyper_2_3_0_5_data"
-  Column   |  Type   | Modifiers | FDW Options | Storage  | Stats target | Description 
------------+---------+-----------+-------------+----------+--------------+-------------
- time      | bigint  |           |             | plain    |              | 
- metric    | integer |           |             | plain    |              | 
- device_id | text    |           |             | extended |              | 
+             Table "_iobeamdb_internal._hyper_2_2_0_4_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+-----------+---------+-----------+----------+--------------+-------------
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint) NOT VALID
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_2_3_0_5_data')
-Inherits: _iobeamdb_internal._hyper_2_3_0_partition
+Inherits: _iobeamdb_internal._hyper_2_2_0_partition
 
-                Foreign table "_iobeamdb_internal._hyper_2_3_0_6_data"
-  Column   |  Type   | Modifiers | FDW Options | Storage  | Stats target | Description 
------------+---------+-----------+-------------+----------+--------------+-------------
- time      | bigint  |           |             | plain    |              | 
- metric    | integer |           |             | plain    |              | 
- device_id | text    |           |             | extended |              | 
+             Table "_iobeamdb_internal._hyper_2_2_0_5_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+-----------+---------+-----------+----------+--------------+-------------
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" >= '3'::bigint) NOT VALID
-Server: test2
-FDW Options: (schema_name '_iobeamdb_internal', table_name '_hyper_2_3_0_6_data')
-Inherits: _iobeamdb_internal._hyper_2_3_0_partition
+Inherits: _iobeamdb_internal._hyper_2_2_0_partition
 
-            Table "_iobeamdb_internal._hyper_2_3_0_partition"
+            Table "_iobeamdb_internal._hyper_2_2_0_partition"
   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
  time      | bigint  |           | plain    |              | 
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
 Inherits: _iobeamdb_internal._hyper_2_0_replica
-Child tables: _iobeamdb_internal._hyper_2_3_0_4_data,
-              _iobeamdb_internal._hyper_2_3_0_5_data,
-              _iobeamdb_internal._hyper_2_3_0_6_data
-
-            Table "_iobeamdb_internal._hyper_2_4_0_partition"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
-Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_2_0_replica
+Child tables: _iobeamdb_internal._hyper_2_2_0_3_data,
+              _iobeamdb_internal._hyper_2_2_0_4_data,
+              _iobeamdb_internal._hyper_2_2_0_5_data
 
                 Table "_iobeamdb_internal._hyper_2_root"
   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
@@ -303,35 +125,33 @@ Inherits: _iobeamdb_internal._hyper_2_0_replica
  device_id | text    |           | extended |              | 
 Child tables: _iobeamdb_internal._hyper_2_0_replica
 
-\c test2
-SELECT *
-FROM "_iobeamdb_internal"._hyper_1_0_replica;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
----------------------+-----------+----------+----------+----------+-------------
- 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
- 1257894000000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000001000 | dev1      |      2.5 |        3 |          | 
- 1257894001000000000 | dev1      |      3.5 |        4 |          | 
- 1257897600000000000 | dev1      |      4.5 |        5 |          | f
- 1257894002000000000 | dev1      |      2.5 |        3 |          | 
- 1257987600000000000 | dev1      |      1.5 |        1 |          | 
- 1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev20     |      1.5 |        1 |          | 
- 1257894000000000000 | dev20     |      1.5 |        2 |          | 
-(10 rows)
-
 SELECT * FROM _iobeamdb_catalog.hypertable;
  id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | testNs             | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           | Test1      |       1073741824
-  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | test2      |            10000
+  1 | public      | testNs             | testNs                 | _hyper_1                | testNs             | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           | single     |       1073741824
+  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (2 rows)
 
 DROP TABLE "testNs";
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to table "testNs"._hyper_1_0_replica
+drop cascades to table "testNs"._hyper_1_1_0_partition
+drop cascades to table "testNs"._hyper_1_1_0_1_data
+drop cascades to table "testNs"._hyper_1_1_0_2_data
+NOTICE:  index "1-testNs_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "6-testNs_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "2-testNs_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "7-testNs_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "3-testNs_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "8-testNs_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "4-testNs_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "9-testNs_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "5-testNs_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  index "10-testNs_timeCustom_series_bool_idx" does not exist, skipping
 SELECT * FROM _iobeamdb_catalog.hypertable;
  id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | test2      |            10000
+  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (1 row)
 
 \dt  "public".*
@@ -369,58 +189,10 @@ SELECT * FROM _iobeamdb_catalog.hypertable;
        Schema       |          Name          | Type  |  Owner   |    Size    | Description 
 --------------------+------------------------+-------+----------+------------+-------------
  _iobeamdb_internal | _hyper_2_0_replica     | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_3_0_4_data    | table | postgres | 16 kB      | 
- _iobeamdb_internal | _hyper_2_3_0_5_data    | table | postgres | 16 kB      | 
- _iobeamdb_internal | _hyper_2_3_0_6_data    | table | postgres | 16 kB      | 
- _iobeamdb_internal | _hyper_2_3_0_partition | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_4_0_partition | table | postgres | 8192 bytes | 
+ _iobeamdb_internal | _hyper_2_2_0_3_data    | table | postgres | 16 kB      | 
+ _iobeamdb_internal | _hyper_2_2_0_4_data    | table | postgres | 16 kB      | 
+ _iobeamdb_internal | _hyper_2_2_0_5_data    | table | postgres | 16 kB      | 
+ _iobeamdb_internal | _hyper_2_2_0_partition | table | postgres | 8192 bytes | 
  _iobeamdb_internal | _hyper_2_root          | table | postgres | 8192 bytes | 
-(7 rows)
-
-\c Test1
-SELECT * FROM _iobeamdb_catalog.hypertable;
- id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | test2      |            10000
-(1 row)
-
-\dt  "public".*
-               List of relations
- Schema |        Name        | Type  |  Owner   
---------+--------------------+-------+----------
- public | chunk_closing_test | table | postgres
-(1 row)
-
-\dt  "_iobeamdb_catalog".*
-                        List of relations
-      Schema       |           Name            | Type  |  Owner   
--------------------+---------------------------+-------+----------
- _iobeamdb_catalog | chunk                     | table | postgres
- _iobeamdb_catalog | chunk_replica_node        | table | postgres
- _iobeamdb_catalog | chunk_replica_node_index  | table | postgres
- _iobeamdb_catalog | cluster_user              | table | postgres
- _iobeamdb_catalog | default_replica_node      | table | postgres
- _iobeamdb_catalog | deleted_hypertable        | table | postgres
- _iobeamdb_catalog | deleted_hypertable_column | table | postgres
- _iobeamdb_catalog | deleted_hypertable_index  | table | postgres
- _iobeamdb_catalog | hypertable                | table | postgres
- _iobeamdb_catalog | hypertable_column         | table | postgres
- _iobeamdb_catalog | hypertable_index          | table | postgres
- _iobeamdb_catalog | hypertable_replica        | table | postgres
- _iobeamdb_catalog | meta                      | table | postgres
- _iobeamdb_catalog | node                      | table | postgres
- _iobeamdb_catalog | partition                 | table | postgres
- _iobeamdb_catalog | partition_epoch           | table | postgres
- _iobeamdb_catalog | partition_replica         | table | postgres
-(17 rows)
-
-\dt+ "_iobeamdb_internal".*
-                                     List of relations
-       Schema       |          Name          | Type  |  Owner   |    Size    | Description 
---------------------+------------------------+-------+----------+------------+-------------
- _iobeamdb_internal | _hyper_2_0_replica     | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_3_0_partition | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_4_0_partition | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_root          | table | postgres | 8192 bytes | 
-(4 rows)
+(6 rows)
 
