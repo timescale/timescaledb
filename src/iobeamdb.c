@@ -744,7 +744,8 @@ prev_ProcessUtility(Node *parsetree,
 
 }
 
-/* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table. */
+/* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table and */
+/* blocking renaming of hypertables. */
 void iobeamdb_ProcessUtility(Node *parsetree,
 							 const char *queryString,
 							 ProcessUtilityContext context,
@@ -752,7 +753,13 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 							 DestReceiver *dest,
 							 char *completionTag)
 {
-	if (IobeamLoaded() && IsA(parsetree, CopyStmt))
+
+	if (!IobeamLoaded()){
+		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
+		return;
+	}
+
+	if (IsA(parsetree, CopyStmt))
 	{
 		CopyStmt *copystmt = (CopyStmt *) parsetree;
 		Oid relId = RangeVarGetRelid(copystmt->relation, NoLock, true);
@@ -764,9 +771,24 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 			}
 		}
 		prev_ProcessUtility((Node *)copystmt, queryString, context, params, dest, completionTag);
+		return;
 	}
-	else
+	
+	/* We don't support renaming hypertables yet so we need to block it */
+	if (IsA(parsetree, RenameStmt))
 	{
-		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
+		RenameStmt *renamestmt = (RenameStmt *) parsetree;
+		Oid relId = RangeVarGetRelid(renamestmt->relation, NoLock, true);
+		if (OidIsValid(relId)) {
+			hypertable_info* hinfo = get_hypertable_info(relId);
+			if (hinfo != NULL && renamestmt->renameType == OBJECT_TABLE)
+				ereport(ERROR,
+                    	(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                     	 errmsg("Renaming hypertables is not yet supported")));
+		}
+		prev_ProcessUtility((Node *)renamestmt, queryString, context, params, dest, completionTag);
+		return;
 	}
+
+	prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);	
 }
