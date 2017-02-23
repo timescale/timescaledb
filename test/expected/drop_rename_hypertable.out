@@ -125,6 +125,19 @@ Child tables: _iobeamdb_internal._hyper_2_2_0_3_data,
  device_id | text    |           | extended |              | 
 Child tables: _iobeamdb_internal._hyper_2_0_replica
 
+-- Test that renaming hypertable is blocked
+\set ON_ERROR_STOP 0
+ALTER TABLE "testNs" RENAME TO "newname";
+ERROR:  Renaming hypertables is not yet supported
+\set ON_ERROR_STOP 1
+-- Test that renaming ordinary table works
+CREATE TABLE renametable (foo int);
+ALTER TABLE "renametable" RENAME TO "newname";
+SELECT * FROM "newname";
+ foo 
+-----
+(0 rows)
+
 SELECT * FROM _iobeamdb_catalog.hypertable;
  id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
@@ -159,7 +172,8 @@ SELECT * FROM _iobeamdb_catalog.hypertable;
  Schema |        Name        | Type  |  Owner   
 --------+--------------------+-------+----------
  public | chunk_closing_test | table | postgres
-(1 row)
+ public | newname            | table | postgres
+(2 rows)
 
 \dt  "_iobeamdb_catalog".*
                         List of relations
