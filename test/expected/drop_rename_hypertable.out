@@ -101,7 +101,7 @@ Inherits: _iobeamdb_internal._hyper_2_2_0_partition
  device_id | text    |           | extended |              | 
 Check constraints:
     "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-    "time_range" CHECK ("time" >= '3'::bigint) NOT VALID
+    "time_range" CHECK ("time" >= '3'::bigint AND "time" <= '3'::bigint) NOT VALID
 Inherits: _iobeamdb_internal._hyper_2_2_0_partition
 
             Table "_iobeamdb_internal._hyper_2_2_0_partition"

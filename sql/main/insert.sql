@@ -93,6 +93,7 @@ DECLARE
     point_record_query_sql      TEXT;
     point_record                RECORD;
     chunk_row                   _iobeamdb_catalog.chunk;
+    chunk_id                    INT;
     crn_record                  RECORD;
     hypertable_row              RECORD;
     partition_constraint_where_clause   TEXT = '';
@@ -140,15 +141,19 @@ BEGIN
         USING ERRCODE = 'IO501';
     END IF;
 
+    --Create a temp table to collect all the chunks we insert into. We might
+    --need to close the chunks at the end of the transaction.
+    CREATE TEMP TABLE IF NOT EXISTS insert_chunks(LIKE _iobeamdb_catalog.chunk) ON COMMIT DROP;
+
+    --We need to truncate the table if it already existed due to calling this
+    --function twice in a single transaction.
+    TRUNCATE TABLE insert_chunks;
+
     WHILE point_record.time IS NOT NULL LOOP
-        --Get the chunk we should insert into
-        chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time);
-
-        --Check if the chunk should be closed (must be done without lock on chunk).
-        PERFORM _iobeamdb_internal.close_chunk_if_needed(chunk_row);
-
-        --Get a chunk with lock
-        chunk_row := get_or_create_chunk(point_record.partition_id, point_record.time, TRUE);
+        --Get a chunk with SHARE lock
+        INSERT INTO insert_chunks 
+        SELECT * FROM get_or_create_chunk(point_record.partition_id, point_record.time, TRUE) 
+        RETURNING * INTO chunk_row;
 
         IF point_record.partitioning_column IS NOT NULL THEN
             --if we are inserting across more than one partition,
@@ -172,17 +177,16 @@ BEGIN
         END IF;
 
         --Do insert on all chunk replicas
-
-       SELECT string_agg(insert_stmt, ',')
-       INTO insert_sql
-       FROM (
+        SELECT string_agg(insert_stmt, ',')
+        INTO insert_sql
+        FROM (
             SELECT format('i_%s AS (INSERT INTO %I.%I (%s) SELECT * FROM selected)',
                 row_number() OVER(), crn.schema_name, crn.table_name, column_list) insert_stmt
             FROM _iobeamdb_catalog.chunk_replica_node crn
             WHERE (crn.chunk_id = chunk_row.id)
-       ) AS parts;
+        ) AS parts;
 
-       EXECUTE format(
+        EXECUTE format(
             $$
             WITH selected AS
             (
@@ -205,6 +209,16 @@ BEGIN
             RAISE EXCEPTION 'Should never happen: could not find partition for insert'
             USING ERRCODE = 'IO501';
         END IF;
+    END LOOP;
+
+    --Loop through all open chunks that were inserted into, closing
+    --if needed. Do it in ID order to avoid deadlocks.
+    FOR chunk_id IN
+    SELECT c.id FROM insert_chunks cl
+    INNER JOIN _iobeamdb_catalog.chunk c ON cl.id = c.id
+    WHERE c.end_time IS NULL ORDER BY cl.id DESC
+    LOOP
+        PERFORM _iobeamdb_internal.close_chunk_if_needed(chunk_id);
     END LOOP;
 END
 $BODY$;

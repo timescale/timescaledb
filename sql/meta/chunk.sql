@@ -56,10 +56,10 @@ BEGIN
 END
 $BODY$;
 
---creates chunk. Must be called after aquiring a lock on partition.
+--creates chunk.
 CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_chunk_unlocked(
-    partition_id INT,
-    time_point   BIGINT
+    part_id     INT,
+    time_point  BIGINT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -69,10 +69,14 @@ DECLARE
 BEGIN
     SELECT *
     INTO table_start, table_end
-    FROM _iobeamdb_meta.calculate_new_chunk_times(partition_id, time_point);
+    FROM _iobeamdb_meta.calculate_new_chunk_times(part_id, time_point);
 
+    --INSERT on chunk implies SHARE lock on partition row due to foreign key.
+    --If the insert conflicts, it means another transaction created the chunk
+    --before us, and we can safely ignore the error.
     INSERT INTO _iobeamdb_catalog.chunk (partition_id, start_time, end_time)
-    VALUES (partition_id, table_start, table_end);
+    VALUES (part_id, table_start, table_end) 
+    ON CONFLICT (partition_id, start_time) DO NOTHING;
 END
 $BODY$;
 
@@ -87,13 +91,6 @@ DECLARE
     chunk_row     _iobeamdb_catalog.chunk;
     partition_row _iobeamdb_catalog.partition;
 BEGIN
-    --get lock
-    SELECT *
-    INTO partition_row
-    FROM _iobeamdb_catalog.partition
-    WHERE id = partition_id
-    FOR UPDATE;
-
     --recheck:
     chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
 
@@ -169,14 +166,7 @@ BEGIN
         RETURN;
     END IF;
 
-    --get partition lock
-    SELECT *
-    INTO partition_row
-    FROM _iobeamdb_catalog.partition
-    WHERE id = chunk_row.partition_id
-    FOR UPDATE;
-        
-    --PHASE 1: lock chunk row on all rows (prevents concurrent chunk insert)
+    --PHASE 1: lock chunk row on all nodes (prevents concurrent chunk insert)
     FOR node_row IN
     SELECT *
     FROM _iobeamdb_catalog.node n

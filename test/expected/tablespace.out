@@ -19,7 +19,7 @@ SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there i
 \set ECHO ALL
 \c single
 \set ON_ERROR_STOP 0
-SET client_min_messages = WARNING;
+SET client_min_messages = ERROR;
 drop tablespace if exists tspace1;
 SET client_min_messages = NOTICE;
 \set VERBOSITY verbose
