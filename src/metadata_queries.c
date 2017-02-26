@@ -53,57 +53,7 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 
 #define HYPERTABLE_QUERY_ARGS (Oid[]) { INT4OID }
 #define HYPERTABLE_QUERY "SELECT id, time_column_name, time_column_type FROM _iobeamdb_catalog.hypertable h WHERE h.id = $1"
-DEFINE_PLAN(get_hypertable_plan, HYPERTABLE_QUERY, 1, HYPERTABLE_QUERY_ARGS)
-
-hypertable_basic_info *
-fetch_hypertable_info(hypertable_basic_info *entry, int32 hypertable_id)
-{
-	SPIPlanPtr	plan = get_hypertable_plan();
-	Datum		args[1] = {Int32GetDatum(hypertable_id)};
-	int			ret;
-	bool		is_null;
-	TupleDesc	tupdesc;
-	HeapTuple	tuple;
-	Name		time_column_name;
-	int			sql_len = NAMEDATALEN * 2 + 100;
-	char		get_one_tuple_copyt_sql[sql_len];
-
-	if (entry == NULL)
-	{
-		entry = palloc(sizeof(hypertable_basic_info));
-	}
-	CACHE2_elog(WARNING, "Looking up hypertable info: %d", hypertable_id);
-
-	if (SPI_connect() < 0)
-	{
-		elog(ERROR, "Got an SPI connect error");
-	}
-	ret = SPI_execute_plan(plan, args, NULL, true, 2);
-	if (ret <= 0)
-	{
-		elog(ERROR, "Got an SPI error %d", ret);
-	}
-	if (SPI_processed != 1)
-	{
-		elog(ERROR, "Got not 1 row but %lu", SPI_processed);
-	}
-
-	tupdesc = SPI_tuptable->tupdesc;
-	tuple = SPI_tuptable->vals[0];
-
-	entry->id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &is_null));
-
-	time_column_name = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &is_null));
-	memcpy(entry->time_column_name.data, time_column_name, NAMEDATALEN);
-
-	entry->time_column_type = DatumGetObjectId(SPI_getbinval(tuple, tupdesc, 3, &is_null));
-
-	SPI_finish();
-	snprintf(get_one_tuple_copyt_sql, sql_len, "SELECT * FROM %s LIMIT 1", copy_table_name(entry->id));
-	entry->get_one_tuple_copyt_plan = prepare_plan(get_one_tuple_copyt_sql, 0, NULL);
-	return entry;
-}
-
+//DEFINE_PLAN(get_hypertable_plan, HYPERTABLE_QUERY, 1, HYPERTABLE_QUERY_ARGS)
 
 #define EPOCH_AND_PARTITION_ARGS (Oid[]) { INT4OID, INT8OID }
 #define EPOCH_AND_PARTITION_QUERY "SELECT  pe.id as epoch_id, hypertable_id, start_time, end_time, \

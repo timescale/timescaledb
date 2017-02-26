@@ -194,13 +194,17 @@ SPIPlanPtr get_hypertable_info_plan()
 bool
 IobeamLoaded(void)
 {
+
 	if (!isLoaded)
 	{
+		Oid id;
+		
 		if(!IsTransactionState())
 		{
 			return false;
 		}
-		Oid id = get_extension_oid("iobeamdb", true);
+
+		id = get_extension_oid("iobeamdb", true);
 
 		if (id != InvalidOid && !(creating_extension && id == CurrentExtensionObject))
 		{

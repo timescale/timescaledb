@@ -25,6 +25,7 @@
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
 #include "deps/dblink.h"
+#include "utils/tqual.h"
 
 #include "access/xact.h"
 #include "parser/parse_oper.h"
@@ -45,7 +46,6 @@
 
 /* private funcs */
 static int	tuple_fnumber(TupleDesc tupdesc, const char *fname);
-static HeapTuple get_one_tuple_from_copy_table(hypertable_cache_entry *hci);
 
 /*
  * Inserts rows from the temporary copy table into correct hypertable child tables.
@@ -100,7 +100,10 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	 * two different hypertables.
 	 */
 	char	   *insert_guard = GetConfigOptionByName("io.insert_data_guard", NULL, true);
-
+	HeapScanDesc scan;
+	ScanKeyData scankey[1];
+	int nkeys = 0;
+	
 	if (insert_guard != NULL && strcmp(insert_guard, "on") == 0)
 	{
 		ereport(ERROR,
@@ -116,24 +119,28 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	 * column fnum for time field
 	 */
 	hci = get_hypertable_cache_entry(atoi(hypertable_id_arg));
-	time_fnum = tuple_fnumber(trigdata->tg_relation->rd_att, NameStr(hci->info->time_column_name));
+	time_fnum = tuple_fnumber(trigdata->tg_relation->rd_att, hci->time_column_name);
 
+	scan = heap_beginscan(trigdata->tg_relation, SnapshotSelf, nkeys, scankey);
+ 
 	/* get one row in a loop until the copy table is empty. */
-	while ((firstrow = get_one_tuple_from_copy_table(hci)))
+	while ((firstrow = heap_getnext(scan, ForwardScanDirection)))
 	{
-		Datum		time_datum = heap_getattr(firstrow, time_fnum, trigdata->tg_relation->rd_att, &isnull);
+		Datum		time_datum;
 		int64		time_internal;
 		epoch_and_partitions_set *pe_entry;
 		partition_info *part = NULL;
 		chunk_cache_entry *chunk;
 		int			ret;
 
+		time_datum = heap_getattr(firstrow, time_fnum, trigdata->tg_relation->rd_att, &isnull);
+
 		if (isnull)
 		{
 			elog(ERROR, "Time column is null");
 		}
 
-		time_internal = time_value_to_internal(time_datum, hci->info->time_column_type);
+		time_internal = time_value_to_internal(time_datum, hci->time_column_type);
 		pe_entry = get_partition_epoch_cache_entry(hci, time_internal, trigdata->tg_relation->rd_id);
 
 		if (pe_entry->partitioning_func != NULL)
@@ -161,6 +168,7 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 		}
 
 		chunk = get_chunk_cache_entry(hci, pe_entry, part, time_internal, true);
+		
 		if (chunk->chunk->end_time == OPEN_END_TIME)
 		{
 			chunk_id_list = lappend_int(chunk_id_list, chunk->id);
@@ -178,6 +186,8 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 
 	}
 
+	heap_endscan(scan);
+	
 	/* build chunk id array */
 	num_chunks = list_length(chunk_id_list);
 	chunk_id_array = palloc(sizeof(int) * num_chunks);
@@ -297,29 +307,3 @@ tuple_fnumber(TupleDesc tupdesc, const char *fname)
 	elog(ERROR, "field not found: %s", fname);
 }
 
-
-static HeapTuple
-get_one_tuple_from_copy_table(hypertable_cache_entry *hci)
-{
-	HeapTuple	res;
-	int			ret;
-
-	if (SPI_connect() < 0)
-	{
-		elog(ERROR, "Got an SPI connect error");
-	}
-	ret = SPI_execute_plan(hci->info->get_one_tuple_copyt_plan, NULL, NULL, false, 1);
-	if (ret <= 0)
-	{
-		elog(ERROR, "Got an SPI error %d", ret);
-	}
-	if (SPI_processed != 1)
-	{
-		SPI_finish();
-		return NULL;
-	}
-	res = SPI_copytuple(SPI_tuptable->vals[0]);
-	SPI_finish();
-
-	return res;
-}

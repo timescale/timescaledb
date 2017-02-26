@@ -10,14 +10,6 @@
 #define OPEN_START_TIME -1
 #define OPEN_END_TIME PG_INT64_MAX
 
-typedef struct hypertable_basic_info
-{
-	int32		id;
-	NameData	time_column_name;
-	Oid			time_column_type;
-	SPIPlanPtr	get_one_tuple_copyt_plan;
-} hypertable_basic_info;
-
 typedef struct partition_info
 {
 	int32		id;
@@ -72,8 +64,6 @@ extern epoch_and_partitions_set *fetch_epoch_and_partitions_set(epoch_and_partit
 							   int32 hypertable_id, int64 time_pt, Oid relid);
 
 extern void free_epoch(epoch_and_partitions_set *epoch);
-
-extern hypertable_basic_info *fetch_hypertable_info(hypertable_basic_info *entry, int32 hypertable_id);
 
 extern chunk_row *fetch_chunk_row(chunk_row *entry, int32 partition_id, int64 time_pt, bool lock);
 

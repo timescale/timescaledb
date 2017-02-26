@@ -1,13 +1,18 @@
 
 #include <postgres.h>
+#include <access/relscan.h>
 #include <utils/catcache.h>
+#include <utils/rel.h>
+#include <utils/fmgroids.h>
+#include <utils/tqual.h>
+#include <utils/acl.h>
 
 #include "hypertable_cache.h"
+#include "catalog.h"
 #include "cache.h"
 #include "metadata_queries.h"
 #include "utils.h"
 
-static void hypertable_cache_pre_invalidate(Cache *cache);
 static void *hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
 
 typedef struct HypertableCacheQueryCtx
@@ -34,33 +39,72 @@ static Cache hypertable_cache = {
 	.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
 	.get_key = hypertable_cache_get_key,
 	.create_entry = hypertable_cache_create_entry,
-	.pre_invalidate_hook = hypertable_cache_pre_invalidate,
 	.post_invalidate_hook = cache_init,
 };
 
-static void
-hypertable_cache_pre_invalidate(Cache *cache)
-{
-	hypertable_cache_entry *entry;
-	HASH_SEQ_STATUS scan;
+/* Column numbers for 'hypertable' table in  sql/common/tables.sql */
+#define	HT_COL_ID 1
+#define	HT_COL_TIME_COL_NAME 10
+#define HT_COL_TIME_TYPE 11
 
-	hash_seq_init(&scan, cache->htab);
-
-	while ((entry = hash_seq_search(&scan)))
-	{
-		SPI_freeplan(entry->info->get_one_tuple_copyt_plan);
-	}
-}
+/* Primary key Index column number */
+#define HT_INDEX_COL_ID 1
 
 static void *
 hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	HypertableCacheQueryCtx *hctx = (HypertableCacheQueryCtx *) ctx;
-	hypertable_cache_entry *he = ctx->entry;
+	hypertable_cache_entry *he = NULL;
+	Relation table, index;
+	ScanKeyData scankey[1];
+	int nkeys = 1, norderbys = 0;
+	IndexScanDesc scan;
+	HeapTuple tuple;
+	TupleDesc tuple_desc;
+	Catalog *catalog = catalog_get();
+	
+	/* Perform an index scan on primary key. */
+   	table = heap_open(catalog->tables[HYPERTABLE].id, AccessShareLock);
+	index = index_open(catalog->tables[HYPERTABLE].index_id, AccessShareLock);
 
-	he->info = fetch_hypertable_info(NULL, hctx->hypertable_id);
-	he->num_epochs = 0;
+	ScanKeyInit(&scankey[0], HT_INDEX_COL_ID, BTEqualStrategyNumber,
+				F_INT4EQ, Int32GetDatum(hctx->hypertable_id));
 
+	scan = index_beginscan(table, index, SnapshotSelf, nkeys, norderbys);
+	index_rescan(scan, scankey, nkeys, NULL, norderbys);
+
+	tuple_desc = RelationGetDescr(table);
+
+	tuple = index_getnext(scan, ForwardScanDirection);
+
+	if (HeapTupleIsValid(tuple))
+	{
+		bool is_null;
+		Datum id_datum = heap_getattr(tuple, HT_COL_ID, tuple_desc, &is_null);
+		Datum time_col_datum = heap_getattr(tuple, HT_COL_TIME_COL_NAME, tuple_desc, &is_null);
+		Datum time_type_datum = heap_getattr(tuple, HT_COL_TIME_TYPE, tuple_desc, &is_null);
+		int32 id = DatumGetInt32(id_datum);
+
+		if (id  != hctx->hypertable_id)
+		{
+			elog(ERROR, "Expected hypertable ID %u, got %u", hctx->hypertable_id, id);
+		}
+
+		he = ctx->entry;
+		he->num_epochs = 0;
+		he->id = hctx->hypertable_id;
+		strncpy(he->time_column_name, DatumGetCString(time_col_datum), NAMEDATALEN);		
+		he->time_column_type = DatumGetObjectId(time_type_datum);
+	}
+	else
+	{
+		elog(ERROR, "Could not find hypertable entry");
+	}
+
+	index_endscan(scan);
+	index_close(index, AccessShareLock);
+	heap_close(table, AccessShareLock);
+	
 	return he;
 }
 
@@ -79,7 +123,7 @@ get_hypertable_cache_entry(int32 hypertable_id)
 	HypertableCacheQueryCtx ctx = {
 		.hypertable_id = hypertable_id,
 	};
-
+	
 	return cache_fetch(&hypertable_cache, &ctx.cctx);
 }
 
@@ -131,7 +175,7 @@ get_partition_epoch_cache_entry(hypertable_cache_entry *hce, int64 time_pt, Oid 
 	}
 
 	old = cache_switch_to_memory_context(&hypertable_cache);
-	entry = fetch_epoch_and_partitions_set(NULL, hce->info->id, time_pt, relid);
+	entry = fetch_epoch_and_partitions_set(NULL, hce->id, time_pt, relid);
 
 	/* check if full */
 	if (hce->num_epochs == MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY)
@@ -202,8 +246,7 @@ get_partition_info(epoch_and_partitions_set *epoch, int16 keyspace_pt)
 	return *part;
 }
 
-void
-_hypertable_cache_init(void)
+void _hypertable_cache_init(void)
 {
 	CreateCacheMemoryContext();
 	cache_init(&hypertable_cache);

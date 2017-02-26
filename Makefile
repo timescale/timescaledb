@@ -12,6 +12,7 @@ SRCS = \
 	src/murmur3.c \
 	src/pgmurmur3.c \
 	src/utils.c \
+	src/catalog.c \
 	src/metadata_queries.c \
 	src/cache.c \
 	src/cache_invalidate.c \

@@ -188,17 +188,17 @@ get_copy_table_insert_sql(ChunkCacheQueryCtx *ctx)
 	if (ctx->chunk_start_time != OPEN_START_TIME)
 	{
 		appendStringInfo(where_clause, " AND (%1$s >= %2$s) ",
-					 quote_identifier(ctx->hci->info->time_column_name.data),
+					 quote_identifier(ctx->hci->time_column_name),
 				   internal_time_to_column_literal_sql(ctx->chunk_start_time,
-										  ctx->hci->info->time_column_type));
+										  ctx->hci->time_column_type));
 	}
 
 	if (ctx->chunk_end_time != OPEN_END_TIME)
 	{
 		appendStringInfo(where_clause, " AND (%1$s <= %2$s) ",
-					 quote_identifier(ctx->hci->info->time_column_name.data),
+					 quote_identifier(ctx->hci->time_column_name),
 					 internal_time_to_column_literal_sql(ctx->chunk_end_time,
-										  ctx->hci->info->time_column_type));
+										  ctx->hci->time_column_type));
 	}
 
 	i = 0;

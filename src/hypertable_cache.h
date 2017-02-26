@@ -16,7 +16,8 @@ typedef struct partition_info partition_info;
 typedef struct hypertable_cache_entry
 {
 	int32		id;
-	hypertable_basic_info *info;
+	char        time_column_name[NAMEDATALEN];
+	Oid			time_column_type;
 	int			num_epochs;
 	/* Array of epoch_and_partitions_set*. Order by start_time */
 	epoch_and_partitions_set *epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY];
