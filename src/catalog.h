@@ -22,6 +22,7 @@ enum catalog_table {
 #define CHUNK_INDEX_NAME "chunk_pkey"
 #define PARTITION_INDEX_NAME "partition_pkey"
 #define PARTITION_EPOCH_INDEX_NAME "partition_epoch_pkey"
+#define PARTITION_EPOCH_TIME_INDEX_NAME "partition_epoch_hypertable_id_start_time_end_time_idx"
 
 typedef struct Catalog {
 	char database_name[NAMEDATALEN];

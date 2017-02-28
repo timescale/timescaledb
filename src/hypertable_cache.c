@@ -1,4 +1,3 @@
-
 #include <postgres.h>
 #include <access/relscan.h>
 #include <utils/catcache.h>
@@ -12,13 +11,14 @@
 #include "cache.h"
 #include "metadata_queries.h"
 #include "utils.h"
+#include "scanner.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
 
 typedef struct HypertableCacheQueryCtx
 {
 	CacheQueryCtx cctx;
-	int32		hypertable_id;
+	int32       hypertable_id;
 } HypertableCacheQueryCtx;
 
 static void *
@@ -43,69 +43,60 @@ static Cache hypertable_cache = {
 };
 
 /* Column numbers for 'hypertable' table in  sql/common/tables.sql */
-#define	HT_COL_ID 1
-#define	HT_COL_TIME_COL_NAME 10
-#define HT_COL_TIME_TYPE 11
+#define HT_TBL_COL_ID 1
+#define HT_TBL_COL_TIME_COL_NAME 10
+#define HT_TBL_COL_TIME_TYPE 11
 
 /* Primary key Index column number */
-#define HT_INDEX_COL_ID 1
+#define HT_IDX_COL_ID 1
+
+static void
+hypertable_tuple_found(HeapTuple tuple, TupleDesc desc, void *data)
+{
+	bool is_null;
+	HypertableCacheQueryCtx *hctx = data;
+	hypertable_cache_entry *he = hctx->cctx.entry;
+	Datum id_datum = heap_getattr(tuple, HT_TBL_COL_ID, desc, &is_null);
+	Datum time_col_datum = heap_getattr(tuple, HT_TBL_COL_TIME_COL_NAME, desc, &is_null);
+	Datum time_type_datum = heap_getattr(tuple, HT_TBL_COL_TIME_TYPE, desc, &is_null);
+	int32 id = DatumGetInt32(id_datum);
+
+	if (id  != hctx->hypertable_id)
+	{
+		elog(ERROR, "Expected hypertable ID %u, got %u", hctx->hypertable_id, id);
+	}
+
+	he->num_epochs = 0;
+	he->id = hctx->hypertable_id;
+	strncpy(he->time_column_name, DatumGetCString(time_col_datum), NAMEDATALEN);
+	he->time_column_type = DatumGetObjectId(time_type_datum);
+}
 
 static void *
 hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	HypertableCacheQueryCtx *hctx = (HypertableCacheQueryCtx *) ctx;
-	hypertable_cache_entry *he = NULL;
-	Relation table, index;
-	ScanKeyData scankey[1];
-	int nkeys = 1, norderbys = 0;
-	IndexScanDesc scan;
-	HeapTuple tuple;
-	TupleDesc tuple_desc;
 	Catalog *catalog = catalog_get();
-	
-	/* Perform an index scan on primary key. */
-   	table = heap_open(catalog->tables[HYPERTABLE].id, AccessShareLock);
-	index = index_open(catalog->tables[HYPERTABLE].index_id, AccessShareLock);
+	ScanKeyData scankey[1];
+	ScannerCtx scanCtx = {
+		.table = catalog->tables[HYPERTABLE].id,
+		.index = catalog->tables[HYPERTABLE].index_id,
+		.scantype = ScannerTypeIndex,
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = ctx,
+		.tuple_found = hypertable_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
 
-	ScanKeyInit(&scankey[0], HT_INDEX_COL_ID, BTEqualStrategyNumber,
+	/* Perform an index scan on primary key. */
+	ScanKeyInit(&scankey[0], HT_IDX_COL_ID, BTEqualStrategyNumber,
 				F_INT4EQ, Int32GetDatum(hctx->hypertable_id));
 
-	scan = index_beginscan(table, index, SnapshotSelf, nkeys, norderbys);
-	index_rescan(scan, scankey, nkeys, NULL, norderbys);
+	scanner_scan(&scanCtx);
 
-	tuple_desc = RelationGetDescr(table);
-
-	tuple = index_getnext(scan, ForwardScanDirection);
-
-	if (HeapTupleIsValid(tuple))
-	{
-		bool is_null;
-		Datum id_datum = heap_getattr(tuple, HT_COL_ID, tuple_desc, &is_null);
-		Datum time_col_datum = heap_getattr(tuple, HT_COL_TIME_COL_NAME, tuple_desc, &is_null);
-		Datum time_type_datum = heap_getattr(tuple, HT_COL_TIME_TYPE, tuple_desc, &is_null);
-		int32 id = DatumGetInt32(id_datum);
-
-		if (id  != hctx->hypertable_id)
-		{
-			elog(ERROR, "Expected hypertable ID %u, got %u", hctx->hypertable_id, id);
-		}
-
-		he = ctx->entry;
-		he->num_epochs = 0;
-		he->id = hctx->hypertable_id;
-		strncpy(he->time_column_name, DatumGetCString(time_col_datum), NAMEDATALEN);		
-		he->time_column_type = DatumGetObjectId(time_type_datum);
-	}
-	else
-	{
-		elog(ERROR, "Could not find hypertable entry");
-	}
-
-	index_endscan(scan);
-	index_close(index, AccessShareLock);
-	heap_close(table, AccessShareLock);
-	
-	return he;
+	return ctx->entry;
 }
 
 void
@@ -123,7 +114,7 @@ get_hypertable_cache_entry(int32 hypertable_id)
 	HypertableCacheQueryCtx ctx = {
 		.hypertable_id = hypertable_id,
 	};
-	
+
 	return cache_fetch(&hypertable_cache, &ctx.cctx);
 }
 
@@ -132,7 +123,7 @@ static int
 cmp_epochs(const void *time_pt_pointer, const void *test)
 {
 	/* note reverse order; assume oldest stuff last */
-	int64	   *time_pt = (int64 *) time_pt_pointer;
+	int64      *time_pt = (int64 *) time_pt_pointer;
 	epoch_and_partitions_set **entry = (epoch_and_partitions_set **) test;
 
 	if ((*entry)->start_time <= *time_pt && (*entry)->end_time >= *time_pt)
@@ -152,8 +143,8 @@ get_partition_epoch_cache_entry(hypertable_cache_entry *hce, int64 time_pt, Oid 
 {
 	MemoryContext old;
 	epoch_and_partitions_set *entry,
-			  **cache_entry;
-	int			j;
+		**cache_entry;
+	int         j;
 
 	/* fastpath: check latest entry */
 	if (hce->num_epochs > 0)
@@ -204,7 +195,7 @@ static int
 cmp_partitions(const void *keyspace_pt_arg, const void *test)
 {
 	/* note in keyspace asc; assume oldest stuff last */
-	int64		keyspace_pt = *((int16 *) keyspace_pt_arg);
+	int64       keyspace_pt = *((int16 *) keyspace_pt_arg);
 	partition_info *part = *((partition_info **) test);
 
 	if (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt)

@@ -154,7 +154,8 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 			Datum		part_value_text_datum = FunctionCall1(pe_entry->partitioning_column_text_func_fmgr, part_value_datum);
 			char	   *partition_val = DatumGetCString(part_value_text_datum);
 
-			Datum		keyspace_datum = FunctionCall2(pe_entry->partition_func_fmgr, CStringGetTextDatum(partition_val), Int32GetDatum(pe_entry->partitioning_mod));
+			Datum		keyspace_datum = FunctionCall2(pe_entry->partition_func_fmgr, CStringGetTextDatum(partition_val),
+													   Int32GetDatum(pe_entry->partitioning_mod));
 
 			int16		keyspace_pt = DatumGetInt16(keyspace_datum);
 
