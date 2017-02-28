@@ -1,4 +1,3 @@
-
 -- Sets a database and hostname as a meta node.
 CREATE OR REPLACE FUNCTION set_meta(
     hostname      TEXT = gethostname(),
@@ -112,6 +111,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION add_partition_epoch(
     hypertable_id               INTEGER,
     keyspace_start              SMALLINT [],
+    number_partitions           SMALLINT,
     partitioning_column         NAME,
     partitioning_func_schema    NAME,
     partitioning_func           NAME,
@@ -120,9 +120,10 @@ CREATE OR REPLACE FUNCTION add_partition_epoch(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
     WITH epoch AS (
-        INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, partitioning_func_schema, 
-            partitioning_func, partitioning_mod, partitioning_column)
-        VALUES (hypertable_id, NULL, NULL, partitioning_func_schema, partitioning_func, 32768, partitioning_column)
+        INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, num_partitions,
+            partitioning_func_schema, partitioning_func, partitioning_mod, partitioning_column)
+        VALUES (hypertable_id, NULL, NULL, number_partitions, partitioning_func_schema,
+        partitioning_func, 32768, partitioning_column)
         RETURNING id
     )
     INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end, tablespace)
@@ -149,6 +150,7 @@ SELECT add_partition_epoch(
     hypertable_id,
     (SELECT ARRAY(SELECT start * 32768 / (number_partitions)
                   FROM generate_series(1, number_partitions - 1) AS start) :: SMALLINT []),
+    number_partitions,
     partitioning_column,
     partitioning_func_schema,
     partitioning_func,

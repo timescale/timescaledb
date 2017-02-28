@@ -119,17 +119,19 @@ SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.default_replica_no
 -- Changing a data's partitioning, and thus creating a new epoch, should be done
 -- INFREQUENTLY as it's expensive operation.
 CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition_epoch (
-    id                          SERIAL  NOT NULL  PRIMARY KEY,
-    hypertable_id               INTEGER NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
-    start_time                  BIGINT  NULL      CHECK (start_time >= 0),
-    end_time                    BIGINT  NULL      CHECK (end_time >= 0),
-    partitioning_func_schema    NAME    NULL,  
-    partitioning_func           NAME    NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
-    partitioning_mod            INT     NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_column         NAME    NULL,
+    id                          SERIAL   NOT NULL  PRIMARY KEY,
+    hypertable_id               INTEGER  NOT NULL  REFERENCES _iobeamdb_catalog.hypertable(id) ON DELETE CASCADE,
+    start_time                  BIGINT   NULL      CHECK (start_time >= 0),
+    end_time                    BIGINT   NULL      CHECK (end_time >= 0),
+    num_partitions              SMALLINT NOT NULL  CHECK (num_partitions >= 0),
+    partitioning_func_schema    NAME     NULL,
+    partitioning_func           NAME     NULL,  --function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
+    partitioning_mod            INT      NOT NULL  CHECK (partitioning_mod < 65536),
+    partitioning_column         NAME     NULL,
     UNIQUE (hypertable_id, start_time),
     UNIQUE (hypertable_id, end_time),
     CHECK (start_time <= end_time),
+    CHECK (num_partitions <= partitioning_mod),
     CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL))
 );
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition_epoch', '');
