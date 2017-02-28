@@ -1,0 +1,6 @@
+# timescaledb extension
+comment = 'TimescaleDB extension'
+default_version = '1.0'
+module_pathname = '$libdir/timescaledb'
+requires = 'dblink, postgres_fdw, hstore'
+relocatable = true

@@ -3,7 +3,7 @@
   is the corresponding create index command with the placeholders /*TABLE_NAME*/
   and  /*INDEX_NAME*/
 */
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_general_index_definition(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_general_index_definition(
     index_oid regclass,
     table_oid regclass
 )
@@ -27,7 +27,7 @@ BEGIN
 
     --replace index name with /*INDEX_NAME*/
 
-    SELECT relname 
+    SELECT relname
     INTO STRICT index_name --index name in def is never schema qualified
     FROM pg_class
     WHERE OID = index_oid;
@@ -43,7 +43,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_default_value_for_attribute(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_default_value_for_attribute(
     att pg_attribute
 )
     RETURNS TEXT LANGUAGE SQL VOLATILE AS
@@ -54,19 +54,19 @@ $BODY$
 $BODY$;
 
 --create the hypertable column based on a pg_attribute (table column) entry.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_column_from_attribute(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_column_from_attribute(
     hypertable_id INTEGER,
     att           pg_attribute
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-    PERFORM _iobeamdb_meta_api.add_column(
+    PERFORM _timescaledb_meta_api.add_column(
         hypertable_id,
         att.attname,
         att.attnum,
         att.atttypid,
-        _iobeamdb_internal.get_default_value_for_attribute(att),
+        _timescaledb_internal.get_default_value_for_attribute(att),
         att.attnotnull
     );
 END

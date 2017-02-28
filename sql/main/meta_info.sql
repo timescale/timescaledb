@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_meta_server_name()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_meta_server_name()
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -7,14 +7,14 @@ DECLARE
 BEGIN
     SELECT m.server_name, m.port
     INTO STRICT server_name, port
-    FROM _iobeamdb_catalog.meta m;
+    FROM _timescaledb_catalog.meta m;
 
     RETURN server_name;
 END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.get_meta_database_name()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_meta_database_name()
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
@@ -22,7 +22,7 @@ DECLARE
 BEGIN
     SELECT m.database_name
     INTO STRICT database_name
-    FROM _iobeamdb_catalog.meta m;
+    FROM _timescaledb_catalog.meta m;
 
     RETURN database_name;
 END

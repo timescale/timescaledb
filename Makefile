@@ -1,4 +1,4 @@
-EXTENSION = iobeamdb
+EXTENSION = timescaledb
 SQL_FILES = $(shell cat sql/load_order.txt)
 
 EXT_VERSION = 1.0
@@ -8,7 +8,7 @@ DATA = $(EXT_SQL_FILE)
 MODULE_big = $(EXTENSION)
 
 SRCS = \
-	src/iobeamdb.c \
+	src/timescaledb.c \
 	src/murmur3.c \
 	src/pgmurmur3.c \
 	src/utils.c \
@@ -44,7 +44,7 @@ REGRESS_OPTS = \
 	--load-extension=dblink \
 	--load-extension=postgres_fdw \
 	--load-extension=hstore \
-	--load-extension=iobeamdb
+	--load-extension=timescaledb
 
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
@@ -73,11 +73,10 @@ package: clean $(EXT_SQL_FILE)
 	$(install_sh) -m 644 $(EXT_SQL_FILE)  'package/extension/'
 
 typedef.list: clean $(OBJS)
-	./generate_typedef.sh 
+	./generate_typedef.sh
 
 pgindent: typedef.list
 	pgindent --typedef=typedef.list
 
 
 .PHONY: check-sql-files all
-

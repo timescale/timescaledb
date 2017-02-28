@@ -3,7 +3,7 @@ FROM postgres:9.6.1
 MAINTAINER Matvey Arye
 
 ENV PG_MAJOR 9.6
-    
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     daemontools \
@@ -17,6 +17,6 @@ COPY src/deps/*.h build/src/deps/
 COPY test/expected /build/test/
 COPY test/sql /build/test/
 COPY test/runner.sh /build/test/runner.sh
-COPY iobeamdb.control /build/
+COPY timescaledb.control /build/
 COPY Makefile build/Makefile
 RUN make -C /build install && rm -rf /build

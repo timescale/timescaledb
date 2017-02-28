@@ -5,7 +5,7 @@
 --will never be disjoint in terms of time. Therefore you will have:
 --     <---current open ended start_time table --| existing closed tables | -- current open ended end_time table --->
 --Should not be called directly. Requires a lock on partition (prevents simultaneous inserts)
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.calculate_new_chunk_times(
+CREATE OR REPLACE FUNCTION _timescaledb_meta.calculate_new_chunk_times(
         partition_id INT,
         "time"       BIGINT,
     OUT table_start  BIGINT,
@@ -14,13 +14,13 @@ CREATE OR REPLACE FUNCTION _iobeamdb_meta.calculate_new_chunk_times(
 LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    partition_epoch_row _iobeamdb_catalog.partition_epoch;
-    chunk_row           _iobeamdb_catalog.chunk;
+    partition_epoch_row _timescaledb_catalog.partition_epoch;
+    chunk_row           _timescaledb_catalog.chunk;
 BEGIN
     SELECT pe.*
     INTO partition_epoch_row
-    FROM _iobeamdb_catalog.partition p
-    INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (p.epoch_id = pe.id)
+    FROM _timescaledb_catalog.partition p
+    INNER JOIN _timescaledb_catalog.partition_epoch pe ON (p.epoch_id = pe.id)
     WHERE p.id = partition_id
     FOR SHARE;
 
@@ -29,7 +29,7 @@ BEGIN
 
     SELECT *
     INTO chunk_row
-    FROM _iobeamdb_catalog.chunk AS c
+    FROM _timescaledb_catalog.chunk AS c
     WHERE c.end_time < calculate_new_chunk_times."time" AND
           c.partition_id = calculate_new_chunk_times.partition_id
     ORDER BY c.end_time DESC
@@ -42,7 +42,7 @@ BEGIN
     ELSE
         SELECT *
         INTO chunk_row
-        FROM _iobeamdb_catalog.chunk AS c
+        FROM _timescaledb_catalog.chunk AS c
         WHERE c.start_time > calculate_new_chunk_times."time" AND
               c.partition_id = calculate_new_chunk_times.partition_id
         ORDER BY c.start_time DESC
@@ -57,7 +57,7 @@ END
 $BODY$;
 
 --creates chunk.
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_chunk_unlocked(
+CREATE OR REPLACE FUNCTION _timescaledb_meta.create_chunk_unlocked(
     part_id     INT,
     time_point  BIGINT
 )
@@ -69,34 +69,34 @@ DECLARE
 BEGIN
     SELECT *
     INTO table_start, table_end
-    FROM _iobeamdb_meta.calculate_new_chunk_times(part_id, time_point);
+    FROM _timescaledb_meta.calculate_new_chunk_times(part_id, time_point);
 
     --INSERT on chunk implies SHARE lock on partition row due to foreign key.
     --If the insert conflicts, it means another transaction created the chunk
     --before us, and we can safely ignore the error.
-    INSERT INTO _iobeamdb_catalog.chunk (partition_id, start_time, end_time)
-    VALUES (part_id, table_start, table_end) 
+    INSERT INTO _timescaledb_catalog.chunk (partition_id, start_time, end_time)
+    VALUES (part_id, table_start, table_end)
     ON CONFLICT (partition_id, start_time) DO NOTHING;
 END
 $BODY$;
 
 --creates and returns a new chunk, taking a lock on the partition being modified.
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.create_chunk(
+CREATE OR REPLACE FUNCTION _timescaledb_meta.create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
-    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row     _iobeamdb_catalog.chunk;
-    partition_row _iobeamdb_catalog.partition;
+    chunk_row     _timescaledb_catalog.chunk;
+    partition_row _timescaledb_catalog.partition;
 BEGIN
     --recheck:
-    chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
+    chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
 
     IF chunk_row IS NULL THEN
-        PERFORM _iobeamdb_meta.create_chunk_unlocked(partition_id, time_point);
-        chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
+        PERFORM _timescaledb_meta.create_chunk_unlocked(partition_id, time_point);
+        chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
     END IF;
 
     IF chunk_row IS NULL THEN --recheck
@@ -110,55 +110,55 @@ $BODY$;
 
 --gets or creates chunk. Concurrent chunk creation is prevented at the
 --partition level by taking a lock on the partition being modified.
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.get_or_create_chunk(
+CREATE OR REPLACE FUNCTION _timescaledb_meta.get_or_create_chunk(
     partition_id INT,
     time_point   BIGINT
 )
-    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row           _iobeamdb_catalog.chunk;
+    chunk_row           _timescaledb_catalog.chunk;
     chunk_table_name    NAME;
     chunk_max_size      BIGINT;
 BEGIN
-    chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
+    chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
 
     IF chunk_row IS NULL THEN
-        chunk_row := _iobeamdb_meta.create_chunk(partition_id, time_point);
+        chunk_row := _timescaledb_meta.create_chunk(partition_id, time_point);
     END IF;
 
     RETURN chunk_row;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.close_chunk_end(
+CREATE OR REPLACE FUNCTION _timescaledb_meta.close_chunk_end(
     chunk_id INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     crn_node_row     RECORD;
-    node_row         _iobeamdb_catalog.node;
+    node_row         _timescaledb_catalog.node;
     max_time_replica BIGINT;
     max_time         BIGINT = 0;
-    chunk_row        _iobeamdb_catalog.chunk;
-    partition_row    _iobeamdb_catalog.partition;
+    chunk_row        _timescaledb_catalog.chunk;
+    partition_row    _timescaledb_catalog.partition;
 BEGIN
     --get chunk lock
     SELECT *
     INTO chunk_row
-    FROM _iobeamdb_catalog.chunk c
+    FROM _timescaledb_catalog.chunk c
     WHERE c.id = chunk_id AND end_time IS NULL
     FOR UPDATE;
 
-    IF chunk_row IS NULL THEN 
+    IF chunk_row IS NULL THEN
         --should only happen if the chunk was already closed
         SELECT *
         INTO chunk_row
-        FROM _iobeamdb_catalog.chunk c
+        FROM _timescaledb_catalog.chunk c
         WHERE c.id = chunk_id AND end_time IS NOT NULL;
 
-        IF chunk_row IS NULL THEN 
+        IF chunk_row IS NULL THEN
             RAISE EXCEPTION 'Should never happen: chunk not found in close.'
             USING ERRCODE = 'IO501';
         END IF;
@@ -169,9 +169,9 @@ BEGIN
     --PHASE 1: lock chunk row on all nodes (prevents concurrent chunk insert)
     FOR node_row IN
     SELECT *
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     LOOP
-        PERFORM _iobeamdb_data_api.lock_for_chunk_close(node_row.database_name, chunk_id);
+        PERFORM _timescaledb_data_api.lock_for_chunk_close(node_row.database_name, chunk_id);
     END LOOP;
 
     --PHASE 2: get max time for chunk
@@ -179,13 +179,13 @@ BEGIN
     SELECT
         crn.*,
         n.*
-    FROM _iobeamdb_catalog.chunk_replica_node crn
-    INNER JOIN _iobeamdb_catalog.node n ON (n.database_name = crn.database_name)
+    FROM _timescaledb_catalog.chunk_replica_node crn
+    INNER JOIN _timescaledb_catalog.node n ON (n.database_name = crn.database_name)
     WHERE crn.chunk_id = close_chunk_end.chunk_id
     LOOP
         SELECT *
         INTO max_time_replica
-        FROM  _iobeamdb_data_api.max_time_for_chunk_close(
+        FROM  _timescaledb_data_api.max_time_for_chunk_close(
             crn_node_row.database_name,
             crn_node_row.schema_name,
             crn_node_row.table_name
@@ -207,17 +207,17 @@ BEGIN
     END IF;
 
     --set time locally
-    UPDATE _iobeamdb_catalog.chunk
+    UPDATE _timescaledb_catalog.chunk
     SET end_time = max_time
     WHERE id = chunk_id;
 
     --PHASE 3: set max_time remotely
     FOR node_row IN
     SELECT *
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
-        PERFORM _iobeamdb_data_api.set_end_time_for_chunk_close(
+        PERFORM _timescaledb_data_api.set_end_time_for_chunk_close(
             node_row.database_name,
             chunk_id,
             max_time

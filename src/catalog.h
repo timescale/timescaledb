@@ -1,5 +1,5 @@
-#ifndef IOBEAMDB_CATALOG_H
-#define IOBEAMDB_CATALOG_H
+#ifndef TIMESCALEDB_CATALOG_H
+#define TIMESCALEDB_CATALOG_H
 
 #include <postgres.h>
 
@@ -11,7 +11,7 @@ enum catalog_table {
 	_MAX_CATALOG_TABLES,
 };
 
-#define CATALOG_SCHEMA_NAME "_iobeamdb_catalog"
+#define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 
 /* Hypertable table definitions */
 #define HYPERTABLE_TABLE_NAME "hypertable"
@@ -45,4 +45,4 @@ typedef struct Catalog {
 
 Catalog *catalog_get(void);
 
-#endif /* IOBEAMDB_CATALOG_H */
+#endif /* TIMESCALEDB_CATALOG_H */

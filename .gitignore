@@ -1,10 +1,10 @@
 *~
 /sql/tests/unit/testoutputs.tmp
-/sql/iobeamdb--*.sql
+/sql/timescaledb--*.sql
 /data/
 /src/*.o
 /src/*.so
 /.vscode/
-/iobeamdb.so
+/timescaledb.so
 *.bak
 typedef.list

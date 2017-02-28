@@ -2,7 +2,7 @@
 -- hypertables.
 
 -- Creates a new schema if it does not exist.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_schema(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_schema(
     schema_name NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -18,7 +18,7 @@ SET client_min_messages = WARNING --suppress NOTICE on IF EXISTS
 ;
 
 -- Creates a table for a hypertable (e.g. main table or root table)
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -34,7 +34,7 @@ END
 $BODY$;
 
 -- Drop main table if it exists.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_main_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_main_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -49,7 +49,7 @@ END
 $BODY$;
 
 -- Drops root table
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.drop_root_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_root_table(
     schema_name NAME,
     table_name  NAME
 )
@@ -63,7 +63,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_remote_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_remote_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -73,11 +73,11 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_remote_table(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    node_row _iobeamdb_catalog.node;
+    node_row _timescaledb_catalog.node;
 BEGIN
     SELECT *
     INTO STRICT node_row
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.database_name = create_remote_table.database_name;
 
     EXECUTE format(
@@ -89,7 +89,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_local_data_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_local_data_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -122,7 +122,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_replica_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_replica_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -139,7 +139,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_data_partition_table(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_data_partition_table(
     schema_name        NAME,
     table_name         NAME,
     parent_schema_name NAME,
@@ -151,12 +151,12 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_data_partition_table(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    epoch_row     _iobeamdb_catalog.partition_epoch;
+    epoch_row     _timescaledb_catalog.partition_epoch;
     column_exists BOOLEAN;
 BEGIN
     SELECT *
     INTO STRICT epoch_row
-    FROM _iobeamdb_catalog.partition_epoch pe
+    FROM _timescaledb_catalog.partition_epoch pe
     WHERE pe.id = epoch_id;
 
     EXECUTE format(
@@ -168,17 +168,17 @@ BEGIN
 
     SELECT COUNT(*) > 0
     INTO column_exists
-    FROM _iobeamdb_catalog.hypertable_column c
+    FROM _timescaledb_catalog.hypertable_column c
     WHERE c.hypertable_id = epoch_row.hypertable_id
           AND c.name = epoch_row.partitioning_column;
 
     IF column_exists THEN
-        PERFORM _iobeamdb_internal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
+        PERFORM _timescaledb_internal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
     END IF;
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.add_partition_constraint(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.add_partition_constraint(
     schema_name    NAME,
     table_name     NAME,
     keyspace_start SMALLINT,
@@ -188,11 +188,11 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.add_partition_constraint(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    epoch_row _iobeamdb_catalog.partition_epoch;
+    epoch_row _timescaledb_catalog.partition_epoch;
 BEGIN
     SELECT *
     INTO STRICT epoch_row
-    FROM _iobeamdb_catalog.partition_epoch pe
+    FROM _timescaledb_catalog.partition_epoch pe
     WHERE pe.id = epoch_id;
 
     IF epoch_row.partitioning_column IS NOT NULL THEN
@@ -208,7 +208,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.set_time_constraint(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.set_time_constraint(
     schema_name NAME,
     table_name  NAME,
     start_time  BIGINT,
@@ -219,7 +219,7 @@ $BODY$
 DECLARE
     time_col_type regtype;
 BEGIN
-    time_col_type := _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name);
+    time_col_type := _timescaledb_internal.time_col_type_for_crn(schema_name, table_name);
 
     EXECUTE format(
         $$
@@ -236,26 +236,26 @@ BEGIN
             $$
             ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s) NOT VALID
         $$,
-            _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
+            _timescaledb_internal.time_col_name_for_crn(schema_name, table_name),
             schema_name, table_name,
-            _iobeamdb_internal.time_literal_sql(start_time, time_col_type),
-            _iobeamdb_internal.time_literal_sql(end_time, time_col_type));
+            _timescaledb_internal.time_literal_sql(start_time, time_col_type),
+            _timescaledb_internal.time_literal_sql(end_time, time_col_type));
     ELSIF start_time IS NOT NULL THEN
         EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %s) NOT VALID
         $$,
             schema_name, table_name,
-            _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
-            _iobeamdb_internal.time_literal_sql(start_time, time_col_type));
+            _timescaledb_internal.time_col_name_for_crn(schema_name, table_name),
+            _timescaledb_internal.time_literal_sql(start_time, time_col_type));
     ELSIF end_time IS NOT NULL THEN
         EXECUTE format(
             $$
             ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s) NOT VALID
             $$,
             schema_name, table_name,
-            _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name),
-            _iobeamdb_internal.time_literal_sql(end_time, time_col_type));
+            _timescaledb_internal.time_col_name_for_crn(schema_name, table_name),
+            _timescaledb_internal.time_literal_sql(end_time, time_col_type));
     END IF;
 END
 $BODY$

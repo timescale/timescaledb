@@ -1,7 +1,7 @@
 /*
   creates an index on a chunk replica node.
 */
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_chunk_replica_node_index(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_replica_node_index(
     schema_name NAME,
     table_name  NAME,
     main_schema_name NAME,
@@ -15,12 +15,12 @@ DECLARE
     prefix     BIGINT;
     sql_code TEXT;
 BEGIN
-    prefix = nextval('_iobeamdb_catalog.chunk_replica_node_index_name_prefix');
+    prefix = nextval('_timescaledb_catalog.chunk_replica_node_index_name_prefix');
     index_name := format('%s-%s', prefix, main_index_name);
 
-    sql_code := _iobeamdb_internal.get_index_definition_for_table(schema_name, table_name, index_name, def);
+    sql_code := _timescaledb_internal.get_index_definition_for_table(schema_name, table_name, index_name, def);
 
-    INSERT INTO _iobeamdb_catalog.chunk_replica_node_index (schema_name, table_name, index_name, main_schema_name, main_index_name, definition)
+    INSERT INTO _timescaledb_catalog.chunk_replica_node_index (schema_name, table_name, index_name, main_schema_name, main_index_name, definition)
     VALUES (schema_name, table_name, index_name,main_schema_name, main_index_name, sql_code);
 END
 $BODY$;

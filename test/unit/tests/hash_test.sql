@@ -12,21 +12,21 @@ BEGIN
 /*
     Ensure same output as the hashlib extension.
 */
-SELECT _iobeamdb_internal.murmur3_hash_string('', 1 :: INT4) INTO hash_value;
+SELECT _timescaledb_internal.murmur3_hash_string('', 1 :: INT4) INTO hash_value;
 SELECT * FROM assert.is_equal(hash_value, 1364076727) INTO message, result;
 
 IF result = false THEN
     RETURN message;
 END IF;
 
-SELECT _iobeamdb_internal.murmur3_hash_string('dev1', 1 :: INT4) INTO hash_value;
+SELECT _timescaledb_internal.murmur3_hash_string('dev1', 1 :: INT4) INTO hash_value;
 SELECT * FROM assert.is_equal(hash_value, 1398815044) INTO message, result;
 
 IF result = false THEN
     RETURN message;
 END IF;
 
-SELECT _iobeamdb_internal.murmur3_hash_string('longlonglonglongpartitionkey', 1 :: INT4) INTO hash_value;
+SELECT _timescaledb_internal.murmur3_hash_string('longlonglonglongpartitionkey', 1 :: INT4) INTO hash_value;
 SELECT * FROM assert.is_equal(hash_value, -1320242451) INTO message, result;
 
 IF result = false THEN

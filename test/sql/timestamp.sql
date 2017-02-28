@@ -37,9 +37,9 @@ INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 2),
 ('2009-11-10T23:00:02+00:00', 'dev1', 2.5, 3);
 
-SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
-INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
+SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
+FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
+INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
 
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-10T23:00:00+00:00', 'dev2', 1.5, 1),
@@ -113,30 +113,30 @@ ALTER DATABASE single SET timezone ='UTC';
 SELECT to_timestamp(1486480176.236538);
 
 -- extension-specific version taking microsecond UNIX timestamp
-SELECT _iobeamdb_internal.to_timestamp(1486480176236538);
+SELECT _timescaledb_internal.to_timestamp(1486480176236538);
 
 -- Should be the inverse of the statement above.
-SELECT _iobeamdb_internal.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
+SELECT _timescaledb_internal.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
 
 -- In UNIX microseconds, BIGINT MAX is smaller than internal date upper bound
 -- and should therefore be OK. Further, converting to the internal postgres
 -- epoch cannot overflow a 64-bit INTEGER since the postgres epoch is at a
 -- later date compared to the UNIX epoch, and is therefore represented by a
 -- smaller number
-SELECT _iobeamdb_internal.to_timestamp(9223372036854775807);
+SELECT _timescaledb_internal.to_timestamp(9223372036854775807);
 
 -- Julian day zero is -210866803200000000 microseconds from UNIX epoch
-SELECT _iobeamdb_internal.to_timestamp(-210866803200000000);
+SELECT _timescaledb_internal.to_timestamp(-210866803200000000);
 
 \set VERBOSITY default
 -- Going beyond Julian day zero should give out-of-range error
-SELECT _iobeamdb_internal.to_timestamp(-210866803200000001);
+SELECT _timescaledb_internal.to_timestamp(-210866803200000001);
 
 -- Lower bound on date (should return the Julian day zero UNIX timestamp above)
-SELECT _iobeamdb_internal.to_unix_microseconds('4714-11-24 00:00:00+00 BC');
+SELECT _timescaledb_internal.to_unix_microseconds('4714-11-24 00:00:00+00 BC');
 
 -- Going beyond lower bound on date should return out-of-range
-SELECT _iobeamdb_internal.to_unix_microseconds('4714-11-23 23:59:59.999999+00 BC');
+SELECT _timescaledb_internal.to_unix_microseconds('4714-11-23 23:59:59.999999+00 BC');
 
 -- The upper bound for Postgres TIMESTAMPTZ
 SELECT timestamp '294276-12-31 23:59:59.999999+00';
@@ -146,14 +146,14 @@ SELECT timestamp '294276-12-31 23:59:59.999999+00' + interval '1 us';
 
 -- Cannot represent the upper bound timestamp with a UNIX microsecond timestamp
 -- since the Postgres epoch is at a later date than the UNIX epoch.
-SELECT _iobeamdb_internal.to_unix_microseconds('294276-12-31 23:59:59.999999+00');
+SELECT _timescaledb_internal.to_unix_microseconds('294276-12-31 23:59:59.999999+00');
 
 -- Subtracting the difference between the two epochs (10957 days) should bring
 -- us within range.
 SELECT timestamp '294276-12-31 23:59:59.999999+00' - interval '10957 days';
 
-SELECT _iobeamdb_internal.to_unix_microseconds('294247-01-01 23:59:59.999999');
+SELECT _timescaledb_internal.to_unix_microseconds('294247-01-01 23:59:59.999999');
 
 -- Adding one microsecond should take us out-of-range again
 SELECT timestamp '294247-01-01 23:59:59.999999' + interval '1 us';
-SELECT _iobeamdb_internal.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');
+SELECT _timescaledb_internal.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');

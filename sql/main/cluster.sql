@@ -12,17 +12,17 @@ CREATE OR REPLACE FUNCTION join_cluster(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    node_row        _iobeamdb_catalog.node;
+    node_row        _timescaledb_catalog.node;
 BEGIN
     SELECT *
     INTO node_row
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.database_name = node_database AND n.hostname = node_hostname AND n.port = node_port
     LIMIT 1;
 
     IF node_row IS NULL THEN
-        PERFORM _iobeamdb_internal.setup_main_immmediate(node_database, username, password);
-        PERFORM _iobeamdb_meta_api.join_cluster(meta_database, meta_hostname, meta_port,
+        PERFORM _timescaledb_internal.setup_main_immmediate(node_database, username, password);
+        PERFORM _timescaledb_meta_api.join_cluster(meta_database, meta_hostname, meta_port,
                                                 node_database, node_hostname, node_port,
                                                 username, password);
     ELSE

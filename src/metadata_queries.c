@@ -58,7 +58,7 @@ free_epoch(epoch_and_partitions_set *epoch)
 
 #define CRN_QUERY_ARGS (Oid[]) { INT4OID }
 #define CRN_QUERY "SELECT schema_name, table_name \
-				FROM _iobeamdb_catalog.chunk_replica_node AS crn \
+				FROM _timescaledb_catalog.chunk_replica_node AS crn \
 				WHERE crn.chunk_id = $1"
 
 DEFINE_PLAN(get_crn_plan, CRN_QUERY, 1, CRN_QUERY_ARGS)

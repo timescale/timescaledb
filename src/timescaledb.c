@@ -36,7 +36,7 @@
 #include "fmgr.h"
 
 
-#include "iobeamdb.h"
+#include "timescaledb.h"
 #include "insert.h"
 #include "cache.h"
 #include "errors.h"
@@ -50,10 +50,10 @@ PG_MODULE_MAGIC;
                                   pe.partitioning_column, pe.partitioning_func_schema, pe.partitioning_func, pe.partitioning_mod, \
                                   format('%I.%I', h.root_schema_name, h.root_table_name)::regclass::oid, \
                                   h.id \
-                                FROM _iobeamdb_catalog.hypertable h \
-                                INNER JOIN _iobeamdb_catalog.default_replica_node drn ON (drn.hypertable_id = h.id AND drn.database_name = current_database()) \
-                                INNER JOIN _iobeamdb_catalog.hypertable_replica hr ON (hr.replica_id = drn.replica_id AND hr.hypertable_id = drn.hypertable_id) \
-                                INNER JOIN _iobeamdb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id) \
+                                FROM _timescaledb_catalog.hypertable h \
+                                INNER JOIN _timescaledb_catalog.default_replica_node drn ON (drn.hypertable_id = h.id AND drn.database_name = current_database()) \
+                                INNER JOIN _timescaledb_catalog.hypertable_replica hr ON (hr.replica_id = drn.replica_id AND hr.hypertable_id = drn.hypertable_id) \
+                                INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id) \
                                 WHERE h.schema_name = $1 AND h.table_name = $2"
 
 void _PG_init(void);
@@ -70,7 +70,7 @@ static  SPIPlanPtr hypertable_info_plan = NULL;
 static bool isLoaded = false;
 
 /* definitions */
-PlannedStmt *iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams);
+PlannedStmt *timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams);
 static void io_xact_callback(XactEvent event, void *arg);
 
 static List *callbackConnections = NIL;
@@ -114,7 +114,7 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partit
 SPIPlanPtr get_hypertable_info_plan(void);
 
 
-void iobeamdb_ProcessUtility(Node *parsetree,
+void timescaledb_ProcessUtility(Node *parsetree,
 							 const char *queryString,
 							 ProcessUtilityContext context,
 							 ParamListInfo params,
@@ -140,19 +140,19 @@ extern void _cache_invalidate_extload(void);
 void
 _PG_init(void)
 {
-	elog(INFO, "iobeamdb loaded");
+	elog(INFO, "timescaledb loaded");
 	_hypertable_cache_init();
 	_chunk_cache_init();
 	_cache_invalidate_init();
-	
+
 	prev_planner_hook = planner_hook;
-	planner_hook = iobeamdb_planner;
+	planner_hook = timescaledb_planner;
 
 	prev_ProcessUtility_hook = ProcessUtility_hook;
-	ProcessUtility_hook = iobeamdb_ProcessUtility;
+	ProcessUtility_hook = timescaledb_ProcessUtility;
 
 	RegisterXactCallback(io_xact_callback, NULL);
-	
+
 }
 
 void
@@ -162,7 +162,7 @@ _PG_fini(void)
 	ProcessUtility_hook = prev_ProcessUtility_hook;
 	_cache_invalidate_fini();
 	_hypertable_cache_fini();
-	_chunk_cache_fini();	
+	_chunk_cache_fini();
 }
 
 SPIPlanPtr get_hypertable_info_plan()
@@ -198,13 +198,13 @@ IobeamLoaded(void)
 	if (!isLoaded)
 	{
 		Oid id;
-		
+
 		if(!IsTransactionState())
 		{
 			return false;
 		}
 
-		id = get_extension_oid("iobeamdb", true);
+		id = get_extension_oid("timescaledb", true);
 
 		if (id != InvalidOid && !(creating_extension && id == CurrentExtensionObject))
 		{
@@ -260,7 +260,7 @@ change_table_name_walker(Node *node, void *context)
 }
 
 PlannedStmt *
-iobeamdb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
+timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 {
 	PlannedStmt *rv = NULL;
 
@@ -309,7 +309,7 @@ hypertable_info *
 get_hypertable_info(Oid mainRelationOid)
 {
 	Oid namespace = get_rel_namespace(mainRelationOid);
-	Oid hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_iobeamdb_catalog", false));
+	Oid hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_timescaledb_catalog", false));
 	char *tableName = get_rel_name(mainRelationOid);
 	char *schemaName = get_namespace_name(namespace);
 	Datum args[2] = {CStringGetTextDatum(schemaName), CStringGetTextDatum(tableName)};
@@ -321,7 +321,7 @@ get_hypertable_info(Oid mainRelationOid)
 	if (
 			hypertable_meta == InvalidOid
 			|| namespace == PG_CATALOG_NAMESPACE
-			|| namespace ==  get_namespace_oid("_iobeamdb_catalog", false)
+			|| namespace ==  get_namespace_oid("_timescaledb_catalog", false)
 		)
 	{
 		return NULL;
@@ -720,7 +720,7 @@ prev_ProcessUtility(Node *parsetree,
 
 /* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table and */
 /* blocking renaming of hypertables. */
-void iobeamdb_ProcessUtility(Node *parsetree,
+void timescaledb_ProcessUtility(Node *parsetree,
 							 const char *queryString,
 							 ProcessUtilityContext context,
 							 ParamListInfo params,
@@ -746,7 +746,7 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 		prev_ProcessUtility((Node *)copystmt, queryString, context, params, dest, completionTag);
 		return;
 	}
-	
+
 	/* We don't support renaming hypertables yet so we need to block it */
 	if (IsA(parsetree, RenameStmt))
 	{
@@ -763,7 +763,5 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 		return;
 	}
 
-	prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);	
+	prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
 }
-
-

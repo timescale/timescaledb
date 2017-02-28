@@ -4,7 +4,7 @@
 -- are actually FDW to the remote tables.
 
 -- Trigger to sync inserts on meta node to data nodes.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.sync_insert()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.sync_insert()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -12,7 +12,7 @@ DECLARE
 BEGIN
     FOR schema_name IN
     SELECT n.schema_name
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         EXECUTE format(
@@ -29,7 +29,7 @@ END
 $BODY$;
 
 -- Trigger to sync updates on meta node to data nodes.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.sync_update()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.sync_update()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -53,7 +53,7 @@ BEGIN
 
     FOR schema_name IN
     SELECT n.schema_name
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         EXECUTE format(
@@ -72,7 +72,7 @@ END
 $BODY$;
 
 -- Trigger to sync deletes on meta node to data nodes.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.sync_delete()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.sync_delete()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -89,7 +89,7 @@ BEGIN
 
     FOR schema_name IN
     SELECT n.schema_name
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.database_name <> current_database()
     LOOP
         EXECUTE format(

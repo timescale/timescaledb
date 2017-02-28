@@ -77,7 +77,7 @@ get_close_if_needed_fn()
 		MemoryContext old;
 
 		old = MemoryContextSwitchTo(TopMemoryContext);
-		single = create_fmgr("_iobeamdb_internal", "close_chunk_if_needed", 1);
+		single = create_fmgr("_timescaledb_internal", "close_chunk_if_needed", 1);
 		MemoryContextSwitchTo(old);
 	}
 	return single;
@@ -102,7 +102,7 @@ typedef struct ChunkInsertCtxRel
 	BulkInsertState bistate;
 } ChunkInsertCtxRel;
 
-static ChunkInsertCtxRel* 
+static ChunkInsertCtxRel*
 chunk_insert_ctx_rel_new(Relation	rel, ResultRelInfo *resultRelInfo, List	   *range_table) {
 	TupleDesc	tupDesc;
 	ChunkInsertCtxRel *rel_ctx = palloc(sizeof(ChunkInsertCtxRel));
@@ -174,7 +174,7 @@ chunk_insert_ctx_new(chunk_cache_entry *chunk, Cache *pinned)
 	ListCell   *lc;
 	List	   *rel_ctx_list = NIL;
 	ChunkInsertCtx *ctx;
-	
+
 	ctx = palloc(sizeof(ChunkInsertCtx));
 	ctx->pinned = pinned;
 
@@ -360,7 +360,7 @@ static void scan_copy_table_and_insert_post(int num_tuples, void *data)
 
 static void scan_copy_table_and_insert( hypertable_cache_entry *hci,
 							epoch_and_partitions_set *pe,
-							Oid table, Oid index) 
+							Oid table, Oid index)
 {
 	CopyTableQueryCtx query_ctx = {
 		.pe = pe,
@@ -415,7 +415,7 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	 * two different hypertables.
 	 */
 	char	   *insert_guard = GetConfigOptionByName("io.insert_data_guard", NULL, true);
-	
+
 	if (insert_guard != NULL && strcmp(insert_guard, "on") == 0)
 	{
 		ereport(ERROR,
@@ -516,7 +516,7 @@ create_copy_table(int32 hypertable_id, Oid root_oid)
 	createTrig = makeNode(CreateTrigStmt);
 	createTrig->trigname = INSERT_TRIGGER_COPY_TABLE_NAME;
 	createTrig->relation = rel;
-	createTrig->funcname = list_make2(makeString(IOBEAMDB_INTERNAL_SCHEMA), makeString(INSERT_TRIGGER_COPY_TABLE_FN));
+	createTrig->funcname = list_make2(makeString(TIMESCALEDB_INTERNAL_SCHEMA), makeString(INSERT_TRIGGER_COPY_TABLE_FN));
 	createTrig->args = list_make1(makeString(hypertable_id_arg->data));
 	createTrig->row = false;
 	createTrig->timing = TRIGGER_TYPE_AFTER;
@@ -618,7 +618,7 @@ create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *par
 		array_pos_args = list_make2(array_expr, get_keyspace_fn_call(part_info));
 		array_pos_fc = makeFuncCall(array_pos_func_name, array_pos_args, -1);
 
-		partition_elem = makeIndexElem(NULL, (Node *) array_pos_fc);		
+		partition_elem = makeIndexElem(NULL, (Node *) array_pos_fc);
 		keyspace_elem = makeIndexElem(NULL, (Node *) get_keyspace_fn_call(part_info));
 
 		/* partition_number, time, keyspace */
