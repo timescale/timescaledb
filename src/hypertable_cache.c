@@ -12,6 +12,7 @@
 #include "metadata_queries.h"
 #include "utils.h"
 #include "scanner.h"
+#include "partitioning.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
 
@@ -109,7 +110,7 @@ invalidate_hypertable_cache_callback(void)
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 hypertable_cache_entry *
-get_hypertable_cache_entry(int32 hypertable_id)
+hypertable_cache_get(int32 hypertable_id)
 {
 	HypertableCacheQueryCtx ctx = {
 		.hypertable_id = hypertable_id,
@@ -139,21 +140,21 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 }
 
 epoch_and_partitions_set *
-get_partition_epoch_cache_entry(hypertable_cache_entry *hce, int64 time_pt, Oid relid)
+hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt, Oid relid)
 {
 	MemoryContext old;
-	epoch_and_partitions_set *entry,
+	epoch_and_partitions_set *epoch,
 		**cache_entry;
 	int         j;
 
 	/* fastpath: check latest entry */
 	if (hce->num_epochs > 0)
 	{
-		entry = hce->epochs[0];
+		epoch = hce->epochs[0];
 
-		if (entry->start_time <= time_pt && entry->end_time >= time_pt)
+		if (epoch->start_time <= time_pt && epoch->end_time >= time_pt)
 		{
-			return entry;
+			return epoch;
 		}
 	}
 
@@ -166,7 +167,7 @@ get_partition_epoch_cache_entry(hypertable_cache_entry *hce, int64 time_pt, Oid 
 	}
 
 	old = cache_switch_to_memory_context(&hypertable_cache);
-	entry = fetch_epoch_and_partitions_set(NULL, hce->id, time_pt, relid);
+	epoch = partition_epoch_scan(hce->id, time_pt, relid);
 
 	/* check if full */
 	if (hce->num_epochs == MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY)
@@ -182,59 +183,12 @@ get_partition_epoch_cache_entry(hypertable_cache_entry *hce, int64 time_pt, Oid 
 	{
 		hce->epochs[j + 1] = hce->epochs[j];
 	}
-	hce->epochs[j + 1] = entry;
+	hce->epochs[j + 1] = epoch;
 	hce->num_epochs++;
 
 	MemoryContextSwitchTo(old);
 
-	return entry;
-}
-
-/* function to compare partitions */
-static int
-cmp_partitions(const void *keyspace_pt_arg, const void *test)
-{
-	/* note in keyspace asc; assume oldest stuff last */
-	int64       keyspace_pt = *((int16 *) keyspace_pt_arg);
-	partition_info *part = *((partition_info **) test);
-
-	if (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt)
-	{
-		return 0;
-	}
-
-	if (keyspace_pt > part->keyspace_end)
-	{
-		return 1;
-	}
-	return -1;
-}
-
-
-partition_info *
-get_partition_info(epoch_and_partitions_set *epoch, int16 keyspace_pt)
-{
-	partition_info **part;
-
-	if (keyspace_pt < 0)
-	{
-		if (epoch->num_partitions > 1)
-		{
-			elog(ERROR, "Found many partitions(%d) for an unpartitioned epoch",
-				 epoch->num_partitions);
-		}
-		return epoch->partitions[0];
-	}
-
-	part = bsearch(&keyspace_pt, epoch->partitions, epoch->num_partitions,
-				   sizeof(partition_info *), cmp_partitions);
-
-	if (part == NULL)
-	{
-		elog(ERROR, "could not find partition for epoch");
-	}
-
-	return *part;
+	return epoch;
 }
 
 void _hypertable_cache_init(void)

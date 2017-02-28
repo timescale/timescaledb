@@ -40,6 +40,7 @@
 #include "errors.h"
 #include "utils.h"
 #include "metadata_queries.h"
+#include "partitioning.h"
 
 #define INSERT_TRIGGER_COPY_TABLE_FN	"insert_trigger_on_copy_table_c"
 #define INSERT_TRIGGER_COPY_TABLE_NAME	"insert_trigger"
@@ -118,7 +119,7 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	 * get the hypertable cache; use the time column name to figure out the
 	 * column fnum for time field
 	 */
-	hci = get_hypertable_cache_entry(atoi(hypertable_id_arg));
+	hci = hypertable_cache_get(atoi(hypertable_id_arg));
 	time_fnum = tuple_fnumber(trigdata->tg_relation->rd_att, hci->time_column_name);
 
 	scan = heap_beginscan(trigdata->tg_relation, SnapshotSelf, nkeys, scankey);
@@ -129,10 +130,10 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 		Datum		time_datum;
 		int64		time_internal;
 		epoch_and_partitions_set *pe_entry;
-		partition_info *part = NULL;
+		Partition   *part = NULL;
 		chunk_cache_entry *chunk;
 		int			ret;
-
+		
 		time_datum = heap_getattr(firstrow, time_fnum, trigdata->tg_relation->rd_att, &isnull);
 
 		if (isnull)
@@ -141,31 +142,24 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 		}
 
 		time_internal = time_value_to_internal(time_datum, hci->time_column_type);
-		pe_entry = get_partition_epoch_cache_entry(hci, time_internal, trigdata->tg_relation->rd_id);
+		
+		pe_entry = hypertable_cache_get_partition_epoch(hci, time_internal,
+														trigdata->tg_relation->rd_id);
 
-		if (pe_entry->partitioning_func != NULL)
+		if (pe_entry->partitioning != NULL && pe_entry->num_partitions > 1)
 		{
-			/*
-			 * get the keyspace point by running the partitioning func on the
-			 * row's partitioning value;
-			 */
-			Datum		part_value_datum = heap_getattr(firstrow, pe_entry->partitioning_column_attrnumber,
-									 trigdata->tg_relation->rd_att, &isnull);
-			Datum		part_value_text_datum = FunctionCall1(pe_entry->partitioning_column_text_func_fmgr, part_value_datum);
-			char	   *partition_val = DatumGetCString(part_value_text_datum);
-
-			Datum		keyspace_datum = FunctionCall2(pe_entry->partition_func_fmgr, CStringGetTextDatum(partition_val),
-													   Int32GetDatum(pe_entry->partitioning_mod));
-
-			int16		keyspace_pt = DatumGetInt16(keyspace_datum);
+			PartitioningInfo *pi = pe_entry->partitioning;
+			Datum part_value = heap_getattr(firstrow, pi->column_attnum,
+											trigdata->tg_relation->rd_att, &isnull);
+			int16 keyspace_pt = partitioning_func_apply(&pi->partfunc, part_value);
 
 			/* get the partition using the keyspace value of the row. */
-			part = get_partition_info(pe_entry, keyspace_pt);
+			part = partition_epoch_get_partition(pe_entry, keyspace_pt);
 		}
 		else
 		{
 			/* Not Partitioning: get the first and only partition */
-			part = get_partition_info(pe_entry, -1);
+			part = partition_epoch_get_partition(pe_entry, -1);
 		}
 
 		chunk = get_chunk_cache_entry(hci, pe_entry, part, time_internal, true);

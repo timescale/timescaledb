@@ -1,5 +1,4 @@
-#include "metadata_queries.h"
-#include "utils.h"
+#include <postgres.h>
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
 #include "utils/inval.h"
@@ -8,6 +7,10 @@
 #include "utils/builtins.h"
 #include "executor/spi.h"
 #include "access/xact.h"
+
+#include "metadata_queries.h"
+#include "utils.h"
+#include "partitioning.h"
 
 #define DEFINE_PLAN(fnname, query, num, args) \
   static SPIPlanPtr fnname() {\
@@ -45,200 +48,11 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 	return plan;
 }
 
-/*
- *
- *	Functions for fetching info from the db.
- *
- */
-
-#define HYPERTABLE_QUERY_ARGS (Oid[]) { INT4OID }
-#define HYPERTABLE_QUERY "SELECT id, time_column_name, time_column_type FROM _iobeamdb_catalog.hypertable h WHERE h.id = $1"
-//DEFINE_PLAN(get_hypertable_plan, HYPERTABLE_QUERY, 1, HYPERTABLE_QUERY_ARGS)
-
-#define EPOCH_AND_PARTITION_ARGS (Oid[]) { INT4OID, INT8OID }
-#define EPOCH_AND_PARTITION_QUERY "SELECT  pe.id as epoch_id, hypertable_id, start_time, end_time, \
-                partitioning_func_schema, partitioning_func, partitioning_mod, partitioning_column, \
-                p.id as partition_id, keyspace_start, keyspace_end \
-                FROM _iobeamdb_catalog.partition_epoch pe\
-                INNER JOIN _iobeamdb_catalog.partition p ON (p.epoch_id = pe.id) \
-                WHERE pe.hypertable_id = $1 AND \
-                (pe.start_time <= $2 OR pe.start_time IS NULL) AND \
-                (pe.end_time   >= $2 OR pe.end_time IS NULL) \
-                ORDER BY p.keyspace_start ASC"
-
-DEFINE_PLAN(get_epoch_and_partition_plan, EPOCH_AND_PARTITION_QUERY, 2, EPOCH_AND_PARTITION_ARGS)
-
-epoch_and_partitions_set *
-fetch_epoch_and_partitions_set(epoch_and_partitions_set *entry, int32 hypertable_id, int64 time_pt, Oid relid)
-{
-	MemoryContext orig_ctx = CurrentMemoryContext;
-	SPIPlanPtr	plan = get_epoch_and_partition_plan();
-	Datum		args[2] = {Int32GetDatum(hypertable_id), Int64GetDatum(time_pt)};
-	int			ret,
-				j;
-	int64		time_ret;
-	int32		mod_ret;
-	Name		name_ret;
-	bool		is_null;
-	TupleDesc	tupdesc;
-	HeapTuple	tuple;
-
-	if (entry == NULL)
-	{
-		entry = palloc(sizeof(epoch_and_partitions_set));
-	}
-	CACHE3_elog(WARNING, "Looking up cache partition_epoch %d %lu", hypertable_id, time_pt);
-
-	if (SPI_connect() < 0)
-	{
-		elog(ERROR, "Got an SPI connect error");
-	}
-	ret = SPI_execute_plan(plan, args, NULL, true, 0);
-	if (ret <= 0)
-	{
-		elog(ERROR, "Got an SPI error %d", ret);
-	}
-	if (SPI_processed < 1)
-	{
-		elog(ERROR, "Could not find partition epoch");
-	}
-
-	tupdesc = SPI_tuptable->tupdesc;
-	tuple = SPI_tuptable->vals[0];
-
-	entry->id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &is_null));
-	entry->hypertable_id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 2, &is_null));
-
-	time_ret = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 3, &is_null));
-	if (is_null)
-	{
-		entry->start_time = OPEN_START_TIME;
-	}
-	else
-	{
-		entry->start_time = time_ret;
-	}
-
-	time_ret = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 4, &is_null));
-	if (is_null)
-	{
-		entry->end_time = OPEN_END_TIME;
-	}
-	else
-	{
-		entry->end_time = time_ret;
-	}
-
-	name_ret = DatumGetName(SPI_getbinval(tuple, tupdesc, 5, &is_null));
-	if (is_null)
-	{
-		entry->partitioning_func_schema = NULL;
-	}
-	else
-	{
-		entry->partitioning_func_schema = SPI_palloc(sizeof(NameData));
-		memcpy(entry->partitioning_func_schema, name_ret, sizeof(NameData));
-	}
-
-	name_ret = DatumGetName(SPI_getbinval(tuple, tupdesc, 6, &is_null));
-	if (is_null)
-	{
-		entry->partitioning_func = NULL;
-	}
-	else
-	{
-		entry->partitioning_func = SPI_palloc(sizeof(NameData));
-		memcpy(entry->partitioning_func, name_ret, sizeof(NameData));
-	}
-
-	mod_ret = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 7, &is_null));
-	if (is_null)
-	{
-		entry->partitioning_mod = -1;
-	}
-	else
-	{
-		entry->partitioning_mod = mod_ret;
-	}
-
-
-	name_ret = DatumGetName(SPI_getbinval(tuple, tupdesc, 8, &is_null));
-	if (is_null)
-	{
-		entry->partitioning_column = NULL;
-		entry->partitioning_column_attrnumber = InvalidAttrNumber;
-		entry->partitioning_column_text_func = InvalidOid;
-	}
-	else
-	{
-		Oid			typeoid;
-		Oid			textfn;
-		bool		isVarlena;
-		FmgrInfo   *textfn_finfo = SPI_palloc(sizeof(FmgrInfo));
-
-		entry->partitioning_column = SPI_palloc(sizeof(NameData));
-		memcpy(entry->partitioning_column, name_ret, sizeof(NameData));
-		entry->partitioning_column_attrnumber = get_attnum(relid, entry->partitioning_column->data);
-		typeoid = get_atttype(relid, entry->partitioning_column_attrnumber);
-		getTypeOutputInfo(typeoid, &textfn, &isVarlena);
-		entry->partitioning_column_text_func = textfn;
-		fmgr_info_cxt(textfn, textfn_finfo, orig_ctx);
-		entry->partitioning_column_text_func_fmgr = textfn_finfo;
-	}
-
-	if (entry->partitioning_func != NULL)
-	{
-		FmgrInfo   *finfo = SPI_palloc(sizeof(FmgrInfo));
-		FuncCandidateList part_func = FuncnameGetCandidates(list_make2(makeString(entry->partitioning_func_schema->data),
-								 makeString(entry->partitioning_func->data)),
-											   2, NULL, false, false, false);
-
-		if (part_func == NULL)
-		{
-			elog(ERROR, "couldn't find the partitioning function");
-		}
-		if (part_func->next != NULL)
-		{
-			elog(ERROR, "multiple partitioning functions found");
-		}
-
-		fmgr_info_cxt(part_func->oid, finfo, orig_ctx);
-		entry->partition_func_fmgr = finfo;
-	}
-	else
-	{
-
-		entry->partition_func_fmgr = NULL;
-	}
-
-	entry->num_partitions = SPI_processed;
-	entry->partitions = SPI_palloc(sizeof(partition_info *) * entry->num_partitions);
-	for (j = 0; j < entry->num_partitions; j++)
-	{
-		HeapTuple	tuple = SPI_tuptable->vals[j];
-
-		entry->partitions[j] = SPI_palloc(sizeof(partition_info));
-
-		entry->partitions[j]->id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 9, &is_null));
-		entry->partitions[j]->keyspace_start = DatumGetInt16(SPI_getbinval(tuple, tupdesc, 10, &is_null));
-		entry->partitions[j]->keyspace_end = DatumGetInt16(SPI_getbinval(tuple, tupdesc, 11, &is_null));
-	}
-
-	SPI_finish();
-	return entry;
-}
-
 void
 free_epoch(epoch_and_partitions_set *epoch)
 {
-	int			j;
-
-	for (j = 0; j < epoch->num_partitions; j++)
-	{
-		partition_info *part = epoch->partitions[j];
-
-		pfree(part);
-	}
+	if (epoch->partitioning != NULL)
+		pfree(epoch->partitioning);
 	pfree(epoch);
 }
 

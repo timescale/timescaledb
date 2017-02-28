@@ -10,7 +10,7 @@
 
 typedef struct hypertable_cache_entry hypertable_cache_entry;
 typedef struct epoch_and_partitions_set epoch_and_partitions_set;
-typedef struct partition_info partition_info;
+typedef struct Partition Partition;
 typedef struct chunk_row chunk_row;
 
 typedef struct chunk_cache_entry
@@ -21,7 +21,7 @@ typedef struct chunk_cache_entry
 } chunk_cache_entry;
 
 extern chunk_cache_entry *get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,
-					  partition_info *part, int64 time_pt, bool lock);
+												Partition *part, int64 time_pt, bool lock);
 
 extern void invalidate_chunk_cache_callback(void);
 

@@ -10,30 +10,7 @@
 #define OPEN_START_TIME -1
 #define OPEN_END_TIME PG_INT64_MAX
 
-typedef struct partition_info
-{
-	int32		id;
-	int16		keyspace_start;
-	int16		keyspace_end;
-} partition_info;
-
-typedef struct epoch_and_partitions_set
-{
-	int32		id;
-	int32		hypertable_id;
-	int64		start_time;
-	int64		end_time;
-	Name		partitioning_func_schema;
-	Name		partitioning_func;
-	int32		partitioning_mod;
-	Name		partitioning_column;
-	AttrNumber	partitioning_column_attrnumber;
-	Oid			partitioning_column_text_func;
-	FmgrInfo   *partitioning_column_text_func_fmgr;
-	FmgrInfo   *partition_func_fmgr;
-	int			num_partitions;
-	partition_info **partitions;
-} epoch_and_partitions_set;
+typedef struct epoch_and_partitions_set epoch_and_partitions_set;
 
 typedef struct chunk_row
 {

@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.partition (
     UNIQUE (epoch_id, keyspace_start),
     CHECK (keyspace_end > keyspace_start)
 );
+CREATE INDEX ON _iobeamdb_catalog.partition(epoch_id);
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.partition', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.partition','id'), '');
 

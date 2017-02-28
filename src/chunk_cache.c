@@ -7,6 +7,7 @@
 #include "hypertable_cache.h"
 #include "utils.h"
 #include "metadata_queries.h"
+#include "partitioning.h"
 
 
 /*
@@ -37,7 +38,7 @@ typedef struct ChunkCacheQueryCtx
 	CacheQueryCtx cctx;
 	hypertable_cache_entry *hci;
 	epoch_and_partitions_set *pe_entry;
-	partition_info *part;
+	Partition   *part;
 	int32		chunk_id;
 	int64		chunk_start_time;
 	int64		chunk_end_time;
@@ -129,7 +130,7 @@ invalidate_chunk_cache_callback(void)
 
 static chunk_insert_plan_htable_entry *
 get_chunk_insert_plan_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,
-				partition_info *part, int32 chunk_id, int64 chunk_start_time,
+								  Partition *part, int32 chunk_id, int64 chunk_start_time,
 								  int64 chunk_end_time)
 {
 	ChunkCacheQueryCtx ctx = {
@@ -146,7 +147,7 @@ get_chunk_insert_plan_cache_entry(hypertable_cache_entry *hci, epoch_and_partiti
 
 chunk_cache_entry *
 get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,
-					  partition_info *part, int64 time_pt, bool lock)
+					  Partition *part, int64 time_pt, bool lock)
 {
 	chunk_insert_plan_htable_entry *move_plan;
 
@@ -173,13 +174,13 @@ get_copy_table_insert_sql(ChunkCacheQueryCtx *ctx)
 
 	appendStringInfo(where_clause, "WHERE TRUE");
 
-	if (ctx->pe_entry->partitioning_func != NULL)
+	if (ctx->pe_entry->num_partitions > 1)
 	{
 		appendStringInfo(where_clause, " AND (%s.%s(%s::TEXT, %d) BETWEEN %d AND %d)",
-			 quote_identifier(ctx->pe_entry->partitioning_func_schema->data),
-					quote_identifier(ctx->pe_entry->partitioning_func->data),
-				  quote_identifier(ctx->pe_entry->partitioning_column->data),
-						 ctx->pe_entry->partitioning_mod,
+			 quote_identifier(ctx->pe_entry->partitioning->partfunc.schema),
+					quote_identifier(ctx->pe_entry->partitioning->partfunc.name),
+				  quote_identifier(ctx->pe_entry->partitioning->column),
+						 ctx->pe_entry->partitioning->partfunc.modulos,
 						 ctx->part->keyspace_start,
 						 ctx->part->keyspace_end);
 	}

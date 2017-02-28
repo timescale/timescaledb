@@ -23,16 +23,14 @@ typedef struct hypertable_cache_entry
     epoch_and_partitions_set *epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY];
 } hypertable_cache_entry;
 
-extern hypertable_cache_entry *get_hypertable_cache_entry(int32 hypertable_id);
+hypertable_cache_entry *hypertable_cache_get(int32 hypertable_id);
 
-extern epoch_and_partitions_set *get_partition_epoch_cache_entry(hypertable_cache_entry *hce,
-                                                                 int64 time_pt, Oid relid);
+epoch_and_partitions_set *
+hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt, Oid relid);
 
-extern partition_info *get_partition_info(epoch_and_partitions_set *epoch, int16 keyspace_pt);
+void invalidate_hypertable_cache_callback(void);
 
-extern void invalidate_hypertable_cache_callback(void);
-
-extern void _hypertable_cache_init(void);
-extern void _hypertable_cache_fini(void);
+void _hypertable_cache_init(void);
+void _hypertable_cache_fini(void);
 
 #endif   /* IOBEAMDB_HYPERTABLE_CACHE_H */
