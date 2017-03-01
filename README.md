@@ -26,9 +26,6 @@ make
 
 # To install
 make install
-
-# To run tests (needs running Postgres server with preloaded extension)
-make installcheck
 ```
 
 ### Option 2: Build and run in Docker
@@ -39,9 +36,6 @@ make -f docker.mk build-image
 
 # To run a container
 make -f docker.mk run
-
-# To run tests
-make -f docker.mk test
 ```
 
 You should now have Postgres running locally, accessible with
@@ -196,3 +190,23 @@ SELECT drop_chunks(interval '3 months');
 
 For automatic data retention, the above calls can be added to (for example)
 a CRON job on the database host.
+
+## Testing
+If you want to contribute, please make sure to run the test suite before
+submitting a PR. For a local Postgres installation, you'll need to modify
+your `postgresql.conf` file to add `dblink` and `timescaledb` to the
+`shared_preload_libraries`:
+```
+shared_preload_libraries = 'pg_stat_statements,dblink,timescaledb'
+```
+
+Then to run tests, simply:
+```bash
+make installcheck
+```
+
+If you are using Docker, the image already contains the correct settings,
+so to run the tests:
+```bash
+make -f docker.mk test
+```
