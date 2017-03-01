@@ -30,7 +30,7 @@ typedef struct InternalScannerCtx {
 typedef struct Scanner {
 	Relation (*open)(InternalScannerCtx *ctx);
 	ScanDesc (*beginscan)(InternalScannerCtx *ctx);
-	HeapTuple (*getnext)(InternalScannerCtx *ctx);
+	bool (*getnext)(InternalScannerCtx *ctx, TupleInfo *ti);
 	void (*endscan)(InternalScannerCtx *ctx);
 	void (*close)(InternalScannerCtx *ctx);
 } Scanner;
@@ -50,9 +50,10 @@ static ScanDesc heap_scanner_beginscan(InternalScannerCtx *ctx)
 	return ctx->scan;
 }
 
-static HeapTuple heap_scanner_getnext(InternalScannerCtx *ctx)
+static bool heap_scanner_getnext(InternalScannerCtx *ctx, TupleInfo *ti)
 {
-	return heap_getnext(ctx->scan.heap_scan, ctx->sctx->scandirection);
+	ti->tuple = heap_getnext(ctx->scan.heap_scan, ctx->sctx->scandirection);
+	return HeapTupleIsValid(ti->tuple);
 }
 
 static void heap_scanner_endscan(InternalScannerCtx *ctx)
@@ -79,14 +80,18 @@ static ScanDesc index_scanner_beginscan(InternalScannerCtx *ctx)
 	ctx->scan.index_scan = index_beginscan(ctx->tablerel, ctx->indexrel,
 										   SnapshotSelf, sctx->nkeys,
 										   sctx->norderbys);
+	ctx->scan.index_scan->xs_want_itup = ctx->sctx->want_itup;
 	index_rescan(ctx->scan.index_scan, sctx->scankey,
 				 sctx->nkeys, NULL, sctx->norderbys);
 	return ctx->scan;
 }
 
-static HeapTuple index_scanner_getnext(InternalScannerCtx *ctx)
+static bool index_scanner_getnext(InternalScannerCtx *ctx, TupleInfo *ti)
 {
-	return index_getnext(ctx->scan.index_scan, ctx->sctx->scandirection);
+	ti->tuple = index_getnext(ctx->scan.index_scan, ctx->sctx->scandirection);
+	ti->ituple = ctx->scan.index_scan->xs_itup;
+	ti->ituple_desc = ctx->scan.index_scan->xs_itupdesc;
+	return HeapTupleIsValid(ti->tuple);
 }
 
 static void index_scanner_endscan(InternalScannerCtx *ctx)
@@ -129,8 +134,9 @@ static Scanner scanners[] = {
  */
 int scanner_scan(ScannerCtx *ctx)
 {
-	HeapTuple tuple;
 	TupleDesc tuple_desc;
+	TupleInfo ti;
+	bool is_valid;
 	int num_tuples = 0;
 	Scanner *scanner = &scanners[ctx->scantype];
 	InternalScannerCtx ictx = {
@@ -141,20 +147,18 @@ int scanner_scan(ScannerCtx *ctx)
 	scanner->beginscan(&ictx);
 
 	tuple_desc = RelationGetDescr(ictx.tablerel);
+	
+	ti.scanrel = ictx.tablerel;
+	ti.desc = tuple_desc;
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)
 		ctx->prescan(ctx->data);
 
-	tuple = scanner->getnext(&ictx);
+	is_valid = scanner->getnext(&ictx, &ti);
 
-	while (HeapTupleIsValid(tuple))
+	while (is_valid)
 	{
-		TupleInfo ti = {
-			.scanrel = ictx.tablerel,
-			.tuple = tuple,
-			.desc = tuple_desc,
-		};
 
 		if (ctx->filter == NULL || ctx->filter(&ti, ctx->data))
 		{
@@ -165,7 +169,7 @@ int scanner_scan(ScannerCtx *ctx)
 				Buffer buffer;
 				HeapUpdateFailureData hufd;
 
-				ti.lockresult = heap_lock_tuple(ictx.tablerel, tuple,
+				ti.lockresult = heap_lock_tuple(ictx.tablerel, ti.tuple,
 												GetCurrentCommandId(false),
 												ctx->tuplock.lockmode,
 												ctx->tuplock.waitpolicy,
@@ -180,7 +184,7 @@ int scanner_scan(ScannerCtx *ctx)
 				break;
 		}
 
-		tuple = scanner->getnext(&ictx);
+		is_valid = scanner->getnext(&ictx,&ti);
 	}
 
 	/* Call post-scan handler, if any. */

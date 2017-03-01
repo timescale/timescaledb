@@ -31,10 +31,11 @@
  */
 typedef struct chunk_insert_plan_htable_entry
 {
-	int32       chunk_id;
-	int64       start_time;
-	int64       end_time;
-	SPIPlanPtr  move_from_copyt_plan;
+	int32		chunk_id;
+	int64		start_time;
+	int64		end_time;
+	crn_set    *crns;
+	SPIPlanPtr	move_from_copyt_plan;
 } chunk_insert_plan_htable_entry;
 
 typedef struct ChunkCacheQueryCtx
@@ -57,7 +58,7 @@ chunk_insert_plan_cache_get_key(CacheQueryCtx *ctx)
 static void *chunk_insert_plan_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
 static void *chunk_insert_plan_cache_update_entry(Cache *cache, CacheQueryCtx *ctx);
 
-static void chunk_insert_plan_cache_pre_invalidate(Cache *cache);
+static void chunk_insert_plan_cache_destroy_storage(CacheStorage *store);
 static char *get_copy_table_insert_sql(ChunkCacheQueryCtx *ctx);
 
 static Cache chunk_insert_plan_cache = {
@@ -66,24 +67,22 @@ static Cache chunk_insert_plan_cache = {
 		.entrysize = sizeof(chunk_insert_plan_htable_entry),
 		.hcxt = NULL,
 	},
-	.htab = NULL,
 	.name = CHUNK_CACHE_INVAL_PROXY_TABLE,
 	.numelements = 16,
 	.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
 	.get_key = chunk_insert_plan_cache_get_key,
 	.create_entry = chunk_insert_plan_cache_create_entry,
 	.update_entry = chunk_insert_plan_cache_update_entry,
-	.pre_invalidate_hook = chunk_insert_plan_cache_pre_invalidate,
-	.post_invalidate_hook = cache_init,
+	.destroy_storage_hook = chunk_insert_plan_cache_destroy_storage,
 };
 
 static void
-chunk_insert_plan_cache_pre_invalidate(Cache *cache)
+chunk_insert_plan_cache_destroy_storage(CacheStorage *store)
 {
 	chunk_insert_plan_htable_entry *entry;
 	HASH_SEQ_STATUS scan;
 
-	hash_seq_init(&scan, cache->htab);
+	hash_seq_init(&scan, store->htab);
 
 	while ((entry = hash_seq_search(&scan)))
 	{
@@ -96,13 +95,19 @@ chunk_insert_plan_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
 	chunk_insert_plan_htable_entry *pe = ctx->entry;
-	char       *insert_sql;
+	char	   *insert_sql;
+	MemoryContext old;
 
 	insert_sql = get_copy_table_insert_sql(cctx);
 	pe->chunk_id = cctx->chunk_id;
 	pe->start_time = cctx->chunk_start_time;
 	pe->end_time = cctx->chunk_end_time;
 	pe->move_from_copyt_plan = prepare_plan(insert_sql, 0, NULL);
+
+	/* TODO: old crn leaks memory here... */
+	old = cache_switch_to_memory_context(cache);
+	pe->crns = fetch_crn_set(NULL, pe->chunk_id);
+	MemoryContextSwitchTo(old);
 
 	return pe;
 }
@@ -112,7 +117,8 @@ chunk_insert_plan_cache_update_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
 	chunk_insert_plan_htable_entry *pe = ctx->entry;
-	char       *insert_sql;
+	char	   *insert_sql;
+	MemoryContext old;
 
 	if (pe->start_time == cctx->chunk_start_time &&
 		pe->end_time == cctx->chunk_end_time)
@@ -121,6 +127,10 @@ chunk_insert_plan_cache_update_entry(Cache *cache, CacheQueryCtx *ctx)
 	insert_sql = get_copy_table_insert_sql(cctx);
 	SPI_freeplan(pe->move_from_copyt_plan);
 	pe->move_from_copyt_plan = prepare_plan(insert_sql, 0, NULL);
+
+	old = cache_switch_to_memory_context(cache);
+	pe->crns = fetch_crn_set(NULL, pe->chunk_id);
+	MemoryContextSwitchTo(old);
 
 	return pe;
 }
@@ -273,8 +283,10 @@ get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_
 	move_plan = get_chunk_insert_plan_cache_entry(hci, pe_entry, part, chunk->id,
 												  chunk->start_time, chunk->end_time);
 	entry->move_from_copyt_plan = move_plan->move_from_copyt_plan;
+	entry->crns = move_plan->crns;
 	return entry;
 }
+
 
 static char *
 get_copy_table_insert_sql(ChunkCacheQueryCtx *ctx)
@@ -351,6 +363,5 @@ _chunk_cache_init(void)
 void
 _chunk_cache_fini(void)
 {
-	chunk_insert_plan_cache.post_invalidate_hook = NULL;
 	cache_invalidate(&chunk_insert_plan_cache);
 }

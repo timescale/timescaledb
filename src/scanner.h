@@ -18,6 +18,9 @@ typedef struct TupleInfo
 	Relation scanrel;
 	HeapTuple tuple;
 	TupleDesc desc;
+	/* return index tuple if it was requested -- only for index scans */
+	IndexTuple ituple;
+	TupleDesc ituple_desc;
 	/*
 	 * If the user requested a tuple lock, the result of the lock is passed on
 	 * in lockresult.
@@ -31,6 +34,7 @@ typedef struct ScannerCtx {
 	ScannerType scantype;
 	ScanKey scankey;
 	int nkeys, norderbys;
+	bool want_itup;
 	LOCKMODE lockmode;
 	struct {
 		LockTupleMode lockmode;

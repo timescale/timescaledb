@@ -95,7 +95,6 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 void
 _cache_invalidate_init(void)
 {
-	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
 }
 
 void
@@ -110,6 +109,7 @@ _cache_invalidate_fini(void)
 void
 _cache_invalidate_extload(void)
 {
+	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
 	hypertable_cache_inval_proxy_oid = get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID);
 	chunk_cache_inval_proxy_oid = get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID);
 }

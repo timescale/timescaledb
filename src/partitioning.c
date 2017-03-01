@@ -175,6 +175,8 @@ partition_epoch_tuple_found(TupleInfo *ti, void *arg)
 													DatumGetCString(partcol),
 													DatumGetInt16(partmod),
 													pctx->relid);
+	} else {
+		pe->partitioning = NULL;
 	}
 
 	/* Scan for the epoch's partitions */
@@ -336,5 +338,21 @@ partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt
 	}
 
 	return part;
+}
+
+
+int16 *
+partition_epoch_get_partition_end_times(epoch_and_partitions_set *epoch)
+{
+	
+	int16	   *end_times_partitions = palloc(sizeof(int16) * epoch->num_partitions);
+	int i;
+
+	for (i = 0; i < epoch->num_partitions; i++)
+	{
+		end_times_partitions[i] = epoch->partitions[i].keyspace_end;
+	}
+
+	return end_times_partitions;
 }
 

@@ -52,5 +52,5 @@ epoch_and_partitions_set *partition_epoch_scan(int32 hypertable_id, int64 timepo
 int16 partitioning_func_apply(PartitioningFunc *pf, Datum value);
 
 Partition *partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt);
-
+int16 * partition_epoch_get_partition_end_times(epoch_and_partitions_set *epoch);
 #endif /* IOBEAMDB_PARTITIONING_H */

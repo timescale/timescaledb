@@ -34,13 +34,11 @@ static Cache hypertable_cache = {
 		.entrysize = sizeof(hypertable_cache_entry),
 		.hcxt = NULL,
 	},
-	.htab = NULL,
 	.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
 	.numelements = 16,
 	.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
 	.get_key = hypertable_cache_get_key,
 	.create_entry = hypertable_cache_create_entry,
-	.post_invalidate_hook = cache_init,
 };
 
 /* Column numbers for 'hypertable' table in  sql/common/tables.sql */
@@ -193,6 +191,13 @@ hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt,
 	return epoch;
 }
 
+extern CacheStorage *
+hypertable_cache_pin_storage() 
+{
+	return cache_pin_storage(&hypertable_cache);
+}
+
+
 void _hypertable_cache_init(void)
 {
 	CreateCacheMemoryContext();
@@ -202,6 +207,5 @@ void _hypertable_cache_init(void)
 void
 _hypertable_cache_fini(void)
 {
-	hypertable_cache.post_invalidate_hook = NULL;
 	cache_invalidate(&hypertable_cache);
 }

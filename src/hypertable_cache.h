@@ -2,6 +2,7 @@
 #define IOBEAMDB_HYPERTABLE_CACHE_H
 
 #include <postgres.h>
+#include "cache.h"
 
 typedef struct hypertable_basic_info hypertable_basic_info;
 typedef struct epoch_and_partitions_set epoch_and_partitions_set;
@@ -29,6 +30,8 @@ epoch_and_partitions_set *
 hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt, Oid relid);
 
 void invalidate_hypertable_cache_callback(void);
+
+extern CacheStorage *hypertable_cache_pin_storage(void);
 
 void _hypertable_cache_init(void);
 void _hypertable_cache_fini(void);
