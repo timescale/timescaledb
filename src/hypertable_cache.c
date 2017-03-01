@@ -51,7 +51,7 @@ static Cache hypertable_cache = {
 /* Primary key Index column number */
 #define HT_IDX_COL_ID 1
 
-static void
+static bool
 hypertable_tuple_found(HeapTuple tuple, TupleDesc desc, void *data)
 {
 	bool is_null;
@@ -71,6 +71,8 @@ hypertable_tuple_found(HeapTuple tuple, TupleDesc desc, void *data)
 	he->id = hctx->hypertable_id;
 	strncpy(he->time_column_name, DatumGetCString(time_col_datum), NAMEDATALEN);
 	he->time_column_type = DatumGetObjectId(time_type_datum);
+
+	return true;
 }
 
 static void *

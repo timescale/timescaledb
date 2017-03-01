@@ -140,7 +140,7 @@ partition_epoch_create(int32 epoch_id, PartitionEpochCtx *ctx)
 
 /* Callback for partition epoch scan. For every epoch tuple found, create a
  * partition epoch entry and scan for associated partitions. */
-static void
+static bool
 partition_epoch_tuple_found(HeapTuple tuple, TupleDesc desc, void *arg)
 {
 	PartitionEpochCtx *pctx = arg;
@@ -182,6 +182,8 @@ partition_epoch_tuple_found(HeapTuple tuple, TupleDesc desc, void *arg)
 
 	/* Scan for the epoch's partitions */
 	partition_scan(pctx);
+
+	return true;
 }
 
 /* Partition table columns */
@@ -194,7 +196,7 @@ partition_epoch_tuple_found(HeapTuple tuple, TupleDesc desc, void *arg)
 /* Partition index columns */
 #define PARTITION_IDX_COL_ID 1
 
-static void
+static bool
 partition_tuple_found(HeapTuple tuple, TupleDesc desc, void *arg)
 {
 	PartitionEpochCtx *pctx = arg;
@@ -202,10 +204,6 @@ partition_tuple_found(HeapTuple tuple, TupleDesc desc, void *arg)
 	Datum datum;
 	bool is_null;
 
-	if (pctx->num_partitions == 0)
-	{
-		elog(ERROR, "Found more partitions than expected for epoch %d", pctx->pe->id);
-	}
    	pctx->num_partitions--;
 	datum = heap_getattr(tuple, PARTITION_TBL_COL_ID, desc, &is_null);
 	pe->partitions[pctx->num_partitions].id = DatumGetInt32(datum);
@@ -213,6 +211,12 @@ partition_tuple_found(HeapTuple tuple, TupleDesc desc, void *arg)
 	pe->partitions[pctx->num_partitions].keyspace_start = DatumGetInt16(datum);
 	datum = heap_getattr(tuple, PARTITION_TBL_COL_KEYSPACE_END, desc, &is_null);
 	pe->partitions[pctx->num_partitions].keyspace_end = DatumGetInt16(datum);
+
+	/* Abort the scan if we have found all partitions */
+	if (pctx->num_partitions == 0)
+		return false;
+
+	return true;
 }
 
 static int

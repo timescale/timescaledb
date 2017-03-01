@@ -145,8 +145,11 @@ int scanner_scan(ScannerCtx *ctx)
 	{
 		if (ctx->filter == NULL || ctx->filter(tuple, tuple_desc, ctx->data))
 		{
-			ctx->tuple_found(tuple, tuple_desc, ctx->data);
+			bool should_continue = ctx->tuple_found(tuple, tuple_desc, ctx->data);
 			num_tuples++;
+
+			if (!should_continue)
+				break;
 		}
 
 		tuple = scanner->getnext(&ictx);

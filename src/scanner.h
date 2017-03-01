@@ -18,8 +18,14 @@ typedef struct ScannerCtx {
 	LOCKMODE lockmode;
 	ScanDirection scandirection;
 	void *data; /* User-provided data passed on to filter() and tuple_found() */
+
+	/* Optional function to filter tuples. Should return true for tuples that
+	 * should be passed on to tuple_found, or false otherwise. */
 	bool (*filter)(HeapTuple tuple, TupleDesc desc, void *data);
-	void (*tuple_found)(HeapTuple tuple, TupleDesc desc, void *data);
+
+	/* Callback for found tuples. Should return true to continue the scan or
+	 * false to abort. */
+    bool (*tuple_found)(HeapTuple tuple, TupleDesc desc, void *data);
 } ScannerCtx;
 
 /* Performs an index scan or heap scan and returns the number of matching
