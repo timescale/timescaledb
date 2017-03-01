@@ -35,6 +35,7 @@ For more details and example usage, see
 Data is easily imported using the standard way of restoring `pg_dump` backups.
 
 Briefly the steps are:
+
 1. Unzip the archive,
 1. Create a database for the data (using the same name as the dataset)
 1. Import the data via `psql`
