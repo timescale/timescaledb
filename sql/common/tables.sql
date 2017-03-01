@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS _iobeamdb_catalog.chunk (
     UNIQUE (partition_id, end_time),
     CHECK (start_time <= end_time)
 );
+CREATE INDEX ON _iobeamdb_catalog.chunk(partition_id, start_time, end_time);
 SELECT pg_catalog.pg_extension_config_dump('_iobeamdb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_iobeamdb_catalog.chunk','id'), '');
 

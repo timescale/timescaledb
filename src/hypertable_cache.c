@@ -52,14 +52,14 @@ static Cache hypertable_cache = {
 #define HT_IDX_COL_ID 1
 
 static bool
-hypertable_tuple_found(HeapTuple tuple, TupleDesc desc, void *data)
+hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	bool is_null;
 	HypertableCacheQueryCtx *hctx = data;
 	hypertable_cache_entry *he = hctx->cctx.entry;
-	Datum id_datum = heap_getattr(tuple, HT_TBL_COL_ID, desc, &is_null);
-	Datum time_col_datum = heap_getattr(tuple, HT_TBL_COL_TIME_COL_NAME, desc, &is_null);
-	Datum time_type_datum = heap_getattr(tuple, HT_TBL_COL_TIME_TYPE, desc, &is_null);
+	Datum id_datum = heap_getattr(ti->tuple, HT_TBL_COL_ID, ti->desc, &is_null);
+	Datum time_col_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_COL_NAME, ti->desc, &is_null);
+	Datum time_type_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_TYPE, ti->desc, &is_null);
 	int32 id = DatumGetInt32(id_datum);
 
 	if (id  != hctx->hypertable_id)

@@ -1,5 +1,8 @@
 #include <postgres.h>
 #include <access/relscan.h>
+#include <access/xact.h>
+#include <storage/lmgr.h>
+#include <storage/bufmgr.h>
 #include <utils/rel.h>
 #include <utils/tqual.h>
 
@@ -139,21 +142,50 @@ int scanner_scan(ScannerCtx *ctx)
 
 	tuple_desc = RelationGetDescr(ictx.tablerel);
 
+	/* Call pre-scan handler, if any. */
+	if (ctx->prescan != NULL)
+		ctx->prescan(ctx->data);
+
 	tuple = scanner->getnext(&ictx);
 
 	while (HeapTupleIsValid(tuple))
 	{
-		if (ctx->filter == NULL || ctx->filter(tuple, tuple_desc, ctx->data))
+		TupleInfo ti = {
+			.scanrel = ictx.tablerel,
+			.tuple = tuple,
+			.desc = tuple_desc,
+		};
+
+		if (ctx->filter == NULL || ctx->filter(&ti, ctx->data))
 		{
-			bool should_continue = ctx->tuple_found(tuple, tuple_desc, ctx->data);
 			num_tuples++;
 
-			if (!should_continue)
+			if (ctx->tuplock.enabled)
+			{
+				Buffer buffer;
+				HeapUpdateFailureData hufd;
+
+				ti.lockresult = heap_lock_tuple(ictx.tablerel, tuple,
+												GetCurrentCommandId(false),
+												ctx->tuplock.lockmode,
+												ctx->tuplock.waitpolicy,
+												false, &buffer, &hufd);
+
+				/* A tuple lock pins the underlying buffer, so we need to unpin it. */
+				ReleaseBuffer(buffer);
+			}
+
+			/* Abort the scan if the handler wants us to */
+			if (!ctx->tuple_found(&ti, ctx->data))
 				break;
 		}
 
 		tuple = scanner->getnext(&ictx);
 	}
+
+	/* Call post-scan handler, if any. */
+	if (ctx->postscan != NULL)
+		ctx->postscan(num_tuples, ctx->data);
 
 	scanner->endscan(&ictx);
 	scanner->close(&ictx);

@@ -58,8 +58,8 @@ free_epoch(epoch_and_partitions_set *epoch)
 
 #define CRN_QUERY_ARGS (Oid[]) { INT4OID }
 #define CRN_QUERY "SELECT schema_name, table_name \
-                FROM _iobeamdb_catalog.chunk_replica_node AS crn \
-                WHERE crn.chunk_id = $1"
+				FROM _iobeamdb_catalog.chunk_replica_node AS crn \
+				WHERE crn.chunk_id = $1"
 
 DEFINE_PLAN(get_crn_plan, CRN_QUERY, 1, CRN_QUERY_ARGS)
 
@@ -140,112 +140,86 @@ fetch_crn_set(crn_set *entry, int32 chunk_id)
  */
 #define CHUNK_QUERY_ARGS (Oid[]) {INT4OID, INT8OID, BOOLOID}
 #define CHUNK_QUERY "SELECT id, partition_id, start_time, end_time \
-                FROM get_or_create_chunk($1, $2, $3)"
-
-#define CHUNK_QUERY_LOCKED_FASTPATH_ARGS (Oid[]) {INT4OID, INT8OID}
-#define CHUNK_QUERY_LOCKED_FASTPATH "SELECT id, partition_id, start_time, end_time \
-                FROM _iobeamdb_catalog.chunk c \
-                WHERE c.partition_id = $1 AND \
-                    (c.start_time <= $2 OR c.start_time IS NULL) AND \
-                    (c.end_time >= $2 OR c.end_time IS NULL) \
-                FOR SHARE;"
-
+				FROM get_or_create_chunk($1, $2, $3)"
 
 /* plan for getting a chunk via get_or_create_chunk(). */
 DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 3, CHUNK_QUERY_ARGS)
-/*
- * Plan for getting a locked chunk. This uses a faster query but will only succeed if there is already a local chunk to lock.
- * Thus, this may return 0 rows, in which case you should fall back to chunk_plan.
- */
-DEFINE_PLAN(get_chunk_plan_locked_fastpath, CHUNK_QUERY_LOCKED_FASTPATH, 2, CHUNK_QUERY_LOCKED_FASTPATH_ARGS)
 
-
-chunk_row *
-fetch_chunk_row(chunk_row *entry, int32 partition_id, int64 time_pt, bool lock)
+static HeapTuple
+chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, bool lock, TupleDesc *desc, SPIPlanPtr plan)
 {
-	HeapTuple	tuple = NULL;
-	TupleDesc	tupdesc = NULL;
-	SPIPlanPtr	plan_locked_fastpath = get_chunk_plan_locked_fastpath();
-	SPIPlanPtr	plan_slowpath = get_chunk_plan();
+	/* the fastpath was n/a or returned 0 rows. */
+	int			ret;
+	Datum		args[3] = {Int32GetDatum(partition_id), Int64GetDatum(timepoint), BoolGetDatum(lock)};
+	HeapTuple	tuple;
+
+	ret = SPI_execute_plan(plan, args, NULL, false, 2);
+
+	if (ret <= 0)
+	{
+		elog(ERROR, "Got an SPI error %d", ret);
+	}
+
+	if (SPI_processed != 1)
+	{
+		elog(ERROR, "Got not 1 row but %lu", SPI_processed);
+	}
+
+	if (desc != NULL)
+		*desc = SPI_tuptable->tupdesc;
+
+	tuple = SPI_tuptable->vals[0];
+
+	return tuple;
+}
+
+static chunk_row *
+chunk_row_fill_in(chunk_row *chunk, HeapTuple tuple, TupleDesc tupdesc)
+{
 	int64		time_ret;
 	bool		is_null;
 
-
-	if (entry == NULL)
-		entry = palloc(sizeof(chunk_row));
-
-	if (SPI_connect() < 0)
-	{
-		elog(ERROR, "Got an SPI connect error");
-	}
-
-	if (lock)
-	{
-		/* try the fastpath */
-		int			ret;
-
-		Datum		args[2] = {Int32GetDatum(partition_id), Int64GetDatum(time_pt)};
-
-		ret = SPI_execute_plan(plan_locked_fastpath, args, NULL, false, 2);
-		if (ret <= 0)
-		{
-			elog(ERROR, "Got an SPI error %d", ret);
-		}
-
-		if (SPI_processed > 1)
-		{
-			elog(ERROR, "Got more than 1 row but %lu", SPI_processed);
-		}
-
-		if (SPI_processed == 1)
-		{
-			tupdesc = SPI_tuptable->tupdesc;
-			tuple = SPI_tuptable->vals[0];
-		}
-	}
-
-	if (tuple == NULL)
-	{
-		/* the fastpath was n/a or returned 0 rows. */
-		int			ret;
-		Datum		args[3] = {Int32GetDatum(partition_id), Int64GetDatum(time_pt), BoolGetDatum(lock)};
-
-		ret = SPI_execute_plan(plan_slowpath, args, NULL, false, 2);
-		if (ret <= 0)
-		{
-			elog(ERROR, "Got an SPI error %d", ret);
-		}
-		if (SPI_processed != 1)
-		{
-			elog(ERROR, "Got not 1 row but %lu", SPI_processed);
-		}
-
-		tupdesc = SPI_tuptable->tupdesc;
-		tuple = SPI_tuptable->vals[0];
-	}
-	entry->id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &is_null));
-	entry->partition_id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 2, &is_null));
+	chunk->id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &is_null));
+	chunk->partition_id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 2, &is_null));
 
 	time_ret = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 3, &is_null));
 	if (is_null)
 	{
-		entry->start_time = OPEN_START_TIME;
+		chunk->start_time = OPEN_START_TIME;
 	}
 	else
 	{
-		entry->start_time = time_ret;
+		chunk->start_time = time_ret;
 	}
 
 	time_ret = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 4, &is_null));
 	if (is_null)
 	{
-		entry->end_time = OPEN_END_TIME;
+		chunk->end_time = OPEN_END_TIME;
 	}
 	else
 	{
-		entry->end_time = time_ret;
+		chunk->end_time = time_ret;
 	}
 
+	return chunk;
+}
+
+chunk_row *
+chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock)
+{
+	HeapTuple tuple;
+	TupleDesc desc;
+	chunk_row *chunk = palloc(sizeof(chunk_row));
+	SPIPlanPtr plan = get_chunk_plan();
+
+	if (SPI_connect() < 0)
+		elog(ERROR, "Got an SPI connect error");
+
+	tuple = chunk_tuple_create_spi_connected(partition_id, timepoint, lock, &desc, plan);
+	chunk = chunk_row_fill_in(chunk, tuple, desc);
+
 	SPI_finish();
-	return entry;
+
+	return chunk;
 }

@@ -131,7 +131,7 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 		int64		time_internal;
 		epoch_and_partitions_set *pe_entry;
 		Partition   *part = NULL;
-		chunk_cache_entry *chunk;
+		chunk_cache_entry *entry;
 		int			ret;
 		
 		time_datum = heap_getattr(firstrow, time_fnum, trigdata->tg_relation->rd_att, &isnull);
@@ -162,17 +162,17 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 			part = partition_epoch_get_partition(pe_entry, -1);
 		}
 
-		chunk = get_chunk_cache_entry(hci, pe_entry, part, time_internal, true);
+		entry = get_chunk_cache_entry(hci, pe_entry, part, time_internal, true);
 		
-		if (chunk->chunk->end_time == OPEN_END_TIME)
+		if (entry->chunk->end_time == OPEN_END_TIME)
 		{
-			chunk_id_list = lappend_int(chunk_id_list, chunk->id);
+			chunk_id_list = lappend_int(chunk_id_list, entry->id);
 		}
 		if (SPI_connect() < 0)
 		{
 			elog(ERROR, "Got an SPI connect error");
 		}
-		ret = SPI_execute_plan(chunk->move_from_copyt_plan, NULL, NULL, false, 1);
+		ret = SPI_execute_plan(entry->move_from_copyt_plan, NULL, NULL, false, 1);
 		if (ret <= 0)
 		{
 			elog(ERROR, "Got an SPI error %d", ret);

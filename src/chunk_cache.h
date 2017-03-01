@@ -5,7 +5,7 @@
 #include <executor/spi.h>
 
 #define CHUNK_CACHE_INVAL_PROXY_TABLE "cache_inval_chunk"
-#define CHUNK_CACHE_INVAL_PROXY_OID										\
+#define CHUNK_CACHE_INVAL_PROXY_OID                                     \
 	get_relname_relid(CHUNK_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID)
 
 typedef struct hypertable_cache_entry hypertable_cache_entry;
@@ -15,9 +15,9 @@ typedef struct chunk_row chunk_row;
 
 typedef struct chunk_cache_entry
 {
-	int32		id;
+	int32       id;
 	chunk_row  *chunk;
-	SPIPlanPtr	move_from_copyt_plan;
+	SPIPlanPtr  move_from_copyt_plan;
 } chunk_cache_entry;
 
 extern chunk_cache_entry *get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,

@@ -13,17 +13,24 @@ enum catalog_table {
 
 #define CATALOG_SCHEMA_NAME "_iobeamdb_catalog"
 
+/* Hypertable table definitions */
 #define HYPERTABLE_TABLE_NAME "hypertable"
-#define CHUNK_TABLE_NAME "chunk"
-#define PARTITION_TABLE_NAME "partition"
-#define PARTITION_EPOCH_TABLE_NAME "partition_epoch"
-
 #define HYPERTABLE_INDEX_NAME "hypertable_pkey"
-#define CHUNK_INDEX_NAME "chunk_pkey"
-#define PARTITION_INDEX_NAME "partition_pkey"
+
+/* Partition epoch table definitions */
+#define PARTITION_EPOCH_TABLE_NAME "partition_epoch"
 #define PARTITION_EPOCH_INDEX_NAME "partition_epoch_pkey"
 #define PARTITION_EPOCH_TIME_INDEX_NAME "partition_epoch_hypertable_id_start_time_end_time_idx"
+
+/* Partition table definitions */
+#define PARTITION_TABLE_NAME "partition"
+#define PARTITION_INDEX_NAME "partition_pkey"
 #define PARTITION_EPOCH_ID_INDEX_NAME "partition_epoch_id_idx"
+
+/* Chunk table definitions */
+#define CHUNK_TABLE_NAME "chunk"
+#define CHUNK_INDEX_NAME "chunk_pkey"
+#define CHUNK_PARTITION_TIME_INDEX_NAME "chunk_partition_id_start_time_end_time_idx"
 
 typedef struct Catalog {
 	char database_name[NAMEDATALEN];

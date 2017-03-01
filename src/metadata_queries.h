@@ -42,8 +42,9 @@ extern epoch_and_partitions_set *fetch_epoch_and_partitions_set(epoch_and_partit
 
 extern void free_epoch(epoch_and_partitions_set *epoch);
 
-extern chunk_row *fetch_chunk_row(chunk_row *entry, int32 partition_id, int64 time_pt, bool lock);
-
 extern crn_set *fetch_crn_set(crn_set *entry, int32 chunk_id);
+
+chunk_row *
+chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock);
 
 #endif   /* IOBEAMDB_METADATA_QUERIES_H */
