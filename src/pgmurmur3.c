@@ -29,3 +29,31 @@ pg_murmur3_hash_string(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(io[0]);
 }
+
+/* _iobeamdb_catalog.get_partition_for_key(key TEXT, mod_factor INT) RETURNS SMALLINT */
+PG_FUNCTION_INFO_V1(get_partition_for_key);
+
+Datum
+get_partition_for_key(PG_FUNCTION_ARGS)
+{
+// SELECT ((_iobeamdb_internal.murmur3_hash_string(key, 1 :: INT4) & x'7fffffff' :: INTEGER) % mod_factor) :: SMALLINT INTO ret;
+    struct varlena *data;
+	int32 mod;
+    Datum hash_d;
+	int32 hash_i;
+	int16 res;
+	/* request aligned data on weird architectures */
+#ifdef HLIB_UNALIGNED_READ_OK
+	data = PG_GETARG_VARLENA_PP(0);
+#else
+	data = PG_GETARG_VARLENA_P(0);
+#endif
+	mod = PG_GETARG_INT32(1);
+
+	hash_d = DirectFunctionCall2(pg_murmur3_hash_string, PointerGetDatum(data), Int32GetDatum(1));
+	hash_i = DatumGetInt32(hash_d);
+
+	res = (int16) ((hash_i & 0x7fffffff) % mod);
+
+	PG_RETURN_INT16(res);
+}
