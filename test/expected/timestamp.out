@@ -1,8 +1,7 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
 \ir include/create_single_db.sql
-\set VERBOSITY normal
-psql:include/create_single_db.sql:1: unrecognized value "normal" for "VERBOSITY"; assuming "default"
+\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
@@ -232,8 +231,7 @@ SELECT _iobeamdb_internal.to_timestamp(-210866803200000000);
  Mon Nov 24 00:00:00 4714 UTC BC
 (1 row)
 
-\set VERBOSITY normal
-unrecognized value "normal" for "VERBOSITY"; assuming "default"
+\set VERBOSITY default
 -- Going beyond Julian day zero should give out-of-range error
 SELECT _iobeamdb_internal.to_timestamp(-210866803200000001);
 ERROR:  timestamp out of range

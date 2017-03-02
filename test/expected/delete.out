@@ -3,8 +3,7 @@
 \ir include/insert_two_partitions.sql
 \set ON_ERROR_STOP 1
 \ir create_single_db.sql
-\set VERBOSITY normal
-psql:include/create_single_db.sql:1: unrecognized value "normal" for "VERBOSITY"; assuming "default"
+\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;

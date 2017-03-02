@@ -1,8 +1,7 @@
 \set ON_ERROR_STOP 1
 \set SHOW_CONTEXT never
 \ir include/create_single_db.sql
-\set VERBOSITY normal
-psql:include/create_single_db.sql:1: unrecognized value "normal" for "VERBOSITY"; assuming "default"
+\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
@@ -93,8 +92,7 @@ Child tables: _copy_temp_1,
               _iobeamdb_internal._hyper_1_0_replica
 
 --cleanup
-\set VERBOSITY normal
-unrecognized value "normal" for "VERBOSITY"; assuming "default"
+\set VERBOSITY default
 drop table test_tspace;
 NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to table _iobeamdb_internal._hyper_1_0_replica

@@ -128,7 +128,7 @@ SELECT _iobeamdb_internal.to_timestamp(9223372036854775807);
 -- Julian day zero is -210866803200000000 microseconds from UNIX epoch
 SELECT _iobeamdb_internal.to_timestamp(-210866803200000000);
 
-\set VERBOSITY normal
+\set VERBOSITY default
 -- Going beyond Julian day zero should give out-of-range error
 SELECT _iobeamdb_internal.to_timestamp(-210866803200000001);
 
