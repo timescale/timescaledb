@@ -1,16 +1,19 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
 \ir include/create_single_db.sql
+\set VERBOSITY normal
+psql:include/create_single_db.sql:1: unrecognized value "normal" for "VERBOSITY"; assuming "default"
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
 SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+\set VERBOSITY verbose
 \o
 \set ECHO ALL
 \c single
@@ -191,14 +194,14 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 SET timezone = 'UTC';
 ALTER DATABASE single SET timezone ='UTC';
 -- Conversion to timestamp using Postgres built-in function taking double
-SELECT to_timestamp(1486480176.236538); 
+SELECT to_timestamp(1486480176.236538);
             to_timestamp             
 -------------------------------------
  Tue Feb 07 15:09:36.236537 2017 UTC
 (1 row)
 
 -- extension-specific version taking microsecond UNIX timestamp
-SELECT _iobeamdb_internal.to_timestamp(1486480176236538); 
+SELECT _iobeamdb_internal.to_timestamp(1486480176236538);
             to_timestamp             
 -------------------------------------
  Tue Feb 07 15:09:36.236538 2017 UTC
@@ -214,7 +217,7 @@ SELECT _iobeamdb_internal.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
 -- In UNIX microseconds, BIGINT MAX is smaller than internal date upper bound
 -- and should therefore be OK. Further, converting to the internal postgres
 -- epoch cannot overflow a 64-bit INTEGER since the postgres epoch is at a
--- later date compared to the UNIX epoch, and is therefore represented by a 
+-- later date compared to the UNIX epoch, and is therefore represented by a
 -- smaller number
 SELECT _iobeamdb_internal.to_timestamp(9223372036854775807);
              to_timestamp              
@@ -229,6 +232,8 @@ SELECT _iobeamdb_internal.to_timestamp(-210866803200000000);
  Mon Nov 24 00:00:00 4714 UTC BC
 (1 row)
 
+\set VERBOSITY normal
+unrecognized value "normal" for "VERBOSITY"; assuming "default"
 -- Going beyond Julian day zero should give out-of-range error
 SELECT _iobeamdb_internal.to_timestamp(-210866803200000001);
 ERROR:  timestamp out of range

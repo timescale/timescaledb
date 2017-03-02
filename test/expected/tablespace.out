@@ -1,21 +1,24 @@
 \set ON_ERROR_STOP 1
 \set SHOW_CONTEXT never
 \ir include/create_single_db.sql
+\set VERBOSITY normal
+psql:include/create_single_db.sql:1: unrecognized value "normal" for "VERBOSITY"; assuming "default"
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
 SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
  setup_single_node 
 -------------------
  
 (1 row)
 
+\set VERBOSITY verbose
 \set ECHO ALL
 \c single
 \set ON_ERROR_STOP 0
@@ -90,11 +93,12 @@ Child tables: _copy_temp_1,
               _iobeamdb_internal._hyper_1_0_replica
 
 --cleanup
+\set VERBOSITY normal
+unrecognized value "normal" for "VERBOSITY"; assuming "default"
 drop table test_tspace;
-NOTICE:  00000: drop cascades to 4 other objects
+NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to table _iobeamdb_internal._hyper_1_0_replica
 drop cascades to table _iobeamdb_internal._hyper_1_1_0_partition
 drop cascades to table _iobeamdb_internal._hyper_1_1_0_1_data
 drop cascades to table _copy_temp_1
-LOCATION:  reportDependentObjects, dependency.c:1011
 drop tablespace tspace1;

@@ -28,5 +28,6 @@ insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
 \d+ _iobeamdb_internal.*
 
 --cleanup
+\set VERBOSITY normal
 drop table test_tspace;
 drop tablespace tspace1;
