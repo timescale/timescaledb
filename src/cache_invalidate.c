@@ -38,6 +38,7 @@ void		_cache_invalidate_extload(void);
 Datum		invalidate_relcache_trigger(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
+PG_FUNCTION_INFO_V1(invalidate_relcache);
 
 
 static Oid	hypertable_cache_inval_proxy_oid = InvalidOid;
@@ -89,6 +90,24 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 		return PointerGetDatum(trigdata->tg_newtuple);
 	else
 		return PointerGetDatum(trigdata->tg_trigtuple);
+}
+
+/*
+ *  This is similar to invalidate_relcache_trigger but not a trigger.
+ *  Not used regularly but useful for debugging.
+ *
+ */
+
+Datum
+invalidate_relcache(PG_FUNCTION_ARGS)
+{
+	Oid proxy_oid = PG_GETARG_OID(0);
+
+	/* arg 0 = relid of the cache_inval_proxy table */
+	CacheInvalidateRelcacheByRelid(proxy_oid);
+
+	/* tuple to return to executor */
+	return BoolGetDatum(true);
 }
 
 
