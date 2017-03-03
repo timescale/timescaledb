@@ -57,10 +57,10 @@ inval_cache_callback(Datum arg, Oid relid)
 		return;
 
 	if (relid == InvalidOid || relid == hypertable_cache_inval_proxy_oid)
-		invalidate_hypertable_cache_callback();
+		hypertable_cache_invalidate_callback();
 
 	if (relid == InvalidOid || relid == chunk_cache_inval_proxy_oid)
-		invalidate_chunk_cache_callback();
+		chunk_crn_set_cache_invalidate_callback();
 }
 
 /*

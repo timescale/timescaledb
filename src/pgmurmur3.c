@@ -39,7 +39,6 @@ PG_FUNCTION_INFO_V1(get_partition_for_key);
 Datum
 get_partition_for_key(PG_FUNCTION_ARGS)
 {
-/*	SELECT ((_iobeamdb_internal.murmur3_hash_string(key, 1 :: INT4) & x'7fffffff' :: INTEGER) % mod_factor) :: SMALLINT INTO ret; */
 	struct varlena *data;
 	int32		mod;
 	Datum		hash_d;
@@ -63,7 +62,12 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 
 
 /*
- * array_position_least
+ * array_position_least returns the highest position in the array such that the element
+ * in the array is <= searched element. If the array is of partition-keyspace-end values 
+ * then this gives a unique bucket for each keyspace value.
+ * 
+ * Arg 0: sorted array of smallint
+ * Arg 1: searched_element (smallint)
  */
 
 PG_FUNCTION_INFO_V1(array_position_least);
@@ -90,18 +94,15 @@ array_position_least(PG_FUNCTION_ARGS)
 		elog(ERROR, "only support smallint arrays");
 	}
 
-	/*
-	 * We refuse to search for elements in multi-dimensional arrays, since we
-	 * have no good way to report the element's location in the array.
-	 */
+	/* should be a single dimensioned array */
 	if (ARR_NDIM(array) > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("searching for elements in multidimensional arrays is not supported")));
+				 errmsg("can only work with single-dimension array")));
 
 	if (PG_ARGISNULL(1))
 	{
-		elog(ERROR, "does not expect null");
+		elog(ERROR, "does not expect null as searched-for element");
 	}
 	else
 	{
@@ -128,16 +129,12 @@ array_position_least(PG_FUNCTION_ARGS)
 		my_extra->element_type = INT2OID;
 	}
 
-	/* Examine each array element until we find a match. */
+	/* Examine each array element until the element is >= searched_element. */
 	array_iterator = array_create_iterator(array, 0, my_extra);
 	while (array_iterate(array_iterator, &value, &isnull))
 	{
 		position++;
 
-		/*
-		 * Can't look at the array element's value if it's null; but if we
-		 * search for null, we have a hit and are done.
-		 */
 		if (isnull)
 		{
 			elog(ERROR, "No element in array should be null");

@@ -760,10 +760,6 @@ void iobeamdb_ProcessUtility(Node *parsetree,
 		return;
 	}
 
-	/*if(IsA(parsetree, IndexStmt)) {
-		pprint(parsetree);	
-	}*/
-
 	prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);	
 }
 

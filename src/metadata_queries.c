@@ -223,3 +223,8 @@ chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock)
 
 	return chunk;
 }
+
+
+bool chunk_row_timepoint_is_member(const chunk_row *row, const int64 time_pt){
+  return row->start_time <= time_pt && row->end_time >= time_pt;
+}

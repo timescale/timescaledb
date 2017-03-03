@@ -41,4 +41,8 @@ void		hlib_murmur3(const void *data, size_t len, uint64_t *io);
 /* SQL function */
 Datum		pg_murmur3_hash_string(PG_FUNCTION_ARGS);
 
+
+#define ARRAY_POSITION_LEAST_FN_NAME "array_position_least"
+Datum		array_position_least(PG_FUNCTION_ARGS);
+
 #endif

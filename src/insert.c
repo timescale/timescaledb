@@ -46,6 +46,8 @@
 #include "metadata_queries.h"
 #include "partitioning.h"
 #include "scanner.h"
+#include "catalog.h"
+#include "pgmurmur3.h"
 
 #include <utils/tqual.h>
 #include <utils/rls.h>
@@ -56,7 +58,8 @@
 #define INSERT_TRIGGER_COPY_TABLE_NAME	"insert_trigger"
 
 /* private funcs */
-static ObjectAddress create_insert_index(int32 hypertable_id, char * time_field, PartitioningInfo *part_info, int16 *end_time_partitions, int num_partitions);
+
+static ObjectAddress create_insert_index(int32 hypertable_id, char * time_field, PartitioningInfo *part_info,epoch_and_partitions_set *epoch);
 static Node *get_keyspace_fn_call(PartitioningInfo *part_info);
 
 /*
@@ -133,7 +136,7 @@ chunk_insert_ctx_rel_destroy(ChunkInsertCtxRel *rel_ctx)
 
 
 static void
-chunk_insert_ctx_rel_chunk_insert_ctx_insert_tuple(ChunkInsertCtxRel *rel_ctx, HeapTuple tuple)
+chunk_insert_ctx_rel_insert_tuple(ChunkInsertCtxRel *rel_ctx, HeapTuple tuple)
 {
 	int			hi_options = 0; /* no optimization */
 	CommandId	mycid = GetCurrentCommandId(true);
@@ -161,16 +164,19 @@ chunk_insert_ctx_rel_chunk_insert_ctx_insert_tuple(ChunkInsertCtxRel *rel_ctx, H
 typedef struct ChunkInsertCtx
 {
 	chunk_cache_entry *chunk;
+	Cache *pinned;
 	List	   *ctxs;
 } ChunkInsertCtx;
 
 static ChunkInsertCtx *
-chunk_insert_ctx_new(chunk_cache_entry *chunk)
+chunk_insert_ctx_new(chunk_cache_entry *chunk, Cache *pinned)
 {
-	/* int num_tables = list_length(chunk->crns->tables); */
 	ListCell   *lc;
 	List	   *rel_ctx_list = NIL;
 	ChunkInsertCtx *ctx;
+	
+	ctx = palloc(sizeof(ChunkInsertCtx));
+	ctx->pinned = pinned;
 
 	foreach(lc, chunk->crns->tables)
 	{
@@ -234,7 +240,6 @@ chunk_insert_ctx_new(chunk_cache_entry *chunk)
 		rel_ctx_list = lappend(rel_ctx_list, rel_ctx);
 	}
 
-	ctx = palloc(sizeof(ChunkInsertCtx));
 	ctx->ctxs = rel_ctx_list;
 	ctx->chunk = chunk;
 	return ctx;
@@ -249,6 +254,8 @@ chunk_insert_ctx_destroy(ChunkInsertCtx *ctx)
 	{
 		return;
 	}
+
+	cache_release(ctx->pinned);
 
 	foreach(lc, ctx->ctxs)
 	{
@@ -265,7 +272,7 @@ chunk_insert_ctx_insert_tuple(ChunkInsertCtx *ctx, HeapTuple tup)
 	foreach(lc, ctx->ctxs)
 	{
 		ChunkInsertCtxRel *rel_ctx = lfirst(lc);
-		chunk_insert_ctx_rel_chunk_insert_ctx_insert_tuple(rel_ctx, tup);
+		chunk_insert_ctx_rel_insert_tuple(rel_ctx, tup);
 	}
 }
 
@@ -286,11 +293,10 @@ copy_table_tuple_found(TupleInfo *ti, void *data)
 
 	if (ctx->pe->num_partitions > 1)
 	{
-		//Datum		partition_datum = index_getattr(scan->xs_itup, 1, scan->xs_itupdesc, &is_null);
+		/* first element is partition index (used for sorting but not necessary here) */
 		Datum		time_datum = index_getattr(ti->ituple, 2, ti->ituple_desc, &is_null);
 		Datum		keyspace_datum = index_getattr(ti->ituple, 3, ti->ituple_desc, &is_null);
 
-		//partition_no = DatumGetInt16(partition_datum);
 		time_pt = time_value_to_internal(time_datum, ctx->hci->time_column_type);
 		keyspace_pt = DatumGetInt16(keyspace_datum);
 	}
@@ -298,18 +304,18 @@ copy_table_tuple_found(TupleInfo *ti, void *data)
 	{
 		Datum		time_datum = index_getattr(ti->ituple, 1, ti->ituple_desc, &is_null);
 		time_pt = time_value_to_internal(time_datum, ctx->hci->time_column_type);
-		keyspace_pt = -1;
+		keyspace_pt = KEYSPACE_PT_NO_PARTITIONING;
 	}
 
 
-	if (ctx->chunk_ctx != NULL && !(ctx->chunk_ctx->chunk->chunk->start_time <= time_pt && ctx->chunk_ctx->chunk->chunk->end_time >= time_pt))
+	if (ctx->chunk_ctx != NULL && !chunk_row_timepoint_is_member(ctx->chunk_ctx->chunk->chunk, time_pt))
 	{
 		/* moving on to next chunk; */
 		chunk_insert_ctx_destroy(ctx->chunk_ctx);
 		ctx->chunk_ctx = NULL;
 
 	}
-	if (ctx->part != NULL && !(ctx->part->keyspace_start <= keyspace_pt && ctx->part->keyspace_end >= keyspace_pt))
+	if (ctx->part != NULL && !partition_keyspace_pt_is_member(ctx->part, keyspace_pt))
 	{
 		/* moving on to next ctx->partition. */
 		chunk_insert_ctx_destroy(ctx->chunk_ctx);
@@ -326,26 +332,21 @@ copy_table_tuple_found(TupleInfo *ti, void *data)
 	{
 		Datum		was_closed_datum;
 		chunk_cache_entry *chunk;
+		Cache *pinned = chunk_crn_set_cache_pin();
 		/*
 		 * TODO: this first call should be non-locking and use a cache(for
 		 * performance)
 		 */
-		chunk = get_chunk_cache_entry(ctx->hci, ctx->pe, ctx->part, time_pt, false);
+		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, false);
 		was_closed_datum = FunctionCall1(get_close_if_needed_fn(), Int32GetDatum(chunk->id));
 		/* chunk may have been closed and thus changed /or/ need to get share lock */
-		chunk = get_chunk_cache_entry(ctx->hci, ctx->pe, ctx->part, time_pt, true);
+		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, true);
 
-		ctx->chunk_ctx = chunk_insert_ctx_new(chunk);
-		/* elog(WARNING, "got new chunk %d", chunk->id); */
+		ctx->chunk_ctx = chunk_insert_ctx_new(chunk, pinned);
 	}
 
-	/*
-	 * elog(WARNING, "time is partition_no: %d keyspace: %d time: %ld
-	 * chunk %d", partition_no, keyspace_pt, time_pt, chunk->id);
-	 */
-
 	/* insert here: */
-	//has to be a copy(not sure why)
+	/* has to be a copy(not sure why) */
 	chunk_insert_ctx_insert_tuple(ctx->chunk_ctx,heap_copytuple(ti->tuple));
 	return true;
 }
@@ -398,7 +399,7 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	hypertable_cache_entry *hci;
 
 	epoch_and_partitions_set *pe;
-	CacheStorage *hypertable_cache_storage;
+	Cache *hypertable_cache;
 	ObjectAddress idx;
 
 	DropStmt   *drop = makeNode(DropStmt);
@@ -429,24 +430,23 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	 * get the hypertable cache; use the time column name to figure out the
 	 * column fnum for time field
 	 */
-	hypertable_cache_storage = hypertable_cache_pin_storage();
+	hypertable_cache = hypertable_cache_pin();
 
-	hci = hypertable_cache_get(hypertable_id);
+	hci = hypertable_cache_get_entry(hypertable_cache, hypertable_id);
 
 	/* TODO: hack assumes single pe. */
-	pe = hypertable_cache_get_partition_epoch(hci, 0, trigdata->tg_relation->rd_id);
+	pe = hypertable_cache_get_partition_epoch(hypertable_cache, hci, 0, trigdata->tg_relation->rd_id);
 
 	/*
 	 * create an index that colocates row from the same chunk together and
 	 * guarantees an order on chunk access as well
 	 */
-	idx = create_insert_index(hypertable_id, hci->time_column_name, pe->partitioning, 
-										  partition_epoch_get_partition_end_times(pe), pe->num_partitions);
+	idx = create_insert_index(hypertable_id, hci->time_column_name, pe->partitioning, pe);
 
 
 	scan_copy_table_and_insert(hci, pe, trigdata->tg_relation->rd_id, idx.objectId);
 
-	cache_release_storage(hypertable_cache_storage);
+	cache_release(hypertable_cache);
 
 	drop->removeType = OBJECT_INDEX;
 	drop->missing_ok = FALSE;
@@ -536,6 +536,21 @@ create_copy_table(int32 hypertable_id, Oid root_oid)
 	return copyTableRelationAddr.objectId;
 }
 
+static IndexElem *
+makeIndexElem(char *name, Node *expr){
+	Assert((name ==NULL || expr == NULL) && (name !=NULL || expr !=NULL));
+
+	IndexElem *time_elem = makeNode(IndexElem);
+	time_elem->name = name;
+	time_elem->expr = expr;
+	time_elem->indexcolname = NULL;
+	time_elem->collation = NIL;
+	time_elem->opclass = NIL;
+	time_elem->ordering = SORTBY_DEFAULT;
+	time_elem->nulls_ordering = SORTBY_NULLS_DEFAULT;
+	return time_elem;
+}
+
 /* creates index for inserting in set chunk order.
  *
  * The index is the following:
@@ -560,7 +575,7 @@ create_copy_table(int32 hypertable_id, Oid root_oid)
  *
  * */
 static ObjectAddress
-create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *part_info, int16 *end_time_partitions, int num_partitions)
+create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *part_info, epoch_and_partitions_set *epoch)
 {
 	IndexStmt  *index_stmt = makeNode(IndexStmt);
 	IndexElem  *time_elem;
@@ -568,31 +583,24 @@ create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *par
 	List	   *indexElem = NIL;
 	int			i;
 
-	time_elem = makeNode(IndexElem);
-	time_elem->name = time_field;
-	time_elem->expr = NULL;
-	time_elem->indexcolname = NULL;
-	time_elem->collation = NIL;
-	time_elem->opclass = NIL;
-	time_elem->ordering = SORTBY_DEFAULT;
-	time_elem->nulls_ordering = SORTBY_NULLS_DEFAULT;
+	time_elem = makeIndexElem(time_field, NULL);
 
 	if (part_info != NULL)
 	{
 		IndexElem  *partition_elem;
 		IndexElem  *keyspace_elem;
-		List	   *array_pos_func_name = list_make2(makeString("_iobeamdb_catalog"), makeString("array_position_least"));
+		List	   *array_pos_func_name = list_make2(makeString(CATALOG_SCHEMA_NAME), makeString(ARRAY_POSITION_LEAST_FN_NAME));
 		List	   *array_pos_args;
 		List	   *array_list = NIL;
 		A_ArrayExpr *array_expr;
 		FuncCall   *array_pos_fc;
 
-		for (i = 0; i < num_partitions; i++)
+		for (i = 0; i < epoch->num_partitions; i++)
 		{
 			A_Const    *end_time_const = makeNode(A_Const);
 			TypeCast   *cast = makeNode(TypeCast);
 
-			end_time_const->val = *makeInteger((int) end_time_partitions[i]);
+			end_time_const->val = *makeInteger((int) epoch->partitions[i].keyspace_end);
 			end_time_const->location = -1;
 
 
@@ -610,23 +618,8 @@ create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *par
 		array_pos_args = list_make2(array_expr, get_keyspace_fn_call(part_info));
 		array_pos_fc = makeFuncCall(array_pos_func_name, array_pos_args, -1);
 
-		partition_elem = makeNode(IndexElem);
-		partition_elem->name = NULL;
-		partition_elem->expr = (Node *) array_pos_fc;
-		partition_elem->indexcolname = NULL;
-		partition_elem->collation = NIL;
-		partition_elem->opclass = NIL;
-		partition_elem->ordering = SORTBY_DEFAULT;
-		partition_elem->nulls_ordering = SORTBY_NULLS_DEFAULT;
-
-		keyspace_elem = makeNode(IndexElem);
-		keyspace_elem->name = NULL;
-		keyspace_elem->expr = (Node *) get_keyspace_fn_call(part_info);
-		keyspace_elem->indexcolname = NULL;
-		keyspace_elem->collation = NIL;
-		keyspace_elem->opclass = NIL;
-		keyspace_elem->ordering = SORTBY_DEFAULT;
-		keyspace_elem->nulls_ordering = SORTBY_NULLS_DEFAULT;
+		partition_elem = makeIndexElem(NULL, (Node *) array_pos_fc);		
+		keyspace_elem = makeIndexElem(NULL, (Node *) get_keyspace_fn_call(part_info));
 
 		/* partition_number, time, keyspace */
 		/* can probably get rid of keyspace but later */
@@ -640,22 +633,7 @@ create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *par
 	index_stmt->idxname = "copy_insert";
 	index_stmt->relation = makeRangeVar("pg_temp", copy_table_name(hypertable_id), -1);
 	index_stmt->accessMethod = "btree";
-	index_stmt->tableSpace = NULL;
 	index_stmt->indexParams = indexElem;
-	index_stmt->options = NULL;
-	index_stmt->whereClause = NULL;
-	index_stmt->excludeOpNames = NIL;
-	index_stmt->idxcomment = NULL;
-	index_stmt->indexOid = InvalidOid;
-	index_stmt->oldNode = InvalidOid;
-	index_stmt->unique = false;
-	index_stmt->primary = false;
-	index_stmt->isconstraint = false;
-	index_stmt->deferrable = false;
-	index_stmt->initdeferred = false;
-	index_stmt->transformed = false;
-	index_stmt->concurrent = false;
-	index_stmt->if_not_exists = false;
 
 	relid =
 		RangeVarGetRelidExtended(index_stmt->relation, ShareLock,
@@ -685,7 +663,6 @@ get_keyspace_fn_call(PartitioningInfo *part_info)
 	A_Const    *mod_const;
 	List	   *part_func_name = list_make2(makeString(part_info->partfunc.schema), makeString(part_info->partfunc.name));
 	List	   *part_func_args;
-	FuncCall   *part_fc;
 
 	col_ref->fields = list_make1(makeString(part_info->column));
 	col_ref->location = -1;
@@ -695,6 +672,5 @@ get_keyspace_fn_call(PartitioningInfo *part_info)
 	mod_const->location = -1;
 
 	part_func_args = list_make2(col_ref, mod_const);
-	part_fc = makeFuncCall(part_func_name, part_func_args, -1);
-	return (Node *) part_fc;
+	return (Node *) makeFuncCall(part_func_name, part_func_args, -1);
 }

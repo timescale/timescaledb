@@ -296,7 +296,7 @@ cmp_partitions(const void *keyspace_pt_arg, const void *value)
 	int16      keyspace_pt = *((int16 *) keyspace_pt_arg);
 	const Partition   *part = value;
 	
-	if (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt)
+	if (partition_keyspace_pt_is_member(part, keyspace_pt))
 	{
 		return 0;
 	}
@@ -319,7 +319,7 @@ partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt
 		return NULL;
 	}
 	
-	if (keyspace_pt < 0)
+	if (keyspace_pt == KEYSPACE_PT_NO_PARTITIONING)
 	{
 		if (epoch->num_partitions > 1)
 		{
@@ -340,19 +340,7 @@ partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt
 	return part;
 }
 
-
-int16 *
-partition_epoch_get_partition_end_times(epoch_and_partitions_set *epoch)
+bool partition_keyspace_pt_is_member(const Partition *part, const int16 keyspace_pt)
 {
-	
-	int16	   *end_times_partitions = palloc(sizeof(int16) * epoch->num_partitions);
-	int i;
-
-	for (i = 0; i < epoch->num_partitions; i++)
-	{
-		end_times_partitions[i] = epoch->partitions[i].keyspace_end;
-	}
-
-	return end_times_partitions;
+   return keyspace_pt == KEYSPACE_PT_NO_PARTITIONING || (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt);
 }
-

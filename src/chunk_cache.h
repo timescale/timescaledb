@@ -5,6 +5,7 @@
 #include <executor/spi.h>
 
 #include "metadata_queries.h"
+#include "cache.h"
 
 #define CHUNK_CACHE_INVAL_PROXY_TABLE "cache_inval_chunk"
 #define CHUNK_CACHE_INVAL_PROXY_OID                                     \
@@ -20,14 +21,14 @@ typedef struct chunk_cache_entry
 	int32       id;
 	chunk_row  *chunk;
 	crn_set    *crns;
-	SPIPlanPtr	move_from_copyt_plan;
 } chunk_cache_entry;
+	
+	
+extern chunk_cache_entry *get_chunk_cache_entry(Cache *cache, Partition *part, int64 timepoint, bool lock);
 
-extern chunk_cache_entry *get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,
-												Partition *part, int64 time_pt, bool lock);
+extern void chunk_crn_set_cache_invalidate_callback(void);
 
-extern void invalidate_chunk_cache_callback(void);
-
+extern Cache *chunk_crn_set_cache_pin(void); 
 extern void _chunk_cache_init(void);
 extern void _chunk_cache_fini(void);
 

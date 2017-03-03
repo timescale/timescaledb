@@ -24,14 +24,14 @@ typedef struct hypertable_cache_entry
     epoch_and_partitions_set *epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY];
 } hypertable_cache_entry;
 
-hypertable_cache_entry *hypertable_cache_get(int32 hypertable_id);
+hypertable_cache_entry *hypertable_cache_get_entry(Cache * cache, int32 hypertable_id);
 
 epoch_and_partitions_set *
-hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt, Oid relid);
+hypertable_cache_get_partition_epoch(Cache *cache, hypertable_cache_entry *hce, int64 time_pt, Oid relid);
 
-void invalidate_hypertable_cache_callback(void);
+void hypertable_cache_invalidate_callback(void);
 
-extern CacheStorage *hypertable_cache_pin_storage(void);
+extern Cache *hypertable_cache_pin(void);
 
 void _hypertable_cache_init(void);
 void _hypertable_cache_fini(void);

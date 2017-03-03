@@ -40,9 +40,6 @@ typedef struct chunk_crn_set_htable_entry
 typedef struct ChunkCacheQueryCtx
 {
 	CacheQueryCtx cctx;
-	hypertable_cache_entry *hci;
-	epoch_and_partitions_set *pe_entry;
-	Partition   *part;
 	int32       chunk_id;
 	int64       chunk_start_time;
 	int64       chunk_end_time;
@@ -57,31 +54,40 @@ chunk_crn_set_cache_get_key(CacheQueryCtx *ctx)
 static void *chunk_crn_set_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
 static void *chunk_crn_set_cache_update_entry(Cache *cache, CacheQueryCtx *ctx);
 
-static char *get_copy_table_insert_sql(ChunkCacheQueryCtx *ctx);
+static Cache *chunk_crn_set_cache_create() {
+	MemoryContext ctx =  AllocSetContextCreate(CacheMemoryContext,
+											   CHUNK_CACHE_INVAL_PROXY_TABLE,
+											   ALLOCSET_DEFAULT_SIZES);
 
-static Cache chunk_crn_set_cache = {
-	.hctl = {
-		.keysize = sizeof(int32),
-		.entrysize = sizeof(chunk_crn_set_htable_entry),
-		.hcxt = NULL,
-	},
-	.name = CHUNK_CACHE_INVAL_PROXY_TABLE,
-	.numelements = 16,
-	.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
-	.get_key = chunk_crn_set_cache_get_key,
-	.create_entry = chunk_crn_set_cache_create_entry,
-	.update_entry = chunk_crn_set_cache_update_entry,
-};
+	Cache *cache = MemoryContextAlloc(ctx, sizeof(Cache));
+	*cache = (Cache)  {
+		.hctl = {
+			.keysize = sizeof(int32),
+			.entrysize = sizeof(chunk_crn_set_htable_entry),
+			.hcxt = ctx,
+		},
+			.name = CHUNK_CACHE_INVAL_PROXY_TABLE,
+			.numelements = 16,
+			.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
+			.get_key = chunk_crn_set_cache_get_key,
+			.create_entry = chunk_crn_set_cache_create_entry,
+			.update_entry = chunk_crn_set_cache_update_entry,
+	};
+
+	cache_init(cache);
+
+	return cache;
+} 
+
+static Cache *chunk_crn_set_cache_current = NULL;
 
 static void *
 chunk_crn_set_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
 	chunk_crn_set_htable_entry *pe = ctx->entry;
-	char	   *insert_sql;
 	MemoryContext old;
 
-	insert_sql = get_copy_table_insert_sql(cctx);
 	pe->chunk_id = cctx->chunk_id;
 	pe->start_time = cctx->chunk_start_time;
 	pe->end_time = cctx->chunk_end_time;
@@ -99,14 +105,11 @@ chunk_crn_set_cache_update_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
 	chunk_crn_set_htable_entry *pe = ctx->entry;
-	char	   *insert_sql;
 	MemoryContext old;
 
 	if (pe->start_time == cctx->chunk_start_time &&
 		pe->end_time == cctx->chunk_end_time)
 		return pe;
-
-	insert_sql = get_copy_table_insert_sql(cctx);
 
 	old = cache_switch_to_memory_context(cache);
 	pe->crns = fetch_crn_set(NULL, pe->chunk_id);
@@ -116,28 +119,35 @@ chunk_crn_set_cache_update_entry(Cache *cache, CacheQueryCtx *ctx)
 }
 
 void
-invalidate_chunk_cache_callback(void)
+chunk_crn_set_cache_invalidate_callback(void)
 {
-	CACHE1_elog(WARNING, "DESTROY chunk_insert plan cache");
-	cache_invalidate(&chunk_crn_set_cache);
+	CACHE1_elog(WARNING, "DESTROY chunk_crn_set_cache");
+	cache_invalidate(chunk_crn_set_cache_current);
+	chunk_crn_set_cache_current = chunk_crn_set_cache_create();
 }
 
 static chunk_crn_set_htable_entry *
-get_chunk_crn_set_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,
-								  Partition *part, int32 chunk_id, int64 chunk_start_time,
-								  int64 chunk_end_time)
+chunk_crn_set_cache_get_entry(Cache *cache, int32 chunk_id, int64 chunk_start_time, int64 chunk_end_time)
 {
+	if (cache == NULL)
+	{
+		cache = chunk_crn_set_cache_current;
+	}
 	ChunkCacheQueryCtx ctx = {
-		.hci = hci,
-		.pe_entry = pe_entry,
-		.part = part,
 		.chunk_id = chunk_id,
 		.chunk_start_time = chunk_start_time,
 		.chunk_end_time = chunk_end_time,
 	};
 
-	return cache_fetch(&chunk_crn_set_cache, &ctx.cctx);
+	return cache_fetch(cache, &ctx.cctx);
 }
+
+extern Cache *
+chunk_crn_set_cache_pin() 
+{
+	return cache_pin(chunk_crn_set_cache_current);
+}
+
 
 static chunk_row *
 chunk_row_create(int32 id, int32 partition_id, int64 starttime, int64 endtime)
@@ -242,9 +252,12 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 	return cctx.chunk;
 }
 
+/*
+ *	Get chunk cache entry.
+ *	The cache parameter is a chunk_crn_set_cache (can be null to use current cache).
+ */
 chunk_cache_entry *
-get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_entry,
-					  Partition *part, int64 timepoint, bool lock)
+get_chunk_cache_entry(Cache *cache, Partition *part, int64 timepoint, bool lock)
 {
 	chunk_crn_set_htable_entry *chunk_crn_cache;
 	chunk_cache_entry *entry;
@@ -260,87 +273,21 @@ get_chunk_cache_entry(hypertable_cache_entry *hci, epoch_and_partitions_set *pe_
 	entry = palloc(sizeof(chunk_cache_entry));
 	entry->chunk = chunk;
 	entry->id = chunk->id;
-	chunk_crn_cache = get_chunk_crn_set_cache_entry(hci, pe_entry, part, chunk->id,
-												  chunk->start_time, chunk->end_time);
+	chunk_crn_cache = chunk_crn_set_cache_get_entry(cache, chunk->id,
+													chunk->start_time, chunk->end_time);
 	entry->crns = chunk_crn_cache->crns;
 	return entry;
-}
-
-
-static char *
-get_copy_table_insert_sql(ChunkCacheQueryCtx *ctx)
-{
-	StringInfo  where_clause = makeStringInfo();
-	StringInfo  insert_clauses = makeStringInfo();
-	StringInfo  sql_insert = makeStringInfo();
-	ListCell   *cell;
-	int         i;
-	crn_set    *crn = fetch_crn_set(NULL, ctx->chunk_id);
-
-	appendStringInfo(where_clause, "WHERE TRUE");
-
-	if (ctx->pe_entry->num_partitions > 1)
-	{
-		appendStringInfo(where_clause, " AND (%s.%s(%s::TEXT, %d) BETWEEN %d AND %d)",
-						 quote_identifier(ctx->pe_entry->partitioning->partfunc.schema),
-						 quote_identifier(ctx->pe_entry->partitioning->partfunc.name),
-						 quote_identifier(ctx->pe_entry->partitioning->column),
-						 ctx->pe_entry->partitioning->partfunc.modulos,
-						 ctx->part->keyspace_start,
-						 ctx->part->keyspace_end);
-	}
-
-
-	if (ctx->chunk_start_time != OPEN_START_TIME)
-	{
-		appendStringInfo(where_clause, " AND (%1$s >= %2$s) ",
-						 quote_identifier(ctx->hci->time_column_name),
-						 internal_time_to_column_literal_sql(ctx->chunk_start_time,
-															 ctx->hci->time_column_type));
-	}
-
-	if (ctx->chunk_end_time != OPEN_END_TIME)
-	{
-		appendStringInfo(where_clause, " AND (%1$s <= %2$s) ",
-						 quote_identifier(ctx->hci->time_column_name),
-						 internal_time_to_column_literal_sql(ctx->chunk_end_time,
-															 ctx->hci->time_column_type));
-	}
-
-	i = 0;
-	foreach(cell, crn->tables)
-	{
-		crn_row    *tab = lfirst(cell);
-
-		i = i + 1;
-		appendStringInfo(insert_clauses, "i_%d AS (INSERT INTO %s.%s SELECT * FROM selected)",
-						 i,
-						 quote_identifier(tab->schema_name.data),
-						 quote_identifier(tab->table_name.data)
-			);
-	}
-	pfree(crn);
-	crn = NULL;
-
-	appendStringInfo(sql_insert, "\
-						 WITH selected AS ( DELETE FROM ONLY %1$s %2$s RETURNING * ), \
-						 %3$s \
-						 SELECT 1", copy_table_name(ctx->hci->id),
-					 where_clause->data,
-					 insert_clauses->data);
-
-	return sql_insert->data;
 }
 
 void
 _chunk_cache_init(void)
 {
 	CreateCacheMemoryContext();
-	cache_init(&chunk_crn_set_cache);
+	chunk_crn_set_cache_current = chunk_crn_set_cache_create();
 }
 
 void
 _chunk_cache_fini(void)
 {
-	cache_invalidate(&chunk_crn_set_cache);
+	cache_invalidate(chunk_crn_set_cache_current);
 }
