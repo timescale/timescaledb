@@ -38,6 +38,7 @@ void		_cache_invalidate_extload(void);
 Datum		invalidate_relcache_trigger(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
+PG_FUNCTION_INFO_V1(invalidate_relcache);
 
 
 static Oid	hypertable_cache_inval_proxy_oid = InvalidOid;
@@ -56,10 +57,10 @@ inval_cache_callback(Datum arg, Oid relid)
 		return;
 
 	if (relid == InvalidOid || relid == hypertable_cache_inval_proxy_oid)
-		invalidate_hypertable_cache_callback();
+		hypertable_cache_invalidate_callback();
 
 	if (relid == InvalidOid || relid == chunk_cache_inval_proxy_oid)
-		invalidate_chunk_cache_callback();
+		chunk_crn_set_cache_invalidate_callback();
 }
 
 /*
@@ -91,11 +92,28 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 		return PointerGetDatum(trigdata->tg_trigtuple);
 }
 
+/*
+ *  This is similar to invalidate_relcache_trigger but not a trigger.
+ *  Not used regularly but useful for debugging.
+ *
+ */
+
+Datum
+invalidate_relcache(PG_FUNCTION_ARGS)
+{
+	Oid proxy_oid = PG_GETARG_OID(0);
+
+	/* arg 0 = relid of the cache_inval_proxy table */
+	CacheInvalidateRelcacheByRelid(proxy_oid);
+
+	/* tuple to return to executor */
+	return BoolGetDatum(true);
+}
+
 
 void
 _cache_invalidate_init(void)
 {
-	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
 }
 
 void
@@ -110,6 +128,7 @@ _cache_invalidate_fini(void)
 void
 _cache_invalidate_extload(void)
 {
+	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
 	hypertable_cache_inval_proxy_oid = get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID);
 	chunk_cache_inval_proxy_oid = get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID);
 }

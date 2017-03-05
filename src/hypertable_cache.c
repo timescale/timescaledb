@@ -28,21 +28,33 @@ hypertable_cache_get_key(CacheQueryCtx *ctx)
 	return &((HypertableCacheQueryCtx *) ctx)->hypertable_id;
 }
 
-static Cache hypertable_cache = {
-	.hctl = {
-		.keysize = sizeof(int32),
-		.entrysize = sizeof(hypertable_cache_entry),
-		.hcxt = NULL,
-	},
-	.htab = NULL,
-	.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
-	.numelements = 16,
-	.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
-	.get_key = hypertable_cache_get_key,
-	.create_entry = hypertable_cache_create_entry,
-	.post_invalidate_hook = cache_init,
-};
 
+static Cache *hypertable_cache_create() {
+	MemoryContext ctx =  AllocSetContextCreate(CacheMemoryContext,
+											   HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
+											   ALLOCSET_DEFAULT_SIZES);
+
+	Cache *cache = MemoryContextAlloc(ctx, sizeof(Cache));
+	*cache = (Cache)  {
+		.hctl = {
+			.keysize = sizeof(int32),
+			.entrysize = sizeof(hypertable_cache_entry),
+			.hcxt = ctx,
+		},
+			.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
+			.numelements = 16,
+			.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
+			.get_key = hypertable_cache_get_key,
+			.create_entry = hypertable_cache_create_entry,
+	};
+
+	cache_init(cache);
+
+	return cache;
+} 
+
+
+static Cache *hypertable_cache_current = NULL; 
 /* Column numbers for 'hypertable' table in  sql/common/tables.sql */
 #define HT_TBL_COL_ID 1
 #define HT_TBL_COL_TIME_COL_NAME 10
@@ -103,22 +115,23 @@ hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
 }
 
 void
-invalidate_hypertable_cache_callback(void)
+hypertable_cache_invalidate_callback(void)
 {
 	CACHE1_elog(WARNING, "DESTROY hypertable_cache");
-	cache_invalidate(&hypertable_cache);
+	cache_invalidate(hypertable_cache_current);
+	hypertable_cache_current = hypertable_cache_create();
 }
 
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 hypertable_cache_entry *
-hypertable_cache_get(int32 hypertable_id)
+hypertable_cache_get_entry(Cache *cache, int32 hypertable_id)
 {
 	HypertableCacheQueryCtx ctx = {
 		.hypertable_id = hypertable_id,
 	};
 
-	return cache_fetch(&hypertable_cache, &ctx.cctx);
+	return cache_fetch(cache, &ctx.cctx);
 }
 
 /* function to compare epochs */
@@ -142,7 +155,7 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 }
 
 epoch_and_partitions_set *
-hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt, Oid relid)
+hypertable_cache_get_partition_epoch(Cache *cache, hypertable_cache_entry *hce, int64 time_pt, Oid relid)
 {
 	MemoryContext old;
 	epoch_and_partitions_set *epoch,
@@ -168,7 +181,7 @@ hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt,
 		return (*cache_entry);
 	}
 
-	old = cache_switch_to_memory_context(&hypertable_cache);
+	old = cache_switch_to_memory_context(cache);
 	epoch = partition_epoch_scan(hce->id, time_pt, relid);
 
 	/* check if full */
@@ -193,15 +206,21 @@ hypertable_cache_get_partition_epoch(hypertable_cache_entry *hce, int64 time_pt,
 	return epoch;
 }
 
+extern Cache *
+hypertable_cache_pin()
+{
+	return cache_pin(hypertable_cache_current);
+}
+
+
 void _hypertable_cache_init(void)
 {
 	CreateCacheMemoryContext();
-	cache_init(&hypertable_cache);
+	hypertable_cache_current = hypertable_cache_create();
 }
 
 void
 _hypertable_cache_fini(void)
 {
-	hypertable_cache.post_invalidate_hook = NULL;
-	cache_invalidate(&hypertable_cache);
+	cache_invalidate(hypertable_cache_current);
 }

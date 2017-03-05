@@ -175,6 +175,8 @@ partition_epoch_tuple_found(TupleInfo *ti, void *arg)
 													DatumGetCString(partcol),
 													DatumGetInt16(partmod),
 													pctx->relid);
+	} else {
+		pe->partitioning = NULL;
 	}
 
 	/* Scan for the epoch's partitions */
@@ -294,7 +296,7 @@ cmp_partitions(const void *keyspace_pt_arg, const void *value)
 	int16      keyspace_pt = *((int16 *) keyspace_pt_arg);
 	const Partition   *part = value;
 	
-	if (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt)
+	if (partition_keyspace_pt_is_member(part, keyspace_pt))
 	{
 		return 0;
 	}
@@ -317,7 +319,7 @@ partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt
 		return NULL;
 	}
 	
-	if (keyspace_pt < 0)
+	if (keyspace_pt == KEYSPACE_PT_NO_PARTITIONING)
 	{
 		if (epoch->num_partitions > 1)
 		{
@@ -338,3 +340,7 @@ partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt
 	return part;
 }
 
+bool partition_keyspace_pt_is_member(const Partition *part, const int16 keyspace_pt)
+{
+   return keyspace_pt == KEYSPACE_PT_NO_PARTITIONING || (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt);
+}
