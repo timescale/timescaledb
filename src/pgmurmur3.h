@@ -36,7 +36,7 @@
 #define MAX_IO_VALUES 2
 
 /* hash function signatures */
-void		hlib_murmur3(const void *data, size_t len, uint64_t *io);
+void		hlib_murmur3(const void *data, size_t len, uint64_t * io);
 
 /* SQL function */
 Datum		pg_murmur3_hash_string(PG_FUNCTION_ARGS);

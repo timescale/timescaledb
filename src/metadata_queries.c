@@ -49,7 +49,7 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 }
 
 void
-free_epoch(epoch_and_partitions_set *epoch)
+free_epoch(epoch_and_partitions_set * epoch)
 {
 	if (epoch->partitioning != NULL)
 		pfree(epoch->partitioning);
@@ -64,7 +64,7 @@ free_epoch(epoch_and_partitions_set *epoch)
 DEFINE_PLAN(get_crn_plan, CRN_QUERY, 1, CRN_QUERY_ARGS)
 
 crn_set *
-fetch_crn_set(crn_set *entry, int32 chunk_id)
+fetch_crn_set(crn_set * entry, int32 chunk_id)
 {
 	SPIPlanPtr	plan = get_crn_plan();
 	Datum		args[1] = {Int32GetDatum(chunk_id)};
@@ -174,7 +174,7 @@ chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, bool lock,
 }
 
 static chunk_row *
-chunk_row_fill_in(chunk_row *chunk, HeapTuple tuple, TupleDesc tupdesc)
+chunk_row_fill_in(chunk_row * chunk, HeapTuple tuple, TupleDesc tupdesc)
 {
 	int64		time_ret;
 	bool		is_null;
@@ -208,10 +208,10 @@ chunk_row_fill_in(chunk_row *chunk, HeapTuple tuple, TupleDesc tupdesc)
 chunk_row *
 chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock)
 {
-	HeapTuple tuple;
-	TupleDesc desc;
-	chunk_row *chunk = palloc(sizeof(chunk_row));
-	SPIPlanPtr plan = get_chunk_plan();
+	HeapTuple	tuple;
+	TupleDesc	desc;
+	chunk_row  *chunk = palloc(sizeof(chunk_row));
+	SPIPlanPtr	plan = get_chunk_plan();
 
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
@@ -225,6 +225,8 @@ chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock)
 }
 
 
-bool chunk_row_timepoint_is_member(const chunk_row *row, const int64 time_pt){
-  return row->start_time <= time_pt && row->end_time >= time_pt;
+bool
+chunk_row_timepoint_is_member(const chunk_row * row, const int64 time_pt)
+{
+	return row->start_time <= time_pt && row->end_time >= time_pt;
 }

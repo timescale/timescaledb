@@ -14,47 +14,53 @@
 #include "scanner.h"
 #include "partitioning.h"
 
-static void *hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
+static void *hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx);
 
 typedef struct HypertableCacheQueryCtx
 {
 	CacheQueryCtx cctx;
-	int32       hypertable_id;
-} HypertableCacheQueryCtx;
+	int32		hypertable_id;
+}	HypertableCacheQueryCtx;
 
 static void *
-hypertable_cache_get_key(CacheQueryCtx *ctx)
+hypertable_cache_get_key(CacheQueryCtx * ctx)
 {
 	return &((HypertableCacheQueryCtx *) ctx)->hypertable_id;
 }
 
 
-static Cache *hypertable_cache_create() {
-	MemoryContext ctx =  AllocSetContextCreate(CacheMemoryContext,
-											   HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
-											   ALLOCSET_DEFAULT_SIZES);
+static Cache *
+hypertable_cache_create()
+{
+	MemoryContext ctx = AllocSetContextCreate(CacheMemoryContext,
+										  HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
+											  ALLOCSET_DEFAULT_SIZES);
 
-	Cache *cache = MemoryContextAlloc(ctx, sizeof(Cache));
-	*cache = (Cache)  {
-		.hctl = {
+	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));
+
+	Cache		tmp = (Cache)
+	{
+		.hctl =
+		{
 			.keysize = sizeof(int32),
 			.entrysize = sizeof(hypertable_cache_entry),
 			.hcxt = ctx,
 		},
-			.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
-			.numelements = 16,
-			.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
-			.get_key = hypertable_cache_get_key,
-			.create_entry = hypertable_cache_create_entry,
+		.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
+		.numelements = 16,
+		.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
+		.get_key = hypertable_cache_get_key,
+		.create_entry = hypertable_cache_create_entry,
 	};
 
+	*cache = tmp;
 	cache_init(cache);
 
 	return cache;
-} 
+}
 
 
-static Cache *hypertable_cache_current = NULL; 
+static Cache *hypertable_cache_current = NULL;
 /* Column numbers for 'hypertable' table in  sql/common/tables.sql */
 #define HT_TBL_COL_ID 1
 #define HT_TBL_COL_TIME_COL_NAME 10
@@ -64,17 +70,17 @@ static Cache *hypertable_cache_current = NULL;
 #define HT_IDX_COL_ID 1
 
 static bool
-hypertable_tuple_found(TupleInfo *ti, void *data)
+hypertable_tuple_found(TupleInfo * ti, void *data)
 {
-	bool is_null;
+	bool		is_null;
 	HypertableCacheQueryCtx *hctx = data;
 	hypertable_cache_entry *he = hctx->cctx.entry;
-	Datum id_datum = heap_getattr(ti->tuple, HT_TBL_COL_ID, ti->desc, &is_null);
-	Datum time_col_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_COL_NAME, ti->desc, &is_null);
-	Datum time_type_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_TYPE, ti->desc, &is_null);
-	int32 id = DatumGetInt32(id_datum);
+	Datum		id_datum = heap_getattr(ti->tuple, HT_TBL_COL_ID, ti->desc, &is_null);
+	Datum		time_col_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_COL_NAME, ti->desc, &is_null);
+	Datum		time_type_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_TYPE, ti->desc, &is_null);
+	int32		id = DatumGetInt32(id_datum);
 
-	if (id  != hctx->hypertable_id)
+	if (id != hctx->hypertable_id)
 	{
 		elog(ERROR, "Expected hypertable ID %u, got %u", hctx->hypertable_id, id);
 	}
@@ -88,12 +94,12 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 }
 
 static void *
-hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
+hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 {
 	HypertableCacheQueryCtx *hctx = (HypertableCacheQueryCtx *) ctx;
-	Catalog *catalog = catalog_get();
+	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
-	ScannerCtx scanCtx = {
+	ScannerCtx	scanCtx = {
 		.table = catalog->tables[HYPERTABLE].id,
 		.index = catalog->tables[HYPERTABLE].index_id,
 		.scantype = ScannerTypeIndex,
@@ -125,7 +131,7 @@ hypertable_cache_invalidate_callback(void)
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 hypertable_cache_entry *
-hypertable_cache_get_entry(Cache *cache, int32 hypertable_id)
+hypertable_cache_get_entry(Cache * cache, int32 hypertable_id)
 {
 	HypertableCacheQueryCtx ctx = {
 		.hypertable_id = hypertable_id,
@@ -139,7 +145,7 @@ static int
 cmp_epochs(const void *time_pt_pointer, const void *test)
 {
 	/* note reverse order; assume oldest stuff last */
-	int64      *time_pt = (int64 *) time_pt_pointer;
+	int64	   *time_pt = (int64 *) time_pt_pointer;
 	epoch_and_partitions_set **entry = (epoch_and_partitions_set **) test;
 
 	if ((*entry)->start_time <= *time_pt && (*entry)->end_time >= *time_pt)
@@ -155,12 +161,12 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 }
 
 epoch_and_partitions_set *
-hypertable_cache_get_partition_epoch(Cache *cache, hypertable_cache_entry *hce, int64 time_pt, Oid relid)
+hypertable_cache_get_partition_epoch(Cache * cache, hypertable_cache_entry * hce, int64 time_pt, Oid relid)
 {
 	MemoryContext old;
 	epoch_and_partitions_set *epoch,
-		**cache_entry;
-	int         j;
+			  **cache_entry;
+	int			j;
 
 	/* fastpath: check latest entry */
 	if (hce->num_epochs > 0)
@@ -213,7 +219,8 @@ hypertable_cache_pin()
 }
 
 
-void _hypertable_cache_init(void)
+void
+_hypertable_cache_init(void)
 {
 	CreateCacheMemoryContext();
 	hypertable_cache_current = hypertable_cache_create();

@@ -2,7 +2,7 @@
 
 
 void
-cache_init(Cache *cache)
+cache_init(Cache * cache)
 {
 	if (cache->htab != NULL)
 	{
@@ -15,9 +15,11 @@ cache_init(Cache *cache)
 	cache->refcount = 1;
 }
 
-static void 
-cache_destroy(Cache *cache) {
-	if (cache->refcount > 0) {
+static void
+cache_destroy(Cache * cache)
+{
+	if (cache->refcount > 0)
+	{
 		/* will be destroyed later */
 		return;
 	}
@@ -32,7 +34,7 @@ cache_destroy(Cache *cache) {
 }
 
 void
-cache_invalidate(Cache *cache)
+cache_invalidate(Cache * cache)
 {
 	if (cache == NULL)
 		return;
@@ -40,7 +42,7 @@ cache_invalidate(Cache *cache)
 	cache_destroy(cache);
 }
 
-/* 
+/*
  * Pinning is needed if any items returned by the cache
  * may need to survive invalidation events (i.e. AcceptInvalidationMessages() may be called).
  *
@@ -49,13 +51,15 @@ cache_invalidate(Cache *cache)
  * Each call to cache_pin MUST BE paired with a call to cache_release.
  *
  */
-extern Cache *cache_pin(Cache *cache)
+extern Cache *
+cache_pin(Cache * cache)
 {
 	cache->refcount++;
 	return cache;
 }
 
-extern void cache_release(Cache *cache)
+extern void
+cache_release(Cache * cache)
 {
 	Assert(cache->refcount > 0);
 	cache->refcount--;
@@ -64,19 +68,19 @@ extern void cache_release(Cache *cache)
 
 
 MemoryContext
-cache_memory_ctx(Cache *cache)
+cache_memory_ctx(Cache * cache)
 {
 	return cache->hctl.hcxt;
 }
 
 MemoryContext
-cache_switch_to_memory_context(Cache *cache)
+cache_switch_to_memory_context(Cache * cache)
 {
 	return MemoryContextSwitchTo(cache->hctl.hcxt);
 }
 
 void *
-cache_fetch(Cache *cache, CacheQueryCtx *ctx)
+cache_fetch(Cache * cache, CacheQueryCtx * ctx)
 {
 	bool		found;
 

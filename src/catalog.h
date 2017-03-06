@@ -3,7 +3,8 @@
 
 #include <postgres.h>
 
-enum catalog_table {
+enum catalog_table
+{
 	HYPERTABLE = 0,
 	CHUNK,
 	PARTITION,
@@ -32,17 +33,19 @@ enum catalog_table {
 #define CHUNK_INDEX_NAME "chunk_pkey"
 #define CHUNK_PARTITION_TIME_INDEX_NAME "chunk_partition_id_start_time_end_time_idx"
 
-typedef struct Catalog {
-	char database_name[NAMEDATALEN];
-	Oid database_id;
-	Oid schema_id;
-	struct {
+typedef struct Catalog
+{
+	char		database_name[NAMEDATALEN];
+	Oid			database_id;
+	Oid			schema_id;
+	struct
+	{
 		const char *name;
-		Oid id;
-		Oid index_id;
-	} tables[_MAX_CATALOG_TABLES];
-} Catalog;
+		Oid			id;
+		Oid			index_id;
+	}			tables[_MAX_CATALOG_TABLES];
+}	Catalog;
 
-Catalog *catalog_get(void);
+Catalog    *catalog_get(void);
 
-#endif /* TIMESCALEDB_CATALOG_H */
+#endif   /* TIMESCALEDB_CATALOG_H */

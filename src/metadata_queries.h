@@ -18,35 +18,35 @@ typedef struct chunk_row
 	int32		partition_id;
 	int64		start_time;
 	int64		end_time;
-} chunk_row;
+}	chunk_row;
 
 typedef struct crn_row
 {
 	NameData	schema_name;
 	NameData	table_name;
-} crn_row;
+}	crn_row;
 
 typedef struct crn_set
 {
 	int32		chunk_id;
 	List	   *tables;
-} crn_set;
+}	crn_set;
 
 /* utility func */
 extern SPIPlanPtr prepare_plan(const char *src, int nargs, Oid *argtypes);
 
 
 /* db access func */
-extern epoch_and_partitions_set *fetch_epoch_and_partitions_set(epoch_and_partitions_set *entry,
+extern epoch_and_partitions_set *fetch_epoch_and_partitions_set(epoch_and_partitions_set * entry,
 							   int32 hypertable_id, int64 time_pt, Oid relid);
 
-extern void free_epoch(epoch_and_partitions_set *epoch);
+extern void free_epoch(epoch_and_partitions_set * epoch);
 
-extern crn_set *fetch_crn_set(crn_set *entry, int32 chunk_id);
+extern crn_set *fetch_crn_set(crn_set * entry, int32 chunk_id);
 
 chunk_row *
-chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock);
+			chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock);
 
-bool chunk_row_timepoint_is_member(const chunk_row *row, const int64 time_pt);
+bool		chunk_row_timepoint_is_member(const chunk_row * row, const int64 time_pt);
 
 #endif   /* TIMESCALEDB_METADATA_QUERIES_H */

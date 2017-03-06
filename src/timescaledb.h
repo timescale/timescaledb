@@ -4,14 +4,14 @@
 
 #include <postgres.h>
 
-#define TIMESCALEDB_CATALOG_SCHEMA         "_timescaledb_catalog"
-#define TIMESCALEDB_INTERNAL_SCHEMA        "_timescaledb_internal"
-#define TIMESCALEDB_HYPERTABLE_TABLE       "hypertable"
+#define TIMESCALEDB_CATALOG_SCHEMA		   "_timescaledb_catalog"
+#define TIMESCALEDB_INTERNAL_SCHEMA		   "_timescaledb_internal"
+#define TIMESCALEDB_HYPERTABLE_TABLE	   "hypertable"
 
 typedef struct Node Node;
 
-bool IobeamLoaded(void);
+bool		IobeamLoaded(void);
 
-char *copy_table_name(int32 hypertable_id);
+char	   *copy_table_name(int32 hypertable_id);
 
-#endif /* timescaledb_H */
+#endif   /* timescaledb_H */

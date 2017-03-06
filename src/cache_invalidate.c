@@ -93,15 +93,15 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 }
 
 /*
- *  This is similar to invalidate_relcache_trigger but not a trigger.
- *  Not used regularly but useful for debugging.
+ *	This is similar to invalidate_relcache_trigger but not a trigger.
+ *	Not used regularly but useful for debugging.
  *
  */
 
 Datum
 invalidate_relcache(PG_FUNCTION_ARGS)
 {
-	Oid proxy_oid = PG_GETARG_OID(0);
+	Oid			proxy_oid = PG_GETARG_OID(0);
 
 	/* arg 0 = relid of the cache_inval_proxy table */
 	CacheInvalidateRelcacheByRelid(proxy_oid);

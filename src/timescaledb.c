@@ -45,7 +45,7 @@
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
-#define HYPERTABLE_INFO_QUERY   "\
+#define HYPERTABLE_INFO_QUERY	"\
                                 SELECT  format('%I.%I', hr.schema_name, hr.table_name)::regclass::oid, \
                                   pe.partitioning_column, pe.partitioning_func_schema, pe.partitioning_func, pe.partitioning_mod, \
                                   format('%I.%I', h.root_schema_name, h.root_table_name)::regclass::oid, \
@@ -56,15 +56,15 @@ PG_MODULE_MAGIC;
                                 INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id) \
                                 WHERE h.schema_name = $1 AND h.table_name = $2"
 
-void _PG_init(void);
-void _PG_fini(void);
+void		_PG_init(void);
+void		_PG_fini(void);
 
 /* Postgres hook interface */
 static planner_hook_type prev_planner_hook = NULL;
 static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 
 /* cached plans */
-static  SPIPlanPtr hypertable_info_plan = NULL;
+static SPIPlanPtr hypertable_info_plan = NULL;
 
 /* variables */
 static bool isLoaded = false;
@@ -77,55 +77,55 @@ static List *callbackConnections = NIL;
 
 typedef struct hypertable_info
 {
-	Oid replica_oid;
-	Oid root_oid;
-	int32 hypertable_id;
-	List *partitioning_info;
-} hypertable_info;
+	Oid			replica_oid;
+	Oid			root_oid;
+	int32		hypertable_id;
+	List	   *partitioning_info;
+}	hypertable_info;
 
 typedef struct partitioning_info
 {
-	Name partitioning_column;
-	Name partitioning_func_schema;
-	Name partitioning_func;
-	int32 partitioning_mod;
-} partitioning_info;
+	Name		partitioning_column;
+	Name		partitioning_func_schema;
+	Name		partitioning_func;
+	int32		partitioning_mod;
+}	partitioning_info;
 
 typedef struct change_table_name_context
 {
-	List *hypertable_info;
-	Query *parse;
-} change_table_name_context;
+	List	   *hypertable_info;
+	Query	   *parse;
+}	change_table_name_context;
 
 typedef struct add_partitioning_func_qual_context
 {
-	Query *parse;
-	List  *hypertable_info_list;
-} add_partitioning_func_qual_context;
+	Query	   *parse;
+	List	   *hypertable_info_list;
+}	add_partitioning_func_qual_context;
 
 
 hypertable_info *get_hypertable_info(Oid mainRelationOid);
 static void add_partitioning_func_qual(Query *parse, List *hypertable_info_list);
-static Node *add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context *context);
+static Node *add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context * context);
 static partitioning_info *
-get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List * hypertable_info_list);
+			get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List *hypertable_info_list);
 static Expr *
-create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod);
-SPIPlanPtr get_hypertable_info_plan(void);
+			create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod);
+SPIPlanPtr	get_hypertable_info_plan(void);
 
 
 void timescaledb_ProcessUtility(Node *parsetree,
-							 const char *queryString,
-							 ProcessUtilityContext context,
-							 ParamListInfo params,
-							 DestReceiver *dest,
-							 char *completionTag);
+						   const char *queryString,
+						   ProcessUtilityContext context,
+						   ParamListInfo params,
+						   DestReceiver *dest,
+						   char *completionTag);
 void prev_ProcessUtility(Node *parsetree,
-						 const char *queryString,
-						 ProcessUtilityContext context,
-						 ParamListInfo params,
-						 DestReceiver *dest,
-						 char *completionTag);
+					const char *queryString,
+					ProcessUtilityContext context,
+					ParamListInfo params,
+					DestReceiver *dest,
+					char *completionTag);
 
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
@@ -165,11 +165,13 @@ _PG_fini(void)
 	_chunk_cache_fini();
 }
 
-SPIPlanPtr get_hypertable_info_plan()
+SPIPlanPtr
+get_hypertable_info_plan()
 {
-	Oid hypertable_info_plan_args[2] = {TEXTOID, TEXTOID};
+	Oid			hypertable_info_plan_args[2] = {TEXTOID, TEXTOID};
 
-	if (hypertable_info_plan != NULL) {
+	if (hypertable_info_plan != NULL)
+	{
 		return hypertable_info_plan;
 	}
 
@@ -194,12 +196,11 @@ SPIPlanPtr get_hypertable_info_plan()
 bool
 IobeamLoaded(void)
 {
-
 	if (!isLoaded)
 	{
-		Oid id;
+		Oid			id;
 
-		if(!IsTransactionState())
+		if (!IsTransactionState())
 		{
 			return false;
 		}
@@ -231,17 +232,22 @@ change_table_name_walker(Node *node, void *context)
 	if (IsA(node, RangeTblEntry))
 	{
 		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
-		change_table_name_context* ctx = (change_table_name_context *)context;
+		change_table_name_context *ctx = (change_table_name_context *) context;
+
 		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
 		{
-			hypertable_info* hinfo = get_hypertable_info(rangeTableEntry->relid);
+			hypertable_info *hinfo = get_hypertable_info(rangeTableEntry->relid);
+
 			if (hinfo != NULL)
 			{
 				ctx->hypertable_info = lappend(ctx->hypertable_info, hinfo);
 				rangeTableEntry->relid = hinfo->replica_oid;
 			}
-		} else if (rangeTableEntry->rtekind == RTE_RELATION && ctx->parse->commandType == CMD_INSERT){
-			hypertable_info* hinfo = get_hypertable_info(rangeTableEntry->relid);
+		}
+		else if (rangeTableEntry->rtekind == RTE_RELATION && ctx->parse->commandType == CMD_INSERT)
+		{
+			hypertable_info *hinfo = get_hypertable_info(rangeTableEntry->relid);
+
 			if (hinfo != NULL)
 			{
 				rangeTableEntry->relid = create_copy_table(hinfo->hypertable_id, hinfo->root_oid);
@@ -256,7 +262,7 @@ change_table_name_walker(Node *node, void *context)
 								 context, QTW_EXAMINE_RTES);
 	}
 
-	return expression_tree_walker(node,  change_table_name_walker, context);
+	return expression_tree_walker(node, change_table_name_walker, context);
 }
 
 PlannedStmt *
@@ -267,7 +273,8 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	if (IobeamLoaded())
 	{
 		change_table_name_context context;
-		char* printParse = GetConfigOptionByName("io.print_parse", NULL, true);
+		char	   *printParse = GetConfigOptionByName("io.print_parse", NULL, true);
+
 		/* set to false to not print all internal actions */
 		SetConfigOption("io.print_parse", "false", PGC_USERSET, PGC_S_SESSION);
 
@@ -289,8 +296,9 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	if (prev_planner_hook != NULL)
 	{
 		/* Call any earlier hooks */
-		rv = (prev_planner_hook)(parse, cursorOptions, boundParams);
-	} else
+		rv = (prev_planner_hook) (parse, cursorOptions, boundParams);
+	}
+	else
 	{
 		/* Call the standard planner */
 		rv = standard_planner(parse, cursorOptions, boundParams);
@@ -308,20 +316,20 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 hypertable_info *
 get_hypertable_info(Oid mainRelationOid)
 {
-	Oid namespace = get_rel_namespace(mainRelationOid);
-	Oid hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_timescaledb_catalog", false));
-	char *tableName = get_rel_name(mainRelationOid);
-	char *schemaName = get_namespace_name(namespace);
-	Datum args[2] = {CStringGetTextDatum(schemaName), CStringGetTextDatum(tableName)};
-	int ret;
-	SPIPlanPtr plan = get_hypertable_info_plan();
+	Oid			namespace = get_rel_namespace(mainRelationOid);
+	Oid			hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_timescaledb_catalog", false));
+	char	   *tableName = get_rel_name(mainRelationOid);
+	char	   *schemaName = get_namespace_name(namespace);
+	Datum		args[2] = {CStringGetTextDatum(schemaName), CStringGetTextDatum(tableName)};
+	int			ret;
+	SPIPlanPtr	plan = get_hypertable_info_plan();
 
 
 	/* prevents infinite recursion, don't check hypertable meta tables */
 	if (
-			hypertable_meta == InvalidOid
-			|| namespace == PG_CATALOG_NAMESPACE
-			|| namespace ==  get_namespace_oid("_timescaledb_catalog", false)
+		hypertable_meta == InvalidOid
+		|| namespace == PG_CATALOG_NAMESPACE
+		|| namespace == get_namespace_oid("_timescaledb_catalog", false)
 		)
 	{
 		return NULL;
@@ -339,55 +347,67 @@ get_hypertable_info(Oid mainRelationOid)
 
 	if (SPI_processed > 0)
 	{
-		bool isnull;
-		int total_rows = SPI_processed;
-		int j;
-		/* do not populate list until SPI_finish because the list cannot be populated in the SPI memory context */
-		List *partitioning_info_list;
+		bool		isnull;
+		int			total_rows = SPI_processed;
+		int			j;
+
+		/*
+		 * do not populate list until SPI_finish because the list cannot be
+		 * populated in the SPI memory context
+		 */
+		List	   *partitioning_info_list;
+
 		/* used to track  list stuff til list can be populated */
 		partitioning_info **partitioning_info_array = SPI_palloc(total_rows * sizeof(partitioning_info *));
 		hypertable_info *hinfo = SPI_palloc(sizeof(hypertable_info));
 
-		TupleDesc tupdesc = SPI_tuptable->tupdesc;
-		HeapTuple tuple =  SPI_tuptable->vals[0];
+		TupleDesc	tupdesc = SPI_tuptable->tupdesc;
+		HeapTuple	tuple = SPI_tuptable->vals[0];
+
 		hinfo->replica_oid = DatumGetObjectId(SPI_getbinval(tuple, tupdesc, 1, &isnull));
 		hinfo->root_oid = DatumGetObjectId(SPI_getbinval(tuple, tupdesc, 6, &isnull));
 		hinfo->hypertable_id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 7, &isnull));
 
 		for (j = 0; j < total_rows; j++)
 		{
-			HeapTuple tuple = SPI_tuptable->vals[j];
-			Name partitioning_func_schema, partitioning_func, partitioning_column;
-			int32 partitioning_mod;
+			HeapTuple	tuple = SPI_tuptable->vals[j];
+			Name		partitioning_func_schema,
+						partitioning_func,
+						partitioning_column;
+			int32		partitioning_mod;
 
-			partitioning_info* info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
+			partitioning_info *info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
 
 			memset(info, 0, sizeof(partitioning_info));
 
 			partitioning_column = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
 
-			if (!isnull) {
+			if (!isnull)
+			{
 				info->partitioning_column = SPI_palloc(sizeof(NameData));
-				memcpy(info->partitioning_column, partitioning_column,  sizeof(NameData));
+				memcpy(info->partitioning_column, partitioning_column, sizeof(NameData));
 			}
 
 			partitioning_func_schema = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
 
-			if (!isnull) {
+			if (!isnull)
+			{
 				info->partitioning_func_schema = SPI_palloc(sizeof(NameData));
-				memcpy(info->partitioning_func_schema, partitioning_func_schema,  sizeof(NameData));
+				memcpy(info->partitioning_func_schema, partitioning_func_schema, sizeof(NameData));
 			}
 
 			partitioning_func = DatumGetName(SPI_getbinval(tuple, tupdesc, 4, &isnull));
 
-			if (!isnull) {
+			if (!isnull)
+			{
 				info->partitioning_func = SPI_palloc(sizeof(NameData));
-				memcpy(info->partitioning_func, partitioning_func,  sizeof(NameData));
+				memcpy(info->partitioning_func, partitioning_func, sizeof(NameData));
 			}
 
-			partitioning_mod =  DatumGetInt32(SPI_getbinval(tuple, tupdesc, 5, &isnull));
+			partitioning_mod = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 5, &isnull));
 
-			if (!isnull) {
+			if (!isnull)
+			{
 				info->partitioning_mod = partitioning_mod;
 			}
 
@@ -414,8 +434,11 @@ get_hypertable_info(Oid mainRelationOid)
 
 
 
-char * copy_table_name(int32 hypertable_id) {
-	StringInfo temp_table_name = makeStringInfo();
+char *
+copy_table_name(int32 hypertable_id)
+{
+	StringInfo	temp_table_name = makeStringInfo();
+
 	appendStringInfo(temp_table_name, "_copy_temp_%d", hypertable_id);
 	return temp_table_name->data;
 }
@@ -426,51 +449,54 @@ char * copy_table_name(int32 hypertable_id) {
  * the query contains equivalence qualifiers on the space partition key.
  *
  * This function goes through the upper-level qual of a parse tree and finds quals of the form:
- *              partitioning_column = const
+ *				partitioning_column = const
  * It transforms them into the qual:
- *              partitioning_column = const AND partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
+ *				partitioning_column = const AND partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
  *
  * This tranformation helps because the check constraint on a table is of the form CHECK(partitioning_func(partition_column, partitioning_mod) BETWEEN X AND Y).
  */
 static void
-add_partitioning_func_qual(Query *parse, List* hypertable_info_list)
+add_partitioning_func_qual(Query *parse, List *hypertable_info_list)
 {
 	add_partitioning_func_qual_context context;
+
 	context.parse = parse;
 	context.hypertable_info_list = hypertable_info_list;
 	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
 }
 
 static Node *
-add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context *context)
+add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context * context)
 {
 	if (node == NULL)
 		return NULL;
 
-	/* Detect partitioning_column = const. If not fall-thru.
-	 * If detected, replace with
-	 *    partitioning_column = const AND
-	 *    partitioning_func(partition_column, partitioning_mod) = partitioning_func(const, partitioning_mod)
+	/*
+	 * Detect partitioning_column = const. If not fall-thru. If detected,
+	 * replace with partitioning_column = const AND
+	 * partitioning_func(partition_column, partitioning_mod) =
+	 * partitioning_func(const, partitioning_mod)
 	 */
 	if (IsA(node, OpExpr))
 	{
-		OpExpr *exp = (OpExpr *) node;
+		OpExpr	   *exp = (OpExpr *) node;
 
 		if (list_length(exp->args) == 2)
 		{
-			//only look at var op const or const op var;
-			Node *left = (Node *) linitial(exp->args);
-			Node *right = (Node *) lsecond(exp->args);
-			Var *var_expr = NULL;
-			Node *other_expr = NULL;
+			/* only look at var op const or const op var; */
+			Node	   *left = (Node *) linitial(exp->args);
+			Node	   *right = (Node *) lsecond(exp->args);
+			Var		   *var_expr = NULL;
+			Node	   *other_expr = NULL;
 
 			if (IsA(left, Var))
 			{
 				var_expr = (Var *) left;
 				other_expr = right;
-			} else if (IsA(right, Var))
+			}
+			else if (IsA(right, Var))
 			{
-				var_expr = (Var *)right;
+				var_expr = (Var *) right;
 				other_expr = left;
 			}
 
@@ -484,24 +510,28 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 				if (IsA(other_expr, Const))
 				{
 					/* have a var and const, make sure the op is = */
-					Const *const_expr = (Const *) other_expr;
-					Oid eq_oid = OpernameGetOprid(list_make2(makeString("pg_catalog"), makeString("=")), exprType(left), exprType(right));
+					Const	   *const_expr = (Const *) other_expr;
+					Oid			eq_oid = OpernameGetOprid(list_make2(makeString("pg_catalog"), makeString("=")), exprType(left), exprType(right));
 
 					if (eq_oid == exp->opno)
 					{
-						/* I now have a var = const. Make sure var is a partitioning column */
+						/*
+						 * I now have a var = const. Make sure var is a
+						 * partitioning column
+						 */
 						partitioning_info *pi = get_partitioning_info_for_partition_column_var(var_expr,
-																							   context->parse,
-																							   context->hypertable_info_list);
+															  context->parse,
+											  context->hypertable_info_list);
 
 						if (pi != NULL
 							&& pi->partitioning_column != NULL
-							&& pi->partitioning_func != NULL) {
+							&& pi->partitioning_func != NULL)
+						{
 							/* The var is a partitioning column */
-							Expr * partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
-																							pi->partitioning_func_schema,
-																							pi->partitioning_func,
-																							pi->partitioning_mod);
+							Expr	   *partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
+												pi->partitioning_func_schema,
+													   pi->partitioning_func,
+													   pi->partitioning_mod);
 
 							return (Node *) make_andclause(list_make2(node, partitioning_clause));
 
@@ -519,22 +549,26 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 /* Returns the partitioning info for a var if the var is a partitioning column. If the var is not a partitioning
  * column return NULL */
 static partitioning_info *
-get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List * hypertable_info_list) {
+get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List *hypertable_info_list)
+{
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
-	char *varname = get_rte_attribute_name(rte, var_expr->varattno);
-	ListCell *hicell;
+	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
+	ListCell   *hicell;
 
 	foreach(hicell, hypertable_info_list)
 	{
 		hypertable_info *info = lfirst(hicell);
+
 		if (rte->relid == info->replica_oid)
 		{
-			ListCell *picell;
+			ListCell   *picell;
+
 			foreach(picell, info->partitioning_info)
 			{
 				partitioning_info *pi = lfirst(picell);
+
 				if (pi->partitioning_column != NULL &&
-					strcmp(NameStr(*(pi->partitioning_column)), varname)==0)
+					strcmp(NameStr(*(pi->partitioning_column)), varname) == 0)
 				{
 					return pi;
 				}
@@ -551,18 +585,18 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod)
 {
-	Expr *op_expr;
-	List *func_name = list_make2(makeString(NameStr(*(partitioning_func_schema))), makeString(NameStr(*(partitioning_func))));
-	Var *var_for_fn_call;
-	Const *const_for_fn_call;
-	Const *mod_const_var_call;
-	Const *mod_const_const_call;
-	List *args_func_var;
-	List *args_func_const;
-	FuncCall *fc_var;
-	FuncCall *fc_const;
-	Node *f_var;
-	Node *f_const;
+	Expr	   *op_expr;
+	List	   *func_name = list_make2(makeString(NameStr(*(partitioning_func_schema))), makeString(NameStr(*(partitioning_func))));
+	Var		   *var_for_fn_call;
+	Const	   *const_for_fn_call;
+	Const	   *mod_const_var_call;
+	Const	   *mod_const_const_call;
+	List	   *args_func_var;
+	List	   *args_func_const;
+	FuncCall   *fc_var;
+	FuncCall   *fc_const;
+	Node	   *f_var;
+	Node	   *f_const;
 
 	mod_const_var_call = makeConst(INT4OID,
 								   -1,
@@ -590,7 +624,7 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partit
 	f_var = ParseFuncOrColumn(NULL, func_name, args_func_var, fc_var, -1);
 	f_const = ParseFuncOrColumn(NULL, func_name, args_func_const, fc_const, -1);
 
-	op_expr = make_op(NULL,list_make2(makeString("pg_catalog"), makeString("=")),f_var,f_const,-1);
+	op_expr = make_op(NULL, list_make2(makeString("pg_catalog"), makeString("=")), f_var, f_const, -1);
 
 	return op_expr;
 }
@@ -601,10 +635,14 @@ PG_FUNCTION_INFO_V1(register_dblink_precommit_connection);
 Datum
 register_dblink_precommit_connection(PG_FUNCTION_ARGS)
 {
-	/* allocate this stuff in top-level transaction context, so that it survives till commit */
+	/*
+	 * allocate this stuff in top-level transaction context, so that it
+	 * survives till commit
+	 */
 	MemoryContext old = MemoryContextSwitchTo(TopTransactionContext);
 
-	char *connectionName = text_to_cstring(PG_GETARG_TEXT_PP(0));
+	char	   *connectionName = text_to_cstring(PG_GETARG_TEXT_PP(0));
+
 	callbackConnections = lappend(callbackConnections, connectionName);
 
 	MemoryContextSwitchTo(old);
@@ -617,9 +655,10 @@ register_dblink_precommit_connection(PG_FUNCTION_ARGS)
  * Look at meta_commands.sql for example usage. Remote commits happen in pre-commit.
  * Remote aborts happen on abort.
  * */
-static void io_xact_callback(XactEvent event, void *arg)
+static void
+io_xact_callback(XactEvent event, void *arg)
 {
-	ListCell *cell;
+	ListCell   *cell;
 
 	if (list_length(callbackConnections) == 0)
 		return;
@@ -628,25 +667,31 @@ static void io_xact_callback(XactEvent event, void *arg)
 	{
 		case XACT_EVENT_PARALLEL_PRE_COMMIT:
 		case XACT_EVENT_PRE_COMMIT:
-			foreach (cell, callbackConnections)
+			foreach(cell, callbackConnections)
 			{
-				char *connection = (char *) lfirst(cell);
+				char	   *connection = (char *) lfirst(cell);
+
 				DirectFunctionCall3(dblink_exec,
-									PointerGetDatum(cstring_to_text(connection)),
-									PointerGetDatum(cstring_to_text("COMMIT")),
-									BoolGetDatum(true)); /* throw error */
+								PointerGetDatum(cstring_to_text(connection)),
+								  PointerGetDatum(cstring_to_text("COMMIT")),
+									BoolGetDatum(true));		/* throw error */
 				DirectFunctionCall1(dblink_disconnect, PointerGetDatum(cstring_to_text(connection)));
 			}
 			break;
 		case XACT_EVENT_PARALLEL_ABORT:
 		case XACT_EVENT_ABORT:
-			/* Be quite careful here. Cannot throw any errors (or infinite loop) and cannot use PG_TRY either.
-			 * Make sure to test with c-asserts on. */
-			foreach (cell, callbackConnections)
+
+			/*
+			 * Be quite careful here. Cannot throw any errors (or infinite
+			 * loop) and cannot use PG_TRY either. Make sure to test with
+			 * c-asserts on.
+			 */
+			foreach(cell, callbackConnections)
 			{
-				char *connection = (char *) lfirst(cell);
+				char	   *connection = (char *) lfirst(cell);
+
 				DirectFunctionCall3(dblink_exec,
-									PointerGetDatum(cstring_to_text(connection)),
+								PointerGetDatum(cstring_to_text(connection)),
 									PointerGetDatum(cstring_to_text("ABORT")),
 									BoolGetDatum(false));
 				DirectFunctionCall1(dblink_disconnect, PointerGetDatum(cstring_to_text(connection)));
@@ -672,9 +717,9 @@ PG_FUNCTION_INFO_V1(pg_gethostname);
 Datum
 pg_gethostname(PG_FUNCTION_ARGS)
 {
-	text *t;
-	long hostname_max_len = sysconf(_SC_HOST_NAME_MAX);
-	size_t length;
+	text	   *t;
+	long		hostname_max_len = sysconf(_SC_HOST_NAME_MAX);
+	size_t		length;
 
 	if (hostname_max_len == -1)
 	{
@@ -685,12 +730,12 @@ pg_gethostname(PG_FUNCTION_ARGS)
 	SET_VARSIZE(t, VARHDRSZ);
 	memset(VARDATA(t), '\0', hostname_max_len + 1);
 
-	if (gethostname((char *)VARDATA(t), hostname_max_len) == -1)
+	if (gethostname((char *) VARDATA(t), hostname_max_len) == -1)
 	{
 		PG_RETURN_TEXT_P(NULL);
 	}
 
-	length = strnlen((char *)VARDATA(t), hostname_max_len);
+	length = strnlen((char *) VARDATA(t), hostname_max_len);
 	SET_VARSIZE(t, VARHDRSZ + length);
 
 	PG_RETURN_TEXT_P(t);
@@ -708,7 +753,7 @@ prev_ProcessUtility(Node *parsetree,
 	if (prev_ProcessUtility_hook != NULL)
 	{
 		/* Call any earlier hooks */
-		(prev_ProcessUtility_hook)(parsetree, queryString, context, params, dest, completionTag);
+		(prev_ProcessUtility_hook) (parsetree, queryString, context, params, dest, completionTag);
 	}
 	else
 	{
@@ -720,30 +765,35 @@ prev_ProcessUtility(Node *parsetree,
 
 /* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table and */
 /* blocking renaming of hypertables. */
-void timescaledb_ProcessUtility(Node *parsetree,
-							 const char *queryString,
-							 ProcessUtilityContext context,
-							 ParamListInfo params,
-							 DestReceiver *dest,
-							 char *completionTag)
+void
+timescaledb_ProcessUtility(Node *parsetree,
+						   const char *queryString,
+						   ProcessUtilityContext context,
+						   ParamListInfo params,
+						   DestReceiver *dest,
+						   char *completionTag)
 {
-	if (!IobeamLoaded()){
+	if (!IobeamLoaded())
+	{
 		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
 		return;
 	}
 
 	if (IsA(parsetree, CopyStmt))
 	{
-		CopyStmt *copystmt = (CopyStmt *) parsetree;
-		Oid relId = RangeVarGetRelid(copystmt->relation, NoLock, true);
-		if (OidIsValid(relId)) {
-			hypertable_info* hinfo = get_hypertable_info(relId);
+		CopyStmt   *copystmt = (CopyStmt *) parsetree;
+		Oid			relId = RangeVarGetRelid(copystmt->relation, NoLock, true);
+
+		if (OidIsValid(relId))
+		{
+			hypertable_info *hinfo = get_hypertable_info(relId);
+
 			if (hinfo != NULL)
 			{
-				copystmt->relation =  makeRangeVarFromRelid(create_copy_table(hinfo->hypertable_id, hinfo->root_oid));
+				copystmt->relation = makeRangeVarFromRelid(create_copy_table(hinfo->hypertable_id, hinfo->root_oid));
 			}
 		}
-		prev_ProcessUtility((Node *)copystmt, queryString, context, params, dest, completionTag);
+		prev_ProcessUtility((Node *) copystmt, queryString, context, params, dest, completionTag);
 		return;
 	}
 
@@ -751,15 +801,18 @@ void timescaledb_ProcessUtility(Node *parsetree,
 	if (IsA(parsetree, RenameStmt))
 	{
 		RenameStmt *renamestmt = (RenameStmt *) parsetree;
-		Oid relId = RangeVarGetRelid(renamestmt->relation, NoLock, true);
-		if (OidIsValid(relId)) {
-			hypertable_info* hinfo = get_hypertable_info(relId);
+		Oid			relId = RangeVarGetRelid(renamestmt->relation, NoLock, true);
+
+		if (OidIsValid(relId))
+		{
+			hypertable_info *hinfo = get_hypertable_info(relId);
+
 			if (hinfo != NULL && renamestmt->renameType == OBJECT_TABLE)
 				ereport(ERROR,
-                    	(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     	 errmsg("Renaming hypertables is not yet supported")));
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					   errmsg("Renaming hypertables is not yet supported")));
 		}
-		prev_ProcessUtility((Node *)renamestmt, queryString, context, params, dest, completionTag);
+		prev_ProcessUtility((Node *) renamestmt, queryString, context, params, dest, completionTag);
 		return;
 	}
 
