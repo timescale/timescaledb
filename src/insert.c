@@ -59,8 +59,8 @@
 
 /* private funcs */
 
-static ObjectAddress create_insert_index(int32 hypertable_id, char * time_field, PartitioningInfo *part_info,epoch_and_partitions_set *epoch);
-static Node *get_keyspace_fn_call(PartitioningInfo *part_info);
+static ObjectAddress create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo * part_info, epoch_and_partitions_set * epoch);
+static Node *get_keyspace_fn_call(PartitioningInfo * part_info);
 
 /*
  * Inserts rows from the temporary copy table into correct hypertable child tables.
@@ -100,10 +100,11 @@ typedef struct ChunkInsertCtxRel
 	EState	   *estate;
 	ResultRelInfo *resultRelInfo;
 	BulkInsertState bistate;
-} ChunkInsertCtxRel;
+}	ChunkInsertCtxRel;
 
-static ChunkInsertCtxRel*
-chunk_insert_ctx_rel_new(Relation	rel, ResultRelInfo *resultRelInfo, List	   *range_table) {
+static ChunkInsertCtxRel *
+chunk_insert_ctx_rel_new(Relation rel, ResultRelInfo *resultRelInfo, List *range_table)
+{
 	TupleDesc	tupDesc;
 	ChunkInsertCtxRel *rel_ctx = palloc(sizeof(ChunkInsertCtxRel));
 
@@ -125,7 +126,7 @@ chunk_insert_ctx_rel_new(Relation	rel, ResultRelInfo *resultRelInfo, List	   *ra
 }
 
 static void
-chunk_insert_ctx_rel_destroy(ChunkInsertCtxRel *rel_ctx)
+chunk_insert_ctx_rel_destroy(ChunkInsertCtxRel * rel_ctx)
 {
 	FreeBulkInsertState(rel_ctx->bistate);
 	ExecCloseIndices(rel_ctx->resultRelInfo);
@@ -136,7 +137,7 @@ chunk_insert_ctx_rel_destroy(ChunkInsertCtxRel *rel_ctx)
 
 
 static void
-chunk_insert_ctx_rel_insert_tuple(ChunkInsertCtxRel *rel_ctx, HeapTuple tuple)
+chunk_insert_ctx_rel_insert_tuple(ChunkInsertCtxRel * rel_ctx, HeapTuple tuple)
 {
 	int			hi_options = 0; /* no optimization */
 	CommandId	mycid = GetCurrentCommandId(true);
@@ -164,12 +165,12 @@ chunk_insert_ctx_rel_insert_tuple(ChunkInsertCtxRel *rel_ctx, HeapTuple tuple)
 typedef struct ChunkInsertCtx
 {
 	chunk_cache_entry *chunk;
-	Cache *pinned;
+	Cache	   *pinned;
 	List	   *ctxs;
-} ChunkInsertCtx;
+}	ChunkInsertCtx;
 
 static ChunkInsertCtx *
-chunk_insert_ctx_new(chunk_cache_entry *chunk, Cache *pinned)
+chunk_insert_ctx_new(chunk_cache_entry * chunk, Cache * pinned)
 {
 	ListCell   *lc;
 	List	   *rel_ctx_list = NIL;
@@ -246,7 +247,7 @@ chunk_insert_ctx_new(chunk_cache_entry *chunk, Cache *pinned)
 }
 
 static void
-chunk_insert_ctx_destroy(ChunkInsertCtx *ctx)
+chunk_insert_ctx_destroy(ChunkInsertCtx * ctx)
 {
 	ListCell   *lc;
 
@@ -260,40 +261,46 @@ chunk_insert_ctx_destroy(ChunkInsertCtx *ctx)
 	foreach(lc, ctx->ctxs)
 	{
 		ChunkInsertCtxRel *rel_ctx = lfirst(lc);
+
 		chunk_insert_ctx_rel_destroy(rel_ctx);
 	}
 }
 
 static void
-chunk_insert_ctx_insert_tuple(ChunkInsertCtx *ctx, HeapTuple tup)
+chunk_insert_ctx_insert_tuple(ChunkInsertCtx * ctx, HeapTuple tup)
 {
 	ListCell   *lc;
 
 	foreach(lc, ctx->ctxs)
 	{
 		ChunkInsertCtxRel *rel_ctx = lfirst(lc);
+
 		chunk_insert_ctx_rel_insert_tuple(rel_ctx, tup);
 	}
 }
 
-typedef struct CopyTableQueryCtx {
-	Partition *part;
+typedef struct CopyTableQueryCtx
+{
+	Partition  *part;
 	ChunkInsertCtx *chunk_ctx;
 	epoch_and_partitions_set *pe;
 	hypertable_cache_entry *hci;
-} CopyTableQueryCtx;
+}	CopyTableQueryCtx;
 
 static bool
-copy_table_tuple_found(TupleInfo *ti, void *data)
+copy_table_tuple_found(TupleInfo * ti, void *data)
 {
-	bool is_null;
+	bool		is_null;
 	CopyTableQueryCtx *ctx = data;
 	int16		keyspace_pt;
 	int64		time_pt;
 
 	if (ctx->pe->num_partitions > 1)
 	{
-		/* first element is partition index (used for sorting but not necessary here) */
+		/*
+		 * first element is partition index (used for sorting but not
+		 * necessary here)
+		 */
 		Datum		time_datum = index_getattr(ti->ituple, 2, ti->ituple_desc, &is_null);
 		Datum		keyspace_datum = index_getattr(ti->ituple, 3, ti->ituple_desc, &is_null);
 
@@ -303,6 +310,7 @@ copy_table_tuple_found(TupleInfo *ti, void *data)
 	else
 	{
 		Datum		time_datum = index_getattr(ti->ituple, 1, ti->ituple_desc, &is_null);
+
 		time_pt = time_value_to_internal(time_datum, ctx->hci->time_column_type);
 		keyspace_pt = KEYSPACE_PT_NO_PARTITIONING;
 	}
@@ -332,14 +340,19 @@ copy_table_tuple_found(TupleInfo *ti, void *data)
 	{
 		Datum		was_closed_datum;
 		chunk_cache_entry *chunk;
-		Cache *pinned = chunk_crn_set_cache_pin();
+		Cache	   *pinned = chunk_crn_set_cache_pin();
+
 		/*
 		 * TODO: this first call should be non-locking and use a cache(for
 		 * performance)
 		 */
 		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, false);
 		was_closed_datum = FunctionCall1(get_close_if_needed_fn(), Int32GetDatum(chunk->id));
-		/* chunk may have been closed and thus changed /or/ need to get share lock */
+
+		/*
+		 * chunk may have been closed and thus changed /or/ need to get share
+		 * lock
+		 */
 		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, true);
 
 		ctx->chunk_ctx = chunk_insert_ctx_new(chunk, pinned);
@@ -347,27 +360,30 @@ copy_table_tuple_found(TupleInfo *ti, void *data)
 
 	/* insert here: */
 	/* has to be a copy(not sure why) */
-	chunk_insert_ctx_insert_tuple(ctx->chunk_ctx,heap_copytuple(ti->tuple));
+	chunk_insert_ctx_insert_tuple(ctx->chunk_ctx, heap_copytuple(ti->tuple));
 	return true;
 }
 
-static void scan_copy_table_and_insert_post(int num_tuples, void *data)
+static void
+scan_copy_table_and_insert_post(int num_tuples, void *data)
 {
 	CopyTableQueryCtx *ctx = data;
+
 	if (ctx->chunk_ctx != NULL)
 		chunk_insert_ctx_destroy(ctx->chunk_ctx);
 }
 
-static void scan_copy_table_and_insert( hypertable_cache_entry *hci,
-							epoch_and_partitions_set *pe,
-							Oid table, Oid index)
+static void
+scan_copy_table_and_insert(hypertable_cache_entry * hci,
+						   epoch_and_partitions_set * pe,
+						   Oid table, Oid index)
 {
 	CopyTableQueryCtx query_ctx = {
 		.pe = pe,
 		.hci = hci,
 	};
 
-	ScannerCtx scanCtx = {
+	ScannerCtx	scanCtx = {
 		.table = table,
 		.index = index,
 		.scantype = ScannerTypeIndex,
@@ -399,7 +415,7 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	hypertable_cache_entry *hci;
 
 	epoch_and_partitions_set *pe;
-	Cache *hypertable_cache;
+	Cache	   *hypertable_cache;
 	ObjectAddress idx;
 
 	DropStmt   *drop = makeNode(DropStmt);
@@ -537,10 +553,12 @@ create_copy_table(int32 hypertable_id, Oid root_oid)
 }
 
 static IndexElem *
-makeIndexElem(char *name, Node *expr){
-	Assert((name ==NULL || expr == NULL) && (name !=NULL || expr !=NULL));
+makeIndexElem(char *name, Node *expr)
+{
+	Assert((name == NULL || expr == NULL) && (name != NULL || expr != NULL));
 
-	IndexElem *time_elem = makeNode(IndexElem);
+	IndexElem  *time_elem = makeNode(IndexElem);
+
 	time_elem->name = name;
 	time_elem->expr = expr;
 	time_elem->indexcolname = NULL;
@@ -575,7 +593,7 @@ makeIndexElem(char *name, Node *expr){
  *
  * */
 static ObjectAddress
-create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *part_info, epoch_and_partitions_set *epoch)
+create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo * part_info, epoch_and_partitions_set * epoch)
 {
 	IndexStmt  *index_stmt = makeNode(IndexStmt);
 	IndexElem  *time_elem;
@@ -657,7 +675,7 @@ create_insert_index(int32 hypertable_id, char *time_field, PartitioningInfo *par
  *
  */
 static Node *
-get_keyspace_fn_call(PartitioningInfo *part_info)
+get_keyspace_fn_call(PartitioningInfo * part_info)
 {
 	ColumnRef  *col_ref = makeNode(ColumnRef);
 	A_Const    *mod_const;

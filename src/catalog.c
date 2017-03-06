@@ -26,18 +26,21 @@ static Catalog catalog = {
 	.database_id = InvalidOid,
 };
 
-Catalog *catalog_get(void)
+Catalog *
+catalog_get(void)
 {
-	AclResult aclresult;		
-	int i;
+	AclResult	aclresult;
+	int			i;
 
 	if (MyDatabaseId == InvalidOid)
 		elog(ERROR, "Invalid database ID");
 
-	/* Check that the user has CREATE permissions on the database, since the
-	   operation may involve creating chunks and inserting into them. */
+	/*
+	 * Check that the user has CREATE permissions on the database, since the
+	 * operation may involve creating chunks and inserting into them.
+	 */
 	aclresult = pg_database_aclcheck(MyDatabaseId, GetUserId(), ACL_CREATE);
-	
+
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, ACL_KIND_DATABASE,
 					   get_database_name(MyDatabaseId));
@@ -57,10 +60,10 @@ Catalog *catalog_get(void)
 
 	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
 	{
-		Oid id;
-		
+		Oid			id;
+
 		id = get_relname_relid(catalog_table_names[i], catalog.schema_id);
-		
+
 		if (id == InvalidOid)
 		{
 			elog(ERROR, "Oid lookup failed for table %s", catalog_table_names[i]);
@@ -69,7 +72,7 @@ Catalog *catalog_get(void)
 		catalog.tables[i].id = id;
 
 		id = get_relname_relid(catalog_table_index_names[i], catalog.schema_id);
-		
+
 		if (id == InvalidOid)
 		{
 			elog(ERROR, "Oid lookup failed for table index %s", catalog_table_index_names[i]);
@@ -77,7 +80,7 @@ Catalog *catalog_get(void)
 
 		catalog.tables[i].index_id = id;
 		catalog.tables[i].name = catalog_table_names[i];
-	}	
+	}
 
 	return &catalog;
 }
