@@ -1,5 +1,5 @@
-#ifndef _IOBEAMDB_CACHE_H_
-#define _IOBEAMDB_CACHE_H_
+#ifndef _TIMESCALEDB_CACHE_H_
+#define _TIMESCALEDB_CACHE_H_
 
 #include <postgres.h>
 #include <utils/memutils.h>
@@ -35,4 +35,4 @@ extern MemoryContext cache_switch_to_memory_context(Cache *cache);
 extern Cache *cache_pin(Cache *cache);
 extern void cache_release(Cache *cache);
 
-#endif   /* _IOBEAMDB_CACHE_H_ */
+#endif   /* _TIMESCALEDB_CACHE_H_ */

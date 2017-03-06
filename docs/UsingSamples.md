@@ -3,8 +3,8 @@
 ### Available samples
 
 We have created several sample datasets (using `pg_dump`) to help you get
-started using iobeamdb. These datasets vary in database size, number of time
-intervals, and number of values for the partition field.
+started using TimescaleDB. These datasets vary in database size, number
+of time intervals, and number of values for the partition field.
 
 (Note that these dataset backups already include our time-series
   database, so you won't need to manually install our extension,
@@ -13,9 +13,9 @@ intervals, and number of values for the partition field.
 **Device ops**: These datasets are designed to represent metrics (e.g. CPU,
 memory, network) collected from mobile devices.
 
-1. [`devices_small`](https://iobeamdata.blob.core.windows.net/datasets/devices_small.bak.tar.gz) - 1,000 devices recorded over 1,000 time intervals
-1. [`devices_med`](https://iobeamdata.blob.core.windows.net/datasets/devices_med.bak.tar.gz) - 5,000 devices recorded over 2,000 time intervals
-1. [`devices_big`](https://iobeamdata.blob.core.windows.net/datasets/devices_big.bak.tar.gz) - 3,000 devices recorded over 10,000 time intervals
+1. [`devices_small`](https://timescaledata.blob.core.windows.net/datasets/devices_small.bak.tar.gz) - 1,000 devices recorded over 1,000 time intervals
+1. [`devices_med`](https://timescaledata.blob.core.windows.net/datasets/devices_med.bak.tar.gz) - 5,000 devices recorded over 2,000 time intervals
+1. [`devices_big`](https://timescaledata.blob.core.windows.net/datasets/devices_big.bak.tar.gz) - 3,000 devices recorded over 10,000 time intervals
 
 For more details and example usage, see
 [In-depth: Device ops datasets](#in-depth-devices).
@@ -23,9 +23,9 @@ For more details and example usage, see
 **Weather**: These datasets are designed to represent temperature and
 humidity data from a variety of locations.
 
-1. [`weather_small`](https://iobeamdata.blob.core.windows.net/datasets/weather_small.bak.tar.gz) - 1,000 locations over 1,000 two-minute intervals
-1. [`weather_med`](https://iobeamdata.blob.core.windows.net/datasets/weather_med.bak.tar.gz) - 1,000 locations over 15,000 two-minute intervals
-1. [`weather_big`](https://iobeamdata.blob.core.windows.net/datasets/weather_big.bak.tar.gz) - 2,000 locations over 20,000 two-minute intervals
+1. [`weather_small`](https://timescaledata.blob.core.windows.net/datasets/weather_small.bak.tar.gz) - 1,000 locations over 1,000 two-minute intervals
+1. [`weather_med`](https://timescaledata.blob.core.windows.net/datasets/weather_med.bak.tar.gz) - 1,000 locations over 15,000 two-minute intervals
+1. [`weather_big`](https://timescaledata.blob.core.windows.net/datasets/weather_big.bak.tar.gz) - 2,000 locations over 20,000 two-minute intervals
 
 For more details and example usage, see
 [In-depth: Weather datasets](#in-depth-weather).

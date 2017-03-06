@@ -17,13 +17,13 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       SMALLINT = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    placement               _iobeamdb_catalog.chunk_placement_type = 'STICKY',
+    placement               _timescaledb_catalog.chunk_placement_type = 'STICKY',
     chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    hypertable_row   _iobeamdb_catalog.hypertable;
+    hypertable_row   _timescaledb_catalog.hypertable;
     table_name       NAME;
     schema_name      NAME;
     tablespace_oid   OID;
@@ -82,7 +82,7 @@ BEGIN
     BEGIN
         SELECT *
         INTO hypertable_row
-        FROM  _iobeamdb_meta_api.create_hypertable(
+        FROM  _timescaledb_meta_api.create_hypertable(
             schema_name,
             table_name,
             time_column_name,
@@ -109,20 +109,18 @@ BEGIN
     FROM pg_attribute att
     WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
         LOOP
-            PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.id, att_row);
+            PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
         END LOOP;
 
 
     PERFORM 1
     FROM pg_index,
-    LATERAL _iobeamdb_meta_api.add_index(
+    LATERAL _timescaledb_meta_api.add_index(
         hypertable_row.id,
         hypertable_row.schema_name,
         (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
-        _iobeamdb_internal.get_general_index_definition(indexrelid, indrelid)
+        _timescaledb_internal.get_general_index_definition(indexrelid, indrelid)
     )
     WHERE indrelid = main_table;
 END
 $BODY$;
-
-

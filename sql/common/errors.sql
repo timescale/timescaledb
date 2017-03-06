@@ -15,7 +15,7 @@
 --IO501 - unexpected state/event
 --IO502 - communication/remote error
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_trigger_error(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.on_trigger_error(
     tg_op     TEXT,
     tg_schema NAME,
     tg_table  NAME
@@ -28,10 +28,10 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_truncate_block()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.on_truncate_block()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+    PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$;

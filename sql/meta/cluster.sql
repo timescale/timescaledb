@@ -9,17 +9,17 @@ CREATE OR REPLACE FUNCTION set_meta(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    meta_row _iobeamdb_catalog.meta;
+    meta_row _timescaledb_catalog.meta;
 BEGIN
     SELECT *
     INTO meta_row
-    FROM _iobeamdb_catalog.meta
+    FROM _timescaledb_catalog.meta
     LIMIT 1;
 
     IF meta_row IS NULL THEN
         PERFORM add_cluster_user(username, password);
-        PERFORM _iobeamdb_internal.setup_meta();
-        INSERT INTO _iobeamdb_catalog.meta (database_name, hostname, port, server_name)
+        PERFORM _timescaledb_internal.setup_meta();
+        INSERT INTO _timescaledb_catalog.meta (database_name, hostname, port, server_name)
         VALUES (database_name, hostname, port, database_name);
     ELSE
         IF meta_row.database_name <> database_name OR meta_row.hostname <> hostname THEN
@@ -44,14 +44,14 @@ DECLARE
 BEGIN
     BEGIN
 
-    new_id := nextval(pg_get_serial_sequence('_iobeamdb_catalog.node', 'id'));
+    new_id := nextval(pg_get_serial_sequence('_timescaledb_catalog.node', 'id'));
     schema_name := format('remote_%s_%s', new_id, database_name);
 
     IF database_name = current_database() THEN
-        schema_name = '_iobeamdb_catalog';
+        schema_name = '_timescaledb_catalog';
     END IF;
 
-    INSERT INTO _iobeamdb_catalog.node (database_name, schema_name, server_name, hostname, port, id)
+    INSERT INTO _timescaledb_catalog.node (database_name, schema_name, server_name, hostname, port, id)
     VALUES (database_name, schema_name, database_name, hostname, port, new_id);
 
     EXCEPTION
@@ -71,7 +71,7 @@ CREATE OR REPLACE FUNCTION add_cluster_user(
 $BODY$
 DECLARE
 BEGIN
-    INSERT INTO _iobeamdb_catalog.cluster_user (username, password)
+    INSERT INTO _timescaledb_catalog.cluster_user (username, password)
     VALUES (username, password);
 EXCEPTION
     WHEN unique_violation THEN
@@ -90,16 +90,16 @@ CREATE OR REPLACE FUNCTION setup_single_node(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    meta_row _iobeamdb_catalog.meta;
+    meta_row _timescaledb_catalog.meta;
 BEGIN
     SELECT *
     INTO meta_row
-    FROM _iobeamdb_catalog.meta
+    FROM _timescaledb_catalog.meta
     LIMIT 1;
 
     IF meta_row IS NULL THEN
         PERFORM set_meta(hostname, port, database, username, password);
-        PERFORM _iobeamdb_internal.setup_main();
+        PERFORM _timescaledb_internal.setup_main();
         PERFORM add_node(database, hostname, port);
     ELSE
         RAISE EXCEPTION 'The node is already configured'
@@ -120,13 +120,13 @@ CREATE OR REPLACE FUNCTION add_partition_epoch(
     RETURNS VOID LANGUAGE SQL VOLATILE AS
 $BODY$
     WITH epoch AS (
-        INSERT INTO _iobeamdb_catalog.partition_epoch (hypertable_id, start_time, end_time, num_partitions,
+        INSERT INTO _timescaledb_catalog.partition_epoch (hypertable_id, start_time, end_time, num_partitions,
             partitioning_func_schema, partitioning_func, partitioning_mod, partitioning_column)
         VALUES (hypertable_id, NULL, NULL, number_partitions, partitioning_func_schema,
         partitioning_func, 32768, partitioning_column)
         RETURNING id
     )
-    INSERT INTO _iobeamdb_catalog.partition (epoch_id, keyspace_start, keyspace_end, tablespace)
+    INSERT INTO _timescaledb_catalog.partition (epoch_id, keyspace_start, keyspace_end, tablespace)
     SELECT
         epoch.id,
         lag(start, 1, 0)

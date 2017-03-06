@@ -9,7 +9,7 @@ DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
 psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
@@ -36,13 +36,13 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
  
 (1 row)
 
-SELECT * FROM _iobeamdb_catalog.hypertable;
- id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+-------------+--------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | Hypertable_1 | _iobeamdb_internal     | _hyper_1                | _iobeamdb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+--------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 | public      | Hypertable_1 | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
 (1 row)
 
-SELECT * FROM _iobeamdb_catalog.hypertable_index;
+SELECT * FROM _timescaledb_catalog.hypertable_index;
  hypertable_id | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
 ---------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
              1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
@@ -77,7 +77,7 @@ EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
    ->  Seq Scan on _hyper_1_1_0_1_data  (cost=0.00..13.50 rows=350 width=204)
 (4 rows)
 
-SELECT * FROM _iobeamdb_catalog.default_replica_node;
+SELECT * FROM _timescaledb_catalog.default_replica_node;
  database_name | hypertable_id | replica_id 
 ---------------+---------------+------------
  single        |             1 |          0
@@ -125,11 +125,11 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _iobeamdb_internal.on_unsupported_main_table()
+    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_modify_main_table()
+    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
-\d+ "_iobeamdb_internal"."_hyper_1_root"
-                          Table "_iobeamdb_internal._hyper_1_root"
+\d+ "_timescaledb_internal"."_hyper_1_root"
+                         Table "_timescaledb_internal._hyper_1_root"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -142,10 +142,10 @@ Triggers:
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
 Child tables: _copy_temp_1,
-              _iobeamdb_internal._hyper_1_0_replica
+              _timescaledb_internal._hyper_1_0_replica
 
-\d+ _iobeamdb_internal._hyper_1_1_0_1_data
-                       Table "_iobeamdb_internal._hyper_1_1_0_1_data"
+\d+ _timescaledb_internal._hyper_1_1_0_1_data
+                      Table "_timescaledb_internal._hyper_1_1_0_1_data"
       Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
 ------------------+---------+------------------------+----------+--------------+-------------
  time             | bigint  | not null               | plain    |              | 
@@ -161,8 +161,8 @@ Indexes:
     "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "3-ind_humidity" btree ("time", humidity)
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_1_1_0_partition
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+Inherits: _timescaledb_internal._hyper_1_1_0_partition
 
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 

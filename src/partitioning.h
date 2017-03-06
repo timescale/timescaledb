@@ -1,5 +1,5 @@
-#ifndef IOBEAMDB_PARTITIONING_H
-#define IOBEAMDB_PARTITIONING_H
+#ifndef TIMESCALEDB_PARTITIONING_H
+#define TIMESCALEDB_PARTITIONING_H
 
 #define KEYSPACE_PT_NO_PARTITIONING -1
 
@@ -22,7 +22,7 @@ typedef struct PartitioningFunc
 	/* Function manager info to call the function to convert a row's
 	 * partitioning column value to a text string */
     FmgrInfo textfunc_fmgr;
-	
+
 	/* Function manager info to call the partitioning function on the
 	   partitioning column's text representation */
     FmgrInfo func_fmgr;
@@ -56,4 +56,4 @@ int16 partitioning_func_apply(PartitioningFunc *pf, Datum value);
 Partition *partition_epoch_get_partition(epoch_and_partitions_set *epoch, int16 keyspace_pt);
 
 bool partition_keyspace_pt_is_member(const Partition *part, const int16 keyspace_pt);
-#endif /* IOBEAMDB_PARTITIONING_H */
+#endif /* TIMESCALEDB_PARTITIONING_H */

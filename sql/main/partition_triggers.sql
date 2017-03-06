@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.on_change_partition()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_partition()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -21,7 +21,7 @@ BEGIN
     ELSIF TG_OP = 'DELETE' THEN
         RETURN OLD;
     ELSE
-        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+        PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
     RETURN NEW;
 END

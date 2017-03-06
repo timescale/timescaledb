@@ -9,6 +9,6 @@ DIR=`dirname $0`
 
 export PGUSER=${PGUSER:-postgres}
 export PGHOST=${PGHOST:-localhost}
-export PGDATABASE=${PGDATABASE:-iobeam}
+export PGDATABASE=${PGDATABASE:-timescaledb}
 
 psql -v ON_ERROR_STOP=1 -q -X -f $DIR/sql/$1

@@ -183,12 +183,12 @@ internal_time_to_column_literal_sql(int64 internal_time, Oid type)
 	/* todo avoid these function calls */
 	if (type == TIMESTAMPOID)
 	{
-		snprintf(sql, 100, "_iobeamdb_internal.to_timestamp(%ld)::TIMESTAMP", internal_time);
+		snprintf(sql, 100, "_timescaledb_internal.to_timestamp(%ld)::TIMESTAMP", internal_time);
 		return sql;
 	}
 	if (type == TIMESTAMPTZOID)
 	{
-		snprintf(sql, 100, "_iobeamdb_internal.to_timestamp(%ld)", internal_time);
+		snprintf(sql, 100, "_timescaledb_internal.to_timestamp(%ld)", internal_time);
 		return sql;
 	}
 	elog(ERROR, "unkown time type oid '%d'", type);

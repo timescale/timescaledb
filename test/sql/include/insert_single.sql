@@ -26,9 +26,9 @@ BEGIN;
 \COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 
-SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
-INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
+SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
+FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
+INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
 
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
@@ -52,8 +52,8 @@ INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
 INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
 INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
 SELECT * FROM chunk_closing_test;
-SELECT * FROM _iobeamdb_catalog.chunk c
-    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+SELECT * FROM _timescaledb_catalog.chunk c
+    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';

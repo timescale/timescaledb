@@ -1,5 +1,5 @@
-#ifndef IOBEAMDB_CHUNK_CACHE_H
-#define IOBEAMDB_CHUNK_CACHE_H
+#ifndef TIMESCALEDB_CHUNK_CACHE_H
+#define TIMESCALEDB_CHUNK_CACHE_H
 
 #include <postgres.h>
 #include <executor/spi.h>
@@ -32,4 +32,4 @@ extern Cache *chunk_crn_set_cache_pin(void);
 extern void _chunk_cache_init(void);
 extern void _chunk_cache_fini(void);
 
-#endif   /* IOBEAMDB_CHUNK_CACHE_H */
+#endif   /* TIMESCALEDB_CHUNK_CACHE_H */

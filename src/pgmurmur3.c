@@ -33,7 +33,7 @@ pg_murmur3_hash_string(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(io[0]);
 }
 
-/* _iobeamdb_catalog.get_partition_for_key(key TEXT, mod_factor INT) RETURNS SMALLINT */
+/* _timescaledb_catalog.get_partition_for_key(key TEXT, mod_factor INT) RETURNS SMALLINT */
 PG_FUNCTION_INFO_V1(get_partition_for_key);
 
 Datum
@@ -63,9 +63,9 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 
 /*
  * array_position_least returns the highest position in the array such that the element
- * in the array is <= searched element. If the array is of partition-keyspace-end values 
+ * in the array is <= searched element. If the array is of partition-keyspace-end values
  * then this gives a unique bucket for each keyspace value.
- * 
+ *
  * Arg 0: sorted array of smallint
  * Arg 1: searched_element (smallint)
  */

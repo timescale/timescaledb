@@ -1,7 +1,5 @@
-
-
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_user_mapping(
-    cluster_user_row _iobeamdb_catalog.cluster_user,
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_user_mapping(
+    cluster_user_row _timescaledb_catalog.cluster_user,
     server_name      NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -14,7 +12,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.create_server(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_server(
     server_name   NAME,
     hostname      NAME,
     port          INT,

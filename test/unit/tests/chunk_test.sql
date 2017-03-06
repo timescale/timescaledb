@@ -7,7 +7,7 @@ chunk_size BIGINT;
 message test_result;
 result boolean;
 BEGIN
-    SELECT _iobeamdb_data_api.get_chunk_size(1) INTO chunk_size;
+    SELECT _timescaledb_data_api.get_chunk_size(1) INTO chunk_size;
     SELECT * FROM assert.is_greater_than(chunk_size, 0::BIGINT) INTO message, result;
 
     IF result = false THEN
@@ -26,17 +26,17 @@ AS
 $$
 DECLARE
 chunk_size      BIGINT;
-chunk_row       _iobeamdb_catalog.chunk;
-chunk_id        _iobeamdb_catalog.chunk.id%type;
-chunk_end_time  _iobeamdb_catalog.chunk.end_time%type;
+chunk_row       _timescaledb_catalog.chunk;
+chunk_id        _timescaledb_catalog.chunk.id%type;
+chunk_end_time  _timescaledb_catalog.chunk.end_time%type;
 message         test_result;
 result          boolean;
 BEGIN
-    SELECT * FROM _iobeamdb_catalog.chunk c
+    SELECT * FROM _timescaledb_catalog.chunk c
     INTO chunk_row
-    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test';
 
     SELECT * FROM assert.is_not_null(chunk_row.id) INTO message, result;
@@ -61,12 +61,12 @@ BEGIN
     -- Remember this chunk's ID
     chunk_id := chunk_row.id;
 
-    SELECT _iobeamdb_internal.get_local_chunk_size(chunk_row.id) INTO chunk_size;
+    SELECT _timescaledb_internal.get_local_chunk_size(chunk_row.id) INTO chunk_size;
 
     -- Insert one row. Should trigger the creation of a new chunk
     INSERT INTO chunk_test VALUES(2, 2, 'dev2');
 
-    SELECT * FROM _iobeamdb_catalog.chunk c
+    SELECT * FROM _timescaledb_catalog.chunk c
     INTO STRICT chunk_row WHERE (c.id = chunk_id);
 
     -- Check that start time is still NULL on the old chunk
@@ -86,11 +86,11 @@ BEGIN
     chunk_end_time := chunk_row.end_time;
 
     -- Query for the new chunk
-    SELECT * FROM _iobeamdb_catalog.chunk c
+    SELECT * FROM _timescaledb_catalog.chunk c
     INTO STRICT chunk_row
-    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test' AND c.end_time IS NULL;
 
     -- Check that start time is the end time of the previous chunk plus one

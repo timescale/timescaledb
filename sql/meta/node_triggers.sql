@@ -1,9 +1,9 @@
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.on_change_node()
+CREATE OR REPLACE FUNCTION _timescaledb_meta.on_change_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     IF TG_OP <> 'INSERT' THEN
-        PERFORM _iobeamdb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+        PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
     END IF;
 
     EXECUTE format(
@@ -13,14 +13,14 @@ BEGIN
         NEW.schema_name);
 
     IF NEW.database_name <> current_database() THEN
-        PERFORM _iobeamdb_internal.create_server(NEW.server_name, NEW.hostname, NEW.port, NEW.database_name);
+        PERFORM _timescaledb_internal.create_server(NEW.server_name, NEW.hostname, NEW.port, NEW.database_name);
 
-        PERFORM _iobeamdb_internal.create_user_mapping(cluster_user, NEW.server_name)
-        FROM _iobeamdb_catalog.cluster_user;
+        PERFORM _timescaledb_internal.create_user_mapping(cluster_user, NEW.server_name)
+        FROM _timescaledb_catalog.cluster_user;
 
         EXECUTE format(
             $$
-                IMPORT FOREIGN SCHEMA _iobeamdb_catalog
+                IMPORT FOREIGN SCHEMA _timescaledb_catalog
                 FROM SERVER %I
                 INTO %I;
             $$,
@@ -32,7 +32,7 @@ $BODY$
 SET client_min_messages = WARNING --supress schema if exists notice.
 ;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_meta.sync_node()
+CREATE OR REPLACE FUNCTION _timescaledb_meta.sync_node()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -44,24 +44,24 @@ BEGIN
     IF NEW.database_name <> current_database() THEN
         EXECUTE format(
             $$
-                INSERT INTO %I.node SELECT * from _iobeamdb_catalog.node;
+                INSERT INTO %I.node SELECT * from _timescaledb_catalog.node;
             $$,
             NEW.schema_name);
         EXECUTE format(
             $$
-                INSERT INTO %I.cluster_user SELECT * from _iobeamdb_catalog.cluster_user;
+                INSERT INTO %I.cluster_user SELECT * from _timescaledb_catalog.cluster_user;
             $$,
             NEW.schema_name);
         EXECUTE format(
             $$
-                INSERT INTO %I.meta SELECT * from _iobeamdb_catalog.meta;
+                INSERT INTO %I.meta SELECT * from _timescaledb_catalog.meta;
             $$,
             NEW.schema_name);
     END IF;
 
     FOR schema_name IN
     SELECT n.schema_name
-    FROM _iobeamdb_catalog.node n
+    FROM _timescaledb_catalog.node n
     WHERE n.schema_name <> NEW.schema_name AND
           n.database_name <> current_database()
     LOOP
@@ -74,8 +74,8 @@ BEGIN
         USING NEW;
     END LOOP;
 
-    PERFORM _iobeamdb_meta.assign_default_replica_node(NEW.database_name, h.id)
-    FROM _iobeamdb_catalog.hypertable h;
+    PERFORM _timescaledb_meta.assign_default_replica_node(NEW.database_name, h.id)
+    FROM _timescaledb_catalog.hypertable h;
 
     RETURN NEW;
 END

@@ -13,7 +13,7 @@ psql -h localhost -U postgres -v ON_ERROR_STOP=1 << EOF
 CREATE DATABASE ${DB_NAME};
 
 \c ${DB_NAME}
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
 \o /dev/null
 \echo 'Set up database...'

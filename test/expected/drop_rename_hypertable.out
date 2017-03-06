@@ -8,7 +8,7 @@ DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
@@ -32,9 +32,9 @@ SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 
 BEGIN;
 \COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
-SELECT _iobeamdb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _iobeamdb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
-INNER JOIN _iobeamdb_catalog.chunk c ON (c.partition_id = part.id);
+SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
+FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
+INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
 INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
@@ -53,77 +53,77 @@ INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
 INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
 INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
 SELECT * FROM chunk_closing_test;
-SELECT * FROM _iobeamdb_catalog.chunk c
-    LEFT JOIN _iobeamdb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _iobeamdb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _iobeamdb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+SELECT * FROM _timescaledb_catalog.chunk c
+    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
 \o
 \set ECHO ALL
 \c single
-\d+ "_iobeamdb_internal".*
-              Table "_iobeamdb_internal._hyper_2_0_replica"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+\d+ "_timescaledb_internal".*
+              Table "_timescaledb_internal._hyper_2_0_replica"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
-Inherits: _iobeamdb_internal._hyper_2_root
-Child tables: _iobeamdb_internal._hyper_2_2_0_partition
+ time      | bigint  |           | plain    |              |
+ metric    | integer |           | plain    |              |
+ device_id | text    |           | extended |              |
+Inherits: _timescaledb_internal._hyper_2_root
+Child tables: _timescaledb_internal._hyper_2_2_0_partition
 
-             Table "_iobeamdb_internal._hyper_2_2_0_3_data"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+             Table "_timescaledb_internal._hyper_2_2_0_3_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
+ time      | bigint  |           | plain    |              |
+ metric    | integer |           | plain    |              |
+ device_id | text    |           | extended |              |
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" <= '1'::bigint) NOT VALID
-Inherits: _iobeamdb_internal._hyper_2_2_0_partition
+Inherits: _timescaledb_internal._hyper_2_2_0_partition
 
-             Table "_iobeamdb_internal._hyper_2_2_0_4_data"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+             Table "_timescaledb_internal._hyper_2_2_0_4_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
+ time      | bigint  |           | plain    |              |
+ metric    | integer |           | plain    |              |
+ device_id | text    |           | extended |              |
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint) NOT VALID
-Inherits: _iobeamdb_internal._hyper_2_2_0_partition
+Inherits: _timescaledb_internal._hyper_2_2_0_partition
 
-             Table "_iobeamdb_internal._hyper_2_2_0_5_data"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+             Table "_timescaledb_internal._hyper_2_2_0_5_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
+ time      | bigint  |           | plain    |              |
+ metric    | integer |           | plain    |              |
+ device_id | text    |           | extended |              |
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" >= '3'::bigint AND "time" <= '3'::bigint) NOT VALID
-Inherits: _iobeamdb_internal._hyper_2_2_0_partition
+Inherits: _timescaledb_internal._hyper_2_2_0_partition
 
-            Table "_iobeamdb_internal._hyper_2_2_0_partition"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+            Table "_timescaledb_internal._hyper_2_2_0_partition"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
+ time      | bigint  |           | plain    |              |
+ metric    | integer |           | plain    |              |
+ device_id | text    |           | extended |              |
 Check constraints:
-    "partition" CHECK (_iobeamdb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _iobeamdb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-Inherits: _iobeamdb_internal._hyper_2_0_replica
-Child tables: _iobeamdb_internal._hyper_2_2_0_3_data,
-              _iobeamdb_internal._hyper_2_2_0_4_data,
-              _iobeamdb_internal._hyper_2_2_0_5_data
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+Inherits: _timescaledb_internal._hyper_2_0_replica
+Child tables: _timescaledb_internal._hyper_2_2_0_3_data,
+              _timescaledb_internal._hyper_2_2_0_4_data,
+              _timescaledb_internal._hyper_2_2_0_5_data
 
-                Table "_iobeamdb_internal._hyper_2_root"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+                Table "_timescaledb_internal._hyper_2_root"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              | 
- metric    | integer |           | plain    |              | 
- device_id | text    |           | extended |              | 
-Child tables: _iobeamdb_internal._hyper_2_0_replica
+ time      | bigint  |           | plain    |              |
+ metric    | integer |           | plain    |              |
+ device_id | text    |           | extended |              |
+Child tables: _timescaledb_internal._hyper_2_0_replica
 
 -- Test that renaming hypertable is blocked
 \set ON_ERROR_STOP 0
@@ -134,15 +134,15 @@ ERROR:  Renaming hypertables is not yet supported
 CREATE TABLE renametable (foo int);
 ALTER TABLE "renametable" RENAME TO "newname";
 SELECT * FROM "newname";
- foo 
+ foo
 -----
 (0 rows)
 
-SELECT * FROM _iobeamdb_catalog.hypertable;
- id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes
 ----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
   1 | public      | testNs             | testNs                 | _hyper_1                | testNs             | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           | single     |       1073741824
-  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+  2 | public      | chunk_closing_test | _timescaledb_internal     | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (2 rows)
 
 DROP TABLE "testNs";
@@ -161,52 +161,51 @@ NOTICE:  index "4-testNs_timeCustom_series_2_idx" does not exist, skipping
 NOTICE:  index "9-testNs_timeCustom_series_2_idx" does not exist, skipping
 NOTICE:  index "5-testNs_timeCustom_series_bool_idx" does not exist, skipping
 NOTICE:  index "10-testNs_timeCustom_series_bool_idx" does not exist, skipping
-SELECT * FROM _iobeamdb_catalog.hypertable;
- id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes
 ----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  2 | public      | chunk_closing_test | _iobeamdb_internal     | _hyper_2                | _iobeamdb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+  2 | public      | chunk_closing_test | _timescaledb_internal     | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (1 row)
 
 \dt  "public".*
                List of relations
- Schema |        Name        | Type  |  Owner   
+ Schema |        Name        | Type  |  Owner
 --------+--------------------+-------+----------
  public | chunk_closing_test | table | postgres
  public | newname            | table | postgres
 (2 rows)
 
-\dt  "_iobeamdb_catalog".*
+\dt  "_timescaledb_catalog".*
                         List of relations
-      Schema       |           Name            | Type  |  Owner   
+      Schema       |           Name            | Type  |  Owner
 -------------------+---------------------------+-------+----------
- _iobeamdb_catalog | chunk                     | table | postgres
- _iobeamdb_catalog | chunk_replica_node        | table | postgres
- _iobeamdb_catalog | chunk_replica_node_index  | table | postgres
- _iobeamdb_catalog | cluster_user              | table | postgres
- _iobeamdb_catalog | default_replica_node      | table | postgres
- _iobeamdb_catalog | deleted_hypertable        | table | postgres
- _iobeamdb_catalog | deleted_hypertable_column | table | postgres
- _iobeamdb_catalog | deleted_hypertable_index  | table | postgres
- _iobeamdb_catalog | hypertable                | table | postgres
- _iobeamdb_catalog | hypertable_column         | table | postgres
- _iobeamdb_catalog | hypertable_index          | table | postgres
- _iobeamdb_catalog | hypertable_replica        | table | postgres
- _iobeamdb_catalog | meta                      | table | postgres
- _iobeamdb_catalog | node                      | table | postgres
- _iobeamdb_catalog | partition                 | table | postgres
- _iobeamdb_catalog | partition_epoch           | table | postgres
- _iobeamdb_catalog | partition_replica         | table | postgres
+ _timescaledb_catalog | chunk                     | table | postgres
+ _timescaledb_catalog | chunk_replica_node        | table | postgres
+ _timescaledb_catalog | chunk_replica_node_index  | table | postgres
+ _timescaledb_catalog | cluster_user              | table | postgres
+ _timescaledb_catalog | default_replica_node      | table | postgres
+ _timescaledb_catalog | deleted_hypertable        | table | postgres
+ _timescaledb_catalog | deleted_hypertable_column | table | postgres
+ _timescaledb_catalog | deleted_hypertable_index  | table | postgres
+ _timescaledb_catalog | hypertable                | table | postgres
+ _timescaledb_catalog | hypertable_column         | table | postgres
+ _timescaledb_catalog | hypertable_index          | table | postgres
+ _timescaledb_catalog | hypertable_replica        | table | postgres
+ _timescaledb_catalog | meta                      | table | postgres
+ _timescaledb_catalog | node                      | table | postgres
+ _timescaledb_catalog | partition                 | table | postgres
+ _timescaledb_catalog | partition_epoch           | table | postgres
+ _timescaledb_catalog | partition_replica         | table | postgres
 (17 rows)
 
-\dt+ "_iobeamdb_internal".*
+\dt+ "_timescaledb_internal".*
                                      List of relations
-       Schema       |          Name          | Type  |  Owner   |    Size    | Description 
+       Schema       |          Name          | Type  |  Owner   |    Size    | Description
 --------------------+------------------------+-------+----------+------------+-------------
- _iobeamdb_internal | _hyper_2_0_replica     | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_2_0_3_data    | table | postgres | 16 kB      | 
- _iobeamdb_internal | _hyper_2_2_0_4_data    | table | postgres | 16 kB      | 
- _iobeamdb_internal | _hyper_2_2_0_5_data    | table | postgres | 16 kB      | 
- _iobeamdb_internal | _hyper_2_2_0_partition | table | postgres | 8192 bytes | 
- _iobeamdb_internal | _hyper_2_root          | table | postgres | 8192 bytes | 
+ _timescaledb_internal | _hyper_2_0_replica     | table | postgres | 8192 bytes |
+ _timescaledb_internal | _hyper_2_2_0_3_data    | table | postgres | 16 kB      |
+ _timescaledb_internal | _hyper_2_2_0_4_data    | table | postgres | 16 kB      |
+ _timescaledb_internal | _hyper_2_2_0_5_data    | table | postgres | 16 kB      |
+ _timescaledb_internal | _hyper_2_2_0_partition | table | postgres | 8192 bytes |
+ _timescaledb_internal | _hyper_2_root          | table | postgres | 8192 bytes |
 (6 rows)
-

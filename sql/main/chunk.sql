@@ -1,5 +1,5 @@
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.lock_for_chunk_close(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.lock_for_chunk_close(
     chunk_id INTEGER
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
@@ -9,14 +9,14 @@ BEGIN
     --take an update lock on the chunk row
     --this conflicts, by design, with the lock taken when inserting on the node getting the insert command (not the node with the chunk table)
     PERFORM *
-    FROM _iobeamdb_catalog.chunk c
+    FROM _timescaledb_catalog.chunk c
     WHERE c.id = chunk_id
     FOR UPDATE;
 END
 $BODY$;
 
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.max_time_for_chunk_close(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.max_time_for_chunk_close(
     schema_name NAME,
     table_name  NAME
 )
@@ -30,9 +30,9 @@ BEGIN
             SELECT max(%s)
             FROM %I.%I
         $$,
-        _iobeamdb_internal.extract_time_sql(
-            format('%I', _iobeamdb_internal.time_col_name_for_crn(schema_name, table_name)),
-            _iobeamdb_internal.time_col_type_for_crn(schema_name, table_name)
+        _timescaledb_internal.extract_time_sql(
+            format('%I', _timescaledb_internal.time_col_name_for_crn(schema_name, table_name)),
+            _timescaledb_internal.time_col_type_for_crn(schema_name, table_name)
         ),
         schema_name,
         table_name
@@ -43,7 +43,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.set_end_time_for_chunk_close(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.set_end_time_for_chunk_close(
     chunk_id INTEGER,
     max_time BIGINT
 )
@@ -51,7 +51,7 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.set_end_time_for_chunk_close(
 $BODY$
 DECLARE
 BEGIN
-    UPDATE _iobeamdb_catalog.chunk
+    UPDATE _timescaledb_catalog.chunk
     SET end_time = max_time
     WHERE id = chunk_id;
 END
@@ -59,7 +59,7 @@ $BODY$;
 
 --closes the given chunk if it is over the size limit set for the hypertable
 --it belongs to.
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.close_chunk_if_needed(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.close_chunk_if_needed(
     chunk_id INTEGER
 )
     RETURNS boolean LANGUAGE PLPGSQL VOLATILE AS
@@ -68,15 +68,15 @@ DECLARE
     chunk_size      BIGINT;
     chunk_max_size  BIGINT;
 BEGIN
-    chunk_size := _iobeamdb_data_api.get_chunk_size(chunk_id);
-    chunk_max_size := _iobeamdb_internal.get_chunk_max_size(chunk_id);
+    chunk_size := _timescaledb_data_api.get_chunk_size(chunk_id);
+    chunk_max_size := _timescaledb_internal.get_chunk_max_size(chunk_id);
 
     IF chunk_size >= chunk_max_size THEN
-        --This should use the non-transactional rpc because this needs to 
+        --This should use the non-transactional rpc because this needs to
         --commit before we can take a lock for writing on the closed chunk.
-        --That means this operation is not transactional with the insert 
+        --That means this operation is not transactional with the insert
         --and will not be rolled back.
-        PERFORM _iobeamdb_meta_api.close_chunk_end_immediate(chunk_id);
+        PERFORM _timescaledb_meta_api.close_chunk_end_immediate(chunk_id);
         RETURN TRUE;
     END IF;
 
@@ -92,16 +92,16 @@ CREATE OR REPLACE FUNCTION get_or_create_chunk(
     time_point   BIGINT,
     lock_chunk   boolean = FALSE
 )
-    RETURNS _iobeamdb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row _iobeamdb_catalog.chunk;
+    chunk_row _timescaledb_catalog.chunk;
 BEGIN
 
     IF lock_chunk THEN
-        chunk_row := _iobeamdb_internal.get_chunk_locked(partition_id, time_point);
+        chunk_row := _timescaledb_internal.get_chunk_locked(partition_id, time_point);
     ELSE
-        chunk_row := _iobeamdb_internal.get_chunk(partition_id, time_point);
+        chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
     END IF;
 
     --Create a new chunk in case no chunk was returned.
@@ -116,10 +116,10 @@ BEGIN
         --A chunk creation will NOT be rolled back if this transaction later aborts. Not ideal, but good enough for now.
         SELECT *
         INTO chunk_row
-        FROM _iobeamdb_meta_api.get_or_create_chunk_immediate(partition_id, time_point);
+        FROM _timescaledb_meta_api.get_or_create_chunk_immediate(partition_id, time_point);
 
         IF lock_chunk THEN
-            chunk_row := _iobeamdb_internal.get_chunk_locked(partition_id, time_point);
+            chunk_row := _timescaledb_internal.get_chunk_locked(partition_id, time_point);
         END IF;
     END LOOP;
 

@@ -1,5 +1,5 @@
-#ifndef IOBEAMDB_UTILS_H
-#define IOBEAMDB_UTILS_H
+#ifndef TIMESCALEDB_UTILS_H
+#define TIMESCALEDB_UTILS_H
 
 #include "fmgr.h"
 #include "nodes/primnodes.h"
@@ -36,4 +36,4 @@ extern FmgrInfo *create_fmgr(char *schema, char *function_name, int num_args);
 extern RangeVar *makeRangeVarFromRelid(Oid relid);
 extern int	int_cmp(const void *a, const void *b);
 
-#endif   /* IOBEAMDB_UTILS_H */
+#endif   /* TIMESCALEDB_UTILS_H */

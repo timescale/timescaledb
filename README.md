@@ -1,9 +1,9 @@
-iobeam is an open-source database designed to make SQL scalable for
+TimescaleDB is an open-source database designed to make SQL scalable for
 time-series data. It is engineered up from PostgreSQL, providing automatic
 partitioning across time and space (partitioning key), as well as full
 SQL support.
 
-iobeam is packaged as a PostgreSQL extension and set of scripts.
+TimescaleDB is packaged as a PostgreSQL extension and set of scripts.
 
 
 ## Prerequisites
@@ -68,7 +68,7 @@ psql -U postgres -h localhost
 -- Install the extension
 CREATE database tutorial;
 \c tutorial
-CREATE EXTENSION IF NOT EXISTS iobeamdb CASCADE;
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
 -- Run initialization function
 select setup_single_node();

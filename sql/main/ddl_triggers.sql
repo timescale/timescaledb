@@ -19,14 +19,14 @@
 */
 
 --Handles ddl create index commands on hypertables
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_create_index()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_create_index()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
     info           record;
     table_oid      regclass;
     def            TEXT;
-    hypertable_row _iobeamdb_catalog.hypertable;
+    hypertable_row _timescaledb_catalog.hypertable;
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
@@ -35,14 +35,14 @@ BEGIN
             FROM pg_catalog.pg_index
             WHERE indexrelid = info.objid;
 
-            IF NOT _iobeamdb_internal.is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+            IF NOT _timescaledb_internal.is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
                 RETURN;
             END IF;
 
-            def = _iobeamdb_internal.get_general_index_definition(info.objid, table_oid);
-            hypertable_row := _iobeamdb_internal.hypertable_from_main_table(table_oid);
+            def = _timescaledb_internal.get_general_index_definition(info.objid, table_oid);
+            hypertable_row := _timescaledb_internal.hypertable_from_main_table(table_oid);
 
-            PERFORM _iobeamdb_meta_api.add_index(
+            PERFORM _timescaledb_meta_api.add_index(
                 hypertable_row.id,
                 hypertable_row.schema_name,
                 (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
@@ -53,7 +53,7 @@ END
 $BODY$;
 
 --Handles ddl alter index commands on hypertables
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_alter_index()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_index()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
@@ -66,7 +66,7 @@ BEGIN
             FROM pg_catalog.pg_index
             WHERE indexrelid = info.objid;
 
-            IF NOT _iobeamdb_internal.is_main_table(table_oid) THEN
+            IF NOT _timescaledb_internal.is_main_table(table_oid) THEN
                 RETURN;
             END IF;
 
@@ -77,19 +77,19 @@ END
 $BODY$;
 
 --Handles ddl drop index commands on hypertables
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_drop_index()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_index()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
     info           record;
     table_oid      regclass;
-    hypertable_row _iobeamdb_catalog.hypertable;
+    hypertable_row _timescaledb_catalog.hypertable;
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_dropped_objects()
         LOOP
             SELECT  format('%I.%I', h.schema_name, h.table_name) INTO table_oid
-            FROM _iobeamdb_catalog.hypertable h
-            INNER JOIN _iobeamdb_catalog.hypertable_index i ON (i.hypertable_id = h.id)
+            FROM _timescaledb_catalog.hypertable h
+            INNER JOIN _timescaledb_catalog.hypertable_index i ON (i.hypertable_id = h.id)
             WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name;
 
             --if table_oid is not null, it is a main table
@@ -98,7 +98,7 @@ BEGIN
             END IF;
 
             --TODO: this ignores the concurrently and cascade/restrict modifiers
-            PERFORM _iobeamdb_meta_api.drop_index(info.schema_name, info.object_name);
+            PERFORM _timescaledb_meta_api.drop_index(info.schema_name, info.object_name);
         END LOOP;
 END
 $BODY$;
@@ -109,12 +109,12 @@ $BODY$;
 -- not supported (explicit):
 -- ALTER COLUMN SET DATA TYPE
 -- Other alter commands also not supported
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_alter_table()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_table()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
     info           record;
-    hypertable_row _iobeamdb_catalog.hypertable;
+    hypertable_row _timescaledb_catalog.hypertable;
     found_action   BOOLEAN;
     att_row        pg_attribute;
     rec            record;
@@ -122,11 +122,11 @@ BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
             --exit if not hypertable or inside trigger
-            IF NOT _iobeamdb_internal.is_main_table(info.objid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+            IF NOT _timescaledb_internal.is_main_table(info.objid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
                 RETURN;
             END IF;
 
-            hypertable_row := _iobeamdb_internal.hypertable_from_main_table(info.objid);
+            hypertable_row := _timescaledb_internal.hypertable_from_main_table(info.objid);
             --Try to find what was done. If you can't find it error out.
             found_action = FALSE;
 
@@ -137,31 +137,31 @@ BEGIN
             WHERE attrelid = info.objid AND
                   attnum > 0 AND
                   NOT attisdropped AND
-                  att.attnum NOT IN (SELECT c.attnum FROM _iobeamdb_catalog.hypertable_column c WHERE hypertable_id = hypertable_row.id)
+                  att.attnum NOT IN (SELECT c.attnum FROM _timescaledb_catalog.hypertable_column c WHERE hypertable_id = hypertable_row.id)
                 LOOP
-                    PERFORM  _iobeamdb_internal.create_column_from_attribute(hypertable_row.id, att_row);
+                    PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
                     found_action = TRUE;
                 END LOOP;
 
             --was a column deleted
             FOR rec IN
             SELECT name
-            FROM _iobeamdb_catalog.hypertable_column c
+            FROM _timescaledb_catalog.hypertable_column c
             INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
             WHERE hypertable_id = hypertable_row.id
                 LOOP
-                    PERFORM _iobeamdb_meta_api.drop_column(hypertable_row.id, rec.name);
+                    PERFORM _timescaledb_meta_api.drop_column(hypertable_row.id, rec.name);
                     found_action = TRUE;
                 END LOOP;
 
             --was a column renamed
             FOR rec IN
             SELECT c.name old_name, att.attname new_name
-            FROM _iobeamdb_catalog.hypertable_column c
+            FROM _timescaledb_catalog.hypertable_column c
             LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND NOT attisdropped)
             WHERE hypertable_id = hypertable_row.id AND c.name IS DISTINCT FROM att.attname
                 LOOP
-                    PERFORM _iobeamdb_meta_api.alter_table_rename_column(
+                    PERFORM _timescaledb_meta_api.alter_table_rename_column(
                         hypertable_row.id,
                         rec.old_name,
                         rec.new_name
@@ -171,12 +171,12 @@ BEGIN
 
             --was a column default changed
             FOR rec IN
-            SELECT name, _iobeamdb_internal.get_default_value_for_attribute(att) AS new_default_value
-            FROM _iobeamdb_catalog.hypertable_column c
+            SELECT name, _timescaledb_internal.get_default_value_for_attribute(att) AS new_default_value
+            FROM _timescaledb_catalog.hypertable_column c
             LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
-            WHERE hypertable_id = hypertable_row.id AND _iobeamdb_internal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
+            WHERE hypertable_id = hypertable_row.id AND _timescaledb_internal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
                 LOOP
-                    PERFORM _iobeamdb_meta_api.alter_column_set_default(
+                    PERFORM _timescaledb_meta_api.alter_column_set_default(
                         hypertable_row.id,
                         rec.name,
                         rec.new_default_value
@@ -187,11 +187,11 @@ BEGIN
             --was the not null flag changed?
             FOR rec IN
               SELECT name, attnotnull AS new_not_null
-              FROM _iobeamdb_catalog.hypertable_column c
+              FROM _timescaledb_catalog.hypertable_column c
               LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
               WHERE hypertable_id = hypertable_row.id AND attnotnull != c.not_null
                 LOOP
-                    PERFORM _iobeamdb_meta_api.alter_column_set_not_null(
+                    PERFORM _timescaledb_meta_api.alter_column_set_not_null(
                         hypertable_row.id,
                         rec.name,
                         rec.new_not_null
@@ -202,7 +202,7 @@ BEGIN
             --type changed
             FOR rec IN
             SELECT name
-            FROM _iobeamdb_catalog.hypertable_column c
+            FROM _timescaledb_catalog.hypertable_column c
             INNER JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
             WHERE hypertable_id = hypertable_row.id AND att.atttypid IS DISTINCT FROM c.data_type
                 LOOP
@@ -218,7 +218,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_hypertable(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.is_hypertable(
     schema_name NAME,
     table_name  NAME
 )
@@ -226,14 +226,14 @@ CREATE OR REPLACE FUNCTION _iobeamdb_internal.is_hypertable(
 $BODY$
 BEGIN
      RETURN EXISTS(
-         SELECT 1 FROM _iobeamdb_catalog.hypertable h
+         SELECT 1 FROM _timescaledb_catalog.hypertable h
          WHERE h.schema_name = is_hypertable.schema_name AND h.table_name = is_hypertable.table_name
      );
 END
 $BODY$;
 
 --Handles drop table command
-CREATE OR REPLACE FUNCTION _iobeamdb_internal.ddl_process_drop_table()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_table()
         RETURNS event_trigger LANGUAGE plpgsql AS $BODY$
 DECLARE
     obj record;
@@ -244,8 +244,8 @@ BEGIN
 
     FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
     LOOP
-        IF tg_tag = 'DROP TABLE' AND _iobeamdb_internal.is_hypertable(obj.schema_name, obj.object_name) THEN
-            PERFORM _iobeamdb_meta_api.drop_hypertable(obj.schema_name, obj.object_name);
+        IF tg_tag = 'DROP TABLE' AND _timescaledb_internal.is_hypertable(obj.schema_name, obj.object_name) THEN
+            PERFORM _timescaledb_meta_api.drop_hypertable(obj.schema_name, obj.object_name);
         END IF;
     END LOOP;
 END

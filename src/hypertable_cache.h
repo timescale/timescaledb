@@ -1,5 +1,5 @@
-#ifndef IOBEAMDB_HYPERTABLE_CACHE_H
-#define IOBEAMDB_HYPERTABLE_CACHE_H
+#ifndef TIMESCALEDB_HYPERTABLE_CACHE_H
+#define TIMESCALEDB_HYPERTABLE_CACHE_H
 
 #include <postgres.h>
 #include "cache.h"
@@ -36,4 +36,4 @@ extern Cache *hypertable_cache_pin(void);
 void _hypertable_cache_init(void);
 void _hypertable_cache_fini(void);
 
-#endif   /* IOBEAMDB_HYPERTABLE_CACHE_H */
+#endif   /* TIMESCALEDB_HYPERTABLE_CACHE_H */

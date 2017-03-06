@@ -1,5 +1,5 @@
-#ifndef IOBEAMDB_SCANNER_H
-#define IOBEAMDB_SCANNER_H
+#ifndef TIMESCALEDB_SCANNER_H
+#define TIMESCALEDB_SCANNER_H
 
 #include <postgres.h>
 #include <access/relscan.h>
@@ -65,4 +65,4 @@ typedef struct ScannerCtx {
  * tuples. */
 int scanner_scan(ScannerCtx *ctx);
 
-#endif /* IOBEAMDB_SCANNER_H */
+#endif /* TIMESCALEDB_SCANNER_H */
