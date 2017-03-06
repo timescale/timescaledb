@@ -80,7 +80,7 @@ EXCEPTION
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION setup_single_node(
+CREATE OR REPLACE FUNCTION setup_db(
     database NAME = current_database(),
     username TEXT = current_user,
     password TEXT = NULL,

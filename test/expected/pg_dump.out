@@ -15,7 +15,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
 psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
 psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
-SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+SELECT setup_db(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \set VERBOSITY verbose
 \c single
 CREATE TABLE PUBLIC."testNs" (
