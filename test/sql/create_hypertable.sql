@@ -10,7 +10,7 @@
 create schema test_schema;
 create table test_schema.test_table(time bigint, temp float8, device_id text);
 \dt "test_schema".*
-select * from create_hypertable('test_schema.test_table', 'time', 'device_id');
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2);
 
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);

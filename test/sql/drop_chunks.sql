@@ -11,8 +11,8 @@
 \c single
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
-SELECT create_hypertable('public.drop_chunk_test1', 'time', 'device_id', chunk_size_bytes => 10000);
-SELECT create_hypertable('public.drop_chunk_test2', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_size_bytes => 10000);
+SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_size_bytes => 10000);
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _timescaledb_catalog.chunk c
