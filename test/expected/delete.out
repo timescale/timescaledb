@@ -29,7 +29,7 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE s
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2::smallint );
+SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
 BEGIN;
 \COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
@@ -49,7 +49,7 @@ CREATE TABLE chunk_closing_test(
         device_id  TEXT
     );
 -- Test chunk closing/creation
-SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', 2, chunk_size_bytes => 10000);
 INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
 INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
 INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');

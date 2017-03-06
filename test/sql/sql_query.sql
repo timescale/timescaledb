@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP 1
 
 \o /dev/null
-\ir include/insert_single.sql
+\ir include/insert_two_partitions.sql
 
 \o
 \set ECHO ALL

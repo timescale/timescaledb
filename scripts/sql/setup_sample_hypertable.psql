@@ -8,4 +8,4 @@ CREATE TABLE conditions (
 CREATE INDEX ON conditions (time DESC NULLS LAST, device_id);
 CREATE INDEX ON conditions (time DESC NULLS LAST, temp);
 
-SELECT create_hypertable('"conditions"', 'time', 'device_id');
+SELECT create_hypertable('"conditions"', 'time', 'device_id', 2);

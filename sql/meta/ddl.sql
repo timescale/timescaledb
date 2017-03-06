@@ -8,8 +8,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_meta.create_hypertable(
     time_column_name        NAME,
     time_column_type        REGTYPE,
     partitioning_column     NAME,
+    number_partitions       INTEGER,
     replication_factor      SMALLINT,
-    number_partitions       SMALLINT,
     associated_schema_name  NAME,
     associated_table_prefix NAME,
     placement               _timescaledb_catalog.chunk_placement_type,
@@ -46,9 +46,14 @@ BEGIN
             USING ERRCODE ='IO101';
         END IF;
     ELSIF number_partitions IS NULL THEN
-        SELECT COUNT(*)
-        INTO number_partitions
-        FROM _timescaledb_catalog.node;
+        RAISE EXCEPTION 'The number of partitions must be specified when there is a partitioning column'
+        USING ERRCODE ='IO101';
+    END IF;
+
+    IF number_partitions IS NOT NULL AND
+       (number_partitions < 1 OR number_partitions > 32767) THEN
+        RAISE EXCEPTION 'Invalid number of partitions'
+        USING ERRCODE ='IO101';
     END IF;
 
     INSERT INTO _timescaledb_catalog.hypertable (
@@ -73,7 +78,7 @@ BEGIN
     RETURNING * INTO hypertable_row;
 
     IF number_partitions != 0 THEN
-        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions, partitioning_column,
+        PERFORM add_equi_partition_epoch(hypertable_row.id, number_partitions::smallint, partitioning_column,
                                          partitioning_func_schema, partitioning_func, tablespace);
     END IF;
     RETURN hypertable_row;

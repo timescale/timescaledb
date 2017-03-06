@@ -34,7 +34,7 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE s
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2::smallint );
+SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
  create_hypertable 
 -------------------
  
@@ -64,7 +64,7 @@ CREATE TABLE chunk_closing_test(
         device_id  TEXT
     );
 -- Test chunk closing/creation
-SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', 2, chunk_size_bytes => 10000);
  create_hypertable 
 -------------------
  
@@ -319,7 +319,8 @@ Child tables: _copy_temp_1,
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Inherits: _timescaledb_internal._hyper_2_root
-Child tables: _timescaledb_internal._hyper_2_3_0_partition
+Child tables: _timescaledb_internal._hyper_2_3_0_partition,
+              _timescaledb_internal._hyper_2_4_0_partition
 
             Table "_timescaledb_internal._hyper_2_3_0_4_data"
   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
@@ -328,7 +329,7 @@ Child tables: _timescaledb_internal._hyper_2_3_0_partition
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" <= '1'::bigint) NOT VALID
 Inherits: _timescaledb_internal._hyper_2_3_0_partition
 
@@ -339,7 +340,7 @@ Inherits: _timescaledb_internal._hyper_2_3_0_partition
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint) NOT VALID
 Inherits: _timescaledb_internal._hyper_2_3_0_partition
 
@@ -350,7 +351,7 @@ Inherits: _timescaledb_internal._hyper_2_3_0_partition
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" >= '3'::bigint) NOT VALID
 Inherits: _timescaledb_internal._hyper_2_3_0_partition
 
@@ -361,11 +362,21 @@ Inherits: _timescaledb_internal._hyper_2_3_0_partition
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
 Inherits: _timescaledb_internal._hyper_2_0_replica
 Child tables: _timescaledb_internal._hyper_2_3_0_4_data,
               _timescaledb_internal._hyper_2_3_0_5_data,
               _timescaledb_internal._hyper_2_3_0_6_data
+
+          Table "_timescaledb_internal._hyper_2_4_0_partition"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+-----------+---------+-----------+----------+--------------+-------------
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+Inherits: _timescaledb_internal._hyper_2_0_replica
 
                Table "_timescaledb_internal._hyper_2_root"
   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
@@ -420,7 +431,8 @@ SELECT * FROM _timescaledb_catalog.partition_replica;
   1 |            1 |             1 |          0 | _timescaledb_internal | _hyper_1_1_0_partition
   2 |            2 |             1 |          0 | _timescaledb_internal | _hyper_1_2_0_partition
   3 |            3 |             2 |          0 | _timescaledb_internal | _hyper_2_3_0_partition
-(3 rows)
+  4 |            4 |             2 |          0 | _timescaledb_internal | _hyper_2_4_0_partition
+(4 rows)
 
 SELECT * FROM chunk_closing_test;
  time | metric | device_id 

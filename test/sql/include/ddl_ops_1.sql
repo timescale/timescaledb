@@ -10,7 +10,7 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 
-SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id');
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 1);
 SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.hypertable_index;
 
