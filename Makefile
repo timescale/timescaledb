@@ -1,7 +1,7 @@
 EXTENSION = timescaledb
 SQL_FILES = $(shell cat sql/load_order.txt)
 
-EXT_VERSION = 1.0
+EXT_VERSION = 0.0.1-beta
 EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 
 DATA = $(EXT_SQL_FILE)
