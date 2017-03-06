@@ -57,9 +57,10 @@ free_epoch(epoch_and_partitions_set * epoch)
 }
 
 #define CRN_QUERY_ARGS (Oid[]) { INT4OID }
-#define CRN_QUERY "SELECT schema_name, table_name \
+#define CRN_QUERY "SELECT schema_name, table_name, database_name \
 				FROM _timescaledb_catalog.chunk_replica_node AS crn \
 				WHERE crn.chunk_id = $1"
+
 
 DEFINE_PLAN(get_crn_plan, CRN_QUERY, 1, CRN_QUERY_ARGS)
 
@@ -106,12 +107,16 @@ fetch_crn_set(crn_set * entry, int32 chunk_id)
 		HeapTuple	tuple = SPI_tuptable->vals[j];
 		crn_row    *tab = SPI_palloc(sizeof(crn_row));
 
-		Name		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 1, &is_null));
+		Name		name;
 
+		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 1, &is_null));
 		memcpy(tab->schema_name.data, name, NAMEDATALEN);
 
 		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &is_null));
 		memcpy(tab->table_name.data, name, NAMEDATALEN);
+
+		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &is_null));
+		memcpy(tab->database_name.data, name, NAMEDATALEN);
 
 		tab_array[j] = tab;
 	}
@@ -229,4 +234,21 @@ bool
 chunk_row_timepoint_is_member(const chunk_row * row, const int64 time_pt)
 {
 	return row->start_time <= time_pt && row->end_time >= time_pt;
+}
+
+extern crn_row *
+crn_set_get_crn_row_for_db(crn_set * set, char *dbname)
+{
+	ListCell   *lc;
+
+	foreach(lc, set->tables)
+	{
+		crn_row    *cr = lfirst(lc);
+
+		if (strncmp(cr->database_name.data, dbname, NAMEDATALEN) == 0)
+		{
+			return cr;
+		}
+	}
+	return NULL;
 }

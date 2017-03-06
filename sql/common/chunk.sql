@@ -29,6 +29,11 @@ WHERE c.partition_id = get_chunk_locked.partition_id AND
 FOR SHARE;
 $BODY$;
 
+
+CREATE OR REPLACE FUNCTION _timescaledb_catalog.local_chunk_size(name, name) RETURNS bigint
+	AS '$libdir/timescaledb', 'local_chunk_size' LANGUAGE C IMMUTABLE STRICT;
+
+
 --returns the current size of a chunk (in bytes) given its ID.
 --The size is typically aligned with the page size in Postgres.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_local_chunk_size(
@@ -38,20 +43,18 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.get_local_chunk_size(
 $BODY$
 DECLARE
     chunk_replica_row _timescaledb_catalog.chunk_replica_node;
-    chunk_table_name  TEXT;
 BEGIN
     SELECT *
     INTO STRICT chunk_replica_row
     FROM _timescaledb_catalog.chunk_replica_node crn
-    WHERE crn.chunk_id = get_local_chunk_size.chunk_id;
+    WHERE crn.chunk_id = get_local_chunk_size.chunk_id
+          AND crn.database_name = current_database();
 
     IF chunk_replica_row.database_name != current_database() THEN
         RAISE EXCEPTION 'get_local_chunk_size should only be called locally'
         USING ERRCODE = 'IO501';
     END IF;
-
-    chunk_table_name := format('%I.%I', chunk_replica_row.schema_name, chunk_replica_row.table_name);
-    RETURN pg_table_size(chunk_table_name :: REGCLASS);
+    RETURN _timescaledb_catalog.local_chunk_size(chunk_replica_row.schema_name, chunk_replica_row.table_name);
 END
 $BODY$;
 

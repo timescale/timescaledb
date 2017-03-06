@@ -24,7 +24,9 @@ typedef struct crn_row
 {
 	NameData	schema_name;
 	NameData	table_name;
+	NameData	database_name;
 }	crn_row;
+
 
 typedef struct crn_set
 {
@@ -48,5 +50,7 @@ chunk_row *
 			chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock);
 
 bool		chunk_row_timepoint_is_member(const chunk_row * row, const int64 time_pt);
+
+extern crn_row *crn_set_get_crn_row_for_db(crn_set * set, char *dbname);
 
 #endif   /* TIMESCALEDB_METADATA_QUERIES_H */

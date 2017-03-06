@@ -16,6 +16,7 @@ SRCS = \
 	src/metadata_queries.c \
 	src/cache.c \
 	src/cache_invalidate.c \
+	src/chunk.c \
 	src/scanner.c \
 	src/hypertable_cache.c \
 	src/chunk_cache.c \
