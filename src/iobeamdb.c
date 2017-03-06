@@ -362,6 +362,8 @@ get_hypertable_info(Oid mainRelationOid)
 
 			partitioning_info* info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
 
+			memset(info, 0, sizeof(partitioning_info));
+
 			partitioning_column = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
 
 			if (!isnull) {
@@ -531,7 +533,8 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List
 			foreach(picell, info->partitioning_info)
 			{
 				partitioning_info *pi = lfirst(picell);
-				if (strcmp(NameStr(*(pi->partitioning_column)), varname)==0)
+				if (pi->partitioning_column != NULL &&
+					strcmp(NameStr(*(pi->partitioning_column)), varname)==0)
 				{
 					return pi;
 				}
