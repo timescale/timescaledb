@@ -106,7 +106,7 @@ One of the core ideas of our time-series database are time-series optimized data
 ### Creating a (hyper)table
 To create a hypertable, you start with a regular SQL table, and then convert
 it into a hypertable via the function
-`create_hypertable()`([API Definition](extension/sql/main/ddl.sql)).
+`create_hypertable()`([API definition](docs/API.md)).
 
 The following example creates a hypertable for tracking
 temperature and humidity across a collection of devices over time.
@@ -121,20 +121,23 @@ CREATE TABLE conditions (
 );
 ```
 
-Next, make it a hypertable using the provided function
-`create_hypertable()` (with `device_id` as the partition key):
+
+
+Next, transform it into a hypertable using the provided function
+`create_hypertable()`:
 ```sql
-SELECT create_hypertable('"conditions"', 'time', 'device_id');
+SELECT create_hypertable('conditions', 'time');
 ```
 
-The hypertable will partition its data along two dimensions: time (using the values in the
-`time` column) and space on `device_id`. Note, however, that space partitioning
-is optional, so one can also do:
+This creates a hypertable that is partitioned by time using the values
+in the `time` column. Additionally, you can partition the data on
+another dimension (what we call 'space') such as `device_id`. For example,
+to partition `device_id` into 2 partitions along:
 ```sql
-SELECT create_hypertable('"conditions"', 'time');
+SELECT create_hypertable('conditions', 'time', 'device_id', 2);
 ```
 
-### Inserting and Querying
+### Inserting and querying
 Inserting data into the hypertable is done via normal SQL `INSERT` commands,
 e.g. using millisecond timestamps:
 ```sql
@@ -173,49 +176,40 @@ Having a `time DESC` column specification in the index allows for efficient quer
 SELECT * FROM conditions WHERE device_id = 'dev_1' ORDER BY time DESC LIMIT 10
 ```
 
-For sparse data where a column is often NULL, we suggest adding a `WHERE column IS NOT NULL` clause to the index (unless you are often searching for missing data). For example,
+For sparse data where a column is often NULL, we suggest adding a
+`WHERE column IS NOT NULL` clause to the index (unless you are often
+searching for missing data). For example,
 
 ```sql
 CREATE INDEX ON conditions (time DESC, humidity) WHERE humidity IS NOT NULL;
 ```
 this creates a more compact, and thus efficient, index.
 
-### Dropping old data using a retention policy
+### Current limitations
+Below are a few current limitations of our database, which we are
+actively working to resolve:
 
-Hypertables allow dropping old data at almost no cost using a built-in API that
-makes it easy to implement retention policies. To drop data older than three months
-from the table `conditions`:
-```sql
-SELECT drop_chunks(interval '3 months', 'conditions');
-```
+- Anyone using TimescaleDB currently needs superuser privileges (this is
+getting fixed very soon)
+- Custom user-created triggers on hypertables currently will not work (i.e.,
+fire)
+- `drop_chunks()` (see our [API Reference](docs/API.md)) is currently only
+supported for hypertables that are not partitioned by space.
 
-This works at the level of table chunks, so if a chunk covers 24 hours of data
-the table might retain up to that amount of additional data (above the three months).
-
-One can also drop chunks from all hypertables in the database by simply doing:
-```sql
-SELECT drop_chunks(interval '3 months');
-```
-
-For automatic data retention, the above calls can be added to (for example)
-a CRON job on the database host.
+### More APIs
+For more information on TimescaleDB's APIs, check out our
+[API Reference](docs/API.md).
 
 ## Testing
 If you want to contribute, please make sure to run the test suite before
-submitting a PR. For a local Postgres installation, you'll need to modify
-your `postgresql.conf` file to add `dblink` and `timescaledb` to the
-`shared_preload_libraries`:
-```
-shared_preload_libraries = 'pg_stat_statements,dblink,timescaledb'
-```
+submitting a PR.
 
-Then to run tests, simply:
+If you are running locally:
 ```bash
 make installcheck
 ```
 
-If you are using Docker, the image already contains the correct settings,
-so to run the tests:
+If you are using Docker:
 ```bash
 make -f docker.mk test
 ```
