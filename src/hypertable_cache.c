@@ -65,6 +65,7 @@ static Cache *hypertable_cache_current = NULL;
 #define HT_TBL_COL_ID 1
 #define HT_TBL_COL_TIME_COL_NAME 10
 #define HT_TBL_COL_TIME_TYPE 11
+#define HT_TBL_COL_CHUNK_SIZE 13
 
 /* Primary key Index column number */
 #define HT_IDX_COL_ID 1
@@ -78,6 +79,7 @@ hypertable_tuple_found(TupleInfo * ti, void *data)
 	Datum		id_datum = heap_getattr(ti->tuple, HT_TBL_COL_ID, ti->desc, &is_null);
 	Datum		time_col_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_COL_NAME, ti->desc, &is_null);
 	Datum		time_type_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_TYPE, ti->desc, &is_null);
+	Datum		chunk_size_datum = heap_getattr(ti->tuple, HT_TBL_COL_CHUNK_SIZE, ti->desc, &is_null);
 	int32		id = DatumGetInt32(id_datum);
 
 	if (id != hctx->hypertable_id)
@@ -89,6 +91,7 @@ hypertable_tuple_found(TupleInfo * ti, void *data)
 	he->id = hctx->hypertable_id;
 	strncpy(he->time_column_name, DatumGetCString(time_col_datum), NAMEDATALEN);
 	he->time_column_type = DatumGetObjectId(time_type_datum);
+	he->chunk_size_bytes = DatumGetInt64(chunk_size_datum);
 
 	return true;
 }

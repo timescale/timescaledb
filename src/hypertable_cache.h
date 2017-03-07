@@ -20,9 +20,11 @@ typedef struct hypertable_cache_entry
 	char		time_column_name[NAMEDATALEN];
 	Oid			time_column_type;
 	int			num_epochs;
+	int64		chunk_size_bytes;
 	/* Array of epoch_and_partitions_set*. Order by start_time */
 	epoch_and_partitions_set *epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY];
 }	hypertable_cache_entry;
+
 
 hypertable_cache_entry *hypertable_cache_get_entry(Cache * cache, int32 hypertable_id);
 

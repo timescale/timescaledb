@@ -48,6 +48,7 @@
 #include "scanner.h"
 #include "catalog.h"
 #include "pgmurmur3.h"
+#include "chunk.h"
 
 #include <utils/tqual.h>
 #include <utils/rls.h>
@@ -81,6 +82,31 @@ get_close_if_needed_fn()
 		MemoryContextSwitchTo(old);
 	}
 	return single;
+}
+
+static void
+close_if_needed(hypertable_cache_entry * hci, chunk_cache_entry * chunk)
+{
+	Name		db_name;
+	Datum		db_name_datum;
+	crn_row    *crn;
+
+	db_name_datum = DirectFunctionCall1(current_database, PointerGetDatum(NULL));
+	db_name = DatumGetName(db_name_datum);
+
+	crn = crn_set_get_crn_row_for_db(chunk->crns, db_name->data);
+	if (crn != NULL)
+	{
+		Datum		size_datum = DirectFunctionCall2(local_chunk_size, NameGetDatum(&crn->schema_name), NameGetDatum(&crn->table_name));
+		int64		size = DatumGetInt64(size_datum);
+
+		if (hci->chunk_size_bytes > size)
+		{
+			return;
+		}
+	}
+	FunctionCall1(get_close_if_needed_fn(), Int32GetDatum(chunk->id));
+	return;
 }
 
 /*
@@ -338,7 +364,6 @@ copy_table_tuple_found(TupleInfo * ti, void *data)
 
 	if (ctx->chunk_ctx == NULL)
 	{
-		Datum		was_closed_datum;
 		chunk_cache_entry *chunk;
 		Cache	   *pinned = chunk_crn_set_cache_pin();
 
@@ -347,7 +372,7 @@ copy_table_tuple_found(TupleInfo * ti, void *data)
 		 * performance)
 		 */
 		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, false);
-		was_closed_datum = FunctionCall1(get_close_if_needed_fn(), Int32GetDatum(chunk->id));
+		close_if_needed(ctx->hci, chunk);
 
 		/*
 		 * chunk may have been closed and thus changed /or/ need to get share
