@@ -622,6 +622,8 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partit
 	fc_const = makeFuncCall(func_name, args_func_const, -1);
 
 	f_var = ParseFuncOrColumn(NULL, func_name, args_func_var, fc_var, -1);
+	exprSetInputCollation(f_var, var_for_fn_call->varcollid);
+
 	f_const = ParseFuncOrColumn(NULL, func_name, args_func_const, fc_const, -1);
 
 	op_expr = make_op(NULL, list_make2(makeString("pg_catalog"), makeString("=")), f_var, f_const, -1);
