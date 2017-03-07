@@ -28,6 +28,15 @@ make
 make install
 ```
 
+Also, you will need to edit your `postgres.conf` file to include
+necessary libraries, and then restart PostgreSQL:
+```bash
+# Modify postgres.conf to add required libraries. For example,
+shared_preload_libraries = 'dblink,timescaledb'
+
+# Then, restart PostgreSQL
+```
+
 ### Option 2: Build and run in Docker
 
 ```bash
