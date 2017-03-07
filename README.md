@@ -51,6 +51,7 @@ You should now have Postgres running locally, accessible with
 the following command:
 
 ```bash
+# access with a superuser named 'postgres'
 psql -U postgres -h localhost
 ```
 
@@ -69,7 +70,7 @@ You again have two options for setting up your initial database:
 When creating a new database, it is necessary to install the extension and then run an initialization function.
 
 ```bash
-# Connect to Postgres
+# Connect to Postgres, using a superuser named 'postgres'
 psql -U postgres -h localhost
 ```
 
