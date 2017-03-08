@@ -250,7 +250,7 @@ change_table_name_walker(Node *node, void *context)
 
 			if (hinfo != NULL)
 			{
-				rangeTableEntry->relid = create_copy_table(hinfo->hypertable_id, hinfo->root_oid);
+				rangeTableEntry->relid = hinfo->root_oid;
 			}
 		}
 		return false;
@@ -792,7 +792,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 
 			if (hinfo != NULL)
 			{
-				copystmt->relation = makeRangeVarFromRelid(create_copy_table(hinfo->hypertable_id, hinfo->root_oid));
+				copystmt->relation = makeRangeVarFromRelid(hinfo->root_oid);
 			}
 		}
 		prev_ProcessUtility((Node *) copystmt, queryString, context, params, dest, completionTag);

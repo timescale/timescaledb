@@ -1,4 +1,7 @@
 \set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
+
 \o /dev/null
 \ir include/insert_two_partitions.sql
 \o

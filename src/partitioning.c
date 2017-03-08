@@ -63,16 +63,33 @@ partitioning_info_create(int num_partitions,
 }
 
 int16
-partitioning_func_apply(PartitioningFunc * pf, Datum value)
+partitioning_func_apply(PartitioningInfo * pinfo, Datum value)
 {
-	Datum text = FunctionCall1(&pf->textfunc_fmgr, value);
+	Datum text = FunctionCall1(&pinfo->partfunc.textfunc_fmgr, value);
 	char	   *partition_val = DatumGetCString(text);
-	Datum		keyspace_datum = FunctionCall2(&pf->func_fmgr,
+	Datum		keyspace_datum = FunctionCall2(&pinfo->partfunc.func_fmgr,
 										  CStringGetTextDatum(partition_val),
-											   Int32GetDatum(pf->modulos));
+									 Int32GetDatum(pinfo->partfunc.modulos));
 
 	return DatumGetInt16(keyspace_datum);
 }
+
+int16
+partitioning_func_apply_tuple(PartitioningInfo * pinfo, HeapTuple tuple, TupleDesc desc)
+{
+	Datum		value;
+	bool		isnull;
+
+	value = heap_getattr(tuple, pinfo->column_attnum, desc, &isnull);
+
+	if (isnull)
+	{
+		return 0;
+	}
+
+	return partitioning_func_apply(pinfo, value);
+}
+
 
 /* Partition epoch index column numbers from sql/common/table.sql */
 #define PE_IDX_COL_HTID 1
@@ -238,6 +255,7 @@ partition_tuple_found(TupleInfo * ti, void *arg)
 	pe->partitions[pctx->num_partitions].keyspace_start = DatumGetInt16(datum);
 	datum = heap_getattr(ti->tuple, PARTITION_TBL_COL_KEYSPACE_END, ti->desc, &is_null);
 	pe->partitions[pctx->num_partitions].keyspace_end = DatumGetInt16(datum);
+	pe->partitions[pctx->num_partitions].index = pctx->num_partitions;
 
 	/* Abort the scan if we have found all partitions */
 	if (pctx->num_partitions == 0)

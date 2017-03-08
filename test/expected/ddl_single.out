@@ -141,8 +141,10 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _copy_temp_1,
-              _timescaledb_internal._hyper_1_0_replica
+Triggers:
+    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger('1')
+    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('1')
+Child tables: _timescaledb_internal._hyper_1_0_replica
 
 \d+ _timescaledb_internal._hyper_1_1_0_1_data
                       Table "_timescaledb_internal._hyper_1_1_0_1_data"
