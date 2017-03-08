@@ -66,22 +66,12 @@ static Catalog catalog = {
 Catalog *
 catalog_get(void)
 {
-	AclResult	aclresult;
 	int			i;
 
 	if (MyDatabaseId == InvalidOid)
 		elog(ERROR, "Invalid database ID");
 
-	/*
-	 * Check that the user has CREATE permissions on the database, since the
-	 * operation may involve creating chunks and inserting into them.
-	 */
-	aclresult = pg_database_aclcheck(MyDatabaseId, GetUserId(), ACL_CREATE);
-
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_DATABASE,
-					   get_database_name(MyDatabaseId));
-
+	
 	if (MyDatabaseId == catalog.database_id)
 		return &catalog;
 

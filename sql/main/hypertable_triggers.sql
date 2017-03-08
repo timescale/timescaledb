@@ -43,10 +43,22 @@ DECLARE
     remote_node _timescaledb_catalog.node;
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        EXECUTE format(
-            $$
-                CREATE SCHEMA IF NOT EXISTS %I
-            $$, NEW.associated_schema_name);
+        DECLARE 
+            cnt INTEGER;
+        BEGIN
+            EXECUTE format(
+                $$
+                    CREATE SCHEMA IF NOT EXISTS %I
+                $$, NEW.associated_schema_name);
+        EXCEPTION
+            WHEN insufficient_privilege THEN
+                SELECT COUNT(*) INTO cnt
+                FROM pg_namespace 
+                WHERE nspname = NEW.associated_schema_name;
+                IF cnt = 0 THEN
+                    RAISE;
+                END IF;
+        END;
 
         PERFORM _timescaledb_internal.create_table(NEW.root_schema_name, NEW.root_table_name);
 
