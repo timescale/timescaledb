@@ -192,6 +192,12 @@ actively working to resolve:
 
 - Anyone using TimescaleDB currently needs superuser privileges (this is
 getting fixed very soon)
+- `create_hypertable()` can only be run on an empty table
+- `COPY`ing a dataset will currently put all data in the same chunk, even if
+chunk size goes over max size. For now we recommend breaking down large
+files for `COPY` (e.g., large CSVs) into smaller files that are slightly
+larger than max_chunk size (currently 1GB).
+We provide `scripts/migrate_data.sh` to help with this.
 - Custom user-created triggers on hypertables currently will not work (i.e.,
 fire)
 - `drop_chunks()` (see our [API Reference](docs/API.md)) is currently only
