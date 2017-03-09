@@ -1,11 +1,14 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
+#include <utils/lsyscache.h>
 #include <storage/lmgr.h>
 #include <access/xact.h>
 #include <storage/bufmgr.h>
+#include <catalog/namespace.h>
 
 #include "chunk_cache.h"
+#include "chunk.h"
 #include "catalog.h"
 #include "cache.h"
 #include "hypertable_cache.h"
@@ -15,47 +18,39 @@
 #include "scanner.h"
 
 /*
- * Chunk Insert Plan Cache:
+ * Chunk cache.
  *
- * Hashtable of chunk_id =>  chunk_crn_set_htable_entry.
+ * This cache stores information about chunks (and their replicas) in the
+ * database. Chunks are stored in the cache by chunk ID.
  *
- * This cache stores plans for the execution of the command for moving stuff
- * from the copy table to the tables associated with the chunk.
- *
- * Retrieval: each chunk has one associated plan. If the chunk's start/end time
- * changes then the old plan is freed and a new plan is regenerated
- *
- * NOTE: chunks themselves do not have a cache since they need to be locked for
- * each insert anyway...
- *
+ * However, since a chunk's ID is generally unknown at lookup time or the chunk
+ * may not yet exist, one typically has to scan the chunk table first to find
+ * the chunk ID for a specific tuple's time point and partition. The cache
+ * therefore mostly serves to store information about a chunk's replicas, which
+ * otherwise would require an additional table scan.
  */
-typedef struct chunk_crn_set_htable_entry
-{
-	int32		chunk_id;
-	int64		start_time;
-	int64		end_time;
-	crn_set    *crns;
-}	chunk_crn_set_htable_entry;
+static Cache *chunk_cache_current = NULL;
 
 typedef struct ChunkCacheQueryCtx
 {
 	CacheQueryCtx cctx;
-	int32		chunk_id;
-	int64		chunk_start_time;
-	int64		chunk_end_time;
+	Chunk	   *stub_chunk;
 }	ChunkCacheQueryCtx;
 
+
 static void *
-chunk_crn_set_cache_get_key(CacheQueryCtx * ctx)
+chunk_cache_get_key(CacheQueryCtx * ctx)
 {
-	return &((ChunkCacheQueryCtx *) ctx)->chunk_id;
+	return &((ChunkCacheQueryCtx *) ctx)->stub_chunk->id;
 }
 
-static void *chunk_crn_set_cache_create_entry(Cache * cache, CacheQueryCtx * ctx);
-static void *chunk_crn_set_cache_update_entry(Cache * cache, CacheQueryCtx * ctx);
+/* Cache entry for chunk replicas */
+
+static void *chunk_cache_create_entry(Cache * cache, CacheQueryCtx * ctx);
+static void *chunk_cache_update_entry(Cache * cache, CacheQueryCtx * ctx);
 
 static Cache *
-chunk_crn_set_cache_create()
+chunk_cache_create()
 {
 	MemoryContext ctx = AllocSetContextCreate(CacheMemoryContext,
 											  CHUNK_CACHE_INVAL_PROXY_TABLE,
@@ -63,112 +58,178 @@ chunk_crn_set_cache_create()
 
 	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));
 
-	Cache		tmp = (Cache)
-	{
+	Cache		template = {
 		.hctl =
 		{
 			.keysize = sizeof(int32),
-			.entrysize = sizeof(chunk_crn_set_htable_entry),
+			.entrysize = sizeof(Chunk),
 			.hcxt = ctx,
 		},
 		.name = CHUNK_CACHE_INVAL_PROXY_TABLE,
 		.numelements = 16,
 		.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
-		.get_key = chunk_crn_set_cache_get_key,
-		.create_entry = chunk_crn_set_cache_create_entry,
-		.update_entry = chunk_crn_set_cache_update_entry,
+		.get_key = chunk_cache_get_key,
+		.create_entry = chunk_cache_create_entry,
+		.update_entry = chunk_cache_update_entry,
 	};
 
-	*cache = tmp;
+	*cache = template;
 
 	cache_init(cache);
 
 	return cache;
 }
 
-static Cache *chunk_crn_set_cache_current = NULL;
 
-static void *
-chunk_crn_set_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
+typedef struct ReplicaScanCtx
 {
-	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
-	chunk_crn_set_htable_entry *pe = ctx->entry;
-	MemoryContext old;
+	ChunkReplica *replicas;
+	int			num_replicas;
+}	ReplicaScanCtx;
 
-	pe->chunk_id = cctx->chunk_id;
-	pe->start_time = cctx->chunk_start_time;
-	pe->end_time = cctx->chunk_end_time;
+static bool
+chunk_replica_tuple_found(TupleInfo * ti, void *arg)
+{
+	ReplicaScanCtx *ctx = arg;
+	ChunkReplica *cr;
+	Datum		values[Natts_chunk_replica_node];
+	bool		isnull[Natts_chunk_replica_node];
 
-	/* TODO: old crn leaks memory here... */
-	old = cache_switch_to_memory_context(cache);
-	pe->crns = fetch_crn_set(NULL, pe->chunk_id);
-	MemoryContextSwitchTo(old);
+	cr = &ctx->replicas[--ctx->num_replicas];
 
-	return pe;
+	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
+
+	strncpy(cr->database_name,
+	DatumGetCString(DATUM_GET(values, Anum_chunk_replica_node_database_name)),
+			NAMEDATALEN);
+	strncpy(cr->schema_name,
+	 DatumGetCString(DATUM_GET(values, Anum_chunk_replica_node_schema_name)),
+			NAMEDATALEN);
+	strncpy(cr->table_name,
+	  DatumGetCString(DATUM_GET(values, Anum_chunk_replica_node_table_name)),
+			NAMEDATALEN);
+
+	cr->schema_id = get_namespace_oid(cr->schema_name, false);
+	cr->table_id = get_relname_relid(cr->table_name, cr->schema_id);
+
+	if (ctx->num_replicas == 0)
+		return false;
+
+	return true;
+}
+
+static ChunkReplica *
+chunk_replica_scan(int32 chunk_id, int num_replicas)
+{
+	ScanKeyData scankey[1];
+	Catalog    *catalog = catalog_get();
+	ReplicaScanCtx cctx = {
+		.num_replicas = num_replicas,
+		.replicas = palloc(sizeof(ChunkReplica) * num_replicas),
+	};
+	ScannerCtx	ctx = {
+		.table = catalog->tables[CHUNK_REPLICA_NODE].id,
+		.index = catalog->tables[CHUNK_REPLICA_NODE].index_ids[CHUNK_REPLICA_NODE_ID_INDEX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = &cctx,
+		.tuple_found = chunk_replica_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	/*
+	 * Perform an index scan on the chunk ID to find all replicas.
+	 */
+	ScanKeyInit(&scankey[0], Anum_chunk_replica_node_pkey_idx_chunk_id, BTEqualStrategyNumber,
+				F_INT4EQ, Int32GetDatum(chunk_id));
+
+	scanner_scan(&ctx);
+
+	return cctx.replicas;
 }
 
 static void *
-chunk_crn_set_cache_update_entry(Cache * cache, CacheQueryCtx * ctx)
+chunk_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 {
 	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
-	chunk_crn_set_htable_entry *pe = ctx->entry;
+	Chunk	   *chunk = ctx->entry;
 	MemoryContext old;
 
-	if (pe->start_time == cctx->chunk_start_time &&
-		pe->end_time == cctx->chunk_end_time)
-		return pe;
-
 	old = cache_switch_to_memory_context(cache);
-	pe->crns = fetch_crn_set(NULL, pe->chunk_id);
+
+	chunk->id = cctx->stub_chunk->id;
+	chunk->start_time = cctx->stub_chunk->start_time;
+	chunk->end_time = cctx->stub_chunk->end_time;
+	chunk->num_replicas = cctx->stub_chunk->num_replicas;
+	chunk->replicas = chunk_replica_scan(chunk->id, chunk->num_replicas);
+
 	MemoryContextSwitchTo(old);
 
-	return pe;
+	return chunk;
+}
+
+
+static void *
+chunk_cache_update_entry(Cache * cache, CacheQueryCtx * ctx)
+{
+	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
+	Chunk	   *chunk = ctx->entry;
+	MemoryContext old;
+
+	if (chunk->start_time == cctx->stub_chunk->start_time &&
+		chunk->end_time == cctx->stub_chunk->end_time &&
+		chunk->replicas != NULL)
+	{
+		return chunk;
+	}
+
+	old = cache_switch_to_memory_context(cache);
+
+	chunk->id = cctx->stub_chunk->id;
+	chunk->start_time = cctx->stub_chunk->start_time;
+	chunk->end_time = cctx->stub_chunk->end_time;
+	chunk->num_replicas = cctx->stub_chunk->num_replicas;
+
+	if (chunk->replicas != NULL && chunk->num_replicas != cctx->stub_chunk->num_replicas)
+	{
+		pfree(chunk->replicas);
+		chunk->replicas = chunk_replica_scan(chunk->id, chunk->num_replicas);
+	}
+
+	MemoryContextSwitchTo(old);
+
+	return chunk;
 }
 
 void
-chunk_crn_set_cache_invalidate_callback(void)
+chunk_cache_invalidate_callback(void)
 {
-	CACHE1_elog(WARNING, "DESTROY chunk_crn_set_cache");
-	cache_invalidate(chunk_crn_set_cache_current);
-	chunk_crn_set_cache_current = chunk_crn_set_cache_create();
+	CACHE1_elog(WARNING, "DESTROY chunk cache");
+	cache_invalidate(chunk_cache_current);
+	chunk_cache_current = chunk_cache_create();
 }
 
-static chunk_crn_set_htable_entry *
-chunk_crn_set_cache_get_entry(Cache * cache, int32 chunk_id, int64 chunk_start_time, int64 chunk_end_time)
+static Chunk *
+chunk_cache_get_from_stub(Cache * cache, Chunk * stub_chunk)
 {
 	ChunkCacheQueryCtx ctx = {
-		.chunk_id = chunk_id,
-		.chunk_start_time = chunk_start_time,
-		.chunk_end_time = chunk_end_time,
+		.stub_chunk = stub_chunk,
 	};
 
 	if (cache == NULL)
 	{
-		cache = chunk_crn_set_cache_current;
+		cache = chunk_cache_current;
 	}
 
 	return cache_fetch(cache, &ctx.cctx);
 }
 
 extern Cache *
-chunk_crn_set_cache_pin()
+chunk_cache_pin()
 {
-	return cache_pin(chunk_crn_set_cache_current);
-}
-
-
-static chunk_row *
-chunk_row_create(int32 id, int32 partition_id, int64 starttime, int64 endtime)
-{
-	chunk_row  *chunk;
-
-	chunk = palloc(sizeof(chunk_row));
-	chunk->id = id;
-	chunk->partition_id = partition_id;
-	chunk->start_time = starttime;
-	chunk->end_time = endtime;
-
-	return chunk;
+	return cache_pin(chunk_cache_current);
 }
 
 /* Chunk table column numbers */
@@ -184,12 +245,13 @@ chunk_row_create(int32 id, int32 partition_id, int64 starttime, int64 endtime)
 
 typedef struct ChunkScanCtx
 {
-	chunk_row  *chunk;
+	Chunk	   *chunk;
 	Oid			chunk_tbl_id;
 	int32		partition_id;
 	int64		starttime,
 				endtime,
 				timepoint;
+	int16		num_replicas;
 	bool		should_lock;
 }	ChunkScanCtx;
 
@@ -221,12 +283,12 @@ chunk_tuple_found(TupleInfo * ti, void *arg)
 	Datum		id;
 
 	id = heap_getattr(ti->tuple, CHUNK_TBL_COL_ID, ti->desc, &is_null);
-	ctx->chunk = chunk_row_create(DatumGetInt32(id), ctx->partition_id,
-								  ctx->starttime, ctx->endtime);
+	ctx->chunk = chunk_create(DatumGetInt32(id), ctx->partition_id,
+							ctx->starttime, ctx->endtime, ctx->num_replicas);
 	return false;
 }
 
-static chunk_row *
+static Chunk *
 chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 {
 	ScanKeyData scankey[1];
@@ -266,40 +328,33 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 
 /*
  *	Get chunk cache entry.
- *	The cache parameter is a chunk_crn_set_cache (can be null to use current cache).
  */
-chunk_cache_entry *
-get_chunk_cache_entry(Cache * cache, Partition * part, int64 timepoint, bool lock)
+Chunk *
+chunk_cache_get(Cache * cache, Partition * part, int16 num_replicas, int64 timepoint, bool lock)
 {
-	chunk_crn_set_htable_entry *chunk_crn_cache;
-	chunk_cache_entry *entry;
-	chunk_row  *chunk;
+	Chunk	   *stub_chunk;
 
-	chunk = chunk_scan(part->id, timepoint, lock);
+	stub_chunk = chunk_scan(part->id, timepoint, lock);
 
-	if (chunk == NULL)
+	if (stub_chunk == NULL)
 	{
-		chunk = chunk_row_insert_new(part->id, timepoint, lock);
+		stub_chunk = chunk_insert_new(part->id, timepoint, lock);
 	}
 
-	entry = palloc(sizeof(chunk_cache_entry));
-	entry->chunk = chunk;
-	entry->id = chunk->id;
-	chunk_crn_cache = chunk_crn_set_cache_get_entry(cache, chunk->id,
-										 chunk->start_time, chunk->end_time);
-	entry->crns = chunk_crn_cache->crns;
-	return entry;
+	stub_chunk->num_replicas = num_replicas;
+
+	return chunk_cache_get_from_stub(cache, stub_chunk);
 }
 
 void
 _chunk_cache_init(void)
 {
 	CreateCacheMemoryContext();
-	chunk_crn_set_cache_current = chunk_crn_set_cache_create();
+	chunk_cache_current = chunk_cache_create();
 }
 
 void
 _chunk_cache_fini(void)
 {
-	cache_invalidate(chunk_crn_set_cache_current);
+	cache_invalidate(chunk_cache_current);
 }

@@ -61,26 +61,21 @@ hypertable_cache_create()
 
 
 static Cache *hypertable_cache_current = NULL;
-/* Column numbers for 'hypertable' table in  sql/common/tables.sql */
-#define HT_TBL_COL_ID 1
-#define HT_TBL_COL_TIME_COL_NAME 10
-#define HT_TBL_COL_TIME_TYPE 11
-#define HT_TBL_COL_CHUNK_SIZE 13
 
-/* Primary key Index column number */
-#define HT_IDX_COL_ID 1
+/* Column numbers for 'hypertable' table in  sql/common/tables.sql */
 
 static bool
 hypertable_tuple_found(TupleInfo * ti, void *data)
 {
-	bool		is_null;
 	HypertableCacheQueryCtx *hctx = data;
 	hypertable_cache_entry *he = hctx->cctx.entry;
-	Datum		id_datum = heap_getattr(ti->tuple, HT_TBL_COL_ID, ti->desc, &is_null);
-	Datum		time_col_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_COL_NAME, ti->desc, &is_null);
-	Datum		time_type_datum = heap_getattr(ti->tuple, HT_TBL_COL_TIME_TYPE, ti->desc, &is_null);
-	Datum		chunk_size_datum = heap_getattr(ti->tuple, HT_TBL_COL_CHUNK_SIZE, ti->desc, &is_null);
-	int32		id = DatumGetInt32(id_datum);
+	Datum		values[Natts_hypertable];
+	bool		isnull[Natts_hypertable];
+	int32		id;
+
+	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
+
+	id = DatumGetInt32(DATUM_GET(values, Anum_hypertable_id));
 
 	if (id != hctx->hypertable_id)
 	{
@@ -89,11 +84,14 @@ hypertable_tuple_found(TupleInfo * ti, void *data)
 
 	he->num_epochs = 0;
 	he->id = hctx->hypertable_id;
-	strncpy(he->time_column_name, DatumGetCString(time_col_datum), NAMEDATALEN);
-	he->time_column_type = DatumGetObjectId(time_type_datum);
-	he->chunk_size_bytes = DatumGetInt64(chunk_size_datum);
+	strncpy(he->time_column_name,
+		DatumGetCString(DATUM_GET(values, Anum_hypertable_time_column_name)),
+			NAMEDATALEN);
+	he->time_column_type = DatumGetObjectId(DATUM_GET(values, Anum_hypertable_time_column_type));
+	he->chunk_size_bytes = DatumGetInt64(DATUM_GET(values, Anum_hypertable_chunk_size_bytes));
+	he->num_replicas = DatumGetInt16(DATUM_GET(values, Anum_hypertable_replication_factor));
 
-	return true;
+	return false;
 }
 
 static void *
@@ -115,7 +113,7 @@ hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 	};
 
 	/* Perform an index scan on primary key. */
-	ScanKeyInit(&scankey[0], HT_IDX_COL_ID, BTEqualStrategyNumber,
+	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id, BTEqualStrategyNumber,
 				F_INT4EQ, Int32GetDatum(hctx->hypertable_id));
 
 	scanner_scan(&scanCtx);
@@ -197,7 +195,7 @@ hypertable_cache_get_partition_epoch(Cache * cache, hypertable_cache_entry * hce
 	if (hce->num_epochs == MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY)
 	{
 		/* remove last */
-		free_epoch(hce->epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY - 1]);
+		partition_epoch_free(hce->epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY - 1]);
 		hce->epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY - 1] = NULL;
 		hce->num_epochs--;
 	}

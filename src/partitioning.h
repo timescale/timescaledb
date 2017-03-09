@@ -7,6 +7,9 @@
 #include <access/attnum.h>
 #include <fmgr.h>
 
+#define OPEN_START_TIME -1
+#define OPEN_END_TIME PG_INT64_MAX
+
 typedef struct Partition
 {
 	int32		id;
@@ -58,6 +61,7 @@ epoch_and_partitions_set *partition_epoch_scan(int32 hypertable_id, int64 timepo
 int16		partitioning_func_apply(PartitioningFunc * pf, Datum value);
 
 Partition  *partition_epoch_get_partition(epoch_and_partitions_set * epoch, int16 keyspace_pt);
+void		partition_epoch_free(epoch_and_partitions_set * epoch);
 
 bool		partition_keyspace_pt_is_member(const Partition * part, const int16 keyspace_pt);
 #endif   /* TIMESCALEDB_PARTITIONING_H */

@@ -1,5 +1,7 @@
 #include <postgres.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <catalog/namespace.h>
 
 #include "partitioning.h"
 #include "metadata_queries.h"
@@ -144,6 +146,14 @@ partition_epoch_create(int32 epoch_id, PartitionEpochCtx * ctx)
 	pe->start_time = ctx->starttime;
 	pe->end_time = ctx->endtime;
 	return pe;
+}
+
+void
+partition_epoch_free(epoch_and_partitions_set * epoch)
+{
+	if (epoch->partitioning != NULL)
+		pfree(epoch->partitioning);
+	pfree(epoch);
 }
 
 /* Callback for partition epoch scan. For every epoch tuple found, create a

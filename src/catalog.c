@@ -11,6 +11,7 @@ static char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[PARTITION] = PARTITION_TABLE_NAME,
 	[PARTITION_EPOCH] = PARTITION_EPOCH_TABLE_NAME,
 	[CHUNK] = CHUNK_TABLE_NAME,
+	[CHUNK_REPLICA_NODE] = CHUNK_REPLICA_NODE_TABLE_NAME,
 };
 
 typedef struct TableIndexDef
@@ -45,6 +46,12 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_PARTITION_TIME_INDEX] = "chunk_partition_id_start_time_end_time_idx",
+		}
+	},
+	[CHUNK_REPLICA_NODE] = {
+		.length = _MAX_CHUNK_REPLICA_NODE_INDEX,
+		.names = (char *[]) {
+			[CHUNK_REPLICA_NODE_ID_INDEX] = "chunk_replica_node_pkey",
 		}
 	},
 };
