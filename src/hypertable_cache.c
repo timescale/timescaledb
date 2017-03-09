@@ -104,7 +104,7 @@ hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 	ScanKeyData scankey[1];
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[HYPERTABLE].id,
-		.index = catalog->tables[HYPERTABLE].index_id,
+		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_ID_INDEX],
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,

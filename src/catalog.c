@@ -13,12 +13,42 @@ static char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[CHUNK] = CHUNK_TABLE_NAME,
 };
 
-static char *catalog_table_index_names[_MAX_CATALOG_TABLES] = {
-	[HYPERTABLE] = HYPERTABLE_INDEX_NAME,
-	[PARTITION] = PARTITION_INDEX_NAME,
-	[PARTITION_EPOCH] = PARTITION_EPOCH_INDEX_NAME,
-	[CHUNK] = CHUNK_INDEX_NAME,
+typedef struct TableIndexDef
+{
+	size_t		length;
+	char	  **names;
+}	TableIndexDef;
+
+const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] = {
+	[HYPERTABLE] = {
+		.length = _MAX_HYPERTABLE_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
+		}
+	},
+	[PARTITION] = {
+		.length = _MAX_PARTITION_INDEX,
+		.names = (char *[]) {
+			[PARTITION_ID_INDEX] = "partition_pkey",
+			[PARTITION_PARTITION_EPOCH_ID_INDEX] = "partition_epoch_id_idx",
+		}
+	},
+	[PARTITION_EPOCH] = {
+		.length = _MAX_PARTITION_EPOCH_INDEX,
+		.names = (char *[]) {
+			[PARTITION_EPOCH_ID_INDEX] = "partition_epoch_pkey",
+			[PARTITION_EPOCH_TIME_INDEX] = "partition_epoch_hypertable_id_start_time_end_time_idx",
+		}
+	},
+	[CHUNK] = {
+		.length = _MAX_CHUNK_INDEX,
+		.names = (char *[]) {
+			[CHUNK_ID_INDEX] = "chunk_pkey",
+			[CHUNK_PARTITION_TIME_INDEX] = "chunk_partition_id_start_time_end_time_idx",
+		}
+	},
 };
+
 
 /* Catalog information for the current database. Should probably be invalidated
  * if the extension is unloaded for the database. */
@@ -61,6 +91,8 @@ catalog_get(void)
 	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
 	{
 		Oid			id;
+		int			number_indexes,
+					j;
 
 		id = get_relname_relid(catalog_table_names[i], catalog.schema_id);
 
@@ -71,14 +103,20 @@ catalog_get(void)
 
 		catalog.tables[i].id = id;
 
-		id = get_relname_relid(catalog_table_index_names[i], catalog.schema_id);
+		number_indexes = catalog_table_index_definitions[i].length;
+		Assert(number_indexes <= _MAX_TABLE_INDEXES);
 
-		if (id == InvalidOid)
+		for (j = 0; j < number_indexes; j++)
 		{
-			elog(ERROR, "Oid lookup failed for table index %s", catalog_table_index_names[i]);
+			id = get_relname_relid(catalog_table_index_definitions[i].names[j], catalog.schema_id);
+			if (id == InvalidOid)
+			{
+				elog(ERROR, "Oid lookup failed for table index %s", catalog_table_index_definitions[i].names[j]);
+			}
+
+			catalog.tables[i].index_ids[j] = id;
 		}
 
-		catalog.tables[i].index_id = id;
 		catalog.tables[i].name = catalog_table_names[i];
 	}
 

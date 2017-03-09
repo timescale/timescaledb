@@ -237,7 +237,7 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 	};
 	ScannerCtx	ctx = {
 		.table = catalog->tables[CHUNK].id,
-		.index = get_relname_relid(CHUNK_PARTITION_TIME_INDEX_NAME, catalog->schema_id),
+		.index = catalog->tables[CHUNK].index_ids[CHUNK_PARTITION_TIME_INDEX],
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
