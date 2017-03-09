@@ -16,22 +16,43 @@ enum catalog_table
 
 /* Hypertable table definitions */
 #define HYPERTABLE_TABLE_NAME "hypertable"
-#define HYPERTABLE_INDEX_NAME "hypertable_pkey"
+enum
+{
+	HYPERTABLE_ID_INDEX = 0,
+	_MAX_HYPERTABLE_INDEX,
+};
 
 /* Partition epoch table definitions */
 #define PARTITION_EPOCH_TABLE_NAME "partition_epoch"
-#define PARTITION_EPOCH_INDEX_NAME "partition_epoch_pkey"
-#define PARTITION_EPOCH_TIME_INDEX_NAME "partition_epoch_hypertable_id_start_time_end_time_idx"
+
+enum
+{
+	PARTITION_EPOCH_ID_INDEX = 0,
+	PARTITION_EPOCH_TIME_INDEX,
+	_MAX_PARTITION_EPOCH_INDEX,
+};
 
 /* Partition table definitions */
 #define PARTITION_TABLE_NAME "partition"
-#define PARTITION_INDEX_NAME "partition_pkey"
-#define PARTITION_EPOCH_ID_INDEX_NAME "partition_epoch_id_idx"
+enum
+{
+	PARTITION_ID_INDEX = 0,
+	PARTITION_PARTITION_EPOCH_ID_INDEX,
+	_MAX_PARTITION_INDEX,
+};
 
 /* Chunk table definitions */
 #define CHUNK_TABLE_NAME "chunk"
-#define CHUNK_INDEX_NAME "chunk_pkey"
-#define CHUNK_PARTITION_TIME_INDEX_NAME "chunk_partition_id_start_time_end_time_idx"
+enum
+{
+	CHUNK_ID_INDEX = 0,
+	CHUNK_PARTITION_TIME_INDEX,
+	_MAX_CHUNK_INDEX,
+};
+
+#define _MAX_TABLE_INDEXES Max(_MAX_HYPERTABLE_INDEX,\
+							   Max(_MAX_PARTITION_EPOCH_INDEX, \
+								   Max(_MAX_PARTITION_INDEX, _MAX_CHUNK_INDEX)))
 
 typedef struct Catalog
 {
@@ -42,7 +63,7 @@ typedef struct Catalog
 	{
 		const char *name;
 		Oid			id;
-		Oid			index_id;
+		Oid			index_ids[_MAX_TABLE_INDEXES];
 	}			tables[_MAX_CATALOG_TABLES];
 }	Catalog;
 

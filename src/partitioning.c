@@ -244,7 +244,7 @@ partition_scan(PartitionEpochCtx * pctx)
 	int			num_partitions = pctx->num_partitions;
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[PARTITION].id,
-		.index = get_relname_relid(PARTITION_EPOCH_ID_INDEX_NAME, catalog->schema_id),
+		.index = catalog->tables[PARTITION].index_ids[PARTITION_PARTITION_EPOCH_ID_INDEX],
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
@@ -287,7 +287,7 @@ partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid)
 	};
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[PARTITION_EPOCH].id,
-		.index = get_relname_relid(PARTITION_EPOCH_TIME_INDEX_NAME, catalog->schema_id),
+		.index = catalog->tables[PARTITION_EPOCH].index_ids[PARTITION_EPOCH_TIME_INDEX],
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
