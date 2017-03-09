@@ -81,13 +81,13 @@ BEGIN
         EXECUTE format(
             $$
                 CREATE TRIGGER insert_trigger BEFORE INSERT ON %I.%I
-                FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger(%L);
-            $$, NEW.root_schema_name, NEW.root_table_name, NEW.id);
+                FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger(%L, %L);
+            $$, NEW.root_schema_name, NEW.root_table_name, NEW.schema_name, NEW.table_name);
         EXECUTE format(
             $$
                 CREATE TRIGGER after_insert_trigger AFTER INSERT ON %I.%I
-                FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger(%L);
-            $$, NEW.root_schema_name, NEW.root_table_name, NEW.id);
+                FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger();
+            $$, NEW.root_schema_name, NEW.root_table_name);
         RETURN NEW;
     END IF;
 

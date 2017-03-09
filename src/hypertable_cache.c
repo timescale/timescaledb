@@ -1,12 +1,15 @@
 #include <postgres.h>
 #include <access/relscan.h>
+#include <catalog/namespace.h>
 #include <utils/catcache.h>
 #include <utils/rel.h>
 #include <utils/fmgroids.h>
 #include <utils/tqual.h>
 #include <utils/acl.h>
+#include <utils/lsyscache.h>
 
 #include "hypertable_cache.h"
+#include "hypertable_replica.h"
 #include "catalog.h"
 #include "cache.h"
 #include "metadata_queries.h"
@@ -14,19 +17,28 @@
 #include "scanner.h"
 #include "partitioning.h"
 
-static void *hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx);
+static void *hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx);
 
 typedef struct HypertableCacheQueryCtx
 {
 	CacheQueryCtx cctx;
-	int32		hypertable_id;
-}	HypertableCacheQueryCtx;
+	Oid			main_table_relid;
+	char	   *schema;
+	char	   *table_name;
+} HypertableCacheQueryCtx;
 
 static void *
-hypertable_cache_get_key(CacheQueryCtx * ctx)
+hypertable_cache_get_key(CacheQueryCtx *ctx)
 {
-	return &((HypertableCacheQueryCtx *) ctx)->hypertable_id;
+	return &((HypertableCacheQueryCtx *) ctx)->main_table_relid;
 }
+
+typedef struct
+{
+	Oid			main_table_relid;
+	bool		negative;		/* true if no such hypertable exists */
+	Hypertable	entry;
+} HypertableNameCacheEntry;
 
 
 static Cache *
@@ -42,8 +54,8 @@ hypertable_cache_create()
 	{
 		.hctl =
 		{
-			.keysize = sizeof(int32),
-			.entrysize = sizeof(Hypertable),
+			.keysize = sizeof(Oid),
+			.entrysize = sizeof(HypertableNameCacheEntry),
 			.hcxt = ctx,
 		},
 		.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
@@ -65,25 +77,31 @@ static Cache *hypertable_cache_current = NULL;
 /* Column numbers for 'hypertable' table in  sql/common/tables.sql */
 
 static bool
-hypertable_tuple_found(TupleInfo * ti, void *data)
+hypertable_tuple_found(TupleInfo *ti, void *data)
 {
-	HypertableCacheQueryCtx *hctx = data;
-	Hypertable *he = hctx->cctx.entry;
+	Hypertable *he = data;
 	Datum		values[Natts_hypertable];
 	bool		isnull[Natts_hypertable];
+	char	   *root_table_name;
+	char	   *root_table_schema;
 	int32		id;
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
 
 	id = DatumGetInt32(DATUM_GET(values, Anum_hypertable_id));
 
-	if (id != hctx->hypertable_id)
-	{
-		elog(ERROR, "Expected hypertable ID %u, got %u", hctx->hypertable_id, id);
-	}
-
 	he->num_epochs = 0;
-	he->id = hctx->hypertable_id;
+	he->id = id;
+	strncpy(he->schema,
+			DatumGetCString(DATUM_GET(values, Anum_hypertable_schema_name)),
+			NAMEDATALEN);
+	strncpy(he->table,
+			DatumGetCString(DATUM_GET(values, Anum_hypertable_table_name)),
+			NAMEDATALEN);
+	root_table_name = DatumGetCString(DATUM_GET(values, Anum_hypertable_root_table_name));
+	root_table_schema = DatumGetCString(DATUM_GET(values, Anum_hypertable_root_schema_name));
+	he->root_table = get_relname_relid(root_table_name, get_namespace_oid(root_table_schema, false));
+	he->replica_table = hypertable_replica_get_table_relid(id);
 	strncpy(he->time_column_name,
 		DatumGetCString(DATUM_GET(values, Anum_hypertable_time_column_name)),
 			NAMEDATALEN);
@@ -95,29 +113,60 @@ hypertable_tuple_found(TupleInfo * ti, void *data)
 }
 
 static void *
-hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
+hypertable_cache_create_entry(Cache *cache, CacheQueryCtx *ctx)
 {
 	HypertableCacheQueryCtx *hctx = (HypertableCacheQueryCtx *) ctx;
 	Catalog    *catalog = catalog_get();
-	ScanKeyData scankey[1];
+	HypertableNameCacheEntry *cache_entry = hctx->cctx.entry;
+	Hypertable *he = &cache_entry->entry;
+	int			number_found;
+	char	   *schema = hctx->schema;
+	char	   *table_name = hctx->table_name;
+	ScanKeyData scankey[2];
+
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[HYPERTABLE].id,
-		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_ID_INDEX],
+		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_NAME_INDEX],
 		.scantype = ScannerTypeIndex,
-		.nkeys = 1,
+		.nkeys = 2,
 		.scankey = scankey,
-		.data = ctx,
+		.data = he,
 		.tuple_found = hypertable_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
 
-	/* Perform an index scan on primary key. */
-	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id, BTEqualStrategyNumber,
-				F_INT4EQ, Int32GetDatum(hctx->hypertable_id));
+	if (NULL == schema)
+	{
+		schema = get_namespace_name(get_rel_namespace(hctx->main_table_relid));
+	}
+	if (NULL == table_name)
+	{
+		table_name = get_rel_name(hctx->main_table_relid);
+	}
 
-	scanner_scan(&scanCtx);
+	/* Perform an index scan on schema and table. */
+	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(schema));
+	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
+				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(table_name));
 
+	number_found = scanner_scan(&scanCtx);
+	switch (number_found)
+	{
+		case 0:
+			cache_entry->negative = true;
+			break;
+		case 1:
+			cache_entry->negative = false;
+			Assert(strncmp(he->schema, get_namespace_name(get_rel_namespace(hctx->main_table_relid)), NAMEDATALEN) == 0);
+			Assert(strncmp(he->table, get_rel_name(hctx->main_table_relid), NAMEDATALEN) == 0);
+			break;
+		default:
+			elog(ERROR, "Got an unexpected number of records: %d", number_found);
+			break;
+
+	}
 	return ctx->entry;
 }
 
@@ -129,16 +178,32 @@ hypertable_cache_invalidate_callback(void)
 	hypertable_cache_current = hypertable_cache_create();
 }
 
-
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 Hypertable *
-hypertable_cache_get_entry(Cache * cache, int32 hypertable_id)
+hypertable_cache_get_entry(Cache *cache, Oid main_table_relid)
+{
+	return hypertable_cache_get_entry_with_table(cache, main_table_relid, NULL, NULL);
+}
+
+Hypertable *
+hypertable_cache_get_entry_with_table(Cache *cache, Oid main_table_relid, char *schema, char *table_name)
 {
 	HypertableCacheQueryCtx ctx = {
-		.hypertable_id = hypertable_id,
+		.main_table_relid = main_table_relid,
+		.schema = schema,
+		.table_name = table_name,
 	};
 
-	return cache_fetch(cache, &ctx.cctx);
+	HypertableNameCacheEntry *entry = cache_fetch(cache, &ctx.cctx);
+
+	if (entry->negative)
+	{
+		return NULL;
+	}
+	else
+	{
+		return &entry->entry;
+	}
 }
 
 /* function to compare epochs */
@@ -162,7 +227,7 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 }
 
 PartitionEpoch *
-hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid)
+hypertable_cache_get_partition_epoch(Cache *cache, Hypertable * hce, int64 time_pt, Oid relid)
 {
 	MemoryContext old;
 	PartitionEpoch *epoch,

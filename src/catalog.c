@@ -8,6 +8,8 @@
 
 static char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
+	[HYPERTABLE_REPLICA] = HYPERTABLE_REPLICA_TABLE_NAME,
+	[DEFAULT_REPLICA_NODE] = DEFAULT_REPLICA_NODE_TABLE_NAME,
 	[PARTITION] = PARTITION_TABLE_NAME,
 	[PARTITION_EPOCH] = PARTITION_EPOCH_TABLE_NAME,
 	[CHUNK] = CHUNK_TABLE_NAME,
@@ -18,13 +20,26 @@ typedef struct TableIndexDef
 {
 	size_t		length;
 	char	  **names;
-}	TableIndexDef;
+} TableIndexDef;
 
 const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = {
 		.length = _MAX_HYPERTABLE_INDEX,
 		.names = (char *[]) {
 			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
+			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
+		}
+	},
+	[HYPERTABLE_REPLICA] = {
+		.length = _MAX_HYPERTABLE_REPLICA_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_REPLICA_HYPERTABLE_REPLICA_INDEX] = "hypertable_replica_pkey",
+		}
+	},
+	[DEFAULT_REPLICA_NODE] = {
+		.length = _MAX_DEFAULT_REPLICA_NODE_INDEX,
+		.names = (char *[]) {
+			[DEFAULT_REPLICA_NODE_DATABASE_HYPERTABLE_INDEX] = "default_replica_node_pkey",
 		}
 	},
 	[PARTITION] = {

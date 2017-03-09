@@ -19,6 +19,7 @@ SRCS = \
 	src/chunk.c \
 	src/scanner.c \
 	src/hypertable_cache.c \
+	src/hypertable_replica.c \
 	src/chunk_cache.c \
 	src/partitioning.c \
 	src/insert.c

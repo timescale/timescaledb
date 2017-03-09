@@ -118,7 +118,7 @@ SELECT * FROM chunk_closing_test;
 ERROR:  permission denied for relation _hyper_2_0_replica
 --todo fix error message here:
 SELECT * FROM "testNs";
-ERROR:  permission denied for schema testNs
+ERROR:  permission denied for relation _hyper_1_0_replica
 \set ON_ERROR_STOP 1
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');

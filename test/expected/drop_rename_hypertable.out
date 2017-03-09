@@ -281,8 +281,8 @@ Child tables: _timescaledb_internal._hyper_1_2_0_3_data
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Triggers:
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger('1')
-    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('1')
+    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
+    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'testNs')
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
             Table "_timescaledb_internal._hyper_2_0_replica"
@@ -358,15 +358,15 @@ Inherits: _timescaledb_internal._hyper_2_0_replica
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
 Triggers:
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_2_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger('2')
-    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_2_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('2')
+    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_2_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
+    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_2_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'chunk_closing_test')
 Child tables: _timescaledb_internal._hyper_2_0_replica
 
 -- Test that renaming hypertable is blocked
+\set VERBOSITY default
 \set ON_ERROR_STOP 0
 ALTER TABLE "testNs" RENAME TO "newname";
-ERROR:  0A000: Renaming hypertables is not yet supported
-LOCATION:  timescaledb_ProcessUtility, timescaledb.c:815
+ERROR:  Renaming hypertables is not yet supported
 \set ON_ERROR_STOP 1
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);
@@ -384,44 +384,28 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (2 rows)
 
 DROP TABLE "testNs";
-NOTICE:  00000: drop cascades to 6 other objects
+NOTICE:  drop cascades to 6 other objects
 DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_0_replica
 drop cascades to table _timescaledb_internal._hyper_1_1_0_partition
 drop cascades to table _timescaledb_internal._hyper_1_1_0_1_data
 drop cascades to table _timescaledb_internal._hyper_1_1_0_2_data
 drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
 drop cascades to table _timescaledb_internal._hyper_1_2_0_3_data
-LOCATION:  reportDependentObjects, dependency.c:1011
-NOTICE:  00000: index "1-testNs_device_id_timeCustom_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "6-testNs_device_id_timeCustom_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "11-testNs_device_id_timeCustom_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "2-testNs_timeCustom_series_0_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "7-testNs_timeCustom_series_0_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "12-testNs_timeCustom_series_0_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "3-testNs_timeCustom_series_1_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "8-testNs_timeCustom_series_1_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "13-testNs_timeCustom_series_1_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "4-testNs_timeCustom_series_2_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "9-testNs_timeCustom_series_2_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "14-testNs_timeCustom_series_2_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "5-testNs_timeCustom_series_bool_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "10-testNs_timeCustom_series_bool_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
-NOTICE:  00000: index "15-testNs_timeCustom_series_bool_idx" does not exist, skipping
-LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  index "1-testNs_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "6-testNs_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "11-testNs_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "2-testNs_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "7-testNs_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "12-testNs_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "3-testNs_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "8-testNs_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "13-testNs_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "4-testNs_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "9-testNs_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "14-testNs_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "5-testNs_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  index "10-testNs_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  index "15-testNs_timeCustom_series_bool_idx" does not exist, skipping
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
 ----+-------------+--------------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------

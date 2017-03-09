@@ -1,5 +1,6 @@
 #include <postgres.h>
 #include <funcapi.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_opfamily.h>
 #include <utils/rel.h>
@@ -337,7 +338,7 @@ tuple_sort_state_init(TupleDesc tupdesc, AttrNumber time_attno, Oid time_type)
 }
 
 static InsertTriggerCtx *
-insert_trigger_ctx_create(HeapTuple tuple, int hypertable_id, Oid relid)
+insert_trigger_ctx_create(HeapTuple tuple, Oid main_table_relid, Oid relid)
 {
 	MemoryContext mctx = AllocSetContextCreate(CacheMemoryContext,
 											   "Insert context",
@@ -351,7 +352,7 @@ insert_trigger_ctx_create(HeapTuple tuple, int hypertable_id, Oid relid)
 	tctx->mctx = mctx;
 	tctx->relid = relid;
 	tctx->hypertable_cache = hypertable_cache_pin();
-	tctx->hypertable = hypertable_cache_get_entry(tctx->hypertable_cache, hypertable_id);
+	tctx->hypertable = hypertable_cache_get_entry(tctx->hypertable_cache, main_table_relid);
 	tctx->first_tuple = heap_copytuple(tuple);
 
 	MemoryContextSwitchTo(oldctx);
@@ -553,7 +554,9 @@ insert_root_table_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	InsertTriggerCtx *tctx = insert_trigger_ctx;
-	int32		hypertable_id = atoi(trigdata->tg_trigger->tgargs[0]);
+	char	*main_table_schema = trigdata->tg_trigger->tgargs[0];
+	char    *main_table_name = trigdata->tg_trigger->tgargs[1];
+	Oid		main_table_oid = get_relname_relid(main_table_name, get_namespace_oid(main_table_schema, false));
 	HeapTuple	tuple;
 	TupleDesc	tupdesc = trigdata->tg_relation->rd_att;
 	MemoryContext oldctx;
@@ -575,7 +578,7 @@ insert_root_table_trigger(PG_FUNCTION_ARGS)
 	if (insert_trigger_ctx == NULL)
 	{
 		/* This is the first row. Allocate a new insert context */
-		insert_trigger_ctx = insert_trigger_ctx_create(tuple, hypertable_id, trigdata->tg_relation->rd_id);
+		insert_trigger_ctx = insert_trigger_ctx_create(tuple, main_table_oid, trigdata->tg_relation->rd_id);
 		return PointerGetDatum(NULL);
 	}
 
@@ -609,7 +612,6 @@ Datum
 insert_root_table_trigger_after(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	int32		hypertable_id = atoi(trigdata->tg_trigger->tgargs[0]);
 	InsertTriggerCtx *tctx = insert_trigger_ctx;
 	char	   *insert_guard;
 
@@ -642,10 +644,6 @@ insert_root_table_trigger_after(PG_FUNCTION_ARGS)
 	set_config_option("io.insert_data_guard", "on", PGC_USERSET, PGC_S_SESSION,
 					  GUC_ACTION_LOCAL, true, 0, false);
 
-	if (hypertable_id != tctx->hypertable->id)
-	{
-		elog(ERROR, "Mismatching hypertable IDs. Insert context in bad state!");
-	}
 
 	if (tctx->sort == NULL)
 	{
