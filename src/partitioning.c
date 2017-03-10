@@ -7,6 +7,7 @@
 #include "metadata_queries.h"
 #include "scanner.h"
 #include "catalog.h"
+#include "utils.h"
 
 static void
 partitioning_func_set_func_fmgr(PartitioningFunc * pf)
@@ -90,29 +91,11 @@ partitioning_func_apply_tuple(PartitioningInfo * pinfo, HeapTuple tuple, TupleDe
 	return partitioning_func_apply(pinfo, value);
 }
 
-
-/* Partition epoch index column numbers from sql/common/table.sql */
-#define PE_IDX_COL_HTID 1
-#define PE_IDX_COL_STARTTIME 2
-#define PE_IDX_COL_ENDTIME 3
-
-/* Partition epoch table column numbers from sql/common/table.sql */
-#define PE_TBL_COL_ID 1
-#define PE_TBL_COL_HT_ID 2
-#define PE_TBL_COL_STARTTIME 3
-#define PE_TBL_COL_ENDTIME 4
-#define PE_TBL_COL_NUMPARTITIONS 5
-#define PE_TBL_COL_PARTFUNC_SCHEMA 6
-#define PE_TBL_COL_PARTFUNC 7
-#define PE_TBL_COL_PARTMOD 8
-#define PE_TBL_COL_PARTCOL 9
-
-
 /* PartitionEpochCtx is used to pass on information during a partition epoch and
  * partition scans. */
 typedef struct
 {
-	epoch_and_partitions_set *pe;
+	PartitionEpoch *pe;
 	int16		num_partitions;
 	int32		hypertable_id;
 	int64		starttime,
@@ -130,14 +113,14 @@ partition_epoch_filter(TupleInfo * ti, void *arg)
 {
 	bool		is_null;
 	PartitionEpochCtx *pctx = arg;
-	Datum		id = heap_getattr(ti->tuple, PE_TBL_COL_HT_ID, ti->desc, &is_null);
+	Datum		hypertable_id = heap_getattr(ti->tuple, Anum_partition_epoch_hypertable_id, ti->desc, &is_null);
 
-	if (DatumGetInt32(id) == pctx->hypertable_id)
+	if (DatumGetInt32(hypertable_id) == pctx->hypertable_id)
 	{
 		bool		starttime_is_null,
 					endtime_is_null;
-		Datum		starttime = heap_getattr(ti->tuple, PE_TBL_COL_STARTTIME, ti->desc, &starttime_is_null);
-		Datum		endtime = heap_getattr(ti->tuple, PE_TBL_COL_ENDTIME, ti->desc, &endtime_is_null);
+		Datum		starttime = heap_getattr(ti->tuple, Anum_partition_epoch_start_time, ti->desc, &starttime_is_null);
+		Datum		endtime = heap_getattr(ti->tuple, Anum_partition_epoch_end_time, ti->desc, &endtime_is_null);
 
 		pctx->starttime = starttime_is_null ? OPEN_START_TIME : DatumGetInt64(starttime);
 		pctx->endtime = endtime_is_null ? OPEN_END_TIME : DatumGetInt64(endtime);
@@ -149,12 +132,12 @@ partition_epoch_filter(TupleInfo * ti, void *arg)
 }
 
 #define PARTITION_EPOCH_SIZE(num_partitions) \
-	sizeof(epoch_and_partitions_set) + (sizeof(Partition) * num_partitions)
+	sizeof(PartitionEpoch) + (sizeof(Partition) * num_partitions)
 
-static epoch_and_partitions_set *
+static PartitionEpoch *
 partition_epoch_create(int32 epoch_id, PartitionEpochCtx * ctx)
 {
-	epoch_and_partitions_set *pe;
+	PartitionEpoch *pe;
 
 	pe = palloc(PARTITION_EPOCH_SIZE(ctx->num_partitions));
 	pe->id = epoch_id;
@@ -166,7 +149,7 @@ partition_epoch_create(int32 epoch_id, PartitionEpochCtx * ctx)
 }
 
 void
-partition_epoch_free(epoch_and_partitions_set * epoch)
+partition_epoch_free(PartitionEpoch * epoch)
 {
 	if (epoch->partitioning != NULL)
 		pfree(epoch->partitioning);
@@ -179,14 +162,14 @@ static bool
 partition_epoch_tuple_found(TupleInfo * ti, void *arg)
 {
 	PartitionEpochCtx *pctx = arg;
-	epoch_and_partitions_set *pe;
+	PartitionEpoch *pe;
 	int32		epoch_id;
 	Datum		datum;
 	bool		is_null;
 
-	datum = heap_getattr(ti->tuple, PE_TBL_COL_NUMPARTITIONS, ti->desc, &is_null);
+	datum = heap_getattr(ti->tuple, Anum_partition_epoch_num_partitions, ti->desc, &is_null);
 	pctx->num_partitions = DatumGetInt16(datum);
-	datum = heap_getattr(ti->tuple, PE_TBL_COL_ID, ti->desc, &is_null);
+	datum = heap_getattr(ti->tuple, Anum_partition_partition_epoch_id, ti->desc, &is_null);
 	epoch_id = DatumGetInt32(datum);
 
 	pe = partition_epoch_create(epoch_id, pctx);
@@ -201,16 +184,16 @@ partition_epoch_tuple_found(TupleInfo * ti, void *arg)
 					partmod_is_null,
 					partcol_is_null;
 
-		partfunc = heap_getattr(ti->tuple, PE_TBL_COL_PARTFUNC, ti->desc, &partfunc_is_null);
-		partmod = heap_getattr(ti->tuple, PE_TBL_COL_PARTMOD, ti->desc, &partmod_is_null);
-		partcol = heap_getattr(ti->tuple, PE_TBL_COL_PARTCOL, ti->desc, &partcol_is_null);
+		partfunc = heap_getattr(ti->tuple, Anum_partition_epoch_partitioning_func, ti->desc, &partfunc_is_null);
+		partmod = heap_getattr(ti->tuple, Anum_partition_epoch_partitioning_mod, ti->desc, &partmod_is_null);
+		partcol = heap_getattr(ti->tuple, Anum_partition_epoch_partitioning_column, ti->desc, &partcol_is_null);
 
 		if (partfunc_is_null || partmod_is_null || partcol_is_null)
 		{
 			elog(ERROR, "Invalid partitioning configuration for partition epoch %d", epoch_id);
 		}
 
-		datum = heap_getattr(ti->tuple, PE_TBL_COL_PARTFUNC_SCHEMA, ti->desc, &is_null);
+		datum = heap_getattr(ti->tuple, Anum_partition_epoch_partitioning_func_schema, ti->desc, &is_null);
 
 		pe->partitioning = partitioning_info_create(pctx->num_partitions,
 									 is_null ? NULL : DatumGetCString(datum),
@@ -230,32 +213,21 @@ partition_epoch_tuple_found(TupleInfo * ti, void *arg)
 	return true;
 }
 
-/* Partition table columns */
-#define PARTITION_TBL_COL_ID 1
-#define PARTITION_TBL_COL_EPOCH_ID 2
-#define PARTITION_TBL_COL_KEYSPACE_START 3
-#define PARTITION_TBL_COL_KEYSPACE_END 4
-#define PARTITION_TBL_COL_TABLESPACE 5
-
-/* Partition index columns */
-#define PARTITION_IDX_COL_ID 1
-
 static bool
 partition_tuple_found(TupleInfo * ti, void *arg)
 {
 	PartitionEpochCtx *pctx = arg;
-	epoch_and_partitions_set *pe = pctx->pe;
-	Datum		datum;
-	bool		is_null;
+	PartitionEpoch *pe = pctx->pe;
+	Partition  *p = &pe->partitions[--pctx->num_partitions];
+	Datum		values[Natts_partition];
+	bool		isnull[Natts_partition];
 
-	pctx->num_partitions--;
-	datum = heap_getattr(ti->tuple, PARTITION_TBL_COL_ID, ti->desc, &is_null);
-	pe->partitions[pctx->num_partitions].id = DatumGetInt32(datum);
-	datum = heap_getattr(ti->tuple, PARTITION_TBL_COL_KEYSPACE_START, ti->desc, &is_null);
-	pe->partitions[pctx->num_partitions].keyspace_start = DatumGetInt16(datum);
-	datum = heap_getattr(ti->tuple, PARTITION_TBL_COL_KEYSPACE_END, ti->desc, &is_null);
-	pe->partitions[pctx->num_partitions].keyspace_end = DatumGetInt16(datum);
-	pe->partitions[pctx->num_partitions].index = pctx->num_partitions;
+	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
+
+	p->id = DatumGetInt32(DATUM_GET(values, Anum_partition_id));
+	p->keyspace_start = DatumGetInt16(DATUM_GET(values, Anum_partition_keyspace_start));
+	p->keyspace_end = DatumGetInt16(DATUM_GET(values, Anum_partition_keyspace_end));
+	p->index = pctx->num_partitions;
 
 	/* Abort the scan if we have found all partitions */
 	if (pctx->num_partitions == 0)
@@ -285,8 +257,11 @@ partition_scan(PartitionEpochCtx * pctx)
 	/*
 	 * Perform an index scan on epoch ID to find the partitions for the epoch.
 	 */
-	ScanKeyInit(&scankey[0], PARTITION_IDX_COL_ID, BTEqualStrategyNumber,
-				F_INT4EQ, Int32GetDatum(pctx->pe->id));
+	ScanKeyInit(&scankey[0],
+				Anum_partition_epoch_id_idx_epoch_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(pctx->pe->id));
 
 	scanner_scan(&scanCtx);
 
@@ -303,7 +278,7 @@ partition_scan(PartitionEpochCtx * pctx)
 	return num_partitions;
 }
 
-epoch_and_partitions_set *
+PartitionEpoch *
 partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid)
 {
 	ScanKeyData scankey[1];
@@ -330,8 +305,11 @@ partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid)
 	 * Perform an index scan on hypertable ID. We filter on start and end
 	 * time.
 	 */
-	ScanKeyInit(&scankey[0], PE_IDX_COL_HTID, BTEqualStrategyNumber,
-				F_INT4EQ, Int32GetDatum(hypertable_id));
+	ScanKeyInit(&scankey[0],
+	   Anum_partition_epoch_hypertable_start_time_end_time_idx_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
 
 	scanner_scan(&scanctx);
 
@@ -360,7 +338,7 @@ cmp_partitions(const void *keyspace_pt_arg, const void *value)
 }
 
 Partition *
-partition_epoch_get_partition(epoch_and_partitions_set * epoch, int16 keyspace_pt)
+partition_epoch_get_partition(PartitionEpoch * epoch, int16 keyspace_pt)
 {
 	Partition  *part;
 

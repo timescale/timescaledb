@@ -30,7 +30,12 @@ enum CatalogTable
 
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 
-/* Hypertable table definitions */
+/******************************
+ *
+ * Hypertable table definitions
+ *
+ ******************************/
+
 #define HYPERTABLE_TABLE_NAME "hypertable"
 
 enum
@@ -58,7 +63,8 @@ enum Anum_hypertable
 	_Anum_hypertable_max,
 };
 
-#define Natts_hypertable (_Anum_hypertable_max - 1)
+#define Natts_hypertable \
+	(_Anum_hypertable_max - 1)
 
 /* Hypertable primary index attribute numbers */
 enum Anum_hypertable_pkey_idx
@@ -67,9 +73,15 @@ enum Anum_hypertable_pkey_idx
 	_Anum_hypertable_pkey_max,
 };
 
-#define Natts_hypertable_pkey_idx (_Anum_hypertable_pkey_max - 1)
+#define Natts_hypertable_pkey_idx \
+	(_Anum_hypertable_pkey_max - 1)
 
-/* Partition epoch table definitions */
+/***********************************
+ *
+ * Partition epoch table definitions
+ *
+ ***********************************/
+
 #define PARTITION_EPOCH_TABLE_NAME "partition_epoch"
 
 enum
@@ -79,7 +91,40 @@ enum
 	_MAX_PARTITION_EPOCH_INDEX,
 };
 
-/* Partition table definitions */
+enum Anum_partition_epoch
+{
+	Anum_partition_epoch_id = 1,
+	Anum_partition_epoch_hypertable_id,
+	Anum_partition_epoch_start_time,
+	Anum_partition_epoch_end_time,
+	Anum_partition_epoch_num_partitions,
+	Anum_partition_epoch_partitioning_func_schema,
+	Anum_partition_epoch_partitioning_func,
+	Anum_partition_epoch_partitioning_mod,
+	Anum_partition_epoch_partitioning_column,
+	_Anum_partition_epoch_max,
+};
+
+#define Natts_partition_epoch \
+	(_Anum_partition_epoch_max - 1)
+
+enum Anum_partition_epoch_hypertable_start_time_end_time_idx
+{
+	Anum_partition_epoch_hypertable_start_time_end_time_idx_hypertable_id = 1,
+	Anum_partition_epoch_hypertable_start_time_end_time_idx_start_time,
+	Anum_partition_epoch_hypertable_start_time_end_time_idx_end_time,
+	_Anum_partition_epoch_hypertable_start_time_end_time_idx_max,
+};
+
+#define Natts_partition_epoch_hypertable_start_time_end_time_idx \
+	(_Anum_partition_epoch_hypertable_start_time_end_time_idx_max - 1)
+
+/*****************************
+ *
+ * Partition table definitions
+ *
+ *****************************/
+
 #define PARTITION_TABLE_NAME "partition"
 
 enum
@@ -89,7 +134,34 @@ enum
 	_MAX_PARTITION_INDEX,
 };
 
-/* Chunk table definitions */
+enum Anum_partition
+{
+	Anum_partition_id = 1,
+	Anum_partition_partition_epoch_id,
+	Anum_partition_keyspace_start,
+	Anum_partition_keyspace_end,
+	Anum_partition_tablespace,
+	_Anum_partition_max,
+};
+
+#define Natts_partition \
+	(_Anum_partition_max - 1)
+
+enum Anum_partition_epoch_id_idx
+{
+	Anum_partition_epoch_id_idx_epoch_id = 1,
+	_Anum_partition_epoch_id_idx_max,
+};
+
+#define Natts_partition_epoch_id_idx \
+	(_Anum_partition_epoch_id_idx_max - 1)
+
+/*************************
+ *
+ * Chunk table definitions
+ *
+ *************************/
+
 #define CHUNK_TABLE_NAME "chunk"
 
 enum
@@ -99,7 +171,35 @@ enum
 	_MAX_CHUNK_INDEX,
 };
 
-/* Chunk replica node table definitions */
+enum Anum_chunk
+{
+	Anum_chunk_id = 1,
+	Anum_chunk_partition_id,
+	Anum_chunk_start_time,
+	Anum_chunk_end_time,
+	_Anum_chunk_max,
+};
+
+#define Natts_chunk \
+	(_Anum_chunk_max - 1)
+
+enum Anum_chunk_partition_start_time_end_time_idx
+{
+	Anum_chunk_partition_start_time_end_time_idx_partition_id = 1,
+	Anum_chunk_partition_start_time_end_time_idx_start_time,
+	Anum_chunk_partition_start_time_end_time_idx_end_time,
+	_Anum_chunk_partition_start_time_end_time_idx_max,
+};
+
+#define Natts_chunk_partition_start_time_end_time_idx \
+	(_Anum_chunk_partition_start_time_end_time_idx_max -1)
+
+/**************************************
+ *
+ * Chunk replica node table definitions
+ *
+ **************************************/
+
 #define CHUNK_REPLICA_NODE_TABLE_NAME "chunk_replica_node"
 
 enum
@@ -118,7 +218,8 @@ enum Anum_chunk_replica_node
 	_Anum_chunk_replica_node_max,
 };
 
-#define Natts_chunk_replica_node (_Anum_chunk_replica_node_max - 1)
+#define Natts_chunk_replica_node \
+	(_Anum_chunk_replica_node_max - 1)
 
 enum Anum_chunk_replica_node_pkey_idx
 {
@@ -126,7 +227,10 @@ enum Anum_chunk_replica_node_pkey_idx
 	_Anum_chunk_replica_node_pkey_idx_max,
 };
 
-#define Natts_chunk_replica_node_pkey_idx (_Anum_chunk_replica_node_pkey_idx_max - 1)
+#define Natts_chunk_replica_node_pkey_idx \
+	(_Anum_chunk_replica_node_pkey_idx_max - 1)
+
+
 
 #define MAX(a, b) \
 	((long)(a) > (long)(b) ? (a) : (b))

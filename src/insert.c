@@ -50,7 +50,7 @@ get_close_if_needed_fn()
 }
 
 static void
-close_if_needed(hypertable_cache_entry * hci, Chunk * chunk)
+close_if_needed(Hypertable * hci, Chunk * chunk)
 {
 	ChunkReplica *cr;
 	Catalog    *catalog = catalog_get();
@@ -187,6 +187,7 @@ chunk_insert_ctx_new(Chunk * chunk, Cache * pinned)
 
 		if (XactReadOnly && !rel->rd_islocaltemp)
 			PreventCommandIfReadOnly("COPY FROM");
+		
 		PreventCommandIfParallelMode("COPY FROM");
 
 		if (rel->rd_rel->relkind != RELKIND_RELATION)
@@ -264,8 +265,8 @@ PG_FUNCTION_INFO_V1(insert_root_table_trigger_after);
 typedef struct InsertTriggerCtx
 {
 	Cache	   *hypertable_cache;
-	hypertable_cache_entry *hypertable;
-	epoch_and_partitions_set *epoch;
+	Hypertable *hypertable;
+	PartitionEpoch *epoch;
 	Oid			relid;
 	AttrNumber	time_attno;
 	Partition  *part;
@@ -451,7 +452,7 @@ insert_trigger_ctx_lookup_partition(InsertTriggerCtx * tctx, HeapTuple tuple,
 	bool		isnull;
 	int64		timepoint,
 				spacepoint;
-	epoch_and_partitions_set *epoch;
+	PartitionEpoch *epoch;
 
 	/*
 	 * Get the timepoint from the tuple, converting to our internal time
@@ -690,8 +691,11 @@ insert_root_table_trigger_after(PG_FUNCTION_ARGS)
 			HeapTuple	tuple = ExecFetchSlotTuple(slot);
 			TupleInfo	ti = {
 				.desc = trigdata->tg_relation->rd_att,
-				/* Strip off the partition attribute from the tuple so that we
-				 * do not add it to the chunk when we insert. */
+
+				/*
+				 * Strip off the partition attribute from the tuple so that we
+				 * do not add it to the chunk when we insert.
+				 */
 				.tuple = heap_modify_tuple(tuple, trigdata->tg_relation->rd_att, NULL, NULL, doreplace),
 			};
 
