@@ -16,6 +16,7 @@ enum catalog_table
 
 /* Hypertable table definitions */
 #define HYPERTABLE_TABLE_NAME "hypertable"
+
 enum
 {
 	HYPERTABLE_ID_INDEX = 0,
@@ -34,6 +35,7 @@ enum
 
 /* Partition table definitions */
 #define PARTITION_TABLE_NAME "partition"
+
 enum
 {
 	PARTITION_ID_INDEX = 0,
@@ -43,6 +45,7 @@ enum
 
 /* Chunk table definitions */
 #define CHUNK_TABLE_NAME "chunk"
+
 enum
 {
 	CHUNK_ID_INDEX = 0,
@@ -50,9 +53,12 @@ enum
 	_MAX_CHUNK_INDEX,
 };
 
-#define _MAX_TABLE_INDEXES Max(_MAX_HYPERTABLE_INDEX,\
-							   Max(_MAX_PARTITION_EPOCH_INDEX, \
-								   Max(_MAX_PARTITION_INDEX, _MAX_CHUNK_INDEX)))
+#define MAX(a, b) \
+	((long)(a) > (long)(b) ? (a) : (b))
+
+#define _MAX_TABLE_INDEXES MAX(_MAX_HYPERTABLE_INDEX, \
+							   MAX(_MAX_PARTITION_EPOCH_INDEX, \
+								   MAX(_MAX_PARTITION_INDEX, _MAX_CHUNK_INDEX)))
 
 typedef struct Catalog
 {

@@ -580,9 +580,9 @@ create_copy_table(int32 hypertable_id, Oid root_oid)
 static IndexElem *
 makeIndexElem(char *name, Node *expr)
 {
-	Assert((name == NULL || expr == NULL) && (name != NULL || expr != NULL));
-
 	IndexElem  *time_elem = makeNode(IndexElem);
+
+	Assert((name == NULL || expr == NULL) && (name != NULL || expr != NULL));
 
 	time_elem->name = name;
 	time_elem->expr = expr;

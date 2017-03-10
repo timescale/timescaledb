@@ -136,15 +136,16 @@ chunk_crn_set_cache_invalidate_callback(void)
 static chunk_crn_set_htable_entry *
 chunk_crn_set_cache_get_entry(Cache * cache, int32 chunk_id, int64 chunk_start_time, int64 chunk_end_time)
 {
-	if (cache == NULL)
-	{
-		cache = chunk_crn_set_cache_current;
-	}
 	ChunkCacheQueryCtx ctx = {
 		.chunk_id = chunk_id,
 		.chunk_start_time = chunk_start_time,
 		.chunk_end_time = chunk_end_time,
 	};
+
+	if (cache == NULL)
+	{
+		cache = chunk_crn_set_cache_current;
+	}
 
 	return cache_fetch(cache, &ctx.cctx);
 }
