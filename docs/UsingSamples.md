@@ -7,11 +7,12 @@ started using TimescaleDB. These datasets vary in database size, number
 of time intervals, and number of values for the partition field.
 
 (Note that these dataset backups already include our time-series
-  database, so you won't need to manually install our extension,
-  nor run the setup scripts, etc.)
+database, so you won't need to manually install our extension,
+nor run the setup scripts, etc.)
 
 **Device ops**: These datasets are designed to represent metrics (e.g. CPU,
-memory, network) collected from mobile devices.
+memory, network) collected from mobile devices. (Click on the name to
+download.)
 
 1. [`devices_small`](https://timescaledata.blob.core.windows.net/datasets/devices_small.bak.tar.gz) - 1,000 devices recorded over 1,000 time intervals
 1. [`devices_med`](https://timescaledata.blob.core.windows.net/datasets/devices_med.bak.tar.gz) - 5,000 devices recorded over 2,000 time intervals
@@ -21,7 +22,7 @@ For more details and example usage, see
 [In-depth: Device ops datasets](#in-depth-devices).
 
 **Weather**: These datasets are designed to represent temperature and
-humidity data from a variety of locations.
+humidity data from a variety of locations. (Click on the name to download.)
 
 1. [`weather_small`](https://timescaledata.blob.core.windows.net/datasets/weather_small.bak.tar.gz) - 1,000 locations over 1,000 two-minute intervals
 1. [`weather_med`](https://timescaledata.blob.core.windows.net/datasets/weather_med.bak.tar.gz) - 1,000 locations over 15,000 two-minute intervals
