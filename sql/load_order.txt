@@ -42,7 +42,6 @@ sql/main/chunk_replica_node_index_triggers.sql
 sql/main/chunk_replica_node_triggers.sql
 sql/main/chunk_triggers.sql
 sql/main/chunk.sql
-sql/main/insert.sql
 sql/main/meta_info.sql
 sql/main/ddl_util.sql
 sql/main/ddl.sql

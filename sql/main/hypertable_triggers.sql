@@ -29,6 +29,12 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION  _timescaledb_internal.root_table_insert_trigger() RETURNS TRIGGER
+	AS '$libdir/timescaledb', 'insert_root_table_trigger' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION  _timescaledb_internal.root_table_after_insert_trigger() RETURNS TRIGGER
+	AS '$libdir/timescaledb', 'insert_root_table_trigger_after' LANGUAGE C;
+
 -- Trigger for handling the addition of new hypertables.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
@@ -36,9 +42,7 @@ $BODY$
 DECLARE
     remote_node _timescaledb_catalog.node;
 BEGIN
-
     IF TG_OP = 'INSERT' THEN
-
         EXECUTE format(
             $$
                 CREATE SCHEMA IF NOT EXISTS %I
@@ -62,6 +66,16 @@ BEGIN
                 CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_modify_main_table();
             $$, NEW.schema_name, NEW.table_name);
+        EXECUTE format(
+            $$
+                CREATE TRIGGER insert_trigger BEFORE INSERT ON %I.%I
+                FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger(%L);
+            $$, NEW.root_schema_name, NEW.root_table_name, NEW.id);
+        EXECUTE format(
+            $$
+                CREATE TRIGGER after_insert_trigger AFTER INSERT ON %I.%I
+                FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger(%L);
+            $$, NEW.root_schema_name, NEW.root_table_name, NEW.id);
         RETURN NEW;
     END IF;
 

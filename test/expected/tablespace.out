@@ -112,17 +112,18 @@ Child tables: _timescaledb_internal._hyper_1_2_0_2_data
  time      | timestamp without time zone |           | plain    |              | 
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
-Child tables: _copy_temp_1,
-              _timescaledb_internal._hyper_1_0_replica
+Triggers:
+    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger('1')
+    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('1')
+Child tables: _timescaledb_internal._hyper_1_0_replica
 
 --cleanup
 \set VERBOSITY default
 drop table test_tspace;
-NOTICE:  drop cascades to 6 other objects
+NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_0_replica
 drop cascades to table _timescaledb_internal._hyper_1_1_0_partition
 drop cascades to table _timescaledb_internal._hyper_1_1_0_1_data
 drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
 drop cascades to table _timescaledb_internal._hyper_1_2_0_2_data
-drop cascades to table _copy_temp_1
 drop tablespace tspace1;
