@@ -1,20 +1,21 @@
 \set ON_ERROR_STOP 1
 \o /dev/null
-\ir include/insert_single.sql
+\ir include/insert_two_partitions.sql
 \set ON_ERROR_STOP 1
 \ir create_single_db.sql
+\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
-SELECT setup_single_node(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+SELECT setup_db(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+\set VERBOSITY verbose
 \c single
-\set ECHO ALL
 CREATE TABLE PUBLIC."testNs" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
@@ -28,14 +29,14 @@ CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE s
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', associated_schema_name=>'testNs' );
+SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
 BEGIN;
-\COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+\COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
 FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
 INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO public."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev20', 1.5, 1),
@@ -48,7 +49,7 @@ CREATE TABLE chunk_closing_test(
         device_id  TEXT
     );
 -- Test chunk closing/creation
-SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', chunk_size_bytes => 10000);
+SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', 2, chunk_size_bytes => 10000);
 INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
 INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
 INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
@@ -62,123 +63,375 @@ SELECT * FROM _timescaledb_catalog.chunk c
 \set ECHO ALL
 \c single
 \d+ "_timescaledb_internal".*
-              Table "_timescaledb_internal._hyper_2_0_replica"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description
+Index "_timescaledb_internal.1-testNs_device_id_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ device_id  | text   | device_id    | extended
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
+
+Index "_timescaledb_internal.10-testNs_timeCustom_series_bool_idx"
+   Column    |  Type   |  Definition  | Storage 
+-------------+---------+--------------+---------
+ timeCustom  | bigint  | "timeCustom" | plain
+ series_bool | boolean | series_bool  | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
+
+Index "_timescaledb_internal.11-testNs_device_id_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ device_id  | text   | device_id    | extended
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_3_data", predicate (device_id IS NOT NULL)
+
+Index "_timescaledb_internal.12-testNs_timeCustom_series_0_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_0   | double precision | series_0     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_3_data", predicate (series_0 IS NOT NULL)
+
+Index "_timescaledb_internal.13-testNs_timeCustom_series_1_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_1   | double precision | series_1     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_3_data", predicate (series_1 IS NOT NULL)
+
+Index "_timescaledb_internal.14-testNs_timeCustom_series_2_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_2   | double precision | series_2     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_3_data", predicate (series_2 IS NOT NULL)
+
+Index "_timescaledb_internal.15-testNs_timeCustom_series_bool_idx"
+   Column    |  Type   |  Definition  | Storage 
+-------------+---------+--------------+---------
+ timeCustom  | bigint  | "timeCustom" | plain
+ series_bool | boolean | series_bool  | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_3_data", predicate (series_bool IS NOT NULL)
+
+Index "_timescaledb_internal.2-testNs_timeCustom_series_0_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_0   | double precision | series_0     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (series_0 IS NOT NULL)
+
+Index "_timescaledb_internal.3-testNs_timeCustom_series_1_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_1   | double precision | series_1     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (series_1 IS NOT NULL)
+
+Index "_timescaledb_internal.4-testNs_timeCustom_series_2_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_2   | double precision | series_2     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (series_2 IS NOT NULL)
+
+Index "_timescaledb_internal.5-testNs_timeCustom_series_bool_idx"
+   Column    |  Type   |  Definition  | Storage 
+-------------+---------+--------------+---------
+ timeCustom  | bigint  | "timeCustom" | plain
+ series_bool | boolean | series_bool  | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (series_bool IS NOT NULL)
+
+Index "_timescaledb_internal.6-testNs_device_id_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ device_id  | text   | device_id    | extended
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
+
+Index "_timescaledb_internal.7-testNs_timeCustom_series_0_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_0   | double precision | series_0     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
+
+Index "_timescaledb_internal.8-testNs_timeCustom_series_1_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_1   | double precision | series_1     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
+
+Index "_timescaledb_internal.9-testNs_timeCustom_series_2_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_2   | double precision | series_2     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
+
+                  Table "_timescaledb_internal._hyper_1_0_replica"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Inherits: _timescaledb_internal._hyper_1_root
+Child tables: _timescaledb_internal._hyper_1_1_0_partition,
+              _timescaledb_internal._hyper_1_2_0_partition
+
+                 Table "_timescaledb_internal._hyper_1_1_0_1_data"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "1-testNs_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "2-testNs_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "3-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "4-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint) NOT VALID
+Inherits: _timescaledb_internal._hyper_1_1_0_partition
+
+                 Table "_timescaledb_internal._hyper_1_1_0_2_data"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "10-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-testNs_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "7-testNs_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "8-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "9-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint) NOT VALID
+Inherits: _timescaledb_internal._hyper_1_1_0_partition
+
+                Table "_timescaledb_internal._hyper_1_1_0_partition"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+Inherits: _timescaledb_internal._hyper_1_0_replica
+Child tables: _timescaledb_internal._hyper_1_1_0_1_data,
+              _timescaledb_internal._hyper_1_1_0_2_data
+
+                 Table "_timescaledb_internal._hyper_1_2_0_3_data"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "11-testNs_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "12-testNs_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "13-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "14-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "15-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+Inherits: _timescaledb_internal._hyper_1_2_0_partition
+
+                Table "_timescaledb_internal._hyper_1_2_0_partition"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+Inherits: _timescaledb_internal._hyper_1_0_replica
+Child tables: _timescaledb_internal._hyper_1_2_0_3_data
+
+                    Table "_timescaledb_internal._hyper_1_root"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Child tables: _timescaledb_internal._hyper_1_0_replica
+
+            Table "_timescaledb_internal._hyper_2_0_replica"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              |
- metric    | integer |           | plain    |              |
- device_id | text    |           | extended |              |
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Inherits: _timescaledb_internal._hyper_2_root
-Child tables: _timescaledb_internal._hyper_2_2_0_partition
+Child tables: _timescaledb_internal._hyper_2_3_0_partition,
+              _timescaledb_internal._hyper_2_4_0_partition
 
-             Table "_timescaledb_internal._hyper_2_2_0_3_data"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description
+            Table "_timescaledb_internal._hyper_2_3_0_4_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              |
- metric    | integer |           | plain    |              |
- device_id | text    |           | extended |              |
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" <= '1'::bigint) NOT VALID
-Inherits: _timescaledb_internal._hyper_2_2_0_partition
+Inherits: _timescaledb_internal._hyper_2_3_0_partition
 
-             Table "_timescaledb_internal._hyper_2_2_0_4_data"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description
+            Table "_timescaledb_internal._hyper_2_3_0_5_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              |
- metric    | integer |           | plain    |              |
- device_id | text    |           | extended |              |
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" >= '2'::bigint AND "time" <= '2'::bigint) NOT VALID
-Inherits: _timescaledb_internal._hyper_2_2_0_partition
+Inherits: _timescaledb_internal._hyper_2_3_0_partition
 
-             Table "_timescaledb_internal._hyper_2_2_0_5_data"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description
+            Table "_timescaledb_internal._hyper_2_3_0_6_data"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              |
- metric    | integer |           | plain    |              |
- device_id | text    |           | extended |              |
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-    "time_range" CHECK ("time" >= '3'::bigint AND "time" <= '3'::bigint) NOT VALID
-Inherits: _timescaledb_internal._hyper_2_2_0_partition
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "time_range" CHECK ("time" >= '3'::bigint) NOT VALID
+Inherits: _timescaledb_internal._hyper_2_3_0_partition
 
-            Table "_timescaledb_internal._hyper_2_2_0_partition"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description
+          Table "_timescaledb_internal._hyper_2_3_0_partition"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              |
- metric    | integer |           | plain    |              |
- device_id | text    |           | extended |              |
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
 Inherits: _timescaledb_internal._hyper_2_0_replica
-Child tables: _timescaledb_internal._hyper_2_2_0_3_data,
-              _timescaledb_internal._hyper_2_2_0_4_data,
-              _timescaledb_internal._hyper_2_2_0_5_data
+Child tables: _timescaledb_internal._hyper_2_3_0_4_data,
+              _timescaledb_internal._hyper_2_3_0_5_data,
+              _timescaledb_internal._hyper_2_3_0_6_data
 
-                Table "_timescaledb_internal._hyper_2_root"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description
+          Table "_timescaledb_internal._hyper_2_4_0_partition"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 -----------+---------+-----------+----------+--------------+-------------
- time      | bigint  |           | plain    |              |
- metric    | integer |           | plain    |              |
- device_id | text    |           | extended |              |
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
+Check constraints:
+    "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+Inherits: _timescaledb_internal._hyper_2_0_replica
+
+               Table "_timescaledb_internal._hyper_2_root"
+  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+-----------+---------+-----------+----------+--------------+-------------
+ time      | bigint  |           | plain    |              | 
+ metric    | integer |           | plain    |              | 
+ device_id | text    |           | extended |              | 
 Child tables: _timescaledb_internal._hyper_2_0_replica
 
 -- Test that renaming hypertable is blocked
 \set ON_ERROR_STOP 0
 ALTER TABLE "testNs" RENAME TO "newname";
-ERROR:  Renaming hypertables is not yet supported
+ERROR:  0A000: Renaming hypertables is not yet supported
+LOCATION:  timescaledb_ProcessUtility, timescaledb.c:815
 \set ON_ERROR_STOP 1
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);
 ALTER TABLE "renametable" RENAME TO "newname";
 SELECT * FROM "newname";
- foo
+ foo 
 -----
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes
-----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | testNs             | testNs                 | _hyper_1                | testNs             | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           | single     |       1073741824
-  2 | public      | chunk_closing_test | _timescaledb_internal     | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+ id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+--------------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 | public      | testNs             | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           | single     |       1073741824
+  2 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (2 rows)
 
 DROP TABLE "testNs";
-NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to table "testNs"._hyper_1_0_replica
-drop cascades to table "testNs"._hyper_1_1_0_partition
-drop cascades to table "testNs"._hyper_1_1_0_1_data
-drop cascades to table "testNs"._hyper_1_1_0_2_data
-NOTICE:  index "1-testNs_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "6-testNs_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "2-testNs_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "7-testNs_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "3-testNs_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "8-testNs_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "4-testNs_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "9-testNs_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "5-testNs_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "10-testNs_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  00000: drop cascades to 6 other objects
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_0_replica
+drop cascades to table _timescaledb_internal._hyper_1_1_0_partition
+drop cascades to table _timescaledb_internal._hyper_1_1_0_1_data
+drop cascades to table _timescaledb_internal._hyper_1_1_0_2_data
+drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
+drop cascades to table _timescaledb_internal._hyper_1_2_0_3_data
+LOCATION:  reportDependentObjects, dependency.c:1011
+NOTICE:  00000: index "1-testNs_device_id_timeCustom_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "6-testNs_device_id_timeCustom_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "11-testNs_device_id_timeCustom_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "2-testNs_timeCustom_series_0_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "7-testNs_timeCustom_series_0_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "12-testNs_timeCustom_series_0_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "3-testNs_timeCustom_series_1_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "8-testNs_timeCustom_series_1_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "13-testNs_timeCustom_series_1_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "4-testNs_timeCustom_series_2_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "9-testNs_timeCustom_series_2_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "14-testNs_timeCustom_series_2_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "5-testNs_timeCustom_series_bool_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "10-testNs_timeCustom_series_bool_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
+NOTICE:  00000: index "15-testNs_timeCustom_series_bool_idx" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:763
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |  root_schema_name  | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes
-----+-------------+--------------------+------------------------+-------------------------+--------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  2 | public      | chunk_closing_test | _timescaledb_internal     | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+ id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+-------------+--------------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  2 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
 (1 row)
 
 \dt  "public".*
                List of relations
- Schema |        Name        | Type  |  Owner
+ Schema |        Name        | Type  |  Owner   
 --------+--------------------+-------+----------
  public | chunk_closing_test | table | postgres
  public | newname            | table | postgres
 (2 rows)
 
 \dt  "_timescaledb_catalog".*
-                        List of relations
-      Schema       |           Name            | Type  |  Owner
--------------------+---------------------------+-------+----------
+                          List of relations
+        Schema        |           Name            | Type  |  Owner   
+----------------------+---------------------------+-------+----------
  _timescaledb_catalog | chunk                     | table | postgres
  _timescaledb_catalog | chunk_replica_node        | table | postgres
  _timescaledb_catalog | chunk_replica_node_index  | table | postgres
@@ -199,13 +452,15 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (17 rows)
 
 \dt+ "_timescaledb_internal".*
-                                     List of relations
-       Schema       |          Name          | Type  |  Owner   |    Size    | Description
---------------------+------------------------+-------+----------+------------+-------------
- _timescaledb_internal | _hyper_2_0_replica     | table | postgres | 8192 bytes |
- _timescaledb_internal | _hyper_2_2_0_3_data    | table | postgres | 16 kB      |
- _timescaledb_internal | _hyper_2_2_0_4_data    | table | postgres | 16 kB      |
- _timescaledb_internal | _hyper_2_2_0_5_data    | table | postgres | 16 kB      |
- _timescaledb_internal | _hyper_2_2_0_partition | table | postgres | 8192 bytes |
- _timescaledb_internal | _hyper_2_root          | table | postgres | 8192 bytes |
-(6 rows)
+                                      List of relations
+        Schema         |          Name          | Type  |  Owner   |    Size    | Description 
+-----------------------+------------------------+-------+----------+------------+-------------
+ _timescaledb_internal | _hyper_2_0_replica     | table | postgres | 8192 bytes | 
+ _timescaledb_internal | _hyper_2_3_0_4_data    | table | postgres | 16 kB      | 
+ _timescaledb_internal | _hyper_2_3_0_5_data    | table | postgres | 16 kB      | 
+ _timescaledb_internal | _hyper_2_3_0_6_data    | table | postgres | 16 kB      | 
+ _timescaledb_internal | _hyper_2_3_0_partition | table | postgres | 8192 bytes | 
+ _timescaledb_internal | _hyper_2_4_0_partition | table | postgres | 8192 bytes | 
+ _timescaledb_internal | _hyper_2_root          | table | postgres | 8192 bytes | 
+(7 rows)
+
