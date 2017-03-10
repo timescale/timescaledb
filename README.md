@@ -5,6 +5,9 @@ SQL support.
 
 TimescaleDB is packaged as a PostgreSQL extension and set of scripts.
 
+For a more detailed description of our architecture, [please read
+the technical
+paper](http://www.timescaledb.com/papers/timescaledb.pdf).
 
 ## Prerequisites
 
