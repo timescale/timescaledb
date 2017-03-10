@@ -21,6 +21,7 @@ typedef struct hypertable_cache_entry
 	Oid			time_column_type;
 	int			num_epochs;
 	int64		chunk_size_bytes;
+	int16		num_replicas;
 	/* Array of epoch_and_partitions_set*. Order by start_time */
 	epoch_and_partitions_set *epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY];
 }	hypertable_cache_entry;

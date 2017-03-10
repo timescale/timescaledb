@@ -49,6 +49,7 @@
 #include "catalog.h"
 #include "pgmurmur3.h"
 #include "chunk.h"
+#include "timescaledb.h"
 
 #include <utils/tqual.h>
 #include <utils/rls.h>
@@ -85,28 +86,18 @@ get_close_if_needed_fn()
 }
 
 static void
-close_if_needed(hypertable_cache_entry * hci, chunk_cache_entry * chunk)
+close_if_needed(hypertable_cache_entry * hci, Chunk * chunk)
 {
-	Name		db_name;
-	Datum		db_name_datum;
-	crn_row    *crn;
+	ChunkReplica *cr;
+	Catalog    *catalog = catalog_get();
 
-	db_name_datum = DirectFunctionCall1(current_database, PointerGetDatum(NULL));
-	db_name = DatumGetName(db_name_datum);
+	cr = chunk_get_replica(chunk, catalog->database_name);
 
-	crn = crn_set_get_crn_row_for_db(chunk->crns, db_name->data);
-	if (crn != NULL)
+	if (cr != NULL && hci->chunk_size_bytes > chunk_replica_size_bytes(cr))
 	{
-		Datum		size_datum = DirectFunctionCall2(local_chunk_size, NameGetDatum(&crn->schema_name), NameGetDatum(&crn->table_name));
-		int64		size = DatumGetInt64(size_datum);
-
-		if (hci->chunk_size_bytes > size)
-		{
-			return;
-		}
+		return;
 	}
 	FunctionCall1(get_close_if_needed_fn(), Int32GetDatum(chunk->id));
-	return;
 }
 
 /*
@@ -190,32 +181,31 @@ chunk_insert_ctx_rel_insert_tuple(ChunkInsertCtxRel * rel_ctx, HeapTuple tuple)
 
 typedef struct ChunkInsertCtx
 {
-	chunk_cache_entry *chunk;
+	Chunk	   *chunk;
 	Cache	   *pinned;
 	List	   *ctxs;
 }	ChunkInsertCtx;
 
 static ChunkInsertCtx *
-chunk_insert_ctx_new(chunk_cache_entry * chunk, Cache * pinned)
+chunk_insert_ctx_new(Chunk * chunk, Cache * pinned)
 {
-	ListCell   *lc;
 	List	   *rel_ctx_list = NIL;
 	ChunkInsertCtx *ctx;
+	int			i;
 
 	ctx = palloc(sizeof(ChunkInsertCtx));
 	ctx->pinned = pinned;
 
-	foreach(lc, chunk->crns->tables)
+	for (i = 0; i < chunk->num_replicas; i++)
 	{
-		crn_row    *cr = lfirst(lc);
-		RangeVar   *rv = makeRangeVarFromNameList(list_make2(makeString(cr->schema_name.data), makeString(cr->table_name.data)));
+		ChunkReplica *cr = &chunk->replicas[i];
 		Relation	rel;
 		RangeTblEntry *rte;
 		List	   *range_table;
 		ResultRelInfo *resultRelInfo;
 		ChunkInsertCtxRel *rel_ctx;;
 
-		rel = heap_openrv(rv, RowExclusiveLock);
+		rel = heap_open(cr->table_id, RowExclusiveLock);
 
 		/* permission check */
 		rte = makeNode(RangeTblEntry);
@@ -342,7 +332,7 @@ copy_table_tuple_found(TupleInfo * ti, void *data)
 	}
 
 
-	if (ctx->chunk_ctx != NULL && !chunk_row_timepoint_is_member(ctx->chunk_ctx->chunk->chunk, time_pt))
+	if (ctx->chunk_ctx != NULL && !chunk_timepoint_is_member(ctx->chunk_ctx->chunk, time_pt))
 	{
 		/* moving on to next chunk; */
 		chunk_insert_ctx_destroy(ctx->chunk_ctx);
@@ -364,21 +354,21 @@ copy_table_tuple_found(TupleInfo * ti, void *data)
 
 	if (ctx->chunk_ctx == NULL)
 	{
-		chunk_cache_entry *chunk;
-		Cache	   *pinned = chunk_crn_set_cache_pin();
+		Chunk	   *chunk;
+		Cache	   *pinned = chunk_cache_pin();
 
 		/*
 		 * TODO: this first call should be non-locking and use a cache(for
 		 * performance)
 		 */
-		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, false);
+		chunk = chunk_cache_get(pinned, ctx->part, ctx->hci->num_replicas, time_pt, false);
 		close_if_needed(ctx->hci, chunk);
 
 		/*
 		 * chunk may have been closed and thus changed /or/ need to get share
 		 * lock
 		 */
-		chunk = get_chunk_cache_entry(pinned, ctx->part, time_pt, true);
+		chunk = chunk_cache_get(pinned, ctx->part, ctx->hci->num_replicas, time_pt, true);
 
 		ctx->chunk_ctx = chunk_insert_ctx_new(chunk, pinned);
 	}
@@ -483,7 +473,6 @@ insert_trigger_on_copy_table_c(PG_FUNCTION_ARGS)
 	 * guarantees an order on chunk access as well
 	 */
 	idx = create_insert_index(hypertable_id, hci->time_column_name, pe->partitioning, pe);
-
 
 	scan_copy_table_and_insert(hci, pe, trigdata->tg_relation->rd_id, idx.objectId);
 

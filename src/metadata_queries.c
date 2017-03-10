@@ -11,18 +11,10 @@
 #include "metadata_queries.h"
 #include "utils.h"
 #include "partitioning.h"
-
-#define DEFINE_PLAN(fnname, query, num, args) \
-  static SPIPlanPtr fnname() {\
-	static SPIPlanPtr plan = NULL; \
-	if(plan != NULL) \
-	  return plan; \
-	plan = prepare_plan(query, num, args); \
-	return plan; \
-  }
+#include "chunk.h"
 
 /* Utility function to prepare an SPI plan */
-SPIPlanPtr
+static SPIPlanPtr
 prepare_plan(const char *src, int nargs, Oid *argtypes)
 {
 	SPIPlanPtr	plan;
@@ -48,89 +40,14 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 	return plan;
 }
 
-void
-free_epoch(epoch_and_partitions_set * epoch)
-{
-	if (epoch->partitioning != NULL)
-		pfree(epoch->partitioning);
-	pfree(epoch);
-}
-
-#define CRN_QUERY_ARGS (Oid[]) { INT4OID }
-#define CRN_QUERY "SELECT schema_name, table_name, database_name \
-				FROM _timescaledb_catalog.chunk_replica_node AS crn \
-				WHERE crn.chunk_id = $1"
-
-
-DEFINE_PLAN(get_crn_plan, CRN_QUERY, 1, CRN_QUERY_ARGS)
-
-crn_set *
-fetch_crn_set(crn_set * entry, int32 chunk_id)
-{
-	SPIPlanPtr	plan = get_crn_plan();
-	Datum		args[1] = {Int32GetDatum(chunk_id)};
-	int			ret,
-				total_rows,
-				j;
-	bool		is_null;
-	TupleDesc	tupdesc;
-	crn_row   **tab_array;
-
-	if (entry == NULL)
-		entry = palloc(sizeof(crn_set));
-	CACHE2_elog(WARNING, "Looking up crn %d", chunk_id);
-
-	entry->chunk_id = chunk_id;
-
-	if (SPI_connect() < 0)
-	{
-		elog(ERROR, "Got an SPI connect error");
-	}
-	ret = SPI_execute_plan(plan, args, NULL, false, 0);
-	if (ret <= 0)
-	{
-		elog(ERROR, "Got an SPI error %d", ret);
-	}
-	if (SPI_processed < 1)
-	{
-		elog(ERROR, "Could not find crn");
-	}
-
-
-	tupdesc = SPI_tuptable->tupdesc;
-
-	total_rows = SPI_processed;
-	tab_array = SPI_palloc(total_rows * sizeof(crn_row *));
-
-	for (j = 0; j < total_rows; j++)
-	{
-		HeapTuple	tuple = SPI_tuptable->vals[j];
-		crn_row    *tab = SPI_palloc(sizeof(crn_row));
-
-		Name		name;
-
-		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 1, &is_null));
-		memcpy(tab->schema_name.data, name, NAMEDATALEN);
-
-		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &is_null));
-		memcpy(tab->table_name.data, name, NAMEDATALEN);
-
-		name = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &is_null));
-		memcpy(tab->database_name.data, name, NAMEDATALEN);
-
-		tab_array[j] = tab;
-	}
-	SPI_finish();
-
-	entry->tables = NIL;
-	for (j = 0; j < total_rows; j++)
-	{
-		entry->tables = lappend(entry->tables, tab_array[j]);
-	}
-	pfree(tab_array);
-	return entry;
-}
-
+#define DEFINE_PLAN(fnname, query, num, args) \
+  static SPIPlanPtr fnname() {\
+	static SPIPlanPtr plan = NULL; \
+	if(plan != NULL) \
+	  return plan; \
+	plan = prepare_plan(query, num, args); \
+	return plan; \
+  }
 
 /*
  * Retrieving chunks:
@@ -178,8 +95,8 @@ chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, bool lock,
 	return tuple;
 }
 
-static chunk_row *
-chunk_row_fill_in(chunk_row * chunk, HeapTuple tuple, TupleDesc tupdesc)
+static Chunk *
+chunk_fill_in(Chunk * chunk, HeapTuple tuple, TupleDesc tupdesc)
 {
 	int64		time_ret;
 	bool		is_null;
@@ -210,45 +127,21 @@ chunk_row_fill_in(chunk_row * chunk, HeapTuple tuple, TupleDesc tupdesc)
 	return chunk;
 }
 
-chunk_row *
-chunk_row_insert_new(int32 partition_id, int64 timepoint, bool lock)
+Chunk *
+chunk_insert_new(int32 partition_id, int64 timepoint, bool lock)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;
-	chunk_row  *chunk = palloc(sizeof(chunk_row));
+	Chunk	   *chunk = palloc(sizeof(Chunk));
 	SPIPlanPtr	plan = get_chunk_plan();
 
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
 	tuple = chunk_tuple_create_spi_connected(partition_id, timepoint, lock, &desc, plan);
-	chunk = chunk_row_fill_in(chunk, tuple, desc);
+	chunk = chunk_fill_in(chunk, tuple, desc);
 
 	SPI_finish();
 
 	return chunk;
-}
-
-
-bool
-chunk_row_timepoint_is_member(const chunk_row * row, const int64 time_pt)
-{
-	return row->start_time <= time_pt && row->end_time >= time_pt;
-}
-
-extern crn_row *
-crn_set_get_crn_row_for_db(crn_set * set, char *dbname)
-{
-	ListCell   *lc;
-
-	foreach(lc, set->tables)
-	{
-		crn_row    *cr = lfirst(lc);
-
-		if (strncmp(cr->database_name.data, dbname, NAMEDATALEN) == 0)
-		{
-			return cr;
-		}
-	}
-	return NULL;
 }

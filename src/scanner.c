@@ -34,7 +34,7 @@ typedef struct InternalScannerCtx
 typedef struct Scanner
 {
 	Relation	(*open) (InternalScannerCtx * ctx);
-				ScanDesc(*beginscan) (InternalScannerCtx * ctx);
+	ScanDesc    (*beginscan) (InternalScannerCtx * ctx);
 	bool		(*getnext) (InternalScannerCtx * ctx);
 	void		(*endscan) (InternalScannerCtx * ctx);
 	void		(*close) (InternalScannerCtx * ctx);
