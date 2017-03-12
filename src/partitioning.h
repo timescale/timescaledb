@@ -47,7 +47,7 @@ typedef struct PartitioningInfo
 	PartitioningFunc partfunc;
 }	PartitioningInfo;
 
-typedef struct epoch_and_partitions_set
+typedef struct PartitionEpoch
 {
 	int32		id;
 	int32		hypertable_id;
@@ -56,16 +56,15 @@ typedef struct epoch_and_partitions_set
 	PartitioningInfo *partitioning;
 	int16		num_partitions;
 	Partition	partitions[0];
-}	epoch_and_partitions_set;
+}	PartitionEpoch;
 
-typedef struct epoch_and_partitions_set epoch_and_partitions_set;
 
-epoch_and_partitions_set *partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid);
+PartitionEpoch *partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid);
 int16		partitioning_func_apply(PartitioningInfo * pinfo, Datum value);
 int16		partitioning_func_apply_tuple(PartitioningInfo * pinfo, HeapTuple tuple, TupleDesc desc);
 
-Partition  *partition_epoch_get_partition(epoch_and_partitions_set * epoch, int16 keyspace_pt);
-void		partition_epoch_free(epoch_and_partitions_set * epoch);
+Partition  *partition_epoch_get_partition(PartitionEpoch * epoch, int16 keyspace_pt);
+void		partition_epoch_free(PartitionEpoch * epoch);
 
 bool		partition_keyspace_pt_is_member(const Partition * part, const int16 keyspace_pt);
 

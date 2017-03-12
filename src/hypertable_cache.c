@@ -43,7 +43,7 @@ hypertable_cache_create()
 		.hctl =
 		{
 			.keysize = sizeof(int32),
-			.entrysize = sizeof(hypertable_cache_entry),
+			.entrysize = sizeof(Hypertable),
 			.hcxt = ctx,
 		},
 		.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
@@ -68,7 +68,7 @@ static bool
 hypertable_tuple_found(TupleInfo * ti, void *data)
 {
 	HypertableCacheQueryCtx *hctx = data;
-	hypertable_cache_entry *he = hctx->cctx.entry;
+	Hypertable *he = hctx->cctx.entry;
 	Datum		values[Natts_hypertable];
 	bool		isnull[Natts_hypertable];
 	int32		id;
@@ -131,7 +131,7 @@ hypertable_cache_invalidate_callback(void)
 
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
-hypertable_cache_entry *
+Hypertable *
 hypertable_cache_get_entry(Cache * cache, int32 hypertable_id)
 {
 	HypertableCacheQueryCtx ctx = {
@@ -147,7 +147,7 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 {
 	/* note reverse order; assume oldest stuff last */
 	int64	   *time_pt = (int64 *) time_pt_pointer;
-	epoch_and_partitions_set **entry = (epoch_and_partitions_set **) test;
+	PartitionEpoch **entry = (PartitionEpoch **) test;
 
 	if ((*entry)->start_time <= *time_pt && (*entry)->end_time >= *time_pt)
 	{
@@ -161,11 +161,11 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 	return -1;
 }
 
-epoch_and_partitions_set *
-hypertable_cache_get_partition_epoch(Cache * cache, hypertable_cache_entry * hce, int64 time_pt, Oid relid)
+PartitionEpoch *
+hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid)
 {
 	MemoryContext old;
-	epoch_and_partitions_set *epoch,
+	PartitionEpoch *epoch,
 			  **cache_entry;
 	int			j;
 
@@ -181,7 +181,7 @@ hypertable_cache_get_partition_epoch(Cache * cache, hypertable_cache_entry * hce
 	}
 
 	cache_entry = bsearch(&time_pt, hce->epochs, hce->num_epochs,
-						  sizeof(epoch_and_partitions_set *), cmp_epochs);
+						  sizeof(PartitionEpoch *), cmp_epochs);
 
 	if (cache_entry != NULL)
 	{
@@ -192,11 +192,11 @@ hypertable_cache_get_partition_epoch(Cache * cache, hypertable_cache_entry * hce
 	epoch = partition_epoch_scan(hce->id, time_pt, relid);
 
 	/* check if full */
-	if (hce->num_epochs == MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY)
+	if (hce->num_epochs == MAX_EPOCHS_PER_HYPERTABLE)
 	{
 		/* remove last */
-		partition_epoch_free(hce->epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY - 1]);
-		hce->epochs[MAX_EPOCHS_PER_HYPERTABLE_CACHE_ENTRY - 1] = NULL;
+		partition_epoch_free(hce->epochs[MAX_EPOCHS_PER_HYPERTABLE - 1]);
+		hce->epochs[MAX_EPOCHS_PER_HYPERTABLE - 1] = NULL;
 		hce->num_epochs--;
 	}
 

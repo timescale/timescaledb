@@ -232,17 +232,6 @@ chunk_cache_pin()
 	return cache_pin(chunk_cache_current);
 }
 
-/* Chunk table column numbers */
-#define CHUNK_TBL_COL_ID 1
-#define CHUNK_TBL_COL_PARTITION_ID 2
-#define CHUNK_TBL_COL_STARTTIME 3
-#define CHUNK_TBL_COL_ENDTIME 4
-
-/* Chunk partition ID index columns */
-#define CHUNK_IDX_COL_PARTITION_ID 1
-#define CHUNK_IDX_COL_STARTTIME 2
-#define CHUNK_IDX_COL_ENDTIME 3
-
 typedef struct ChunkScanCtx
 {
 	Chunk	   *chunk;
@@ -263,9 +252,9 @@ chunk_tuple_timepoint_filter(TupleInfo * ti, void *arg)
 				endtime_is_null;
 	Datum		datum;
 
-	datum = heap_getattr(ti->tuple, CHUNK_TBL_COL_STARTTIME, ti->desc, &starttime_is_null);
+	datum = heap_getattr(ti->tuple, Anum_chunk_start_time, ti->desc, &starttime_is_null);
 	ctx->starttime = starttime_is_null ? OPEN_START_TIME : DatumGetInt64(datum);
-	datum = heap_getattr(ti->tuple, CHUNK_TBL_COL_ENDTIME, ti->desc, &endtime_is_null);
+	datum = heap_getattr(ti->tuple, Anum_chunk_end_time, ti->desc, &endtime_is_null);
 	ctx->endtime = endtime_is_null ? OPEN_END_TIME : DatumGetInt64(datum);
 
 	if ((starttime_is_null || ctx->timepoint >= ctx->starttime) &&
@@ -282,7 +271,7 @@ chunk_tuple_found(TupleInfo * ti, void *arg)
 	bool		is_null;
 	Datum		id;
 
-	id = heap_getattr(ti->tuple, CHUNK_TBL_COL_ID, ti->desc, &is_null);
+	id = heap_getattr(ti->tuple, Anum_chunk_id, ti->desc, &is_null);
 	ctx->chunk = chunk_create(DatumGetInt32(id), ctx->partition_id,
 							ctx->starttime, ctx->endtime, ctx->num_replicas);
 	return false;
@@ -318,7 +307,9 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 	/*
 	 * Perform an index scan on epoch ID to find the partitions for the epoch.
 	 */
-	ScanKeyInit(&scankey[0], CHUNK_IDX_COL_PARTITION_ID, BTEqualStrategyNumber,
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_partition_start_time_end_time_idx_partition_id,
+				BTEqualStrategyNumber,
 				F_INT4EQ, Int32GetDatum(partition_id));
 
 	scanner_scan(&ctx);
@@ -334,6 +325,13 @@ chunk_cache_get(Cache * cache, Partition * part, int16 num_replicas, int64 timep
 {
 	Chunk	   *stub_chunk;
 
+	/*
+	 * Scan for a chunk or create and insert a new one if missing. The
+	 * returned chunk will not have replica information and requires a cache
+	 * lookup (and potential scan of replica tables in case of cache miss).
+	 * The chunk will ultimately be stored in the cache, which provides its
+	 * own storage for chunk, which will replace this stub.
+	 */
 	stub_chunk = chunk_scan(part->id, timepoint, lock);
 
 	if (stub_chunk == NULL)
