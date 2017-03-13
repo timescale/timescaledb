@@ -68,10 +68,12 @@ BEGIN
             WHERE oid = info.objid;
 
             IF _timescaledb_internal.is_main_table(table_oid) 
-                AND trigger_name != '_timescale_insert_trigger' 
-                AND trigger_name != '_timescale_modify_trigger' 
+                AND trigger_name != '_timescaledb_main_insert_trigger'
+                AND trigger_name != '_timescaledb_main_after_insert_trigger'
+                AND trigger_name != '_timescaledb_modify_trigger'
             THEN
-                RAISE EXCEPTION 'Cannot create trigger on hypertable';
+                RAISE EXCEPTION 'CREATE TRIGGER not supported on hypertable %', table_oid
+                USING ERRCODE = 'IO101';
             END IF;
         END LOOP;
 END

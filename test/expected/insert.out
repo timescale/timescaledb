@@ -309,9 +309,6 @@ Child tables: _timescaledb_internal._hyper_1_2_0_3_data
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Triggers:
-    _timescale_root_insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'testNs')
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
             Table "_timescaledb_internal._hyper_2_0_replica"
@@ -386,9 +383,6 @@ Inherits: _timescaledb_internal._hyper_2_0_replica
  time      | bigint  |           | plain    |              | 
  metric    | integer |           | plain    |              | 
  device_id | text    |           | extended |              | 
-Triggers:
-    _timescale_root_insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_2_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'chunk_closing_test')
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_2_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
 Child tables: _timescaledb_internal._hyper_2_0_replica
 
 SELECT *

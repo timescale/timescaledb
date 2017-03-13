@@ -50,26 +50,6 @@ timescaledb_ProcessUtility(Node *parsetree,
 		return;
 	}
 
-	if (IsA(parsetree, CopyStmt))
-	{
-		CopyStmt   *copystmt = (CopyStmt *) parsetree;
-		Oid			relId = RangeVarGetRelid(copystmt->relation, NoLock, true);
-
-		if (OidIsValid(relId))
-		{
-			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
-
-			if (hentry != NULL)
-			{
-				copystmt->relation = makeRangeVarFromRelid(hentry->root_table);
-			}
-			cache_release(hcache);
-		}
-		prev_ProcessUtility((Node *) copystmt, queryString, context, params, dest, completionTag);
-		return;
-	}
-
 	/* We don't support renaming hypertables yet so we need to block it */
 	if (IsA(parsetree, RenameStmt))
 	{

@@ -238,9 +238,6 @@ Child tables: "testNs"._hyper_1_1_0_1_data,
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Triggers:
-    _timescale_root_insert_trigger BEFORE INSERT ON "testNs"._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'testNs')
-    after_insert_trigger AFTER INSERT ON "testNs"._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
 Child tables: "testNs"._hyper_1_0_replica
 
 SELECT * FROM "testNs";
