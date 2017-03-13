@@ -47,3 +47,4 @@ sql/main/ddl_util.sql
 sql/main/ddl.sql
 sql/main/ddl_triggers.sql
 sql/main/setup_main.sql
+sql/common/permissions.sql
