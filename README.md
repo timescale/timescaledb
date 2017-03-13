@@ -21,6 +21,8 @@ And either:
 
 ## Installation (from source)
 
+_**NOTE: Currently, upgrading to new versions require a fresh install.**_
+
 ### Option 1: Build and install with local PostgreSQL
 
 ```bash
