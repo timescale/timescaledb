@@ -15,6 +15,10 @@ typedef struct PartitionEpoch PartitionEpoch;
 typedef struct Hypertable
 {
 	int32		id;
+	char		schema[NAMEDATALEN];
+	char		table[NAMEDATALEN];
+	Oid			root_table;
+	Oid			replica_table;
 	char		time_column_name[NAMEDATALEN];
 	Oid			time_column_type;
 	int			num_epochs;
@@ -25,7 +29,9 @@ typedef struct Hypertable
 }	Hypertable;
 
 
-Hypertable *hypertable_cache_get_entry(Cache * cache, int32 hypertable_id);
+extern Hypertable *hypertable_cache_get_entry(Cache * cache, Oid main_table_relid);
+extern Hypertable *
+hypertable_cache_get_entry_with_table(Cache *cache, Oid main_table_relid, char *schema, char *table_name);
 
 PartitionEpoch *hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid);
 

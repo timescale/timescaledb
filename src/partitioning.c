@@ -42,7 +42,7 @@ partitioning_info_create(int num_partitions,
 						 const char *schema,
 						 const char *partfunc,
 						 const char *partcol,
-						 int16 partmod,
+						 int32 partmod,
 						 Oid relid)
 {
 	PartitioningInfo *pi;
@@ -199,7 +199,7 @@ partition_epoch_tuple_found(TupleInfo * ti, void *arg)
 									 is_null ? NULL : DatumGetCString(datum),
 													DatumGetCString(partfunc),
 													DatumGetCString(partcol),
-													DatumGetInt16(partmod),
+													DatumGetInt32(partmod),
 													pctx->relid);
 	}
 	else

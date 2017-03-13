@@ -11,6 +11,7 @@
 \d+ "_timescaledb_internal".*
 
 -- Test that renaming hypertable is blocked
+\set VERBOSITY default
 \set ON_ERROR_STOP 0
 ALTER TABLE "testNs" RENAME TO "newname";
 \set ON_ERROR_STOP 1

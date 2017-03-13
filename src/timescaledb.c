@@ -39,22 +39,14 @@
 #include "timescaledb.h"
 #include "insert.h"
 #include "cache.h"
+#include "hypertable_cache.h"
 #include "errors.h"
 #include "utils.h"
+#include "partitioning.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
-#define HYPERTABLE_INFO_QUERY	"\
-                                SELECT  format('%I.%I', hr.schema_name, hr.table_name)::regclass::oid, \
-                                  pe.partitioning_column, pe.partitioning_func_schema, pe.partitioning_func, pe.partitioning_mod, \
-                                  format('%I.%I', h.root_schema_name, h.root_table_name)::regclass::oid, \
-                                  h.id \
-                                FROM _timescaledb_catalog.hypertable h \
-                                INNER JOIN _timescaledb_catalog.default_replica_node drn ON (drn.hypertable_id = h.id AND drn.database_name = current_database()) \
-                                INNER JOIN _timescaledb_catalog.hypertable_replica hr ON (hr.replica_id = drn.replica_id AND hr.hypertable_id = drn.hypertable_id) \
-                                INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id) \
-                                WHERE h.schema_name = $1 AND h.table_name = $2"
 
 void		_PG_init(void);
 void		_PG_fini(void);
@@ -62,9 +54,6 @@ void		_PG_fini(void);
 /* Postgres hook interface */
 static planner_hook_type prev_planner_hook = NULL;
 static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
-
-/* cached plans */
-static SPIPlanPtr hypertable_info_plan = NULL;
 
 /* variables */
 static bool isLoaded = false;
@@ -74,14 +63,6 @@ PlannedStmt *timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo 
 static void io_xact_callback(XactEvent event, void *arg);
 
 static List *callbackConnections = NIL;
-
-typedef struct hypertable_info
-{
-	Oid			replica_oid;
-	Oid			root_oid;
-	int32		hypertable_id;
-	List	   *partitioning_info;
-}	hypertable_info;
 
 typedef struct partitioning_info
 {
@@ -93,25 +74,25 @@ typedef struct partitioning_info
 
 typedef struct change_table_name_context
 {
-	List	   *hypertable_info;
 	Query	   *parse;
-}	change_table_name_context;
+	Cache	   *hcache;
+	Hypertable *hentry;
+} change_table_name_context;
 
 typedef struct add_partitioning_func_qual_context
 {
 	Query	   *parse;
-	List	   *hypertable_info_list;
-}	add_partitioning_func_qual_context;
+	Cache	   *hcache;
+	Hypertable *hentry;
+} add_partitioning_func_qual_context;
 
 
-hypertable_info *get_hypertable_info(Oid mainRelationOid);
-static void add_partitioning_func_qual(Query *parse, List *hypertable_info_list);
-static Node *add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context * context);
-static partitioning_info *
-			get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List *hypertable_info_list);
+static void add_partitioning_func_qual(Query *parse, Cache *hcache, Hypertable *hentry);
+static Node *add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context *context);
+static PartitioningInfo *
+get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cache *hcache, Hypertable *hentry);
 static Expr *
-			create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod);
-SPIPlanPtr	get_hypertable_info_plan(void);
+			create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema, char *partitioning_func, int32 partitioning_mod);
 
 
 void timescaledb_ProcessUtility(Node *parsetree,
@@ -165,34 +146,6 @@ _PG_fini(void)
 	_chunk_cache_fini();
 }
 
-SPIPlanPtr
-get_hypertable_info_plan()
-{
-	Oid			hypertable_info_plan_args[2] = {TEXTOID, TEXTOID};
-
-	if (hypertable_info_plan != NULL)
-	{
-		return hypertable_info_plan;
-	}
-
-	SPI_connect();
-	hypertable_info_plan = SPI_prepare(HYPERTABLE_INFO_QUERY, 2, hypertable_info_plan_args);
-
-	if (NULL == hypertable_info_plan)
-	{
-		elog(ERROR, "Could not prepare plan");
-	}
-
-	if (SPI_keepplan(hypertable_info_plan) != 0)
-	{
-		elog(ERROR, "Could not keep plan");
-	}
-
-	SPI_finish();
-
-	return hypertable_info_plan;
-}
-
 bool
 IobeamLoaded(void)
 {
@@ -236,21 +189,21 @@ change_table_name_walker(Node *node, void *context)
 
 		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
 		{
-			hypertable_info *hinfo = get_hypertable_info(rangeTableEntry->relid);
+			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rangeTableEntry->relid);
 
-			if (hinfo != NULL)
+			if (hentry != NULL)
 			{
-				ctx->hypertable_info = lappend(ctx->hypertable_info, hinfo);
-				rangeTableEntry->relid = hinfo->replica_oid;
+				ctx->hentry = hentry;
+				rangeTableEntry->relid = hentry->replica_table;
 			}
 		}
 		else if (rangeTableEntry->rtekind == RTE_RELATION && ctx->parse->commandType == CMD_INSERT)
 		{
-			hypertable_info *hinfo = get_hypertable_info(rangeTableEntry->relid);
+			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rangeTableEntry->relid);
 
-			if (hinfo != NULL)
+			if (hentry != NULL)
 			{
-				rangeTableEntry->relid = hinfo->root_oid;
+				rangeTableEntry->relid = hentry->root_table;
 			}
 		}
 		return false;
@@ -279,13 +232,16 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		SetConfigOption("io.print_parse", "false", PGC_USERSET, PGC_S_SESSION);
 
 		/* replace call to main table with call to the replica table */
-		context.hypertable_info = NIL;
+		context.hcache = hypertable_cache_pin();
 		context.parse = parse;
+		context.hentry = NULL;
 		change_table_name_walker((Node *) parse, &context);
-		if (list_length(context.hypertable_info) > 0)
+		/* note assumes 1 hypertable per query */
+		if (context.hentry != NULL)
 		{
-			add_partitioning_func_qual(parse, context.hypertable_info);
+			add_partitioning_func_qual(parse, context.hcache, context.hentry);
 		}
+		cache_release(context.hcache);
 
 		if (printParse != NULL && strcmp(printParse, "true") == 0)
 		{
@@ -306,132 +262,6 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 	return rv;
 }
-
-/*
- *
- * Use the default_replica_node to look up the hypertable_info for a replica table from the oid of the main table.
- * TODO: make this use a cache instead of a db lookup every time.
- *
- * */
-hypertable_info *
-get_hypertable_info(Oid mainRelationOid)
-{
-	Oid			namespace = get_rel_namespace(mainRelationOid);
-	Oid			hypertable_meta = get_relname_relid("hypertable", get_namespace_oid("_timescaledb_catalog", false));
-	char	   *tableName = get_rel_name(mainRelationOid);
-	char	   *schemaName = get_namespace_name(namespace);
-	Datum		args[2] = {CStringGetTextDatum(schemaName), CStringGetTextDatum(tableName)};
-	int			ret;
-	SPIPlanPtr	plan = get_hypertable_info_plan();
-
-
-	/* prevents infinite recursion, don't check hypertable meta tables */
-	if (
-		hypertable_meta == InvalidOid
-		|| namespace == PG_CATALOG_NAMESPACE
-		|| namespace == get_namespace_oid("_timescaledb_catalog", false)
-		)
-	{
-		return NULL;
-	}
-
-
-	SPI_connect();
-
-	ret = SPI_execute_plan(plan, args, NULL, true, 0);
-
-	if (ret <= 0)
-	{
-		elog(ERROR, "Got an SPI error %d %d", ret, SPI_ERROR_ARGUMENT);
-	}
-
-	if (SPI_processed > 0)
-	{
-		bool		isnull;
-		int			total_rows = SPI_processed;
-		int			j;
-
-		/*
-		 * do not populate list until SPI_finish because the list cannot be
-		 * populated in the SPI memory context
-		 */
-		List	   *partitioning_info_list;
-
-		/* used to track  list stuff til list can be populated */
-		partitioning_info **partitioning_info_array = SPI_palloc(total_rows * sizeof(partitioning_info *));
-		hypertable_info *hinfo = SPI_palloc(sizeof(hypertable_info));
-
-		TupleDesc	tupdesc = SPI_tuptable->tupdesc;
-		HeapTuple	tuple = SPI_tuptable->vals[0];
-
-		hinfo->replica_oid = DatumGetObjectId(SPI_getbinval(tuple, tupdesc, 1, &isnull));
-		hinfo->root_oid = DatumGetObjectId(SPI_getbinval(tuple, tupdesc, 6, &isnull));
-		hinfo->hypertable_id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 7, &isnull));
-
-		for (j = 0; j < total_rows; j++)
-		{
-			HeapTuple	tuple = SPI_tuptable->vals[j];
-			Name		partitioning_func_schema,
-						partitioning_func,
-						partitioning_column;
-			int32		partitioning_mod;
-
-			partitioning_info *info = (partitioning_info *) SPI_palloc(sizeof(partitioning_info));
-
-			memset(info, 0, sizeof(partitioning_info));
-
-			partitioning_column = DatumGetName(SPI_getbinval(tuple, tupdesc, 2, &isnull));
-
-			if (!isnull)
-			{
-				info->partitioning_column = SPI_palloc(sizeof(NameData));
-				memcpy(info->partitioning_column, partitioning_column, sizeof(NameData));
-			}
-
-			partitioning_func_schema = DatumGetName(SPI_getbinval(tuple, tupdesc, 3, &isnull));
-
-			if (!isnull)
-			{
-				info->partitioning_func_schema = SPI_palloc(sizeof(NameData));
-				memcpy(info->partitioning_func_schema, partitioning_func_schema, sizeof(NameData));
-			}
-
-			partitioning_func = DatumGetName(SPI_getbinval(tuple, tupdesc, 4, &isnull));
-
-			if (!isnull)
-			{
-				info->partitioning_func = SPI_palloc(sizeof(NameData));
-				memcpy(info->partitioning_func, partitioning_func, sizeof(NameData));
-			}
-
-			partitioning_mod = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 5, &isnull));
-
-			if (!isnull)
-			{
-				info->partitioning_mod = partitioning_mod;
-			}
-
-			partitioning_info_array[j] = info;
-		}
-
-		SPI_finish();
-
-		partitioning_info_list = NIL;
-
-		for (j = 0; j < total_rows; j++)
-		{
-			partitioning_info_list = lappend(partitioning_info_list, partitioning_info_array[j]);
-		}
-		pfree(partitioning_info_array);
-		hinfo->partitioning_info = partitioning_info_list;
-
-		return hinfo;
-	}
-	SPI_finish();
-
-	return NULL;
-}
-
 
 
 char *
@@ -456,17 +286,18 @@ copy_table_name(int32 hypertable_id)
  * This tranformation helps because the check constraint on a table is of the form CHECK(partitioning_func(partition_column, partitioning_mod) BETWEEN X AND Y).
  */
 static void
-add_partitioning_func_qual(Query *parse, List *hypertable_info_list)
+add_partitioning_func_qual(Query *parse, Cache *hcache, Hypertable *hentry)
 {
 	add_partitioning_func_qual_context context;
 
 	context.parse = parse;
-	context.hypertable_info_list = hypertable_info_list;
+	context.hcache = hcache;
+	context.hentry = hentry;
 	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
 }
 
 static Node *
-add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context * context)
+add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context *context)
 {
 	if (node == NULL)
 		return NULL;
@@ -519,19 +350,15 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 						 * I now have a var = const. Make sure var is a
 						 * partitioning column
 						 */
-						partitioning_info *pi = get_partitioning_info_for_partition_column_var(var_expr,
+						PartitioningInfo *pi = get_partitioning_info_for_partition_column_var(var_expr,
 															  context->parse,
-											  context->hypertable_info_list);
+										   context->hcache, context->hentry);
 
-						if (pi != NULL
-							&& pi->partitioning_column != NULL
-							&& pi->partitioning_func != NULL)
+						if (pi != NULL)
 						{
 							/* The var is a partitioning column */
 							Expr	   *partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
-												pi->partitioning_func_schema,
-													   pi->partitioning_func,
-													   pi->partitioning_mod);
+																								 pi->partfunc.schema, pi->partfunc.name, pi->partfunc.modulos);
 
 							return (Node *) make_andclause(list_make2(node, partitioning_clause));
 
@@ -548,32 +375,21 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 
 /* Returns the partitioning info for a var if the var is a partitioning column. If the var is not a partitioning
  * column return NULL */
-static partitioning_info *
-get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List *hypertable_info_list)
+static PartitioningInfo *
+get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cache *hcache, Hypertable *hentry)
 {
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
-	ListCell   *hicell;
 
-	foreach(hicell, hypertable_info_list)
+	if (rte->relid == hentry->replica_table)
 	{
-		hypertable_info *info = lfirst(hicell);
+		/* get latest partition epoch: TODO scan all pe */
+		PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
 
-		if (rte->relid == info->replica_oid)
+		if (eps->partitioning != NULL &&
+			strncmp(eps->partitioning->column, varname, NAMEDATALEN) == 0)
 		{
-			ListCell   *picell;
-
-			foreach(picell, info->partitioning_info)
-			{
-				partitioning_info *pi = lfirst(picell);
-
-				if (pi->partitioning_column != NULL &&
-					strcmp(NameStr(*(pi->partitioning_column)), varname) == 0)
-				{
-					return pi;
-				}
-
-			}
+			return eps->partitioning;
 		}
 	}
 	return NULL;
@@ -583,10 +399,10 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, List
  * This function makes a copy of all nodes given in input.
  * */
 static Expr *
-create_partition_func_equals_const(Var *var_expr, Const *const_expr, Name partitioning_func_schema, Name partitioning_func, int32 partitioning_mod)
+create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema, char *partitioning_func, int32 partitioning_mod)
 {
 	Expr	   *op_expr;
-	List	   *func_name = list_make2(makeString(NameStr(*(partitioning_func_schema))), makeString(NameStr(*(partitioning_func))));
+	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
 	Var		   *var_for_fn_call;
 	Const	   *const_for_fn_call;
 	Const	   *mod_const_var_call;
@@ -788,12 +604,14 @@ timescaledb_ProcessUtility(Node *parsetree,
 
 		if (OidIsValid(relId))
 		{
-			hypertable_info *hinfo = get_hypertable_info(relId);
+			Cache	   *hcache = hypertable_cache_pin();
+			Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
 
-			if (hinfo != NULL)
+			if (hentry != NULL)
 			{
-				copystmt->relation = makeRangeVarFromRelid(hinfo->root_oid);
+				copystmt->relation = makeRangeVarFromRelid(hentry->root_table);
 			}
+			cache_release(hcache);
 		}
 		prev_ProcessUtility((Node *) copystmt, queryString, context, params, dest, completionTag);
 		return;
@@ -807,12 +625,14 @@ timescaledb_ProcessUtility(Node *parsetree,
 
 		if (OidIsValid(relId))
 		{
-			hypertable_info *hinfo = get_hypertable_info(relId);
+			Cache	   *hcache = hypertable_cache_pin();
+			Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
 
-			if (hinfo != NULL && renamestmt->renameType == OBJECT_TABLE)
+			if (hentry != NULL && renamestmt->renameType == OBJECT_TABLE)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					   errmsg("Renaming hypertables is not yet supported")));
+			cache_release(hcache);
 		}
 		prev_ProcessUtility((Node *) renamestmt, queryString, context, params, dest, completionTag);
 		return;

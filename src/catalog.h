@@ -21,6 +21,8 @@
 enum CatalogTable
 {
 	HYPERTABLE = 0,
+	HYPERTABLE_REPLICA,
+	DEFAULT_REPLICA_NODE,
 	PARTITION_EPOCH,
 	PARTITION,
 	CHUNK,
@@ -41,6 +43,7 @@ enum CatalogTable
 enum
 {
 	HYPERTABLE_ID_INDEX = 0,
+	HYPERTABLE_NAME_INDEX,
 	_MAX_HYPERTABLE_INDEX,
 };
 
@@ -75,6 +78,98 @@ enum Anum_hypertable_pkey_idx
 
 #define Natts_hypertable_pkey_idx \
 	(_Anum_hypertable_pkey_max - 1)
+
+/* Hypertable name (schema,table) index attribute numbers */
+enum Anum_hypertable_name_idx
+{
+	Anum_hypertable_name_idx_schema = 1,
+	Anum_hypertable_name_idx_table,
+	_Anum_hypertable_name_max,
+};
+
+#define Natts_hypertable_name_idx (_Anum_hypertable_name_max - 1)
+
+/***********************************
+ *
+ * Hypertable replica table definitions
+ *
+ ***********************************/
+
+#define HYPERTABLE_REPLICA_TABLE_NAME "hypertable_replica"
+
+enum Anum_hypertable_replica
+{
+	Anum_hypertable_replica_hypertable_id = 1,
+	Anum_hypertable_replica_replica_id,
+	Anum_hypertable_replica_schema_name,
+	Anum_hypertable_replica_table_name,
+	_Anum_hypertable_replica_max,
+};
+
+#define Natts_hypertable_replica (_Anum_hypertable_replica_max - 1)
+
+enum
+{
+	HYPERTABLE_REPLICA_HYPERTABLE_REPLICA_INDEX = 0,
+	_MAX_HYPERTABLE_REPLICA_INDEX,
+};
+
+enum Anum_hypertable_replica_hypertable_replica_idx
+{
+	Anum_hypertable_replica_hypertable_replica_idx_hypertable = 1,
+	Anum_hypertable_replica_hypertable_replica_idx_replica,
+	_Anum_hypertable_replica_hypertable_replica_idx_max,
+};
+
+
+typedef struct FormData_hypertable_replica
+{
+	int32		hypertable_id;
+	int16		replica_id;
+	NameData	schema_name;
+	NameData	table_name;
+} FormData_hypertable_replica;
+typedef FormData_hypertable_replica *Form_hypertable_replica;
+
+/***********************************
+ *
+ * default replica table definitions
+ *
+ ***********************************/
+
+#define DEFAULT_REPLICA_NODE_TABLE_NAME "default_replica_node"
+
+enum Anum_default_replica_node
+{
+	Anum_default_replica_node_database_name = 1,
+	Anum_default_replica_node_hypertable_id,
+	Anum_default_replica_node_replica_id,
+	_Anum_default_replica_node_max,
+};
+
+#define Natts_default_replica_node (_Anum_default_replica_node_max - 1)
+
+enum
+{
+	DEFAULT_REPLICA_NODE_DATABASE_HYPERTABLE_INDEX = 0,
+	_MAX_DEFAULT_REPLICA_NODE_INDEX,
+};
+
+enum Anum_default_replica_node_database_hypertable_idx
+{
+	Anum_default_replica_node_database_hypertable_idx_database = 1,
+	Anum_default_replica_node_database_hypertable_idx_hypertable,
+	_Anum_default_replica_node_hypertable_replica_idx_max,
+};
+
+typedef struct FormData_default_replica_node
+{
+	NameData	database_name;
+	int32		hypertable_id;
+	int16		replica_id;
+} FormData_default_replica_node;
+
+typedef FormData_default_replica_node *Form_default_replica_node;
 
 /***********************************
  *
@@ -238,7 +333,9 @@ enum Anum_chunk_replica_node_pkey_idx
 #define _MAX_TABLE_INDEXES MAX(_MAX_HYPERTABLE_INDEX,\
 							   MAX(_MAX_PARTITION_EPOCH_INDEX, \
 								   MAX(_MAX_PARTITION_INDEX, \
-									   MAX(_MAX_CHUNK_INDEX, _MAX_CHUNK_REPLICA_NODE_INDEX))))
+									   MAX(_MAX_HYPERTABLE_REPLICA_INDEX, \
+										  MAX(_MAX_DEFAULT_REPLICA_NODE_INDEX, \
+											MAX(_MAX_CHUNK_INDEX, _MAX_CHUNK_REPLICA_NODE_INDEX))))))
 
 typedef struct Catalog
 {
@@ -251,7 +348,7 @@ typedef struct Catalog
 		Oid			id;
 		Oid			index_ids[_MAX_TABLE_INDEXES];
 	}			tables[_MAX_CATALOG_TABLES];
-}	Catalog;
+} Catalog;
 
 Catalog    *catalog_get(void);
 
