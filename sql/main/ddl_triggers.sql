@@ -52,6 +52,31 @@ BEGIN
 END
 $BODY$;
 
+--Handles ddl create trigger commands on hypertables
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_create_trigger()
+    RETURNS event_trigger LANGUAGE plpgsql AS
+$BODY$
+DECLARE
+    info           record;
+    table_oid      regclass;
+    trigger_name            TEXT;
+BEGIN
+    FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
+        LOOP
+            SELECT tgrelid, tgname INTO STRICT table_oid, trigger_name
+            FROM pg_catalog.pg_trigger
+            WHERE oid = info.objid;
+
+            IF _timescaledb_internal.is_main_table(table_oid) 
+                AND trigger_name != '_timescale_insert_trigger' 
+                AND trigger_name != '_timescale_modify_trigger' 
+            THEN
+                RAISE EXCEPTION 'Cannot create trigger on hypertable';
+            END IF;
+        END LOOP;
+END
+$BODY$;
+
 --Handles ddl alter index commands on hypertables
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_index()
     RETURNS event_trigger LANGUAGE plpgsql AS

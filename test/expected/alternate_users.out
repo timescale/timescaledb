@@ -200,12 +200,21 @@ ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 DROP NOT NULL;
 ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_2 TO sensor_2_renamed;
 ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
 DROP INDEX "ind_sensor_1";
+CREATE OR REPLACE FUNCTION empty_trigger_func()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+END
+$BODY$;
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
-psql:include/ddl_ops_2.sql:15: ERROR:  ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:23: ERROR:  ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:16: ERROR:  ALTER INDEX not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:24: ERROR:  ALTER INDEX not supported on hypertable "Hypertable_1"
+CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
+FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
+psql:include/ddl_ops_2.sql:26: ERROR:  Cannot create trigger on hypertable
 \set ON_ERROR_STOP 1
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;

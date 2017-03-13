@@ -70,17 +70,17 @@ BEGIN
         -- UPDATE not supported, so do them before action
         EXECUTE format(
             $$
-                CREATE TRIGGER modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
+                CREATE TRIGGER _timescale_modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table();
             $$, NEW.schema_name, NEW.table_name);
         EXECUTE format(
             $$
-                CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
+                CREATE TRIGGER _timescale_insert_trigger AFTER INSERT ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_modify_main_table();
             $$, NEW.schema_name, NEW.table_name);
         EXECUTE format(
             $$
-                CREATE TRIGGER insert_trigger BEFORE INSERT ON %I.%I
+                CREATE TRIGGER _timescale_root_insert_trigger BEFORE INSERT ON %I.%I
                 FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger(%L, %L);
             $$, NEW.root_schema_name, NEW.root_table_name, NEW.schema_name, NEW.table_name);
         EXECUTE format(
