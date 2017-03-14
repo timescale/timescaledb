@@ -504,7 +504,7 @@ insert_trigger_ctx_tuplesort_put(InsertTriggerCtx * tctx, HeapTuple tuple, Tuple
 
 	/*
 	 * Create a new (expanded) tuple from the old one that has the partition
-	 * index and timepoint as the two last attributes
+	 * index as the last attribute
 	 */
 	tuple = heap_tuple_add_partition_index(tuple, tupdesc, tctx->expanded_tupdesc, part->index);
 
