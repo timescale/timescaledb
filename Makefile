@@ -4,7 +4,7 @@ SQL_FILES = $(shell cat sql/load_order.txt)
 EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^.*'\(.*\)'$\/\1/g")
 EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 
-DATA = $(wildcard sql/$(EXTENSION)--*.sql)
+DATA = $(EXT_SQL_FILE)
 MODULE_big = $(EXTENSION)
 
 SRCS = \
@@ -72,7 +72,7 @@ package: clean $(EXT_SQL_FILE)
 	@mkdir -p package/extension
 	$(install_sh) -m 755 $(EXTENSION).so 'package/lib/$(EXTENSION).so'
 	$(install_sh) -m 644 $(EXTENSION).control 'package/extension/'
-	$(install_sh) -m 644 $(wildcard sql/$(EXTENSION)--*.sql)  'package/extension/'
+	$(install_sh) -m 644 $(EXT_SQL_FILE) 'package/extension/'
 
 typedef.list: clean $(OBJS)
 	./generate_typedef.sh

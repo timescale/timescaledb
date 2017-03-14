@@ -1,6 +1,6 @@
 # timescaledb extension
 comment = 'Enables scalable inserts and complex queries for time-series data'
-default_version = '0.0.2-beta'
+default_version = '0.0.3-beta'
 module_pathname = '$libdir/timescaledb'
 requires = 'dblink, postgres_fdw, hstore'
 relocatable = true
