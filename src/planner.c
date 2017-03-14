@@ -24,19 +24,19 @@ bool		extension_is_loaded(void);
 
 static planner_hook_type prev_planner_hook;
 
-typedef struct change_table_name_context
+typedef struct ChangeTableNameCtx
 {
 	Query	   *parse;
 	Cache	   *hcache;
 	Hypertable *hentry;
-} change_table_name_context;
+} ChangeTableNameCtx;
 
-typedef struct add_partitioning_func_qual_context
+typedef struct AddPartFuncQualCtx
 {
 	Query	   *parse;
 	Cache	   *hcache;
 	Hypertable *hentry;
-} add_partitioning_func_qual_context;
+} AddPartFuncQualCtx;
 
 /*
  * Change all main tables to one of the replicas in the parse tree.
@@ -53,7 +53,7 @@ change_table_name_walker(Node *node, void *context)
 	if (IsA(node, RangeTblEntry))
 	{
 		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
-		change_table_name_context *ctx = (change_table_name_context *) context;
+		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
 
 		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
 		{
@@ -113,7 +113,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
  * all nodes given in input. */
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema,
-							 char *partitioning_func, int32 partitioning_mod)
+								   char *partitioning_func, int32 partitioning_mod)
 {
 	Expr	   *op_expr;
 	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
@@ -162,7 +162,7 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 }
 
 static Node *
-add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_context *context)
+add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 {
 	if (node == NULL)
 		return NULL;
@@ -260,11 +260,11 @@ add_partitioning_func_qual_mutator(Node *node, add_partitioning_func_qual_contex
 static void
 add_partitioning_func_qual(Query *parse, Cache * hcache, Hypertable * hentry)
 {
-	add_partitioning_func_qual_context context;
-
-	context.parse = parse;
-	context.hcache = hcache;
-	context.hentry = hentry;
+	AddPartFuncQualCtx context = {
+		.parse = parse,
+		.hcache = hcache,
+		.hentry = hentry,
+	};
 	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
 }
 
@@ -275,7 +275,7 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 	if (extension_is_loaded())
 	{
-		change_table_name_context context;
+		ChangeTableNameCtx context;
 		char	   *printParse = GetConfigOptionByName("io.print_parse", NULL, true);
 
 		/* set to false to not print all internal actions */
