@@ -25,13 +25,13 @@
 #include <commands/trigger.h>
 #include <utils/inval.h>
 
-#include "timescaledb.h"
 #include "hypertable_cache.h"
 #include "chunk_cache.h"
 
 #define CACHE_INVAL_PROXY_SCHEMA "_timescaledb_cache"
 #define CACHE_INVAL_PROXY_SCHEMA_OID get_namespace_oid(CACHE_INVAL_PROXY_SCHEMA, false)
 
+bool        IobeamLoaded(void);
 void		_cache_invalidate_init(void);
 void		_cache_invalidate_fini(void);
 void		_cache_invalidate_extload(void);

@@ -32,7 +32,6 @@
 #include "catalog.h"
 #include "pgmurmur3.h"
 #include "chunk.h"
-#include "timescaledb.h"
 
 static FmgrInfo *
 get_close_if_needed_fn()
