@@ -30,16 +30,15 @@ typedef struct Hypertable
 
 
 extern Hypertable *hypertable_cache_get_entry(Cache * cache, Oid main_table_relid);
-extern Hypertable *
-hypertable_cache_get_entry_with_table(Cache *cache, Oid main_table_relid, char *schema, char *table_name);
+extern Hypertable *hypertable_cache_get_entry_with_table(Cache * cache, Oid main_table_relid, const char *schema, const char *table);
 
-PartitionEpoch *hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid);
+extern PartitionEpoch *hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid);
 
-void		hypertable_cache_invalidate_callback(void);
+extern void hypertable_cache_invalidate_callback(void);
 
 extern Cache *hypertable_cache_pin(void);
 
-void		_hypertable_cache_init(void);
-void		_hypertable_cache_fini(void);
+extern void _hypertable_cache_init(void);
+extern void _hypertable_cache_fini(void);
 
 #endif   /* TIMESCALEDB_HYPERTABLE_CACHE_H */
