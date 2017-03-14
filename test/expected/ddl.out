@@ -105,8 +105,9 @@ Indexes:
     "ind_humidity" btree ("time", humidity)
     "ind_sensor_1" btree ("time", sensor_1)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 \d+ "_timescaledb_internal"."_hyper_1_root"
                          Table "_timescaledb_internal._hyper_1_root"
@@ -120,9 +121,6 @@ Triggers:
  sensor_2  | numeric | not null default 1             | main     |              | 
  sensor_3  | numeric | not null default 1             | main     |              | 
  sensor_4  | numeric | not null default 1             | main     |              | 
-Triggers:
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
-    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'Hypertable_1')
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
 \d+ _timescaledb_internal._hyper_1_1_0_1_data
@@ -164,13 +162,23 @@ ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2 DROP NOT NULL;
 ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_2 TO sensor_2_renamed;
 ALTER TABLE PUBLIC."Hypertable_1" RENAME COLUMN sensor_3 TO sensor_3_renamed;
 DROP INDEX "ind_sensor_1";
+CREATE OR REPLACE FUNCTION empty_trigger_func()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+END
+$BODY$;
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
-psql:include/ddl_ops_2.sql:15: ERROR:  IO101: ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:23: ERROR:  IO101: ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:16: ERROR:  IO101: ALTER INDEX not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:24: ERROR:  IO101: ALTER INDEX not supported on hypertable "Hypertable_1"
+LOCATION:  exec_stmt_raise, pl_exec.c:3165
+CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
+FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
+psql:include/ddl_ops_2.sql:26: ERROR:  IO101: CREATE TRIGGER not supported on hypertable "Hypertable_1"
 LOCATION:  exec_stmt_raise, pl_exec.c:3165
 \set ON_ERROR_STOP 1
 --create column with same name as previously renamed one
@@ -194,8 +202,9 @@ Indexes:
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_modify_main_table()
-    modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 \d+ "_timescaledb_internal"."_hyper_1_root"
                          Table "_timescaledb_internal._hyper_1_root"
@@ -210,9 +219,6 @@ Triggers:
  temp_f           | integer | not null default 31    | plain    |              | 
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
-Triggers:
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
-    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'Hypertable_1')
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
 SELECT * FROM PUBLIC."Hypertable_1";

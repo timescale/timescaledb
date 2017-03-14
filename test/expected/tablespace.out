@@ -112,9 +112,6 @@ Child tables: _timescaledb_internal._hyper_1_2_0_2_data
  time      | timestamp without time zone |           | plain    |              | 
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
-Triggers:
-    after_insert_trigger AFTER INSERT ON _timescaledb_internal._hyper_1_root FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger()
-    insert_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_root FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger('public', 'test_tspace')
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
 --cleanup

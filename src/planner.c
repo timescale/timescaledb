@@ -55,7 +55,9 @@ change_table_name_walker(Node *node, void *context)
 		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
 		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
 
-		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh)
+		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh
+			&& ctx->parse->commandType != CMD_INSERT
+			)
 		{
 			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rangeTableEntry->relid);
 
@@ -65,15 +67,7 @@ change_table_name_walker(Node *node, void *context)
 				rangeTableEntry->relid = hentry->replica_table;
 			}
 		}
-		else if (rangeTableEntry->rtekind == RTE_RELATION && ctx->parse->commandType == CMD_INSERT)
-		{
-			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rangeTableEntry->relid);
 
-			if (hentry != NULL)
-			{
-				rangeTableEntry->relid = hentry->root_table;
-			}
-		}
 		return false;
 	}
 

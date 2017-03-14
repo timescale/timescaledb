@@ -19,21 +19,11 @@ BEGIN
 END
 $BODY$;
 
---Trigger for when stuff is inserted into main table (error because everything should go through a temp table)
-CREATE OR REPLACE FUNCTION _timescaledb_internal.on_modify_main_table()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-    RAISE EXCEPTION 'Should never be inserting data directly into main table'
-    USING ERRCODE = 'IO501';
-END
-$BODY$;
+CREATE OR REPLACE FUNCTION  _timescaledb_internal.main_table_insert_trigger() RETURNS TRIGGER
+	AS '$libdir/timescaledb', 'insert_main_table_trigger' LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION  _timescaledb_internal.root_table_insert_trigger() RETURNS TRIGGER
-	AS '$libdir/timescaledb', 'insert_root_table_trigger' LANGUAGE C;
-
-CREATE OR REPLACE FUNCTION  _timescaledb_internal.root_table_after_insert_trigger() RETURNS TRIGGER
-	AS '$libdir/timescaledb', 'insert_root_table_trigger_after' LANGUAGE C;
+CREATE OR REPLACE FUNCTION  _timescaledb_internal.main_table_after_insert_trigger() RETURNS TRIGGER
+	AS '$libdir/timescaledb', 'insert_main_table_trigger_after' LANGUAGE C;
 
 -- Trigger for handling the addition of new hypertables.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_hypertable()
@@ -70,24 +60,19 @@ BEGIN
         -- UPDATE not supported, so do them before action
         EXECUTE format(
             $$
-                CREATE TRIGGER modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
+                CREATE TRIGGER _timescaledb_modify_trigger BEFORE UPDATE OR DELETE ON %I.%I
                 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table();
             $$, NEW.schema_name, NEW.table_name);
         EXECUTE format(
             $$
-                CREATE TRIGGER insert_trigger AFTER INSERT ON %I.%I
-                FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_modify_main_table();
+                CREATE TRIGGER _timescaledb_main_insert_trigger BEFORE INSERT ON %I.%I
+                FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger();
             $$, NEW.schema_name, NEW.table_name);
         EXECUTE format(
             $$
-                CREATE TRIGGER insert_trigger BEFORE INSERT ON %I.%I
-                FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.root_table_insert_trigger(%L, %L);
-            $$, NEW.root_schema_name, NEW.root_table_name, NEW.schema_name, NEW.table_name);
-        EXECUTE format(
-            $$
-                CREATE TRIGGER after_insert_trigger AFTER INSERT ON %I.%I
-                FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.root_table_after_insert_trigger();
-            $$, NEW.root_schema_name, NEW.root_table_name);
+                CREATE TRIGGER _timescaledb_main_after_insert_trigger AFTER INSERT ON %I.%I
+                FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger();
+            $$, NEW.schema_name, NEW.table_name);
         RETURN NEW;
     END IF;
 
