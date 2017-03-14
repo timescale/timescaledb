@@ -623,14 +623,13 @@ insert_root_table_trigger_after(PG_FUNCTION_ARGS)
 		elog(ERROR, "Unsupported event for trigger");
 
 	/*
-	 * --This guard protects against calling insert_data() twice in the same
-	 * transaction, --which might otherwise cause a deadlock in case the
-	 * second insert_data() involves a chunk --that was inserted into in the
-	 * first call to insert_data(). --This is a temporary safe guard that
-	 * should ideally be removed once chunk management --has been refactored
-	 * and improved to avoid such deadlocks. --NOTE: In its current form, this
-	 * safe guard unfortunately prohibits transactions --involving INSERTs on
-	 * two different hypertables.
+	 * This guard protects against calling insert_data() twice in the same
+	 * transaction, which might otherwise cause a deadlock in case the second
+	 * insert_data() involves a chunk that was inserted into in the first call
+	 * to insert_data(). This is a temporary safe guard that should ideally be
+	 * removed once chunk management has been refactored and improved to avoid
+	 * such deadlocks. NOTE: In its current form, this safe guard unfortunately
+	 * prohibits transactions involving INSERTs on two different hypertables.
 	 */
 	insert_guard = GetConfigOptionByName("io.insert_data_guard", NULL, true);
 
