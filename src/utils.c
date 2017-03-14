@@ -235,3 +235,33 @@ create_fmgr(char *schema, char *function_name, int num_args)
 
 	return finfo;
 }
+
+
+/* Function to get the local hostname. */
+PG_FUNCTION_INFO_V1(pg_gethostname);
+Datum
+pg_gethostname(PG_FUNCTION_ARGS)
+{
+	text	   *t;
+	long		hostname_max_len = sysconf(_SC_HOST_NAME_MAX);
+	size_t		length;
+
+	if (hostname_max_len == -1)
+	{
+		PG_RETURN_TEXT_P(NULL);
+	}
+
+	t = (text *) palloc(VARHDRSZ + hostname_max_len + 1);
+	SET_VARSIZE(t, VARHDRSZ);
+	memset(VARDATA(t), '\0', hostname_max_len + 1);
+
+	if (gethostname((char *) VARDATA(t), hostname_max_len) == -1)
+	{
+		PG_RETURN_TEXT_P(NULL);
+	}
+
+	length = strnlen((char *) VARDATA(t), hostname_max_len);
+	SET_VARSIZE(t, VARHDRSZ + length);
+
+	PG_RETURN_TEXT_P(t);
+}

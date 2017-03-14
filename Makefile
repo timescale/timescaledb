@@ -8,7 +8,7 @@ DATA = $(EXT_SQL_FILE)
 MODULE_big = $(EXTENSION)
 
 SRCS = \
-	src/timescaledb.c \
+	src/init.c \
 	src/murmur3.c \
 	src/pgmurmur3.c \
 	src/utils.c \
@@ -22,7 +22,10 @@ SRCS = \
 	src/hypertable_replica.c \
 	src/chunk_cache.c \
 	src/partitioning.c \
-	src/insert.c
+	src/insert.c \
+	src/planner.c \
+	src/process_utility.c \
+	src/xact.c
 
 OBJS = $(SRCS:.c=.o)
 
