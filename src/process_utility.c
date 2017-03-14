@@ -6,7 +6,7 @@
 #include "utils.h"
 #include "hypertable_cache.h"
 
-bool		IobeamLoaded(void);
+bool		extension_is_loaded(void);
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
 
@@ -44,7 +44,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 						   DestReceiver *dest,
 						   char *completionTag)
 {
-	if (!IobeamLoaded())
+	if (!extension_is_loaded())
 	{
 		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
 		return;

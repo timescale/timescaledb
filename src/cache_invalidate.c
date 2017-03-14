@@ -31,7 +31,7 @@
 #define CACHE_INVAL_PROXY_SCHEMA "_timescaledb_cache"
 #define CACHE_INVAL_PROXY_SCHEMA_OID get_namespace_oid(CACHE_INVAL_PROXY_SCHEMA, false)
 
-bool        IobeamLoaded(void);
+bool        extension_is_loaded(void);
 void		_cache_invalidate_init(void);
 void		_cache_invalidate_fini(void);
 void		_cache_invalidate_extload(void);
@@ -53,7 +53,7 @@ static void
 inval_cache_callback(Datum arg, Oid relid)
 {
 	/* TODO: look at IsTransactionState should this be necessary? */
-	if (!IobeamLoaded())
+	if (!extension_is_loaded())
 		return;
 
 	if (relid == InvalidOid || relid == hypertable_cache_inval_proxy_oid)

@@ -28,7 +28,7 @@ extern void _xact_fini(void);
 extern void _PG_init(void);
 extern void _PG_fini(void);
 
-extern bool IobeamLoaded(void);
+extern bool extension_is_loaded(void);
 
 void
 _PG_init(void)
@@ -53,12 +53,12 @@ _PG_fini(void)
 	_chunk_cache_fini();
 }
 
-static bool isLoaded = false;
+static bool is_loaded = false;
 
 bool
-IobeamLoaded(void)
+extension_is_loaded(void)
 {
-	if (!isLoaded)
+	if (!is_loaded)
 	{
 		Oid			id;
 
@@ -71,9 +71,9 @@ IobeamLoaded(void)
 
 		if (id != InvalidOid && !(creating_extension && id == CurrentExtensionObject))
 		{
-			isLoaded = true;
+			is_loaded = true;
 			_cache_invalidate_extload();
 		}
 	}
-	return isLoaded;
+	return is_loaded;
 }

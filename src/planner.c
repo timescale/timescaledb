@@ -20,7 +20,7 @@
 void		_planner_init(void);
 void		_planner_fini(void);
 
-bool		IobeamLoaded(void);
+bool		extension_is_loaded(void);
 
 static planner_hook_type prev_planner_hook;
 
@@ -273,7 +273,7 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 {
 	PlannedStmt *rv = NULL;
 
-	if (IobeamLoaded())
+	if (extension_is_loaded())
 	{
 		change_table_name_context context;
 		char	   *printParse = GetConfigOptionByName("io.print_parse", NULL, true);
