@@ -9,21 +9,36 @@ For a more detailed description of our architecture, [please read
 the technical
 paper](http://www.timescaledb.com/papers/timescaledb.pdf).
 
-## Prerequisites
-
-- The [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
-
-And either:
-
-- *Option 1* - A standard **PostgreSQL 9.6** installation with development environment (header files), OR
-
-- *Option 2* - [Docker](https://docs.docker.com/engine/installation/) (see separate build and run instructions)
+There are two ways to install TimescaleDB: (1) Docker and (2) Postgres.
 
 ## Installation (from source)
 
-_**NOTE: Currently, upgrading to new versions require a fresh install.**_
+_NOTE: Currently, upgrading to new versions require a fresh install._
 
-### Option 1: Build and install with local PostgreSQL
+### Installation Options
+
+#### Option 1 - Docker (recommended)
+
+**Prerequisites**
+- [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
+- [Docker](https://docs.docker.com/engine/installation/)
+
+**Build and run in Docker**
+
+```bash
+# To build a Docker image
+make -f docker.mk build-image
+
+# To run a container
+make -f docker.mk run
+```
+
+#### Option 2 - Postgres
+
+**Prerequisites**
+- A standard **PostgreSQL 9.6** installation with development environment (header files) (e.g., [Postgres.app for MacOS](https://postgresapp.com/))
+
+**Build and install with local PostgreSQL**
 
 ```bash
 # To build the extension
@@ -32,6 +47,8 @@ make
 # To install
 make install
 ```
+
+**Update `postgresql.conf`**
 
 Also, you will need to edit your `postgresql.conf` file to include
 necessary libraries, and then restart PostgreSQL:
@@ -42,27 +59,9 @@ shared_preload_libraries = 'dblink,timescaledb'
 # Then, restart PostgreSQL
 ```
 
-### Option 2: Build and run in Docker
-
-```bash
-# To build a Docker image
-make -f docker.mk build-image
-
-# To run a container
-make -f docker.mk run
-```
-
-You should now have Postgres running locally, accessible with
-the following command:
-
-```bash
-# access with a superuser named 'postgres'
-psql -U postgres -h localhost
-```
-
-Next, we'll install our extension and create an initial database.
-
 ### Setting up your initial database
+Now, we'll install our extension and create an initial database.
+
 You again have two options for setting up your initial database:
 
 1. *Empty Database* - To set up a new, empty database, please follow the instructions below.
@@ -127,19 +126,17 @@ CREATE TABLE conditions (
 );
 ```
 
-
-
 Next, transform it into a hypertable using the provided function
 `create_hypertable()`:
-```sql
-SELECT create_hypertable('conditions', 'time');
-```
 
-This creates a hypertable that is partitioned by time using the values
-in the `time` column. Additionally, you can partition the data on
-another dimension (what we call 'space') such as `device_id`. For example,
-to partition `device_id` into 2 partitions along:
 ```sql
+-- This creates a hypertable that is partitioned by time
+--   using the values in the `time` column.
+SELECT create_hypertable('conditions', 'time');
+
+-- OR you can additionally partition the data on another dimension
+--   (what we call 'space') such as `device_id`.
+-- For example, to partition `device_id` into 2 partitions:
 SELECT create_hypertable('conditions', 'time', 'device_id', 2);
 ```
 
