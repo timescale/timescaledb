@@ -7,13 +7,15 @@ TimescaleDB is packaged as a PostgreSQL extension and set of scripts.
 
 For a more detailed description of our architecture, [please read
 the technical
-paper](http://www.timescaledb.com/papers/timescaledb.pdf).
+paper](http://www.timescaledb.com/papers/timescaledb.pdf). Additionally,
+more documentation can be
+found [on our docs website](https://docs.timescaledb.com/).
 
 There are two ways to install TimescaleDB: (1) Docker and (2) Postgres.
 
 ## Installation (from source)
 
-_NOTE: Currently, upgrading to new versions require a fresh install._
+_NOTE: Currently, upgrading to new versions requires a fresh install._
 
 ### Installation Options
 
