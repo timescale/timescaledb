@@ -20,7 +20,9 @@ _NOTE: Currently, upgrading to new versions require a fresh install._
 #### Option 1 - Docker (recommended)
 
 **Prerequisites**
+
 - [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
+
 - [Docker](https://docs.docker.com/engine/installation/)
 
 **Build and run in Docker**
@@ -36,6 +38,7 @@ make -f docker.mk run
 #### Option 2 - Postgres
 
 **Prerequisites**
+
 - A standard **PostgreSQL 9.6** installation with development environment (header files) (e.g., [Postgres.app for MacOS](https://postgresapp.com/))
 
 **Build and install with local PostgreSQL**
