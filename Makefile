@@ -28,6 +28,7 @@ SRCS = \
 	src/xact.c
 
 OBJS = $(SRCS:.c=.o)
+DEPS = $(SRCS:.c=.d)
 
 MKFILE_PATH := $(abspath $(MAKEFILE_LIST))
 CURRENT_DIR = $(dir $(MKFILE_PATH))
@@ -49,16 +50,17 @@ REGRESS_OPTS = \
 	--load-extension=dblink \
 	--load-extension=postgres_fdw \
 	--load-extension=hstore \
-	--load-extension=timescaledb
+	--load-extension=$(EXTENSION)
 
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 
-EXTRA_CLEAN = $(EXT_SQL_FILE)
+EXTRA_CLEAN = $(EXT_SQL_FILE) $(DEPS)
 
 include $(PGXS)
-override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0
+override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0 -MMD
 override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/
+-include $(DEPS)
 
 all: $(EXT_SQL_FILE)
 
