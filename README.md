@@ -15,7 +15,7 @@ paper](http://www.timescaledb.com/papers/timescaledb.pdf).
 
 And either:
 
-- *Option 1* - A standard PostgreSQL installation with development environment (header files), OR
+- *Option 1* - A standard **PostgreSQL 9.6** installation with development environment (header files), OR
 
 - *Option 2* - [Docker](https://docs.docker.com/engine/installation/) (see separate build and run instructions)
 
