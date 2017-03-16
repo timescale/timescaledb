@@ -80,10 +80,9 @@ package: clean $(EXT_SQL_FILE)
 	$(install_sh) -m 644 $(EXT_SQL_FILE) 'package/extension/'
 
 typedef.list: clean $(OBJS)
-	./generate_typedef.sh
+	./scripts/generate_typedef.sh
 
 pgindent: typedef.list
 	pgindent --typedef=typedef.list
-
 
 .PHONY: check-sql-files all
