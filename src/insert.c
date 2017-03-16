@@ -20,7 +20,6 @@
 #include <miscadmin.h>
 #include <fmgr.h>
 
-#include "insert.h"
 #include "cache.h"
 #include "hypertable_cache.h"
 #include "chunk_cache.h"
