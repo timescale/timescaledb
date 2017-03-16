@@ -205,8 +205,7 @@ chunk size goes over max size. For now we recommend breaking down large
 files for `COPY` (e.g., large CSVs) into smaller files that are slightly
 larger than max_chunk size (currently 1GB by default).
 We provide `scripts/migrate_data.sh` to help with this.
-- Custom user-created triggers on hypertables currently will not work (i.e.,
-fire)
+- Custom user-created triggers on hypertables currently not allowed
 - `drop_chunks()` (see our [API Reference](docs/API.md)) is currently only
 supported for hypertables that are not partitioned by space.
 
