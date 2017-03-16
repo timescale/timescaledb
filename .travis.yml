@@ -1,0 +1,21 @@
+sudo: required
+
+language: c
+os: linux
+dist: trusty
+
+addons:
+  postgresql: "9.6"
+
+services:
+  - docker
+
+before_install:
+  - sudo add-apt-repository "deb http://apt.postgresql.org/pub/repos/apt/ trusty-pgdg main"
+  - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+  - sudo apt-get update
+  - sudo apt-get install postgresql-server-dev-9.6
+
+install: make -f docker.mk build-image
+
+script: make -f docker.mk test
