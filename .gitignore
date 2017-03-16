@@ -4,6 +4,7 @@
 /data/
 /src/*.o
 /src/*.so
+/src/*.d
 /.vscode/
 /timescaledb.so
 *.bak
