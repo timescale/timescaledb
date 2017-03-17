@@ -26,13 +26,13 @@ typedef struct Hypertable
 	int16		num_replicas;
 	/* Array of PartitionEpoch. Order by start_time */
 	PartitionEpoch *epochs[MAX_EPOCHS_PER_HYPERTABLE];
-}	Hypertable;
+} Hypertable;
 
 
-extern Hypertable *hypertable_cache_get_entry(Cache * cache, Oid main_table_relid);
-extern Hypertable *hypertable_cache_get_entry_with_table(Cache * cache, Oid main_table_relid, const char *schema, const char *table);
+extern Hypertable *hypertable_cache_get_entry(Cache *cache, Oid relid);
+extern Hypertable *hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *schema, const char *table);
 
-extern PartitionEpoch *hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid);
+extern PartitionEpoch *hypertable_cache_get_partition_epoch(Cache *cache, Hypertable *hce, int64 time_pt, Oid relid);
 
 extern void hypertable_cache_invalidate_callback(void);
 
