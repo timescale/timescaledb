@@ -44,7 +44,7 @@ static Cache *
 hypertable_cache_create()
 {
 	MemoryContext ctx = AllocSetContextCreate(CacheMemoryContext,
-										  HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
+						 catalog_get_cache_proxy_name(CACHE_TYPE_HYPERTABLE),
 											  ALLOCSET_DEFAULT_SIZES);
 
 	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));
@@ -56,7 +56,7 @@ hypertable_cache_create()
 			.entrysize = sizeof(HypertableNameCacheEntry),
 			.hcxt = ctx,
 		},
-		.name = HYPERTABLE_CACHE_INVAL_PROXY_TABLE,
+		.name = "hypertable_cache",
 		.numelements = 16,
 		.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
 		.get_key = hypertable_cache_get_key,

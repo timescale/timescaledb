@@ -16,11 +16,10 @@
 
 #include "hypertable_cache.h"
 #include "partitioning.h"
+#include "extension.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
-
-bool		extension_is_loaded(void);
 
 static planner_hook_type prev_planner_hook;
 

@@ -23,27 +23,19 @@
 #include <catalog/namespace.h>
 #include <miscadmin.h>
 #include <commands/trigger.h>
+#include <commands/event_trigger.h>
+#include <nodes/nodes.h>
 #include <utils/inval.h>
+#include <unistd.h>
 
 #include "hypertable_cache.h"
 #include "chunk_cache.h"
+#include "catalog.h"
+#include "extension.h"
 
-#define CACHE_INVAL_PROXY_SCHEMA "_timescaledb_cache"
-#define CACHE_INVAL_PROXY_SCHEMA_OID get_namespace_oid(CACHE_INVAL_PROXY_SCHEMA, false)
-
-bool        extension_is_loaded(void);
 void		_cache_invalidate_init(void);
 void		_cache_invalidate_fini(void);
 void		_cache_invalidate_extload(void);
-Datum		invalidate_relcache_trigger(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
-PG_FUNCTION_INFO_V1(invalidate_relcache);
-
-
-static Oid	hypertable_cache_inval_proxy_oid = InvalidOid;
-static Oid	chunk_cache_inval_proxy_oid = InvalidOid;
-
 
 /*
  * This function is called when any relcache is invalidated.
@@ -52,16 +44,30 @@ static Oid	chunk_cache_inval_proxy_oid = InvalidOid;
 static void
 inval_cache_callback(Datum arg, Oid relid)
 {
-	/* TODO: look at IsTransactionState should this be necessary? */
+	Catalog    *catalog = catalog_get();
+
 	if (!extension_is_loaded())
 		return;
 
-	if (relid == InvalidOid || relid == hypertable_cache_inval_proxy_oid)
+	if (extension_is_being_dropped(relid))
+	{
+		/* Extension was dropped. Reset state. */
 		hypertable_cache_invalidate_callback();
+		chunk_cache_invalidate_callback();
+		extension_reset();
+		return;
+	}
 
-	if (relid == InvalidOid || relid == chunk_cache_inval_proxy_oid)
+	if (!OidIsValid(relid) || relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
+	{
+		hypertable_cache_invalidate_callback();
+	}
+
+	if (!OidIsValid(relid) || relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_CHUNK))
 		chunk_cache_invalidate_callback();
 }
+
+PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
 
 /*
  * This trigger causes the relcache for the cache_inval_proxy table (passed in
@@ -74,15 +80,14 @@ Datum
 invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	char	   *inval_proxy_name_arg;
 	Oid			proxy_oid;
+	Catalog    *catalog = catalog_get();
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
 		elog(ERROR, "not called by trigger manager");
 
-	/* arg 0 = relid of the cache_inval_proxy table */
-	inval_proxy_name_arg = trigdata->tg_trigger->tgargs[0];
-	proxy_oid = get_relname_relid(inval_proxy_name_arg, get_namespace_oid(CACHE_INVAL_PROXY_SCHEMA, false));
+	/* arg 0 = relid of the proxy table */
+	proxy_oid = catalog_get_cache_proxy_id_by_name(catalog, trigdata->tg_trigger->tgargs[0]);
 	CacheInvalidateRelcacheByRelid(proxy_oid);
 
 	/* tuple to return to executor */
@@ -92,12 +97,13 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 		return PointerGetDatum(trigdata->tg_trigtuple);
 }
 
+PG_FUNCTION_INFO_V1(invalidate_relcache);
+
 /*
  *	This is similar to invalidate_relcache_trigger but not a trigger.
  *	Not used regularly but useful for debugging.
  *
  */
-
 Datum
 invalidate_relcache(PG_FUNCTION_ARGS)
 {
@@ -110,25 +116,14 @@ invalidate_relcache(PG_FUNCTION_ARGS)
 	return BoolGetDatum(true);
 }
 
-
 void
 _cache_invalidate_init(void)
 {
+	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
 }
 
 void
 _cache_invalidate_fini(void)
 {
 	/* No way to unregister relcache callback */
-	hypertable_cache_inval_proxy_oid = InvalidOid;
-	chunk_cache_inval_proxy_oid = InvalidOid;
-}
-
-
-void
-_cache_invalidate_extload(void)
-{
-	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
-	hypertable_cache_inval_proxy_oid = get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID);
-	chunk_cache_inval_proxy_oid = get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID);
 }

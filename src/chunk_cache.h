@@ -7,10 +7,6 @@
 #include "metadata_queries.h"
 #include "cache.h"
 
-#define CHUNK_CACHE_INVAL_PROXY_TABLE "cache_inval_chunk"
-#define CHUNK_CACHE_INVAL_PROXY_OID										\
-	get_relname_relid(CHUNK_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID)
-
 typedef struct Partition Partition;
 typedef struct Chunk Chunk;
 

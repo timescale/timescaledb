@@ -5,8 +5,9 @@
 #include <commands/dbcommands.h>
 
 #include "catalog.h"
+#include "extension.h"
 
-static char *catalog_table_names[_MAX_CATALOG_TABLES] = {
+static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
 	[HYPERTABLE_REPLICA] = HYPERTABLE_REPLICA_TABLE_NAME,
 	[DEFAULT_REPLICA_NODE] = DEFAULT_REPLICA_NODE_TABLE_NAME,
@@ -71,24 +72,39 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 	},
 };
 
+/* Names for proxy tables used for cache invalidation. Must match names in
+ * sql/common/caches.sql */
+static const char *cache_proxy_table_names[_MAX_CACHE_TYPES] = {
+	[CACHE_TYPE_HYPERTABLE] = "cache_inval_hypertable",
+	[CACHE_TYPE_CHUNK] = "cache_inval_chunk",
+};
 
-/* Catalog information for the current database. Should probably be invalidated
- * if the extension is unloaded for the database. */
+/* Catalog information for the current database. */
 static Catalog catalog = {
 	.database_id = InvalidOid,
 };
+
+bool
+catalog_is_valid(Catalog *catalog)
+{
+	return catalog != NULL && OidIsValid(catalog->database_id);
+}
 
 Catalog *
 catalog_get(void)
 {
 	int			i;
 
-	if (MyDatabaseId == InvalidOid)
+	if (!OidIsValid(MyDatabaseId))
 		elog(ERROR, "Invalid database ID");
 
-	
 	if (MyDatabaseId == catalog.database_id)
 		return &catalog;
+
+	if (!extension_is_loaded())
+	{
+		return &catalog;
+	}
 
 	memset(&catalog, 0, sizeof(Catalog));
 	catalog.database_id = MyDatabaseId;
@@ -132,5 +148,51 @@ catalog_get(void)
 		catalog.tables[i].name = catalog_table_names[i];
 	}
 
+	catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
+
+	for (i = 0; i < _MAX_CACHE_TYPES; i++)
+	{
+		catalog.caches[i].inval_proxy_id = get_relname_relid(cache_proxy_table_names[i],
+													catalog.cache_schema_id);
+	}
+
 	return &catalog;
+}
+
+void
+catalog_reset(void)
+{
+	catalog.database_id = InvalidOid;
+}
+
+const char *
+catalog_get_cache_proxy_name(CacheType type)
+{
+	return cache_proxy_table_names[type];
+}
+
+Oid
+catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
+{
+	return catalog->caches[type].inval_proxy_id;
+}
+
+Oid
+catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname)
+{
+	int			i;
+
+	if (!catalog_is_valid(catalog))
+		return InvalidOid;
+
+	for (i = 0; i < _MAX_CACHE_TYPES; i++)
+	{
+		if (strcmp(relname, cache_proxy_table_names[i]) == 0)
+			break;
+	}
+
+	if (_MAX_CACHE_TYPES == i)
+		return InvalidOid;
+
+	return catalog->caches[i].inval_proxy_id;
 }
