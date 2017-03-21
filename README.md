@@ -127,7 +127,7 @@ temperature and humidity across a collection of devices over time.
 -- We start by creating a regular SQL table
 CREATE TABLE conditions (
   time        TIMESTAMP WITH TIME ZONE NOT NULL,
-  device_id   TEXT                     NOT NULL,
+  location TEXT                     NOT NULL,
   temperature DOUBLE PRECISION         NULL,
   humidity    DOUBLE PRECISION         NULL
 );
@@ -142,16 +142,16 @@ Next, transform it into a hypertable using the provided function
 SELECT create_hypertable('conditions', 'time');
 
 -- OR you can additionally partition the data on another dimension
---   (what we call 'space') such as `device_id`.
--- For example, to partition `device_id` into 2 partitions:
-SELECT create_hypertable('conditions', 'time', 'device_id', 2);
+--   (what we call 'space') such as `location`.
+-- For example, to partition `location` into 2 partitions:
+SELECT create_hypertable('conditions', 'time', 'location', 2);
 ```
 
 ### Inserting and querying
 Inserting data into the hypertable is done via normal SQL `INSERT` commands,
 e.g. using millisecond timestamps:
 ```sql
-INSERT INTO conditions(time,device_id,temperature,humidity)
+INSERT INTO conditions(time,location,temperature,humidity)
 VALUES(NOW(), 'office', 70.0, 50.0);
 ```
 
@@ -162,7 +162,7 @@ SQL `UPDATE` and `DELETE` commands also work as expected.
 
 Data is indexed using normal SQL `CREATE INDEX` commands. For instance,
 ```sql
-CREATE INDEX ON conditions (device_id, time DESC);
+CREATE INDEX ON conditions (location, time DESC);
 ```
 This can be done before or after converting the table to a hypertable.
 
@@ -174,7 +174,7 @@ time-series data, depending on your data.
 For indexing columns with discrete (limited-cardinality) values (e.g., where you are most likely
   to use an "equals" or "not equals" comparator) we suggest using an index like this (using our hypertable `conditions` for the example):
 ```sql
-CREATE INDEX ON conditions (device_id, time DESC);
+CREATE INDEX ON conditions (location, time DESC);
 ```
 For all other types of columns, i.e., columns with continuous values (e.g., where you are most likely to use a
 "less than" or "greater than" comparator) the index should be in the form:
@@ -183,7 +183,7 @@ CREATE INDEX ON conditions (time DESC, temperature);
 ```
 Having a `time DESC` column specification in the index allows for efficient queries by column-value and time. For example, the index defined above would optimize the following query:
 ```sql
-SELECT * FROM conditions WHERE device_id = 'dev_1' ORDER BY time DESC LIMIT 10
+SELECT * FROM conditions WHERE location = 'garage' ORDER BY time DESC LIMIT 10
 ```
 
 For sparse data where a column is often NULL, we suggest adding a
