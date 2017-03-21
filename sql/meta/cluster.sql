@@ -17,6 +17,9 @@ BEGIN
     LIMIT 1;
 
     IF meta_row IS NULL THEN
+        IF port IS NULL THEN
+            port = 5432;
+        END IF;
         PERFORM add_cluster_user(username, password);
         PERFORM _timescaledb_internal.setup_meta();
         INSERT INTO _timescaledb_catalog.meta (database_name, hostname, port, server_name)
@@ -80,7 +83,7 @@ EXCEPTION
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION setup_db(
+CREATE OR REPLACE FUNCTION setup_timescaledb(
     database NAME = current_database(),
     username TEXT = current_user,
     password TEXT = NULL,
@@ -96,6 +99,10 @@ BEGIN
     INTO meta_row
     FROM _timescaledb_catalog.meta
     LIMIT 1;
+
+    IF port IS NULL THEN
+        port = 5432;
+    END IF;
 
     IF meta_row IS NULL THEN
         PERFORM set_meta(hostname, port, database, username, password);

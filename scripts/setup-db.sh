@@ -17,6 +17,6 @@ CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
 \o /dev/null
 \echo 'Set up database...'
-select setup_db();
+select setup_timescaledb();
 \echo 'Success'
 EOF

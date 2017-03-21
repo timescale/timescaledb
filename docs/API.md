@@ -74,12 +74,12 @@ SELECT drop_chunks(interval '3 months', 'foo');
 
 ---
 
-### `setup_db()`
+### `setup_timescaledb()`
 
 Initializes a Postgres database to fully use TimescaleDB.
 
 **Sample usage**
 
 ```sql
-SELECT setup_db();
+SELECT setup_timescaledb();
 ```

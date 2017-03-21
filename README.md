@@ -92,7 +92,7 @@ CREATE database tutorial;
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
 -- Run initialization function
-SELECT setup_db();
+SELECT setup_timescaledb();
 ```
 
 For convenience, this can also be done in one step by running a script from

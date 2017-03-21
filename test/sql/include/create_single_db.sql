@@ -6,5 +6,5 @@ CREATE DATABASE single;
 
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-SELECT setup_db(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \set VERBOSITY verbose
