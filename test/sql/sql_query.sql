@@ -30,20 +30,4 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBL
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
 
 
---make table with timestamp. Test timestamp instead of int time.
-CREATE TABLE PUBLIC.hyper_1 (
-  time TIMESTAMPTZ NOT NULL,
-  series_0 DOUBLE PRECISION NULL,
-  series_1 DOUBLE PRECISION NULL,
-  series_2 DOUBLE PRECISION NULL
-);
 
-CREATE INDEX ON PUBLIC.hyper_1 (time DESC, series_0);
-SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, chunk_size_bytes=>100000);
-INSERT INTO hyper_1 SELECT to_timestamp(generate_series(0,10000)), random(), random(), random();
-
---non-aggragated uses MergeAppend correctly
-EXPLAIN (verbose ON, costs off)SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
-
---TODO: aggregated with date_trunc doesn't work
-EXPLAIN (verbose ON, costs off)SELECT date_trunc('minute', time) t, min(series_0) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;

@@ -1,0 +1,36 @@
+--make sure diff only has explain output not result output
+\! diff ../results/sql_query_results_optimized.out ../results/sql_query_results_unoptimized.out 
+13a14
+> SET timescaledb.disable_optimizations= 'true';
+56,57c57,58
+<                                               QUERY PLAN                                              
+< ------------------------------------------------------------------------------------------------------
+---
+>                                    QUERY PLAN                                   
+> --------------------------------------------------------------------------------
+59,65c60,65
+<    ->  GroupAggregate
+<          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+<                      ->  Sort
+<                            Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+---
+>    ->  Sort
+>          Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+>          ->  HashAggregate
+>                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
+>                ->  Result
+>                      ->  Append
+67,68d66
+<                      ->  Sort
+<                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
+70,72c68,70
+<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
+<                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
+< (14 rows)
+---
+>                            ->  Seq Scan on _hyper_1_1_0_1_data
+>                            ->  Seq Scan on _hyper_1_1_0_2_data
+> (11 rows)

@@ -34,6 +34,7 @@ SRCS = \
 	src/insert.c \
 	src/planner.c \
 	src/process_utility.c \
+	src/sort_transform.c \
 	src/xact.c
 
 OBJS = $(SRCS:.c=.o)

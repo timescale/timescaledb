@@ -13,6 +13,7 @@
 #include <optimizer/planner.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <optimizer/paths.h>
 
 #include "hypertable_cache.h"
 #include "partitioning.h"
@@ -22,6 +23,7 @@ void		_planner_init(void);
 void		_planner_fini(void);
 
 static planner_hook_type prev_planner_hook;
+static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 
 typedef struct ChangeTableNameCtx
 {
@@ -306,15 +308,36 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	return rv;
 }
 
+
+extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
+static void timescaledb_set_rel_pathlist(PlannerInfo *root,
+														RelOptInfo *rel,
+														Index rti,
+														RangeTblEntry *rte) 
+{
+	char *disable_optimizations = GetConfigOptionByName("timescaledb.disable_optimizations", NULL, true);
+	if (extension_is_loaded() && (disable_optimizations == NULL || strncmp(disable_optimizations, "true", 4) != 0)) {
+		sort_transform_optimization(root, rel);
+	}
+
+	if (prev_set_rel_pathlist_hook != NULL) {
+		(void) (*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+	}
+}
+
 void
 _planner_init(void)
 {
 	prev_planner_hook = planner_hook;
 	planner_hook = timescaledb_planner;
+	prev_set_rel_pathlist_hook = set_rel_pathlist_hook;
+	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
+
 }
 
 void
 _planner_fini(void)
 {
 	planner_hook = prev_planner_hook;
+	set_rel_pathlist_hook = prev_set_rel_pathlist_hook;
 }
