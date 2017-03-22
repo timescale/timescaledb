@@ -1,0 +1,99 @@
+\set ON_ERROR_STOP 1
+\set VERBOSITY verbose
+\set SHOW_CONTEXT never
+\o /dev/null
+\ir include/create_single_db.sql
+\set VERBOSITY default
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+\set VERBOSITY verbose
+\o
+\set ECHO ALL
+\c single
+CREATE TABLE drop_test(time timestamp, temp float8, device text);
+SELECT create_hypertable('drop_test', 'time', 'device', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_size_bytes 
+----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       1073741824
+(1 row)
+
+INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
+SELECT * FROM drop_test;
+              time               | temp | device 
+---------------------------------+------+--------
+ Mon Mar 20 09:17:00.936242 2017 | 23.4 | dev1
+(1 row)
+
+-- Drop the extension
+DROP EXTENSION timescaledb CASCADE;
+NOTICE:  00000: drop cascades to 14 other objects
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_root
+drop cascades to table _timescaledb_internal._hyper_1_0_replica
+drop cascades to table _timescaledb_internal._hyper_1_1_0_partition
+drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
+drop cascades to table _timescaledb_internal._hyper_1_1_0_1_data
+drop cascades to trigger _timescaledb_modify_trigger on table drop_test
+drop cascades to trigger _timescaledb_main_insert_trigger on table drop_test
+drop cascades to trigger _timescaledb_main_after_insert_trigger on table drop_test
+drop cascades to event trigger ddl_create_index
+drop cascades to event trigger ddl_create_trigger
+drop cascades to event trigger ddl_alter_index
+drop cascades to event trigger ddl_drop_index
+drop cascades to event trigger ddl_create_column
+drop cascades to event trigger ddl_check_drop_command
+LOCATION:  reportDependentObjects, dependency.c:1011
+-- Querying the original table should not return any rows since all of
+-- them actually existed in chunks that are now gone
+SELECT * FROM drop_test;
+ time | temp | device 
+------+------+--------
+(0 rows)
+
+-- Recreate the extension
+CREATE EXTENSION timescaledb CASCADE;
+-- Test that calling twice generates proper error
+\set ON_ERROR_STOP 0
+CREATE EXTENSION timescaledb CASCADE;
+ERROR:  42710: extension "timescaledb" already exists
+LOCATION:  CreateExtension, extension.c:1542
+\set ON_ERROR_STOP 1
+SELECT setup_timescaledb();
+ setup_timescaledb 
+-------------------
+ 
+(1 row)
+
+-- Make the table a hypertable again
+SELECT create_hypertable('drop_test', 'time', 'device', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_size_bytes 
+----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       1073741824
+(1 row)
+
+INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');
+SELECT * FROM drop_test;
+              time               | temp | device 
+---------------------------------+------+--------
+ Mon Mar 20 09:18:19.100462 2017 | 22.1 | dev1
+(1 row)
+

@@ -31,6 +31,8 @@ enum CatalogTable
 };
 
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
+#define CACHE_SCHEMA_NAME "_timescaledb_cache"
+#define EXTENSION_NAME "timescaledb"
 
 /******************************
  *
@@ -337,6 +339,13 @@ enum Anum_chunk_replica_node_pkey_idx
 										  MAX(_MAX_DEFAULT_REPLICA_NODE_INDEX, \
 											MAX(_MAX_CHUNK_INDEX, _MAX_CHUNK_REPLICA_NODE_INDEX))))))
 
+typedef enum CacheType
+{
+	CACHE_TYPE_HYPERTABLE,
+	CACHE_TYPE_CHUNK,
+	_MAX_CACHE_TYPES
+}	CacheType;
+
 typedef struct Catalog
 {
 	char		database_name[NAMEDATALEN];
@@ -348,9 +357,21 @@ typedef struct Catalog
 		Oid			id;
 		Oid			index_ids[_MAX_TABLE_INDEXES];
 	}			tables[_MAX_CATALOG_TABLES];
+
+	Oid			cache_schema_id;
+	struct
+	{
+		Oid			inval_proxy_id;
+	}			caches[_MAX_CACHE_TYPES];
 } Catalog;
 
+bool		catalog_is_valid(Catalog *catalog);
 Catalog    *catalog_get(void);
+void		catalog_reset(void);
 
+Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
+Oid			catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname);
+
+const char *catalog_get_cache_proxy_name(CacheType type);
 
 #endif   /* TIMESCALEDB_CATALOG_H */

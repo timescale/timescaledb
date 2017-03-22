@@ -5,8 +5,8 @@
 
 #include "utils.h"
 #include "hypertable_cache.h"
+#include "extension.h"
 
-bool		extension_is_loaded(void);
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
 
@@ -31,7 +31,6 @@ prev_ProcessUtility(Node *parsetree,
 		/* Call the standard */
 		standard_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
 	}
-
 }
 
 /* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table and */

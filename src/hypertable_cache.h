@@ -6,10 +6,6 @@
 
 typedef struct PartitionEpoch PartitionEpoch;
 
-#define HYPERTABLE_CACHE_INVAL_PROXY_TABLE "cache_inval_hypertable"
-#define HYPERTABLE_CACHE_INVAL_PROXY_OID								\
-	get_relname_relid(HYPERTABLE_CACHE_INVAL_PROXY_TABLE, CACHE_INVAL_PROXY_SCHEMA_OID)
-
 #define MAX_EPOCHS_PER_HYPERTABLE 20
 
 typedef struct Hypertable

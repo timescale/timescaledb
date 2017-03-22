@@ -53,7 +53,7 @@ static Cache *
 chunk_cache_create()
 {
 	MemoryContext ctx = AllocSetContextCreate(CacheMemoryContext,
-											  CHUNK_CACHE_INVAL_PROXY_TABLE,
+							  catalog_get_cache_proxy_name(CACHE_TYPE_CHUNK),
 											  ALLOCSET_DEFAULT_SIZES);
 
 	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));
@@ -66,7 +66,7 @@ chunk_cache_create()
 			.entrysize = sizeof(Chunk),
 			.hcxt = ctx,
 		},
-		.name = CHUNK_CACHE_INVAL_PROXY_TABLE,
+		.name = "chunk_cache",
 		.numelements = 16,
 		.flags = HASH_ELEM | HASH_CONTEXT | HASH_BLOBS,
 		.get_key = chunk_cache_get_key,
