@@ -1,3 +1,11 @@
+PG_CONFIG = pg_config
+MIN_SUPPORTED_VERSION = $(shell cat src/init.c | grep -m 1 'MIN_SUPPORTED_VERSION_STR' | sed "s/^\#define MIN_SUPPORTED_VERSION_STR \"\([0-9]*\.[0-9]*\)\"$\/\1/g")
+
+# will need to change when we support more than one version
+ifneq ($(MIN_SUPPORTED_VERSION), $(shell $(PG_CONFIG) --version | sed "s/^PostgreSQL \([0-9]*\.[0-9]*\)\.[0-9]*$\/\1/g"))
+$(error "TimescaleDB requires PostgreSQL $(MIN_SUPPORTED_VERSION)")
+endif
+
 EXTENSION = timescaledb
 SQL_FILES = $(shell cat sql/load_order.txt)
 
@@ -52,7 +60,6 @@ REGRESS_OPTS = \
 	--load-extension=hstore \
 	--load-extension=$(EXTENSION)
 
-PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 
 EXTRA_CLEAN = $(EXT_SQL_FILE) $(DEPS)

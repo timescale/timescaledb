@@ -1,6 +1,14 @@
 #include <postgres.h>
+#include <pg_config.h>
 #include <access/xact.h>
 #include <commands/extension.h>
+
+#define MIN_SUPPORTED_VERSION_STR "9.6"
+#define MIN_SUPPORTED_VERSION_NUM 90600
+
+#if PG_VERSION_NUM < MIN_SUPPORTED_VERSION_NUM
+    #error "Unsupported version of PostgreSQL. Check src/init.c for supported versions."
+#endif
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
