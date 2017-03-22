@@ -1,4 +1,4 @@
-FROM postgres:9.6.1
+FROM postgres:9.6.2
 
 MAINTAINER Matvey Arye
 
