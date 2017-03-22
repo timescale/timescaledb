@@ -31,23 +31,23 @@
  */
 static Cache *chunk_cache_current = NULL;
 
-typedef struct ChunkCacheQueryCtx
+typedef struct ChunkCacheQuery
 {
-	CacheQueryCtx cctx;
+	CacheQuery	cq;
 	Chunk	   *stub_chunk;
-}	ChunkCacheQueryCtx;
+} ChunkCacheQuery;
 
 
 static void *
-chunk_cache_get_key(CacheQueryCtx * ctx)
+chunk_cache_get_key(CacheQuery *query)
 {
-	return &((ChunkCacheQueryCtx *) ctx)->stub_chunk->id;
+	return &((ChunkCacheQuery *) query)->stub_chunk->id;
 }
 
 /* Cache entry for chunk replicas */
 
-static void *chunk_cache_create_entry(Cache * cache, CacheQueryCtx * ctx);
-static void *chunk_cache_update_entry(Cache * cache, CacheQueryCtx * ctx);
+static void *chunk_cache_create_entry(Cache *cache, CacheQuery *ctx);
+static void *chunk_cache_update_entry(Cache *cache, CacheQuery *ctx);
 
 static Cache *
 chunk_cache_create()
@@ -58,7 +58,8 @@ chunk_cache_create()
 
 	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));
 
-	Cache		template = {
+	Cache		template =
+	{
 		.hctl =
 		{
 			.keysize = sizeof(int32),
@@ -85,10 +86,10 @@ typedef struct ReplicaScanCtx
 {
 	ChunkReplica *replicas;
 	int			num_replicas;
-}	ReplicaScanCtx;
+} ReplicaScanCtx;
 
 static bool
-chunk_replica_tuple_found(TupleInfo * ti, void *arg)
+chunk_replica_tuple_found(TupleInfo *ti, void *arg)
 {
 	ReplicaScanCtx *ctx = arg;
 	ChunkReplica *cr;
@@ -123,7 +124,7 @@ chunk_replica_scan(int32 chunk_id, int num_replicas)
 {
 	ScanKeyData scankey[1];
 	Catalog    *catalog = catalog_get();
-	ReplicaScanCtx cctx = {
+	ReplicaScanCtx cq = {
 		.num_replicas = num_replicas,
 		.replicas = palloc(sizeof(ChunkReplica) * num_replicas),
 	};
@@ -133,7 +134,7 @@ chunk_replica_scan(int32 chunk_id, int num_replicas)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
-		.data = &cctx,
+		.data = &cq,
 		.tuple_found = chunk_replica_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
@@ -147,22 +148,22 @@ chunk_replica_scan(int32 chunk_id, int num_replicas)
 
 	scanner_scan(&ctx);
 
-	return cctx.replicas;
+	return cq.replicas;
 }
 
 static void *
-chunk_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
+chunk_cache_create_entry(Cache *cache, CacheQuery *query)
 {
-	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
-	Chunk	   *chunk = ctx->entry;
+	ChunkCacheQuery *cq = (ChunkCacheQuery *) query;
+	Chunk	   *chunk = query->result;
 	MemoryContext old;
 
 	old = cache_switch_to_memory_context(cache);
 
-	chunk->id = cctx->stub_chunk->id;
-	chunk->start_time = cctx->stub_chunk->start_time;
-	chunk->end_time = cctx->stub_chunk->end_time;
-	chunk->num_replicas = cctx->stub_chunk->num_replicas;
+	chunk->id = cq->stub_chunk->id;
+	chunk->start_time = cq->stub_chunk->start_time;
+	chunk->end_time = cq->stub_chunk->end_time;
+	chunk->num_replicas = cq->stub_chunk->num_replicas;
 	chunk->replicas = chunk_replica_scan(chunk->id, chunk->num_replicas);
 
 	MemoryContextSwitchTo(old);
@@ -172,14 +173,14 @@ chunk_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 
 
 static void *
-chunk_cache_update_entry(Cache * cache, CacheQueryCtx * ctx)
+chunk_cache_update_entry(Cache *cache, CacheQuery *query)
 {
-	ChunkCacheQueryCtx *cctx = (ChunkCacheQueryCtx *) ctx;
-	Chunk	   *chunk = ctx->entry;
+	ChunkCacheQuery *cq = (ChunkCacheQuery *) query;
+	Chunk	   *chunk = query->result;
 	MemoryContext old;
 
-	if (chunk->start_time == cctx->stub_chunk->start_time &&
-		chunk->end_time == cctx->stub_chunk->end_time &&
+	if (chunk->start_time == cq->stub_chunk->start_time &&
+		chunk->end_time == cq->stub_chunk->end_time &&
 		chunk->replicas != NULL)
 	{
 		return chunk;
@@ -187,12 +188,12 @@ chunk_cache_update_entry(Cache * cache, CacheQueryCtx * ctx)
 
 	old = cache_switch_to_memory_context(cache);
 
-	chunk->id = cctx->stub_chunk->id;
-	chunk->start_time = cctx->stub_chunk->start_time;
-	chunk->end_time = cctx->stub_chunk->end_time;
-	chunk->num_replicas = cctx->stub_chunk->num_replicas;
+	chunk->id = cq->stub_chunk->id;
+	chunk->start_time = cq->stub_chunk->start_time;
+	chunk->end_time = cq->stub_chunk->end_time;
+	chunk->num_replicas = cq->stub_chunk->num_replicas;
 
-	if (chunk->replicas != NULL && chunk->num_replicas != cctx->stub_chunk->num_replicas)
+	if (chunk->replicas != NULL && chunk->num_replicas != cq->stub_chunk->num_replicas)
 	{
 		pfree(chunk->replicas);
 		chunk->replicas = chunk_replica_scan(chunk->id, chunk->num_replicas);
@@ -212,9 +213,9 @@ chunk_cache_invalidate_callback(void)
 }
 
 static Chunk *
-chunk_cache_get_from_stub(Cache * cache, Chunk * stub_chunk)
+chunk_cache_get_from_stub(Cache *cache, Chunk *stub_chunk)
 {
-	ChunkCacheQueryCtx ctx = {
+	ChunkCacheQuery ctx = {
 		.stub_chunk = stub_chunk,
 	};
 
@@ -223,7 +224,7 @@ chunk_cache_get_from_stub(Cache * cache, Chunk * stub_chunk)
 		cache = chunk_cache_current;
 	}
 
-	return cache_fetch(cache, &ctx.cctx);
+	return cache_fetch(cache, &ctx.cq);
 }
 
 extern Cache *
@@ -242,10 +243,10 @@ typedef struct ChunkScanCtx
 				timepoint;
 	int16		num_replicas;
 	bool		should_lock;
-}	ChunkScanCtx;
+} ChunkScanCtx;
 
 static bool
-chunk_tuple_timepoint_filter(TupleInfo * ti, void *arg)
+chunk_tuple_timepoint_filter(TupleInfo *ti, void *arg)
 {
 	ChunkScanCtx *ctx = arg;
 	bool		starttime_is_null,
@@ -265,7 +266,7 @@ chunk_tuple_timepoint_filter(TupleInfo * ti, void *arg)
 }
 
 static bool
-chunk_tuple_found(TupleInfo * ti, void *arg)
+chunk_tuple_found(TupleInfo *ti, void *arg)
 {
 	ChunkScanCtx *ctx = arg;
 	bool		is_null;
@@ -282,7 +283,7 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 {
 	ScanKeyData scankey[1];
 	Catalog    *catalog = catalog_get();
-	ChunkScanCtx cctx = {
+	ChunkScanCtx cq = {
 		.chunk_tbl_id = catalog->tables[CHUNK].id,
 		.partition_id = partition_id,
 		.timepoint = timepoint,
@@ -293,7 +294,7 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
-		.data = &cctx,
+		.data = &cq,
 		.filter = chunk_tuple_timepoint_filter,
 		.tuple_found = chunk_tuple_found,
 		.lockmode = AccessShareLock,
@@ -314,14 +315,14 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 
 	scanner_scan(&ctx);
 
-	return cctx.chunk;
+	return cq.chunk;
 }
 
 /*
  *	Get chunk cache entry.
  */
 Chunk *
-chunk_cache_get(Cache * cache, Partition * part, int16 num_replicas, int64 timepoint, bool lock)
+chunk_cache_get(Cache *cache, Partition *part, int16 num_replicas, int64 timepoint, bool lock)
 {
 	Chunk	   *stub_chunk;
 

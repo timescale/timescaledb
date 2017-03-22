@@ -17,27 +17,27 @@
 #include "scanner.h"
 #include "partitioning.h"
 
-static void *hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx);
+static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);
 
-typedef struct HypertableCacheQueryCtx
+typedef struct HypertableCacheQuery
 {
-	CacheQueryCtx cctx;
-	Oid			main_table_relid;
+	CacheQuery	q;
+	Oid			relid;
 	const char *schema;
 	const char *table;
-}	HypertableCacheQueryCtx;
+} HypertableCacheQuery;
 
 static void *
-hypertable_cache_get_key(CacheQueryCtx * ctx)
+hypertable_cache_get_key(CacheQuery *query)
 {
-	return &((HypertableCacheQueryCtx *) ctx)->main_table_relid;
+	return &((HypertableCacheQuery *) query)->relid;
 }
 
 typedef struct
 {
-	Oid			main_table_relid;
+	Oid			relid;
 	Hypertable *hypertable;
-}	HypertableNameCacheEntry;
+} HypertableNameCacheEntry;
 
 
 static Cache *
@@ -48,8 +48,7 @@ hypertable_cache_create()
 											  ALLOCSET_DEFAULT_SIZES);
 
 	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));
-
-	Cache		tmp = (Cache)
+	Cache		template =
 	{
 		.hctl =
 		{
@@ -64,7 +63,8 @@ hypertable_cache_create()
 		.create_entry = hypertable_cache_create_entry,
 	};
 
-	*cache = tmp;
+	*cache = template;
+
 	cache_init(cache);
 
 	return cache;
@@ -76,7 +76,7 @@ static Cache *hypertable_cache_current = NULL;
 /* Column numbers for 'hypertable' table in  sql/common/tables.sql */
 
 static bool
-hypertable_tuple_found(TupleInfo * ti, void *data)
+hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	HypertableNameCacheEntry *entry = data;
 	Hypertable *he;
@@ -117,11 +117,11 @@ hypertable_tuple_found(TupleInfo * ti, void *data)
 }
 
 static void *
-hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
+hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 {
-	HypertableCacheQueryCtx *hctx = (HypertableCacheQueryCtx *) ctx;
+	HypertableCacheQuery *hq = (HypertableCacheQuery *) query;
 	Catalog    *catalog = catalog_get();
-	HypertableNameCacheEntry *cache_entry = ctx->entry;
+	HypertableNameCacheEntry *cache_entry = query->result;
 	int			number_found;
 	ScanKeyData scankey[2];
 	ScannerCtx	scanCtx = {
@@ -130,27 +130,27 @@ hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 2,
 		.scankey = scankey,
-		.data = ctx->entry,
+		.data = query->result,
 		.tuple_found = hypertable_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
 
-	if (NULL == hctx->schema)
+	if (NULL == hq->schema)
 	{
-		hctx->schema = get_namespace_name(get_rel_namespace(hctx->main_table_relid));
+		hq->schema = get_namespace_name(get_rel_namespace(hq->relid));
 	}
 
-	if (NULL == hctx->table)
+	if (NULL == hq->table)
 	{
-		hctx->table = get_rel_name(hctx->main_table_relid);
+		hq->table = get_rel_name(hq->relid);
 	}
 
 	/* Perform an index scan on schema and table. */
 	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(hctx->schema));
+				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(hq->schema));
 	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
-			BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(hctx->table));
+				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(hq->table));
 
 	number_found = scanner_scan(&scanCtx);
 
@@ -161,15 +161,15 @@ hypertable_cache_create_entry(Cache * cache, CacheQueryCtx * ctx)
 			cache_entry->hypertable = NULL;
 			break;
 		case 1:
-			Assert(strncmp(cache_entry->hypertable->schema, hctx->schema, NAMEDATALEN) == 0);
-			Assert(strncmp(cache_entry->hypertable->table, hctx->table, NAMEDATALEN) == 0);
+			Assert(strncmp(cache_entry->hypertable->schema, hq->schema, NAMEDATALEN) == 0);
+			Assert(strncmp(cache_entry->hypertable->table, hq->table, NAMEDATALEN) == 0);
 			break;
 		default:
 			elog(ERROR, "Got an unexpected number of records: %d", number_found);
 			break;
 
 	}
-	return ctx->entry;
+	return query->result;
 }
 
 void
@@ -182,20 +182,20 @@ hypertable_cache_invalidate_callback(void)
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 Hypertable *
-hypertable_cache_get_entry(Cache * cache, Oid main_table_relid)
+hypertable_cache_get_entry(Cache *cache, Oid relid)
 {
-	return hypertable_cache_get_entry_with_table(cache, main_table_relid, NULL, NULL);
+	return hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
 }
 
 Hypertable *
-hypertable_cache_get_entry_with_table(Cache * cache, Oid main_table_relid, const char *schema, const char *table)
+hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *schema, const char *table)
 {
-	HypertableCacheQueryCtx ctx = {
-		.main_table_relid = main_table_relid,
+	HypertableCacheQuery query = {
+		.relid = relid,
 		.schema = schema,
 		.table = table,
 	};
-	HypertableNameCacheEntry *entry = cache_fetch(cache, &ctx.cctx);
+	HypertableNameCacheEntry *entry = cache_fetch(cache, &query.q);
 
 	return entry->hypertable;
 }
@@ -221,7 +221,7 @@ cmp_epochs(const void *time_pt_pointer, const void *test)
 }
 
 PartitionEpoch *
-hypertable_cache_get_partition_epoch(Cache * cache, Hypertable * hce, int64 time_pt, Oid relid)
+hypertable_cache_get_partition_epoch(Cache *cache, Hypertable *hce, int64 time_pt, Oid relid)
 {
 	MemoryContext old;
 	PartitionEpoch *epoch,
@@ -277,7 +277,6 @@ hypertable_cache_pin()
 {
 	return cache_pin(hypertable_cache_current);
 }
-
 
 void
 _hypertable_cache_init(void)

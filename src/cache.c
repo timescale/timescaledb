@@ -1,8 +1,7 @@
 #include "cache.h"
 
-
 void
-cache_init(Cache * cache)
+cache_init(Cache *cache)
 {
 	if (cache->htab != NULL)
 	{
@@ -16,7 +15,7 @@ cache_init(Cache * cache)
 }
 
 static void
-cache_destroy(Cache * cache)
+cache_destroy(Cache *cache)
 {
 	if (cache->refcount > 0)
 	{
@@ -34,7 +33,7 @@ cache_destroy(Cache * cache)
 }
 
 void
-cache_invalidate(Cache * cache)
+cache_invalidate(Cache *cache)
 {
 	if (cache == NULL)
 		return;
@@ -52,14 +51,14 @@ cache_invalidate(Cache * cache)
  *
  */
 extern Cache *
-cache_pin(Cache * cache)
+cache_pin(Cache *cache)
 {
 	cache->refcount++;
 	return cache;
 }
 
 extern void
-cache_release(Cache * cache)
+cache_release(Cache *cache)
 {
 	Assert(cache->refcount > 0);
 	cache->refcount--;
@@ -68,42 +67,69 @@ cache_release(Cache * cache)
 
 
 MemoryContext
-cache_memory_ctx(Cache * cache)
+cache_memory_ctx(Cache *cache)
 {
 	return cache->hctl.hcxt;
 }
 
 MemoryContext
-cache_switch_to_memory_context(Cache * cache)
+cache_switch_to_memory_context(Cache *cache)
 {
 	return MemoryContextSwitchTo(cache->hctl.hcxt);
 }
 
 void *
-cache_fetch(Cache * cache, CacheQueryCtx * ctx)
+cache_fetch(Cache *cache, CacheQuery *query)
 {
 	bool		found;
+	HASHACTION	action = cache->create_entry == NULL ? HASH_FIND : HASH_ENTER;
 
 	if (cache->htab == NULL)
 	{
 		elog(ERROR, "Hash %s not initialized", cache->name);
 	}
 
-	ctx->entry = hash_search(cache->htab, cache->get_key(ctx), HASH_ENTER, &found);
+	query->result = hash_search(cache->htab, cache->get_key(query), action, &found);
 
-	if (!found && cache->create_entry != NULL)
+	if (found)
 	{
-		MemoryContext old = cache_switch_to_memory_context(cache);
+		cache->stats.hits++;
 
-		ctx->entry = cache->create_entry(cache, ctx);
-		MemoryContextSwitchTo(old);
+		if (cache->update_entry != NULL)
+		{
+			/* Switch memory context here? */
+			/* MemoryContext old = cache_switch_to_memory_context(cache); */
+			query->result = cache->update_entry(cache, query);
+			/* MemoryContextSwitchTo(old); */
+		}
 	}
-	else if (found && cache->update_entry != NULL)
+	else
 	{
-		/* Switch memory context here? */
-		/* MemoryContext old = cache_switch_to_memory_context(cache); */
-		ctx->entry = cache->update_entry(cache, ctx);
-		/* MemoryContextSwitchTo(old); */
+		cache->stats.misses++;
+
+		if (cache->create_entry != NULL)
+		{
+			MemoryContext old = cache_switch_to_memory_context(cache);
+
+			query->result = cache->create_entry(cache, query);
+			MemoryContextSwitchTo(old);
+			cache->stats.numelements++;
+		}
 	}
-	return ctx->entry;
+
+	return query->result;
+}
+
+bool
+cache_remove(Cache *cache, void *key)
+{
+	bool		found;
+
+	hash_search(cache->htab, key, HASH_REMOVE, &found);
+
+	if (found)
+	{
+		cache->stats.numelements--;
+	}
+	return found;
 }
