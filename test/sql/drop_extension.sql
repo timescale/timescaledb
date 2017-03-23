@@ -1,13 +1,6 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
-
 \o /dev/null
 \ir include/create_single_db.sql
 \o
-\set ECHO ALL
-
-\c single
 
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 
@@ -16,7 +9,6 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
 SELECT * FROM drop_test;
 
--- Drop the extension
 DROP EXTENSION timescaledb CASCADE;
 
 -- Querying the original table should not return any rows since all of

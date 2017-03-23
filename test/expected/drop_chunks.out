@@ -1,23 +1,16 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
 \o /dev/null
 \ir include/create_single_db.sql
-\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
-\set VERBOSITY verbose
 \o
-\set ECHO ALL
-\c single
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_size_bytes => 10000);

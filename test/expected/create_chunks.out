@@ -1,0 +1,56 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
+SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
+ setup_timescaledb 
+-------------------
+ 
+(1 row)
+
+CREATE TABLE chunk_closing_test(
+        time       BIGINT,
+        metric     INTEGER,
+        device_id  TEXT
+    );
+-- Test chunk closing/creation
+SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', 2, chunk_size_bytes => 10000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
+INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
+INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
+SELECT * FROM chunk_closing_test;
+ time | metric | device_id 
+------+--------+-----------
+    1 |      1 | dev1
+    2 |      2 | dev2
+    3 |      3 | dev3
+(3 rows)
+
+SELECT * FROM ONLY chunk_closing_test;
+ time | metric | device_id 
+------+--------+-----------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk c
+    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
+    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
+ id | partition_id | start_time | end_time | chunk_id | partition_replica_id | database_name |      schema_name      |     table_name      | id | partition_id | hypertable_id | replica_id |      schema_name      |       table_name       | id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
+----+--------------+------------+----------+----------+----------------------+---------------+-----------------------+---------------------+----+--------------+---------------+------------+-----------------------+------------------------+----+-------------+--------------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
+  1 |            1 |            |        1 |        1 |                    1 | single        | _timescaledb_internal | _hyper_1_1_0_1_data |  1 |            1 |             1 |          0 | _timescaledb_internal | _hyper_1_1_0_partition |  1 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+  2 |            1 |          2 |        2 |        2 |                    1 | single        | _timescaledb_internal | _hyper_1_1_0_2_data |  1 |            1 |             1 |          0 | _timescaledb_internal | _hyper_1_1_0_partition |  1 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+  3 |            1 |          3 |          |        3 |                    1 | single        | _timescaledb_internal | _hyper_1_1_0_3_data |  1 |            1 |             1 |          0 | _timescaledb_internal | _hyper_1_1_0_partition |  1 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
+(3 rows)
+

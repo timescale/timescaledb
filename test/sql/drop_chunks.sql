@@ -1,14 +1,7 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
-
 \o /dev/null
 \ir include/create_single_db.sql
-
 \o
-\set ECHO ALL
 
-\c single
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_size_bytes => 10000);

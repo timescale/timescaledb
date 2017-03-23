@@ -1,19 +1,13 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
-
 \o /dev/null
 \ir include/insert_two_partitions.sql
 \o
-\set ECHO ALL
 
-\c single
 \d+ "_timescaledb_internal".*
 
 -- Test that renaming hypertable is blocked
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
-ALTER TABLE "testNs" RENAME TO "newname";
+ALTER TABLE "two_Partitions" RENAME TO "newname";
 \set ON_ERROR_STOP 1
 
 -- Test that renaming ordinary table works
@@ -22,7 +16,7 @@ ALTER TABLE "renametable" RENAME TO "newname";
 SELECT * FROM "newname";
 
 SELECT * FROM _timescaledb_catalog.hypertable;
-DROP TABLE "testNs";
+DROP TABLE "two_Partitions";
 
 SELECT * FROM _timescaledb_catalog.hypertable;
 \dt  "public".*

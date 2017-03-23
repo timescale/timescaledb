@@ -1,22 +1,18 @@
-\set ON_ERROR_STOP 1
 \o /dev/null
 \ir include/insert_two_partitions.sql
-\set ON_ERROR_STOP 1
 \ir create_single_db.sql
-\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
-\set VERBOSITY verbose
 \c single
-CREATE TABLE PUBLIC."testNs" (
+CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
   series_0 DOUBLE PRECISION NULL,
@@ -24,46 +20,28 @@ CREATE TABLE PUBLIC."testNs" (
   series_2 DOUBLE PRECISION NULL,
   series_bool BOOLEAN NULL
 );
-CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, device_id);
-SELECT * FROM create_hypertable('"public"."testNs"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
 BEGIN;
-\COPY public."testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
+FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'two_Partitions'), 'dev1') part
 INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
-INSERT INTO public."testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev20', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
-CREATE TABLE chunk_closing_test(
-        time       BIGINT,
-        metric     INTEGER,
-        device_id  TEXT
-    );
--- Test chunk closing/creation
-SELECT * FROM create_hypertable('chunk_closing_test', 'time', 'device_id', 2, chunk_size_bytes => 10000);
-INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
-INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
-INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
-SELECT * FROM chunk_closing_test;
-SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
 \o
-\set ECHO ALL
-\c single
-SELECT * FROM PUBLIC."testNs";
+SELECT * FROM PUBLIC."two_Partitions";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
@@ -78,7 +56,7 @@ SELECT * FROM PUBLIC."testNs";
  1257894000000000000 | dev20     |      1.5 |        2 |          | 
 (10 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs";
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -96,9 +74,9 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs";
          Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
 (13 rows)
 
-\echo "The following queries should NOT scan testNs._hyper_1_1_0_partition"
-"The following queries should NOT scan testNs._hyper_1_1_0_partition"
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 'dev20';
+\echo "The following queries should NOT scan two_Partitions._hyper_1_1_0_partition"
+"The following queries should NOT scan two_Partitions._hyper_1_1_0_partition"
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev20';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -112,11 +90,11 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 
          Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
          Recheck Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
          Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_3_data.device_id, 32768) = '28646'::smallint)
-         ->  Bitmap Index Scan on "13-testNs_device_id_timeCustom_idx"
+         ->  Bitmap Index Scan on "13-two_Partitions_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
 (13 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 'dev'||'20';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'20';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -130,11 +108,11 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE device_id = 
          Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
          Recheck Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
          Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_3_data.device_id, 32768) = '28646'::smallint)
-         ->  Bitmap Index Scan on "13-testNs_device_id_timeCustom_idx"
+         ->  Bitmap Index Scan on "13-two_Partitions_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_2_0_3_data.device_id = 'dev20'::text)
 (13 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE 'dev'||'20' = device_id;
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'20' = device_id;
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -148,15 +126,15 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."testNs" WHERE 'dev'||'20' 
          Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
          Recheck Cond: ('dev20'::text = _hyper_1_2_0_3_data.device_id)
          Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_3_data.device_id, 32768) = '28646'::smallint)
-         ->  Bitmap Index Scan on "13-testNs_device_id_timeCustom_idx"
+         ->  Bitmap Index Scan on "13-two_Partitions_device_id_timeCustom_idx"
                Index Cond: ('dev20'::text = _hyper_1_2_0_3_data.device_id)
 (13 rows)
 
 --TODO: handle this later?
---EXPLAIN (verbose ON, costs off) SELECT * FROM "testNs" WHERE device_id IN ('dev20', 'dev21');
+--EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev20', 'dev21');
 \echo "The following shows non-aggregated queries with time desc using merge append"
 "The following shows non-aggregated queries with time desc using merge append"
-EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."testNs" ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "timeCustom" DESC NULLS LAST limit 2;
                                                                                                                 QUERY PLAN                                                                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -178,16 +156,16 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."testNs" ORDER BY "timeCusto
                Sort Key: _hyper_1_2_0_partition."timeCustom" DESC NULLS LAST
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
                      Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         ->  Index Scan using "6-testNs_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_1_data
+         ->  Index Scan using "6-two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_1_data
                Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
-         ->  Index Scan using "12-testNs_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_2_data
+         ->  Index Scan using "12-two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_2_data
                Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
-         ->  Index Scan using "18-testNs_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_0_3_data
+         ->  Index Scan using "18-two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_0_3_data
                Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
 (25 rows)
 
 --shows that more specific indexes are used if the WHERE clauses "match", uses the series_1 index here.
-EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."testNs" WHERE series_1 IS NOT NULL ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 IS NOT NULL ORDER BY "timeCustom" DESC NULLS LAST limit 2;
                                                                                                                 QUERY PLAN                                                                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -212,16 +190,16 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."testNs" WHERE series_1 IS N
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
                      Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
                      Filter: (_hyper_1_2_0_partition.series_1 IS NOT NULL)
-         ->  Index Scan using "3-testNs_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_1_data
+         ->  Index Scan using "3-two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_1_data
                Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
-         ->  Index Scan using "9-testNs_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_2_data
+         ->  Index Scan using "9-two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_2_data
                Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
-         ->  Index Scan using "15-testNs_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_2_0_3_data
+         ->  Index Scan using "15-two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_2_0_3_data
                Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
 (28 rows)
 
 --here the "match" is implication series_1 > 1 => series_1 IS NOT NULL
-EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."testNs" WHERE series_1 > 1 ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 > 1 ORDER BY "timeCustom" DESC NULLS LAST limit 2;
                                                                                                                 QUERY PLAN                                                                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -246,21 +224,21 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."testNs" WHERE series_1 > 1 
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
                      Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
                      Filter: (_hyper_1_2_0_partition.series_1 > '1'::double precision)
-         ->  Index Scan using "3-testNs_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_1_data
+         ->  Index Scan using "3-two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_1_data
                Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.device_id, _hyper_1_1_0_1_data.series_0, _hyper_1_1_0_1_data.series_1, _hyper_1_1_0_1_data.series_2, _hyper_1_1_0_1_data.series_bool
                Index Cond: (_hyper_1_1_0_1_data.series_1 > '1'::double precision)
-         ->  Index Scan using "9-testNs_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_2_data
+         ->  Index Scan using "9-two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_1_0_2_data
                Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.device_id, _hyper_1_1_0_2_data.series_0, _hyper_1_1_0_2_data.series_1, _hyper_1_1_0_2_data.series_2, _hyper_1_1_0_2_data.series_bool
                Index Cond: (_hyper_1_1_0_2_data.series_1 > '1'::double precision)
-         ->  Index Scan using "15-testNs_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_2_0_3_data
+         ->  Index Scan using "15-two_Partitions_timeCustom_series_1_idx" on _timescaledb_internal._hyper_1_2_0_3_data
                Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.device_id, _hyper_1_2_0_3_data.series_0, _hyper_1_2_0_3_data.series_1, _hyper_1_2_0_3_data.series_2, _hyper_1_2_0_3_data.series_bool
                Index Cond: (_hyper_1_2_0_3_data.series_1 > '1'::double precision)
 (31 rows)
 
 --note that without time transform things work too
-EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."testNs" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_1_0_replica."timeCustom", (min(_hyper_1_0_replica.series_0))
    ->  GroupAggregate
@@ -283,16 +261,16 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC.
                      Sort Key: _hyper_1_2_0_partition."timeCustom" DESC NULLS LAST
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
                            Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.series_0
-               ->  Index Scan using "6-testNs_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_1_data
+               ->  Index Scan using "6-two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_1_data
                      Output: _hyper_1_1_0_1_data."timeCustom", _hyper_1_1_0_1_data.series_0
-               ->  Index Scan using "12-testNs_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_2_data
+               ->  Index Scan using "12-two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_0_2_data
                      Output: _hyper_1_1_0_2_data."timeCustom", _hyper_1_1_0_2_data.series_0
-               ->  Index Scan using "18-testNs_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_0_3_data
+               ->  Index Scan using "18-two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_0_3_data
                      Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.series_0
 (28 rows)
 
 --TODO: time transform doesn't work
-EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."testNs" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
  Limit
@@ -320,7 +298,7 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBL
                                  Output: _hyper_1_2_0_3_data."timeCustom", _hyper_1_2_0_3_data.series_0
 (23 rows)
 
-EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."testNs" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
  Limit
@@ -368,21 +346,21 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM hyper_1 ORDER BY "time" DESC limit 
                                                                           QUERY PLAN                                                                          
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_3_0_replica."time", _hyper_3_0_replica.series_0, _hyper_3_0_replica.series_1, _hyper_3_0_replica.series_2
+   Output: _hyper_2_0_replica."time", _hyper_2_0_replica.series_0, _hyper_2_0_replica.series_1, _hyper_2_0_replica.series_2
    ->  Merge Append
-         Sort Key: _hyper_3_0_replica."time" DESC
+         Sort Key: _hyper_2_0_replica."time" DESC
          ->  Sort
-               Output: _hyper_3_0_replica."time", _hyper_3_0_replica.series_0, _hyper_3_0_replica.series_1, _hyper_3_0_replica.series_2
-               Sort Key: _hyper_3_0_replica."time" DESC
-               ->  Seq Scan on _timescaledb_internal._hyper_3_0_replica
-                     Output: _hyper_3_0_replica."time", _hyper_3_0_replica.series_0, _hyper_3_0_replica.series_1, _hyper_3_0_replica.series_2
+               Output: _hyper_2_0_replica."time", _hyper_2_0_replica.series_0, _hyper_2_0_replica.series_1, _hyper_2_0_replica.series_2
+               Sort Key: _hyper_2_0_replica."time" DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_2_0_replica
+                     Output: _hyper_2_0_replica."time", _hyper_2_0_replica.series_0, _hyper_2_0_replica.series_1, _hyper_2_0_replica.series_2
          ->  Sort
-               Output: _hyper_3_5_0_partition."time", _hyper_3_5_0_partition.series_0, _hyper_3_5_0_partition.series_1, _hyper_3_5_0_partition.series_2
-               Sort Key: _hyper_3_5_0_partition."time" DESC
-               ->  Seq Scan on _timescaledb_internal._hyper_3_5_0_partition
-                     Output: _hyper_3_5_0_partition."time", _hyper_3_5_0_partition.series_0, _hyper_3_5_0_partition.series_1, _hyper_3_5_0_partition.series_2
-         ->  Index Scan using "19-hyper_1_time_series_0_idx" on _timescaledb_internal._hyper_3_5_0_7_data
-               Output: _hyper_3_5_0_7_data."time", _hyper_3_5_0_7_data.series_0, _hyper_3_5_0_7_data.series_1, _hyper_3_5_0_7_data.series_2
+               Output: _hyper_2_3_0_partition."time", _hyper_2_3_0_partition.series_0, _hyper_2_3_0_partition.series_1, _hyper_2_3_0_partition.series_2
+               Sort Key: _hyper_2_3_0_partition."time" DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_2_3_0_partition
+                     Output: _hyper_2_3_0_partition."time", _hyper_2_3_0_partition.series_0, _hyper_2_3_0_partition.series_1, _hyper_2_3_0_partition.series_2
+         ->  Index Scan using "19-hyper_1_time_series_0_idx" on _timescaledb_internal._hyper_2_3_0_4_data
+               Output: _hyper_2_3_0_4_data."time", _hyper_2_3_0_4_data.series_0, _hyper_2_3_0_4_data.series_1, _hyper_2_3_0_4_data.series_2
 (16 rows)
 
 --TODO: aggregated with date_trunc doesn't work
@@ -390,21 +368,21 @@ EXPLAIN (verbose ON, costs off)SELECT date_trunc('minute', time) t, min(series_0
                                                    QUERY PLAN                                                    
 -----------------------------------------------------------------------------------------------------------------
  Limit
-   Output: (date_trunc('minute'::text, _hyper_3_0_replica."time")), (min(_hyper_3_0_replica.series_0))
+   Output: (date_trunc('minute'::text, _hyper_2_0_replica."time")), (min(_hyper_2_0_replica.series_0))
    ->  Sort
-         Output: (date_trunc('minute'::text, _hyper_3_0_replica."time")), (min(_hyper_3_0_replica.series_0))
-         Sort Key: (date_trunc('minute'::text, _hyper_3_0_replica."time")) DESC
+         Output: (date_trunc('minute'::text, _hyper_2_0_replica."time")), (min(_hyper_2_0_replica.series_0))
+         Sort Key: (date_trunc('minute'::text, _hyper_2_0_replica."time")) DESC
          ->  HashAggregate
-               Output: (date_trunc('minute'::text, _hyper_3_0_replica."time")), min(_hyper_3_0_replica.series_0)
-               Group Key: date_trunc('minute'::text, _hyper_3_0_replica."time")
+               Output: (date_trunc('minute'::text, _hyper_2_0_replica."time")), min(_hyper_2_0_replica.series_0)
+               Group Key: date_trunc('minute'::text, _hyper_2_0_replica."time")
                ->  Result
-                     Output: date_trunc('minute'::text, _hyper_3_0_replica."time"), _hyper_3_0_replica.series_0
+                     Output: date_trunc('minute'::text, _hyper_2_0_replica."time"), _hyper_2_0_replica.series_0
                      ->  Append
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_0_replica
-                                 Output: _hyper_3_0_replica."time", _hyper_3_0_replica.series_0
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_5_0_partition
-                                 Output: _hyper_3_5_0_partition."time", _hyper_3_5_0_partition.series_0
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_5_0_7_data
-                                 Output: _hyper_3_5_0_7_data."time", _hyper_3_5_0_7_data.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_2_0_replica
+                                 Output: _hyper_2_0_replica."time", _hyper_2_0_replica.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_2_3_0_partition
+                                 Output: _hyper_2_3_0_partition."time", _hyper_2_3_0_partition.series_0
+                           ->  Seq Scan on _timescaledb_internal._hyper_2_3_0_4_data
+                                 Output: _hyper_2_3_0_4_data."time", _hyper_2_3_0_4_data.series_0
 (17 rows)
 

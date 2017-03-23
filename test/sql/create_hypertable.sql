@@ -1,11 +1,4 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
-
 \ir include/create_single_db.sql
-
-\set ECHO ALL
-\c single
 
 create schema test_schema;
 create table test_schema.test_table(time bigint, temp float8, device_id text);

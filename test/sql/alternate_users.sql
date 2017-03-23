@@ -1,12 +1,5 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
-
-
-\set ECHO ALL
 \ir include/insert_single.sql
 
-\set VERBOSITY default
 DO $$
 BEGIN
     CREATE ROLE alt_usr LOGIN;
@@ -19,9 +12,8 @@ END$$;
 \dt
 
 \set ON_ERROR_STOP 0
-SELECT * FROM chunk_closing_test;
 --todo fix error message here:
-SELECT * FROM "testNs";
+SELECT * FROM "one_Partition";
 \set ON_ERROR_STOP 1
 
 CREATE TABLE "1dim"(time timestamp, temp float);

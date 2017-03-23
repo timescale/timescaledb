@@ -1,13 +1,6 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
-
 \o /dev/null
 \ir include/insert_two_partitions.sql
 \o
-
-\set ECHO ALL
-
 
 \c postgres
 
@@ -17,7 +10,7 @@
 \! pg_restore -h localhost -U postgres -d postgres -C dump/single.sql
 
 \c single
-SELECT * FROM "testNs";
+SELECT * FROM "two_Partitions";
 
 --query for the extension tables/sequences that will not be dumped by pg_dump (should be empty)
 SELECT objid::regclass, *
