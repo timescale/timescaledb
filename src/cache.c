@@ -97,10 +97,9 @@ cache_fetch(Cache *cache, CacheQuery *query)
 
 		if (cache->update_entry != NULL)
 		{
-			/* Switch memory context here? */
-			/* MemoryContext old = cache_switch_to_memory_context(cache); */
+			MemoryContext old = cache_switch_to_memory_context(cache);
 			query->result = cache->update_entry(cache, query);
-			/* MemoryContextSwitchTo(old); */
+			MemoryContextSwitchTo(old);
 		}
 	}
 	else
@@ -110,7 +109,6 @@ cache_fetch(Cache *cache, CacheQuery *query)
 		if (cache->create_entry != NULL)
 		{
 			MemoryContext old = cache_switch_to_memory_context(cache);
-
 			query->result = cache->create_entry(cache, query);
 			MemoryContextSwitchTo(old);
 			cache->stats.numelements++;
