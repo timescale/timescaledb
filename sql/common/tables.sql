@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     time_column_name        NAME                                    NOT NULL,
     time_column_type        REGTYPE                                 NOT NULL,
     created_on              NAME                                    NOT NULL REFERENCES _timescaledb_catalog.node(database_name),
-    chunk_size_bytes        BIGINT                                  NOT NULL CHECK (chunk_size_bytes > 0),
+    chunk_time_interval     BIGINT                                  NOT NULL CHECK (chunk_time_interval > 0),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
     UNIQUE (root_schema_name, root_table_name)
@@ -177,19 +177,11 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- Represent a (replicated) chunk of data, which is data in a hypertable that is
 -- both partitioned by both the partition_column and time.
 --
--- For each partition, there can be 0 or more chunks, which are replicated.
--- At most two chunks per partition are "open-ended", i.e. having a NULL
--- start_time or a NULL end_time. A NULL start_time means the chunk has
--- data from the beginning of time until end_time. A NULL end_time means the
--- chunk has data from start_time until the end of time. Only when there is
--- one chunk for a partition can it be open-ended on BOTH start_time and end_time.
---
--- TODO(erik) - Describe conditions of closure.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     id           SERIAL NOT NULL    PRIMARY KEY,
     partition_id INT    NOT NULL    REFERENCES _timescaledb_catalog.partition (id) ON DELETE CASCADE,
-    start_time   BIGINT NULL        CHECK (start_time >= 0),
-    end_time     BIGINT NULL        CHECK (end_time >= 0),
+    start_time   BIGINT NOT NULL    CHECK (start_time >= 0),
+    end_time     BIGINT NOT NULL    CHECK (end_time >= 0),
     UNIQUE (partition_id, start_time),
     UNIQUE (partition_id, end_time),
     CHECK (start_time <= end_time)

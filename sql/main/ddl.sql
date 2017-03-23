@@ -18,7 +18,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
     placement               _timescaledb_catalog.chunk_placement_type = 'STICKY',
-    chunk_size_bytes        BIGINT = 1073741824 -- 1 GB
+    chunk_time_interval     BIGINT =  _timescaledb_internal.interval_to_usec('1 month')
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -93,7 +93,7 @@ BEGIN
             associated_schema_name,
             associated_table_prefix,
             placement,
-            chunk_size_bytes,
+            chunk_time_interval,
             tablespace_name
         );
     EXCEPTION
@@ -122,5 +122,31 @@ BEGIN
         _timescaledb_internal.get_general_index_definition(indexrelid, indrelid)
     )
     WHERE indrelid = main_table;
+END
+$BODY$;
+
+-- Update chunk_time_interval for hypertable
+CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
+    main_table              REGCLASS,
+    chunk_time_interval     BIGINT
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    table_name       NAME;
+    schema_name      NAME;
+    tablespace_oid   OID;
+    tablespace_name  NAME;
+BEGIN
+    SELECT relname, nspname, reltablespace
+    INTO STRICT table_name, schema_name, tablespace_oid
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    WHERE c.OID = main_table;
+
+    PERFORM _timescaledb_meta_api.set_chunk_time_interval(
+                                        schema_name,
+                                        table_name,
+                                        chunk_time_interval);
 END
 $BODY$;

@@ -34,7 +34,9 @@ SRCS = \
 	src/insert.c \
 	src/planner.c \
 	src/process_utility.c \
-	src/sort_transform.c
+	src/sort_transform.c \
+	src/insert_chunk_state.c \
+	src/insert_statement_state.c
 
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)

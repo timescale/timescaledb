@@ -2,13 +2,13 @@
 \! diff ../results/sql_query_results_optimized.out ../results/sql_query_results_unoptimized.out 
 11a12
 > SET timescaledb.disable_optimizations= 'true';
-54,55c55,56
+53,54c54,55
 <                                               QUERY PLAN                                              
 < ------------------------------------------------------------------------------------------------------
 ---
 >                                    QUERY PLAN                                   
 > --------------------------------------------------------------------------------
-57,63c58,63
+56,62c57,62
 <    ->  GroupAggregate
 <          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
 <          ->  Result
@@ -23,18 +23,16 @@
 >                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
 >                ->  Result
 >                      ->  Append
-65,66d64
+64,65d63
 <                      ->  Sort
 <                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
-68,70c66,68
+67,68c65,66
 <                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
-<                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
-< (14 rows)
+< (13 rows)
 ---
 >                            ->  Seq Scan on _hyper_1_1_0_1_data
->                            ->  Seq Scan on _hyper_1_1_0_2_data
-> (11 rows)
-98,104c96,101
+> (10 rows)
+96,102c94,99
 <    ->  GroupAggregate
 <          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
 <          ->  Result
@@ -49,18 +47,14 @@
 >                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
 >                ->  Result
 >                      ->  Append
-107,108d103
+105,106d101
 <                      ->  Sort
 <                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
-111,115c106,110
+109,111c104,106
 <                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
 <                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-<                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
-<                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-< (18 rows)
+< (16 rows)
 ---
 >                            ->  Seq Scan on _hyper_1_1_0_1_data
 >                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
->                            ->  Seq Scan on _hyper_1_1_0_2_data
->                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-> (15 rows)
+> (13 rows)

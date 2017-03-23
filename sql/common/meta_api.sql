@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_meta_api.create_hypertable(
     associated_schema_name  NAME,
     associated_table_prefix NAME,
     placement               _timescaledb_catalog.chunk_placement_type,
-    chunk_size_bytes        BIGINT,
+    chunk_time_interval     BIGINT,
     tablespace              NAME
 )
     RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
@@ -31,13 +31,33 @@ BEGIN
                 associated_schema_name,
                 associated_table_prefix,
                 placement,
-                chunk_size_bytes,
+                chunk_time_interval,
                 tablespace,
                 current_database()
             )
         ) AS res;
 
     RETURN hypertable_row;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_meta_api.set_chunk_time_interval(
+    main_schema_name        NAME,
+    main_table_name         NAME,
+    chunk_time_interval     BIGINT
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+BEGIN
+PERFORM
+    _timescaledb_internal.meta_transaction_exec(
+        format('SELECT _timescaledb_meta.set_chunk_time_interval(%L, %L, %L, %L)',
+            main_schema_name,
+            main_table_name,
+            chunk_time_interval,
+            current_database()
+        )
+    );
 END
 $BODY$;
 
@@ -200,21 +220,6 @@ BEGIN
             new_not_null,
             current_database()
         )
-    );
-END
-$BODY$;
-
--- *immediate functions are not transactional.
-CREATE OR REPLACE FUNCTION _timescaledb_meta_api.close_chunk_end_immediate(
-    chunk_id INT
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-BEGIN
-    --This should use the non-transactional rpc because this needs to commit before we can take a lock
-    --for writing on the closed chunk. That means this operation is not transactional with the insert and will not be rolled back.
-    PERFORM _timescaledb_internal.meta_immediate_commit_exec_with_return(
-        format('SELECT * FROM _timescaledb_meta.close_chunk_end(%L)', chunk_id)
     );
 END
 $BODY$;

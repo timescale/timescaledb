@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_meta.create_hypertable(
     associated_schema_name  NAME,
     associated_table_prefix NAME,
     placement               _timescaledb_catalog.chunk_placement_type,
-    chunk_size_bytes        BIGINT,
+    chunk_time_interval        BIGINT,
     tablespace              NAME,
     created_on              NAME
 )
@@ -62,7 +62,7 @@ BEGIN
         root_schema_name, root_table_name,
         replication_factor,
         placement,
-        chunk_size_bytes,
+        chunk_time_interval,
         time_column_name, time_column_type,
         created_on)
     VALUES (
@@ -71,7 +71,7 @@ BEGIN
         associated_schema_name, format('%s_root', associated_table_prefix),
         replication_factor,
         placement,
-        chunk_size_bytes,
+        chunk_time_interval,
         time_column_name, time_column_type,
         created_on
       )
@@ -83,6 +83,20 @@ BEGIN
     END IF;
     RETURN hypertable_row;
 END
+$BODY$;
+
+-- Update chunk_time_interval for hypertable
+CREATE OR REPLACE FUNCTION _timescaledb_meta.set_chunk_time_interval(
+    schema_name NAME,
+    table_name  NAME,
+    time_interval  BIGINT,
+    modified_on NAME
+)
+    RETURNS VOID LANGUAGE SQL VOLATILE AS
+$BODY$
+    UPDATE _timescaledb_catalog.hypertable h SET chunk_time_interval = time_interval
+           WHERE h.schema_name = set_chunk_time_interval.schema_name AND
+                 h.table_name = set_chunk_time_interval.table_name;
 $BODY$;
 
 -- Adds a column to a hypertable

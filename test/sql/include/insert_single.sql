@@ -22,10 +22,6 @@ BEGIN;
 \COPY "one_Partition" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 
-SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'one_Partition'), 'dev1') part
-INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
-
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),

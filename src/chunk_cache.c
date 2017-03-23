@@ -161,6 +161,7 @@ chunk_cache_create_entry(Cache *cache, CacheQuery *query)
 	old = cache_switch_to_memory_context(cache);
 
 	chunk->id = cq->stub_chunk->id;
+	chunk->partition_id = cq->stub_chunk->partition_id;
 	chunk->start_time = cq->stub_chunk->start_time;
 	chunk->end_time = cq->stub_chunk->end_time;
 	chunk->num_replicas = cq->stub_chunk->num_replicas;
@@ -322,7 +323,7 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
  *	Get chunk cache entry.
  */
 Chunk *
-chunk_cache_get(Cache *cache, Partition *part, int16 num_replicas, int64 timepoint, bool lock)
+chunk_cache_get(Cache *cache, Partition *part, int16 num_replicas, int64 timepoint)
 {
 	Chunk	   *stub_chunk;
 
@@ -333,11 +334,11 @@ chunk_cache_get(Cache *cache, Partition *part, int16 num_replicas, int64 timepoi
 	 * The chunk will ultimately be stored in the cache, which provides its
 	 * own storage for chunk, which will replace this stub.
 	 */
-	stub_chunk = chunk_scan(part->id, timepoint, lock);
+	stub_chunk = chunk_scan(part->id, timepoint, false);
 
 	if (stub_chunk == NULL)
 	{
-		stub_chunk = chunk_insert_new(part->id, timepoint, lock);
+		stub_chunk = chunk_insert_new(part->id, timepoint);
 	}
 
 	stub_chunk->num_replicas = num_replicas;

@@ -56,3 +56,12 @@ BEGIN
     END CASE;
 END
 $BODY$;
+
+--Convert a interval to microseconds.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.interval_to_usec(
+       chunk_interval INTERVAL
+)
+RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (int_sec * 1000000)::bigint from extract(epoch from chunk_interval) as int_sec;
+$BODY$;

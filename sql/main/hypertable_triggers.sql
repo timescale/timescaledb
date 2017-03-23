@@ -23,7 +23,7 @@ CREATE OR REPLACE FUNCTION  _timescaledb_internal.main_table_insert_trigger() RE
 	AS '$libdir/timescaledb', 'insert_main_table_trigger' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION  _timescaledb_internal.main_table_after_insert_trigger() RETURNS TRIGGER
-	AS '$libdir/timescaledb', 'insert_main_table_trigger_after' LANGUAGE C;
+        AS '$libdir/timescaledb', 'insert_main_table_trigger_after' LANGUAGE C;
 
 -- Trigger for handling the addition of new hypertables.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_hypertable()
@@ -74,6 +74,10 @@ BEGIN
                 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger();
             $$, NEW.schema_name, NEW.table_name);
         RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+       RETURN NEW;
     END IF;
 
     PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);

@@ -6,9 +6,9 @@ FROM "_timescaledb_internal"._hyper_1_0_replica;
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.chunk_replica_node;
 SELECT * FROM _timescaledb_catalog.partition_replica;
+
 SELECT * FROM "two_Partitions";
 SELECT * FROM ONLY "two_Partitions";
-
 
 CREATE TABLE error_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('error_test', 'time', 'device', 2);

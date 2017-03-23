@@ -11,13 +11,13 @@ SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there i
 \o
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
-SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_size_bytes => 10000);
+SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval => 1);
  create_hypertable 
 -------------------
  
 (1 row)
 
-SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_size_bytes => 10000);
+SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval => 1);
  create_hypertable 
 -------------------
  
@@ -77,18 +77,18 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = pr.hypertable_id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
  chunk_id | partition_id | hypertable_id |     chunk_schema      |     chunk_table      | start_time | end_time 
 ----------+--------------+---------------+-----------------------+----------------------+------------+----------
-        1 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_1_data  |            |        1
+        1 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_1_data  |          1 |        1
         2 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_2_data  |          2 |        2
         3 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_3_data  |          3 |        3
         4 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_4_data  |          4 |        4
         5 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_5_data  |          5 |        5
-        6 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_6_data  |          6 |         
-        7 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_7_data  |            |        1
+        6 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_6_data  |          6 |        6
+        7 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_7_data  |          1 |        1
         8 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_8_data  |          2 |        2
         9 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_9_data  |          3 |        3
        10 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_10_data |          4 |        4
        11 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_11_data |          5 |        5
-       12 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_12_data |          6 |         
+       12 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_12_data |          6 |        6
 (12 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_replica_node;
@@ -150,12 +150,12 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
         3 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_3_data  |          3 |        3
         4 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_4_data  |          4 |        4
         5 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_5_data  |          5 |        5
-        6 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_6_data  |          6 |         
+        6 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_6_data  |          6 |        6
         8 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_8_data  |          2 |        2
         9 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_9_data  |          3 |        3
        10 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_10_data |          4 |        4
        11 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_11_data |          5 |        5
-       12 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_12_data |          6 |         
+       12 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_12_data |          6 |        6
 (10 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_replica_node;
@@ -212,12 +212,12 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
         3 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_3_data  |          3 |        3
         4 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_4_data  |          4 |        4
         5 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_5_data  |          5 |        5
-        6 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_6_data  |          6 |         
+        6 |            1 |             1 | _timescaledb_internal | _hyper_1_1_0_6_data  |          6 |        6
         8 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_8_data  |          2 |        2
         9 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_9_data  |          3 |        3
        10 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_10_data |          4 |        4
        11 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_11_data |          5 |        5
-       12 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_12_data |          6 |         
+       12 |            2 |             2 | _timescaledb_internal | _hyper_2_2_0_12_data |          6 |        6
 (9 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_replica_node;

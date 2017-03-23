@@ -36,14 +36,6 @@ SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associ
 BEGIN;
 \COPY "one_Partition" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
-SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'one_Partition'), 'dev1') part
-INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
- close_chunk_end_immediate 
----------------------------
- 
-(1 row)
-
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
@@ -108,11 +100,11 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |  table_name   | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_size_bytes 
-----+-------------+---------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+------------------
-  1 | public      | one_Partition | one_Partition          | _hyper_1                | one_Partition         | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint                      | single     |       1073741824
-  2 | public      | 1dim          | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       1073741824
-  3 | public      | Hypertable_1  | _timescaledb_internal  | _hyper_3                | _timescaledb_internal | _hyper_3_root   |                  1 | STICKY    | time             | bigint                      | single     |       1073741824
+ id | schema_name |  table_name   | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
+----+-------------+---------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
+  1 | public      | one_Partition | one_Partition          | _hyper_1                | one_Partition         | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint                      | single     |       2592000000000
+  2 | public      | 1dim          | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
+  3 | public      | Hypertable_1  | _timescaledb_internal  | _hyper_3                | _timescaledb_internal | _hyper_3_root   |                  1 | STICKY    | time             | bigint                      | single     |       2592000000000
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_index;

@@ -3,6 +3,7 @@
 
 #include <postgres.h>
 #include "cache.h"
+#include "partitioning.h"
 
 typedef struct PartitionEpoch PartitionEpoch;
 

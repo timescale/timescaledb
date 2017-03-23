@@ -17,9 +17,9 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_size_bytes 
-----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+------------------
-  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       1073741824
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
+----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
 (1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
@@ -59,9 +59,9 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_size_bytes 
-----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+------------------
-  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       1073741824
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
+----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
 (1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');

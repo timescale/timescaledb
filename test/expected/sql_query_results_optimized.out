@@ -17,7 +17,7 @@ CREATE TABLE PUBLIC.hyper_1 (
   series_2 DOUBLE PRECISION NULL
 );
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
-SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, chunk_size_bytes=>10000);
+SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1);
  create_hypertable 
 -------------------
  
@@ -39,8 +39,7 @@ EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
                Sort Key: _hyper_1_1_0_partition."time" DESC
                ->  Seq Scan on _hyper_1_1_0_partition
          ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
-         ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
-(11 rows)
+(10 rows)
 
 SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
            time           | series_0 | series_1 |     series_2     
@@ -66,8 +65,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
                            ->  Seq Scan on _hyper_1_1_0_partition
                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
-                     ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
-(14 rows)
+(13 rows)
 
 --the minute and second results should be diff
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -110,9 +108,7 @@ LIMIT 2;
                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-                     ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
-                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(18 rows)
+(16 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
 FROM hyper_1 
@@ -144,9 +140,8 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Sort
                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
                            ->  Seq Scan on _hyper_1_1_0_partition
-                     ->  Index Scan Backward using "3-time_trunc" on _hyper_1_1_0_1_data
-                     ->  Index Scan Backward using "4-time_trunc" on _hyper_1_1_0_2_data
-(14 rows)
+                     ->  Index Scan Backward using "2-time_trunc" on _hyper_1_1_0_1_data
+(13 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
             t             |   avg   |  min  |       avg        
@@ -172,9 +167,8 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Sort
                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
                            ->  Seq Scan on _hyper_1_1_0_partition
-                     ->  Index Scan Backward using "3-time_trunc" on _hyper_1_1_0_1_data
-                     ->  Index Scan Backward using "4-time_trunc" on _hyper_1_1_0_2_data
-(14 rows)
+                     ->  Index Scan Backward using "2-time_trunc" on _hyper_1_1_0_1_data
+(13 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
             t             |   avg   |  min  |       avg        

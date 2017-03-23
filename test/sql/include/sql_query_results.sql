@@ -6,7 +6,7 @@ CREATE TABLE PUBLIC.hyper_1 (
 );
 
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
-SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, chunk_size_bytes=>10000);
+SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1);
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 

@@ -61,6 +61,7 @@ Child tables: _timescaledb_internal._hyper_1_1_0_partition,
  device_id | text                        |           | extended |              | 
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
+    "time_range" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" <= 'Mon Jan 23 15:59:59.999999 2017'::timestamp without time zone)
 Inherits: _timescaledb_internal._hyper_1_1_0_partition
 Tablespace: "tspace1"
 
@@ -83,6 +84,7 @@ Child tables: _timescaledb_internal._hyper_1_1_0_1_data
  device_id | text                        |           | extended |              | 
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
+    "time_range" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" <= 'Mon Jan 23 15:59:59.999999 2017'::timestamp without time zone)
 Inherits: _timescaledb_internal._hyper_1_2_0_partition
 Tablespace: "tspace1"
 

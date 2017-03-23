@@ -28,9 +28,9 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+-------------+--------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  1 | public      | Hypertable_1 | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       1073741824
+ id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
+----+-------------+--------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
+  1 | public      | Hypertable_1 | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       2592000000000
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_index;
@@ -158,6 +158,7 @@ Indexes:
     "3-ind_humidity" btree ("time", humidity)
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "time_range" CHECK ("time" >= '1257892416000000000'::bigint AND "time" <= '1257895007999999999'::bigint)
 Inherits: _timescaledb_internal._hyper_1_1_0_partition
 
 SELECT * FROM PUBLIC."Hypertable_1";
