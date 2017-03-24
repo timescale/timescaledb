@@ -45,8 +45,8 @@ brew install timescaledb
 Also, you will need to edit your `postgresql.conf` file to include
 necessary libraries:
 ```bash
-# Modify postgresql.conf to uncomment this line and
-# add required libraries. For example,
+# Modify postgresql.conf to uncomment this line and add required libraries.
+# For example:
 shared_preload_libraries = 'dblink,timescaledb'
 ```
 
@@ -92,7 +92,8 @@ make install
 Also, you will need to edit your `postgresql.conf` file to include
 necessary libraries, and then restart PostgreSQL:
 ```bash
-# Modify postgresql.conf to add required libraries. For example,
+# Modify postgresql.conf to uncomment this line and add required libraries.
+# For example:
 shared_preload_libraries = 'dblink,timescaledb'
 
 # Then, restart PostgreSQL
