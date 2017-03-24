@@ -91,6 +91,13 @@ DECLARE
     chunk_row     _timescaledb_catalog.chunk;
     partition_row _timescaledb_catalog.partition;
 BEGIN
+     --get lock: prevents simultaneous creation of multiple chunks for same partition.
+     SELECT *
+     INTO partition_row
+     FROM  _timescaledb_catalog.partition
+     WHERE id = partition_id
+     FOR UPDATE; 
+
     --recheck:
     chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
 
