@@ -1,28 +1,20 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
 \o /dev/null
 \ir include/create_single_db.sql
-\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
-\set VERBOSITY verbose
 \o
-\set ECHO ALL
-\c single
 -- Expect error when adding user again
 \set ON_ERROR_STOP 0
 SELECT add_cluster_user();
-ERROR:  IO130: User postgres already exists
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+ERROR:  User postgres already exists
 \set ON_ERROR_STOP 1
 -- Expect error when adding node again
 CREATE TABLE PUBLIC."Hypertable_1" (
@@ -33,23 +25,16 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id', 2);
-ERROR:  42P01: relation "public.Hypertable_1_mispelled" does not exist
-LINE 1: SELECT * FROM create_hypertable('"public"."Hypertable_1_misp...
-                                        ^
-LOCATION:  RangeVarGetRelidExtended, namespace.c:415
+ERROR:  relation "public.Hypertable_1_mispelled" does not exist at character 33
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2);
-ERROR:  IO102: column "time_mispelled" does not exist
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+ERROR:  column "time_mispelled" does not exist
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id', 2);
-ERROR:  IO102: illegal type for time column "Device_id": text
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+ERROR:  illegal type for time column "Device_id": text
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled', 2);
-ERROR:  IO102: column "Device_id_mispelled" does not exist
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+ERROR:  column "Device_id_mispelled" does not exist
 INSERT INTO PUBLIC."Hypertable_1" VALUES(1,'dev_1', 3); 
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2);
-ERROR:  IO102: the table being converted to a hypertable must be empty
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+ERROR:  the table being converted to a hypertable must be empty
 DELETE FROM  PUBLIC."Hypertable_1" ;
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2);
@@ -60,5 +45,4 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2);
-ERROR:  IO110: hypertable "Hypertable_1" already exists
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+ERROR:  hypertable "Hypertable_1" already exists

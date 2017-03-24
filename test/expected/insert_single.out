@@ -1,28 +1,22 @@
-\set ON_ERROR_STOP 1
-\set ECHO ALL
 \ir include/insert_single.sql
-\set ON_ERROR_STOP 1
 \ir create_single_db.sql
-\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
  setup_timescaledb 
 -------------------
  
 (1 row)
 
-\set VERBOSITY verbose
 \c single
-\set ECHO ALL
-CREATE TABLE PUBLIC."testNs" (
+CREATE TABLE PUBLIC."one_Partition" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
   series_0 DOUBLE PRECISION NULL,
@@ -30,143 +24,107 @@ CREATE TABLE PUBLIC."testNs" (
   series_2 DOUBLE PRECISION NULL,
   series_bool BOOLEAN NULL
 );
-CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
-CREATE INDEX ON PUBLIC."testNs" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', associated_schema_name=>'testNs' );
+CREATE INDEX ON PUBLIC."one_Partition" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition' );
  create_hypertable 
 -------------------
  
 (1 row)
 
 BEGIN;
-\COPY "testNs" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+\COPY "one_Partition" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
 SELECT _timescaledb_meta_api.close_chunk_end_immediate(c.id)
-FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'testNs'), 'dev1') part
+FROM get_open_partition_for_key((SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'one_Partition'), 'dev1') part
 INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = part.id);
  close_chunk_end_immediate 
 ---------------------------
  
 (1 row)
 
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev20', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
-INSERT INTO "testNs"("timeCustom", device_id, series_0, series_1) VALUES
+INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev20', 1.5, 2);
-CREATE TABLE chunk_closing_test(
-        time       BIGINT,
-        metric     INTEGER,
-        device_id  TEXT
-    );
--- Test chunk closing/creation
-SELECT * FROM create_hypertable('chunk_closing_test', 'time', chunk_size_bytes => 10000);
- create_hypertable 
--------------------
- 
-(1 row)
-
-INSERT INTO chunk_closing_test VALUES(1, 1, 'dev1');
-INSERT INTO chunk_closing_test VALUES(2, 2, 'dev2');
-INSERT INTO chunk_closing_test VALUES(3, 3, 'dev3');
-SELECT * FROM chunk_closing_test;
- time | metric | device_id 
-------+--------+-----------
-    1 |      1 | dev1
-    2 |      2 | dev2
-    3 |      3 | dev3
-(3 rows)
-
-SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_closing_test';
- id | partition_id | start_time | end_time | chunk_id | partition_replica_id | database_name |      schema_name      |     table_name      | id | partition_id | hypertable_id | replica_id |      schema_name      |       table_name       | id | schema_name |     table_name     | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_size_bytes 
-----+--------------+------------+----------+----------+----------------------+---------------+-----------------------+---------------------+----+--------------+---------------+------------+-----------------------+------------------------+----+-------------+--------------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+------------------
-  3 |            2 |            |        1 |        3 |                    2 | single        | _timescaledb_internal | _hyper_2_2_0_3_data |  2 |            2 |             2 |          0 | _timescaledb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
-  4 |            2 |          2 |        2 |        4 |                    2 | single        | _timescaledb_internal | _hyper_2_2_0_4_data |  2 |            2 |             2 |          0 | _timescaledb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
-  5 |            2 |          3 |          |        5 |                    2 | single        | _timescaledb_internal | _hyper_2_2_0_5_data |  2 |            2 |             2 |          0 | _timescaledb_internal | _hyper_2_2_0_partition |  2 | public      | chunk_closing_test | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |            10000
-(3 rows)
-
-\c single
-\d+ "testNs".*
-Index "testNs.1-testNs_device_id_timeCustom_idx"
+\d+ "one_Partition".*
+Index "one_Partition.1-one_Partition_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  device_id  | text   | device_id    | extended
  timeCustom | bigint | "timeCustom" | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
 
-Index "testNs.10-testNs_timeCustom_series_bool_idx"
+Index "one_Partition.10-one_Partition_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
 
-    Index "testNs.2-testNs_timeCustom_series_0_idx"
+Index "one_Partition.2-one_Partition_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_0 IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (series_0 IS NOT NULL)
 
-    Index "testNs.3-testNs_timeCustom_series_1_idx"
+Index "one_Partition.3-one_Partition_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_1   | double precision | series_1     | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_1 IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (series_1 IS NOT NULL)
 
-    Index "testNs.4-testNs_timeCustom_series_2_idx"
+Index "one_Partition.4-one_Partition_timeCustom_series_2_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_2   | double precision | series_2     | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_2 IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (series_2 IS NOT NULL)
 
-Index "testNs.5-testNs_timeCustom_series_bool_idx"
+Index "one_Partition.5-one_Partition_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
-btree, for table "testNs._hyper_1_1_0_1_data", predicate (series_bool IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (series_bool IS NOT NULL)
 
-Index "testNs.6-testNs_device_id_timeCustom_idx"
+Index "one_Partition.6-one_Partition_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  device_id  | text   | device_id    | extended
  timeCustom | bigint | "timeCustom" | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
 
-    Index "testNs.7-testNs_timeCustom_series_0_idx"
+Index "one_Partition.7-one_Partition_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
 
-    Index "testNs.8-testNs_timeCustom_series_1_idx"
+Index "one_Partition.8-one_Partition_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_1   | double precision | series_1     | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
 
-    Index "testNs.9-testNs_timeCustom_series_2_idx"
+Index "one_Partition.9-one_Partition_timeCustom_series_2_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_2   | double precision | series_2     | plain
-btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
+btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
 
-                         Table "testNs._hyper_1_0_replica"
+                      Table "one_Partition._hyper_1_0_replica"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
  timeCustom  | bigint           | not null  | plain    |              | 
@@ -175,10 +133,10 @@ btree, for table "testNs._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Inherits: "testNs"._hyper_1_root
-Child tables: "testNs"._hyper_1_1_0_partition
+Inherits: "one_Partition"._hyper_1_root
+Child tables: "one_Partition"._hyper_1_1_0_partition
 
-                         Table "testNs._hyper_1_1_0_1_data"
+                     Table "one_Partition._hyper_1_1_0_1_data"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
  timeCustom  | bigint           | not null  | plain    |              | 
@@ -188,16 +146,16 @@ Child tables: "testNs"._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "1-testNs_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-testNs_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "3-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "4-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "5-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "1-one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "2-one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "3-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "4-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "5-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "time_range" CHECK ("timeCustom" <= '1257897600000000000'::bigint) NOT VALID
-Inherits: "testNs"._hyper_1_1_0_partition
+Inherits: "one_Partition"._hyper_1_1_0_partition
 
-                         Table "testNs._hyper_1_1_0_2_data"
+                     Table "one_Partition._hyper_1_1_0_2_data"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
  timeCustom  | bigint           | not null  | plain    |              | 
@@ -207,16 +165,16 @@ Inherits: "testNs"._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "10-testNs_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "6-testNs_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "7-testNs_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "8-testNs_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "9-testNs_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "10-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "7-one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "8-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "9-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
 Check constraints:
     "time_range" CHECK ("timeCustom" >= '1257897600000000001'::bigint) NOT VALID
-Inherits: "testNs"._hyper_1_1_0_partition
+Inherits: "one_Partition"._hyper_1_1_0_partition
 
-                       Table "testNs._hyper_1_1_0_partition"
+                    Table "one_Partition._hyper_1_1_0_partition"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
  timeCustom  | bigint           | not null  | plain    |              | 
@@ -225,11 +183,11 @@ Inherits: "testNs"._hyper_1_1_0_partition
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Inherits: "testNs"._hyper_1_0_replica
-Child tables: "testNs"._hyper_1_1_0_1_data,
-              "testNs"._hyper_1_1_0_2_data
+Inherits: "one_Partition"._hyper_1_0_replica
+Child tables: "one_Partition"._hyper_1_1_0_1_data,
+              "one_Partition"._hyper_1_1_0_2_data
 
-                            Table "testNs._hyper_1_root"
+                        Table "one_Partition._hyper_1_root"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
 -------------+------------------+-----------+----------+--------------+-------------
  timeCustom  | bigint           | not null  | plain    |              | 
@@ -238,9 +196,9 @@ Child tables: "testNs"._hyper_1_1_0_1_data,
  series_1    | double precision |           | plain    |              | 
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
-Child tables: "testNs"._hyper_1_0_replica
+Child tables: "one_Partition"._hyper_1_0_replica
 
-SELECT * FROM "testNs";
+SELECT * FROM "one_Partition";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t

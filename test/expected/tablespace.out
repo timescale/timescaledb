@@ -1,30 +1,23 @@
-\set ON_ERROR_STOP 1
-\set SHOW_CONTEXT never
 \ir include/create_single_db.sql
-\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
  setup_timescaledb 
 -------------------
  
 (1 row)
 
-\set VERBOSITY verbose
-\set ECHO ALL
-\c single
 \set ON_ERROR_STOP 0
 SET client_min_messages = ERROR;
 drop tablespace if exists tspace1;
 SET client_min_messages = NOTICE;
-\set VERBOSITY verbose
 --test hypertable with tables space
 create tablespace tspace1 location :TEST_TABLESPACE_PATH;
 create table test_tspace(time timestamp, temp float, device_id text) tablespace tspace1;
@@ -115,12 +108,6 @@ Child tables: _timescaledb_internal._hyper_1_2_0_2_data
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
 --cleanup
-\set VERBOSITY default
 drop table test_tspace;
 NOTICE:  drop cascades to 5 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_0_replica
-drop cascades to table _timescaledb_internal._hyper_1_1_0_partition
-drop cascades to table _timescaledb_internal._hyper_1_1_0_1_data
-drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
-drop cascades to table _timescaledb_internal._hyper_1_2_0_2_data
 drop tablespace tspace1;

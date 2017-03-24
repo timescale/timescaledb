@@ -13,4 +13,4 @@ PG_PROC_USER=$(ps u | awk '/postgres/ { print $1; exit }')
 mkdir -p ${TEST_TABLESPACE_PATH}
 mkdir -p dump
 
-exec ${PSQL} -v ON_ERROR_STOP=1 -v TEST_TABLESPACE_PATH=\'${TEST_TABLESPACE_PATH}\' $@
+exec ${PSQL} -v ON_ERROR_STOP=1 -v VERBOSITY=terse -v ECHO=all -v TEST_TABLESPACE_PATH=\'${TEST_TABLESPACE_PATH}\' $@

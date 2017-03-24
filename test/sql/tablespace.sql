@@ -1,19 +1,9 @@
-
-\set ON_ERROR_STOP 1
-\set SHOW_CONTEXT never
-
 \ir include/create_single_db.sql
-
-\set ECHO ALL
-\c single
-
 \set ON_ERROR_STOP 0
 
 SET client_min_messages = ERROR;
 drop tablespace if exists tspace1;
 SET client_min_messages = NOTICE;
-
-\set VERBOSITY verbose
 
 --test hypertable with tables space
 create tablespace tspace1 location :TEST_TABLESPACE_PATH;
@@ -28,6 +18,5 @@ insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
 \d+ _timescaledb_internal.*
 
 --cleanup
-\set VERBOSITY default
 drop table test_tspace;
 drop tablespace tspace1;

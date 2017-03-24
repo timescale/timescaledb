@@ -1,22 +1,16 @@
-\set ON_ERROR_STOP 1
-\set VERBOSITY verbose
-\set SHOW_CONTEXT never
 \o /dev/null
 \ir include/create_single_db.sql
-\set VERBOSITY default
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "dblink"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "postgres_fdw"
-psql:include/create_single_db.sql:8: NOTICE:  installing required extension "hstore"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "dblink"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+psql:include/create_single_db.sql:7: NOTICE:  installing required extension "hstore"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
-\set VERBOSITY verbose
 \o
-\set ECHO ALL
 \ir include/ddl_ops_1.sql
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
@@ -55,11 +49,9 @@ VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 --expect error cases
 \set ON_ERROR_STOP 0
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
-psql:include/ddl_ops_1.sql:25: ERROR:  IO101: UPDATE ONLY not supported on hypertables
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+psql:include/ddl_ops_1.sql:25: ERROR:  UPDATE ONLY not supported on hypertables
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
-psql:include/ddl_ops_1.sql:26: ERROR:  IO101: DELETE ONLY not currently supported on hypertables
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+psql:include/ddl_ops_1.sql:26: ERROR:  DELETE ONLY not currently supported on hypertables
 \set ON_ERROR_STOP 1
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
@@ -171,15 +163,12 @@ $BODY$;
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
-psql:include/ddl_ops_2.sql:23: ERROR:  IO101: ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+psql:include/ddl_ops_2.sql:23: ERROR:  ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:24: ERROR:  IO101: ALTER INDEX not supported on hypertable "Hypertable_1"
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+psql:include/ddl_ops_2.sql:24: ERROR:  ALTER INDEX not supported on hypertable "Hypertable_1"
 CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
 FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
-psql:include/ddl_ops_2.sql:26: ERROR:  IO101: CREATE TRIGGER not supported on hypertable "Hypertable_1"
-LOCATION:  exec_stmt_raise, pl_exec.c:3165
+psql:include/ddl_ops_2.sql:26: ERROR:  CREATE TRIGGER not supported on hypertable "Hypertable_1"
 \set ON_ERROR_STOP 1
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;

@@ -1,11 +1,6 @@
-\set ON_ERROR_STOP 1
-
 \o /dev/null
 \ir include/create_single_db.sql
-
 \o
-\set ECHO ALL
-\c single
 
 -- Utility function for grouping/slotting time with a given interval.
 CREATE OR REPLACE FUNCTION date_group(
