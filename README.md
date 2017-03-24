@@ -13,33 +13,65 @@ paper](http://www.timescaledb.com/papers/timescaledb.pdf). Additionally,
 more documentation can be
 found [on our docs website](https://docs.timescaledb.com/).
 
-There are two ways to install TimescaleDB: (1) Docker and (2) Postgres.
+There are several ways to install TimescaleDB: (1) Homebrew (for MacOS),
+(2) Docker, or (3) from source.
 
-## Installation (from source)
+## Installation
 
 _NOTE: Currently, upgrading to new versions requires a fresh install._
 
-### Installation Options
+### Option 1 - Homebrew
 
-#### Option 1 - Docker (recommended)
+This will install PostgreSQL 9.6 via Homebrew as well. If you have
+another installation (such as Postgres.app), this will cause problems. We
+recommend removing other installations before using this method.
 
 **Prerequisites**
 
-- [Postgres client](https://wiki.postgresql.org/wiki/Detailed_installation_guides) (psql)
+- [Homebrew](https://brew.sh/)
 
-- [Docker](https://docs.docker.com/engine/installation/)
-
-**Build and run in Docker**
+**Build and install**
 
 ```bash
-# To build a Docker image
-make -f docker.mk build-image
+# Add our tap
+brew tap timescaledb/tap
 
-# To run a container
-make -f docker.mk run
+# To install
+brew install timescaledb
 ```
 
-#### Option 2 - Postgres
+**Update `postgresql.conf`**
+
+Also, you will need to edit your `postgresql.conf` file to include
+necessary libraries:
+```bash
+# Modify postgresql.conf to uncomment this line and
+# add required libraries. For example,
+shared_preload_libraries = 'dblink,timescaledb'
+```
+
+To get started you'll now need to restart PostgreSQL and add a
+`postgres` superuser (used in the rest of the docs):
+```bash
+# Restart PostgreSQL
+brew services restart postgresql
+
+# Add a superuser postgres:
+createuser postgres -s
+```
+
+### Option 2 - Docker Hub
+
+You can pull our Docker images from [Docker Hub](https://hub.docker.com/r/timescaledb/timescaledb/).
+
+```bash
+docker pull timescaledb/timescaledb:latest
+```
+
+### Option 3 - From source
+We have only tested our build process on **MacOS and Linux**. We do
+not support building on Windows yet. Windows may be able to use our
+Docker image on Docker Hub (see above).
 
 **Prerequisites**
 
@@ -65,6 +97,7 @@ shared_preload_libraries = 'dblink,timescaledb'
 
 # Then, restart PostgreSQL
 ```
+
 
 ### Setting up your initial database
 Now, we'll install our extension and create an initial database.
