@@ -194,6 +194,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     UNIQUE (partition_id, end_time),
     CHECK (start_time <= end_time)
 );
+CREATE UNIQUE INDEX ON  _timescaledb_catalog.chunk (partition_id) WHERE start_time IS NULL;
+CREATE UNIQUE INDEX ON  _timescaledb_catalog.chunk (partition_id) WHERE end_time IS NULL;
 CREATE INDEX ON _timescaledb_catalog.chunk(partition_id, start_time, end_time);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
