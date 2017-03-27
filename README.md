@@ -20,6 +20,12 @@ There are several ways to install TimescaleDB: (1) Homebrew (for MacOS),
 
 _NOTE: Currently, upgrading to new versions requires a fresh install._
 
+**Prerequisite**
+
+- The [Postgres client][Postgres-client] (psql) is required for all of the following installation methods.
+
+[Postgres-client]: https://wiki.postgresql.org/wiki/Detailed_installation_guides
+
 ### Option 1 - Homebrew
 
 This will install PostgreSQL 9.6 via Homebrew as well. If you have
