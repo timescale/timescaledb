@@ -34,7 +34,7 @@ recommend removing other installations before using this method.
 
 ```bash
 # Add our tap
-brew tap timescaledb/tap
+brew tap timescale/tap
 
 # To install
 brew install timescaledb
