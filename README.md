@@ -166,10 +166,10 @@ temperature and humidity across a collection of devices over time.
 ```sql
 -- We start by creating a regular SQL table
 CREATE TABLE conditions (
-  time        TIMESTAMP WITH TIME ZONE NOT NULL,
-  location TEXT                     NOT NULL,
-  temperature DOUBLE PRECISION         NULL,
-  humidity    DOUBLE PRECISION         NULL
+  time        TIMESTAMPTZ       NOT NULL,
+  location    TEXT              NOT NULL,
+  temperature DOUBLE PRECISION  NULL,
+  humidity    DOUBLE PRECISION  NULL
 );
 ```
 
