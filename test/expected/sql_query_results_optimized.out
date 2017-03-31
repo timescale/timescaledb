@@ -86,6 +86,48 @@ SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2)
  Wed Dec 31 21:33:19 1969 | 19999 | 29999 | 141.417820659208
 (2 rows)
 
+--test that when index on time used by constraint, still works correctly
+EXPLAIN (costs off)
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
+         ->  Result
+               ->  Merge Append
+                     Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+                     ->  Sort
+                           Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+                           ->  Seq Scan on _hyper_1_0_replica
+                                 Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+                     ->  Sort
+                           Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
+                           ->  Seq Scan on _hyper_1_1_0_partition
+                                 Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+                     ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
+                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+                     ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
+                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(18 rows)
+
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+            t             |  avg  |  min  |       avg        
+--------------------------+-------+-------+------------------
+ Wed Dec 31 16:14:00 1969 | 869.5 | 10840 | 29.4858228711055
+ Wed Dec 31 16:13:00 1969 | 809.5 | 10780 | 28.4500853206775
+(2 rows)
+
 --test that still works with an expression index on data_trunc.
 DROP INDEX "time_plain";
 CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));

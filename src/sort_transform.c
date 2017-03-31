@@ -182,8 +182,7 @@ sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 
 	if (was_transformed)
 	{
-		ListCell   *lc_newplan;
-		ListCell   *orig_tail = list_tail(rel->pathlist);
+		ListCell   *lc_plan;
 
 		/* search for indexes on transformed pathkeys */
 		List	   *orig_query_pathkeys = root->query_pathkeys;
@@ -192,12 +191,20 @@ sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 		create_index_paths(root, rel);
 		root->query_pathkeys = orig_query_pathkeys;
 
-		/* change returned paths to use original pathkeys */
-		for_each_cell(lc_newplan, orig_tail != NULL ? orig_tail->next : list_head(rel->pathlist))
+		/*
+		 * change returned paths to use original pathkeys. have to go through
+		 * all paths since create_index_paths might have modified existing
+		 * pathkey. Always safe to do transform since ordering of transformed_query_pathkey
+		 * implements ordering of orig_query_pathkeys.
+		 */
+		foreach(lc_plan, rel->pathlist)
 		{
-			Path	   *new_path = lfirst(lc_newplan);
+			Path	   *path = lfirst(lc_plan);
 
-			new_path->pathkeys = orig_query_pathkeys;
+			if (compare_pathkeys(path->pathkeys, transformed_query_pathkey) == PATHKEYS_EQUAL)
+			{
+				path->pathkeys = orig_query_pathkeys;
+			}
 		}
 	}
 

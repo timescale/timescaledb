@@ -21,6 +21,22 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
+--test that when index on time used by constraint, still works correctly
+EXPLAIN (costs off)
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+
 --test that still works with an expression index on data_trunc.
 DROP INDEX "time_plain";
 CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
@@ -31,3 +47,4 @@ SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+
