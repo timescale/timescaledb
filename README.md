@@ -68,10 +68,10 @@ createuser postgres -s
 
 ### Option 2 - Docker Hub
 
-You can pull our Docker images from [Docker Hub](https://hub.docker.com/r/timescaledb/timescaledb/).
+You can pull our Docker images from [Docker Hub](https://hub.docker.com/r/timescale/timescaledb/).
 
 ```bash
-docker pull timescaledb/timescaledb:latest
+docker pull timescale/timescaledb:latest
 ```
 
 ### Option 3 - From source
