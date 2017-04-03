@@ -49,21 +49,21 @@ inval_cache_callback(Datum arg, Oid relid)
 	if (!extension_is_loaded())
 		return;
 
-	if (extension_is_being_dropped(relid))
+	if (!OidIsValid(relid) || extension_is_being_dropped(relid))
 	{
-		/* Extension was dropped. Reset state. */
+		/* Extension was dropped or entire cache invalidated. Reset state. */
 		hypertable_cache_invalidate_callback();
 		chunk_cache_invalidate_callback();
 		extension_reset();
 		return;
 	}
 
-	if (!OidIsValid(relid) || relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
+	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
 	{
 		hypertable_cache_invalidate_callback();
 	}
 
-	if (!OidIsValid(relid) || relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_CHUNK))
+	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_CHUNK))
 		chunk_cache_invalidate_callback();
 }
 
