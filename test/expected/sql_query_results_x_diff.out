@@ -1,0 +1,66 @@
+--make sure diff only has explain output not result output
+\! diff ../results/sql_query_results_optimized.out ../results/sql_query_results_unoptimized.out 
+13a14
+> SET timescaledb.disable_optimizations= 'true';
+56,57c57,58
+<                                               QUERY PLAN                                              
+< ------------------------------------------------------------------------------------------------------
+---
+>                                    QUERY PLAN                                   
+> --------------------------------------------------------------------------------
+59,65c60,65
+<    ->  GroupAggregate
+<          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+<                      ->  Sort
+<                            Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+---
+>    ->  Sort
+>          Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+>          ->  HashAggregate
+>                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
+>                ->  Result
+>                      ->  Append
+67,68d66
+<                      ->  Sort
+<                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
+70,72c68,70
+<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
+<                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
+< (14 rows)
+---
+>                            ->  Seq Scan on _hyper_1_1_0_1_data
+>                            ->  Seq Scan on _hyper_1_1_0_2_data
+> (11 rows)
+100,106c98,103
+<    ->  GroupAggregate
+<          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+<                      ->  Sort
+<                            Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+---
+>    ->  Sort
+>          Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+>          ->  HashAggregate
+>                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
+>                ->  Result
+>                      ->  Append
+109,110d105
+<                      ->  Sort
+<                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
+113,117c108,112
+<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
+<                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+<                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
+<                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+< (18 rows)
+---
+>                            ->  Seq Scan on _hyper_1_1_0_1_data
+>                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+>                            ->  Seq Scan on _hyper_1_1_0_2_data
+>                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+> (15 rows)
