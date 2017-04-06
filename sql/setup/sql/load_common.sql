@@ -3,7 +3,6 @@
 -- \ir ../../common/extensions.sql
 CREATE EXTENSION IF NOT EXISTS dblink;
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
-CREATE EXTENSION IF NOT EXISTS hstore;
 
 \ir ../../common/types.sql
 \ir ../../common/tables.sql

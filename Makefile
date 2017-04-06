@@ -59,7 +59,6 @@ REGRESS_OPTS = \
 	--load-language=plpgsql \
 	--load-extension=dblink \
 	--load-extension=postgres_fdw \
-	--load-extension=hstore \
 	--load-extension=$(EXTENSION)
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)

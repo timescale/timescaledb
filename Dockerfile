@@ -1,6 +1,6 @@
 FROM postgres:9.6.2
 
-MAINTAINER Matvey Arye
+MAINTAINER Timescale
 
 ENV PG_MAJOR 9.6
 
