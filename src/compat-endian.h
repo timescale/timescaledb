@@ -17,6 +17,8 @@
 #define bswap_64(x) OSSwapInt64(x)
 #define _NEED_ENDIAN_COMPAT
 
+#elif defined(__FreeBSD__)
+#include <sys/endian.h>
 #else
 #include <endian.h>
 #endif
