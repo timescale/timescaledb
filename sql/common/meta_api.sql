@@ -259,8 +259,7 @@ BEGIN
     IF meta_database = current_database() THEN
         EXECUTE sql_stmt;
     ELSE
-        PERFORM * FROM dblink(format('host=%s port=%s dbname=%s user=%s password=%s',
-                                     meta_hostname, meta_port, meta_database, username, password), sql_stmt) AS r(t TEXT);
+        PERFORM _timescaledb_internal.clustering_not_supported();
     END IF;
 END
 $BODY$;

@@ -10,10 +10,9 @@ RUN apt-get update && apt-get install -y \
     postgresql-server-dev-$PG_MAJOR \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /build/{src/deps,test/results}
+RUN mkdir -p /build/{src,test/results}
 COPY sql /build/sql
 COPY src/*.c src/*.h build/src/
-COPY src/deps/*.h build/src/deps/
 COPY test/expected /build/test/
 COPY test/sql /build/test/
 COPY test/runner.sh /build/test/runner.sh

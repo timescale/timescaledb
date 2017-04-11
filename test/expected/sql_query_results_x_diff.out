@@ -1,14 +1,14 @@
 --make sure diff only has explain output not result output
 \! diff ../results/sql_query_results_optimized.out ../results/sql_query_results_unoptimized.out 
-12a13
+11a12
 > SET timescaledb.disable_optimizations= 'true';
-55,56c56,57
+54,55c55,56
 <                                               QUERY PLAN                                              
 < ------------------------------------------------------------------------------------------------------
 ---
 >                                    QUERY PLAN                                   
 > --------------------------------------------------------------------------------
-58,64c59,64
+57,63c58,63
 <    ->  GroupAggregate
 <          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
 <          ->  Result
@@ -23,10 +23,10 @@
 >                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
 >                ->  Result
 >                      ->  Append
-66,67d65
+65,66d64
 <                      ->  Sort
 <                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
-69,71c67,69
+68,70c66,68
 <                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
 <                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data
 < (14 rows)
@@ -34,7 +34,7 @@
 >                            ->  Seq Scan on _hyper_1_1_0_1_data
 >                            ->  Seq Scan on _hyper_1_1_0_2_data
 > (11 rows)
-99,105c97,102
+98,104c96,101
 <    ->  GroupAggregate
 <          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
 <          ->  Result
@@ -49,10 +49,10 @@
 >                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
 >                ->  Result
 >                      ->  Append
-108,109d104
+107,108d103
 <                      ->  Sort
 <                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
-112,116c107,111
+111,115c106,110
 <                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
 <                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 <                      ->  Index Scan using "2-time_plain" on _hyper_1_1_0_2_data

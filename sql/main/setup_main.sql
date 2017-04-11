@@ -144,14 +144,4 @@ $BODY$
 SET client_min_messages = WARNING --supress notices for trigger drops
 ;
 
--- Run setup_main() above with immediate effect by calling through dblink().
-CREATE OR REPLACE FUNCTION _timescaledb_internal.setup_main_immmediate(
-    database    NAME,
-    username    TEXT,
-    password    TEXT
-)
-    RETURNS TEXT LANGUAGE SQL AS
-$BODY$
-    SELECT * FROM dblink(format('dbname=%s user=%s password=%s', database, username, password),
-                                'SELECT _timescaledb_internal.setup_main()') AS r(t TEXT);
-$BODY$;
+

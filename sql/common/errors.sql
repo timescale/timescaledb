@@ -35,3 +35,12 @@ BEGIN
     PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.clustering_not_supported()
+    RETURNS VOID LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RAISE EXCEPTION 'Clustering not supported' 
+    USING ERRCODE = 'IO101';
+END
+$BODY$;
