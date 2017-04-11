@@ -50,7 +50,7 @@ BEGIN
         FOR SHARE;
         IF FOUND THEN
             --there is a table that ends before this point
-            table_end = chunk_row.start_time - 1;
+            table_end := chunk_row.start_time - 1;
         END IF;
     END IF;
 END

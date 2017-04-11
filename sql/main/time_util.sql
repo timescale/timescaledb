@@ -19,7 +19,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIG
 
 -- Gets the sql code for extracting the internal (bigint) time value from the identifier with the given column_type.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.extract_time_sql(
-    identifier      text,
+    identifier      TEXT,
     column_type     REGTYPE
 )
     RETURNS text LANGUAGE PLPGSQL STABLE AS
