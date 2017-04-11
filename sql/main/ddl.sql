@@ -109,7 +109,7 @@ BEGIN
     FROM pg_attribute att
     WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
         LOOP
-            PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
+            PERFORM _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
         END LOOP;
 
 

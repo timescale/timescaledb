@@ -1,29 +1,18 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_meta_server_name()
-    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
+RETURNS TEXT
+LANGUAGE SQL STABLE
+AS
 $BODY$
-DECLARE
-    server_name  TEXT;
-    port         INT;
-BEGIN
-    SELECT m.server_name, m.port
-    INTO STRICT server_name, port
+    SELECT m.server_name::TEXT
     FROM _timescaledb_catalog.meta m;
-
-    RETURN server_name;
-END
 $BODY$;
 
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_meta_database_name()
-    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
+RETURNS TEXT
+LANGUAGE SQL STABLE
+AS
 $BODY$
-DECLARE
-    database_name  TEXT;
-BEGIN
-    SELECT m.database_name
-    INTO STRICT database_name
+    SELECT m.database_name::TEXT
     FROM _timescaledb_catalog.meta m;
-
-    RETURN database_name;
-END
 $BODY$;

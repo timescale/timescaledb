@@ -18,7 +18,7 @@ BEGIN
 
     IF meta_row IS NULL THEN
         IF port IS NULL THEN
-            port = 5432;
+            port := 5432;
         END IF;
         PERFORM add_cluster_user(username, password);
         PERFORM _timescaledb_internal.setup_meta();
@@ -51,7 +51,7 @@ BEGIN
     schema_name := format('remote_%s_%s', new_id, database_name);
 
     IF database_name = current_database() THEN
-        schema_name = '_timescaledb_catalog';
+        schema_name := '_timescaledb_catalog';
     END IF;
 
     INSERT INTO _timescaledb_catalog.node (database_name, schema_name, server_name, hostname, port, id)
@@ -101,7 +101,7 @@ BEGIN
     LIMIT 1;
 
     IF port IS NULL THEN
-        port = 5432;
+        port := 5432;
     END IF;
 
     IF meta_row IS NULL THEN

@@ -26,14 +26,14 @@ DECLARE
     partitioning_func_schema _timescaledb_catalog.partition_epoch.partitioning_func_schema%TYPE = '_timescaledb_catalog';
 BEGIN
 
-    id :=  nextval('_timescaledb_catalog.default_hypertable_seq');
+    id := nextval('_timescaledb_catalog.default_hypertable_seq');
 
     IF associated_schema_name IS NULL THEN
-        associated_schema_name = '_timescaledb_internal';
+        associated_schema_name := '_timescaledb_internal';
     END IF;
 
     IF associated_table_prefix IS NULL THEN
-        associated_table_prefix = format('_hyper_%s', id);
+        associated_table_prefix := format('_hyper_%s', id);
     END IF;
 
     IF partitioning_column IS NULL THEN

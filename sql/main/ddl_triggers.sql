@@ -8,12 +8,12 @@
 
   The intercepted schema changes work as follows:
     1) a ddl command is intercepted and it is determined whether it's on a hypertable, if not exit.
-    2) it is determined whether this is a user or trigger initate command. If it is trigger initiated, exit.
+    2) it is determined whether this is a user or trigger initated command. If it is trigger initiated, exit.
     3) send the corresponding hypertable ddl command to the meta node.
 
   Because ddl commands cannot be "canceled" without an error, all comands are allowed to succeed. This is
   why the command sent to the meta node always contains a parameter for the node the ddl command was executed on
-  (so that the meta node can know that the main table on that node was already modified and does not needed to be
+  (so that the meta node can know that the main table on that node was already modified and does not need to be
     modified again).
 
 */
@@ -23,8 +23,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_create_index()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    info           record;
-    table_oid      regclass;
+    info           RECORD;
+    table_oid      REGCLASS;
     def            TEXT;
     hypertable_row _timescaledb_catalog.hypertable;
 BEGIN
@@ -39,7 +39,7 @@ BEGIN
                 RETURN;
             END IF;
 
-            def = _timescaledb_internal.get_general_index_definition(info.objid, table_oid);
+            def := _timescaledb_internal.get_general_index_definition(info.objid, table_oid);
             hypertable_row := _timescaledb_internal.hypertable_from_main_table(table_oid);
 
             PERFORM _timescaledb_meta_api.add_index(
@@ -57,9 +57,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_create_trigger()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    info           record;
-    table_oid      regclass;
-    trigger_name            TEXT;
+    info           RECORD;
+    table_oid      REGCLASS;
+    trigger_name   TEXT;
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
@@ -84,8 +84,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_index()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    info record;
-    table_oid regclass;
+    info        RECORD;
+    table_oid   REGCLASS;
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
@@ -108,13 +108,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_index()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    info           record;
-    table_oid      regclass;
+    info           RECORD;
+    table_oid      REGCLASS;
     hypertable_row _timescaledb_catalog.hypertable;
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_dropped_objects()
         LOOP
-            SELECT  format('%I.%I', h.schema_name, h.table_name) INTO table_oid
+            SELECT format('%I.%I', h.schema_name, h.table_name) INTO table_oid
             FROM _timescaledb_catalog.hypertable h
             INNER JOIN _timescaledb_catalog.hypertable_index i ON (i.hypertable_id = h.id)
             WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name;
@@ -140,11 +140,11 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_table()
     RETURNS event_trigger LANGUAGE plpgsql AS
 $BODY$
 DECLARE
-    info           record;
+    info           RECORD;
     hypertable_row _timescaledb_catalog.hypertable;
     found_action   BOOLEAN;
     att_row        pg_attribute;
-    rec            record;
+    rec            RECORD;
 BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
@@ -155,7 +155,7 @@ BEGIN
 
             hypertable_row := _timescaledb_internal.hypertable_from_main_table(info.objid);
             --Try to find what was done. If you can't find it error out.
-            found_action = FALSE;
+            found_action := FALSE;
 
             --was a column added?
             FOR att_row IN
@@ -166,8 +166,8 @@ BEGIN
                   NOT attisdropped AND
                   att.attnum NOT IN (SELECT c.attnum FROM _timescaledb_catalog.hypertable_column c WHERE hypertable_id = hypertable_row.id)
                 LOOP
-                    PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
-                    found_action = TRUE;
+                    PERFORM _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
+                    found_action := TRUE;
                 END LOOP;
 
             --was a column deleted
@@ -178,7 +178,7 @@ BEGIN
             WHERE hypertable_id = hypertable_row.id
                 LOOP
                     PERFORM _timescaledb_meta_api.drop_column(hypertable_row.id, rec.name);
-                    found_action = TRUE;
+                    found_action := TRUE;
                 END LOOP;
 
             --was a column renamed
@@ -193,7 +193,7 @@ BEGIN
                         rec.old_name,
                         rec.new_name
                     );
-                    found_action = TRUE;
+                    found_action := TRUE;
                 END LOOP;
 
             --was a column default changed
@@ -208,7 +208,7 @@ BEGIN
                         rec.name,
                         rec.new_default_value
                     );
-                    found_action = TRUE;
+                    found_action := TRUE;
             END LOOP;
 
             --was the not null flag changed?
@@ -223,7 +223,7 @@ BEGIN
                         rec.name,
                         rec.new_not_null
                     );
-                    found_action = TRUE;
+                    found_action := TRUE;
                 END LOOP;
 
             --type changed
@@ -263,7 +263,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_table()
         RETURNS event_trigger LANGUAGE plpgsql AS $BODY$
 DECLARE
-    obj record;
+    obj RECORD;
 BEGIN
     IF current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
         RETURN;

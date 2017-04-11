@@ -90,7 +90,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION get_or_create_chunk(
     partition_id INT,
     time_point   BIGINT,
-    lock_chunk   boolean = FALSE
+    lock_chunk   BOOLEAN = FALSE
 )
     RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$

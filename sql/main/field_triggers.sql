@@ -37,10 +37,10 @@ DECLARE
     created_columns_att_num INT2;
 BEGIN
     IF NOT not_null THEN
-        null_constraint = 'NULL';
+        null_constraint := 'NULL';
     END IF;
 
-    default_constraint = 'DEFAULT '|| default_value;
+    default_constraint := 'DEFAULT '|| default_value;
 
     EXECUTE format(
         $$
@@ -96,8 +96,8 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.exec_alter_table_rename_column(
     schema_name   NAME,
     table_name    NAME,
-    old_column     NAME,
-    new_column     NAME
+    old_column    NAME,
+    new_column    NAME
 ) RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
@@ -139,7 +139,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_column()
 $BODY$
 DECLARE
     hypertable_row _timescaledb_catalog.hypertable;
-    update_found   BOOLEAN = false;
+    update_found   BOOLEAN := false;
 BEGIN
 
     IF TG_OP = 'INSERT' THEN
@@ -169,7 +169,7 @@ BEGIN
         WHERE h.id = NEW.hypertable_id;
 
         IF NEW.default_value IS DISTINCT FROM OLD.default_value THEN
-            update_found = TRUE;
+            update_found := TRUE;
             -- update root table
             PERFORM _timescaledb_internal.exec_alter_column_set_default(
                 hypertable_row.root_schema_name, hypertable_row.root_table_name,
@@ -184,7 +184,7 @@ BEGIN
             END IF;
         END IF;
         IF NEW.not_null IS DISTINCT FROM OLD.not_null THEN
-            update_found = TRUE;
+            update_found := TRUE;
             -- update root table
             PERFORM _timescaledb_internal.exec_alter_column_set_not_null(
                 hypertable_row.root_schema_name, hypertable_row.root_table_name,
@@ -198,7 +198,7 @@ BEGIN
             END IF;
         END IF;
         IF NEW.name IS DISTINCT FROM OLD.name THEN
-            update_found = TRUE;
+            update_found := TRUE;
             -- update root table
             PERFORM _timescaledb_internal.exec_alter_table_rename_column(
                 hypertable_row.root_schema_name, hypertable_row.root_table_name,
