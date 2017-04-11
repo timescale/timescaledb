@@ -26,14 +26,14 @@ DECLARE
     partitioning_func_schema _timescaledb_catalog.partition_epoch.partitioning_func_schema%TYPE = '_timescaledb_catalog';
 BEGIN
 
-    id :=  nextval('_timescaledb_catalog.default_hypertable_seq');
+    id := nextval('_timescaledb_catalog.default_hypertable_seq');
 
     IF associated_schema_name IS NULL THEN
-        associated_schema_name = '_timescaledb_internal';
+        associated_schema_name := '_timescaledb_internal';
     END IF;
 
     IF associated_table_prefix IS NULL THEN
-        associated_table_prefix = format('_hyper_%s', id);
+        associated_table_prefix := format('_hyper_%s', id);
     END IF;
 
     IF partitioning_column IS NULL THEN
@@ -203,8 +203,8 @@ $BODY$;
 -- drop only chunks associated with this table.
 CREATE OR REPLACE FUNCTION _timescaledb_meta.drop_chunks_older_than(
     older_than_time  BIGINT,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL
+    table_name  NAME := NULL,
+    schema_name NAME := NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -229,8 +229,8 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION drop_chunks(
     older_than TIMESTAMPTZ,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL
+    table_name  NAME := NULL,
+    schema_name NAME := NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -244,8 +244,8 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION drop_chunks(
     older_than  INTERVAL,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL
+    table_name  NAME := NULL,
+    schema_name NAME := NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$

@@ -43,7 +43,7 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_meta_api.drop_hypertable(
     schema_name NAME,
-    table_name NAME
+    table_name  NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$

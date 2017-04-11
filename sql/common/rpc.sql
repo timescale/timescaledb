@@ -12,12 +12,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.meta_transaction_start()
 $BODY$
 DECLARE
     conn_exists BOOLEAN;
-    conn_name TEXT = 'meta_conn';
+    conn_name   TEXT := 'meta_conn';
 BEGIN
     SELECT conn_name = ANY (conn) INTO conn_exists
     FROM dblink_get_connections() conn;
 
-    IF conn_exists IS NULL OR NOT conn_exists THEN
+    IF conn_exists IS NOT TRUE THEN
         --tells c code to commit in precommit.
         PERFORM dblink_connect(conn_name, _timescaledb_internal.get_meta_server_name());
         PERFORM dblink_exec(conn_name, 'BEGIN');
@@ -99,7 +99,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_meta.node_transaction_start(database_nam
 $BODY$
 DECLARE
     conn_exists BOOLEAN;
-    conn_name TEXT;
+    conn_name   TEXT;
 BEGIN
     IF database_name = current_database() THEN
         RETURN NULL;
@@ -110,7 +110,7 @@ BEGIN
     SELECT conn_name = ANY (conn) INTO conn_exists
     FROM dblink_get_connections() conn;
 
-    IF conn_exists IS NULL OR NOT conn_exists THEN
+    IF conn_exists IS NOT TRUE THEN
         --tells c code to commit in precommit.
         PERFORM dblink_connect(conn_name, server_name);
         PERFORM dblink_exec(conn_name, 'BEGIN');
@@ -132,8 +132,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_meta.node_transaction_exec_with_return(
     RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    conn_name TEXT;
-    return_value TEXT;
+    conn_name       TEXT;
+    return_value    TEXT;
 BEGIN
     SELECT _timescaledb_meta.node_transaction_start(database_name, server_name) INTO conn_name;
 

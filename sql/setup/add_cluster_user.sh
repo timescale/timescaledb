@@ -27,7 +27,7 @@ PG_USER_TO_ADD=$1
 echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER and with db $INSTALL_DB"
 echo "SELECT add_cluster_user('$PG_USER_TO_ADD', $PASS);"
 cd $DIR
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB -v ON_ERROR_STOP=1  <<EOF
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $INSTALL_DB -X -v ON_ERROR_STOP=1  <<EOF
 SELECT add_cluster_user('$PG_USER_TO_ADD', $PASS);
 EOF
 

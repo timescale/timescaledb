@@ -100,7 +100,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_local_data_table(
 $BODY$
 DECLARE
     tablespace_oid  pg_catalog.pg_tablespace.oid%type;
-    tablespace_clause TEXT = '';
+    tablespace_clause TEXT := '';
 BEGIN
     SELECT t.oid
     INTO tablespace_oid

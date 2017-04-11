@@ -13,7 +13,7 @@ $BODY$
 DECLARE
     index_name NAME;
     prefix     BIGINT;
-    sql_code TEXT;
+    sql_code   TEXT;
 BEGIN
     prefix = nextval('_timescaledb_catalog.chunk_replica_node_index_name_prefix');
     index_name := format('%s-%s', prefix, main_index_name);
