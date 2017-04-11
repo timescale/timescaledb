@@ -229,8 +229,8 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION drop_chunks(
     older_than TIMESTAMPTZ,
-    table_name  NAME := NULL,
-    schema_name NAME := NULL
+    table_name  NAME = NULL,
+    schema_name NAME = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -244,8 +244,8 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION drop_chunks(
     older_than  INTERVAL,
-    table_name  NAME := NULL,
-    schema_name NAME := NULL
+    table_name  NAME = NULL,
+    schema_name NAME = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
