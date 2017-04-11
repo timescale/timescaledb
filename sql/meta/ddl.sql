@@ -203,8 +203,8 @@ $BODY$;
 -- drop only chunks associated with this table.
 CREATE OR REPLACE FUNCTION _timescaledb_meta.drop_chunks_older_than(
     older_than_time  BIGINT,
-    table_name  NAME := NULL,
-    schema_name NAME := NULL
+    table_name  NAME = NULL,
+    schema_name NAME = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
