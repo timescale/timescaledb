@@ -54,22 +54,18 @@ SELECT date_group("timeCustom", '100 days') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 
 \echo 'The rest of the queries will be the same in output between UTC and EST'
---have to set the timezones on both Test1 and test2. Have to also kill ongoing dblinks as their sessions cache the timezone setting.
 SET timezone = 'UTC';
 ALTER DATABASE single SET timezone ='UTC';
-SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 
 SET timezone = 'EST';
 ALTER DATABASE single SET timezone ='EST';
-SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 
 SET timezone = 'UTC';
 ALTER DATABASE single SET timezone ='UTC';
-SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 
 SELECT *
 FROM PUBLIC."testNs"
@@ -78,7 +74,6 @@ AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
 
 SET timezone = 'EST';
 ALTER DATABASE single SET timezone ='EST';
-SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
@@ -86,13 +81,11 @@ AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
 
 SET timezone = 'UTC';
 ALTER DATABASE single SET timezone ='UTC';
-SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 
 SET timezone = 'EST';
 ALTER DATABASE single SET timezone ='EST';
-SELECT dblink_disconnect(conn) FROM unnest(dblink_get_connections()) conn;
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 

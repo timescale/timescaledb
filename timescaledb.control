@@ -2,5 +2,5 @@
 comment = 'Enables scalable inserts and complex queries for time-series data'
 default_version = '0.0.7-beta'
 module_pathname = '$libdir/timescaledb'
-requires = 'dblink, postgres_fdw'
+requires = 'postgres_fdw'
 relocatable = true

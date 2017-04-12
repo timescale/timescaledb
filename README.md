@@ -53,7 +53,7 @@ necessary libraries:
 ```bash
 # Modify postgresql.conf to uncomment this line and add required libraries.
 # For example:
-shared_preload_libraries = 'dblink,timescaledb'
+shared_preload_libraries = 'timescaledb'
 ```
 
 To get started you'll now need to restart PostgreSQL and add a
@@ -100,7 +100,7 @@ necessary libraries, and then restart PostgreSQL:
 ```bash
 # Modify postgresql.conf to uncomment this line and add required libraries.
 # For example:
-shared_preload_libraries = 'dblink,timescaledb'
+shared_preload_libraries = 'timescaledb'
 
 # Then, restart PostgreSQL
 ```

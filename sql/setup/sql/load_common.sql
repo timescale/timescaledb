@@ -1,7 +1,6 @@
 
 -- Can't load extensions from extension
 -- \ir ../../common/extensions.sql
-CREATE EXTENSION IF NOT EXISTS dblink;
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 
 \ir ../../common/types.sql

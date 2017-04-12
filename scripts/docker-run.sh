@@ -24,7 +24,7 @@ docker run -d \
   $IMAGE_NAME $BIN_CMD \
   -csynchronous_commit=off -cwal_writer_delay=1000 \
   -cmax_locks_per_transaction=1000 \
-  -cshared_preload_libraries=pg_stat_statements,dblink,timescaledb \
+  -cshared_preload_libraries=pg_stat_statements,timescaledb \
   -cvacuum_cost_delay=20 -cautovacuum_max_workers=1 \
   -clog_autovacuum_min_duration=1000 -cshared_buffers=1GB \
   -ceffective_cache_size=3GB -cwork_mem=52428kB \

@@ -34,8 +34,7 @@ SRCS = \
 	src/insert.c \
 	src/planner.c \
 	src/process_utility.c \
-	src/sort_transform.c \
-	src/xact.c
+	src/sort_transform.c
 
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
@@ -57,7 +56,6 @@ REGRESS_OPTS = \
 	--port=$(TEST_PGPORT) \
 	--user=$(TEST_PGUSER) \
 	--load-language=plpgsql \
-	--load-extension=dblink \
 	--load-extension=postgres_fdw \
 	--load-extension=$(EXTENSION)
 

@@ -21,7 +21,7 @@ BEGIN
     LIMIT 1;
 
     IF node_row IS NULL THEN
-        PERFORM _timescaledb_internal.setup_main_immmediate(node_database, username, password);
+        --PERFORM _timescaledb_internal.setup_main_immmediate(node_database, username, password);
         PERFORM _timescaledb_meta_api.join_cluster(meta_database, meta_hostname, meta_port,
                                                 node_database, node_hostname, node_port,
                                                 username, password);

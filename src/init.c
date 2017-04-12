@@ -29,9 +29,6 @@ extern void _planner_fini(void);
 extern void _process_utility_init(void);
 extern void _process_utility_fini(void);
 
-extern void _xact_init(void);
-extern void _xact_fini(void);
-
 extern void _PG_init(void);
 extern void _PG_fini(void);
 
@@ -44,13 +41,11 @@ _PG_init(void)
 	_cache_invalidate_init();
 	_planner_init();
 	_process_utility_init();
-	_xact_init();
 }
 
 void
 _PG_fini(void)
 {
-	_xact_fini();
 	_process_utility_fini();
 	_planner_fini();
 	_cache_invalidate_fini();
