@@ -264,3 +264,90 @@ pg_gethostname(PG_FUNCTION_ARGS)
 
 	PG_RETURN_TEXT_P(t);
 }
+
+static inline int64 get_interval_period(Interval *interval) 
+{
+	if (interval->month != 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("interval defined in terms of month, year, century etc. not supported")
+				 ));
+	}
+#ifdef HAVE_INT64_TIMESTAMP
+	return interval->time + (interval->day * USECS_PER_DAY);
+#else
+	if (interval->time != trunc(interval->time))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("interval must not have sub-second precision")
+				 ));
+	}
+	return interval->time + (interval->day * SECS_PER_DAY);
+#endif
+}
+
+PG_FUNCTION_INFO_V1(timestamp_bucket);
+Datum
+timestamp_bucket(PG_FUNCTION_ARGS)
+{
+	Interval   *interval = PG_GETARG_INTERVAL_P(0);
+	Timestamp	timestamp = PG_GETARG_TIMESTAMP(1);
+	Timestamp	result;
+	int64		period = -1;
+
+	if (TIMESTAMP_NOT_FINITE(timestamp))
+		PG_RETURN_TIMESTAMP(timestamp);
+
+	period = get_interval_period(interval); 
+	/* result = (timestamp / period) * period */
+	TMODULO(timestamp, result, period);
+	if (timestamp < 0)
+	{
+		/*
+		 * need to subtract another period if remainder < 0 this only happens
+		 * if timestamp is negative to begin with and there is a remainder
+		 * after division. Need to subtract another period since division
+		 * truncates toward 0 in C99.
+		 */
+		result = (result * period) - period;
+	}
+	else
+	{
+		result *= period;
+	}
+	PG_RETURN_TIMESTAMP(result);
+}
+
+PG_FUNCTION_INFO_V1(timestamptz_bucket);
+Datum
+timestamptz_bucket(PG_FUNCTION_ARGS)
+{
+	Interval   *interval = PG_GETARG_INTERVAL_P(0);
+	TimestampTz	timestamp = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz	result;
+	int64		period = -1;
+
+	if (TIMESTAMP_NOT_FINITE(timestamp))
+		PG_RETURN_TIMESTAMPTZ(timestamp);
+
+	period = get_interval_period(interval); 
+	/* result = (timestamp / period) * period */
+	TMODULO(timestamp, result, period);
+	if (timestamp < 0)
+	{
+		/*
+		 * need to subtract another period if remainder < 0 this only happens
+		 * if timestamp is negative to begin with and there is a remainder
+		 * after division. Need to subtract another period since division
+		 * truncates toward 0 in C99.
+		 */
+		result = (result * period) - period;
+	}
+	else
+	{
+		result *= period;
+	}
+	PG_RETURN_TIMESTAMPTZ(result);
+}

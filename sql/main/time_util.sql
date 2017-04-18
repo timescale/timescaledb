@@ -12,6 +12,66 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIGINT) RETURNS TIMESTAMPTZ
 	AS '$libdir/timescaledb', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT;
 
+-- time_bucket returns the left edge of the bucket where ts falls into. 
+-- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
+	AS '$libdir/timescaledb', 'timestamp_bucket' LANGUAGE C IMMUTABLE;
+
+-- bucketing of timestamptz happens at UTC time
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+	AS '$libdir/timescaledb', 'timestamptz_bucket' LANGUAGE C IMMUTABLE;
+
+-- If an interval is given as the third argument, the bucket alignment is offset by the interval.
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
+    RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT public.time_bucket(bucket_width, ts-"offset")+"offset";
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, "offset" INTERVAL)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT public.time_bucket(bucket_width, ts-"offset")+"offset";
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width BIGINT, ts BIGINT)
+    RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (ts / bucket_width)*bucket_width;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INT, ts INT)
+    RETURNS INT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (ts / bucket_width)*bucket_width;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width SMALLINT, ts SMALLINT)
+    RETURNS SMALLINT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (ts / bucket_width)*bucket_width;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width BIGINT, ts BIGINT, "offset" BIGINT)
+    RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INT, ts INT, "offset" INT)
+    RETURNS INT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
+$BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width SMALLINT, ts SMALLINT, "offset" SMALLINT)
+    RETURNS SMALLINT LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
+$BODY$;
+
+
+
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
 -- with or without timezones). In or metatables and other internal systems all time values are stored as bigint.
 -- Converting from int* columns to internal representation is a cast to bigint.

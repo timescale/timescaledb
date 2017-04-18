@@ -83,3 +83,95 @@ Initializes a Postgres database to fully use TimescaleDB.
 ```sql
 SELECT setup_timescaledb();
 ```
+
+### `time_bucket()`
+
+This is a more powerful version of the standard postgres `date_trunc` function.
+It allows for arbitrary time intervals instead of the second, minute, hour, etc.
+provided by `date_trunc`. The return value is the bucket's start time.
+
+#### For TIMESTAMP/TIMESTAMPTZ time inputs
+
+**Notes about TIMESTAMPTZ inputs:**
+TIMESTAMPTZ arguments are bucketed by the time at UTC. So the alignment of
+buckets is on UTC time. One consequence of this is that daily buckets are
+aligned to midnight UTC, not local time.
+
+If the user wants buckets aligned by local time, the TIMESTAMPTZ input should be
+cast to TIMESTAMP (such a cast converts the value to local time) before being
+passed to time_bucket (see example below).  Note that along daylight savings
+time boundaries the amount of data aggregated into a bucket after such a cast is
+irregular: for example if the bucket_width is 2 hours, the number of UTC hours
+bucketed by local time on daylight savings time boundaries can be either 3 hours
+or 1 hour.
+
+**Required arguments**
+
+|Name|Description|
+|---|---|
+| `bucket_width` | A postgres time interval for how long each bucket is (interval) |
+| `time` | The timestamp to bucket (timestamp/timestamptz)|
+
+**Optional arguments**
+
+|Name|Description|
+|---|---|
+| `offset` | The time interval to offset all buckets by (interval) |
+
+#### For integer time inputs
+
+**Required arguments**
+
+|Name|Description|
+|---|---|
+| `bucket_width` | The bucket width (integer) |
+| `time` | The timestamp to bucket (integer) |
+
+**Optional arguments**
+
+|Name|Description|
+|---|---|
+| `offset` | The amount to offset all buckets by (integer) |
+
+
+**Sample usage**
+
+Simple 5-minute averaging
+
+```sql
+SELECT time_bucket('5 minutes', time) five_min, avg(cpu)
+FROM metrics
+GROUP BY five_min
+ORDER BY five_min
+LIMIT 10;
+```
+
+To report the middle of the bucket, instead of the left edge:
+```sql
+SELECT time_bucket('5 minutes', time)+'2.5 minutes' five_min, avg(cpu)
+FROM metrics
+GROUP BY five_min
+ORDER BY five_min
+LIMIT 10;
+```
+
+For rounding, move the alignment so that the middle of the bucket is at the 5 minute mark (and report the middle of the bucket):
+```sql
+SELECT time_bucket('5 minutes', time, '-2.5 minutes')+'2.5 minutes' five_min,
+       avg(cpu)
+FROM metrics
+GROUP BY five_min
+ORDER BY five_min
+LIMIT 10;
+```
+
+Bucketing a TIMESTAMPTZ at local time instead of UTC(see note above):
+```sql
+SELECT time_bucket('2 hours', timetz::TIMESTAMP) five_min,
+       avg(cpu)
+FROM metrics
+GROUP BY five_min
+ORDER BY five_min
+```
+Note that the above cast to TIMESTAMP converts the time to local time according
+to the server's timezone setting.
