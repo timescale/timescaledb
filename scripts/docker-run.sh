@@ -8,7 +8,7 @@ fi
 
 DOCKER_HOST=${DOCKER_HOST:-localhost}
 CONTAINER_NAME=${CONTAINER_NAME:-timescaledb}
-DATA_DIR=${DATA_DIR-$PWD/data}
+DATA_DIR=${DATA_DIR:-$PWD/data}
 BIN_CMD=${BIN_CMD:-postgres}
 PGPORT=${PGPORT:=5432}
 
