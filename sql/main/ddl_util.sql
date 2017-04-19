@@ -5,43 +5,35 @@
 */
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_general_index_definition(
     index_oid regclass,
-    table_oid regclass
-)
-    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
+    table_oid regclass)
+RETURNS text
+LANGUAGE plpgsql VOLATILE AS
 $BODY$
 DECLARE
     def TEXT;
-    c   INTEGER;
-    index_name TEXT;
 BEGIN
-    --get definition text
-    def = pg_get_indexdef(index_oid);
+    -- Get index definition
+    def := pg_get_indexdef(index_oid);
 
-    --replace table name in def with /*TABLE_NAME*/
-    SELECT count(*) INTO c
-    FROM regexp_matches(def, 'ON '||table_oid::TEXT || ' USING', 'g');
-    IF c <> 1 THEN
-        RAISE EXCEPTION 'Cannot process index with definition(not table name match) %', def;
+    IF def IS NULL THEN
+        RAISE EXCEPTION 'Cannot process index with definition (no index name matched: %)', index_oid::TEXT;
     END IF;
-    def = replace(def,  'ON '||table_oid::TEXT || ' USING', 'ON /*TABLE_NAME*/ USING');
 
-    --replace index name with /*INDEX_NAME*/
+    def := replace(def, 'ON '|| table_oid::TEXT || ' USING', 'ON /*TABLE_NAME*/ USING');
 
-    SELECT relname
-    INTO STRICT index_name --index name in def is never schema qualified
-    FROM pg_class
-    WHERE OID = index_oid;
-
-    SELECT count(*) INTO c
-    FROM regexp_matches(def, 'CREATE INDEX '||  format('%I', index_name) || ' ON', 'g');
-    IF c <> 1 THEN
-        RAISE EXCEPTION 'Cannot process index with definition (no index name match) %', def;
-    END IF;
-    def = replace(def, 'CREATE INDEX '|| format('%I', index_name) || ' ON', 'CREATE INDEX /*INDEX_NAME*/ ON');
+    -- Replace index name with /*INDEX_NAME*/
+    -- Index name is never schema qualified
+    -- Mixed case identifiers are properly handled.
+    SELECT replace(
+            def,
+            'INDEX '|| format('%I', (SELECT c.relname FROM pg_catalog.pg_class AS c WHERE c.oid = index_oid AND c.relkind = 'i'::CHAR) ) || ' ON',
+            'INDEX /*INDEX_NAME*/ ON')
+    INTO def;
 
     RETURN def;
 END
 $BODY$;
+
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_default_value_for_attribute(
     att pg_attribute
