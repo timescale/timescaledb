@@ -83,7 +83,7 @@ docker run -d \
   -v /your/data/dir:/var/lib/postgresql/data \
   -p 5432:5432 \
   -e PGDATA=/var/lib/postgresql/data/timescaledb \
-  timescaledb postgres \
+  timescale/timescaledb postgres \
   -cshared_preload_libraries=timescaledb
 ```
 In particular, the `-v` flag sets where the data is stored. If not set,
