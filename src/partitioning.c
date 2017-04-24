@@ -2,6 +2,8 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_type.h>
+#include <access/hash.h>
 
 #include "partitioning.h"
 #include "metadata_queries.h"
@@ -373,4 +375,29 @@ bool
 partition_keyspace_pt_is_member(const Partition * part, const int16 keyspace_pt)
 {
 	return keyspace_pt == KEYSPACE_PT_NO_PARTITIONING || (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt);
+}
+
+
+/* _timescaledb_catalog.get_partition_for_key(key TEXT, mod_factor INT) RETURNS SMALLINT */
+Datum 		get_partition_for_key(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(get_partition_for_key);
+Datum
+get_partition_for_key(PG_FUNCTION_ARGS)
+{
+	struct varlena *data;
+	int32		mod;
+	uint32		hash_u;
+	int16		res;
+
+	data = PG_GETARG_VARLENA_PP(0);
+	mod = PG_GETARG_INT32(1);
+
+	hash_u = hash_any((unsigned char *) VARDATA_ANY(data),
+			  VARSIZE_ANY_EXHDR(data));
+
+	res = (int16) ((hash_u & 0x7fffffff) % mod);
+
+	PG_FREE_IF_COPY(data, 0);
+	PG_RETURN_INT16(res);
 }

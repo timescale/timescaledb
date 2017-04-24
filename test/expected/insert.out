@@ -40,10 +40,10 @@ COMMIT;
 INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
-(1257894000000000000, 'dev20', 1.5, 1),
+(1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
-(1257894000000000000, 'dev20', 1.5, 2);
+(1257894000000000000, 'dev2', 1.5, 2);
 \d+ "_timescaledb_internal".*
 Index "_timescaledb_internal.1-two_Partitions_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
@@ -352,20 +352,22 @@ Child tables: _timescaledb_internal._hyper_1_2_0_4_data
 Child tables: _timescaledb_internal._hyper_1_0_replica
 
 SELECT *
-FROM "_timescaledb_internal"._hyper_1_0_replica;
+FROM "_timescaledb_internal"._hyper_1_0_replica order by "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
  1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000001000 | dev1      |      2.5 |        3 |          | 
  1257894001000000000 | dev1      |      3.5 |        4 |          | 
  1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
- 1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev20     |      1.5 |        1 |          | 
- 1257894000000000000 | dev20     |      1.5 |        2 |          | 
-(10 rows)
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+(12 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
  id | partition_id |     start_time      |      end_time       
@@ -392,20 +394,22 @@ SELECT * FROM _timescaledb_catalog.partition_replica;
   2 |            2 |             1 |          0 | _timescaledb_internal | _hyper_1_2_0_partition
 (2 rows)
 
-SELECT * FROM "two_Partitions";
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
  1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000001000 | dev1      |      2.5 |        3 |          | 
  1257894001000000000 | dev1      |      3.5 |        4 |          | 
  1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
- 1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev20     |      1.5 |        1 |          | 
- 1257894000000000000 | dev20     |      1.5 |        2 |          | 
-(10 rows)
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+(12 rows)
 
 SELECT * FROM ONLY "two_Partitions";
  timeCustom | device_id | series_0 | series_1 | series_2 | series_bool 

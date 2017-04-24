@@ -5,7 +5,6 @@ sql/common/cache.sql
 sql/common/cluster_setup_functions.sql
 sql/common/errors.sql
 sql/common/chunk.sql
-sql/common/hash_function.sql
 sql/common/rpc.sql
 sql/common/meta_api.sql
 sql/common/data_api.sql

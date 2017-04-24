@@ -1,7 +1,7 @@
 \ir include/insert_single.sql
 
 \d+ "one_Partition".*
-SELECT * FROM "one_Partition";
+SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
 
 --test that we can insert data into a 1-dimensional table (only time partitioning)
 CREATE TABLE "1dim"(time timestamp, temp float);

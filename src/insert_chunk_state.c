@@ -29,7 +29,6 @@
 #include "partitioning.h"
 #include "scanner.h"
 #include "catalog.h"
-#include "pgmurmur3.h"
 #include "chunk.h"
 #include "insert_chunk_state.h"
 

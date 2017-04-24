@@ -20,7 +20,7 @@ SELECT * FROM set_chunk_time_interval('chunk_test', 40::bigint);
 
 INSERT INTO chunk_test VALUES(23, 3, 'dev3');
 
-SELECT * FROM chunk_test;
+SELECT * FROM chunk_test order by time, metric, device_id;
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable;
 
@@ -29,6 +29,6 @@ SELECT * FROM _timescaledb_catalog.chunk c
     LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
     LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
     LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test';
-
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
+    ORDER BY c.id;
 

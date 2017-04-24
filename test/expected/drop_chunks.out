@@ -48,13 +48,13 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 SELECT  _timescaledb_catalog.get_partition_for_key('dev1', 32768);
  get_partition_for_key 
 -----------------------
-                 14660
+                 14708
 (1 row)
 
 SELECT  _timescaledb_catalog.get_partition_for_key('dev7', 32768);
  get_partition_for_key 
 -----------------------
-                 21278
+                 21060
 (1 row)
 
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(1, 1.0, 'dev1');
