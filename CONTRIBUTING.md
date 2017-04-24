@@ -15,9 +15,9 @@ discuss your proposed improvement (and its implementation) with the core
 development team.
 
 Before we accept any code contributions, Timescale contributors need to
-sign the Contributor License Agreement (CLA). By signing a CLA, we can
+sign the [Contributor License Agreement](https://cla-assistant.io/timescale/timescaledb) (CLA). By signing a CLA, we can
 ensure that the community is free and confident in its ability to use your
-contributions.  **The Timescale CLA will be forthcoming shortly.**
+contributions.
 
 ## Getting and building TimescaleDB
 
@@ -30,7 +30,7 @@ our [Style Guide](docs/StyleGuide.md).
 
 ## Code review workflow
 
-* Sign the Contributor License Agreement (CLA) if you're a new contributor.
+* Sign the [Contributor License Agreement](https://cla-assistant.io/timescale/timescaledb) (CLA) if you're a new contributor.
 
 * Develop on your local branch:
 
