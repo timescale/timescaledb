@@ -7,12 +7,12 @@ SELECT * FROM PUBLIC."two_Partitions";
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
 
 \echo "The following queries should NOT scan two_Partitions._hyper_1_1_0_partition"
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev20';
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'20';
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'20' = device_id;
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev2';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
 
 --TODO: handle this later?
---EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev20', 'dev21');
+--EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
 
 \echo "The following shows non-aggregated queries with time desc using merge append"
 EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "timeCustom" DESC NULLS LAST limit 2;

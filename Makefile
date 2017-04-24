@@ -18,8 +18,6 @@ MODULE_big = $(EXTENSION)
 SRCS = \
 	src/init.c \
 	src/extension.c \
-	src/murmur3.c \
-	src/pgmurmur3.c \
 	src/utils.c \
 	src/catalog.c \
 	src/metadata_queries.c \

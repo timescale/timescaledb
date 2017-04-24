@@ -12,22 +12,22 @@ BEGIN
 /*
     Ensure same output as the hashlib extension.
 */
-SELECT _timescaledb_internal.murmur3_hash_string('', 1 :: INT4) INTO hash_value;
-SELECT * FROM assert.is_equal(hash_value, 1364076727) INTO message, result;
+SELECT _timescaledb_catalog.get_partition_for_key('', 16:: INT4) INTO hash_value;
+SELECT * FROM assert.is_equal(hash_value, 13) INTO message, result;
 
 IF result = false THEN
     RETURN message;
 END IF;
 
-SELECT _timescaledb_internal.murmur3_hash_string('dev1', 1 :: INT4) INTO hash_value;
-SELECT * FROM assert.is_equal(hash_value, 1398815044) INTO message, result;
+SELECT _timescaledb_catalog.get_partition_for_key('dev1', 16:: INT4) INTO hash_value;
+SELECT * FROM assert.is_equal(hash_value, 4) INTO message, result;
 
 IF result = false THEN
     RETURN message;
 END IF;
 
-SELECT _timescaledb_internal.murmur3_hash_string('longlonglonglongpartitionkey', 1 :: INT4) INTO hash_value;
-SELECT * FROM assert.is_equal(hash_value, -1320242451) INTO message, result;
+SELECT _timescaledb_catalog.get_partition_for_key('longlonglonglongpartitionkey', 16:: INT4) INTO hash_value;
+SELECT * FROM assert.is_equal(hash_value, 6) INTO message, result;
 
 IF result = false THEN
     RETURN message;

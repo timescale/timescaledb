@@ -27,8 +27,8 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
-(1257894000000000000, 'dev20', 1.5, 1),
+(1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
-(1257894000000000000, 'dev20', 1.5, 2);
+(1257894000000000000, 'dev2', 1.5, 2);

@@ -39,10 +39,10 @@ COMMIT;
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
-(1257894000000000000, 'dev20', 1.5, 1),
+(1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
-(1257894000000000000, 'dev20', 1.5, 2);
+(1257894000000000000, 'dev2', 1.5, 2);
 DO $$
 BEGIN
     CREATE ROLE alt_usr LOGIN;
@@ -59,7 +59,6 @@ END$$;
 (1 row)
 
 \set ON_ERROR_STOP 0
---todo fix error message here:
 SELECT * FROM "one_Partition";
 ERROR:  permission denied for relation _hyper_1_0_replica
 \set ON_ERROR_STOP 1

@@ -12,7 +12,6 @@ END$$;
 \dt
 
 \set ON_ERROR_STOP 0
---todo fix error message here:
 SELECT * FROM "one_Partition";
 \set ON_ERROR_STOP 1
 

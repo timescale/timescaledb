@@ -31,10 +31,10 @@ COMMIT;
 INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
-(1257894000000000000, 'dev20', 1.5, 1),
+(1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
-(1257894000000000000, 'dev20', 1.5, 2);
+(1257894000000000000, 'dev2', 1.5, 2);
 \o
 SELECT * FROM PUBLIC."two_Partitions";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
@@ -43,13 +43,15 @@ SELECT * FROM PUBLIC."two_Partitions";
  1257894000000000000 | dev1      |      1.5 |        2 |          | 
  1257894000000001000 | dev1      |      2.5 |        3 |          | 
  1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
  1257894002000000000 | dev1      |      2.5 |        3 |          | 
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
  1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev20     |      1.5 |        1 |          | 
- 1257894000000000000 | dev20     |      1.5 |        2 |          | 
-(10 rows)
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+(12 rows)
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
                                                                                                           QUERY PLAN                                                                                                          
@@ -73,62 +75,62 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
 
 \echo "The following queries should NOT scan two_Partitions._hyper_1_1_0_partition"
 "The following queries should NOT scan two_Partitions._hyper_1_1_0_partition"
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev20';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev2';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on _timescaledb_internal._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-         Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '28646'::smallint))
+         Filter: ((_hyper_1_0_replica.device_id = 'dev2'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '17190'::smallint))
    ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
          Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         Filter: ((_hyper_1_2_0_partition.device_id = 'dev20'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_partition.device_id, 32768) = '28646'::smallint))
+         Filter: ((_hyper_1_2_0_partition.device_id = 'dev2'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_partition.device_id, 32768) = '17190'::smallint))
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_2_0_4_data
          Output: _hyper_1_2_0_4_data."timeCustom", _hyper_1_2_0_4_data.device_id, _hyper_1_2_0_4_data.series_0, _hyper_1_2_0_4_data.series_1, _hyper_1_2_0_4_data.series_2, _hyper_1_2_0_4_data.series_bool
-         Recheck Cond: (_hyper_1_2_0_4_data.device_id = 'dev20'::text)
-         Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_4_data.device_id, 32768) = '28646'::smallint)
+         Recheck Cond: (_hyper_1_2_0_4_data.device_id = 'dev2'::text)
+         Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_4_data.device_id, 32768) = '17190'::smallint)
          ->  Bitmap Index Scan on "19-two_Partitions_device_id_timeCustom_idx"
-               Index Cond: (_hyper_1_2_0_4_data.device_id = 'dev20'::text)
+               Index Cond: (_hyper_1_2_0_4_data.device_id = 'dev2'::text)
 (13 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'20';
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on _timescaledb_internal._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-         Filter: ((_hyper_1_0_replica.device_id = 'dev20'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '28646'::smallint))
+         Filter: ((_hyper_1_0_replica.device_id = 'dev2'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '17190'::smallint))
    ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
          Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         Filter: ((_hyper_1_2_0_partition.device_id = 'dev20'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_partition.device_id, 32768) = '28646'::smallint))
+         Filter: ((_hyper_1_2_0_partition.device_id = 'dev2'::text) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_partition.device_id, 32768) = '17190'::smallint))
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_2_0_4_data
          Output: _hyper_1_2_0_4_data."timeCustom", _hyper_1_2_0_4_data.device_id, _hyper_1_2_0_4_data.series_0, _hyper_1_2_0_4_data.series_1, _hyper_1_2_0_4_data.series_2, _hyper_1_2_0_4_data.series_bool
-         Recheck Cond: (_hyper_1_2_0_4_data.device_id = 'dev20'::text)
-         Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_4_data.device_id, 32768) = '28646'::smallint)
+         Recheck Cond: (_hyper_1_2_0_4_data.device_id = 'dev2'::text)
+         Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_4_data.device_id, 32768) = '17190'::smallint)
          ->  Bitmap Index Scan on "19-two_Partitions_device_id_timeCustom_idx"
-               Index Cond: (_hyper_1_2_0_4_data.device_id = 'dev20'::text)
+               Index Cond: (_hyper_1_2_0_4_data.device_id = 'dev2'::text)
 (13 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'20' = device_id;
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
                                                                                                           QUERY PLAN                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on _timescaledb_internal._hyper_1_0_replica
          Output: _hyper_1_0_replica."timeCustom", _hyper_1_0_replica.device_id, _hyper_1_0_replica.series_0, _hyper_1_0_replica.series_1, _hyper_1_0_replica.series_2, _hyper_1_0_replica.series_bool
-         Filter: (('dev20'::text = _hyper_1_0_replica.device_id) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '28646'::smallint))
+         Filter: (('dev2'::text = _hyper_1_0_replica.device_id) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_0_replica.device_id, 32768) = '17190'::smallint))
    ->  Seq Scan on _timescaledb_internal._hyper_1_2_0_partition
          Output: _hyper_1_2_0_partition."timeCustom", _hyper_1_2_0_partition.device_id, _hyper_1_2_0_partition.series_0, _hyper_1_2_0_partition.series_1, _hyper_1_2_0_partition.series_2, _hyper_1_2_0_partition.series_bool
-         Filter: (('dev20'::text = _hyper_1_2_0_partition.device_id) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_partition.device_id, 32768) = '28646'::smallint))
+         Filter: (('dev2'::text = _hyper_1_2_0_partition.device_id) AND (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_partition.device_id, 32768) = '17190'::smallint))
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_2_0_4_data
          Output: _hyper_1_2_0_4_data."timeCustom", _hyper_1_2_0_4_data.device_id, _hyper_1_2_0_4_data.series_0, _hyper_1_2_0_4_data.series_1, _hyper_1_2_0_4_data.series_2, _hyper_1_2_0_4_data.series_bool
-         Recheck Cond: ('dev20'::text = _hyper_1_2_0_4_data.device_id)
-         Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_4_data.device_id, 32768) = '28646'::smallint)
+         Recheck Cond: ('dev2'::text = _hyper_1_2_0_4_data.device_id)
+         Filter: (_timescaledb_catalog.get_partition_for_key(_hyper_1_2_0_4_data.device_id, 32768) = '17190'::smallint)
          ->  Bitmap Index Scan on "19-two_Partitions_device_id_timeCustom_idx"
-               Index Cond: ('dev20'::text = _hyper_1_2_0_4_data.device_id)
+               Index Cond: ('dev2'::text = _hyper_1_2_0_4_data.device_id)
 (13 rows)
 
 --TODO: handle this later?
---EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev20', 'dev21');
+--EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
 \echo "The following shows non-aggregated queries with time desc using merge append"
 "The following shows non-aggregated queries with time desc using merge append"
 EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "timeCustom" DESC NULLS LAST limit 2;

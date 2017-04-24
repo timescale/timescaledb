@@ -6,11 +6,10 @@
 
 \! pg_dump -h localhost -U postgres -Fc single > dump/single.sql
 \! dropdb -h localhost -U postgres single
-
 \! pg_restore -h localhost -U postgres -d postgres -C dump/single.sql
 
 \c single
-SELECT * FROM "two_Partitions";
+SELECT * FROM "two_Partitions" order by "timeCustom", device_id;
 
 --query for the extension tables/sequences that will not be dumped by pg_dump (should be empty)
 SELECT objid::regclass, *
