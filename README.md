@@ -211,7 +211,7 @@ SELECT create_hypertable('conditions', 'time', 'location', 2);
 Inserting data into the hypertable is done via normal SQL `INSERT` commands,
 e.g. using millisecond timestamps:
 ```sql
-INSERT INTO conditions(time,location,temperature,humidity)
+INSERT INTO conditions(time, location, temperature, humidity)
 VALUES(NOW(), 'office', 70.0, 50.0);
 ```
 
