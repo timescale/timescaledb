@@ -127,14 +127,14 @@ shared_preload_libraries = 'timescaledb'
 
 
 ### Setting up your initial database
-Now, we'll install our extension and create an initial database.
+Now, we'll install our extension and create an initial database. Below
+you'll find instructions for creating a new, empty database.
 
-You again have two options for setting up your initial database:
-
-1. *Empty Database* - To set up a new, empty database, please follow the instructions below.
-
-2. *Database with pre-loaded sample data* - To help you quickly get started, we have also created some sample datasets. See
-[Using our Sample Datasets](docs/UsingSamples.md) for further instructions. (Includes installing our extension.)
+To help you quickly get started, we have also created some sample
+datasets. Once you complete the initial setup below you can then
+easily import this data to play around with TimescaleDB functionality.
+See [our Sample Datasets](https://docs.timescale.com/other-sample-datasets)
+for further instructions.
 
 #### Setting up an empty database
 
