@@ -1,4 +1,3 @@
-/* -*- Mode: C; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- */
 /* ----------------------------------------------------------------------------- */
 /*	MurmurHash3 was written by Austin Appleby, and is placed in the public */
 /*	domain. The author hereby disclaims copyright to this source code. */

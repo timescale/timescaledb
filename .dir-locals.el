@@ -1,0 +1,20 @@
+;; see also src/tools/editors/emacs.samples in the PostgreSQL source
+;; tree for more complete settings
+
+((c-mode . ((c-basic-offset . 4)
+            (c-file-style . "bsd")
+            (fill-column . 78)
+            (indent-tabs-mode . t)
+            (tab-width . 4)))
+ (dsssl-mode . ((indent-tabs-mode . nil)))
+ (nxml-mode . ((indent-tabs-mode . nil)))
+ (perl-mode . ((perl-indent-level . 4)
+               (perl-continued-statement-offset . 4)
+               (perl-continued-brace-offset . 4)
+               (perl-brace-offset . 0)
+               (perl-brace-imaginary-offset . 0)
+               (perl-label-offset . -2)
+               (indent-tabs-mode . t)
+               (tab-width . 4)))
+ (sgml-mode . ((fill-column . 78)
+               (indent-tabs-mode . nil))))
