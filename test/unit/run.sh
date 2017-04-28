@@ -20,7 +20,7 @@ if [ $RESET_POSTGRES_DB == "true" ]; then
 
     $DB_SETUPDIR/setup_meta.sh
     $DB_SETUPDIR/add_cluster_user.sh postgres
-    $DB_SETUPDIR/set_meta.sh $METANAME $POSTGRES_HOST
+    $DB_SETUPDIR/set_meta.sh $POSTGRES_HOST
 
     for node in $NODES; do
         $DB_SETUPDIR/setup_node.sh $node
