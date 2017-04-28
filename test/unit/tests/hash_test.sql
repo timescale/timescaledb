@@ -9,9 +9,6 @@ hash_value integer;
 result boolean;
 BEGIN
 
-/*
-    Ensure same output as the hashlib extension.
-*/
 SELECT _timescaledb_catalog.get_partition_for_key('', 16:: INT4) INTO hash_value;
 SELECT * FROM assert.is_equal(hash_value, 13) INTO message, result;
 
