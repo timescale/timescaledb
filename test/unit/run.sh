@@ -14,7 +14,6 @@ echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER"
 
 NODES="Test1 test2"
 DB_SETUPDIR="../../sql/setup"
-METANAME="meta"
 if [ $RESET_POSTGRES_DB == "true" ]; then
     echo "Cleaning up DB"
 
