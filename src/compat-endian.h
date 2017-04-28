@@ -1,4 +1,3 @@
-/* -*- Mode: C; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- */
 #ifndef _COMPAT_ENDIAN_H_
 #define _COMPAT_ENDIAN_H_
 
