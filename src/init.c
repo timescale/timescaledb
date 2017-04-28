@@ -7,7 +7,7 @@
 #define MIN_SUPPORTED_VERSION_NUM 90600
 
 #if PG_VERSION_NUM < MIN_SUPPORTED_VERSION_NUM
-    #error "Unsupported version of PostgreSQL. Check src/init.c for supported versions."
+#error "Unsupported version of PostgreSQL. Check src/init.c for supported versions."
 #endif
 
 #ifdef PG_MODULE_MAGIC

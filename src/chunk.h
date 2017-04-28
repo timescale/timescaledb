@@ -10,7 +10,7 @@ typedef struct ChunkReplica
 	char		database_name[NAMEDATALEN];
 	char		schema_name[NAMEDATALEN];
 	char		table_name[NAMEDATALEN];
-}	ChunkReplica;
+} ChunkReplica;
 
 typedef struct Chunk
 {
@@ -20,11 +20,11 @@ typedef struct Chunk
 	int64		end_time;
 	int16		num_replicas;
 	ChunkReplica *replicas;
-}	Chunk;
+} Chunk;
 
-extern bool chunk_timepoint_is_member(const Chunk * row, const int64 time_pt);
-extern int64 chunk_replica_size_bytes(ChunkReplica * cr);
-extern ChunkReplica *chunk_get_replica(Chunk * cunk, const char *dbname);
+extern bool chunk_timepoint_is_member(const Chunk *row, const int64 time_pt);
+extern int64 chunk_replica_size_bytes(ChunkReplica *cr);
+extern ChunkReplica *chunk_get_replica(Chunk *cunk, const char *dbname);
 extern Chunk *chunk_create(int32 id, int32 partition_id, int64 starttime, int64 endtime, int16 num_replicas);
 
 #endif   /* TIMESCALEDB_CHUNK_H */

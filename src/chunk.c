@@ -15,7 +15,7 @@ chunk_replica_size_bytes_internal(const char *schema, const char *table)
 }
 
 int64
-chunk_replica_size_bytes(ChunkReplica * cr)
+chunk_replica_size_bytes(ChunkReplica *cr)
 {
 	Datum		size = chunk_replica_size_bytes_internal(cr->schema_name, cr->table_name);
 
@@ -36,13 +36,13 @@ local_chunk_size(PG_FUNCTION_ARGS)
 }
 
 bool
-chunk_timepoint_is_member(const Chunk * chunk, const int64 time_pt)
+chunk_timepoint_is_member(const Chunk *chunk, const int64 time_pt)
 {
 	return chunk->start_time <= time_pt && chunk->end_time >= time_pt;
 }
 
 extern ChunkReplica *
-chunk_get_replica(Chunk * chunk, const char *dbname)
+chunk_get_replica(Chunk *chunk, const char *dbname)
 {
 	int			i;
 

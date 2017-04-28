@@ -5,6 +5,6 @@
 
 typedef struct Chunk Chunk;
 
-Chunk *chunk_insert_new(int32 partition_id, int64 timepoint);
+Chunk	   *chunk_insert_new(int32 partition_id, int64 timepoint);
 
 #endif   /* TIMESCALEDB_METADATA_QUERIES_H */

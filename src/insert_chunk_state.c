@@ -43,9 +43,9 @@ typedef struct InsertChunkStateRel
 	EState	   *estate;
 	ResultRelInfo *resultRelInfo;
 	BulkInsertState bistate;
-}	InsertChunkStateRel;
+} InsertChunkStateRel;
 
-static InsertChunkStateRel*
+static InsertChunkStateRel *
 insert_chunk_state_rel_new(Relation rel, ResultRelInfo *resultRelInfo, List *range_table)
 {
 	TupleDesc	tupDesc;
@@ -104,7 +104,7 @@ insert_chunk_state_rel_insert_tuple(InsertChunkStateRel *rel_state, HeapTuple tu
 							  NIL);
 }
 
-extern InsertChunkState*
+extern InsertChunkState *
 insert_chunk_state_new(Chunk *chunk)
 {
 	List	   *rel_state_list = NIL;

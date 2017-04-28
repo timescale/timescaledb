@@ -9,7 +9,7 @@
 #include "hypertable_cache.h"
 #include "partitioning.h"
 
-InsertStatementState*
+InsertStatementState *
 insert_statement_state_new(Oid relid)
 {
 	MemoryContext oldctx;
@@ -73,7 +73,7 @@ set_or_update_new_entry(InsertStatementState *state, Partition *partition, int64
  * Get an insert context to the chunk corresponding to the partition and
  * timepoint of a tuple.
  */
-extern InsertChunkState*
+extern InsertChunkState *
 insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Partition *partition, PartitionEpoch *epoch, int64 timepoint)
 {
 	/* First call, set up mem */

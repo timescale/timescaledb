@@ -12,7 +12,7 @@
 #include "utils.h"
 
 static void
-partitioning_func_set_func_fmgr(PartitioningFunc * pf)
+partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 {
 	FuncCandidateList funclist =
 	FuncnameGetCandidates(list_make2(makeString(pf->schema), makeString(pf->name)),
@@ -27,7 +27,7 @@ partitioning_func_set_func_fmgr(PartitioningFunc * pf)
 }
 
 static void
-partitioning_info_set_textfunc_fmgr(PartitioningInfo * pi, Oid relid)
+partitioning_info_set_textfunc_fmgr(PartitioningInfo *pi, Oid relid)
 {
 	Oid			type_id,
 				func_id;
@@ -66,7 +66,7 @@ partitioning_info_create(int num_partitions,
 }
 
 int16
-partitioning_func_apply(PartitioningInfo * pinfo, Datum value)
+partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
 	Datum text = FunctionCall1(&pinfo->partfunc.textfunc_fmgr, value);
 	char	   *partition_val = DatumGetCString(text);
@@ -78,7 +78,7 @@ partitioning_func_apply(PartitioningInfo * pinfo, Datum value)
 }
 
 int16
-partitioning_func_apply_tuple(PartitioningInfo * pinfo, HeapTuple tuple, TupleDesc desc)
+partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc)
 {
 	Datum		value;
 	bool		isnull;
@@ -104,14 +104,14 @@ typedef struct
 				endtime,
 				timepoint;
 	Oid			relid;
-}	PartitionEpochCtx;
+} PartitionEpochCtx;
 
 static int
-			partition_scan(PartitionEpochCtx * pctx);
+			partition_scan(PartitionEpochCtx *pctx);
 
 /* Filter partition epoch tuples based on hypertable ID and start/end time. */
 static bool
-partition_epoch_filter(TupleInfo * ti, void *arg)
+partition_epoch_filter(TupleInfo *ti, void *arg)
 {
 	bool		is_null;
 	PartitionEpochCtx *pctx = arg;
@@ -137,7 +137,7 @@ partition_epoch_filter(TupleInfo * ti, void *arg)
 	sizeof(PartitionEpoch) + (sizeof(Partition) * num_partitions)
 
 static PartitionEpoch *
-partition_epoch_create(int32 epoch_id, PartitionEpochCtx * ctx)
+partition_epoch_create(int32 epoch_id, PartitionEpochCtx *ctx)
 {
 	PartitionEpoch *pe;
 
@@ -151,7 +151,7 @@ partition_epoch_create(int32 epoch_id, PartitionEpochCtx * ctx)
 }
 
 void
-partition_epoch_free(PartitionEpoch * epoch)
+partition_epoch_free(PartitionEpoch *epoch)
 {
 	if (epoch->partitioning != NULL)
 		pfree(epoch->partitioning);
@@ -161,7 +161,7 @@ partition_epoch_free(PartitionEpoch * epoch)
 /* Callback for partition epoch scan. For every epoch tuple found, create a
  * partition epoch entry and scan for associated partitions. */
 static bool
-partition_epoch_tuple_found(TupleInfo * ti, void *arg)
+partition_epoch_tuple_found(TupleInfo *ti, void *arg)
 {
 	PartitionEpochCtx *pctx = arg;
 	PartitionEpoch *pe;
@@ -216,7 +216,7 @@ partition_epoch_tuple_found(TupleInfo * ti, void *arg)
 }
 
 static bool
-partition_tuple_found(TupleInfo * ti, void *arg)
+partition_tuple_found(TupleInfo *ti, void *arg)
 {
 	PartitionEpochCtx *pctx = arg;
 	PartitionEpoch *pe = pctx->pe;
@@ -239,7 +239,7 @@ partition_tuple_found(TupleInfo * ti, void *arg)
 }
 
 static int
-partition_scan(PartitionEpochCtx * pctx)
+partition_scan(PartitionEpochCtx *pctx)
 {
 	ScanKeyData scankey[1];
 	Catalog    *catalog = catalog_get();
@@ -340,7 +340,7 @@ cmp_partitions(const void *keyspace_pt_arg, const void *value)
 }
 
 Partition *
-partition_epoch_get_partition(PartitionEpoch * epoch, int16 keyspace_pt)
+partition_epoch_get_partition(PartitionEpoch *epoch, int16 keyspace_pt)
 {
 	Partition  *part;
 
@@ -372,14 +372,14 @@ partition_epoch_get_partition(PartitionEpoch * epoch, int16 keyspace_pt)
 }
 
 bool
-partition_keyspace_pt_is_member(const Partition * part, const int16 keyspace_pt)
+partition_keyspace_pt_is_member(const Partition *part, const int16 keyspace_pt)
 {
 	return keyspace_pt == KEYSPACE_PT_NO_PARTITIONING || (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt);
 }
 
 
 /* _timescaledb_catalog.get_partition_for_key(key TEXT, mod_factor INT) RETURNS SMALLINT */
-Datum 		get_partition_for_key(PG_FUNCTION_ARGS);
+Datum		get_partition_for_key(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(get_partition_for_key);
 Datum
@@ -394,7 +394,7 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 	mod = PG_GETARG_INT32(1);
 
 	hash_u = hash_any((unsigned char *) VARDATA_ANY(data),
-			  VARSIZE_ANY_EXHDR(data));
+					  VARSIZE_ANY_EXHDR(data));
 
 	res = (int16) ((hash_u & 0x7fffffff) % mod);
 

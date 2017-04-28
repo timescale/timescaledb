@@ -98,6 +98,7 @@ cache_fetch(Cache *cache, CacheQuery *query)
 		if (cache->update_entry != NULL)
 		{
 			MemoryContext old = cache_switch_to_memory_context(cache);
+
 			query->result = cache->update_entry(cache, query);
 			MemoryContextSwitchTo(old);
 		}
@@ -109,6 +110,7 @@ cache_fetch(Cache *cache, CacheQuery *query)
 		if (cache->create_entry != NULL)
 		{
 			MemoryContext old = cache_switch_to_memory_context(cache);
+
 			query->result = cache->create_entry(cache, query);
 			MemoryContextSwitchTo(old);
 			cache->stats.numelements++;

@@ -84,7 +84,7 @@ change_table_name_walker(Node *node, void *context)
 /* Returns the partitioning info for a var if the var is a partitioning
  * column. If the var is not a partitioning column return NULL */
 static PartitioningInfo *
-get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cache * hcache, Hypertable * hentry)
+get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cache *hcache, Hypertable *hentry)
 {
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
@@ -108,7 +108,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
  * all nodes given in input. */
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema,
-								   char *partitioning_func, int32 partitioning_mod)
+							 char *partitioning_func, int32 partitioning_mod)
 {
 	Expr	   *op_expr;
 	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
@@ -253,13 +253,14 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
  * AND Y).
  */
 static void
-add_partitioning_func_qual(Query *parse, Cache * hcache, Hypertable * hentry)
+add_partitioning_func_qual(Query *parse, Cache *hcache, Hypertable *hentry)
 {
 	AddPartFuncQualCtx context = {
 		.parse = parse,
 		.hcache = hcache,
 		.hentry = hentry,
 	};
+
 	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
 }
 
@@ -310,18 +311,22 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 
 extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
-static void timescaledb_set_rel_pathlist(PlannerInfo *root,
-														RelOptInfo *rel,
-														Index rti,
-														RangeTblEntry *rte) 
+static void
+timescaledb_set_rel_pathlist(PlannerInfo *root,
+							 RelOptInfo *rel,
+							 Index rti,
+							 RangeTblEntry *rte)
 {
-	char *disable_optimizations = GetConfigOptionByName("timescaledb.disable_optimizations", NULL, true);
-	if (extension_is_loaded() && (disable_optimizations == NULL || strncmp(disable_optimizations, "true", 4) != 0)) {
+	char	   *disable_optimizations = GetConfigOptionByName("timescaledb.disable_optimizations", NULL, true);
+
+	if (extension_is_loaded() && (disable_optimizations == NULL || strncmp(disable_optimizations, "true", 4) != 0))
+	{
 		sort_transform_optimization(root, rel);
 	}
 
-	if (prev_set_rel_pathlist_hook != NULL) {
-		(void) (*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+	if (prev_set_rel_pathlist_hook != NULL)
+	{
+		(void) (*prev_set_rel_pathlist_hook) (root, rel, rti, rte);
 	}
 }
 

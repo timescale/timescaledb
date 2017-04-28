@@ -17,10 +17,10 @@ typedef struct
 	Hypertable *hypertable;
 	AttrNumber	time_attno;
 	int			num_partitions;
-}	InsertStatementState;
+} InsertStatementState;
 
 InsertStatementState *insert_statement_state_new(Oid);
 void		insert_statement_state_destroy(InsertStatementState *);
-InsertChunkState *insert_statement_state_get_insert_chunk_state(InsertStatementState * cache, Partition * partition, PartitionEpoch * epoch, int64 timepoint);
+InsertChunkState *insert_statement_state_get_insert_chunk_state(InsertStatementState *cache, Partition *partition, PartitionEpoch *epoch, int64 timepoint);
 
 #endif   /* TIMESCALEDB_INSERT_STATEMENT_STATE_H */
