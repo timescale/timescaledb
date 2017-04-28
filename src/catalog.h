@@ -344,7 +344,7 @@ typedef enum CacheType
 	CACHE_TYPE_HYPERTABLE,
 	CACHE_TYPE_CHUNK,
 	_MAX_CACHE_TYPES
-}	CacheType;
+} CacheType;
 
 typedef struct Catalog
 {

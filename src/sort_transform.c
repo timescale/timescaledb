@@ -194,8 +194,9 @@ sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 		/*
 		 * change returned paths to use original pathkeys. have to go through
 		 * all paths since create_index_paths might have modified existing
-		 * pathkey. Always safe to do transform since ordering of transformed_query_pathkey
-		 * implements ordering of orig_query_pathkeys.
+		 * pathkey. Always safe to do transform since ordering of
+		 * transformed_query_pathkey implements ordering of
+		 * orig_query_pathkeys.
 		 */
 		foreach(lc_plan, rel->pathlist)
 		{

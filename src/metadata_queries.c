@@ -96,7 +96,7 @@ chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, TupleDesc 
 }
 
 static Chunk *
-chunk_fill_in(Chunk * chunk, HeapTuple tuple, TupleDesc tupdesc)
+chunk_fill_in(Chunk *chunk, HeapTuple tuple, TupleDesc tupdesc)
 {
 	int64		time_ret;
 	bool		is_null;

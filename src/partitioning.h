@@ -18,7 +18,7 @@ typedef struct Partition
 								 * partition array */
 	int16		keyspace_start;
 	int16		keyspace_end;
-}	Partition;
+} Partition;
 
 typedef struct PartitioningFunc
 {
@@ -37,7 +37,7 @@ typedef struct PartitioningFunc
 	 */
 	FmgrInfo	func_fmgr;
 	int32		modulos;
-}	PartitioningFunc;
+} PartitioningFunc;
 
 
 typedef struct PartitioningInfo
@@ -45,7 +45,7 @@ typedef struct PartitioningInfo
 	char		column[NAMEDATALEN];
 	AttrNumber	column_attnum;
 	PartitioningFunc partfunc;
-}	PartitioningInfo;
+} PartitioningInfo;
 
 typedef struct PartitionEpoch
 {
@@ -56,16 +56,16 @@ typedef struct PartitionEpoch
 	PartitioningInfo *partitioning;
 	int16		num_partitions;
 	Partition	partitions[0];
-}	PartitionEpoch;
+} PartitionEpoch;
 
 
 PartitionEpoch *partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid);
-int16		partitioning_func_apply(PartitioningInfo * pinfo, Datum value);
-int16		partitioning_func_apply_tuple(PartitioningInfo * pinfo, HeapTuple tuple, TupleDesc desc);
+int16		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+int16		partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
 
-Partition  *partition_epoch_get_partition(PartitionEpoch * epoch, int16 keyspace_pt);
-void		partition_epoch_free(PartitionEpoch * epoch);
+Partition  *partition_epoch_get_partition(PartitionEpoch *epoch, int16 keyspace_pt);
+void		partition_epoch_free(PartitionEpoch *epoch);
 
-bool		partition_keyspace_pt_is_member(const Partition * part, const int16 keyspace_pt);
+bool		partition_keyspace_pt_is_member(const Partition *part, const int16 keyspace_pt);
 
 #endif   /* TIMESCALEDB_PARTITIONING_H */

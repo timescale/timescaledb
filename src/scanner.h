@@ -11,7 +11,7 @@ typedef enum ScannerType
 {
 	ScannerTypeHeap,
 	ScannerTypeIndex,
-}	ScannerType;
+} ScannerType;
 
 /* Tuple information passed on to handlers when scanning for tuples. */
 typedef struct TupleInfo
@@ -28,7 +28,7 @@ typedef struct TupleInfo
 	 * in lockresult.
 	 */
 	HTSU_Result lockresult;
-}	TupleInfo;
+} TupleInfo;
 
 typedef struct ScannerCtx
 {
@@ -66,17 +66,17 @@ typedef struct ScannerCtx
 	 * Optional handler to filter tuples. Should return true for tuples that
 	 * should be passed on to tuple_found, or false otherwise.
 	 */
-	bool		(*filter) (TupleInfo * ti, void *data);
+	bool		(*filter) (TupleInfo *ti, void *data);
 
 	/*
 	 * Handler for found tuples. Should return true to continue the scan or
 	 * false to abort.
 	 */
-	bool		(*tuple_found) (TupleInfo * ti, void *data);
-}	ScannerCtx;
+	bool		(*tuple_found) (TupleInfo *ti, void *data);
+} ScannerCtx;
 
 /* Performs an index scan or heap scan and returns the number of matching
  * tuples. */
-int			scanner_scan(ScannerCtx * ctx);
+int			scanner_scan(ScannerCtx *ctx);
 
 #endif   /* TIMESCALEDB_SCANNER_H */

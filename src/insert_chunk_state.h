@@ -10,7 +10,7 @@ typedef struct InsertChunkState
 {
 	Chunk	   *chunk;
 	List	   *replica_states;
-}	InsertChunkState;
+} InsertChunkState;
 
 extern InsertChunkState *insert_chunk_state_new(Chunk *chunk);
 

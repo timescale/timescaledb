@@ -12,7 +12,7 @@ typedef union ScanDesc
 {
 	IndexScanDesc index_scan;
 	HeapScanDesc heap_scan;
-}	ScanDesc;
+} ScanDesc;
 
 /*
  * InternalScannerCtx is the context passed to Scanner functions.
@@ -26,30 +26,30 @@ typedef struct InternalScannerCtx
 	TupleInfo	tinfo;
 	ScanDesc	scan;
 	ScannerCtx *sctx;
-}	InternalScannerCtx;
+} InternalScannerCtx;
 
 /*
  * Scanner can implement both index and heap scans in a single interface.
  */
 typedef struct Scanner
 {
-	Relation	(*open) (InternalScannerCtx * ctx);
-	ScanDesc    (*beginscan) (InternalScannerCtx * ctx);
-	bool		(*getnext) (InternalScannerCtx * ctx);
-	void		(*endscan) (InternalScannerCtx * ctx);
-	void		(*close) (InternalScannerCtx * ctx);
-}	Scanner;
+	Relation	(*open) (InternalScannerCtx *ctx);
+	ScanDesc	(*beginscan) (InternalScannerCtx *ctx);
+	bool		(*getnext) (InternalScannerCtx *ctx);
+	void		(*endscan) (InternalScannerCtx *ctx);
+	void		(*close) (InternalScannerCtx *ctx);
+} Scanner;
 
 /* Functions implementing heap scans */
 static Relation
-heap_scanner_open(InternalScannerCtx * ctx)
+heap_scanner_open(InternalScannerCtx *ctx)
 {
 	ctx->tablerel = heap_open(ctx->sctx->table, ctx->sctx->lockmode);
 	return ctx->tablerel;
 }
 
 static ScanDesc
-heap_scanner_beginscan(InternalScannerCtx * ctx)
+heap_scanner_beginscan(InternalScannerCtx *ctx)
 {
 	ScannerCtx *sctx = ctx->sctx;
 
@@ -59,27 +59,27 @@ heap_scanner_beginscan(InternalScannerCtx * ctx)
 }
 
 static bool
-heap_scanner_getnext(InternalScannerCtx * ctx)
+heap_scanner_getnext(InternalScannerCtx *ctx)
 {
 	ctx->tinfo.tuple = heap_getnext(ctx->scan.heap_scan, ctx->sctx->scandirection);
 	return HeapTupleIsValid(ctx->tinfo.tuple);
 }
 
 static void
-heap_scanner_endscan(InternalScannerCtx * ctx)
+heap_scanner_endscan(InternalScannerCtx *ctx)
 {
 	heap_endscan(ctx->scan.heap_scan);
 }
 
 static void
-heap_scanner_close(InternalScannerCtx * ctx)
+heap_scanner_close(InternalScannerCtx *ctx)
 {
 	heap_close(ctx->tablerel, ctx->sctx->lockmode);
 }
 
 /* Functions implementing index scans */
 static Relation
-index_scanner_open(InternalScannerCtx * ctx)
+index_scanner_open(InternalScannerCtx *ctx)
 {
 	ctx->tablerel = heap_open(ctx->sctx->table, ctx->sctx->lockmode);
 	ctx->indexrel = index_open(ctx->sctx->index, ctx->sctx->lockmode);
@@ -87,7 +87,7 @@ index_scanner_open(InternalScannerCtx * ctx)
 }
 
 static ScanDesc
-index_scanner_beginscan(InternalScannerCtx * ctx)
+index_scanner_beginscan(InternalScannerCtx *ctx)
 {
 	ScannerCtx *sctx = ctx->sctx;
 
@@ -101,7 +101,7 @@ index_scanner_beginscan(InternalScannerCtx * ctx)
 }
 
 static bool
-index_scanner_getnext(InternalScannerCtx * ctx)
+index_scanner_getnext(InternalScannerCtx *ctx)
 {
 	ctx->tinfo.tuple = index_getnext(ctx->scan.index_scan, ctx->sctx->scandirection);
 	ctx->tinfo.ituple = ctx->scan.index_scan->xs_itup;
@@ -110,13 +110,13 @@ index_scanner_getnext(InternalScannerCtx * ctx)
 }
 
 static void
-index_scanner_endscan(InternalScannerCtx * ctx)
+index_scanner_endscan(InternalScannerCtx *ctx)
 {
 	index_endscan(ctx->scan.index_scan);
 }
 
 static void
-index_scanner_close(InternalScannerCtx * ctx)
+index_scanner_close(InternalScannerCtx *ctx)
 {
 	heap_close(ctx->tablerel, ctx->sctx->lockmode);
 	index_close(ctx->indexrel, ctx->sctx->lockmode);
@@ -150,7 +150,7 @@ static Scanner scanners[] = {
  * Return the number of tuples that where found.
  */
 int
-scanner_scan(ScannerCtx * ctx)
+scanner_scan(ScannerCtx *ctx)
 {
 	TupleDesc	tuple_desc;
 	bool		is_valid;
