@@ -262,11 +262,6 @@ actively working to resolve:
 - Any user has full read/write access to the metadata tables for hypertables.
 - Permission changes on hypertables are not correctly propagated.
 - `create_hypertable()` can only be run on an empty table
-- `COPY`ing a dataset will currently put all data in the same chunk, even if
-chunk size goes over max size. For now we recommend breaking down large
-files for `COPY` (e.g., large CSVs) into smaller files that are slightly
-larger than max_chunk size (currently 1GB by default).
-We provide `scripts/migrate_data.sh` to help with this.
 - Custom user-created triggers on hypertables currently not allowed
 - `drop_chunks()` (see our [API Reference](docs/API.md)) is currently only
 supported for hypertables that are not partitioned by space.
