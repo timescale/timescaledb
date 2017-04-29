@@ -14,12 +14,13 @@ echo "Connecting to $POSTGRES_HOST as user $POSTGRES_USER"
 
 NODES="Test1 test2"
 DB_SETUPDIR="../../sql/setup"
+METANAME="meta"
 if [ $RESET_POSTGRES_DB == "true" ]; then
     echo "Cleaning up DB"
 
     $DB_SETUPDIR/setup_meta.sh
     $DB_SETUPDIR/add_cluster_user.sh postgres
-    $DB_SETUPDIR/set_meta.sh $POSTGRES_HOST
+    $DB_SETUPDIR/set_meta.sh $METANAME $POSTGRES_HOST
 
     for node in $NODES; do
         $DB_SETUPDIR/setup_node.sh $node

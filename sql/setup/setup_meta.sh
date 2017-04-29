@@ -18,7 +18,7 @@ DROP DATABASE IF EXISTS $INSTALL_DB;
 CREATE DATABASE $INSTALL_DB;
 \c $INSTALL_DB
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-SELECT _timescaledb_internal.setup_meta();
+SELECT _timescaledb_meta.setup_meta();
 EOF
 
 cd $PWD
