@@ -119,7 +119,7 @@ BEGIN
         hypertable_row.id,
         hypertable_row.schema_name,
         (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
-        _timescaledb_internal.get_general_index_definition(indexrelid, indrelid)
+        _timescaledb_internal.get_general_index_definition(indexrelid, indrelid, hypertable_row)
     )
     WHERE indrelid = main_table;
 END

@@ -4,7 +4,7 @@
 \ir include/ddl_ops_1.sql
 
 SELECT * FROM PUBLIC."Hypertable_1";
-EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
+EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
 SELECT * FROM _timescaledb_catalog.default_replica_node;
 
 \ir include/ddl_ops_2.sql
