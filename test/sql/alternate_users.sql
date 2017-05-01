@@ -8,6 +8,8 @@ EXCEPTION
         --mute error
 END$$;
 
+CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION alt_usr;
+
 \c single alt_usr
 \dt
 

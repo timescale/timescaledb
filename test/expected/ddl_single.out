@@ -21,35 +21,84 @@ CREATE TABLE PUBLIC."Hypertable_1" (
   sensor_4 NUMERIC NOT NULL DEFAULT 1
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
+\set ON_ERROR_STOP 0
+CREATE SCHEMA IF NOT EXISTS "customSchema";
+\set ON_ERROR_STOP 1
+CREATE TABLE "customSchema"."Hypertable_1" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1,
+  humidity numeric NULL DEFAULT 0,
+  sensor_1 NUMERIC NULL DEFAULT 1,
+  sensor_2 NUMERIC NOT NULL DEFAULT 1,
+  sensor_3 NUMERIC NOT NULL DEFAULT 1,
+  sensor_4 NUMERIC NOT NULL DEFAULT 1
+);
+CREATE INDEX ON "customSchema"."Hypertable_1" (time, "Device_id");
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 1);
  create_hypertable 
 -------------------
  
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |  table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
-----+-------------+--------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
-  1 | public      | Hypertable_1 | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       2592000000000
+SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1);
+ create_hypertable 
+-------------------
+ 
 (1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name  |  table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
+----+--------------+--------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
+  1 | public       | Hypertable_1 | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       2592000000000
+  2 | customSchema | Hypertable_1 | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |       2592000000000
+(2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_index;
  hypertable_id | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
 ---------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
              1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
-(1 row)
+             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
+(2 rows)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
 CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
 INSERT INTO PUBLIC."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+CREATE UNIQUE INDEX "Unique1" ON PUBLIC."Hypertable_1" (time, "Device_id");
+CREATE UNIQUE INDEX "Unique1" ON "customSchema"."Hypertable_1" (time);
+INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
+INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
+SELECT * FROM _timescaledb_catalog.hypertable_index;
+ hypertable_id | main_schema_name |         main_index_name         |                                       definition                                       | created_on 
+---------------+------------------+---------------------------------+----------------------------------------------------------------------------------------+------------
+             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")        | single
+             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")        | single
+             1 | public           | Hypertable_1_time_temp_c_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", temp_c)             | single
+             1 | public           | ind_humidity                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", humidity)           | single
+             1 | public           | ind_sensor_1                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", sensor_1)           | single
+             1 | public           | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
+             2 | customSchema     | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time")              | single
+(7 rows)
+
 --expect error cases
 \set ON_ERROR_STOP 0
+INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
+VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
+psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "7-Unique1"
+CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
+psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the time column
+CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
+psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the partitioning column: Device_id
+CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
+psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the time column
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
-psql:include/ddl_ops_1.sql:25: ERROR:  UPDATE ONLY not supported on hypertables
+psql:include/ddl_ops_1.sql:61: ERROR:  UPDATE ONLY not supported on hypertables
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
-psql:include/ddl_ops_1.sql:26: ERROR:  DELETE ONLY not currently supported on hypertables
+psql:include/ddl_ops_1.sql:62: ERROR:  DELETE ONLY not currently supported on hypertables
 \set ON_ERROR_STOP 1
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
@@ -57,20 +106,21 @@ SELECT * FROM PUBLIC."Hypertable_1";
  1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
 (1 row)
 
-EXPLAIN SELECT * FROM PUBLIC."Hypertable_1";
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
- Append  (cost=0.00..13.50 rows=352 width=204)
-   ->  Seq Scan on _hyper_1_0_replica  (cost=0.00..0.00 rows=1 width=204)
-   ->  Seq Scan on _hyper_1_1_0_partition  (cost=0.00..0.00 rows=1 width=204)
-   ->  Seq Scan on _hyper_1_1_0_1_data  (cost=0.00..13.50 rows=350 width=204)
+EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
+                QUERY PLAN                
+------------------------------------------
+ Append
+   ->  Seq Scan on _hyper_1_0_replica
+   ->  Seq Scan on _hyper_1_1_0_partition
+   ->  Seq Scan on _hyper_1_1_0_1_data
 (4 rows)
 
 SELECT * FROM _timescaledb_catalog.default_replica_node;
  database_name | hypertable_id | replica_id 
 ---------------+---------------+------------
  single        |             1 |          0
-(1 row)
+ single        |             2 |          0
+(2 rows)
 
 \ir include/ddl_ops_2.sql
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
@@ -118,6 +168,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
  sensor_3         | bigint  | not null default 131 | plain    |              | 
  sensor_4         | bigint  | not null default 131 | plain    |              | 
 Indexes:
+    "Unique1" UNIQUE, btree ("time", "Device_id")
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "ind_humidity" btree ("time", humidity)
 Triggers:
@@ -154,6 +205,7 @@ Child tables: _timescaledb_internal._hyper_1_0_replica
  sensor_3         | bigint  | not null default 131   | plain    |              | 
  sensor_4         | bigint  | not null default 131   | plain    |              | 
 Indexes:
+    "5-Unique1" UNIQUE, btree ("time", "Device_id")
     "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "3-ind_humidity" btree ("time", humidity)
 Check constraints:

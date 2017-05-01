@@ -39,8 +39,8 @@ BEGIN
                 RETURN;
             END IF;
 
-            def = _timescaledb_internal.get_general_index_definition(info.objid, table_oid);
             hypertable_row := _timescaledb_internal.hypertable_from_main_table(table_oid);
+            def = _timescaledb_internal.get_general_index_definition(info.objid, table_oid, hypertable_row);
 
             PERFORM _timescaledb_meta_api.add_index(
                 hypertable_row.id,

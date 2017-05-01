@@ -15,6 +15,7 @@
 --IO100 - GROUP: DDL errors
 --IO101 - operation not supported
 --IO102 - bad hypertable definition
+--IO103 - bad hypertable index definition
 --IO110 - hypertable already exists
 --I0120 - node already exists
 --I0130 - user already exists
@@ -22,6 +23,7 @@
 #define ERRCODE_IO_DDL_ERRORS MAKE_SQLSTATE('I','O','1','0','0')
 #define ERRCODE_IO_OPERATION_NOT_SUPPORTED MAKE_SQLSTATE('I','O','1','0','1')
 #define ERRCODE_IO_BAD_HYPERTABLE_DEFINITION MAKE_SQLSTATE('I','O','1','0','2')
+#define ERRCODE_IO_BAD_HYPERTABLE_INDEX_DEFINITION MAKE_SQLSTATE('I','O','1','0','3')
 #define ERRCODE_IO_HYPERTABLE_EXISTS MAKE_SQLSTATE('I','O','1','1','0')
 #define ERRCODE_IO_NODE_EXISTS MAKE_SQLSTATE('I','O','1','2','0')
 #define ERRCODE_IO_USER_EXISTS MAKE_SQLSTATE('I','O','1','3','0')
