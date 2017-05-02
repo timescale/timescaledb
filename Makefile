@@ -31,6 +31,7 @@ SRCS = \
 	src/partitioning.c \
 	src/insert.c \
 	src/planner.c \
+	src/executor.c \
 	src/process_utility.c \
 	src/sort_transform.c \
 	src/insert_chunk_state.c \
