@@ -32,6 +32,7 @@
 #include "chunk.h"
 #include "insert_chunk_state.h"
 #include "insert_statement_state.h"
+#include "executor.h"
 
 static void
 insert_main_table_cleanup(InsertStatementState **state_p)
@@ -139,6 +140,12 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	/*
+	 * add 1 to the number of processed tuples in the commandTag. Without this
+	 * tuples that return NULL in before triggers are not counted.
+	 */
+	executor_add_number_tuples_processed(1);
 
 	/* Return NULL since we do not want the tuple in the trigger's table */
 	return PointerGetDatum(NULL);

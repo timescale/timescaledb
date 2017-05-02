@@ -3,6 +3,8 @@
 #include <access/xact.h>
 #include <commands/extension.h>
 
+#include "executor.h"
+
 #define MIN_SUPPORTED_VERSION_STR "9.6"
 #define MIN_SUPPORTED_VERSION_NUM 90600
 
@@ -40,15 +42,21 @@ _PG_init(void)
 	_chunk_cache_init();
 	_cache_invalidate_init();
 	_planner_init();
+	_executor_init();
 	_process_utility_init();
 }
 
 void
 _PG_fini(void)
 {
+	/*
+	 * Order of items should be strict reverse order of _PG_init. Please
+	 * document any exceptions.
+	 */
 	_process_utility_fini();
+	_executor_fini();
 	_planner_fini();
 	_cache_invalidate_fini();
-	_hypertable_cache_fini();
 	_chunk_cache_fini();
+	_hypertable_cache_fini();
 }
