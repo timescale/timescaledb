@@ -28,6 +28,7 @@ static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 typedef struct ChangeTableNameCtx
 {
 	Query	   *parse;
+	CmdType    commandType;
 	Cache	   *hcache;
 	Hypertable *hentry;
 } ChangeTableNameCtx;
@@ -57,7 +58,7 @@ change_table_name_walker(Node *node, void *context)
 		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
 
 		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh
-			&& ctx->parse->commandType != CMD_INSERT
+			&& ctx->commandType != CMD_INSERT
 			)
 		{
 			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rangeTableEntry->relid);
@@ -74,8 +75,20 @@ change_table_name_walker(Node *node, void *context)
 
 	if (IsA(node, Query))
 	{
-		return query_tree_walker((Query *) node, change_table_name_walker,
+		bool result;
+		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
+		CmdType old = ctx->commandType;
+
+		/* adjust context */
+		ctx->commandType = ((Query *) node)->commandType;
+
+		result = query_tree_walker((Query *) node, change_table_name_walker,
 								 context, QTW_EXAMINE_RTES);
+
+		/* restore context */
+		ctx->commandType = old;
+
+		return result;
 	}
 
 	return expression_tree_walker(node, change_table_name_walker, context);
@@ -280,6 +293,7 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		/* replace call to main table with call to the replica table */
 		context.hcache = hypertable_cache_pin();
 		context.parse = parse;
+		context.commandType = parse->commandType;
 		context.hentry = NULL;
 		change_table_name_walker((Node *) parse, &context);
 		/* note assumes 1 hypertable per query */

@@ -279,3 +279,25 @@ SELECT * FROM "1dim";
  Fri Jan 20 09:00:47 2017 | 25.1
 (3 rows)
 
+CREATE TABLE regular_table (time timestamp, temp float);
+INSERT INTO regular_table SELECT * FROM "1dim";
+SELECT * FROM regular_table;
+           time           | temp 
+--------------------------+------
+ Fri Jan 20 09:00:01 2017 | 22.5
+ Fri Jan 20 09:00:21 2017 | 21.2
+ Fri Jan 20 09:00:47 2017 | 25.1
+(3 rows)
+
+TRUNCATE TABLE regular_table;
+INSERT INTO regular_table VALUES('2017-01-20T09:00:59', 29.2);
+INSERT INTO "1dim" SELECT * FROM regular_table;
+SELECT * FROM "1dim";
+           time           | temp 
+--------------------------+------
+ Fri Jan 20 09:00:01 2017 | 22.5
+ Fri Jan 20 09:00:21 2017 | 21.2
+ Fri Jan 20 09:00:47 2017 | 25.1
+ Fri Jan 20 09:00:59 2017 | 29.2
+(4 rows)
+
