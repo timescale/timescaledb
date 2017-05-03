@@ -1,6 +1,0 @@
-r json
-{"time":1257897600000000000,"bool_1":false,"device_id":"dev1","field_only_dev2":null,"field_only_ref2":null,"num_1":null,"num_2":5,"string_1":"const","string_2":"five"}
-{"time":1257894001000000000,"bool_1":true,"device_id":"dev1","field_only_dev2":null,"field_only_ref2":null,"num_1":null,"num_2":4,"string_1":"const","string_2":"four"}
-{"time":1257894000000001000,"bool_1":true,"device_id":"dev1","field_only_dev2":null,"field_only_ref2":null,"num_1":null,"num_2":3,"string_1":"const","string_2":"three"}
-{"time":1257894000000000000,"bool_1":true,"device_id":"dev1","field_only_dev2":null,"field_only_ref2":null,"num_1":null,"num_2":1,"string_1":"const","string_2":"one"}
-{"time":1257894000000000000,"bool_1":false,"device_id":"dev1","field_only_dev2":null,"field_only_ref2":null,"num_1":null,"num_2":2,"string_1":"const","string_2":"two"}

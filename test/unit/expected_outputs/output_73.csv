@@ -1,2 +1,0 @@
-device_id text; time bigint; count_device_id_ numeric
-dev1;1257987600000000000;2

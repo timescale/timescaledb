@@ -1,3 +1,0 @@
-time bigint; bool_1 boolean; device_id text; field_only_dev2 double precision; field_only_ref2 text; nUm_1 double precision; num_2 double precision; string_1 text; string_2 text
-1257894000000000000;t;dev2;3;null;1.5;9;const;one
-1257894000000000000;t;dev2;null;null;1.5;10;const;two
