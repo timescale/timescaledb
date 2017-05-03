@@ -28,7 +28,7 @@ static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 typedef struct ChangeTableNameCtx
 {
 	Query	   *parse;
-	CmdType    commandType;
+	CmdType		commandType;
 	Cache	   *hcache;
 	Hypertable *hentry;
 } ChangeTableNameCtx;
@@ -75,15 +75,15 @@ change_table_name_walker(Node *node, void *context)
 
 	if (IsA(node, Query))
 	{
-		bool result;
+		bool		result;
 		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
-		CmdType old = ctx->commandType;
+		CmdType		old = ctx->commandType;
 
 		/* adjust context */
 		ctx->commandType = ((Query *) node)->commandType;
 
 		result = query_tree_walker((Query *) node, change_table_name_walker,
-								 context, QTW_EXAMINE_RTES);
+								   context, QTW_EXAMINE_RTES);
 
 		/* restore context */
 		ctx->commandType = old;

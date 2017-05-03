@@ -265,7 +265,8 @@ pg_gethostname(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(t);
 }
 
-static inline int64 get_interval_period(Interval *interval) 
+static inline int64
+get_interval_period(Interval *interval)
 {
 	if (interval->month != 0)
 	{
@@ -300,7 +301,7 @@ timestamp_bucket(PG_FUNCTION_ARGS)
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMP(timestamp);
 
-	period = get_interval_period(interval); 
+	period = get_interval_period(interval);
 	/* result = (timestamp / period) * period */
 	TMODULO(timestamp, result, period);
 	if (timestamp < 0)
@@ -325,14 +326,14 @@ Datum
 timestamptz_bucket(PG_FUNCTION_ARGS)
 {
 	Interval   *interval = PG_GETARG_INTERVAL_P(0);
-	TimestampTz	timestamp = PG_GETARG_TIMESTAMPTZ(1);
-	TimestampTz	result;
+	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz result;
 	int64		period = -1;
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMPTZ(timestamp);
 
-	period = get_interval_period(interval); 
+	period = get_interval_period(interval);
 	/* result = (timestamp / period) * period */
 	TMODULO(timestamp, result, period);
 	if (timestamp < 0)
