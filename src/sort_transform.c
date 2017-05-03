@@ -66,16 +66,17 @@ transform_time_bucket(FuncExpr *func)
 static Expr *
 transform_timestamp_cast(FuncExpr *func)
 {
-	/* transform cast from timestamptz to timestamp
+	/*
+	 * transform cast from timestamptz to timestamp
 	 *
 	 * timestamp(var) => var
 	 *
-	 * proof: timestamp(time1) > timestamp(time2) 
-	 * iff time1 > time2
+	 * proof: timestamp(time1) > timestamp(time2) iff time1 > time2
 	 *
 	 */
 
 	Expr	   *first;
+
 	if (list_length(func->args) != 1)
 		return (Expr *) func;
 
