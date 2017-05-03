@@ -26,6 +26,36 @@ SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, nu
 
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.hyper_1_tz (
+  time TIMESTAMPTZ NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_tz" ON PUBLIC.hyper_1_tz (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_tz"'::regclass, 'time'::name, number_partitions => 1);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO hyper_1_tz SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_tz SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.hyper_1_int (
+  time int NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_int" ON PUBLIC.hyper_1_int (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>10000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 --non-aggregates use MergeAppend in both optimized and non-optimized
 EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
                              QUERY PLAN                             
@@ -135,7 +165,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Sort
                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
                            ->  Seq Scan on _hyper_1_1_0_partition
-                     ->  Index Scan Backward using "2-time_trunc" on _hyper_1_1_0_1_data
+                     ->  Index Scan Backward using "6-time_trunc" on _hyper_1_1_0_1_data
 (13 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -162,7 +192,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                      ->  Sort
                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
                            ->  Seq Scan on _hyper_1_1_0_partition
-                     ->  Index Scan Backward using "2-time_trunc" on _hyper_1_1_0_1_data
+                     ->  Index Scan Backward using "6-time_trunc" on _hyper_1_1_0_1_data
 (13 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -170,5 +200,201 @@ SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 --------------------------+---------+-------+------------------
  Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
  Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time")) DESC
+         ->  HashAggregate
+               Group Key: time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time")
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_1_0_replica
+                           ->  Seq Scan on _hyper_1_1_0_partition
+                           ->  Seq Scan on _hyper_1_1_0_1_data
+(10 rows)
+
+SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+            t             |   avg   |  min  |       avg        
+--------------------------+---------+-------+------------------
+ Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
+ Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
+         ->  HashAggregate
+               Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_1_0_replica
+                           ->  Seq Scan on _hyper_1_1_0_partition
+                           ->  Seq Scan on _hyper_1_1_0_1_data
+(10 rows)
+
+SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+            t             |   avg   |  min  |       avg        
+--------------------------+---------+-------+------------------
+ Wed Dec 31 21:32:30 1969 |   19975 | 29950 | 141.332930657636
+ Wed Dec 31 21:31:30 1969 | 19919.5 | 29890 | 141.136445455771
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval))) DESC
+         ->  HashAggregate
+               Group Key: time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval))
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_1_0_replica
+                           ->  Seq Scan on _hyper_1_1_0_partition
+                           ->  Seq Scan on _hyper_1_1_0_1_data
+(10 rows)
+
+SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+            t             |   avg   |  min  |       avg        
+--------------------------+---------+-------+------------------
+ Wed Dec 31 21:32:00 1969 |   19975 | 29950 | 141.332930657636
+ Wed Dec 31 21:31:00 1969 | 19919.5 | 29890 | 141.136445455771
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
+         ->  HashAggregate
+               Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_1_0_replica
+                           ->  Seq Scan on _hyper_1_1_0_partition
+                           ->  Seq Scan on _hyper_1_1_0_1_data
+(10 rows)
+
+SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+            t             |   avg   |  min  |       avg        
+--------------------------+---------+-------+------------------
+ Wed Dec 31 21:32:30 1969 |   19975 | 29950 | 141.332930657636
+ Wed Dec 31 21:31:30 1969 | 19919.5 | 29890 | 141.136445455771
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time")) DESC
+         ->  HashAggregate
+               Group Key: time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time")
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_2_0_replica
+                           ->  Seq Scan on _hyper_2_2_0_partition
+                           ->  Seq Scan on _hyper_2_2_0_2_data
+(10 rows)
+
+SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+              t               |   avg   |  min  |       avg        
+------------------------------+---------+-------+------------------
+ Wed Dec 31 21:33:00 1969 PST |   19990 | 29980 | 141.385994856058
+ Wed Dec 31 21:32:00 1969 PST | 19949.5 | 29920 | 141.242685621416
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone)) DESC
+         ->  HashAggregate
+               Group Key: time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_2_0_replica
+                           ->  Seq Scan on _hyper_2_2_0_partition
+                           ->  Seq Scan on _hyper_2_2_0_2_data
+(10 rows)
+
+SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+            t             |   avg   |  min  |       avg        
+--------------------------+---------+-------+------------------
+ Wed Dec 31 21:33:00 1969 |   19990 | 29980 | 141.385994856058
+ Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (((_hyper_3_0_replica."time" / 10) * 10)) DESC
+         ->  HashAggregate
+               Group Key: ((_hyper_3_0_replica."time" / 10) * 10)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_3_0_replica
+                           ->  Seq Scan on _hyper_3_3_0_partition
+                           ->  Seq Scan on _hyper_3_3_0_3_data
+                           ->  Seq Scan on _hyper_3_3_0_4_data
+                           ->  Seq Scan on _hyper_3_3_0_5_data
+(12 rows)
+
+SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+   t   |   avg   |  min  |       avg        
+-------+---------+-------+------------------
+ 20000 |   20000 | 30000 |  141.42135623731
+ 19990 | 19994.5 | 29990 | 141.401909099017
+(2 rows)
+
+EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2)) DESC
+         ->  HashAggregate
+               Group Key: ((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on _hyper_3_0_replica
+                           ->  Seq Scan on _hyper_3_3_0_partition
+                           ->  Seq Scan on _hyper_3_3_0_3_data
+                           ->  Seq Scan on _hyper_3_3_0_4_data
+                           ->  Seq Scan on _hyper_3_3_0_5_data
+(12 rows)
+
+SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
+   t   |   avg   |  min  |       avg        
+-------+---------+-------+------------------
+ 20000 |   20000 | 30000 |  141.42135623731
+ 19990 | 19994.5 | 29990 | 141.401909099017
 (2 rows)
 

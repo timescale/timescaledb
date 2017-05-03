@@ -1,5 +1,7 @@
 #include <postgres.h>
+#include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
 #include <parser/parsetree.h>
 #include <utils/guc.h>
@@ -18,6 +20,171 @@
  */
 
 extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
+static Expr *sort_transform_expr(Expr *orig_expr);
+
+static Expr *
+transform_date_trunc(FuncExpr *func)
+{
+	/*
+	 * date_trunc (const, var) => var
+	 *
+	 * proof: date_trunc(c, time1) > date_trunc(c,time2) iff time1 > time2
+	 */
+	Expr	   *second;
+
+	if (list_length(func->args) != 2 || !IsA(linitial(func->args), Const))
+		return (Expr *) func;
+
+	second = sort_transform_expr(lsecond(func->args));
+	if (!IsA(second, Var))
+		return (Expr *) func;
+
+	return (Expr *) copyObject(second);
+}
+
+static Expr *
+transform_time_bucket(FuncExpr *func)
+{
+	/*
+	 * time_bucket(const, var, const) => var
+	 *
+	 * proof: time_bucket(const1, time1) > time_bucket(const1,time2) iff time1
+	 * > time2
+	 */
+	Expr	   *second;
+
+	if (list_length(func->args) != 2 || !IsA(linitial(func->args), Const))
+		return (Expr *) func;
+
+	second = sort_transform_expr(lsecond(func->args));
+	if (!IsA(second, Var))
+		return (Expr *) func;
+
+	return (Expr *) copyObject(second);
+}
+
+static Expr *
+transform_timestamp_cast(FuncExpr *func)
+{
+	/* transform cast from timestamptz to timestamp
+	 *
+	 * timestamp(var) => var
+	 *
+	 * proof: timestamp(time1) > timestamp(time2) 
+	 * iff time1 > time2
+	 *
+	 */
+
+	Expr	   *first;
+	if (list_length(func->args) != 1)
+		return (Expr *) func;
+
+	first = sort_transform_expr(linitial(func->args));
+	if (!IsA(first, Var))
+		return (Expr *) func;
+
+	return (Expr *) copyObject(first);
+}
+
+
+static inline Expr *
+transform_time_op_const_interval(OpExpr *op)
+{
+	/*
+	 * optimize timestamp(tz) +/- const interval
+	 *
+	 * Sort of ts + 1 minute fulfilled by sort of ts
+	 */
+	if (list_length(op->args) == 2 && IsA(lsecond(op->args), Const))
+	{
+		Oid			left = exprType((Node *) linitial(op->args));
+		Oid			right = exprType((Node *) lsecond(op->args));
+
+		if ((left == TIMESTAMPOID && right == INTERVALOID) ||
+			(left == TIMESTAMPTZOID && right == INTERVALOID))
+		{
+			char	   *name = get_opname(op->opno);
+
+			if (strncmp(name, "-", NAMEDATALEN) == 0 ||
+				strncmp(name, "+", NAMEDATALEN) == 0)
+			{
+				Expr	   *first = sort_transform_expr((Expr *) linitial(op->args));
+
+				if (IsA(first, Var))
+					return copyObject(first);
+			}
+		}
+	}
+	return (Expr *) op;
+}
+
+static inline Expr *
+transform_int_op_const(OpExpr *op)
+{
+	/*
+	 * Optimize int op const (or const op int), whenever possible. e.g. sort
+	 * of  some_int + const fulfilled by sort of some_int same for the
+	 * following operator: + - / *
+	 *
+	 * Note that / is not commutative and const / var does NOT work (namely it
+	 * reverses sort order, which we don't handle yet)
+	 */
+	if (list_length(op->args) == 2 &&
+		(IsA(lsecond(op->args), Const) ||IsA(linitial(op->args), Const)))
+	{
+		Oid			left = exprType((Node *) linitial(op->args));
+		Oid			right = exprType((Node *) lsecond(op->args));
+
+		if (
+			(left == INT8OID && right == INT8OID) ||
+			(left == INT4OID && right == INT4OID) ||
+			(left == INT2OID && right == INT2OID)
+			)
+		{
+			char	   *name = get_opname(op->opno);
+
+			if (name[1] == '\0')
+			{
+				switch (name[0])
+				{
+					case '-':
+					case '+':
+					case '*':
+						/* commutative cases */
+						if (IsA(linitial(op->args), Const))
+						{
+							Expr	   *nonconst = sort_transform_expr((Expr *) lsecond(op->args));
+
+							if (IsA(nonconst, Var))
+								return copyObject(nonconst);
+						}
+						else
+						{
+							Expr	   *nonconst = sort_transform_expr((Expr *) linitial(op->args));
+
+							if (IsA(nonconst, Var))
+								return copyObject(nonconst);
+
+						}
+						break;
+					case '/':
+						/* only if second arg is const */
+						if (IsA(lsecond(op->args), Const))
+						{
+							Expr	   *nonconst = sort_transform_expr((Expr *) linitial(op->args));
+
+							if (IsA(nonconst, Var))
+								return copyObject(nonconst);
+						}
+						break;
+				}
+
+			}
+		}
+	}
+	return (Expr *) op;
+}
+
 
 /* sort_transforms_expr returns a simplified sort expression in a form
  * more common for indexes. Must return same data type & collation too.
@@ -36,28 +203,33 @@ extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 static Expr *
 sort_transform_expr(Expr *orig_expr)
 {
-	/*
-	 * date_trunc (const, var) => var
-	 *
-	 * proof: date_trunc(c, time1) > date_trunc(c,time2) iff time1 > time2
-	 */
 	if (IsA(orig_expr, FuncExpr))
 	{
 		FuncExpr   *func = (FuncExpr *) orig_expr;
 		char	   *func_name = get_func_name(func->funcid);
-		Var		   *v;
 
-		if (strncmp(func_name, "date_trunc", NAMEDATALEN) != 0)
-			return NULL;
-
-		if (!IsA(linitial(func->args), Const) ||!IsA(lsecond(func->args), Var))
-			return NULL;
-
-		v = lsecond(func->args);
-
-		return (Expr *) copyObject(v);
+		if (strncmp(func_name, "date_trunc", NAMEDATALEN) == 0)
+			return transform_date_trunc(func);
+		if (strncmp(func_name, "time_bucket", NAMEDATALEN) == 0)
+			return transform_time_bucket(func);
+		if (strncmp(func_name, "timestamp", NAMEDATALEN) == 0)
+			return transform_timestamp_cast(func);
 	}
-	return NULL;
+	if (IsA(orig_expr, OpExpr))
+	{
+		OpExpr	   *op = (OpExpr *) orig_expr;
+		Oid			type_first = exprType((Node *) linitial(op->args));
+
+		if (type_first == TIMESTAMPOID || type_first == TIMESTAMPTZOID)
+		{
+			return transform_time_op_const_interval(op);
+		}
+		if (type_first == INT2OID || type_first == INT4OID || type_first == INT8OID)
+		{
+			return transform_int_op_const(op);
+		}
+	}
+	return orig_expr;
 }
 
 /*	sort_transform_ec creates a new EquivalenceClass with transformed
@@ -76,9 +248,11 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 		EquivalenceMember *ec_mem = (EquivalenceMember *) lfirst(lc_member);
 		Expr	   *transformed_expr = sort_transform_expr(ec_mem->em_expr);
 
-		if (transformed_expr != NULL)
+		if (transformed_expr != ec_mem->em_expr)
 		{
 			EquivalenceMember *em;
+			Oid			type = exprType((Node *) transformed_expr);
+			List	   *opfamilies = list_copy(orig->ec_opfamilies);
 
 			/*
 			 * if the transform already exists for even one member, assume
@@ -86,7 +260,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 			 */
 			EquivalenceClass *exist =
 			get_eclass_for_sort_expr(root, transformed_expr, ec_mem->em_nullable_relids,
-									 orig->ec_opfamilies, ec_mem->em_datatype,
+									 opfamilies, type,
 									 orig->ec_collation, orig->ec_sortref,
 									 ec_mem->em_relids, false);
 
@@ -102,13 +276,13 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 			em->em_nullable_relids = bms_copy(ec_mem->em_nullable_relids);
 			em->em_is_const = ec_mem->em_is_const;
 			em->em_is_child = ec_mem->em_is_child;
-			em->em_datatype = ec_mem->em_datatype;
+			em->em_datatype = type;
 
 			if (newec == NULL)
 			{
 				/* lazy create the ec. */
 				newec = makeNode(EquivalenceClass);
-				newec->ec_opfamilies = list_copy(orig->ec_opfamilies);
+				newec->ec_opfamilies = opfamilies;
 				newec->ec_collation = orig->ec_collation;
 				newec->ec_members = NIL;
 				newec->ec_sources = list_copy(orig->ec_sources);

@@ -141,3 +141,188 @@ SELECT _timescaledb_internal.to_unix_microseconds('294247-01-01 23:59:59.999999'
 -- Adding one microsecond should take us out-of-range again
 SELECT timestamp '294247-01-01 23:59:59.999999' + interval '1 us';
 SELECT _timescaledb_internal.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');
+
+\set ON_ERROR_STOP 1
+
+SELECT time_bucket(INTERVAL '1 day', TIMESTAMP '2011-01-02 01:01:01');
+
+SELECT time, time_bucket(INTERVAL '2 day ', time) 
+FROM unnest(ARRAY[
+    TIMESTAMP '2011-01-01 01:01:01',
+    TIMESTAMP '2011-01-02 01:01:01',
+    TIMESTAMP '2011-01-03 01:01:01',
+    TIMESTAMP '2011-01-04 01:01:01'
+    ]) AS time;
+
+
+SELECT int_def, time_bucket(int_def,TIMESTAMP '2011-01-02 01:01:01.111') 
+FROM unnest(ARRAY[
+    INTERVAL '1 millisecond',
+    INTERVAL '1 second',
+    INTERVAL '1 minute',
+    INTERVAL '1 hour',
+    INTERVAL '1 day',
+    INTERVAL '2 millisecond',
+    INTERVAL '2 second',
+    INTERVAL '2 minute',
+    INTERVAL '2 hour',
+    INTERVAL '2 day'
+    ]) AS int_def;
+
+\set ON_ERROR_STOP 0
+SELECT time_bucket(INTERVAL '1 year',TIMESTAMP '2011-01-02 01:01:01.111');
+SELECT time_bucket(INTERVAL '1 month',TIMESTAMP '2011-01-02 01:01:01.111');
+\set ON_ERROR_STOP 1
+
+SELECT time, time_bucket(INTERVAL '5 minute', time) 
+FROM unnest(ARRAY[
+    TIMESTAMP '1970-01-01 00:59:59.999999',
+    TIMESTAMP '1970-01-01 01:01:00',
+    TIMESTAMP '1970-01-01 01:04:59.999999',
+    TIMESTAMP '1970-01-01 01:05:00'
+    ]) AS time;
+
+
+SELECT time, time_bucket(INTERVAL '5 minute', time) 
+FROM unnest(ARRAY[
+    TIMESTAMP '2011-01-02 01:04:59.999999',
+    TIMESTAMP '2011-01-02 01:05:00',
+    TIMESTAMP '2011-01-02 01:09:59.999999',
+    TIMESTAMP '2011-01-02 01:10:00'
+    ]) AS time;
+
+--offset with interval
+SELECT time, time_bucket(INTERVAL '5 minute', time ,  INTERVAL '2 minutes')
+FROM unnest(ARRAY[
+    TIMESTAMP '2011-01-02 01:01:59.999999',
+    TIMESTAMP '2011-01-02 01:02:00',
+    TIMESTAMP '2011-01-02 01:06:59.999999',
+    TIMESTAMP '2011-01-02 01:07:00'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '5 minute', time , - INTERVAL '2 minutes')
+FROM unnest(ARRAY[
+    TIMESTAMP '2011-01-02 01:02:59.999999',
+    TIMESTAMP '2011-01-02 01:03:00',
+    TIMESTAMP '2011-01-02 01:07:59.999999',
+    TIMESTAMP '2011-01-02 01:08:00'
+    ]) AS time;
+
+--example to align with an origin 
+SELECT time, time_bucket(INTERVAL '5 minute', time - (TIMESTAMP '2011-01-02 00:02:00' - TIMESTAMP 'epoch')) +  (TIMESTAMP '2011-01-02 00:02:00'-TIMESTAMP 'epoch')
+FROM unnest(ARRAY[
+    TIMESTAMP '2011-01-02 01:01:59.999999',
+    TIMESTAMP '2011-01-02 01:02:00',
+    TIMESTAMP '2011-01-02 01:06:59.999999',
+    TIMESTAMP '2011-01-02 01:07:00'
+    ]) AS time;
+
+
+--rounding version
+SELECT time, time_bucket(INTERVAL '5 minute', time , - INTERVAL '2.5 minutes') + INTERVAL '2 minutes 30 seconds'
+FROM unnest(ARRAY[
+    TIMESTAMP '2011-01-02 01:05:01',
+    TIMESTAMP '2011-01-02 01:07:29',
+    TIMESTAMP '2011-01-02 01:02:30',
+    TIMESTAMP '2011-01-02 01:07:30',
+    TIMESTAMP '2011-01-02 01:02:29'
+    ]) AS time;
+
+--time_bucket with timezone should mimick date_trunc
+SET timezone TO 'UTC';
+SELECT time, time_bucket(INTERVAL '1 hour', time), date_trunc('hour', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01',
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01+01',
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01+02'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 day', time), date_trunc('day', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01',
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01+01',
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01+02'
+    ]) AS time;
+
+--what happens with a local tz
+SET timezone TO 'America/New_York';
+SELECT time, time_bucket(INTERVAL '1 hour', time), date_trunc('hour', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01',
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01+01',
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01+02'
+    ]) AS time;
+
+--Note the timestamp tz input is aligned with UTC day /not/ local day. different than date_trunc.
+SELECT time, time_bucket(INTERVAL '1 day', time), date_trunc('day', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01',
+    TIMESTAMP WITH TIME ZONE '2011-01-03 01:01:01+01',
+    TIMESTAMP WITH TIME ZONE '2011-01-04 01:01:01+02'
+    ]) AS time;
+
+--can force local bucketing with simple cast.
+SELECT time, time_bucket(INTERVAL '1 day', time::timestamp), date_trunc('day', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01',
+    TIMESTAMP WITH TIME ZONE '2011-01-03 01:01:01+01',
+    TIMESTAMP WITH TIME ZONE '2011-01-04 01:01:01+02'
+    ]) AS time;
+
+--can also use interval to correct
+SELECT time, time_bucket(INTERVAL '1 day', time, -INTERVAL '19 hours'), date_trunc('day', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2011-01-02 01:01:01',
+    TIMESTAMP WITH TIME ZONE '2011-01-03 01:01:01+01',
+    TIMESTAMP WITH TIME ZONE '2011-01-04 01:01:01+02'
+    ]) AS time;
+
+--dst: same local hour bucketed as two different hours. 
+SELECT time, time_bucket(INTERVAL '1 hour', time), date_trunc('hour', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2017-11-05 12:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 13:05:00+07'
+    ]) AS time;
+
+--local alignment changes when bucketing by UTC across dst boundary
+SELECT time, time_bucket(INTERVAL '2 hour', time)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2017-11-05 10:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 12:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 13:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 15:05:00+07'
+    ]) AS time;
+
+--local alignment is preserved when bucketing by local time across DST boundary.
+SELECT time, time_bucket(INTERVAL '2 hour', time::timestamp)
+FROM unnest(ARRAY[
+    TIMESTAMP WITH TIME ZONE '2017-11-05 10:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 12:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 13:05:00+07',
+    TIMESTAMP WITH TIME ZONE '2017-11-05 15:05:00+07'
+    ]) AS time;
+
+
+SELECT time, time_bucket(10, time) 
+FROM unnest(ARRAY[
+     '99',
+     '100',
+     '109',
+     '110'
+    ]::int[]) AS time;
+
+SELECT time, time_bucket(10, time,2) 
+FROM unnest(ARRAY[
+     '101',
+     '102',
+     '111',
+     '112'
+    ]::int[]) AS time;
+
+SELECT time, time_bucket(10, time, -2) 
+FROM unnest(ARRAY[
+     '97',
+     '98',
+     '107',
+     '108'
+    ]::int[]) AS time;
