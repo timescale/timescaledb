@@ -21,7 +21,7 @@ etc., still work on the resulting hypertable.
 |---|---|
 | `partitioning_column` | Name of an additional column to partition by. If provided, `number_partitions` must be set.
 | `number_partitions` | Number of partitions to use when `partitioning_column` is set. Must be > 0.
-
+| `chunk_time_interval` | Interval in event time (micro seconds for TIMESTAMP and TIMESTAMPTZ) that each chunk covers. Must be > 0. Default is 1 month.
 **Sample usage**
 
 Convert table `foo` to hypertable with just time partitioning on column `ts`:
