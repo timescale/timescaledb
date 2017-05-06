@@ -36,7 +36,8 @@ SRCS = \
 	src/sort_transform.c \
 	src/insert_chunk_state.c \
 	src/insert_statement_state.c \
-	src/ddl_utils.c
+	src/ddl_utils.c \
+	src/agg_bookend.c
 
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)

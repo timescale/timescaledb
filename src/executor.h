@@ -7,4 +7,4 @@ extern void _executor_fini(void);
 
 extern void executor_add_number_tuples_processed(uint64 count);
 
-#endif /*  TIMESCALEDB_EXECUTOR_H */
+#endif   /* TIMESCALEDB_EXECUTOR_H */
