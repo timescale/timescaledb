@@ -14,6 +14,7 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <optimizer/paths.h>
+#include <utils/lsyscache.h>
 
 #include "hypertable_cache.h"
 #include "partitioning.h"
@@ -28,9 +29,11 @@ static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 typedef struct ChangeTableNameCtx
 {
 	Query	   *parse;
+	Query	   *parent;
 	CmdType		commandType;
 	Cache	   *hcache;
 	Hypertable *hentry;
+	Index		rti;
 } ChangeTableNameCtx;
 
 typedef struct AddPartFuncQualCtx
@@ -39,6 +42,37 @@ typedef struct AddPartFuncQualCtx
 	Cache	   *hcache;
 	Hypertable *hentry;
 } AddPartFuncQualCtx;
+
+typedef struct ChangeVarTypeCtx
+{
+	Index		rti;
+	Oid			oldtype;
+	Oid			newrelid;
+} ChangeVarTypeCtx;
+
+
+static bool
+change_var_type_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+	if (IsA(node, Var))
+	{
+		Var		   *var = (Var *) node;
+		ChangeVarTypeCtx *ctx = (ChangeVarTypeCtx *) context;
+
+		if (var->vartype == ctx->oldtype && var->varno == ctx->rti)
+		{
+			var->vartype = get_rel_type_id(ctx->newrelid);
+		}
+		return false;
+	}
+
+	return expression_tree_walker(node, change_var_type_walker, context);
+}
+
 
 /*
  * Change all main tables to one of the replicas in the parse tree.
@@ -65,28 +99,45 @@ change_table_name_walker(Node *node, void *context)
 
 			if (hentry != NULL)
 			{
+				ChangeVarTypeCtx context;
+
+				context.rti = ctx->rti;
+				context.oldtype = get_rel_type_id(rangeTableEntry->relid);
+				context.newrelid = hentry->replica_table;
+
+				query_tree_walker(ctx->parent, change_var_type_walker, &context, 0);
+
 				ctx->hentry = hentry;
 				rangeTableEntry->relid = hentry->replica_table;
 			}
 		}
 
+		ctx->rti++;
 		return false;
 	}
+
 
 	if (IsA(node, Query))
 	{
 		bool		result;
 		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
 		CmdType		old = ctx->commandType;
+		Index		oldrti = ctx->rti;
+		Query	   *oldparent = ctx->parent;
 
 		/* adjust context */
 		ctx->commandType = ((Query *) node)->commandType;
+		ctx->rti = 1;
+		ctx->parent = (Query *) node;
 
-		result = query_tree_walker((Query *) node, change_table_name_walker,
+		result = query_tree_walker(ctx->parent, change_table_name_walker,
 								   context, QTW_EXAMINE_RTES);
 
 		/* restore context */
 		ctx->commandType = old;
+		ctx->rti = oldrti;
+		ctx->parent = oldparent;
+
 
 		return result;
 	}
@@ -293,6 +344,8 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		/* replace call to main table with call to the replica table */
 		context.hcache = hypertable_cache_pin();
 		context.parse = parse;
+		context.parent = parse;
+		context.rti = 1;
 		context.commandType = parse->commandType;
 		context.hentry = NULL;
 		change_table_name_walker((Node *) parse, &context);

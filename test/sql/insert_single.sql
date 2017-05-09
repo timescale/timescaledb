@@ -19,4 +19,5 @@ TRUNCATE TABLE regular_table;
 INSERT INTO regular_table VALUES('2017-01-20T09:00:59', 29.2);
 INSERT INTO "1dim" SELECT * FROM regular_table;
 SELECT * FROM "1dim";
+SELECT "1dim" FROM "1dim";
 
