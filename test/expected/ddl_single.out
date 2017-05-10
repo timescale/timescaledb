@@ -100,6 +100,91 @@ psql:include/ddl_ops_1.sql:61: ERROR:  UPDATE ONLY not supported on hypertables
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 psql:include/ddl_ops_1.sql:62: ERROR:  DELETE ONLY not currently supported on hypertables
 \set ON_ERROR_STOP 1
+CREATE TABLE my_ht (time bigint, val integer);
+SELECT * FROM create_hypertable('my_ht', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+ALTER TABLE my_ht ADD COLUMN val2 integer;
+\d my_ht
+     Table "public.my_ht"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ time   | bigint  | 
+ val    | integer | 
+ val2   | integer | 
+Triggers:
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+
+-- Should error when adding again
+\set ON_ERROR_STOP 0
+ALTER TABLE my_ht ADD COLUMN val2 integer;
+psql:include/ddl_ops_1.sql:73: ERROR:  column "val2" of relation "my_ht" already exists
+\set ON_ERROR_STOP 1
+-- Should create 
+ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
+\d my_ht
+     Table "public.my_ht"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ time   | bigint  | 
+ val    | integer | 
+ val2   | integer | 
+ val3   | integer | 
+Triggers:
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+
+-- Should skip and not error
+ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
+psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+\d my_ht
+     Table "public.my_ht"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ time   | bigint  | 
+ val    | integer | 
+ val2   | integer | 
+ val3   | integer | 
+Triggers:
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+
+-- Should drop
+ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
+\d my_ht
+     Table "public.my_ht"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ time   | bigint  | 
+ val    | integer | 
+ val2   | integer | 
+Triggers:
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+
+-- Should skip and not error
+ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
+psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+\d my_ht
+     Table "public.my_ht"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ time   | bigint  | 
+ val    | integer | 
+ val2   | integer | 
+Triggers:
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
 ---------------------+-----------+--------+----------+----------+----------+----------+----------
@@ -120,7 +205,8 @@ SELECT * FROM _timescaledb_catalog.default_replica_node;
 ---------------+---------------+------------
  single        |             1 |          0
  single        |             2 |          0
-(2 rows)
+ single        |             3 |          0
+(3 rows)
 
 \ir include/ddl_ops_2.sql
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
@@ -154,6 +240,7 @@ psql:include/ddl_ops_2.sql:26: ERROR:  CREATE TRIGGER not supported on hypertabl
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
+ 
 \d+ PUBLIC."Hypertable_1"
                                 Table "public.Hypertable_1"
       Column      |  Type   |      Modifiers       | Storage  | Stats target | Description 
