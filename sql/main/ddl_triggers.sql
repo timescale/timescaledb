@@ -158,28 +158,34 @@ BEGIN
             found_action = FALSE;
 
             --was a column added?
-            FOR att_row IN
-            SELECT *
-            FROM pg_attribute att
-            WHERE attrelid = info.objid AND
+
+            IF ddl_is_add_column(info.command) THEN
+               FOR att_row IN
+               SELECT *
+               FROM pg_attribute att
+               WHERE attrelid = info.objid AND
                   attnum > 0 AND
                   NOT attisdropped AND
                   att.attnum NOT IN (SELECT c.attnum FROM _timescaledb_catalog.hypertable_column c WHERE hypertable_id = hypertable_row.id)
                 LOOP
                     PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
-                    found_action = TRUE;
                 END LOOP;
 
+            found_action = TRUE;
+            END IF;
+
             --was a column deleted
-            FOR rec IN
-            SELECT name
-            FROM _timescaledb_catalog.hypertable_column c
-            INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
-            WHERE hypertable_id = hypertable_row.id
-                LOOP
-                    PERFORM _timescaledb_meta_api.drop_column(hypertable_row.id, rec.name);
-                    found_action = TRUE;
-                END LOOP;
+            IF ddl_is_drop_column(info.command) THEN
+               FOR rec IN
+               SELECT name
+               FROM _timescaledb_catalog.hypertable_column c
+               INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
+               WHERE hypertable_id = hypertable_row.id
+                     LOOP
+                         PERFORM _timescaledb_meta_api.drop_column(hypertable_row.id, rec.name);
+                     END LOOP;
+               found_action = TRUE;
+            END IF;
 
             --was a column renamed
             FOR rec IN

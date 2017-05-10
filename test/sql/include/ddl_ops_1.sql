@@ -61,3 +61,30 @@ CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
+
+
+CREATE TABLE my_ht (time bigint, val integer);
+SELECT * FROM create_hypertable('my_ht', 'time');
+ALTER TABLE my_ht ADD COLUMN val2 integer;
+\d my_ht
+
+-- Should error when adding again
+\set ON_ERROR_STOP 0
+ALTER TABLE my_ht ADD COLUMN val2 integer;
+\set ON_ERROR_STOP 1
+
+-- Should create 
+ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
+\d my_ht
+
+-- Should skip and not error
+ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
+\d my_ht
+
+-- Should drop
+ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
+\d my_ht
+
+-- Should skip and not error
+ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
+\d my_ht

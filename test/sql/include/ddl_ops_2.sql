@@ -30,5 +30,4 @@ FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
-
-
+ 
