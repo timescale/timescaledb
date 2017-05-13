@@ -2,10 +2,12 @@
 #include <nodes/parsenodes.h>
 #include <tcop/utility.h>
 #include <catalog/namespace.h>
+#include <commands/copy.h>
 
 #include "utils.h"
 #include "hypertable_cache.h"
 #include "extension.h"
+#include "executor.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -67,6 +69,21 @@ timescaledb_ProcessUtility(Node *parsetree,
 			cache_release(hcache);
 		}
 		prev_ProcessUtility((Node *) renamestmt, queryString, context, params, dest, completionTag);
+		return;
+	}
+	if (IsA(parsetree, CopyStmt))
+	{
+		/*
+		 * Needed to add the appropriate number of tuples to the completion
+		 * tag
+		 */
+		uint64		processed;
+
+		DoCopy((CopyStmt *) parsetree, queryString, &processed);
+		processed += executor_get_additional_tuples_processed();
+		if (completionTag)
+			snprintf(completionTag, COMPLETION_TAG_BUFSIZE,
+					 "COPY " UINT64_FORMAT, processed);
 		return;
 	}
 
