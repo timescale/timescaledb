@@ -12,6 +12,12 @@ executor_add_number_tuples_processed(uint64 count)
 	additional_tuples += count;
 }
 
+uint64
+executor_get_additional_tuples_processed()
+{
+	return additional_tuples;
+}
+
 static void
 timescaledb_ExecutorRun(QueryDesc *queryDesc,
 						ScanDirection direction,

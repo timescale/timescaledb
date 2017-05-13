@@ -33,16 +33,24 @@ SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associ
  
 (1 row)
 
+--output command tags
+\set QUIET off
 BEGIN;
+BEGIN
 \COPY "one_Partition" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COPY 3
 COMMIT;
+COMMIT
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
+INSERT 0 4
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
+INSERT 0 1
+\set QUIET on
 \d+ "one_Partition".*
 Index "one_Partition.1-one_Partition_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  

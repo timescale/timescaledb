@@ -18,6 +18,8 @@ CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_boo
 
 SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition' );
 
+--output command tags
+\set QUIET off
 BEGIN;
 \COPY "one_Partition" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
@@ -30,3 +32,4 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
+\set QUIET on
