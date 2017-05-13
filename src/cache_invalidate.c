@@ -44,7 +44,7 @@ void		_cache_invalidate_extload(void);
 static void
 inval_cache_callback(Datum arg, Oid relid)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog;
 
 	if (!extension_is_loaded())
 		return;
@@ -57,6 +57,8 @@ inval_cache_callback(Datum arg, Oid relid)
 		extension_reset();
 		return;
 	}
+
+	catalog = catalog_get();
 
 	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
 	{
