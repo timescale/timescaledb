@@ -5,6 +5,7 @@
 #include <utils/datetime.h>
 #include <catalog/pg_type.h>
 #include <catalog/namespace.h>
+#include <utils/guc.h>
 
 #include "utils.h"
 #include "nodes/nodes.h"
@@ -351,4 +352,14 @@ timestamptz_bucket(PG_FUNCTION_ARGS)
 		result *= period;
 	}
 	PG_RETURN_TIMESTAMPTZ(result);
+}
+
+inline bool
+util_config_default_off(const char *name)
+{
+	const char *result = GetConfigOption(name, true, true);
+
+	if (result != NULL && strlen(result) == 2 && strncmp(result, "on", 2) == 0)
+		return true;
+	return false;
 }
