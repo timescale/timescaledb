@@ -19,6 +19,7 @@
 #include "hypertable_cache.h"
 #include "partitioning.h"
 #include "extension.h"
+#include "utils.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -50,6 +51,13 @@ typedef struct ChangeVarTypeCtx
 	Oid			newrelid;
 } ChangeVarTypeCtx;
 
+
+typedef struct GlobalPlannerCtx
+{
+	bool		has_hypertables;
+} GlobalPlannerCtx;
+
+static GlobalPlannerCtx *global_planner_ctx = NULL;
 
 static bool
 change_var_type_walker(Node *node, void *context)
@@ -332,6 +340,9 @@ static PlannedStmt *
 timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 {
 	PlannedStmt *rv = NULL;
+	GlobalPlannerCtx gpc;
+
+	global_planner_ctx = &gpc;
 
 	if (extension_is_loaded())
 	{
@@ -353,7 +364,9 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		if (context.hentry != NULL)
 		{
 			add_partitioning_func_qual(parse, context.hcache, context.hentry);
+			gpc.has_hypertables = true;
 		}
+
 		cache_release(context.hcache);
 
 		if (printParse != NULL && strcmp(printParse, "true") == 0)
@@ -373,9 +386,17 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		rv = standard_planner(parse, cursorOptions, boundParams);
 	}
 
+	global_planner_ctx = NULL;
 	return rv;
 }
 
+
+static inline bool
+should_optimize_query()
+{
+	return !util_config_default_off("timescaledb.disable_optimizations") &&
+		(util_config_default_off("timescaledb.optimize_plain_tables") || (global_planner_ctx != NULL && global_planner_ctx->has_hypertables));
+}
 
 extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 static void
@@ -384,11 +405,12 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 							 Index rti,
 							 RangeTblEntry *rte)
 {
-	char	   *disable_optimizations = GetConfigOptionByName("timescaledb.disable_optimizations", NULL, true);
-
-	if (extension_is_loaded() && (disable_optimizations == NULL || strncmp(disable_optimizations, "true", 4) != 0))
+	if (extension_is_loaded() && should_optimize_query())
 	{
-		sort_transform_optimization(root, rel);
+		if (OidIsValid(rte->relid))
+		{
+			sort_transform_optimization(root, rel);
+		}
 	}
 
 	if (prev_set_rel_pathlist_hook != NULL)

@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
 SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \o
-SET timescaledb.disable_optimizations= 'true';
+SET timescaledb.disable_optimizations= 'on';
 \ir include/sql_query_results.sql
 CREATE TABLE PUBLIC.hyper_1 (
   time TIMESTAMP NOT NULL,
@@ -56,6 +56,15 @@ SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name
 
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.plain_table (
+  time TIMESTAMPTZ NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_plain_table" ON PUBLIC.plain_table (time DESC, series_0);
+INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 --non-aggregates use MergeAppend in both optimized and non-optimized
 EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
                              QUERY PLAN                             
@@ -398,3 +407,68 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
  19990 | 19994.5 | 29990 | 141.401909099017
 (2 rows)
 
+--plain tables shouldnt be optimized by default
+EXPLAIN (costs off)
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM plain_table 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, "time")) DESC
+         ->  HashAggregate
+               Group Key: date_trunc('minute'::text, "time")
+               ->  Seq Scan on plain_table
+                     Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(7 rows)
+
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM plain_table 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+              t               |  avg  |  min  |       avg        
+------------------------------+-------+-------+------------------
+ Wed Dec 31 16:14:00 1969 PST | 869.5 | 10840 | 29.4858228711055
+ Wed Dec 31 16:13:00 1969 PST | 809.5 | 10780 | 28.4500853206775
+(2 rows)
+
+--can turn on plain table optimizations
+BEGIN;
+    SET LOCAL timescaledb.optimize_plain_tables= 'on';
+    EXPLAIN (costs off)
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+    FROM plain_table 
+    WHERE time < to_timestamp(900) 
+    GROUP BY t 
+    ORDER BY t DESC 
+    LIMIT 2;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, "time")) DESC
+         ->  HashAggregate
+               Group Key: date_trunc('minute'::text, "time")
+               ->  Seq Scan on plain_table
+                     Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(7 rows)
+
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+    FROM plain_table 
+    WHERE time < to_timestamp(900) 
+    GROUP BY t 
+    ORDER BY t DESC 
+    LIMIT 2;
+              t               |  avg  |  min  |       avg        
+------------------------------+-------+-------+------------------
+ Wed Dec 31 16:14:00 1969 PST | 869.5 | 10840 | 29.4858228711055
+ Wed Dec 31 16:13:00 1969 PST | 809.5 | 10780 | 28.4500853206775
+(2 rows)
+
+ROLLBACK;

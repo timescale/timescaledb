@@ -34,6 +34,18 @@ SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 
+CREATE TABLE PUBLIC.plain_table (
+  time TIMESTAMPTZ NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+
+CREATE INDEX "time_plain_plain_table" ON PUBLIC.plain_table (time DESC, series_0);
+INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+
+
 
 
 --non-aggregates use MergeAppend in both optimized and non-optimized
@@ -117,3 +129,38 @@ SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 
 
+--plain tables shouldnt be optimized by default
+EXPLAIN (costs off)
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM plain_table 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+FROM plain_table 
+WHERE time < to_timestamp(900) 
+GROUP BY t 
+ORDER BY t DESC 
+LIMIT 2;
+
+
+--can turn on plain table optimizations
+BEGIN;
+    SET LOCAL timescaledb.optimize_plain_tables= 'on';
+    EXPLAIN (costs off)
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+    FROM plain_table 
+    WHERE time < to_timestamp(900) 
+    GROUP BY t 
+    ORDER BY t DESC 
+    LIMIT 2;
+
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+    FROM plain_table 
+    WHERE time < to_timestamp(900) 
+    GROUP BY t 
+    ORDER BY t DESC 
+    LIMIT 2;
+ROLLBACK;

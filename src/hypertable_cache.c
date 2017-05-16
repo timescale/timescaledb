@@ -184,6 +184,10 @@ hypertable_cache_invalidate_callback(void)
 Hypertable *
 hypertable_cache_get_entry(Cache *cache, Oid relid)
 {
+	if (!OidIsValid(relid))
+	{
+		return NULL;
+	}
 	return hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
 }
 
