@@ -181,7 +181,7 @@ to the server's timezone setting.
 
 ### `last()` and `first()`
 
-The `last()` and `first()` aggregates allow you to get the value of one column as ordered by another. For example, `last(temp, time)` will return the latest temperate value based on time within an aggregate group.
+The `last()` and `first()` aggregates allow you to get the value of one column as ordered by another. For example, `last(temperature, time)` will return the latest temperature value based on time within an aggregate group.
 
 **Required arguments**
 
