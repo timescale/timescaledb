@@ -88,3 +88,61 @@ ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 \d my_ht
+
+--default indexes--
+--both created
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1);
+\d+ "Hypertable_1_with_default_index_enabled"
+ROLLBACK;
+
+--only time
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Time", "Device_id");
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1);
+\d+ "Hypertable_1_with_default_index_enabled"
+ROLLBACK;
+
+--only partition
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Time" DESC);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1);
+\d+ "Hypertable_1_with_default_index_enabled"
+ROLLBACK;
+
+--null space
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time');
+\d+ "Hypertable_1_with_default_index_enabled"
+ROLLBACK;
+
+--disable index creation
+BEGIN;
+CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
+  "Time" BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1, create_default_indexes=>FALSE);
+\d+ "Hypertable_1_with_default_index_enabled"
+ROLLBACK;

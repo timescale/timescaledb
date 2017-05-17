@@ -59,47 +59,66 @@ Index "one_Partition.1-one_Partition_device_id_timeCustom_idx"
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
 
-Index "one_Partition.10-one_Partition_timeCustom_series_bool_idx"
+Index "one_Partition.10-one_Partition_timeCustom_series_2_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_2   | double precision | series_2     | plain
+btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
+
+Index "one_Partition.11-one_Partition_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
 btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
 
-Index "one_Partition.11-one_Partition_device_id_timeCustom_idx"
+Index "one_Partition.12-one_Partition_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "one_Partition._hyper_1_1_0_2_data"
+
+Index "one_Partition.13-one_Partition_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  device_id  | text   | device_id    | extended
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "one_Partition._hyper_1_1_0_3_data", predicate (device_id IS NOT NULL)
 
-Index "one_Partition.12-one_Partition_timeCustom_series_0_idx"
+Index "one_Partition.14-one_Partition_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
 btree, for table "one_Partition._hyper_1_1_0_3_data", predicate (series_0 IS NOT NULL)
 
-Index "one_Partition.13-one_Partition_timeCustom_series_1_idx"
+Index "one_Partition.15-one_Partition_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_1   | double precision | series_1     | plain
 btree, for table "one_Partition._hyper_1_1_0_3_data", predicate (series_1 IS NOT NULL)
 
-Index "one_Partition.14-one_Partition_timeCustom_series_2_idx"
+Index "one_Partition.16-one_Partition_timeCustom_series_2_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_2   | double precision | series_2     | plain
 btree, for table "one_Partition._hyper_1_1_0_3_data", predicate (series_2 IS NOT NULL)
 
-Index "one_Partition.15-one_Partition_timeCustom_series_bool_idx"
+Index "one_Partition.17-one_Partition_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
 btree, for table "one_Partition._hyper_1_1_0_3_data", predicate (series_bool IS NOT NULL)
+
+Index "one_Partition.18-one_Partition_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "one_Partition._hyper_1_1_0_3_data"
 
 Index "one_Partition.2-one_Partition_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
@@ -129,33 +148,32 @@ Index "one_Partition.5-one_Partition_timeCustom_series_bool_idx"
  series_bool | boolean | series_bool  | plain
 btree, for table "one_Partition._hyper_1_1_0_1_data", predicate (series_bool IS NOT NULL)
 
-Index "one_Partition.6-one_Partition_device_id_timeCustom_idx"
+Index "one_Partition.6-one_Partition_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "one_Partition._hyper_1_1_0_1_data"
+
+Index "one_Partition.7-one_Partition_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  device_id  | text   | device_id    | extended
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
 
-Index "one_Partition.7-one_Partition_timeCustom_series_0_idx"
+Index "one_Partition.8-one_Partition_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
 btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
 
-Index "one_Partition.8-one_Partition_timeCustom_series_1_idx"
+Index "one_Partition.9-one_Partition_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_1   | double precision | series_1     | plain
 btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
-
-Index "one_Partition.9-one_Partition_timeCustom_series_2_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_2   | double precision | series_2     | plain
-btree, for table "one_Partition._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
 
                       Table "one_Partition._hyper_1_0_replica"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -184,6 +202,7 @@ Indexes:
     "3-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
     "4-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "5-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-one_Partition_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "time_range" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" <= '1257895007999999999'::bigint)
 Inherits: "one_Partition"._hyper_1_1_0_partition
@@ -198,11 +217,12 @@ Inherits: "one_Partition"._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "10-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "6-one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "7-one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "8-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "9-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "10-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "11-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "12-one_Partition_timeCustom_idx" btree ("timeCustom" DESC)
+    "7-one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "8-one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "9-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
 Check constraints:
     "time_range" CHECK ("timeCustom" >= '1257897600000000000'::bigint AND "timeCustom" <= '1257900191999999999'::bigint)
 Inherits: "one_Partition"._hyper_1_1_0_partition
@@ -217,11 +237,12 @@ Inherits: "one_Partition"._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "11-one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "12-one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "13-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "14-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "15-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "13-one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "14-one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "15-one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "16-one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "17-one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "18-one_Partition_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "time_range" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" <= '1257988319999999999'::bigint)
 Inherits: "one_Partition"._hyper_1_1_0_partition

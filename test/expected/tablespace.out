@@ -43,6 +43,32 @@ insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
 
 --verify that the table chunk has the correct tablespace
 \d+ _timescaledb_internal.*
+    Index "_timescaledb_internal.1-test_tspace_time_idx"
+ Column |            Type             | Definition | Storage 
+--------+-----------------------------+------------+---------
+ time   | timestamp without time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data"
+
+ Index "_timescaledb_internal.2-test_tspace_device_id_time_idx"
+  Column   |            Type             | Definition | Storage  
+-----------+-----------------------------+------------+----------
+ device_id | text                        | device_id  | extended
+ time      | timestamp without time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data"
+
+    Index "_timescaledb_internal.3-test_tspace_time_idx"
+ Column |            Type             | Definition | Storage 
+--------+-----------------------------+------------+---------
+ time   | timestamp without time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_2_data"
+
+ Index "_timescaledb_internal.4-test_tspace_device_id_time_idx"
+  Column   |            Type             | Definition | Storage  
+-----------+-----------------------------+------------+----------
+ device_id | text                        | device_id  | extended
+ time      | timestamp without time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_2_data"
+
                       Table "_timescaledb_internal._hyper_1_0_replica"
   Column   |            Type             | Modifiers | Storage  | Stats target | Description 
 -----------+-----------------------------+-----------+----------+--------------+-------------
@@ -59,6 +85,9 @@ Child tables: _timescaledb_internal._hyper_1_1_0_partition,
  time      | timestamp without time zone |           | plain    |              | 
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
+Indexes:
+    "1-test_tspace_time_idx" btree ("time" DESC)
+    "2-test_tspace_device_id_time_idx" btree (device_id, "time" DESC)
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" <= 'Mon Jan 23 15:59:59.999999 2017'::timestamp without time zone)
@@ -82,6 +111,9 @@ Child tables: _timescaledb_internal._hyper_1_1_0_1_data
  time      | timestamp without time zone |           | plain    |              | 
  temp      | double precision            |           | plain    |              | 
  device_id | text                        |           | extended |              | 
+Indexes:
+    "3-test_tspace_time_idx" btree ("time" DESC)
+    "4-test_tspace_device_id_time_idx" btree (device_id, "time" DESC)
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" <= 'Mon Jan 23 15:59:59.999999 2017'::timestamp without time zone)
@@ -110,4 +142,8 @@ Child tables: _timescaledb_internal._hyper_1_0_replica
 --cleanup
 drop table test_tspace;
 NOTICE:  drop cascades to 5 other objects
+NOTICE:  index "1-test_tspace_time_idx" does not exist, skipping
+NOTICE:  index "3-test_tspace_time_idx" does not exist, skipping
+NOTICE:  index "2-test_tspace_device_id_time_idx" does not exist, skipping
+NOTICE:  index "4-test_tspace_device_id_time_idx" does not exist, skipping
 drop tablespace tspace1;

@@ -44,75 +44,74 @@ Index "_timescaledb_internal.1-two_Partitions_device_id_timeCustom_idx"
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (device_id IS NOT NULL)
 
-Index "_timescaledb_internal.10-two_Partitions_timeCustom_series_2_idx"
+Index "_timescaledb_internal.10-two_Partitions_timeCustom_series_1_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_1   | double precision | series_1     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
+
+Index "_timescaledb_internal.11-two_Partitions_timeCustom_series_2_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_2   | double precision | series_2     | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_2 IS NOT NULL)
 
-Index "_timescaledb_internal.11-two_Partitions_timeCustom_series_bool_idx"
+Index "_timescaledb_internal.12-two_Partitions_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_bool IS NOT NULL)
 
-Index "_timescaledb_internal.12-two_Partitions_timeCustom_device_id_idx"
+Index "_timescaledb_internal.13-two_Partitions_timeCustom_device_id_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  timeCustom | bigint | "timeCustom" | plain
  device_id  | text   | device_id    | extended
 btree, for table "_timescaledb_internal._hyper_1_1_0_2_data"
 
-Index "_timescaledb_internal.13-two_Partitions_device_id_timeCustom_idx"
+Index "_timescaledb_internal.14-two_Partitions_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_2_data"
+
+Index "_timescaledb_internal.15-two_Partitions_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  device_id  | text   | device_id    | extended
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_3_data", predicate (device_id IS NOT NULL)
 
-Index "_timescaledb_internal.14-two_Partitions_timeCustom_series_0_idx"
+Index "_timescaledb_internal.16-two_Partitions_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_3_data", predicate (series_0 IS NOT NULL)
 
-Index "_timescaledb_internal.15-two_Partitions_timeCustom_series_1_idx"
+Index "_timescaledb_internal.17-two_Partitions_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_1   | double precision | series_1     | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_3_data", predicate (series_1 IS NOT NULL)
 
-Index "_timescaledb_internal.16-two_Partitions_timeCustom_series_2_idx"
+Index "_timescaledb_internal.18-two_Partitions_timeCustom_series_2_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_2   | double precision | series_2     | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_3_data", predicate (series_2 IS NOT NULL)
 
-Index "_timescaledb_internal.17-two_Partitions_timeCustom_series_bool_idx"
+Index "_timescaledb_internal.19-two_Partitions_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_3_data", predicate (series_bool IS NOT NULL)
-
-Index "_timescaledb_internal.18-two_Partitions_timeCustom_device_id_idx"
-   Column   |  Type  |  Definition  | Storage  
-------------+--------+--------------+----------
- timeCustom | bigint | "timeCustom" | plain
- device_id  | text   | device_id    | extended
-btree, for table "_timescaledb_internal._hyper_1_1_0_3_data"
-
-Index "_timescaledb_internal.19-two_Partitions_device_id_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage  
-------------+--------+--------------+----------
- device_id  | text   | device_id    | extended
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "_timescaledb_internal._hyper_1_2_0_4_data", predicate (device_id IS NOT NULL)
 
 Index "_timescaledb_internal.2-two_Partitions_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
@@ -121,39 +120,65 @@ Index "_timescaledb_internal.2-two_Partitions_timeCustom_series_0_idx"
  series_0   | double precision | series_0     | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_1_data", predicate (series_0 IS NOT NULL)
 
-Index "_timescaledb_internal.20-two_Partitions_timeCustom_series_0_idx"
+Index "_timescaledb_internal.20-two_Partitions_timeCustom_device_id_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ timeCustom | bigint | "timeCustom" | plain
+ device_id  | text   | device_id    | extended
+btree, for table "_timescaledb_internal._hyper_1_1_0_3_data"
+
+Index "_timescaledb_internal.21-two_Partitions_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_3_data"
+
+Index "_timescaledb_internal.22-two_Partitions_device_id_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ device_id  | text   | device_id    | extended
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_2_0_4_data", predicate (device_id IS NOT NULL)
+
+Index "_timescaledb_internal.23-two_Partitions_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
 btree, for table "_timescaledb_internal._hyper_1_2_0_4_data", predicate (series_0 IS NOT NULL)
 
-Index "_timescaledb_internal.21-two_Partitions_timeCustom_series_1_idx"
+Index "_timescaledb_internal.24-two_Partitions_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_1   | double precision | series_1     | plain
 btree, for table "_timescaledb_internal._hyper_1_2_0_4_data", predicate (series_1 IS NOT NULL)
 
-Index "_timescaledb_internal.22-two_Partitions_timeCustom_series_2_idx"
+Index "_timescaledb_internal.25-two_Partitions_timeCustom_series_2_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_2   | double precision | series_2     | plain
 btree, for table "_timescaledb_internal._hyper_1_2_0_4_data", predicate (series_2 IS NOT NULL)
 
-Index "_timescaledb_internal.23-two_Partitions_timeCustom_series_bool_idx"
+Index "_timescaledb_internal.26-two_Partitions_timeCustom_series_bool_idx"
    Column    |  Type   |  Definition  | Storage 
 -------------+---------+--------------+---------
  timeCustom  | bigint  | "timeCustom" | plain
  series_bool | boolean | series_bool  | plain
 btree, for table "_timescaledb_internal._hyper_1_2_0_4_data", predicate (series_bool IS NOT NULL)
 
-Index "_timescaledb_internal.24-two_Partitions_timeCustom_device_id_idx"
+Index "_timescaledb_internal.27-two_Partitions_timeCustom_device_id_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  timeCustom | bigint | "timeCustom" | plain
  device_id  | text   | device_id    | extended
+btree, for table "_timescaledb_internal._hyper_1_2_0_4_data"
+
+Index "_timescaledb_internal.28-two_Partitions_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
 btree, for table "_timescaledb_internal._hyper_1_2_0_4_data"
 
 Index "_timescaledb_internal.3-two_Partitions_timeCustom_series_1_idx"
@@ -184,26 +209,25 @@ Index "_timescaledb_internal.6-two_Partitions_timeCustom_device_id_idx"
  device_id  | text   | device_id    | extended
 btree, for table "_timescaledb_internal._hyper_1_1_0_1_data"
 
-Index "_timescaledb_internal.7-two_Partitions_device_id_timeCustom_idx"
+Index "_timescaledb_internal.7-two_Partitions_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_1_0_1_data"
+
+Index "_timescaledb_internal.8-two_Partitions_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
 ------------+--------+--------------+----------
  device_id  | text   | device_id    | extended
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (device_id IS NOT NULL)
 
-Index "_timescaledb_internal.8-two_Partitions_timeCustom_series_0_idx"
+Index "_timescaledb_internal.9-two_Partitions_timeCustom_series_0_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
  timeCustom | bigint           | "timeCustom" | plain
  series_0   | double precision | series_0     | plain
 btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_0 IS NOT NULL)
-
-Index "_timescaledb_internal.9-two_Partitions_timeCustom_series_1_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_1   | double precision | series_1     | plain
-btree, for table "_timescaledb_internal._hyper_1_1_0_2_data", predicate (series_1 IS NOT NULL)
 
                   Table "_timescaledb_internal._hyper_1_0_replica"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -234,6 +258,7 @@ Indexes:
     "4-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "5-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
     "6-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" <= '1257895007999999999'::bigint)
@@ -249,12 +274,13 @@ Inherits: _timescaledb_internal._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "10-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "11-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "12-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "7-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "8-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "9-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "10-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "11-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "12-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "13-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "14-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "8-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "9-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("timeCustom" >= '1257897600000000000'::bigint AND "timeCustom" <= '1257900191999999999'::bigint)
@@ -270,12 +296,13 @@ Inherits: _timescaledb_internal._hyper_1_1_0_partition
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "13-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "14-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "15-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "16-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "17-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "18-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "15-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "16-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "17-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "18-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "19-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "20-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "21-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
     "time_range" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" <= '1257988319999999999'::bigint)
@@ -307,12 +334,13 @@ Child tables: _timescaledb_internal._hyper_1_1_0_1_data,
  series_2    | double precision |           | plain    |              | 
  series_bool | boolean          |           | plain    |              | 
 Indexes:
-    "19-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "20-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "21-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "22-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "23-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "24-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "22-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "23-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "24-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "25-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "26-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "27-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "28-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "partition" CHECK (_timescaledb_catalog.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_catalog.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
     "time_range" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" <= '1257895007999999999'::bigint)
@@ -373,29 +401,33 @@ drop cascades to table _timescaledb_internal._hyper_1_1_0_3_data
 drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
 drop cascades to table _timescaledb_internal._hyper_1_2_0_4_data
 NOTICE:  index "1-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "7-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "13-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "19-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "8-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "15-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
+NOTICE:  index "22-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
 NOTICE:  index "2-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "8-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "14-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "20-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "9-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "16-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
+NOTICE:  index "23-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
 NOTICE:  index "3-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "9-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "15-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "21-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "10-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "17-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
+NOTICE:  index "24-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
 NOTICE:  index "4-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "10-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "16-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "22-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "11-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "18-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
+NOTICE:  index "25-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
 NOTICE:  index "5-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "11-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "17-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "23-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  index "12-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  index "19-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
+NOTICE:  index "26-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
 NOTICE:  index "6-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "12-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "18-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "24-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
+NOTICE:  index "13-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
+NOTICE:  index "20-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
+NOTICE:  index "27-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
+NOTICE:  index "7-two_Partitions_timeCustom_idx" does not exist, skipping
+NOTICE:  index "14-two_Partitions_timeCustom_idx" does not exist, skipping
+NOTICE:  index "21-two_Partitions_timeCustom_idx" does not exist, skipping
+NOTICE:  index "28-two_Partitions_timeCustom_idx" does not exist, skipping
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
 ----+-------------+------------+------------------------+-------------------------+------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
