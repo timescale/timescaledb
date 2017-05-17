@@ -11,6 +11,7 @@ SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there i
 \o
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
+CREATE INDEX ON drop_chunk_test1(time DESC);
 SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval => 1, create_default_indexes=>false);
  create_hypertable 
 -------------------
@@ -133,6 +134,7 @@ SELECT * FROM _timescaledb_catalog.chunk_replica_node;
 (18 rows)
 
 SELECT _timescaledb_meta.drop_chunks_older_than(2);
+NOTICE:  index "1-drop_chunk_test1_time_idx" does not exist, skipping
  drop_chunks_older_than 
 ------------------------
  
@@ -196,6 +198,7 @@ SELECT * FROM _timescaledb_catalog.chunk_replica_node;
 (16 rows)
 
 SELECT _timescaledb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
+NOTICE:  index "2-drop_chunk_test1_time_idx" does not exist, skipping
  drop_chunks_older_than 
 ------------------------
  

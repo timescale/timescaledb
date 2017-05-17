@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_replica_node_index (
     main_index_name   NAME    NOT NULL,
     definition        TEXT    NOT NULL,
     PRIMARY KEY (schema_name, table_name, index_name),
-    FOREIGN KEY (schema_name, table_name) REFERENCES _timescaledb_catalog.chunk_replica_node (schema_name, table_name),
+    FOREIGN KEY (schema_name, table_name) REFERENCES _timescaledb_catalog.chunk_replica_node (schema_name, table_name) ON DELETE CASCADE,
     FOREIGN KEY (main_schema_name, main_index_name) REFERENCES _timescaledb_catalog.hypertable_index (main_schema_name, main_index_name) ON DELETE CASCADE
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_replica_node_index', '');
