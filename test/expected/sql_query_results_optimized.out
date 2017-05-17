@@ -17,7 +17,7 @@ CREATE TABLE PUBLIC.hyper_1 (
   series_2 DOUBLE PRECISION NULL
 );
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
-SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1);
+SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
  create_hypertable 
 -------------------
  
@@ -32,7 +32,7 @@ CREATE TABLE PUBLIC.hyper_1_tz (
   series_2 DOUBLE PRECISION NULL
 );
 CREATE INDEX "time_plain_tz" ON PUBLIC.hyper_1_tz (time DESC, series_0);
-SELECT * FROM create_hypertable('"public"."hyper_1_tz"'::regclass, 'time'::name, number_partitions => 1);
+SELECT * FROM create_hypertable('"public"."hyper_1_tz"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
  create_hypertable 
 -------------------
  
@@ -47,7 +47,7 @@ CREATE TABLE PUBLIC.hyper_1_int (
   series_2 DOUBLE PRECISION NULL
 );
 CREATE INDEX "time_plain_int" ON PUBLIC.hyper_1_int (time DESC, series_0);
-SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>10000);
+SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>10000, create_default_indexes=>FALSE);
  create_hypertable 
 -------------------
  

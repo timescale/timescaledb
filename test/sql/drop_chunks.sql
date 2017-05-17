@@ -4,8 +4,8 @@
 
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
-SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval => 1);
-SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval => 1);
+SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval => 1, create_default_indexes=>false);
+SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval => 1, create_default_indexes=>false);
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _timescaledb_catalog.chunk c

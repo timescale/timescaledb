@@ -114,3 +114,43 @@ BEGIN
     );
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_default_indexes(hypertable_row _timescaledb_catalog.hypertable, main_table REGCLASS, partitioning_column NAME)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    index_count INTEGER;
+BEGIN
+    SELECT count(*) INTO index_count
+    FROM pg_index
+    WHERE indkey = (
+        SELECT attnum::text::int2vector
+        FROM pg_attribute WHERE attrelid = main_table AND attname=hypertable_row.time_column_name
+    ) AND indrelid = main_table;
+
+    IF index_count = 0 THEN
+        EXECUTE format($$ CREATE INDEX ON %I.%I(%I DESC) $$,
+            hypertable_row.schema_name, hypertable_row.table_name, hypertable_row.time_column_name);
+    END IF;
+
+    IF partitioning_column IS NOT NULL THEN
+        SELECT count(*) INTO index_count
+        FROM pg_index
+        WHERE indkey = (
+            SELECT array_to_string(ARRAY(
+                SELECT attnum::text
+                FROM pg_attribute WHERE attrelid = main_table AND attname=hypertable_row.time_column_name
+                UNION ALL
+                SELECT attnum::text
+                FROM pg_attribute WHERE attrelid = main_table AND attname=partitioning_column
+            ), ' ')::int2vector
+        ) AND indrelid = main_table;
+
+
+        IF index_count = 0 THEN
+            EXECUTE format($$ CREATE INDEX ON %I.%I(%I, %I DESC) $$,
+            hypertable_row.schema_name, hypertable_row.table_name, partitioning_column, hypertable_row.time_column_name);
+        END IF;
+    END IF;
+END
+$BODY$;

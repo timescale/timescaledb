@@ -18,7 +18,8 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
     placement               _timescaledb_catalog.chunk_placement_type = 'STICKY',
-    chunk_time_interval     BIGINT =  _timescaledb_internal.interval_to_usec('1 month')
+    chunk_time_interval     BIGINT =  _timescaledb_internal.interval_to_usec('1 month'),
+    create_default_indexes  BOOLEAN = TRUE
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -108,10 +109,9 @@ BEGIN
     FOR att_row IN SELECT *
     FROM pg_attribute att
     WHERE attrelid = main_table AND attnum > 0 AND NOT attisdropped
-        LOOP
-            PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
-        END LOOP;
-
+    LOOP
+        PERFORM  _timescaledb_internal.create_column_from_attribute(hypertable_row.id, att_row);
+    END LOOP;
 
     PERFORM 1
     FROM pg_index,
@@ -122,6 +122,10 @@ BEGIN
         _timescaledb_internal.get_general_index_definition(indexrelid, indrelid, hypertable_row)
     )
     WHERE indrelid = main_table;
+
+    IF create_default_indexes THEN
+        PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
+    END IF;
 END
 $BODY$;
 
