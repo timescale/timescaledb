@@ -2,6 +2,8 @@
 #include <pg_config.h>
 #include <access/xact.h>
 #include <commands/extension.h>
+#include <miscadmin.h>
+#include <utils/guc.h>
 
 #include "executor.h"
 
@@ -37,6 +39,27 @@ extern void _PG_fini(void);
 void
 _PG_init(void)
 {
+	if (!process_shared_preload_libraries_in_progress)
+	{
+	
+		char	   *force_load = GetConfigOptionByName("timescaledb.allow_install_without_preload", NULL, true);
+		if (force_load == NULL || strlen(force_load) != 2 || strncmp(force_load, "on", 2) != 0) {
+			char	   *config_file = GetConfigOptionByName("config_file", NULL, false);
+			
+			ereport(ERROR, (errmsg("The timescaledb library is not preloaded"),
+                        errhint(
+"Please preload the timescaledb library via shared_preload_libraries.\n\n"
+"This can be done by editing the config file at: %1$s\n"
+"and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
+"	# Modify postgresql.conf:\n"
+"	shared_preload_libraries = 'timescaledb'\n\n"
+"Another way to do this, if not preloading other libraries, is with the command:\n"
+"	echo \"shared_preload_libraries = 'timescaledb'\" >> %1$s \n\n"
+"If you REALLY know what you are doing and would like to load the library without preloading, you can disable this check with: \n"
+"	SET timescaledb.allow_install_without_preload = 'on';", config_file)));
+			return;
+		}
+	}
 	elog(INFO, "timescaledb loaded");
 	_hypertable_cache_init();
 	_chunk_cache_init();
