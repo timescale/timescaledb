@@ -150,9 +150,6 @@ psql -U postgres -h localhost
 CREATE database tutorial;
 \c tutorial
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-
--- Run initialization function
-SELECT setup_timescaledb();
 ```
 
 For convenience, this can also be done in one step by running a script from
@@ -265,6 +262,27 @@ actively working to resolve:
 - Custom user-created triggers on hypertables currently not allowed
 - `drop_chunks()` (see our [API Reference](docs/API.md)) is currently only
 supported for hypertables that are not partitioned by space.
+
+### Restoring a database from backup.
+
+A database with the timescaledb extension can be backed up using normal backup
+procedures (e.g. `pg\_dump`). However, when restoring the database the following
+procedure must be used.
+
+```sql
+CREATE DATABASE db_for_restore;
+ALTER DATABASE db_for_restore SET timescaledb.restoring='on';
+
+--execute the restore below:
+\! pg_restore -h localhost -U postgres -d single dump/single.sql
+
+--connect to the restored db;
+\c db_for_restore
+SELECT restore_timescaledb();
+ALTER DATABASE single SET timescaledb.restoring='off';
+```
+
+Note: You must use pg_dump and pg_restore versions 9.6.2 and above.
 
 ### More APIs
 For more information on TimescaleDB's APIs, check out our

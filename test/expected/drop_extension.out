@@ -7,7 +7,6 @@ CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
-SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
 \o
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
@@ -30,7 +29,7 @@ SELECT * FROM drop_test;
 (1 row)
 
 DROP EXTENSION timescaledb CASCADE;
-NOTICE:  drop cascades to 14 other objects
+NOTICE:  drop cascades to 8 other objects
 -- Querying the original table should not return any rows since all of
 -- them actually existed in chunks that are now gone
 SELECT * FROM drop_test;
@@ -45,12 +44,6 @@ CREATE EXTENSION timescaledb CASCADE;
 CREATE EXTENSION timescaledb CASCADE;
 ERROR:  extension "timescaledb" already exists
 \set ON_ERROR_STOP 1
-SELECT setup_timescaledb();
- setup_timescaledb 
--------------------
- 
-(1 row)
-
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
  create_hypertable 

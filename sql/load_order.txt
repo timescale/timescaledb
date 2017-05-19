@@ -49,3 +49,4 @@ sql/main/setup_main.sql
 sql/main/bookend.sql
 sql/common/permissions.sql
 sql/common/ddl_utils.sql
+sql/common/init.sql
