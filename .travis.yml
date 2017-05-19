@@ -4,9 +4,6 @@ language: c
 os: linux
 dist: trusty
 
-addons:
-  postgresql: "9.6"
-
 services:
   - docker
 
@@ -14,10 +11,15 @@ before_install:
   - sudo add-apt-repository "deb http://apt.postgresql.org/pub/repos/apt/ trusty-pgdg main"
   - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
   - sudo apt-get update
-  - sudo apt-get install postgresql-server-dev-9.6
+  - sudo apt-get install postgresql-server-dev-9.6 postgresql-client-9.6
+  - sudo ln -sf /usr/lib/postgresql/9.6/bin/pg_dump /usr/bin/pg_dump
+  - sudo ln -sf /usr/lib/postgresql/9.6/bin/pg_restore /usr/bin/pg_restore
+  - pg_dump -V
+  - pg_restore -V
 
 install: make -f docker.mk build-image
 
 script: make -f docker.mk test
 
-after_failure: cat test/regression.diffs
+after_failure: 
+  - cat test/regression.diffs
