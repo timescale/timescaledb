@@ -19,3 +19,5 @@ before_install:
 install: make -f docker.mk build-image
 
 script: make -f docker.mk test
+
+after_failure: cat test/regression.diffs
