@@ -83,7 +83,7 @@ EXCEPTION
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION setup_timescaledb(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.setup_timescaledb(
     database NAME = current_database(),
     username TEXT = current_user,
     password TEXT = NULL,

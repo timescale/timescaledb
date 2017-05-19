@@ -1,5 +1,5 @@
 -- Initializes a data node in the cluster.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.setup_main()
+CREATE OR REPLACE FUNCTION _timescaledb_internal.setup_main(restore BOOLEAN = FALSE)
     RETURNS void LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -138,6 +138,15 @@ BEGIN
     CREATE EVENT TRIGGER ddl_check_drop_command
        ON sql_drop
        EXECUTE PROCEDURE _timescaledb_internal.ddl_process_drop_table();
+
+    IF restore THEN
+        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_index;
+        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_alter_index;
+        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_drop_index;
+        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_column;
+        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_trigger;
+        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_check_drop_command;
+    END IF;
 
 END
 $BODY$

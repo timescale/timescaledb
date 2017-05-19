@@ -74,17 +74,6 @@ SELECT drop_chunks(interval '3 months', 'foo');
 
 ---
 
-### `setup_timescaledb()`
-
-Initializes a Postgres database to fully use TimescaleDB.
-
-**Sample usage**
-
-```sql
-SELECT setup_timescaledb();
-```
----
-
 ### `time_bucket()`
 
 This is a more powerful version of the standard postgres `date_trunc` function.

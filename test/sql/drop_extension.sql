@@ -23,8 +23,6 @@ CREATE EXTENSION timescaledb CASCADE;
 CREATE EXTENSION timescaledb CASCADE;
 \set ON_ERROR_STOP 1
 
-SELECT setup_timescaledb();
-
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
 

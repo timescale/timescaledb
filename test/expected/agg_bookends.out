@@ -6,12 +6,6 @@ CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
-SELECT setup_timescaledb(hostname => 'fakehost'); -- fakehost makes sure there is no network connection
- setup_timescaledb 
--------------------
- 
-(1 row)
-
 CREATE TABLE "btest"(time timestamp, time_alt timestamp, gp INTEGER, temp float, strid TEXT DEFAULT 'testing');
 SELECT create_hypertable('"btest"', 'time');
  create_hypertable 
