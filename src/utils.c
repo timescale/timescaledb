@@ -353,13 +353,3 @@ timestamptz_bucket(PG_FUNCTION_ARGS)
 	}
 	PG_RETURN_TIMESTAMPTZ(result);
 }
-
-inline bool
-util_config_default_off(const char *name)
-{
-	const char *result = GetConfigOption(name, true, true);
-
-	if (result != NULL && strlen(result) == 2 && strncmp(result, "on", 2) == 0)
-		return true;
-	return false;
-}

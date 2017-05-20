@@ -36,7 +36,6 @@ extern char *internal_time_to_column_literal_sql(int64 internal_time, Oid type);
 extern FmgrInfo *create_fmgr(char *schema, char *function_name, int num_args);
 extern RangeVar *makeRangeVarFromRelid(Oid relid);
 extern int	int_cmp(const void *a, const void *b);
-extern bool util_config_default_off(const char *name);
 
 #define DATUM_GET(values, attno) \
 	values[attno-1]

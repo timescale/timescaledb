@@ -6,6 +6,7 @@
 #include <utils/guc.h>
 
 #include "executor.h"
+#include "guc.h"
 
 #define MIN_SUPPORTED_VERSION_STR "9.6"
 #define MIN_SUPPORTED_VERSION_NUM 90600
@@ -41,22 +42,22 @@ _PG_init(void)
 {
 	if (!process_shared_preload_libraries_in_progress)
 	{
-	
-		char	   *force_load = GetConfigOptionByName("timescaledb.allow_install_without_preload", NULL, true);
-		if (force_load == NULL || strlen(force_load) != 2 || strncmp(force_load, "on", 2) != 0) {
+
+		if (!guc_allow_install_without_preload)
+		{
 			char	   *config_file = GetConfigOptionByName("config_file", NULL, false);
-			
-			ereport(ERROR, (errmsg("The timescaledb library is not preloaded"),
-                        errhint(
-"Please preload the timescaledb library via shared_preload_libraries.\n\n"
-"This can be done by editing the config file at: %1$s\n"
-"and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
-"	# Modify postgresql.conf:\n"
-"	shared_preload_libraries = 'timescaledb'\n\n"
-"Another way to do this, if not preloading other libraries, is with the command:\n"
-"	echo \"shared_preload_libraries = 'timescaledb'\" >> %1$s \n\n"
-"If you REALLY know what you are doing and would like to load the library without preloading, you can disable this check with: \n"
-"	SET timescaledb.allow_install_without_preload = 'on';", config_file)));
+
+			ereport(ERROR,
+					(errmsg("The timescaledb library is not preloaded"),
+					 errhint("Please preload the timescaledb library via shared_preload_libraries.\n\n"
+					 "This can be done by editing the config file at: %1$s\n"
+							 "and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
+							 "	# Modify postgresql.conf:\n	shared_preload_libraries = 'timescaledb'\n\n"
+							 "Another way to do this, if not preloading other libraries, is with the command:\n"
+							 "	echo \"shared_preload_libraries = 'timescaledb'\" >> %1$s \n\n"
+							 "(Will require a database restart.)\n\n"
+							 "If you REALLY know what you are doing and would like to load the library without preloading, you can disable this check with: \n"
+							 "	SET timescaledb.allow_install_without_preload = 'on';", config_file)));
 			return;
 		}
 	}
@@ -67,6 +68,7 @@ _PG_init(void)
 	_planner_init();
 	_executor_init();
 	_process_utility_init();
+	_guc_init();
 }
 
 void
@@ -76,6 +78,7 @@ _PG_fini(void)
 	 * Order of items should be strict reverse order of _PG_init. Please
 	 * document any exceptions.
 	 */
+	_guc_fini();
 	_process_utility_fini();
 	_executor_fini();
 	_planner_fini();
