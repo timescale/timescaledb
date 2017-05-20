@@ -20,6 +20,7 @@
 #include "partitioning.h"
 #include "extension.h"
 #include "utils.h"
+#include "guc.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -347,10 +348,6 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	if (extension_is_loaded())
 	{
 		ChangeTableNameCtx context;
-		char	   *printParse = GetConfigOptionByName("io.print_parse", NULL, true);
-
-		/* set to false to not print all internal actions */
-		SetConfigOption("io.print_parse", "false", PGC_USERSET, PGC_S_SESSION);
 
 		/* replace call to main table with call to the replica table */
 		context.hcache = hypertable_cache_pin();
@@ -368,11 +365,6 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		}
 
 		cache_release(context.hcache);
-
-		if (printParse != NULL && strcmp(printParse, "true") == 0)
-		{
-			pprint(parse);
-		}
 
 	}
 	if (prev_planner_hook != NULL)
@@ -394,8 +386,8 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 static inline bool
 should_optimize_query()
 {
-	return !util_config_default_off("timescaledb.disable_optimizations") &&
-		(util_config_default_off("timescaledb.optimize_plain_tables") || (global_planner_ctx != NULL && global_planner_ctx->has_hypertables));
+	return !guc_disable_optimizations &&
+		(guc_optimize_non_hypertables || (global_planner_ctx != NULL && global_planner_ctx->has_hypertables));
 }
 
 extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);

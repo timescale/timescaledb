@@ -148,7 +148,7 @@ LIMIT 2;
 
 --can turn on plain table optimizations
 BEGIN;
-    SET LOCAL timescaledb.optimize_plain_tables= 'on';
+    SET LOCAL timescaledb.optimize_non_hypertables = 'on';
     EXPLAIN (costs off)
     SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
     FROM plain_table 
