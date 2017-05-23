@@ -108,7 +108,7 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 		DatumGetCString(DATUM_GET(values, Anum_hypertable_time_column_name)),
 			NAMEDATALEN);
 	he->time_column_type = DatumGetObjectId(DATUM_GET(values, Anum_hypertable_time_column_type));
-	he->chunk_size_bytes = DatumGetInt64(DATUM_GET(values, Anum_hypertable_chunk_size_bytes));
+	he->chunk_time_interval = DatumGetInt64(DATUM_GET(values, Anum_hypertable_chunk_time_interval));
 	he->num_replicas = DatumGetInt16(DATUM_GET(values, Anum_hypertable_replication_factor));
 
 	entry->hypertable = he;

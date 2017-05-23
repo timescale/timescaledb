@@ -19,7 +19,7 @@ typedef struct Hypertable
 	char		time_column_name[NAMEDATALEN];
 	Oid			time_column_type;
 	int			num_epochs;
-	int64		chunk_size_bytes;
+	int64		chunk_time_interval;
 	int16		num_replicas;
 	/* Array of PartitionEpoch. Order by start_time */
 	PartitionEpoch *epochs[MAX_EPOCHS_PER_HYPERTABLE];
