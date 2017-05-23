@@ -37,7 +37,6 @@ typedef struct ChangeTableNameCtx
 	CmdType		commandType;
 	Cache	   *hcache;
 	Hypertable *hentry;
-	Index		rti;
 } ChangeTableNameCtx;
 
 typedef struct AddPartFuncQualCtx
@@ -47,43 +46,12 @@ typedef struct AddPartFuncQualCtx
 	Hypertable *hentry;
 } AddPartFuncQualCtx;
 
-typedef struct ChangeVarTypeCtx
-{
-	Index		rti;
-	Oid			oldtype;
-	Oid			newrelid;
-} ChangeVarTypeCtx;
-
-
 typedef struct GlobalPlannerCtx
 {
 	bool		has_hypertables;
 } GlobalPlannerCtx;
 
 static GlobalPlannerCtx *global_planner_ctx = NULL;
-
-static bool
-change_var_type_walker(Node *node, void *context)
-{
-	if (node == NULL)
-	{
-		return false;
-	}
-	if (IsA(node, Var))
-	{
-		Var		   *var = (Var *) node;
-		ChangeVarTypeCtx *ctx = (ChangeVarTypeCtx *) context;
-
-		if (var->vartype == ctx->oldtype && var->varno == ctx->rti)
-		{
-			var->vartype = get_rel_type_id(ctx->newrelid);
-		}
-		return false;
-	}
-
-	return expression_tree_walker(node, change_var_type_walker, context);
-}
-
 
 /*
  * Change all main tables to one of the replicas in the parse tree.
@@ -110,20 +78,10 @@ change_table_name_walker(Node *node, void *context)
 
 			if (hentry != NULL)
 			{
-				ChangeVarTypeCtx context;
-
-				context.rti = ctx->rti;
-				context.oldtype = get_rel_type_id(rangeTableEntry->relid);
-				context.newrelid = hentry->replica_table;
-
-				query_tree_walker(ctx->parent, change_var_type_walker, &context, 0);
-
 				ctx->hentry = hentry;
-				rangeTableEntry->relid = hentry->replica_table;
 			}
 		}
 
-		ctx->rti++;
 		return false;
 	}
 
@@ -133,12 +91,10 @@ change_table_name_walker(Node *node, void *context)
 		bool		result;
 		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
 		CmdType		old = ctx->commandType;
-		Index		oldrti = ctx->rti;
 		Query	   *oldparent = ctx->parent;
 
 		/* adjust context */
 		ctx->commandType = ((Query *) node)->commandType;
-		ctx->rti = 1;
 		ctx->parent = (Query *) node;
 
 		result = query_tree_walker(ctx->parent, change_table_name_walker,
@@ -146,9 +102,7 @@ change_table_name_walker(Node *node, void *context)
 
 		/* restore context */
 		ctx->commandType = old;
-		ctx->rti = oldrti;
 		ctx->parent = oldparent;
-
 
 		return result;
 	}
@@ -164,7 +118,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
 
-	if (rte->relid == hentry->replica_table)
+	if (rte->relid == hentry->main_table)
 	{
 		/* get latest partition epoch: TODO scan all pe */
 		PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
@@ -376,7 +330,6 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		context.hcache = hypertable_cache_pin();
 		context.parse = parse;
 		context.parent = parse;
-		context.rti = 1;
 		context.commandType = parse->commandType;
 		context.hentry = NULL;
 		change_table_name_walker((Node *) parse, &context);
@@ -420,7 +373,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 							 Index rti,
 							 RangeTblEntry *rte)
 {
-	if (extension_is_loaded() && should_optimize_query())
+	if (extension_is_loaded() && !IS_DUMMY_REL(rel) && should_optimize_query())
 	{
 		if (OidIsValid(rte->relid))
 		{

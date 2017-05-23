@@ -10,8 +10,7 @@
 typedef struct Partition Partition;
 typedef struct Chunk Chunk;
 
-extern Chunk *chunk_cache_get(Cache *cache, Partition *part, int16 num_replicas,
-				int64 timepoint);
+extern Chunk *chunk_cache_get(Cache *cache, Partition *part, int64 timepoint);
 extern Cache *chunk_cache_pin(void);
 extern void chunk_cache_invalidate_callback(void);
 

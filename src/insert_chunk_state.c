@@ -109,70 +109,64 @@ insert_chunk_state_new(Chunk *chunk)
 {
 	List	   *rel_state_list = NIL;
 	InsertChunkState *state;
-	int			i;
+	Relation	rel;
+	RangeTblEntry *rte;
+	List	   *range_table;
+	ResultRelInfo *resultRelInfo;
+	InsertChunkStateRel *rel_state;;
 
 	state = palloc(sizeof(InsertChunkState));
 
-	for (i = 0; i < chunk->num_replicas; i++)
+	rel = heap_open(chunk->table_id, RowExclusiveLock);
+
+	/* permission check */
+	rte = makeNode(RangeTblEntry);
+	rte->rtekind = RTE_RELATION;
+	rte->relid = RelationGetRelid(rel);
+	rte->relkind = rel->rd_rel->relkind;
+	rte->requiredPerms = ACL_INSERT;
+	range_table = list_make1(rte);
+	ExecCheckRTPerms(range_table, true);
+
+	if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
 	{
-		ChunkReplica *cr = &chunk->replicas[i];
-		Relation	rel;
-		RangeTblEntry *rte;
-		List	   *range_table;
-		ResultRelInfo *resultRelInfo;
-		InsertChunkStateRel *rel_state;;
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("Hypertables don't support Row level security")));
 
-		rel = heap_open(cr->table_id, RowExclusiveLock);
-
-		/* permission check */
-		rte = makeNode(RangeTblEntry);
-		rte->rtekind = RTE_RELATION;
-		rte->relid = RelationGetRelid(rel);
-		rte->relkind = rel->rd_rel->relkind;
-		rte->requiredPerms = ACL_INSERT;
-		range_table = list_make1(rte);
-		ExecCheckRTPerms(range_table, true);
-
-		if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Hypertables don't support Row level security")));
-
-		}
-
-		if (XactReadOnly && !rel->rd_islocaltemp)
-			PreventCommandIfReadOnly("COPY FROM");
-
-		PreventCommandIfParallelMode("COPY FROM");
-
-		if (rel->rd_rel->relkind != RELKIND_RELATION)
-		{
-			elog(ERROR, "inserting not to table");
-		}
-
-		/*
-		 * We need a ResultRelInfo so we can use the regular executor's
-		 * index-entry-making machinery.  (There used to be a huge amount of
-		 * code here that basically duplicated execUtils.c ...)
-		 */
-
-		resultRelInfo = makeNode(ResultRelInfo);
-		InitResultRelInfo(resultRelInfo,
-						  rel,
-						  1,	/* dummy rangetable index */
-						  0);
-
-		ExecOpenIndices(resultRelInfo, false);
-
-		if (resultRelInfo->ri_TrigDesc != NULL)
-		{
-			elog(ERROR, "triggers on chunk tables not supported");
-		}
-
-		rel_state = insert_chunk_state_rel_new(rel, resultRelInfo, range_table);
-		rel_state_list = lappend(rel_state_list, rel_state);
 	}
+
+	if (XactReadOnly && !rel->rd_islocaltemp)
+		PreventCommandIfReadOnly("COPY FROM");
+
+	PreventCommandIfParallelMode("COPY FROM");
+
+	if (rel->rd_rel->relkind != RELKIND_RELATION)
+	{
+		elog(ERROR, "inserting not to table");
+	}
+
+	/*
+	 * We need a ResultRelInfo so we can use the regular executor's
+	 * index-entry-making machinery.  (There used to be a huge amount of code
+	 * here that basically duplicated execUtils.c ...)
+	 */
+
+	resultRelInfo = makeNode(ResultRelInfo);
+	InitResultRelInfo(resultRelInfo,
+					  rel,
+					  1,		/* dummy rangetable index */
+					  0);
+
+	ExecOpenIndices(resultRelInfo, false);
+
+	if (resultRelInfo->ri_TrigDesc != NULL)
+	{
+		elog(ERROR, "triggers on chunk tables not supported");
+	}
+
+	rel_state = insert_chunk_state_rel_new(rel, resultRelInfo, range_table);
+	rel_state_list = lappend(rel_state_list, rel_state);
 
 	state->replica_states = rel_state_list;
 	state->chunk = chunk;

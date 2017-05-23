@@ -1,11 +1,7 @@
 \ir include/insert_two_partitions.sql
 
 \d+ "_timescaledb_internal".*
-SELECT *
-FROM "_timescaledb_internal"._hyper_1_0_replica order by "timeCustom", device_id;
 SELECT * FROM _timescaledb_catalog.chunk;
-SELECT * FROM _timescaledb_catalog.chunk_replica_node;
-SELECT * FROM _timescaledb_catalog.partition_replica;
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
 SELECT * FROM ONLY "two_Partitions";

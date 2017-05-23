@@ -65,7 +65,7 @@ set_or_update_new_entry(InsertStatementState *state, Partition *partition, int64
 		insert_chunk_state_destroy(state->cstates[partition->index]);
 	}
 
-	chunk = chunk_cache_get(state->chunk_cache, partition, state->hypertable->num_replicas, timepoint);
+	chunk = chunk_cache_get(state->chunk_cache, partition, timepoint);
 	state->cstates[partition->index] = insert_chunk_state_new(chunk);
 }
 

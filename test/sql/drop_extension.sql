@@ -16,11 +16,11 @@ DROP EXTENSION timescaledb CASCADE;
 SELECT * FROM drop_test;
 
 -- Recreate the extension
-CREATE EXTENSION timescaledb CASCADE;
+CREATE EXTENSION timescaledb;
 
 -- Test that calling twice generates proper error
 \set ON_ERROR_STOP 0
-CREATE EXTENSION timescaledb CASCADE;
+CREATE EXTENSION timescaledb;
 \set ON_ERROR_STOP 1
 
 -- Make the table a hypertable again

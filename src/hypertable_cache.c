@@ -9,7 +9,6 @@
 #include <utils/lsyscache.h>
 
 #include "hypertable_cache.h"
-#include "hypertable_replica.h"
 #include "catalog.h"
 #include "cache.h"
 #include "metadata_queries.h"
@@ -82,8 +81,6 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 	Hypertable *he;
 	Datum		values[Natts_hypertable];
 	bool		isnull[Natts_hypertable];
-	char	   *root_table_name;
-	char	   *root_table_schema;
 	int32		id;
 
 	he = palloc(sizeof(Hypertable));
@@ -100,16 +97,12 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 	strncpy(he->table,
 			DatumGetCString(DATUM_GET(values, Anum_hypertable_table_name)),
 			NAMEDATALEN);
-	root_table_name = DatumGetCString(DATUM_GET(values, Anum_hypertable_root_table_name));
-	root_table_schema = DatumGetCString(DATUM_GET(values, Anum_hypertable_root_schema_name));
-	he->root_table = get_relname_relid(root_table_name, get_namespace_oid(root_table_schema, false));
-	he->replica_table = hypertable_replica_get_table_relid(id);
+	he->main_table = get_relname_relid(he->table, get_namespace_oid(he->schema, false));
 	strncpy(he->time_column_name,
 		DatumGetCString(DATUM_GET(values, Anum_hypertable_time_column_name)),
 			NAMEDATALEN);
 	he->time_column_type = DatumGetObjectId(DATUM_GET(values, Anum_hypertable_time_column_type));
 	he->chunk_time_interval = DatumGetInt64(DATUM_GET(values, Anum_hypertable_chunk_time_interval));
-	he->num_replicas = DatumGetInt16(DATUM_GET(values, Anum_hypertable_replication_factor));
 
 	entry->hypertable = he;
 

@@ -5,8 +5,7 @@ DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 \o
 \ir include/ddl_ops_1.sql
 CREATE TABLE PUBLIC."Hypertable_1" (
@@ -47,19 +46,19 @@ SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name  |  table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
-----+--------------+--------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
-  1 | public       | Hypertable_1 | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | bigint           | single     |       2592000000000
-  2 | customSchema | Hypertable_1 | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | bigint           | single     |       2592000000000
+ id | schema_name  |  table_name  | associated_schema_name | associated_table_prefix | time_column_name | time_column_type | chunk_time_interval 
+----+--------------+--------------+------------------------+-------------------------+------------------+------------------+---------------------
+  1 | public       | Hypertable_1 | _timescaledb_internal  | _hyper_1                | time             | bigint           |       2592000000000
+  2 | customSchema | Hypertable_1 | _timescaledb_internal  | _hyper_2                | time             | bigint           |       2592000000000
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_index;
- hypertable_id | main_schema_name |         main_index_name         |                                   definition                                    | created_on 
----------------+------------------+---------------------------------+---------------------------------------------------------------------------------+------------
-             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
-             1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)         | single
-             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
-             2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)         | single
+ hypertable_id | main_schema_name |         main_index_name         |                                   definition                                    
+---------------+------------------+---------------------------------+---------------------------------------------------------------------------------
+             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
+             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
 (4 rows)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
@@ -74,17 +73,17 @@ VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
 SELECT * FROM _timescaledb_catalog.hypertable_index;
- hypertable_id | main_schema_name |         main_index_name         |                                       definition                                       | created_on 
----------------+------------------+---------------------------------+----------------------------------------------------------------------------------------+------------
-             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")        | single
-             1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)                | single
-             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")        | single
-             2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)                | single
-             1 | public           | Hypertable_1_time_temp_c_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", temp_c)             | single
-             1 | public           | ind_humidity                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", humidity)           | single
-             1 | public           | ind_sensor_1                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", sensor_1)           | single
-             1 | public           | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id") | single
-             2 | customSchema     | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time")              | single
+ hypertable_id | main_schema_name |         main_index_name         |                                       definition                                       
+---------------+------------------+---------------------------------+----------------------------------------------------------------------------------------
+             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
+             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
+             1 | public           | Hypertable_1_time_temp_c_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", temp_c)
+             1 | public           | ind_humidity                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", humidity)
+             1 | public           | ind_sensor_1                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", sensor_1)
+             1 | public           | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             2 | customSchema     | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time")
 (9 rows)
 
 --expect error cases
@@ -99,9 +98,7 @@ psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the 
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
 psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the time column
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
-psql:include/ddl_ops_1.sql:61: ERROR:  UPDATE ONLY not supported on hypertables
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
-psql:include/ddl_ops_1.sql:62: ERROR:  DELETE ONLY not currently supported on hypertables
 \set ON_ERROR_STOP 1
 CREATE TABLE my_ht (time bigint, val integer);
 SELECT * FROM create_hypertable('my_ht', 'time');
@@ -123,7 +120,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 -- Should error when adding again
 \set ON_ERROR_STOP 0
@@ -145,7 +141,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -163,7 +158,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 -- Should drop
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
@@ -179,7 +173,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
@@ -196,7 +189,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 --default indexes--
 --both created
@@ -225,7 +217,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 ROLLBACK;
 --only time
@@ -255,7 +246,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 ROLLBACK;
 --only partition
@@ -285,7 +275,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 ROLLBACK;
 --null space
@@ -313,7 +302,6 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 ROLLBACK;
 --disable index creation
@@ -339,7 +327,6 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
 
 ROLLBACK;
 SELECT * FROM PUBLIC."Hypertable_1";
@@ -349,20 +336,11 @@ SELECT * FROM PUBLIC."Hypertable_1";
 (1 row)
 
 EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
-                QUERY PLAN                
-------------------------------------------
+             QUERY PLAN             
+------------------------------------
  Append
-   ->  Seq Scan on _hyper_1_0_replica
-   ->  Seq Scan on _hyper_1_1_0_partition
-   ->  Seq Scan on _hyper_1_1_0_1_data
-(4 rows)
-
-SELECT * FROM _timescaledb_catalog.default_replica_node;
- database_name | hypertable_id | replica_id 
----------------+---------------+------------
- single        |             1 |          0
- single        |             2 |          0
- single        |             3 |          0
+   ->  Seq Scan on "Hypertable_1"
+   ->  Seq Scan on _hyper_1_1_chunk
 (3 rows)
 
 \ir include/ddl_ops_2.sql
@@ -386,7 +364,6 @@ $BODY$;
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
-psql:include/ddl_ops_2.sql:23: ERROR:  ALTER TABLE ... ALTER COLUMN SET DATA TYPE  not supported on hypertable "Hypertable_1"
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
 psql:include/ddl_ops_2.sql:24: ERROR:  ALTER INDEX not supported on hypertable "Hypertable_1"
 CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
@@ -406,7 +383,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
  Device_id        | text    | not null             | extended |              | 
  humidity         | numeric | default 100          | main     |              | 
  sensor_1         | numeric | not null             | main     |              | 
- sensor_2_renamed | numeric |                      | main     |              | 
+ sensor_2_renamed | integer |                      | plain    |              | 
  sensor_3_renamed | numeric | not null default 1   | main     |              | 
  temp_f           | integer | not null default 31  | plain    |              | 
  sensor_3         | bigint  | not null default 131 | plain    |              | 
@@ -419,45 +396,30 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
-    _timescaledb_modify_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.on_unsupported_main_table()
+Child tables: _timescaledb_internal._hyper_1_1_chunk
 
-\d+ "_timescaledb_internal"."_hyper_1_root"
-                         Table "_timescaledb_internal._hyper_1_root"
-      Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
-------------------+---------+------------------------+----------+--------------+-------------
- time             | bigint  | not null               | plain    |              | 
- Device_id        | text    | not null               | extended |              | 
- humidity         | numeric | default '100'::numeric | main     |              | 
- sensor_1         | numeric | not null               | main     |              | 
- sensor_2_renamed | numeric |                        | main     |              | 
- sensor_3_renamed | numeric | not null default 1     | main     |              | 
- temp_f           | integer | not null default 31    | plain    |              | 
- sensor_3         | bigint  | not null default 131   | plain    |              | 
- sensor_4         | bigint  | not null default 131   | plain    |              | 
-Child tables: _timescaledb_internal._hyper_1_0_replica
-
-\d+ _timescaledb_internal._hyper_1_1_0_1_data
-                      Table "_timescaledb_internal._hyper_1_1_0_1_data"
-      Column      |  Type   |       Modifiers        | Storage  | Stats target | Description 
-------------------+---------+------------------------+----------+--------------+-------------
- time             | bigint  | not null               | plain    |              | 
- Device_id        | text    | not null               | extended |              | 
- humidity         | numeric | default '100'::numeric | main     |              | 
- sensor_1         | numeric | not null               | main     |              | 
- sensor_2_renamed | numeric |                        | main     |              | 
- sensor_3_renamed | numeric | not null default 1     | main     |              | 
- temp_f           | integer | not null default 31    | plain    |              | 
- sensor_3         | bigint  | not null default 131   | plain    |              | 
- sensor_4         | bigint  | not null default 131   | plain    |              | 
+\d+ _timescaledb_internal._hyper_1_1_chunk
+                      Table "_timescaledb_internal._hyper_1_1_chunk"
+      Column      |  Type   |      Modifiers       | Storage  | Stats target | Description 
+------------------+---------+----------------------+----------+--------------+-------------
+ time             | bigint  | not null             | plain    |              | 
+ Device_id        | text    | not null             | extended |              | 
+ humidity         | numeric | default 100          | main     |              | 
+ sensor_1         | numeric | not null             | main     |              | 
+ sensor_2_renamed | integer |                      | plain    |              | 
+ sensor_3_renamed | numeric | not null default 1   | main     |              | 
+ temp_f           | integer | not null default 31  | plain    |              | 
+ sensor_3         | bigint  | not null default 131 | plain    |              | 
+ sensor_4         | bigint  | not null default 131 | plain    |              | 
 Indexes:
     "6-Unique1" UNIQUE, btree ("time", "Device_id")
     "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "2-Hypertable_1_time_idx" btree ("time" DESC)
     "4-ind_humidity" btree ("time", humidity)
 Check constraints:
-    "partition" CHECK (_timescaledb_catalog.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _timescaledb_catalog.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
+    "partition" CHECK (_timescaledb_internal.get_partition_for_key("Device_id", 32768) >= '0'::smallint AND _timescaledb_internal.get_partition_for_key("Device_id", 32768) <= '32767'::smallint)
     "time_range" CHECK ("time" >= '1257892416000000000'::bigint AND "time" <= '1257895007999999999'::bigint)
-Inherits: _timescaledb_internal._hyper_1_1_0_partition
+Inherits: "Hypertable_1"
 
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 

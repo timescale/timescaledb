@@ -26,9 +26,9 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 
 SELECT * FROM ONLY chunk_test;
 SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_replica_node crn ON (c.id = crn.chunk_id)
-    LEFT JOIN _timescaledb_catalog.partition_replica pr ON (crn.partition_replica_id = pr.id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (pr.hypertable_id = h.id)
+    LEFT JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
+    LEFT JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
     ORDER BY c.id;
 

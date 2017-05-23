@@ -1,0 +1,31 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\c single
+--list all extension functions in public schema
+SELECT DISTINCT proname
+FROM pg_proc
+WHERE OID IN (
+    SELECT objid
+    FROM pg_catalog.pg_depend                                                                                                               WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
+    refobjid = (select oid from pg_extension where extname='timescaledb') AND
+    deptype = 'e' and classid = 'pg_catalog.pg_proc'::regclass
+) AND pronamespace = 'public'::regnamespace
+ORDER BY proname;
+         proname          
+--------------------------
+ add_equi_partition_epoch
+ add_partition_epoch
+ create_hypertable
+ drop_chunks
+ first
+ last
+ restore_timescaledb
+ set_chunk_time_interval
+ time_bucket
+(9 rows)
+

@@ -61,8 +61,8 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
  *
  */
 #define CHUNK_QUERY_ARGS (Oid[]) {INT4OID, INT8OID}
-#define CHUNK_QUERY "SELECT id, partition_id, start_time, end_time \
-				FROM get_or_create_chunk($1, $2)"
+#define CHUNK_QUERY "SELECT * \
+				FROM _timescaledb_internal.get_or_create_chunk($1, $2)"
 
 /* plan for getting a chunk via get_or_create_chunk(). */
 DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 2, CHUNK_QUERY_ARGS)
@@ -95,37 +95,20 @@ chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, TupleDesc 
 	return tuple;
 }
 
-static Chunk *
-chunk_fill_in(Chunk *chunk, HeapTuple tuple, TupleDesc tupdesc)
-{
-	int64		time_ret;
-	bool		is_null;
-
-	chunk->id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &is_null));
-	chunk->partition_id = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 2, &is_null));
-
-	time_ret = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 3, &is_null));
-	chunk->start_time = time_ret;
-
-	time_ret = DatumGetInt64(SPI_getbinval(tuple, tupdesc, 4, &is_null));
-	chunk->end_time = time_ret;
-
-	return chunk;
-}
-
 Chunk *
 chunk_insert_new(int32 partition_id, int64 timepoint)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;
-	Chunk	   *chunk = palloc(sizeof(Chunk));
+	Chunk	   *chunk;
+	MemoryContext top = CurrentMemoryContext;
 	SPIPlanPtr	plan = get_chunk_plan();
 
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
 	tuple = chunk_tuple_create_spi_connected(partition_id, timepoint, &desc, plan);
-	chunk = chunk_fill_in(chunk, tuple, desc);
+	chunk = chunk_create(tuple, desc, top);
 
 	SPI_finish();
 

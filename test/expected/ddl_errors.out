@@ -5,14 +5,8 @@ DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 \o
--- Expect error when adding user again
-\set ON_ERROR_STOP 0
-SELECT add_cluster_user();
-ERROR:  User postgres already exists
-\set ON_ERROR_STOP 1
 -- Expect error when adding node again
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,

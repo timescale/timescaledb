@@ -4,11 +4,10 @@ DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
-----+-------------+------------+------------------------+-------------------------+------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | time_column_name | time_column_type | chunk_time_interval 
+----+-------------+------------+------------------------+-------------------------+------------------+------------------+---------------------
 (0 rows)
 
 SELECT * from _timescaledb_catalog.partition_epoch;
@@ -33,9 +32,9 @@ NOTICE:  hypertable should_drop already exists, skipping
 (1 row)
 
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
-----+-------------+-------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
-  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
+----+-------------+-------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
+  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                | time             | timestamp without time zone |       2592000000000
 (1 row)
 
 SELECT * from _timescaledb_catalog.partition_epoch;
@@ -45,7 +44,6 @@ SELECT * from _timescaledb_catalog.partition_epoch;
 (1 row)
 
 DROP TABLE should_drop;
-NOTICE:  drop cascades to 2 other objects
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
  create_hypertable 
@@ -55,9 +53,9 @@ SELECT create_hypertable('should_drop', 'time');
 
 INSERT INTO should_drop VALUES (now(), 1.0);
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
-----+-------------+-------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
-  2 | public      | should_drop | _timescaledb_internal  | _hyper_2                | _timescaledb_internal | _hyper_2_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
+----+-------------+-------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
+  2 | public      | should_drop | _timescaledb_internal  | _hyper_2                | time             | timestamp without time zone |       2592000000000
 (1 row)
 
 SELECT * from _timescaledb_catalog.partition_epoch;
