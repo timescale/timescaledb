@@ -1,2 +1,1 @@
 \unset ECHO
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"

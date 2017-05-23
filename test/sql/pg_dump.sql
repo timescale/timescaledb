@@ -33,8 +33,8 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series
 
 SELECT * FROM "two_Partitions" order by "timeCustom", device_id;
 
---query for the extension tables/sequences that will not be dumped by pg_dump (should be empty)
-SELECT objid::regclass, *
+--query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
+SELECT objid::regclass
 FROM pg_catalog.pg_depend
 WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         refobjid = (select oid from pg_extension where extname='timescaledb') AND

@@ -44,7 +44,7 @@ CREATE TABLE PUBLIC.plain_table (
 CREATE INDEX "time_plain_plain_table" ON PUBLIC.plain_table (time DESC, series_0);
 INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
-
+ANALYZE;
 
 
 
@@ -78,11 +78,13 @@ LIMIT 2;
 --test that still works with an expression index on data_trunc.
 DROP INDEX "time_plain";
 CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
+ANALYZE;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
 --test that works with both indexes
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
+ANALYZE;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 

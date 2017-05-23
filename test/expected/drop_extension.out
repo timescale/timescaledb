@@ -5,8 +5,7 @@ DROP DATABASE IF EXISTS single;
 SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-psql:include/create_single_db.sql:7: NOTICE:  installing required extension "postgres_fdw"
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 \o
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
@@ -16,9 +15,9 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
-----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
-  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
+----+-------------+------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | time             | timestamp without time zone |       2592000000000
 (1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
@@ -29,7 +28,7 @@ SELECT * FROM drop_test;
 (1 row)
 
 DROP EXTENSION timescaledb CASCADE;
-NOTICE:  drop cascades to 8 other objects
+NOTICE:  drop cascades to 3 other objects
 -- Querying the original table should not return any rows since all of
 -- them actually existed in chunks that are now gone
 SELECT * FROM drop_test;
@@ -38,10 +37,10 @@ SELECT * FROM drop_test;
 (0 rows)
 
 -- Recreate the extension
-CREATE EXTENSION timescaledb CASCADE;
+CREATE EXTENSION timescaledb;
 -- Test that calling twice generates proper error
 \set ON_ERROR_STOP 0
-CREATE EXTENSION timescaledb CASCADE;
+CREATE EXTENSION timescaledb;
 ERROR:  extension "timescaledb" already exists
 \set ON_ERROR_STOP 1
 -- Make the table a hypertable again
@@ -52,9 +51,9 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name |      time_column_type       | created_on | chunk_time_interval 
-----+-------------+------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+-----------------------------+------------+---------------------
-  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | time             | timestamp without time zone | single     |       2592000000000
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
+----+-------------+------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
+  1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                | time             | timestamp without time zone |       2592000000000
 (1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');

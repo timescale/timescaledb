@@ -2,11 +2,6 @@
 \ir include/create_single_db.sql
 \o
 
--- Expect error when adding user again
-\set ON_ERROR_STOP 0
-SELECT add_cluster_user();
-\set ON_ERROR_STOP 1
-
 -- Expect error when adding node again
 
 CREATE TABLE PUBLIC."Hypertable_1" (

@@ -4,4 +4,4 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 
 \c single
-CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+CREATE EXTENSION IF NOT EXISTS timescaledb;

@@ -1,318 +1,242 @@
 --make sure diff only has explain output not result output
 \! diff ../results/sql_query_results_optimized.out ../results/sql_query_results_unoptimized.out 
-10a11
+9a10
 > SET timescaledb.disable_optimizations= 'on';
-91,92c92,93
-<                                               QUERY PLAN                                              
-< ------------------------------------------------------------------------------------------------------
+86,87c87,88
+<                                    QUERY PLAN                                    
+< ---------------------------------------------------------------------------------
 ---
->                                    QUERY PLAN                                   
-> --------------------------------------------------------------------------------
-94,100c95,100
-<    ->  GroupAggregate
-<          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
+>                                 QUERY PLAN                                 
+> ---------------------------------------------------------------------------
+91,96c92,98
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
-<                      ->  Sort
-<                            Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
+<                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
+<                      ->  Index Scan using time_plain on hyper_1
+<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_chunk
+< (8 rows)
 ---
->    ->  Sort
->          Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
->          ->  HashAggregate
->                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
+>          ->  Sort
+>                Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
 >                ->  Result
 >                      ->  Append
-102,103d101
-<                      ->  Sort
-<                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
-105,106c103,104
-<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
-< (13 rows)
+>                            ->  Seq Scan on hyper_1
+>                            ->  Seq Scan on _hyper_1_1_chunk
+> (9 rows)
+121,122c123,124
+<                                                 QUERY PLAN                                                 
+< -----------------------------------------------------------------------------------------------------------
 ---
->                            ->  Seq Scan on _hyper_1_1_0_1_data
-> (10 rows)
-134,140c132,137
+>                                                       QUERY PLAN                                                       
+> -----------------------------------------------------------------------------------------------------------------------
+124,133c126,138
 <    ->  GroupAggregate
-<          Group Key: (date_trunc('minute'::text, _hyper_1_0_replica."time"))
+<          Group Key: (date_trunc('minute'::text, hyper_1."time"))
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
-<                      ->  Sort
-<                            Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
----
->    ->  Sort
->          Sort Key: (date_trunc('minute'::text, _hyper_1_0_replica."time")) DESC
->          ->  HashAggregate
->                Group Key: date_trunc('minute'::text, _hyper_1_0_replica."time")
->                ->  Result
->                      ->  Append
-143,144d139
-<                      ->  Sort
-<                            Sort Key: (date_trunc('minute'::text, _hyper_1_1_0_partition."time")) DESC
-147,149c142,144
-<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_0_1_data
+<                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
+<                      ->  Index Scan using time_plain on hyper_1
 <                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-< (16 rows)
+<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_chunk
+<                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+< (10 rows)
 ---
->                            ->  Seq Scan on _hyper_1_1_0_1_data
+>    ->  Sort
+>          Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
+>          ->  HashAggregate
+>                Group Key: date_trunc('minute'::text, hyper_1."time")
+>                ->  Result
+>                      ->  Append
+>                            ->  Seq Scan on hyper_1
 >                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+>                            ->  Bitmap Heap Scan on _hyper_1_1_chunk
+>                                  Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+>                                  ->  Bitmap Index Scan on "1-time_plain"
+>                                        Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 > (13 rows)
-220,221c215,216
-<                                                  QUERY PLAN                                                 
-< ------------------------------------------------------------------------------------------------------------
+196,197c201,202
+<                                       QUERY PLAN                                       
+< ---------------------------------------------------------------------------------------
 ---
->                                       QUERY PLAN                                      
-> --------------------------------------------------------------------------------------
-223,229c218,223
-<    ->  GroupAggregate
-<          Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time"))
+>                                    QUERY PLAN                                    
+> ---------------------------------------------------------------------------------
+201,206c206,212
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time")) DESC
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time")) DESC
+<                      Sort Key: (time_bucket('@ 1 min'::interval, hyper_1."time")) DESC
+<                      ->  Index Scan using time_plain on hyper_1
+<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_chunk
+< (8 rows)
 ---
->    ->  Sort
->          Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time")) DESC
->          ->  HashAggregate
->                Group Key: time_bucket('@ 1 min'::interval, _hyper_1_0_replica."time")
+>          ->  Sort
+>                Sort Key: (time_bucket('@ 1 min'::interval, hyper_1."time")) DESC
 >                ->  Result
 >                      ->  Append
-231,232d224
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_0_partition."time")) DESC
-234,235c226,227
-<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_0_1_data
-< (13 rows)
----
->                            ->  Seq Scan on _hyper_1_1_0_1_data
-> (10 rows)
-247,248c239,240
-<                                                                            QUERY PLAN                                                                           
-< ----------------------------------------------------------------------------------------------------------------------------------------------------------------
----
->                                                                 QUERY PLAN                                                                
-> ------------------------------------------------------------------------------------------------------------------------------------------
-250,256c242,247
-<    ->  GroupAggregate
-<          Group Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval))
-<          ->  Result
-<                ->  Merge Append
-<                      Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
-<                      ->  Sort
-<                            Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
----
->    ->  Sort
->          Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
->          ->  HashAggregate
->                Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)
->                ->  Result
->                      ->  Append
-258,259d248
-<                      ->  Sort
-<                            Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_1_0_partition."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
-261,262c250,251
-<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_0_1_data
-< (13 rows)
----
->                            ->  Seq Scan on _hyper_1_1_0_1_data
-> (10 rows)
-274,275c263,264
-<                                                               QUERY PLAN                                                              
-< --------------------------------------------------------------------------------------------------------------------------------------
----
->                                                    QUERY PLAN                                                   
-> ----------------------------------------------------------------------------------------------------------------
-277,283c266,271
-<    ->  GroupAggregate
-<          Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)))
-<          ->  Result
-<                ->  Merge Append
-<                      Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval))) DESC
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval))) DESC
----
->    ->  Sort
->          Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval))) DESC
->          ->  HashAggregate
->                Group Key: time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval))
->                ->  Result
->                      ->  Append
-285,286d272
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_1_1_0_partition."time" - '@ 30 secs'::interval))) DESC
-288,289c274,275
-<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_0_1_data
-< (13 rows)
----
->                            ->  Seq Scan on _hyper_1_1_0_1_data
-> (10 rows)
-301,302c287,288
-<                                                                            QUERY PLAN                                                                           
-< ----------------------------------------------------------------------------------------------------------------------------------------------------------------
----
->                                                                 QUERY PLAN                                                                
-> ------------------------------------------------------------------------------------------------------------------------------------------
-304,310c290,295
-<    ->  GroupAggregate
-<          Group Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval))
-<          ->  Result
-<                ->  Merge Append
-<                      Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
-<                      ->  Sort
-<                            Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
----
->    ->  Sort
->          Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
->          ->  HashAggregate
->                Group Key: (time_bucket('@ 1 min'::interval, (_hyper_1_0_replica."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)
->                ->  Result
->                      ->  Append
-312,313d296
-<                      ->  Sort
-<                            Sort Key: ((time_bucket('@ 1 min'::interval, (_hyper_1_1_0_partition."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
-315,316c298,299
-<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_0_1_data
-< (13 rows)
----
->                            ->  Seq Scan on _hyper_1_1_0_1_data
-> (10 rows)
-328,329c311,312
-<                                                  QUERY PLAN                                                 
-< ------------------------------------------------------------------------------------------------------------
----
->                                       QUERY PLAN                                      
-> --------------------------------------------------------------------------------------
-331,337c314,319
-<    ->  GroupAggregate
-<          Group Key: (time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time"))
-<          ->  Result
-<                ->  Merge Append
-<                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time")) DESC
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time")) DESC
----
->    ->  Sort
->          Sort Key: (time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time")) DESC
->          ->  HashAggregate
->                Group Key: time_bucket('@ 1 min'::interval, _hyper_2_0_replica."time")
->                ->  Result
->                      ->  Append
-339,340d320
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, _hyper_2_2_0_partition."time")) DESC
-342,343c322,323
-<                      ->  Index Scan using "2-time_plain_tz" on _hyper_2_2_0_2_data
-< (13 rows)
----
->                            ->  Seq Scan on _hyper_2_2_0_2_data
-> (10 rows)
-355,356c335,336
+>                            ->  Seq Scan on hyper_1
+>                            ->  Seq Scan on _hyper_1_1_chunk
+> (9 rows)
+218,219c224,225
 <                                                                 QUERY PLAN                                                                 
 < -------------------------------------------------------------------------------------------------------------------------------------------
 ---
->                                                      QUERY PLAN                                                      
-> ---------------------------------------------------------------------------------------------------------------------
-358,364c338,343
-<    ->  GroupAggregate
-<          Group Key: (time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone))
+>                                                              QUERY PLAN                                                              
+> -------------------------------------------------------------------------------------------------------------------------------------
+223,228c229,235
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone)) DESC
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone)) DESC
+<                      Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
+<                      ->  Index Scan using time_plain on hyper_1
+<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_chunk
+< (8 rows)
 ---
->    ->  Sort
->          Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone)) DESC
->          ->  HashAggregate
->                Group Key: time_bucket('@ 1 min'::interval, (_hyper_2_0_replica."time")::timestamp without time zone)
+>          ->  Sort
+>                Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
 >                ->  Result
 >                      ->  Append
-366,367d344
-<                      ->  Sort
-<                            Sort Key: (time_bucket('@ 1 min'::interval, (_hyper_2_2_0_partition."time")::timestamp without time zone)) DESC
-369,370c346,347
-<                      ->  Index Scan using "2-time_plain_tz" on _hyper_2_2_0_2_data
-< (13 rows)
+>                            ->  Seq Scan on hyper_1
+>                            ->  Seq Scan on _hyper_1_1_chunk
+> (9 rows)
+240,241c247,248
+<                                                    QUERY PLAN                                                    
+< -----------------------------------------------------------------------------------------------------------------
 ---
->                            ->  Seq Scan on _hyper_2_2_0_2_data
-> (10 rows)
-382,383c359,360
-<                                        QUERY PLAN                                       
-< ----------------------------------------------------------------------------------------
----
->                             QUERY PLAN                            
-> ------------------------------------------------------------------
-385,391c362,367
-<    ->  GroupAggregate
-<          Group Key: (((_hyper_3_0_replica."time" / 10) * 10))
+>                                                 QUERY PLAN                                                 
+> -----------------------------------------------------------------------------------------------------------
+245,250c252,258
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (((_hyper_3_0_replica."time" / 10) * 10)) DESC
-<                      ->  Sort
-<                            Sort Key: (((_hyper_3_0_replica."time" / 10) * 10)) DESC
+<                      Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval))) DESC
+<                      ->  Index Scan using time_plain on hyper_1
+<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_chunk
+< (8 rows)
 ---
->    ->  Sort
->          Sort Key: (((_hyper_3_0_replica."time" / 10) * 10)) DESC
->          ->  HashAggregate
->                Group Key: ((_hyper_3_0_replica."time" / 10) * 10)
+>          ->  Sort
+>                Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval))) DESC
 >                ->  Result
 >                      ->  Append
-393,394d368
-<                      ->  Sort
-<                            Sort Key: (((_hyper_3_3_0_partition."time" / 10) * 10)) DESC
-396,399c370,373
-<                      ->  Index Scan using "3-time_plain_int" on _hyper_3_3_0_3_data
-<                      ->  Index Scan using "4-time_plain_int" on _hyper_3_3_0_4_data
-<                      ->  Index Scan using "5-time_plain_int" on _hyper_3_3_0_5_data
-< (15 rows)
+>                            ->  Seq Scan on hyper_1
+>                            ->  Seq Scan on _hyper_1_1_chunk
+> (9 rows)
+262,263c270,271
+<                                                                 QUERY PLAN                                                                 
+< -------------------------------------------------------------------------------------------------------------------------------------------
 ---
->                            ->  Seq Scan on _hyper_3_3_0_3_data
->                            ->  Seq Scan on _hyper_3_3_0_4_data
->                            ->  Seq Scan on _hyper_3_3_0_5_data
-> (12 rows)
-411,412c385,386
-<                                              QUERY PLAN                                             
-< ----------------------------------------------------------------------------------------------------
----
->                                   QUERY PLAN                                  
-> ------------------------------------------------------------------------------
-414,420c388,393
-<    ->  GroupAggregate
-<          Group Key: (((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2))
+>                                                              QUERY PLAN                                                              
+> -------------------------------------------------------------------------------------------------------------------------------------
+267,272c275,281
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2)) DESC
-<                      ->  Sort
-<                            Sort Key: (((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2)) DESC
+<                      Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
+<                      ->  Index Scan using time_plain on hyper_1
+<                      ->  Index Scan using "7-time_plain" on _hyper_1_1_chunk
+< (8 rows)
 ---
->    ->  Sort
->          Sort Key: (((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2)) DESC
->          ->  HashAggregate
->                Group Key: ((((_hyper_3_0_replica."time" - 2) / 10) * 10) + 2)
+>          ->  Sort
+>                Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
 >                ->  Result
 >                      ->  Append
-422,423d394
-<                      ->  Sort
-<                            Sort Key: (((((_hyper_3_3_0_partition."time" - 2) / 10) * 10) + 2)) DESC
-425,428c396,399
-<                      ->  Index Scan using "3-time_plain_int" on _hyper_3_3_0_3_data
-<                      ->  Index Scan using "4-time_plain_int" on _hyper_3_3_0_4_data
-<                      ->  Index Scan using "5-time_plain_int" on _hyper_3_3_0_5_data
-< (15 rows)
+>                            ->  Seq Scan on hyper_1
+>                            ->  Seq Scan on _hyper_1_1_chunk
+> (9 rows)
+284,285c293,294
+<                                         QUERY PLAN                                        
+< ------------------------------------------------------------------------------------------
 ---
->                            ->  Seq Scan on _hyper_3_3_0_3_data
->                            ->  Seq Scan on _hyper_3_3_0_4_data
->                            ->  Seq Scan on _hyper_3_3_0_5_data
-> (12 rows)
-479,480c450,451
+>                                      QUERY PLAN                                     
+> ------------------------------------------------------------------------------------
+289,294c298,304
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (time_bucket('@ 1 min'::interval, hyper_1_tz."time")) DESC
+<                      ->  Index Scan using time_plain_tz on hyper_1_tz
+<                      ->  Index Scan using "2-time_plain_tz" on _hyper_2_2_chunk
+< (8 rows)
+---
+>          ->  Sort
+>                Sort Key: (time_bucket('@ 1 min'::interval, hyper_1_tz."time")) DESC
+>                ->  Result
+>                      ->  Append
+>                            ->  Seq Scan on hyper_1_tz
+>                            ->  Seq Scan on _hyper_2_2_chunk
+> (9 rows)
+306,307c316,317
+<                                                        QUERY PLAN                                                        
+< -------------------------------------------------------------------------------------------------------------------------
+---
+>                                                     QUERY PLAN                                                     
+> -------------------------------------------------------------------------------------------------------------------
+311,316c321,327
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1_tz."time")::timestamp without time zone)) DESC
+<                      ->  Index Scan using time_plain_tz on hyper_1_tz
+<                      ->  Index Scan using "2-time_plain_tz" on _hyper_2_2_chunk
+< (8 rows)
+---
+>          ->  Sort
+>                Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1_tz."time")::timestamp without time zone)) DESC
+>                ->  Result
+>                      ->  Append
+>                            ->  Seq Scan on hyper_1_tz
+>                            ->  Seq Scan on _hyper_2_2_chunk
+> (9 rows)
+328,329c339,340
+<                                    QUERY PLAN                                    
+< ---------------------------------------------------------------------------------
+---
+>                            QUERY PLAN                            
+> -----------------------------------------------------------------
+333,340c344,352
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
+<                      ->  Index Scan using time_plain_int on hyper_1_int
+<                      ->  Index Scan using "3-time_plain_int" on _hyper_3_3_chunk
+<                      ->  Index Scan using "4-time_plain_int" on _hyper_3_4_chunk
+<                      ->  Index Scan using "5-time_plain_int" on _hyper_3_5_chunk
+< (10 rows)
+---
+>          ->  Sort
+>                Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
+>                ->  Result
+>                      ->  Append
+>                            ->  Seq Scan on hyper_1_int
+>                            ->  Seq Scan on _hyper_3_3_chunk
+>                            ->  Seq Scan on _hyper_3_4_chunk
+>                            ->  Seq Scan on _hyper_3_5_chunk
+> (11 rows)
+352,353c364,365
+<                                     QUERY PLAN                                     
+< -----------------------------------------------------------------------------------
+---
+>                                  QUERY PLAN                                  
+> -----------------------------------------------------------------------------
+357,364c369,377
+<          ->  Result
+<                ->  Merge Append
+<                      Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
+<                      ->  Index Scan using time_plain_int on hyper_1_int
+<                      ->  Index Scan using "3-time_plain_int" on _hyper_3_3_chunk
+<                      ->  Index Scan using "4-time_plain_int" on _hyper_3_4_chunk
+<                      ->  Index Scan using "5-time_plain_int" on _hyper_3_5_chunk
+< (10 rows)
+---
+>          ->  Sort
+>                Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
+>                ->  Result
+>                      ->  Append
+>                            ->  Seq Scan on hyper_1_int
+>                            ->  Seq Scan on _hyper_3_3_chunk
+>                            ->  Seq Scan on _hyper_3_4_chunk
+>                            ->  Seq Scan on _hyper_3_5_chunk
+> (11 rows)
+417,418c430,431
 <                                           QUERY PLAN                                           
 < -----------------------------------------------------------------------------------------------
 ---
->                                            QUERY PLAN                                            
-> -------------------------------------------------------------------------------------------------
-482,486c453,459
+>                                                 QUERY PLAN                                                 
+> -----------------------------------------------------------------------------------------------------------
+420,424c433,441
 <    ->  GroupAggregate
 <          Group Key: date_trunc('minute'::text, "time")
 <          ->  Index Scan using time_plain_plain_table on plain_table
@@ -323,6 +247,8 @@
 >          Sort Key: (date_trunc('minute'::text, "time")) DESC
 >          ->  HashAggregate
 >                Group Key: date_trunc('minute'::text, "time")
->                ->  Seq Scan on plain_table
->                      Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-> (7 rows)
+>                ->  Bitmap Heap Scan on plain_table
+>                      Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+>                      ->  Bitmap Index Scan on time_plain_plain_table
+>                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+> (9 rows)

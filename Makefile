@@ -26,7 +26,6 @@ SRCS = \
 	src/chunk.c \
 	src/scanner.c \
 	src/hypertable_cache.c \
-	src/hypertable_replica.c \
 	src/chunk_cache.c \
 	src/partitioning.c \
 	src/insert.c \
@@ -36,7 +35,6 @@ SRCS = \
 	src/sort_transform.c \
 	src/insert_chunk_state.c \
 	src/insert_statement_state.c \
-	src/ddl_utils.c \
 	src/agg_bookend.c \
 	src/guc.c
 
@@ -72,7 +70,6 @@ REGRESS_OPTS = \
 	--port=$(TEST_PGPORT) \
 	--user=$(TEST_PGUSER) \
 	--load-language=plpgsql \
-	--load-extension=postgres_fdw \
 	--load-extension=$(EXTENSION) \
 	$(EXTRA_REGRESS_OPTS)
 
