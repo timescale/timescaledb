@@ -63,7 +63,6 @@ enum Anum_hypertable
 	Anum_hypertable_placement,
 	Anum_hypertable_time_column_name,
 	Anum_hypertable_time_column_type,
-	Anum_hypertable_created_on,
 	Anum_hypertable_chunk_time_interval,
 	_Anum_hypertable_max,
 };

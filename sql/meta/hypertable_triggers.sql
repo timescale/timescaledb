@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_meta.on_change_hypertable()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    IF TG_OP = 'INSERT' THEN
+    IF TG_OP = 'INSERT'  AND current_setting('timescaledb_internal.originating_node') = 'on' THEN
         INSERT INTO _timescaledb_catalog.hypertable_replica
         SELECT
             NEW.id,

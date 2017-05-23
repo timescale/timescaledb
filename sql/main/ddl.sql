@@ -83,7 +83,7 @@ BEGIN
     BEGIN
         SELECT *
         INTO hypertable_row
-        FROM  _timescaledb_meta_api.create_hypertable(
+        FROM  _timescaledb_catalog.create_hypertable(
             schema_name,
             table_name,
             time_column_name,
@@ -115,7 +115,7 @@ BEGIN
 
     PERFORM 1
     FROM pg_index,
-    LATERAL _timescaledb_meta_api.add_index(
+    LATERAL _timescaledb_catalog.add_index(
         hypertable_row.id,
         hypertable_row.schema_name,
         (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
@@ -148,7 +148,7 @@ BEGIN
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
-    PERFORM _timescaledb_meta_api.set_chunk_time_interval(
+    PERFORM _timescaledb_catalog.set_chunk_time_interval(
                                         schema_name,
                                         table_name,
                                         chunk_time_interval);

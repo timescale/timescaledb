@@ -104,7 +104,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_column_from_attribute(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
-    PERFORM _timescaledb_meta_api.add_column(
+    PERFORM _timescaledb_catalog.add_column(
         hypertable_id,
         att.attname,
         att.attnum,

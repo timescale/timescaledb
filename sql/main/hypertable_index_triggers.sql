@@ -63,48 +63,34 @@ DECLARE
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+        RETURN NEW;
+    ELSIF TG_OP = 'INSERT' THEN
+        --create index on all chunks
+        PERFORM _timescaledb_internal.create_index_on_all_chunk_replica_nodes(NEW.hypertable_id, NEW.main_schema_name, NEW.main_index_name, NEW.definition);
+
+        IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
+          --create index on main table
+          SELECT *
+          INTO STRICT hypertable_row
+          FROM _timescaledb_catalog.hypertable AS h
+          WHERE h.id = NEW.hypertable_id;
+
+          PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+          EXECUTE _timescaledb_internal.get_index_definition_for_table(hypertable_row.schema_name, hypertable_row.table_name, NEW.main_index_name, NEW.definition);
+        END IF;
+
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        PERFORM _timescaledb_internal.drop_chunk_replica_node_index(OLD.main_schema_name, OLD.main_index_name);
+        
+        IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
+            PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+            --note: index might have been deleted by field deletion ahead of time. IF EXISTS necessary
+            EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.main_schema_name, OLD.main_index_name);
+        END IF;
+        RETURN OLD;
     END IF;
-
-    --create index on all chunks
-    PERFORM _timescaledb_internal.create_index_on_all_chunk_replica_nodes(NEW.hypertable_id, NEW.main_schema_name, NEW.main_index_name, NEW.definition);
-
-    IF new.created_on <> current_database() THEN
-      --create index on main table
-      SELECT *
-      INTO STRICT hypertable_row
-      FROM _timescaledb_catalog.hypertable AS h
-      WHERE h.id = NEW.hypertable_id;
-
-      PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      EXECUTE _timescaledb_internal.get_index_definition_for_table(hypertable_row.schema_name, hypertable_row.table_name, NEW.main_index_name, NEW.definition);
-    END IF;
-
-    RETURN NEW;
 END
 $BODY$;
 
 
-/*
-    Drops indexes on chunk tables when hypertable_index rows deleted (row created in deleted_hypertable_index table).
-*/
-CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_deleted_hypertable_index()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-    hypertable_row _timescaledb_catalog.hypertable;
-BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
-    END IF;
-    --drop index on all chunks
-    PERFORM _timescaledb_internal.drop_chunk_replica_node_index(NEW.main_schema_name, NEW.main_index_name);
-
-    IF new.deleted_on <> current_database() THEN
-      PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      --note: index might have been deleted by field deletion ahead of time. IF EXISTS necessary
-      EXECUTE format('DROP INDEX IF EXISTS %I.%I', NEW.main_schema_name, NEW.main_index_name);
-    END IF;
-
-    RETURN NEW;
-END
-$BODY$;

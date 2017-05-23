@@ -106,34 +106,20 @@ BEGIN
 
     --sync data on insert
     IF TG_OP = 'INSERT' THEN
-        FOR schema_name IN
-        SELECT n.schema_name
-        FROM _timescaledb_catalog.node AS n
-        WHERE n.database_name <> current_database()
-        LOOP
-            EXECUTE format(
-              $$
-                  INSERT INTO %I.%I SELECT $1.*
-              $$,
-                  schema_name,
-                  TG_TABLE_NAME
-            )
-            USING NEW;
-        END LOOP;
 
-        --do not sync data on update. synced by close_chunk logic.
-
-        INSERT INTO _timescaledb_catalog.chunk_replica_node (chunk_id, partition_replica_id, database_name, schema_name, table_name)
-            SELECT
-                NEW.id,
-                pr.id,
-                p.database_name,
-                pr.schema_name,
-                format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
-            FROM _timescaledb_catalog.partition_replica pr
-            INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = pr.hypertable_id)
-            INNER JOIN _timescaledb_meta.place_chunks(new, h.placement, h.replication_factor) p ON (p.replica_id = pr.replica_id)
-            WHERE pr.partition_id = NEW.partition_id;
+        IF current_setting('timescaledb_internal.originating_node') = 'on' THEN
+            INSERT INTO _timescaledb_catalog.chunk_replica_node (chunk_id, partition_replica_id, database_name, schema_name, table_name)
+                SELECT
+                    NEW.id,
+                    pr.id,
+                    p.database_name,
+                    pr.schema_name,
+                    format('%s_%s_%s_%s_data', h.associated_table_prefix, pr.id, pr.replica_id, NEW.id)
+                FROM _timescaledb_catalog.partition_replica pr
+                INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = pr.hypertable_id)
+                INNER JOIN _timescaledb_meta.place_chunks(new, h.placement, h.replication_factor) p ON (p.replica_id = pr.replica_id)
+                WHERE pr.partition_id = NEW.partition_id;
+        END IF;
     END IF;
 
     RETURN NEW;

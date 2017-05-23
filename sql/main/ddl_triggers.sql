@@ -42,7 +42,7 @@ BEGIN
             hypertable_row := _timescaledb_internal.hypertable_from_main_table(table_oid);
             def = _timescaledb_internal.get_general_index_definition(info.objid, table_oid, hypertable_row);
 
-            PERFORM _timescaledb_meta_api.add_index(
+            PERFORM _timescaledb_catalog.add_index(
                 hypertable_row.id,
                 hypertable_row.schema_name,
                 (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
@@ -125,7 +125,7 @@ BEGIN
             END IF;
 
             --TODO: this ignores the concurrently and cascade/restrict modifiers
-            PERFORM _timescaledb_meta_api.drop_index(info.schema_name, info.object_name);
+            PERFORM _timescaledb_catalog.drop_index(info.schema_name, info.object_name);
         END LOOP;
 END
 $BODY$;
@@ -182,7 +182,7 @@ BEGIN
                INNER JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND attisdropped) --do not match on att.attname here. it gets mangled
                WHERE hypertable_id = hypertable_row.id
                      LOOP
-                         PERFORM _timescaledb_meta_api.drop_column(hypertable_row.id, rec.name);
+                         PERFORM _timescaledb_catalog.drop_column(hypertable_row.id, rec.name);
                      END LOOP;
                found_action = TRUE;
             END IF;
@@ -194,7 +194,7 @@ BEGIN
             LEFT JOIN pg_attribute att ON (attrelid = info.objid AND att.attnum = c.attnum AND NOT attisdropped)
             WHERE hypertable_id = hypertable_row.id AND c.name IS DISTINCT FROM att.attname
                 LOOP
-                    PERFORM _timescaledb_meta_api.alter_table_rename_column(
+                    PERFORM _timescaledb_catalog.alter_table_rename_column(
                         hypertable_row.id,
                         rec.old_name,
                         rec.new_name
@@ -209,7 +209,7 @@ BEGIN
             LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
             WHERE hypertable_id = hypertable_row.id AND _timescaledb_internal.get_default_value_for_attribute(att) IS DISTINCT FROM c.default_value
                 LOOP
-                    PERFORM _timescaledb_meta_api.alter_column_set_default(
+                    PERFORM _timescaledb_catalog.alter_column_set_default(
                         hypertable_row.id,
                         rec.name,
                         rec.new_default_value
@@ -224,7 +224,7 @@ BEGIN
               LEFT JOIN pg_attribute att ON (attrelid = info.objid AND attname = c.name AND att.attnum = c.attnum AND NOT attisdropped)
               WHERE hypertable_id = hypertable_row.id AND attnotnull != c.not_null
                 LOOP
-                    PERFORM _timescaledb_meta_api.alter_column_set_not_null(
+                    PERFORM _timescaledb_catalog.alter_column_set_not_null(
                         hypertable_row.id,
                         rec.name,
                         rec.new_not_null
@@ -278,7 +278,7 @@ BEGIN
     FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
     LOOP
         IF tg_tag = 'DROP TABLE' AND _timescaledb_internal.is_hypertable(obj.schema_name, obj.object_name) THEN
-            PERFORM _timescaledb_meta_api.drop_hypertable(obj.schema_name, obj.object_name);
+            PERFORM _timescaledb_catalog.drop_hypertable(obj.schema_name, obj.object_name);
         END IF;
     END LOOP;
 END

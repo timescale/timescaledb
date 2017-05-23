@@ -44,7 +44,7 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 SELECT * FROM _timescaledb_catalog.chunk_replica_node;
 \dt "_timescaledb_internal".*
 
-SELECT _timescaledb_meta.drop_chunks_older_than(2);
+SELECT _timescaledb_catalog.drop_chunks_older_than(2);
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _timescaledb_catalog.chunk c
@@ -56,7 +56,7 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 SELECT * FROM _timescaledb_catalog.chunk_replica_node;
 \dt "_timescaledb_internal".*
 
-SELECT _timescaledb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
+SELECT _timescaledb_catalog.drop_chunks_older_than(3, 'drop_chunk_test1');
 
 SELECT c.id AS chunk_id, pr.partition_id, pr.hypertable_id, crn.schema_name AS chunk_schema, crn.table_name AS chunk_table, c.start_time, c.end_time
 FROM _timescaledb_catalog.chunk c

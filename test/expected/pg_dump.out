@@ -41,7 +41,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   206
+   202
 (1 row)
 
 \c postgres
@@ -65,7 +65,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   206
+   202
 (1 row)
 
 \c single
@@ -91,7 +91,7 @@ SELECT * FROM "two_Partitions" order by "timeCustom", device_id;
  1357894000000000000 | dev5      |      1.5 |        2 |          |             |        4
 (13 rows)
 
---query for the extension tables/sequences that will not be dumped by pg_dump (should be empty)
+--query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
 SELECT objid::regclass, *
 FROM pg_catalog.pg_depend
 WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND

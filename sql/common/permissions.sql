@@ -31,7 +31,5 @@ TO PUBLIC;
 GRANT DELETE, UPDATE ON TABLE _timescaledb_catalog.hypertable_column 
 TO PUBLIC;
 
-GRANT INSERT ON TABLE  _timescaledb_catalog.deleted_hypertable_index, _timescaledb_catalog.deleted_hypertable_column
-TO PUBLIC;
 
 

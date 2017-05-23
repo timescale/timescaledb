@@ -95,6 +95,7 @@ DECLARE
     chunk_row     _timescaledb_catalog.chunk;
     partition_row _timescaledb_catalog.partition;
 BEGIN
+    PERFORM set_config('timescaledb_internal.originating_node', 'true', true);
     LOCK TABLE _timescaledb_catalog.chunk IN EXCLUSIVE MODE;
 
     --recheck:
