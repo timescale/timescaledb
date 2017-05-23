@@ -1,5 +1,5 @@
 --schema permisions
-GRANT USAGE ON SCHEMA _timescaledb_catalog, _timescaledb_meta,  _timescaledb_meta_api, _timescaledb_data_api, _timescaledb_cache 
+GRANT USAGE ON SCHEMA _timescaledb_catalog, _timescaledb_meta, _timescaledb_cache 
 TO PUBLIC;
 
 GRANT USAGE, CREATE ON SCHEMA _timescaledb_internal TO PUBLIC;
