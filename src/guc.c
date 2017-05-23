@@ -8,6 +8,7 @@ bool		guc_optimize_non_hypertables = false;
 bool		guc_allow_install_without_preload = false;
 bool		guc_restoring = false;
 bool        guc_originating_node = false;
+bool        guc_ignore_ddl = false;
 
 
 void
@@ -56,6 +57,16 @@ _guc_init(void)
 	DefineCustomBoolVariable("timescaledb_internal.originating_node", "Determines whether this is the originating node",
 							 "Internal use only",
 							 &guc_originating_node,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb_internal.ignore_ddl", "Determines whether we should be ignoring ddl commands",
+							 "Internal use only",
+							 &guc_ignore_ddl,
 							 false,
 							 PGC_USERSET,
 							 0,

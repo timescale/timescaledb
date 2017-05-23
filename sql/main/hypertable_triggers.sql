@@ -77,7 +77,7 @@ BEGIN
     ELSIF TG_OP = 'DELETE' THEN
         PERFORM _timescaledb_internal.drop_root_table(OLD.root_schema_name, OLD.root_table_name);
         IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
-              PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+              PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
               EXECUTE format('DROP TABLE %I.%I', OLD.schema_name, OLD.table_name);
         END IF;
         RETURN OLD;

@@ -153,7 +153,7 @@ BEGIN
             hypertable_row.root_schema_name, hypertable_row.root_table_name,
             NEW.name, NEW.attnum, NEW.data_type, NEW.default_value, NEW.not_null);
         IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
-            PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+            PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
             -- update main table on others
             PERFORM _timescaledb_internal.create_column_on_table(
                 hypertable_row.schema_name, hypertable_row.table_name,
@@ -176,7 +176,7 @@ BEGIN
                 NEW.name, NEW.default_value);
 
             IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
-                PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+                PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
                 -- update main table on others
                 PERFORM _timescaledb_internal.exec_alter_column_set_default(
                     hypertable_row.schema_name, hypertable_row.table_name,
@@ -190,7 +190,7 @@ BEGIN
                 hypertable_row.root_schema_name, hypertable_row.root_table_name,
                 NEW.name, NEW.not_null);
             IF  current_setting('timescaledb_internal.originating_node') <> 'on' THEN
-                PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+                PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
                 -- update main table on others
                 PERFORM _timescaledb_internal.exec_alter_column_set_not_null(
                     hypertable_row.schema_name, hypertable_row.table_name,
@@ -204,7 +204,7 @@ BEGIN
                 hypertable_row.root_schema_name, hypertable_row.root_table_name,
                 OLD.name, NEW.name);
             IF  current_setting('timescaledb_internal.originating_node') <> 'on' THEN
-                PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+                PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
                 -- update main table on others
                 PERFORM _timescaledb_internal.exec_alter_table_rename_column(
                     hypertable_row.schema_name, hypertable_row.table_name,
@@ -233,7 +233,7 @@ BEGIN
             PERFORM _timescaledb_internal.drop_column_on_table(
             hypertable_row.root_schema_name, hypertable_row.root_table_name, OLD.name);
 
-            PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+            PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
             -- update main table on others
             PERFORM _timescaledb_internal.drop_column_on_table(
             hypertable_row.schema_name, hypertable_row.table_name, OLD.name);

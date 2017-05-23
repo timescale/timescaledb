@@ -75,7 +75,7 @@ BEGIN
           FROM _timescaledb_catalog.hypertable AS h
           WHERE h.id = NEW.hypertable_id;
 
-          PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+          PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
           EXECUTE _timescaledb_internal.get_index_definition_for_table(hypertable_row.schema_name, hypertable_row.table_name, NEW.main_index_name, NEW.definition);
         END IF;
 
@@ -84,7 +84,7 @@ BEGIN
         PERFORM _timescaledb_internal.drop_chunk_replica_node_index(OLD.main_schema_name, OLD.main_index_name);
         
         IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
-            PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
+            PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
             --note: index might have been deleted by field deletion ahead of time. IF EXISTS necessary
             EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.main_schema_name, OLD.main_index_name);
         END IF;

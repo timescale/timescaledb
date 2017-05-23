@@ -35,7 +35,7 @@ BEGIN
             FROM pg_catalog.pg_index
             WHERE indexrelid = info.objid;
 
-            IF NOT _timescaledb_internal.is_main_table(table_oid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+            IF NOT _timescaledb_internal.is_main_table(table_oid) OR current_setting('timescaledb_internal.ignore_ddl') = 'on' THEN
                 RETURN;
             END IF;
 
@@ -120,7 +120,7 @@ BEGIN
             WHERE i.main_schema_name = info.schema_name AND i.main_index_name = info.object_name;
 
             --if table_oid is not null, it is a main table
-            IF table_oid IS NULL OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+            IF table_oid IS NULL OR current_setting('timescaledb_internal.ignore_ddl') = 'on' THEN
                 RETURN;
             END IF;
 
@@ -149,7 +149,7 @@ BEGIN
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
             --exit if not hypertable or inside trigger
-            IF NOT _timescaledb_internal.is_main_table(info.objid) OR current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+            IF NOT _timescaledb_internal.is_main_table(info.objid) OR current_setting('timescaledb_internal.ignore_ddl') = 'on' THEN
                 RETURN;
             END IF;
 
@@ -271,7 +271,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_table()
 DECLARE
     obj record;
 BEGIN
-    IF current_setting('io.ignore_ddl_in_trigger', true) = 'true' THEN
+    IF current_setting('timescaledb_internal.ignore_ddl') = 'on' THEN
         RETURN;
     END IF;
 
