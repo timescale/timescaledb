@@ -19,7 +19,8 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     associated_table_prefix NAME = NULL,
     placement               _timescaledb_catalog.chunk_placement_type = 'STICKY',
     chunk_time_interval     BIGINT =  _timescaledb_internal.interval_to_usec('1 month'),
-    create_default_indexes  BOOLEAN = TRUE
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -99,8 +100,13 @@ BEGIN
         );
     EXCEPTION
         WHEN unique_violation THEN
-            RAISE EXCEPTION 'hypertable % already exists', main_table
-            USING ERRCODE = 'IO110';
+            IF if_not_exists THEN
+               RAISE NOTICE 'hypertable % already exists, skipping', main_table;
+               RETURN;
+            ELSE
+               RAISE EXCEPTION 'hypertable % already exists', main_table
+               USING ERRCODE = 'IO110';
+            END IF;
         WHEN foreign_key_violation THEN
             RAISE EXCEPTION 'database not configured for hypertable storage (not setup as a data-node)'
             USING ERRCODE = 'IO101';
