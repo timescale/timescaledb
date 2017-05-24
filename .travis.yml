@@ -8,7 +8,7 @@ services:
   - docker
 
 before_install:
-  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:9.6.2-alpine
+  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:9.6.3-alpine
 
 install:
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && make -C /build install && chown -R postgres:postgres /build/"

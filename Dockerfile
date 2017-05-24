@@ -1,4 +1,4 @@
-FROM postgres:9.6.2
+FROM postgres:9.6.3
 
 MAINTAINER Timescale
 
