@@ -13,8 +13,11 @@ paper](http://www.timescaledb.com/papers/timescaledb.pdf). Additionally,
 more documentation can be
 found [on our docs website](https://docs.timescaledb.com/).
 
-There are several ways to install TimescaleDB: (1) Homebrew (for MacOS),
-(2) Docker, or (3) from source.
+There are several ways to install TimescaleDB:
+1. Homebrew (for MacOS)
+1. `apt` (Ubuntu 16.04 & 17.04)
+1. Docker
+1. From source
 
 ## Installation
 
@@ -26,11 +29,11 @@ _NOTE: Currently, upgrading to new versions requires a fresh install._
 
 [Postgres-client]: https://wiki.postgresql.org/wiki/Detailed_installation_guides
 
-### Option 1 - Homebrew
+### Option 1 - Homebrew (MacOS)
 
 This will install PostgreSQL 9.6 via Homebrew as well. If you have
-another installation (such as Postgres.app), this will cause problems. We
-recommend removing other installations before using this method.
+another installation (e.g. Postgres.app), this will cause problems.
+We recommend removing other installations before using this method.
 
 **Prerequisites**
 
@@ -41,32 +44,35 @@ recommend removing other installations before using this method.
 ```bash
 # Add our tap
 brew tap timescale/tap
-
 # To install
 brew install timescaledb
 ```
 
-**Update `postgresql.conf`**
+You'll need to [update your PostgreSQL configuration](#update-conf) and
+restart as well.
 
-Also, you will need to edit your `postgresql.conf` file to include
-necessary libraries:
+
+### Option 2 - `apt` (Ubuntu)
+
+**Prerequisites**
+
+- Ubuntu 16.04 or 17.04
+
+**Build and install**
+
 ```bash
-# Modify postgresql.conf to uncomment this line and add required libraries.
-# For example:
-shared_preload_libraries = 'timescaledb'
+# Add our PPA
+sudo add-apt-repository ppa:timescale/timescaledb-ppa
+sudo apt-get update
+# To install
+sudo apt install timescaledb
 ```
 
-To get started you'll now need to restart PostgreSQL and add a
-`postgres` superuser (used in the rest of the docs):
-```bash
-# Restart PostgreSQL
-brew services restart postgresql
+You'll need to [update your PostgreSQL configuration](#update-conf) and
+restart as well.
 
-# Add a superuser postgres:
-createuser postgres -s
-```
 
-### Option 2 - Docker Hub
+### Option 3 - Docker Hub
 
 You can pull our Docker images from [Docker Hub](https://hub.docker.com/r/timescale/timescaledb/).
 
@@ -94,7 +100,7 @@ our [docker-run.sh](scripts/docker-run.sh) in `scripts/`, which saves
 the data to `$PWD/data`. There you can also see additional `-c` flags
 we recommend for memory settings, etc.
 
-### Option 3 - From source
+### Option 4 - From source
 We have only tested our build process on **MacOS and Linux**. We do
 not support building on Windows yet. Windows may be able to use our
 Docker image on Docker Hub (see above).
@@ -106,25 +112,45 @@ Docker image on Docker Hub (see above).
 **Build and install with local PostgreSQL**
 
 ```bash
-# To build the extension
 make
-
-# To install
 make install
 ```
 
-**Update `postgresql.conf`**
+You'll need to [update your PostgreSQL configuration](#update-conf) and
+restart as well.
 
-Also, you will need to edit your `postgresql.conf` file to include
-necessary libraries, and then restart PostgreSQL:
+<a name="update-conf"></a>
+### Updating `postgresql.conf`
+
+For every installation method except Docker, you'll need to add our
+extension as a preloaded library to your `postgresql.conf` file. To
+locate that file:
 ```bash
-# Modify postgresql.conf to uncomment this line and add required libraries.
-# For example:
-shared_preload_libraries = 'timescaledb'
+# Create postgres superuser if not already done:
+createuser postgres -s
+psql -U postgres -c 'SHOW config_file;'
 
-# Then, restart PostgreSQL
+               config_file
+------------------------------------------
+/path/to/your/postgresql.conf
+(1 row)
 ```
 
+Using your favorite editor, open the file and modify it
+to add TimescaleDB's library:
+```bash
+# Modify postgresql.conf to uncomment this line and add required libraries.
+shared_preload_libraries = 'timescaledb'
+```
+
+Now restart PostgreSQL:
+```bash
+# Homebrew
+brew services restart postgresql
+# apt
+sudo service postgresql restart
+# Other platforms may have different methods
+```
 
 ### Setting up your initial database
 Now, we'll install our extension and create an initial database. Below
