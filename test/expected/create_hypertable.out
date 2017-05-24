@@ -37,3 +37,15 @@ select create_hypertable('test_schema.test_1dim', 'time');
  test_schema | test_table | table | postgres
 (2 rows)
 
+select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
+NOTICE:  hypertable test_schema.test_1dim already exists, skipping
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+-- Should error when creating again without if_not_exists set to true
+\set ON_ERROR_STOP 0
+select create_hypertable('test_schema.test_1dim', 'time');
+ERROR:  hypertable test_schema.test_1dim already exists
+\set ON_ERROR_STOP 1
