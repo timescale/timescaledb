@@ -93,7 +93,9 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 SET timezone = 'UTC';
 ALTER DATABASE single SET timezone ='UTC';
 
--- Conversion to timestamp using Postgres built-in function taking double
+-- Conversion to timestamp using Postgres built-in function taking
+-- double. Gives inaccurate result on Postgres <= 9.6.2. Accurate on
+-- Postgres >= 9.6.3.
 SELECT to_timestamp(1486480176.236538);
 
 -- extension-specific version taking microsecond UNIX timestamp
