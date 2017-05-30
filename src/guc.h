@@ -4,7 +4,6 @@
 
 extern bool guc_disable_optimizations;
 extern bool guc_optimize_non_hypertables;
-extern bool guc_allow_install_without_preload;
 
 void		_guc_init(void);
 void		_guc_fini(void);

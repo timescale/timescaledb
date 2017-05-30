@@ -5,7 +5,6 @@
 
 bool		guc_disable_optimizations = false;
 bool		guc_optimize_non_hypertables = false;
-bool		guc_allow_install_without_preload = false;
 bool		guc_restoring = false;
 
 
@@ -25,16 +24,6 @@ _guc_init(void)
 	DefineCustomBoolVariable("timescaledb.optimize_non_hypertables", "Apply timescale query optimization to plain tables",
 							 "Apply timescale query optimization to plain tables in addition to hypertables",
 							 &guc_optimize_non_hypertables,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.allow_install_without_preload", "Allow installing timescaledb without preloading the library (DANGEROUS)",
-							 NULL,
-							 &guc_allow_install_without_preload,
 							 false,
 							 PGC_USERSET,
 							 0,
