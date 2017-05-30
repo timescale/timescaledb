@@ -33,6 +33,7 @@ DECLARE
     time_column_type REGTYPE;
     att_row          pg_attribute;
     main_table_has_items BOOLEAN;
+    is_hypertable    BOOLEAN;
 BEGIN
     SELECT relname, nspname, reltablespace
     INTO STRICT table_name, schema_name, tablespace_oid
@@ -72,6 +73,21 @@ BEGIN
             RAISE EXCEPTION 'column "%" does not exist', partitioning_column
             USING ERRCODE = 'IO102';
         END IF;
+    END IF;
+
+    EXECUTE format('SELECT TRUE FROM _timescaledb_catalog.hypertable WHERE
+                    hypertable.schema_name = %L AND
+                    hypertable.table_name = %L',
+                    schema_name, table_name) INTO is_hypertable;
+
+    IF is_hypertable THEN
+       IF if_not_exists THEN
+          RAISE NOTICE 'hypertable % already exists, skipping', main_table;
+              RETURN;
+          ELSE
+              RAISE EXCEPTION 'hypertable % already exists', main_table
+              USING ERRCODE = 'IO110';
+          END IF;
     END IF;
 
     EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
