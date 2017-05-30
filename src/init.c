@@ -42,8 +42,12 @@ _PG_init(void)
 {
 	if (!process_shared_preload_libraries_in_progress)
 	{
+		/* cannot use GUC variable here since extension not yet loaded */
+		char	   *allow_install_without_preload = GetConfigOptionByName("timescaledb.allow_install_without_preload", NULL, true);
 
-		if (!guc_allow_install_without_preload)
+		if (allow_install_without_preload == NULL ||
+			strlen(allow_install_without_preload) != 2 ||
+			strncmp(allow_install_without_preload, "on", 2) != 0)
 		{
 			char	   *config_file = GetConfigOptionByName("config_file", NULL, false);
 
