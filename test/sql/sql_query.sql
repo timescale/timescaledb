@@ -11,6 +11,15 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE devi
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
 
+
+--test integer partition key
+CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
+SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
+INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
+SELECT * FROM "int_part" WHERE object_id = 1;
+--make sure this touches only one partititon
+EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
+
 --TODO: handle this later?
 --EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
 
