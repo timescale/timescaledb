@@ -15,6 +15,8 @@
 #include <catalog/pg_type.h>
 #include <optimizer/paths.h>
 #include <utils/lsyscache.h>
+#include <parser/parse_coerce.h>
+#include <parser/parse_collate.h>
 
 #include "hypertable_cache.h"
 #include "partitioning.h"
@@ -186,7 +188,9 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 	Expr	   *op_expr;
 	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
 	Var		   *var_for_fn_call;
+	Node	   *var_node_for_fn_call;
 	Const	   *const_for_fn_call;
+	Node	   *const_node_for_fn_call;
 	Const	   *mod_const_var_call;
 	Const	   *mod_const_const_call;
 	List	   *args_func_var;
@@ -213,14 +217,33 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 	var_for_fn_call = (Var *) palloc(sizeof(Var));
 	memcpy(var_for_fn_call, var_expr, sizeof(Var));
 
-	args_func_var = list_make2(var_for_fn_call, mod_const_var_call);
-	args_func_const = list_make2(const_for_fn_call, mod_const_const_call);
+	if (var_for_fn_call->vartype == TEXTOID)
+	{
+		var_node_for_fn_call = (Node *) var_for_fn_call;
+		const_node_for_fn_call = (Node *) const_for_fn_call;
+	}
+	else
+	{
+		var_node_for_fn_call =
+			coerce_to_target_type(NULL, (Node *) var_for_fn_call,
+								  var_for_fn_call->vartype,
+								  TEXTOID, -1, COERCION_EXPLICIT,
+								  COERCE_EXPLICIT_CAST, -1);
+		const_node_for_fn_call =
+			coerce_to_target_type(NULL, (Node *) const_for_fn_call,
+								  const_for_fn_call->consttype,
+								  TEXTOID, -1, COERCION_EXPLICIT,
+								  COERCE_EXPLICIT_CAST, -1);
+	}
+
+	args_func_var = list_make2(var_node_for_fn_call, mod_const_var_call);
+	args_func_const = list_make2(const_node_for_fn_call, mod_const_const_call);
 
 	fc_var = makeFuncCall(func_name, args_func_var, -1);
 	fc_const = makeFuncCall(func_name, args_func_const, -1);
 
 	f_var = ParseFuncOrColumn(NULL, func_name, args_func_var, fc_var, -1);
-	exprSetInputCollation(f_var, var_for_fn_call->varcollid);
+	assign_expr_collations(NULL, f_var);
 
 	f_const = ParseFuncOrColumn(NULL, func_name, args_func_const, fc_const, -1);
 

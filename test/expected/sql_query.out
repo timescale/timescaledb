@@ -128,6 +128,40 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev
                Index Cond: ('dev2'::text = _hyper_1_2_0_4_data.device_id)
 (13 rows)
 
+--test integer partition key
+CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
+SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
+SELECT * FROM "int_part" WHERE object_id = 1;
+           time           | object_id | temp 
+--------------------------+-----------+------
+ Fri Jan 20 09:00:01 2017 |         1 | 22.5
+(1 row)
+
+--make sure this touches only one partititon
+EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on _timescaledb_internal._hyper_2_0_replica
+         Output: _hyper_2_0_replica."time", _hyper_2_0_replica.object_id, _hyper_2_0_replica.temp
+         Filter: ((_hyper_2_0_replica.object_id = 1) AND (_timescaledb_catalog.get_partition_for_key((_hyper_2_0_replica.object_id)::text, 32768) = '11001'::smallint))
+   ->  Seq Scan on _timescaledb_internal._hyper_2_3_0_partition
+         Output: _hyper_2_3_0_partition."time", _hyper_2_3_0_partition.object_id, _hyper_2_3_0_partition.temp
+         Filter: ((_hyper_2_3_0_partition.object_id = 1) AND (_timescaledb_catalog.get_partition_for_key((_hyper_2_3_0_partition.object_id)::text, 32768) = '11001'::smallint))
+   ->  Bitmap Heap Scan on _timescaledb_internal._hyper_2_3_0_5_data
+         Output: _hyper_2_3_0_5_data."time", _hyper_2_3_0_5_data.object_id, _hyper_2_3_0_5_data.temp
+         Recheck Cond: (_hyper_2_3_0_5_data.object_id = 1)
+         Filter: (_timescaledb_catalog.get_partition_for_key((_hyper_2_3_0_5_data.object_id)::text, 32768) = '11001'::smallint)
+         ->  Bitmap Index Scan on "30-int_part_object_id_time_idx"
+               Index Cond: (_hyper_2_3_0_5_data.object_id = 1)
+(13 rows)
+
 --TODO: handle this later?
 --EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
 \echo "The following shows non-aggregated queries with time desc using merge append"
