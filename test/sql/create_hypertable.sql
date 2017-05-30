@@ -18,3 +18,12 @@ select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true)
 select create_hypertable('test_schema.test_1dim', 'time');
 \set ON_ERROR_STOP 1
 
+-- if_not_exist should also work with data in the hypertable
+insert into test_schema.test_1dim VALUES ('2004-10-19 10:23:54+02',1.0);
+select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
+
+-- Should error when creating again without if_not_exists set to true
+\set ON_ERROR_STOP 0
+select create_hypertable('test_schema.test_1dim', 'time');
+\set ON_ERROR_STOP 1
+
