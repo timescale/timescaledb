@@ -4,6 +4,7 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <access/hash.h>
+#include <parser/parse_coerce.h>
 
 #include "partitioning.h"
 #include "metadata_queries.h"
@@ -32,10 +33,20 @@ partitioning_info_set_textfunc_fmgr(PartitioningInfo *pi, Oid relid)
 	Oid			type_id,
 				func_id;
 	bool		isVarlena;
+	CoercionPathType cpt;
 
 	pi->column_attnum = get_attnum(relid, pi->column);
 	type_id = get_atttype(relid, pi->column_attnum);
-	getTypeOutputInfo(type_id, &func_id, &isVarlena);
+
+	/*
+	 * First look for an explicit cast type. Needed since the output of for
+	 * example character(20) not the same as character(20)::text
+	 */
+	cpt = find_coercion_pathway(TEXTOID, type_id, COERCION_EXPLICIT, &func_id);
+	if (cpt != COERCION_PATH_FUNC)
+	{
+		getTypeOutputInfo(type_id, &func_id, &isVarlena);
+	}
 	fmgr_info_cxt(func_id, &pi->partfunc.textfunc_fmgr, CurrentMemoryContext);
 }
 
