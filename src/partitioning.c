@@ -171,7 +171,7 @@ partition_epoch_tuple_found(TupleInfo *ti, void *arg)
 
 	datum = heap_getattr(ti->tuple, Anum_partition_epoch_num_partitions, ti->desc, &is_null);
 	pctx->num_partitions = DatumGetInt16(datum);
-	datum = heap_getattr(ti->tuple, Anum_partition_partition_epoch_id, ti->desc, &is_null);
+	datum = heap_getattr(ti->tuple, Anum_partition_epoch_id, ti->desc, &is_null);
 	epoch_id = DatumGetInt32(datum);
 
 	pe = partition_epoch_create(epoch_id, pctx);
