@@ -8,18 +8,16 @@ services:
   - docker
 
 before_install:
-  - sudo add-apt-repository "deb http://apt.postgresql.org/pub/repos/apt/ trusty-pgdg main"
-  - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-  - sudo apt-get update
-  - sudo apt-get install postgresql-server-dev-9.6 postgresql-client-9.6
-  - sudo ln -sf /usr/lib/postgresql/9.6/bin/pg_dump /usr/bin/pg_dump
-  - sudo ln -sf /usr/lib/postgresql/9.6/bin/pg_restore /usr/bin/pg_restore
-  - pg_dump -V
-  - pg_restore -V
+  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:9.6.2-alpine
 
-install: make -f docker.mk build-image
+install:
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && make -C /build install && chown -R postgres:postgres /build/"
 
-script: make -f docker.mk test
+script:
+  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build installcheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
 
-after_failure: 
-  - cat test/regression.diffs
+after_failure:
+  - docker exec -it pgbuild cat /build/test/regression.diffs
+
+after_script:
+  - docker rm -f pgbuild
