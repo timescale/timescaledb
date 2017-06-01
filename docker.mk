@@ -5,6 +5,7 @@ MAKE = make
 PGPORT = 5432
 TEST_PGPORT = 6543
 TEST_TABLESPACE_PATH = /tmp/tspace1
+TEST_INSTANCE_OPTS = # clear this setting when running against existing Docker instance
 
 build-image: Dockerfile
 	@docker build . -t $(IMAGE_NAME)

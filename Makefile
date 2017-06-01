@@ -46,22 +46,35 @@ DEPS = $(SRCS:.c=.d)
 MKFILE_PATH := $(abspath $(MAKEFILE_LIST))
 CURRENT_DIR = $(dir $(MKFILE_PATH))
 
-TEST_PGPORT ?= 5432
+TEST_PGPORT ?= 15432
 TEST_PGHOST ?= localhost
 TEST_PGUSER ?= postgres
+TEST_DIR = test
+TEST_CLUSTER ?= $(TEST_DIR)/testcluster
+TEST_INSTANCE_OPTS ?= \
+	--create-role=$(TEST_PGUSER) \
+	--temp-instance=$(TEST_CLUSTER) \
+	--temp-config=$(TEST_DIR)/postgresql.conf
+
+EXTRA_REGRESS_OPTS ?=
+
+export TEST_PGUSER
+
 TESTS = $(sort $(wildcard test/sql/*.sql))
 USE_MODULE_DB=true
 REGRESS = $(patsubst test/sql/%.sql,%,$(TESTS))
 REGRESS_OPTS = \
-	--inputdir=test \
-	--outputdir=test \
-	--launcher=test/runner.sh \
+	$(TEST_INSTANCE_OPTS) \
+	--inputdir=$(TEST_DIR) \
+	--outputdir=$(TEST_DIR) \
+	--launcher=$(TEST_DIR)/runner.sh \
 	--host=$(TEST_PGHOST) \
 	--port=$(TEST_PGPORT) \
 	--user=$(TEST_PGUSER) \
 	--load-language=plpgsql \
 	--load-extension=postgres_fdw \
-	--load-extension=$(EXTENSION)
+	--load-extension=$(EXTENSION) \
+	$(EXTRA_REGRESS_OPTS)
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 
@@ -69,7 +82,7 @@ EXTRA_CLEAN = $(EXT_SQL_FILE) $(DEPS)
 
 include $(PGXS)
 override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0 -MMD
-override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/
+override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/ $(TEST_CLUSTER)
 -include $(DEPS)
 
 all: $(EXT_SQL_FILE)
