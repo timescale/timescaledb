@@ -459,3 +459,21 @@ SELECT * FROM error_test;
  Mon Mar 20 09:18:25.7 2017 | 22.4 | dev2
 (2 rows)
 
+--test character(9) partition keys since there were issues with padding causing partitioning errors
+CREATE TABLE tick_character (
+    symbol      character(9) NOT NULL,                                                                                                      mid       REAL NOT NULL,                                                                                                                spread      REAL NOT NULL,
+    time        TIMESTAMPTZ       NOT NULL
+);
+SELECT create_hypertable ('tick_character', 'time', 'symbol', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO tick_character ( symbol, mid, spread, time ) VALUES ( 'GBPJPY', 142.639000, 5.80, 'Mon Mar 20 09:18:22.3 2017');
+SELECT * FROM tick_character;
+  symbol   |   mid   | spread |              time              
+-----------+---------+--------+--------------------------------
+ GBPJPY    | 142.639 |    5.8 | Mon Mar 20 09:18:22.3 2017 PDT
+(1 row)
+
