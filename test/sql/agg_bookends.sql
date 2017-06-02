@@ -27,17 +27,5 @@ SELECT gp, first("btest", time) FROM "btest" GROUP BY gp;
 SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp;
 
 
-CREATE TABLE test (i int, j double precision);
---has to be big enough to force at least 2 workers below.
-INSERT INTO test SELECT x, x+0.1 FROM generate_series(1,1000000) AS x;
-
-SET force_parallel_mode = 'on';
-SET max_parallel_workers_per_gather = 4;
-
-EXPLAIN SELECT first(i, j) FROM "test";
-SELECT first(i, j) FROM "test";
-EXPLAIN SELECT last(i, j) FROM "test";
-SELECT last(i, j) FROM "test";
-
 
 
