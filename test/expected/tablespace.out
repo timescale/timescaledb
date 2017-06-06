@@ -135,7 +135,6 @@ Child tables: _timescaledb_internal._hyper_1_0_replica
 
 --cleanup
 drop table test_tspace;
-NOTICE:  drop cascades to 5 other objects
 NOTICE:  index "1-test_tspace_time_idx" does not exist, skipping
 NOTICE:  index "3-test_tspace_time_idx" does not exist, skipping
 NOTICE:  index "2-test_tspace_device_id_time_idx" does not exist, skipping

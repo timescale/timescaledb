@@ -5,9 +5,6 @@ sql/common/cache.sql
 sql/common/cluster_setup_functions.sql
 sql/common/errors.sql
 sql/common/chunk.sql
-sql/common/rpc.sql
-sql/common/meta_api.sql
-sql/common/data_api.sql
 sql/common/utils.sql
 sql/meta/cluster.sql
 sql/meta/node_triggers.sql
@@ -19,7 +16,6 @@ sql/meta/hypertable_triggers.sql
 sql/meta/partition_triggers.sql
 sql/meta/sync_triggers.sql
 sql/meta/setup_meta.sql
-sql/meta/deleted_triggers.sql
 sql/meta/ddl.sql
 sql/main/time_util.sql
 sql/main/table_creation.sql

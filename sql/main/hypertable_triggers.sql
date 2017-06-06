@@ -52,7 +52,7 @@ BEGIN
 
         PERFORM _timescaledb_internal.create_table(NEW.root_schema_name, NEW.root_table_name);
 
-        IF NEW.created_on <> current_database() THEN
+        IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
            PERFORM _timescaledb_internal.create_schema(NEW.schema_name);
            PERFORM _timescaledb_internal.create_table(NEW.schema_name, NEW.table_name);
         END IF;
@@ -74,9 +74,14 @@ BEGIN
                 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger();
             $$, NEW.schema_name, NEW.table_name);
         RETURN NEW;
-    END IF;
-
-    IF TG_OP = 'UPDATE' THEN
+    ELSIF TG_OP = 'DELETE' THEN
+        PERFORM _timescaledb_internal.drop_root_table(OLD.root_schema_name, OLD.root_table_name);
+        IF current_setting('timescaledb_internal.originating_node') <> 'on' THEN
+              PERFORM set_config('timescaledb_internal.ignore_ddl', 'true', true);
+              EXECUTE format('DROP TABLE %I.%I', OLD.schema_name, OLD.table_name);
+        END IF;
+        RETURN OLD;
+    ELSIF TG_OP = 'UPDATE' THEN
        RETURN NEW;
     END IF;
 
@@ -85,29 +90,3 @@ END
 $BODY$
 SET client_min_messages = WARNING; --suppress NOTICE on IF EXISTS schema
 
-
-/*
-    Drops public hypertable when hypertable rows deleted (row created in deleted_hypertable table).
-*/
-CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_deleted_hypertable()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-    hypertable_row _timescaledb_catalog.hypertable;
-BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
-    END IF;
-    --drop index on all chunks
-
-    PERFORM _timescaledb_internal.drop_root_table(NEW.root_schema_name, NEW.root_table_name);
-
-    IF new.deleted_on <> current_database() THEN
-      PERFORM set_config('io.ignore_ddl_in_trigger', 'true', true);
-      EXECUTE format('DROP TABLE %I.%I', NEW.schema_name, NEW.table_name);
-    END IF;
-
-    RETURN NEW;
-END
-$BODY$
-;

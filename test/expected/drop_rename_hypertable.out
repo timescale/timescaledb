@@ -385,20 +385,12 @@ SELECT * FROM "newname";
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
-----+-------------+----------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
-  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           | single     |       2592000000000
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix |   root_schema_name    | root_table_name | replication_factor | placement | time_column_name | time_column_type | chunk_time_interval 
+----+-------------+----------------+------------------------+-------------------------+-----------------------+-----------------+--------------------+-----------+------------------+------------------+---------------------
+  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                | _timescaledb_internal | _hyper_1_root   |                  1 | STICKY    | timeCustom       | bigint           |       2592000000000
 (1 row)
 
 DROP TABLE "two_Partitions";
-NOTICE:  drop cascades to 7 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_0_replica
-drop cascades to table _timescaledb_internal._hyper_1_1_0_partition
-drop cascades to table _timescaledb_internal._hyper_1_1_0_1_data
-drop cascades to table _timescaledb_internal._hyper_1_1_0_2_data
-drop cascades to table _timescaledb_internal._hyper_1_1_0_3_data
-drop cascades to table _timescaledb_internal._hyper_1_2_0_partition
-drop cascades to table _timescaledb_internal._hyper_1_2_0_4_data
 NOTICE:  index "1-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
 NOTICE:  index "8-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
 NOTICE:  index "15-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
@@ -428,8 +420,8 @@ NOTICE:  index "14-two_Partitions_timeCustom_idx" does not exist, skipping
 NOTICE:  index "21-two_Partitions_timeCustom_idx" does not exist, skipping
 NOTICE:  index "28-two_Partitions_timeCustom_idx" does not exist, skipping
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | replication_factor | placement | time_column_name | time_column_type | created_on | chunk_time_interval 
-----+-------------+------------+------------------------+-------------------------+------------------+-----------------+--------------------+-----------+------------------+------------------+------------+---------------------
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | root_schema_name | root_table_name | replication_factor | placement | time_column_name | time_column_type | chunk_time_interval 
+----+-------------+------------+------------------------+-------------------------+------------------+-----------------+--------------------+-----------+------------------+------------------+---------------------
 (0 rows)
 
 \dt  "public".*
@@ -448,9 +440,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | chunk_replica_node_index  | table | postgres
  _timescaledb_catalog | cluster_user              | table | postgres
  _timescaledb_catalog | default_replica_node      | table | postgres
- _timescaledb_catalog | deleted_hypertable        | table | postgres
  _timescaledb_catalog | deleted_hypertable_column | table | postgres
- _timescaledb_catalog | deleted_hypertable_index  | table | postgres
  _timescaledb_catalog | hypertable                | table | postgres
  _timescaledb_catalog | hypertable_column         | table | postgres
  _timescaledb_catalog | hypertable_index          | table | postgres
@@ -460,7 +450,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | partition                 | table | postgres
  _timescaledb_catalog | partition_epoch           | table | postgres
  _timescaledb_catalog | partition_replica         | table | postgres
-(17 rows)
+(15 rows)
 
 \dt+ "_timescaledb_internal".*
                  List of relations

@@ -132,7 +132,7 @@ SELECT * FROM _timescaledb_catalog.chunk_replica_node;
  _timescaledb_internal | _hyper_2_root          | table | postgres
 (18 rows)
 
-SELECT _timescaledb_meta.drop_chunks_older_than(2);
+SELECT _timescaledb_catalog.drop_chunks_older_than(2);
 NOTICE:  index "1-drop_chunk_test1_time_idx" does not exist, skipping
  drop_chunks_older_than 
 ------------------------
@@ -196,7 +196,7 @@ SELECT * FROM _timescaledb_catalog.chunk_replica_node;
  _timescaledb_internal | _hyper_2_root          | table | postgres
 (16 rows)
 
-SELECT _timescaledb_meta.drop_chunks_older_than(3, 'drop_chunk_test1');
+SELECT _timescaledb_catalog.drop_chunks_older_than(3, 'drop_chunk_test1');
 NOTICE:  index "2-drop_chunk_test1_time_idx" does not exist, skipping
  drop_chunks_older_than 
 ------------------------

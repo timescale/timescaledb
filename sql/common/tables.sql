@@ -61,7 +61,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     placement               _timescaledb_catalog.chunk_placement_type  NOT NULL,
     time_column_name        NAME                                    NOT NULL,
     time_column_type        REGTYPE                                 NOT NULL,
-    created_on              NAME                                    NOT NULL REFERENCES _timescaledb_catalog.node(database_name),
     chunk_time_interval     BIGINT                                  NOT NULL CHECK (chunk_time_interval > 0),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
@@ -69,13 +68,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
-
--- deleted_hypertable is used to avoid deadlocks when doing multinode drops.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.deleted_hypertable (
-  LIKE _timescaledb_catalog.hypertable,
-  deleted_on NAME
-);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.deleted_hypertable', '');
 
 -- hypertable_replica contains information on how a hypertable's data replicas
 -- are stored. A replica of the data is across all partitions and time.
@@ -218,8 +210,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_column (
     data_type       REGTYPE             NOT NULL,
     default_value   TEXT                NULL,
     not_null        BOOLEAN             NOT NULL,
-    created_on      NAME                NOT NULL REFERENCES _timescaledb_catalog.node(database_name),
-    modified_on     NAME                NOT NULL REFERENCES _timescaledb_catalog.node(database_name),
     PRIMARY KEY (hypertable_id, name),
     UNIQUE(hypertable_id, attnum)
 );
@@ -237,15 +227,9 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_index (
     main_schema_name NAME                NOT NULL, --schema name of main table (needed for a uniqueness constraint)
     main_index_name  NAME                NOT NULL, --index name on main table
     definition       TEXT                NOT NULL, --def with /*INDEX_NAME*/ and /*TABLE_NAME*/ placeholders
-    created_on       NAME                NOT NULL REFERENCES _timescaledb_catalog.node(database_name),
     PRIMARY KEY (hypertable_id, main_index_name),
     UNIQUE(main_schema_name, main_index_name) --globally unique since index names globally unique
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_index', '');
 
--- TODO(mat) - Description?
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.deleted_hypertable_index (
-  LIKE _timescaledb_catalog.hypertable_index,
-  deleted_on NAME
-);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.deleted_hypertable_index', '');
+

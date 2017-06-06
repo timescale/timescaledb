@@ -21,7 +21,7 @@ BEGIN
         --A chunk creation will NOT be rolled back if this transaction later aborts. Not ideal, but good enough for now.
         SELECT *
         INTO chunk_row
-        FROM _timescaledb_meta_api.get_or_create_chunk_immediate(partition_id, time_point);
+        FROM _timescaledb_meta.get_or_create_chunk(partition_id, time_point);
     END LOOP;
 
     RETURN chunk_row;

@@ -34,15 +34,8 @@ BEGIN
     DROP TRIGGER IF EXISTS trigger_main_on_change_column
     ON _timescaledb_catalog.hypertable_column;
     CREATE TRIGGER trigger_main_on_change_column
-    -- no DELETE: it would be a no-op
-    AFTER INSERT OR UPDATE ON _timescaledb_catalog.hypertable_column
+    AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.hypertable_column
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_column();
-
-    DROP TRIGGER IF EXISTS trigger_main_on_change_deleted_column
-    ON _timescaledb_catalog.deleted_hypertable_column;
-    CREATE TRIGGER trigger_main_on_change_deleted_column
-    AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.deleted_hypertable_column
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_deleted_column();
 
     -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_main_on_change_hypertable_replica
@@ -52,10 +45,10 @@ BEGIN
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_hypertable_replica();
 
     -- no DELETE: it would be a no-op
-    DROP TRIGGER IF EXISTS trigger_1_main_on_change_create_hypertable
+    DROP TRIGGER IF EXISTS trigger_1_main_on_change_hypertable
     ON _timescaledb_catalog.hypertable;
     CREATE TRIGGER trigger_1_main_on_change_hypertable
-    AFTER INSERT OR UPDATE ON _timescaledb_catalog.hypertable
+    AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.hypertable
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_hypertable();
 
     DROP TRIGGER IF EXISTS trigger_main_on_change_meta
@@ -86,25 +79,14 @@ BEGIN
     DROP TRIGGER IF EXISTS trigger_main_on_change_hypertable_index
     ON _timescaledb_catalog.hypertable_index;
     CREATE TRIGGER trigger_main_on_change_hypertable_index
-    AFTER INSERT OR UPDATE ON _timescaledb_catalog.hypertable_index
+    AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.hypertable_index
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_hypertable_index();
 
-    DROP TRIGGER IF EXISTS trigger_main_on_change_deleted_hypertable_index
-    ON _timescaledb_catalog.deleted_hypertable_index;
-    CREATE TRIGGER trigger_main_on_change_deleted_hypertable_index
-    AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.deleted_hypertable_index
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_deleted_hypertable_index();
-
-    DROP TRIGGER IF EXISTS trigger_on_change_deleted_hypertable
-    ON _timescaledb_catalog.deleted_hypertable;
-    CREATE TRIGGER trigger_on_change_deleted_hypertable
-    AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.deleted_hypertable
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_deleted_hypertable();
 
     -- No support for TRUNCATE currently, so have a trigger to prevent it on
     -- all meta tables.
-    FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'node', 'meta', 'hypertable', 'deleted_hypertable', 'hypertable_index', 'deleted_hypertable_index',
-    'hypertable_column', 'deleted_hypertable_column', 'hypertable_replica', 'default_replica_node', 'partition_epoch',
+    FOREACH table_name IN ARRAY ARRAY ['cluster_user', 'node', 'meta', 'hypertable', 'hypertable_index',
+    'hypertable_column', 'hypertable_replica', 'default_replica_node', 'partition_epoch',
     'partition', 'partition_replica', 'chunk_replica_node'] :: NAME [] LOOP
         EXECUTE format(
             $$
