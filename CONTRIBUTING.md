@@ -87,13 +87,22 @@ our [Style Guide](docs/StyleGuide.md).
 ## Testing
 
 Every non-trivial change to the code base should be accompanied by a
-relevant addition to or modification of the test suite.  
+relevant addition to or modification of the test suite.
 
 Please check that the full test suite (including your test additions
 or changes) passes successfully on your local machine before you
-open a pull request.  All submitted pull requests are also automatically
+open a pull request.
+
+If you are running locally:
+```bash
+make installcheck
+```
+
+If you are using Docker:
+```bash
+make -f docker.mk test
+```
+
+All submitted pull requests are also automatically
 run against our test suite via [Travis CI](https://travis-ci.org/timescale/timescaledb)
 (that link shows the latest build status of the repository).
-
-For more information on testing, please see our
-[README](https://github.com/timescale/timescaledb/blob/master/README.md#testing).
