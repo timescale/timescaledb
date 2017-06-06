@@ -248,10 +248,10 @@ BEGIN
         WHERE indkey = (
             SELECT array_to_string(ARRAY(
                 SELECT attnum::text
-                FROM pg_attribute WHERE attrelid = main_table AND attname=hypertable_row.time_column_name
+                FROM pg_attribute WHERE attrelid = main_table AND attname=partitioning_column
                 UNION ALL
                 SELECT attnum::text
-                FROM pg_attribute WHERE attrelid = main_table AND attname=partitioning_column
+                FROM pg_attribute WHERE attrelid = main_table AND attname=hypertable_row.time_column_name
             ), ' ')::int2vector
         ) AND indrelid = main_table;
 

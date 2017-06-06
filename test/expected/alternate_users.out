@@ -142,9 +142,10 @@ SELECT * FROM _timescaledb_catalog.hypertable_index;
              2 | public           | 1dim_time_idx                            | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
              3 | public           | Hypertable_1_time_Device_id_idx          | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              3 | public           | Hypertable_1_time_idx                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
+             3 | public           | Hypertable_1_Device_id_time_idx          | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("Device_id", "time" DESC)
              4 | customSchema     | Hypertable_1_time_Device_id_idx          | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              4 | customSchema     | Hypertable_1_time_idx                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
-(11 rows)
+(12 rows)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
@@ -169,6 +170,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_index;
              2 | public           | 1dim_time_idx                            | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
              3 | public           | Hypertable_1_time_Device_id_idx          | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              3 | public           | Hypertable_1_time_idx                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
+             3 | public           | Hypertable_1_Device_id_time_idx          | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("Device_id", "time" DESC)
              4 | customSchema     | Hypertable_1_time_Device_id_idx          | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              4 | customSchema     | Hypertable_1_time_idx                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
              3 | public           | Hypertable_1_time_temp_c_idx             | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", temp_c)
@@ -176,13 +178,13 @@ SELECT * FROM _timescaledb_catalog.hypertable_index;
              3 | public           | ind_sensor_1                             | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", sensor_1)
              3 | public           | Unique1                                  | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              4 | customSchema     | Unique1                                  | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time")
-(16 rows)
+(17 rows)
 
 --expect error cases
 \set ON_ERROR_STOP 0
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
-psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "28-Unique1"
+psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "29-Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
 psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the time column
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
@@ -318,7 +320,7 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Device_id" TEXT NOT NULL,
   sensor_1 NUMERIC NULL DEFAULT 1
 );
-CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Time", "Device_id");
+CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Device_id", "Time" DESC);
 SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1);
  create_hypertable 
 -------------------
@@ -333,7 +335,7 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  Device_id | text    | not null  | extended |              | 
  sensor_1  | numeric | default 1 | main     |              | 
 Indexes:
-    "Hypertable_1_with_default_index_enabled_Time_Device_id_idx" btree ("Time", "Device_id")
+    "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
     "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
