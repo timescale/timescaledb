@@ -27,16 +27,23 @@ SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCust
  
 (1 row)
 
+\set QUIET off
 BEGIN;
+BEGIN
 \COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COPY 7
 COMMIT;
+COMMIT
 INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257987600000000000, 'dev1', 1.5, 1),
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
+INSERT 0 4
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
+INSERT 0 1
+\set QUIET on
 \d+ "_timescaledb_internal".*
 Index "_timescaledb_internal.1-two_Partitions_device_id_timeCustom_idx"
    Column   |  Type  |  Definition  | Storage  
@@ -356,13 +363,17 @@ SELECT create_hypertable('error_test', 'time', 'device', 2);
  
 (1 row)
 
+\set QUIET off
 INSERT INTO error_test VALUES ('Mon Mar 20 09:18:20.1 2017', 21.3, 'dev1');
+INSERT 0 1
 \set ON_ERROR_STOP 0
 -- generate insert error 
 INSERT INTO error_test VALUES ('Mon Mar 20 09:18:22.3 2017', 21.1, NULL);
 ERROR:  null value in column "device" violates not-null constraint
 \set ON_ERROR_STOP 1
 INSERT INTO error_test VALUES ('Mon Mar 20 09:18:25.7 2017', 22.4, 'dev2');
+INSERT 0 1
+\set QUIET on
 SELECT * FROM error_test;
             time            | temp | device 
 ----------------------------+------+--------

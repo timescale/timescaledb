@@ -79,7 +79,9 @@ timescaledb_ProcessUtility(Node *parsetree,
 		 */
 		uint64		processed;
 
+		executor_level_enter();
 		DoCopy((CopyStmt *) parsetree, queryString, &processed);
+		executor_level_exit();
 		processed += executor_get_additional_tuples_processed();
 		if (completionTag)
 			snprintf(completionTag, COMPLETION_TAG_BUFSIZE,
