@@ -63,3 +63,22 @@ SELECT * FROM drop_test;
  Mon Mar 20 09:18:19.100462 2017 | 22.1 | dev1
 (1 row)
 
+--test drops thru cascades of other objects
+\c postgres
+\o /dev/null
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\o
+drop schema public cascade;
+NOTICE:  drop cascades to extension timescaledb
+\dn
+List of schemas
+ Name | Owner 
+------+-------
+(0 rows)
+
