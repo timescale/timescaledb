@@ -108,7 +108,7 @@ CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Device_id" TEXT NOT NULL,
   sensor_1 NUMERIC NULL DEFAULT 1
 );
-CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Time", "Device_id");
+CREATE INDEX ON PUBLIC."Hypertable_1_with_default_index_enabled" ("Device_id", "Time" DESC);
 SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabled"', 'Time', 'Device_id', 1);
 \d+ "Hypertable_1_with_default_index_enabled"
 ROLLBACK;
