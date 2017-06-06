@@ -45,16 +45,14 @@ inval_cache_callback(Datum arg, Oid relid)
 {
 	Catalog    *catalog;
 
-	if (!extension_is_loaded())
-		return;
-
-	if (!OidIsValid(relid) || extension_is_being_dropped(relid))
+	if (extension_invalidate(relid))
 	{
-		/* Extension was dropped or entire cache invalidated. Reset state. */
 		hypertable_cache_invalidate_callback();
-		extension_reset();
 		return;
 	}
+
+	if (!extension_is_loaded())
+		return;
 
 	catalog = catalog_get();
 

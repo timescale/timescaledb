@@ -10,8 +10,8 @@ cache_init(Cache *cache)
 	}
 
 	/*
-	 * The cache object should have been created in its own context
-	 * so that cache_destroy can just delete the context to free everything.
+	 * The cache object should have been created in its own context so that
+	 * cache_destroy can just delete the context to free everything.
 	 */
 	Assert(MemoryContextContains(cache_memory_ctx(cache), cache));
 

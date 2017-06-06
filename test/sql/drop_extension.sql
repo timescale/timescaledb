@@ -29,3 +29,12 @@ SELECT create_hypertable('drop_test', 'time', 'device', 2);
 SELECT * FROM _timescaledb_catalog.hypertable;
 INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');
 SELECT * FROM drop_test;
+
+--test drops thru cascades of other objects
+\c postgres
+\o /dev/null
+\ir include/create_single_db.sql
+\o
+
+drop schema public cascade;
+\dn
