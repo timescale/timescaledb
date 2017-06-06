@@ -31,7 +31,7 @@ SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associ
 BEGIN;
 BEGIN
 \COPY "one_Partition" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
-COPY 3
+COPY 7
 COMMIT;
 COMMIT
 INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES

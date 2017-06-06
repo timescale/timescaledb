@@ -19,6 +19,7 @@ CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id
 
 SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
 
+\set QUIET off
 BEGIN;
 \COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
 COMMIT;
@@ -32,3 +33,4 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
+\set QUIET on
