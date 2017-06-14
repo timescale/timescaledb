@@ -23,71 +23,58 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
 
--- A partition_epoch represents a different partitioning of the data.
--- It has a start and end time (data time). Data needs to be placed in the correct epoch by time.
--- Partitionings are defined by a function, column, and modulo:
---   1) partitioning_func - Takes the partitioning_column and returns a number
---      which is modulo'd to place the data correctly
---   2) partitioning_mod - Number used in modulo operation
---   3) partitioning_column - column in data to partition by (input to partitioning_func)
---
--- Changing a data's partitioning, and thus creating a new epoch, should be done
--- INFREQUENTLY as it's expensive operation.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.partition_epoch (
-    id                          SERIAL   NOT NULL  PRIMARY KEY,
+CREATE TABLE  _timescaledb_catalog.dimension (
+    id                          SERIAL   NOT NULL PRIMARY KEY,
     hypertable_id               INTEGER  NOT NULL  REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    start_time                  BIGINT   NULL      CHECK (start_time >= 0),
-    end_time                    BIGINT   NULL      CHECK (end_time >= 0),
-    num_partitions              SMALLINT NOT NULL  CHECK (num_partitions >= 0),
+    column_name                 NAME     NOT NULL,
+    time_type                   BOOLEAN  NOT NULL,
+    -- space-columns
+    num_slices                  SMALLINT NULL,
     partitioning_func_schema    NAME     NULL,
-    partitioning_func           NAME     NULL,  -- function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
-    partitioning_mod            INT      NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_column         NAME     NULL,
-    UNIQUE (hypertable_id, start_time),
-    UNIQUE (hypertable_id, end_time),
-    CHECK (start_time <= end_time),
-    CHECK (num_partitions <= partitioning_mod),
-    CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL))
-);
-CREATE INDEX ON  _timescaledb_catalog.partition_epoch(hypertable_id, start_time, end_time);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.partition_epoch', '');
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.partition_epoch','id'), '');
+    partitioning_func           NAME     NULL,  -- function name of a function of the form func(data_value) -> [0, 65535)
+    -- time-columns
+    interval_length             BIGINT   NULL,
 
--- A partition defines a partition witin a partition_epoch.
--- For any partition the keyspace is defined as [keyspace_start, keyspace_end].
--- For any epoch, there must be a partition that covers every element in the
--- keyspace, i.e. from [0, partition_epoch.partitioning_mod].
---   Parent: "hypertable.schema_name"."hypertable.table_name"
---   Children: "chunk.schema_name"."chunk.table_name"
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.partition (
-    id             SERIAL   NOT NULL PRIMARY KEY,
-    epoch_id       INT      NOT NULL REFERENCES _timescaledb_catalog.partition_epoch (id) ON DELETE CASCADE,
-    keyspace_start SMALLINT NOT NULL CHECK (keyspace_start >= 0), -- start inclusive
-    keyspace_end   SMALLINT NOT NULL CHECK (keyspace_end > 0), -- end inclusive; compatible with between operator
-    tablespace     NAME     NULL,
-    UNIQUE (epoch_id, keyspace_start),
-    CHECK (keyspace_end > keyspace_start)
+    CHECK (
+        (partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR 
+        (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)
+    ),
+    CHECK (
+        (time_type AND interval_length IS NOT NULL) OR 
+        (NOT time_type AND num_slices IS NOT NULL)
+    )
 );
-CREATE INDEX ON _timescaledb_catalog.partition(epoch_id);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.partition', '');
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.partition','id'), '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension','id'), '');
+
+CREATE TABLE  _timescaledb_catalog.dimension_slice (
+    id            SERIAL   NOT NULL PRIMARY KEY,
+    dimension_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE,
+    range_start   BIGINT   NOT NULL CHECK (range_start >= 0),
+    range_end    BIGINT   NOT NULL CHECK (range_end >= 0),
+    CHECK (range_start <= range_end),
+    UNIQUE (dimension_id, range_start, range_end)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice','id'), '');
+
+
+CREATE TABLE  _timescaledb_catalog.chunk_constraint(
+    dimension_slice_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE,
+    chunk_id            INTEGER  NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
+    PRIMARY KEY(dimension_slice_id, chunk_id)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
 
 -- Represent a chunk of data, which is data in a hypertable that is
 -- partitioned by both the partition_column and time.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     id           SERIAL NOT NULL    PRIMARY KEY,
     partition_id INT    NOT NULL    REFERENCES _timescaledb_catalog.partition (id) ON DELETE CASCADE,
-    start_time   BIGINT NOT NULL    CHECK (start_time >= 0),
-    end_time     BIGINT NOT NULL    CHECK (end_time >= 0),
     schema_name  NAME   NOT NULL,
     table_name   NAME   NOT NULL,
     UNIQUE (schema_name, table_name),
-    UNIQUE (partition_id, start_time),
-    UNIQUE (partition_id, end_time),
-    CHECK (start_time <= end_time)
 );
-CREATE UNIQUE INDEX ON  _timescaledb_catalog.chunk (partition_id) WHERE start_time IS NULL;
-CREATE UNIQUE INDEX ON  _timescaledb_catalog.chunk (partition_id) WHERE end_time IS NULL;
 CREATE INDEX ON _timescaledb_catalog.chunk(partition_id, start_time, end_time);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');

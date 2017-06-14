@@ -9,8 +9,6 @@
 
 static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
-	[PARTITION] = PARTITION_TABLE_NAME,
-	[PARTITION_EPOCH] = PARTITION_EPOCH_TABLE_NAME,
 	[CHUNK] = CHUNK_TABLE_NAME
 };
 
@@ -26,20 +24,6 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
 			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
-		}
-	},
-	[PARTITION] = {
-		.length = _MAX_PARTITION_INDEX,
-		.names = (char *[]) {
-			[PARTITION_ID_INDEX] = "partition_pkey",
-			[PARTITION_PARTITION_EPOCH_ID_INDEX] = "partition_epoch_id_idx",
-		}
-	},
-	[PARTITION_EPOCH] = {
-		.length = _MAX_PARTITION_EPOCH_INDEX,
-		.names = (char *[]) {
-			[PARTITION_EPOCH_ID_INDEX] = "partition_epoch_pkey",
-			[PARTITION_EPOCH_TIME_INDEX] = "partition_epoch_hypertable_id_start_time_end_time_idx",
 		}
 	},
 	[CHUNK] = {
