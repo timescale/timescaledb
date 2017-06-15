@@ -60,22 +60,27 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
  * The slowpath calls  get_or_create_chunk(), and is called only if the fastpath returned no rows.
  *
  */
-#define CHUNK_QUERY_ARGS (Oid[]) {INT4OID, INT8OID}
+#define CHUNK_QUERY_ARGS (Oid[]) {INT4OID, INT8OID, INT4OID, INT8OID}
 #define CHUNK_QUERY "SELECT * \
-				FROM _timescaledb_internal.get_or_create_chunk($1, $2)"
+				FROM _timescaledb_internal.chunk_get_or_create($1, $2, $3, $4)"
 
 /* plan for getting a chunk via get_or_create_chunk(). */
 DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 2, CHUNK_QUERY_ARGS)
 
 static HeapTuple
-chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, TupleDesc *desc, SPIPlanPtr plan)
+chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,
+								int32 space_dimension_id, int64 space_value,
+								TupleDesc *desc, SPIPlanPtr plan)
 {
 	/* the fastpath was n/a or returned 0 rows. */
 	int			ret;
-	Datum		args[3] = {Int32GetDatum(partition_id), Int64GetDatum(timepoint)};
+	Datum		args[4] = {
+		Int32GetDatum(time_dimension_id), Int64GetDatum(time_value),
+		Int32GetDatum(space_dimension_id), Int64GetDatum(space_value)
+	};
 	HeapTuple	tuple;
 
-	ret = SPI_execute_plan(plan, args, NULL, false, 2);
+	ret = SPI_execute_plan(plan, args, NULL, false, 4);
 
 	if (ret <= 0)
 	{
@@ -96,7 +101,8 @@ chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, TupleDesc 
 }
 
 Chunk *
-chunk_insert_new(int32 partition_id, int64 timepoint)
+chunk_get_or_create(int32 time_dimension_id, int64 time_value,
+				 int32 space_dimension_id, int64 space_value)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;
@@ -107,7 +113,9 @@ chunk_insert_new(int32 partition_id, int64 timepoint)
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
-	tuple = chunk_tuple_create_spi_connected(partition_id, timepoint, &desc, plan);
+	tuple = chunk_tuple_create_spi_connected(time_dimension_id, time_value,
+											 space_dimension_id, space_value,
+											 &desc, plan);
 	chunk = chunk_create(tuple, desc, top);
 
 	SPI_finish();

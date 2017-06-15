@@ -30,7 +30,7 @@ CREATE TABLE  _timescaledb_catalog.dimension (
     -- space-columns
     num_slices                  SMALLINT NULL,
     partitioning_func_schema    NAME     NULL,
-    partitioning_func           NAME     NULL,  -- function name of a function of the form func(data_value) -> [0, 65535)
+    partitioning_func           NAME     NULL,  -- function name of a function of the form func(data_value) -> [0, 32768)
     -- time-columns
     time_type                   REGTYPE  NULL,
     interval_length             BIGINT   NULL CHECK(interval_length IS NULL OR interval_length > 0),
@@ -39,8 +39,8 @@ CREATE TABLE  _timescaledb_catalog.dimension (
         (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)
     ),
     CHECK (
-        (time_type AND interval_length IS NOT NULL) OR 
-        (NOT time_type AND num_slices IS NOT NULL)
+        (time_type IS NOT NULL AND interval_length IS NOT NULL) OR 
+        (time_type IS NULL AND num_slices IS NOT NULL)
     )
 );
 CREATE INDEX ON  _timescaledb_catalog.dimension(hypertable_id);
@@ -71,12 +71,13 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constrain
 -- Represent a chunk of data, which is data in a hypertable that is
 -- partitioned by both the partition_column and time.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
-    id           SERIAL NOT NULL    PRIMARY KEY,
-    partition_id INT    NOT NULL    REFERENCES _timescaledb_catalog.partition (id) ON DELETE CASCADE,
-    schema_name  NAME   NOT NULL,
-    table_name   NAME   NOT NULL,
+    id              SERIAL  NOT NULL    PRIMARY KEY,
+    hypertable_id   INT     NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    schema_name     NAME    NOT NULL,
+    table_name      NAME     NOT NULL,
     UNIQUE (schema_name, table_name),
 );
+CREATE INDEX ON _timescaledb_catalog.chunk(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
 

@@ -218,7 +218,7 @@ enum
 enum Anum_chunk
 {
 	Anum_chunk_id = 1,
-	Anum_chunk_partition_id,
+	Anum_chunk_hypertable_id,
 	Anum_chunk_schema_name,
 	Anum_chunk_table_name,
 	_Anum_chunk_max,
@@ -230,7 +230,7 @@ enum Anum_chunk
 typedef struct FormData_chunk
 {
 	int32 id;
-	int32 partition_id;
+	int32 hypertable_id;
     NameData schema_name;
 	NameData table_name;
 } FormData_chunk;
@@ -240,7 +240,7 @@ typedef FormData_chunk *Form_chunk;
 enum
 {
 	CHUNK_ID_INDEX = 0,
-	CHUNK_PARTITION_TIME_INDEX,
+	CHUNK_HYPERTABLE_INDEX,
 	_MAX_CHUNK_INDEX,
 };
 
