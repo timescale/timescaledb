@@ -8,6 +8,7 @@
 #include "cache.h"
 #include "hypertable_cache.h"
 #include "partitioning.h"
+#include "dimension.h"
 
 InsertStatementState *
 insert_statement_state_new(Oid relid)
@@ -17,6 +18,7 @@ insert_statement_state_new(Oid relid)
 											   "Insert context",
 											   ALLOCSET_DEFAULT_SIZES);
 	InsertStatementState *state;
+	Dimension *time_dim;
 
 	oldctx = MemoryContextSwitchTo(mctx);
 
@@ -28,7 +30,9 @@ insert_statement_state_new(Oid relid)
 
 	/* Find hypertable and the time field column */
 	state->hypertable = hypertable_cache_get_entry(state->hypertable_cache, relid);
-	state->time_attno = get_attnum(relid, state->hypertable->time_column_name);
+
+	time_dim = hypertable_time_dimension(state->hypertable);
+	state->time_attno = get_attnum(relid, NameStr(time_dim->fd.column_name));
 
 	state->num_partitions = 0;
 

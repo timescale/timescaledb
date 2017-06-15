@@ -104,6 +104,8 @@ partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDes
 	return partitioning_func_apply(pinfo, value);
 }
 
+
+#if 0
 /* PartitionEpochCtx is used to pass on information during a partition epoch and
  * partition scans. */
 typedef struct
@@ -388,6 +390,7 @@ partition_keyspace_pt_is_member(const Partition *part, const int16 keyspace_pt)
 	return keyspace_pt == KEYSPACE_PT_NO_PARTITIONING || (part->keyspace_start <= keyspace_pt && part->keyspace_end >= keyspace_pt);
 }
 
+#endif
 
 /* _timescaledb_catalog.get_partition_for_key(key TEXT, mod_factor INT) RETURNS SMALLINT */
 Datum		get_partition_for_key(PG_FUNCTION_ARGS);

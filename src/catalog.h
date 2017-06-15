@@ -21,6 +21,9 @@
 enum CatalogTable
 {
 	HYPERTABLE = 0,
+	DIMENSION,
+	DIMENSION_SLICE,
+	CHUNK_CONSTRAINT,
 	CHUNK,
 	_MAX_CATALOG_TABLES,
 };
@@ -37,13 +40,6 @@ enum CatalogTable
 
 #define HYPERTABLE_TABLE_NAME "hypertable"
 
-enum
-{
-	HYPERTABLE_ID_INDEX = 0,
-	HYPERTABLE_NAME_INDEX,
-	_MAX_HYPERTABLE_INDEX,
-};
-
 /* Hypertable table attribute numbers */
 enum Anum_hypertable
 {
@@ -52,14 +48,32 @@ enum Anum_hypertable
 	Anum_hypertable_table_name,
 	Anum_hypertable_associated_schema_name,
 	Anum_hypertable_associated_table_prefix,
+	/*
 	Anum_hypertable_time_column_name,
 	Anum_hypertable_time_column_type,
 	Anum_hypertable_chunk_time_interval,
+	*/
 	_Anum_hypertable_max,
 };
 
 #define Natts_hypertable \
 	(_Anum_hypertable_max - 1)
+
+typedef struct FormData_hypertable
+{
+    int32 id;
+    NameData schema_name;
+    NameData table_name;
+    NameData associated_schema_name;
+    NameData associated_table_prefix;
+/*	
+    NameData time_column_name;
+    Oid time_column_type;
+	int64 chunk_time_interval;
+*/
+} FormData_hypertable;
+
+typedef FormData_hypertable *Form_hypertable;
 
 /* Hypertable primary index attribute numbers */
 enum Anum_hypertable_pkey_idx
@@ -81,6 +95,118 @@ enum Anum_hypertable_name_idx
 
 #define Natts_hypertable_name_idx (_Anum_hypertable_name_max - 1)
 
+enum
+{
+	HYPERTABLE_ID_INDEX = 0,
+	HYPERTABLE_NAME_INDEX,
+	_MAX_HYPERTABLE_INDEX,
+};
+
+
+/******************************
+ *
+ * Dimension table definitions
+ *
+ ******************************/
+
+#define DIMENSION_TABLE_NAME "dimension"
+
+enum Anum_dimension
+{
+	Anum_dimension_id = 1,
+	Anum_dimension_hypertable_id,
+	Anum_dimension_column_name,
+	Anum_dimension_num_slices,
+	Anum_dimension_partitioning_func_schema,
+	Anum_dimension_partitioning_func,
+	Anum_dimension_time_type,
+	Anum_dimension_interval_length,
+	_Anum_dimension_max,
+};
+
+#define Natts_dimension \
+	(_Anum_dimension_max - 1)
+
+typedef struct FormData_dimension
+{
+	int32 id;
+    int32 hypertable_id;
+    NameData column_name;
+    /* space columns */
+    int64 num_slices;
+    NameData partitioning_func_schema;
+    NameData partitioning_func;
+    /* time columns */
+	Oid time_type;
+    int64 interval_length;
+} FormData_dimension;
+
+typedef FormData_dimension *Form_dimension;
+
+enum Anum_dimension_hypertable_id_idx
+{
+	Anum_dimension_hypertable_id_idx_hypertable_id = 1,
+	_Anum_dimension_hypertable_id_idx_max,
+};
+
+#define Natts_dimension_hypertable_id_idx \
+	(_Anum_dimension_hypertable_id_idx_max - 1)
+
+enum
+{
+	DIMENSION_ID_IDX = 0,
+	DIMENSION_HYPERTABLE_ID_IDX,
+	_MAX_DIMENSION_INDEX,
+};
+
+/******************************
+ *
+ * Dimension slice table definitions
+ *
+ ******************************/
+
+#define DIMENSION_SLICE_TABLE_NAME "dimension_slice"
+
+enum Anum_dimension_slice
+{
+	Anum_dimension_slice_id = 1,
+	Anum_dimension_slice_dimension_id,
+	Anum_dimension_slice_range_start,
+	Anum_dimension_slice_range_end,
+	_Anum_dimension_slice_max,
+};
+
+#define Natts_dimension_slice \
+	(_Anum_dimension_slice_max - 1)
+
+typedef struct FormData_dimension_slice
+{
+	int32 id;
+	int32 dimension_id;
+    int64 range_start;
+    int64 range_end;
+} FormData_dimension_slice;
+
+typedef FormData_dimension_slice *Form_dimension_slice;
+
+enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
+{
+	Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id = 1,
+	Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+	Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+	_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max,
+};
+
+#define Natts_dimension_slice_dimension_id_range_start_range_end_idx \
+	(_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max - 1)
+	
+enum
+{
+	DIMENSION_SLICE_ID_IDX = 0,
+	DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+	_MAX_DIMENSION_SLICE_INDEX,
+};
+
 /*************************
  *
  * Chunk table definitions
@@ -88,13 +214,6 @@ enum Anum_hypertable_name_idx
  *************************/
 
 #define CHUNK_TABLE_NAME "chunk"
-
-enum
-{
-	CHUNK_ID_INDEX = 0,
-	CHUNK_PARTITION_TIME_INDEX,
-	_MAX_CHUNK_INDEX,
-};
 
 enum Anum_chunk
 {
@@ -108,12 +227,64 @@ enum Anum_chunk
 #define Natts_chunk \
 	(_Anum_chunk_max - 1)
 
+typedef struct FormData_chunk
+{
+	int32 id;
+	int32 partition_id;
+    NameData schema_name;
+	NameData table_name;
+} FormData_chunk;
+
+typedef FormData_chunk *Form_chunk;
+
+enum
+{
+	CHUNK_ID_INDEX = 0,
+	CHUNK_PARTITION_TIME_INDEX,
+	_MAX_CHUNK_INDEX,
+};
+
+/************************************
+ *
+ * Chunk constraint table definitions
+ *
+ ************************************/
+
+#define CHUNK_CONSTRAINT_TABLE_NAME "chunk_constraint"
+
+enum Anum_chunk_constraint
+{
+	Anum_chunk_constraint_dimension_slice_id = 1,
+	Anum_chunk_constraint_chunk_id,
+	_Anum_chunk_constraint_max,
+};
+
+#define Natts_chunk_constraint \
+	(_Anum_chunk_constraint_max - 1)
+
+typedef struct FormData_chunk_constraint
+{
+	int32 dimension_slice_id;
+	int32 chunk_id;
+} FormData_chunk_constraint;
+
+typedef FormData_chunk_constraint *Form_chunk_constraint;
+
+enum
+{
+	CHUNK_CONSTRAINT_ID_IDX = 0,
+	_MAX_CHUNK_CONSTRAINT_INDEX,
+};
 
 #define MAX(a, b) \
 	((long)(a) > (long)(b) ? (a) : (b))
 
-#define _MAX_TABLE_INDEXES MAX(_MAX_HYPERTABLE_INDEX,\
-							    _MAX_CHUNK_INDEX)
+#define _MAX_TABLE_INDEXES								\
+	MAX(_MAX_HYPERTABLE_INDEX,							\
+		MAX(_MAX_DIMENSION_INDEX,						\
+			MAX(_MAX_DIMENSION_SLICE_INDEX,				\
+				MAX(_MAX_CHUNK_CONSTRAINT_INDEX,		\
+					_MAX_CHUNK_INDEX))))
 
 typedef enum CacheType
 {
