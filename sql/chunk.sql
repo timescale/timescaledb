@@ -1,172 +1,262 @@
--- get the chunk for a given partition and time.
--- static
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_chunk(
-    partition_id INT,
-    time_point   BIGINT
+-- Add a new partition epoch with equally sized partitions
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_get(
+    time_dimension_id           INTEGER,
+    time_value                  BIGINT,
+    space_dimension_id          INTEGER,
+    space_dimension_hash        BIGINT
 )
     RETURNS _timescaledb_catalog.chunk LANGUAGE SQL STABLE AS
 $BODY$
-SELECT *
-FROM _timescaledb_catalog.chunk c
-WHERE c.partition_id = get_chunk.partition_id AND
-      (c.start_time <= time_point OR c.start_time IS NULL) AND
-      (c.end_time >= time_point OR c.end_time IS NULL);
+SELECT * 
+FROM _timescaledb_catalog.chunk
+WHERE 
+id = (
+SELECT cc.chunk_id
+FROM _timescaledb_catalog.dimension_slice ds 
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
+WHERE ds.dimension_id = time_dimension_id and ds.range_start <= time_value and ds.range_end >= time_value
+
+INTERSECT
+
+SELECT cc.chunk_id
+FROM _timescaledb_catalog.dimension_slice ds 
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
+WHERE ds.dimension_id =  space_dimension_id and ds.range_start <= space_dimension_hash and ds.range_end >= space_dimension_hash
+)
 $BODY$;
 
--- calculate new times for a new chunk for appropriate time values
--- Should not be called directly. Requires a lock on chunk table
--- static
-CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_new_chunk_times(
-        partition_id INT,
-        time_point   BIGINT,
-    OUT table_start  BIGINT,
-    OUT table_end    BIGINT
-)
-LANGUAGE PLPGSQL VOLATILE AS
+--todo: unit test
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range(
+        dimension_id      INTEGER,
+        dimension_value   BIGINT,
+    OUT range_start  BIGINT,
+    OUT range_end    BIGINT)
+LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
-    partition_epoch_row _timescaledb_catalog.partition_epoch;
-    chunk_row           _timescaledb_catalog.chunk;
-    time_interval       BIGINT;
-    start_distinct_ctn  BIGINT;
-    end_distinct_ctn    BIGINT;
+    dimension_row _timescaledb_catalog.dimension;
+    inter BIGINT;
 BEGIN
-
-    SELECT pe.*
-    INTO partition_epoch_row
-    FROM _timescaledb_catalog.partition p
-    INNER JOIN _timescaledb_catalog.partition_epoch pe ON (p.epoch_id = pe.id)
-    WHERE p.id = partition_id
-    FOR SHARE;
-
-    -- Check if there are chunks in other partitions.
-    -- If so, use their time range to keep chunks time aligned
-
-    SELECT COUNT(DISTINCT(start_time)), COUNT(DISTINCT(end_time))
-    INTO start_distinct_ctn, end_distinct_ctn
-    FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-    WHERE c.start_time <= time_point AND
-          c.end_time >= time_point AND
-          p.epoch_id = partition_epoch_row.id;
-
-    -- Sanity check that all previous chunks between partitions are
-    -- aligned
-    IF start_distinct_ctn != 0 or end_distinct_ctn != 0 THEN
-        -- At least one chunk exists, check that all chunks 
-        -- from other partitions are aligned
-        IF start_distinct_ctn != 1 OR end_distinct_ctn != 1 THEN
-           RAISE EXCEPTION 'Unaligned chunks between partitions';
-        END IF;
-
-        SELECT start_time, end_time 
-        INTO table_start, table_end
-        FROM _timescaledb_catalog.chunk AS c
-        INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-        WHERE c.start_time <= time_point AND
-              c.end_time >= time_point AND
-              p.epoch_id = partition_epoch_row.id LIMIT 1;    
-
-        RETURN; 
-    END IF;
-
-    SELECT chunk_time_interval
-    INTO time_interval
-    FROM _timescaledb_catalog.hypertable ht
-    WHERE ht.id = partition_epoch_row.hypertable_id;
-
-    -- Create start and stop times for the new chunk, subtract 1 from the end time
-    -- as chunk intervals are inclusive.
-    table_start := (time_point / time_interval) * time_interval;
-    table_end := table_start + time_interval - 1;
-
-    -- Check whether the new chunk interval overlaps with existing chunks.
     SELECT *
-    INTO chunk_row
-    FROM _timescaledb_catalog.chunk AS c
-    WHERE c.end_time <= table_end AND
-          c.end_time >= table_start AND
-          c.partition_id = calculate_new_chunk_times.partition_id
-    ORDER BY c.end_time DESC
-    LIMIT 1;
+    INTO STRICT dimension_row
+    WHERE id = time_dimension_id;
 
-    IF FOUND THEN
-        -- there is at least one table that ends in the new chunk, cut the
-        -- start to match the last one
-        table_start := chunk_row.end_time + 1;
-    END IF;
-
-    SELECT *
-    INTO chunk_row
-    FROM _timescaledb_catalog.chunk AS c
-    WHERE c.start_time < table_end AND
-          c.start_time >= table_start AND
-          c.partition_id = calculate_new_chunk_times.partition_id
-    ORDER BY c.start_time ASC
-    LIMIT 1;
-
-    IF FOUND THEN
-        -- there is at least one table that starts in the new chunk, cut the end to match
-        -- the first of them
-        table_end := chunk_row.start_time - 1;
+    IF dimension_row.interval_length IS NOT NULL THEN
+        range_start := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
+        range_end := range_start + dimension_row.interval_length - 1;
+    ELSE
+       inter := (32768 / dimension_row.num_slices);
+       IF dimension_value >= inter * (dimension_row.num_slices - 1) THEN
+          --put overflow from integer-division errors in last range
+          range_start = inter * (dimension_row.num_slices - 1);
+          range_end = 32768 - 1;
+       ELSE
+          range_start = (dimension_value / inter) * inter;
+          range_end := range_start + inter - 1;
+       END IF;
     END IF;
 END
 $BODY$;
 
--- creates the row in the chunk table. Prerequisite: appropriate lock and check that chunk does not
--- already exist.
+-- calculate the range for a free dimension.
+-- assumes one other fixed dimension.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_calculate_new_ranges(
+        free_dimension_id      INTEGER,
+        free_dimension_value   BIGINT,
+        fixed_dimension_id     INTEGER,
+        fixed_dimension_value  BIGINT,
+        align                  BOOLEAN,
+    OUT new_range_start  BIGINT = NULL,
+    OUT new_range_end    BIGINT = NULL
+)
+LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    overlap_value BIGINT;
+    alignment_found := FALSE;
+BEGIN
+    IF align THEN
+        --if i am aligning then fix see if other chunks have values that fit me in the free dimension
+        SELECT free_slice.range_start, free_slice.range_end
+        INTO new_range_start, new_range_end
+        FROM _timescaledb_catalog.chunk c
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.chunk_id) 
+        INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (ds.id = cc.dimension_slice_id AND ds.dimension_id = free_dimension_id)
+        WHERE 
+           free_slice.range_end >= free_dimension_value and free_slice.range_start <= free_dimension_value
+        LIMIT 1;
+        
+        SELECT new_range_start IS NOT NULL INTO alignment_found; 
+    END IF;
+
+    IF NOT alignment_found THEN
+        --either not aligned or did not find an alignment
+        SELECT *
+        INTO new_range_start, new_range_end
+        FROM _timescaledb_internal.dimension_calculate_default_range(free_dimension_id, free_dimension_value);
+    END IF;
+
+    -- Check whether the new chunk interval overlaps with existing chunks.
+    -- new_range_start overlaps 
+    SELECT free_slice.range_end 
+    INTO overlap_value
+    FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.chunk_id) 
+    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (ds.id = cc.dimension_slice_id AND ds.dimension_id = free_dimension_id)
+    WHERE 
+    c.id = (
+        SELECT cc.chunk_id
+        FROM _timescaledb_catalog.dimension_slice ds 
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
+        WHERE ds.dimension_id = free_dimension_id and ds.range_end <= new_range_end and ds.range_end >= new_range_start
+
+        INTERSECT
+
+        SELECT cc.chunk_id
+        FROM _timescaledb_catalog.dimension_slice ds 
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
+        WHERE ds.dimension_id =  fixed_dimension_id and ds.range_start <= fixed_dimension_value and ds.range_end >= fixed_dimension_value
+    )
+    ORDER BY free_slice.range_end DESC 
+    LIMIT 1;
+
+    IF FOUND THEN
+        -- there is at least one ends inside cut the
+        -- start to match the last one
+        IF alignment_found THEN
+            RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
+            USING ERRCODE = 'IO501';
+        END IF;
+        new_range_start := overlap_value + 1;
+    END IF;
+
+    --check for new_range_end overlap
+    SELECT free_slice.range_start
+    INTO overlap_value
+    FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.chunk_id) 
+    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (ds.id = cc.dimension_slice_id AND ds.dimension_id = free_dimension_id)
+    WHERE 
+    c.id = (
+        SELECT cc.chunk_id
+        FROM _timescaledb_catalog.dimension_slice ds 
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
+        WHERE ds.dimension_id = free_dimension_id and  ds.range_start >= new_range_start and ds.range_start <= new_range_end
+
+        INTERSECT
+
+        SELECT cc.chunk_id
+        FROM _timescaledb_catalog.dimension_slice ds 
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
+        WHERE ds.dimension_id = fixed_dimension_id and ds.range_start <= fixed_dimension_value and ds.range_end >= fixed_dimension_value
+    )
+    ORDER BY free_slice.range_start ASC
+    LIMIT 1;
+
+    IF FOUND THEN
+        -- there is at least one table that starts inside, cut the end to match
+        IF alignment_found THEN
+            RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
+            USING ERRCODE = 'IO501';
+        END IF;
+        new_range_end := overlap_value - 1;
+    END IF;
+END
+$BODY$;
+
+
+
+
+-- creates the row in the chunk table. Prerequisite: appropriate lock.
 -- static
-CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_row(
-    part_id     INT,
-    time_point  BIGINT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create_after_lock(
+    time_dimension_id           INTEGER,
+    time_value                  BIGINT,
+    space_dimension_id          INTEGER,
+    space_value                 BIGINT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    table_start BIGINT;
-    table_end   BIGINT;
-BEGIN    
-    
+    time_start BIGINT;
+    time_end   BIGINT;
+    space_start BIGINT;
+    space_end BIGINT;
+    dimension_row _timescaledb_catalog.dimension;
+BEGIN
     SELECT *
-    INTO table_start, table_end
-    FROM _timescaledb_internal.calculate_new_chunk_times(part_id, time_point);
+    INTO STRICT dimension_row
+    WHERE id = time_dimension_id;
 
-    INSERT INTO _timescaledb_catalog.chunk (id, partition_id, start_time, end_time, schema_name, table_name)
-    SELECT seq_id, part_id, table_start, table_end, h.associated_schema_name, 
+    SELECT *
+    INTO time_start, time_end
+    FROM _timescaledb_internal.chunk_calculate_new_ranges(time_dimension_id, time_value, space_dimension_id, space_value, true);
+
+    SELECT *
+    INTO space_start, space_end
+    FROM _timescaledb_internal.chunk_calculate_new_ranges(space_dimension_id, space_value, time_dimension_id, time_value, false);
+
+    --do not use RETURNING here (ON CONFLICT DO NOTHING)
+    INSERT INTO  _timescaledb_catalog.dimension_slice (dimension_id, range_start, range_end) 
+    VALUES(time_dimension_id, time_start, time_end) ON CONFLICT DO NOTHING;
+
+    INSERT INTO  _timescaledb_catalog.dimension_slice (dimension_id, range_start, range_end) 
+    VALUES(space_dimension_id, space_start, space_end) ON CONFLICT DO NOTHING;
+
+    WITH chunk AS (
+        INSERT INTO _timescaledb_catalog.chunk (id, hypertable_id, schema_name, table_name)
+        SELECT seq_id, h.id, h.associated_schema_name,
            format('%s_%s_chunk', h.associated_table_prefix, seq_id)
-    FROM 
-    nextval(pg_get_serial_sequence('_timescaledb_catalog.chunk','id')) seq_id,
-    _timescaledb_catalog.partition p
-    INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-    INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = pe.hypertable_id)
-    WHERE p.id = part_id;
+        FROM 
+        nextval(pg_get_serial_sequence('_timescaledb_catalog.chunk','id')) seq_id,
+        _timescaledb_catalog.hypertable h 
+        WHERE h.id = dimension_row.hypertable_id
+        RETURNING *
+    ), space_slice AS (
+        SELECT * 
+        FROM _timescaledb_catalog.dimension_slice
+        WHERE dimension_id = space_dimension_id AND
+              range_start = space_start AND
+              range_end = space_end
+    ), time_slice AS (
+        SELECT * 
+        FROM _timescaledb_catalog.dimension_slice
+        WHERE dimension_id = time_dimension_id AND
+              range_start = time_start AND
+              range_end = time_end
+    )
+    INSERT INTO chunk_constraint (dimension_slice_id, chunk_id)
+    SELECT space_slice.id, chunk.id FROM space_slice, chunk
+    UNION 
+    SELECT time_slice.id, chunk.id FROM time_slice, chunk;
 END
 $BODY$;
 
 -- Creates and returns a new chunk, taking a lock on the chunk table.
 -- static
-CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk(
-    partition_id INT,
-    time_point   BIGINT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create(
+    time_dimension_id           INTEGER,
+    time_value                  BIGINT,
+    space_dimension_id          INTEGER,
+    space_value                 BIGINT
 )
     RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     chunk_row     _timescaledb_catalog.chunk;
-    partition_row _timescaledb_catalog.partition;
 BEGIN
     LOCK TABLE _timescaledb_catalog.chunk IN EXCLUSIVE MODE;
 
     -- recheck:
-    chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
+    chunk_row := _timescaledb_internal.chunk_get(time_dimension_id, time_value, space_dimension_id, space_value);
 
     IF chunk_row IS NULL THEN
-        PERFORM _timescaledb_internal.create_chunk_row(partition_id, time_point);
-        chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
+        PERFORM _timescaledb_internal.chunk_create_after_lock(time_dimension_id, time_value, space_dimension_id, space_value);
+        chunk_row := _timescaledb_internal.chunk_get(time_dimension_id, time_value, space_dimension_id, space_value);
     END IF;
 
     IF chunk_row IS NULL THEN -- recheck
-        RAISE EXCEPTION 'Should never happen: chunk not found after creation'
+        RAISE EXCEPTION 'Should never happen: chunk not found after creation on meta'
         USING ERRCODE = 'IO501';
     END IF;
 
@@ -176,19 +266,21 @@ $BODY$;
 
 -- Return a chunk, creating one if it doesn't exist. 
 -- This is the only non-static function in this file.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_or_create_chunk(
-    partition_id INT,
-    time_point   BIGINT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_get_or_create(
+    time_dimension_id           INTEGER,
+    time_value                  BIGINT,
+    space_dimension_id          INTEGER,
+    space_value                 BIGINT
 )
     RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     chunk_row _timescaledb_catalog.chunk;
 BEGIN
-    chunk_row := _timescaledb_internal.get_chunk(partition_id, time_point);
+    chunk_row := _timescaledb_internal.chunk_get(time_dimension_id, time_value, space_dimension_id, space_value);
 
     IF chunk_row IS NULL THEN
-        chunk_row := _timescaledb_internal.create_chunk(partition_id, time_point);
+        chunk_row := _timescaledb_internal.chunk_create(time_dimension_id, time_value, space_dimension_id, space_value);
     END IF;
 
     RETURN chunk_row;

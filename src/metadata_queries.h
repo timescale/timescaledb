@@ -5,6 +5,7 @@
 
 typedef struct Chunk Chunk;
 
-Chunk	   *chunk_insert_new(int32 partition_id, int64 timepoint);
-
+extern Chunk *
+chunk_get_or_create(int32 time_dimension_id, int64 time_value,
+				 int32 space_dimension_id, int64 space_value);
 #endif   /* TIMESCALEDB_METADATA_QUERIES_H */
