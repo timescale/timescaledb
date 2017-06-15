@@ -7,8 +7,11 @@
 #include "catalog.h"
 #include "extension.h"
 
-static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
+static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {	
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
+	[DIMENSION] = DIMENSION_SLICE_TABLE_NAME,
+	[DIMENSION_SLICE] = DIMENSION_SLICE_TABLE_NAME,
+	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME,
 	[CHUNK] = CHUNK_TABLE_NAME
 };
 
@@ -24,6 +27,26 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
 			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
+		}
+	},
+	[DIMENSION] = {
+		.length = _MAX_DIMENSION_INDEX,
+		.names = (char *[]) {
+			[DIMENSION_ID_IDX] = "dimension_pkey",
+			[DIMENSION_HYPERTABLE_ID_IDX] = "dimension_hypertable_id_idx",
+		}
+	},
+	[DIMENSION_SLICE] = {
+		.length = _MAX_DIMENSION_SLICE_INDEX,
+		.names = (char *[]) {
+			[DIMENSION_SLICE_ID_IDX] = "dimension_slice_pkey",
+			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_idx",
+		}
+	},
+	[CHUNK_CONSTRAINT] = {
+		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
+		.names = (char *[]) {
+			[CHUNK_CONSTRAINT_ID_IDX] = "chunk_constraint_pkey",
 		}
 	},
 	[CHUNK] = {

@@ -19,10 +19,6 @@ Chunk *
 chunk_create(HeapTuple tuple, TupleDesc tupdesc, MemoryContext ctx)
 {
 	Chunk	   *chunk;
-	bool		is_null;
-	Datum		datum;
-
-
 	MemoryContext old;
 
 	if (ctx != NULL)
@@ -30,28 +26,11 @@ chunk_create(HeapTuple tuple, TupleDesc tupdesc, MemoryContext ctx)
 		old = MemoryContextSwitchTo(ctx);
 	}
 
-	chunk = palloc(sizeof(Chunk));
+	chunk = palloc0(sizeof(Chunk));
 
-	datum = heap_getattr(tuple, Anum_chunk_id, tupdesc, &is_null);
-	Assert(!is_null);
-	chunk->id = DatumGetInt32(datum);
-
-	datum = heap_getattr(tuple, Anum_chunk_start_time, tupdesc, &is_null);
-	chunk->start_time = is_null ? OPEN_START_TIME : DatumGetInt64(datum);
-
-	datum = heap_getattr(tuple, Anum_chunk_end_time, tupdesc, &is_null);
-	chunk->end_time = is_null ? OPEN_END_TIME : DatumGetInt64(datum);
-
-	datum = heap_getattr(tuple, Anum_chunk_schema_name, tupdesc, &is_null);
-	Assert(!is_null);
-	strncpy(chunk->schema_name, DatumGetCString(datum), NAMEDATALEN);
-
-	datum = heap_getattr(tuple, Anum_chunk_table_name, tupdesc, &is_null);
-	Assert(!is_null);
-	strncpy(chunk->table_name, DatumGetCString(datum), NAMEDATALEN);
-
-	chunk->table_id = get_relname_relid(chunk->table_name, get_namespace_oid(chunk->schema_name, false));
-	Assert(OidIsValid(chunk->table_id));
+	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
+	
+	Assert(OidIsValid(chunk->fd.table_id));
 
 	if (ctx != NULL)
 	{

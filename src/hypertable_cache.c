@@ -9,12 +9,14 @@
 #include <utils/lsyscache.h>
 
 #include "hypertable_cache.h"
+#include "hypertable.h"
 #include "catalog.h"
 #include "cache.h"
 #include "metadata_queries.h"
 #include "utils.h"
 #include "scanner.h"
 #include "partitioning.h"
+#include "dimension.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);
 
@@ -61,7 +63,7 @@ hypertable_cache_create()
 		.get_key = hypertable_cache_get_key,
 		.create_entry = hypertable_cache_create_entry,
 	};
-
+	
 	*cache = template;
 
 	cache_init(cache);
@@ -78,34 +80,7 @@ static bool
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	HypertableNameCacheEntry *entry = data;
-	Hypertable *he;
-	Datum		values[Natts_hypertable];
-	bool		isnull[Natts_hypertable];
-	int32		id;
-
-	he = palloc(sizeof(Hypertable));
-
-	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
-
-	id = DatumGetInt32(DATUM_GET(values, Anum_hypertable_id));
-
-	he->num_epochs = 0;
-	he->id = id;
-	strncpy(he->schema,
-			DatumGetCString(DATUM_GET(values, Anum_hypertable_schema_name)),
-			NAMEDATALEN);
-	strncpy(he->table,
-			DatumGetCString(DATUM_GET(values, Anum_hypertable_table_name)),
-			NAMEDATALEN);
-	he->main_table = get_relname_relid(he->table, get_namespace_oid(he->schema, false));
-	strncpy(he->time_column_name,
-		DatumGetCString(DATUM_GET(values, Anum_hypertable_time_column_name)),
-			NAMEDATALEN);
-	he->time_column_type = DatumGetObjectId(DATUM_GET(values, Anum_hypertable_time_column_type));
-	he->chunk_time_interval = DatumGetInt64(DATUM_GET(values, Anum_hypertable_chunk_time_interval));
-
-	entry->hypertable = he;
-
+	entry->hypertable = hypertable_from_tuple(ti->tuple);
 	return false;
 }
 
@@ -115,6 +90,7 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 	HypertableCacheQuery *hq = (HypertableCacheQuery *) query;
 	Catalog    *catalog = catalog_get();
 	HypertableNameCacheEntry *cache_entry = query->result;
+	Hypertable *ht;
 	int			number_found;
 	ScanKeyData scankey[2];
 	ScannerCtx	scanCtx = {
@@ -154,14 +130,18 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 			cache_entry->hypertable = NULL;
 			break;
 		case 1:
-			Assert(strncmp(cache_entry->hypertable->schema, hq->schema, NAMEDATALEN) == 0);
-			Assert(strncmp(cache_entry->hypertable->table, hq->table, NAMEDATALEN) == 0);
+			Assert(strncmp(cache_entry->hypertable->fd.schema_name, hq->schema, NAMEDATALEN) == 0);
+			Assert(strncmp(cache_entry->hypertable->fd.table_name, hq->table, NAMEDATALEN) == 0);
 			break;
 		default:
 			elog(ERROR, "Got an unexpected number of records: %d", number_found);
 			break;
 
 	}
+
+	ht = cache_entry->hypertable;   
+	ht->space = dimension_scan(ht->fd.id);
+	
 	return query->result;
 }
 
@@ -197,6 +177,7 @@ hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *schem
 	return entry->hypertable;
 }
 
+#if 0
 /* function to compare epochs */
 static int
 cmp_epochs(const void *time_pt_pointer, const void *test)
@@ -268,6 +249,8 @@ hypertable_cache_get_partition_epoch(Cache *cache, Hypertable *hce, int64 time_p
 
 	return epoch;
 }
+
+#endif
 
 extern Cache *
 hypertable_cache_pin()

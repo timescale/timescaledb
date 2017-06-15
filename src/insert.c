@@ -22,6 +22,7 @@
 
 #include "cache.h"
 #include "hypertable_cache.h"
+#include "dimension.h"
 #include "chunk_cache.h"
 #include "errors.h"
 #include "utils.h"
@@ -70,6 +71,7 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 	int64		timepoint;
 	int64		spacepoint;
 	PartitionEpoch *epoch;
+	Dimension *time_dim, *space_dim;
 
 	InsertChunkState *cstate;
 
@@ -101,6 +103,10 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 
 		oldctx = MemoryContextSwitchTo(insert_statement_state->mctx);
 
+
+		/* Get the time dimension associated with the hypertable */
+		time_dim = hypertable_time_dimension(insert_statement_state->hypertable);
+
 		/*
 		 * Get the timepoint from the tuple, converting to our internal time
 		 * representation
@@ -112,15 +118,14 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 			elog(ERROR, "No time attribute in tuple");
 		}
 
-		timepoint = time_value_to_internal(datum, insert_statement_state->hypertable->time_column_type);
+		timepoint = time_value_to_internal(datum, time_dim->fd.time_type);
 
-		epoch = hypertable_cache_get_partition_epoch(insert_statement_state->hypertable_cache, insert_statement_state->hypertable,
-													 timepoint, relid);
-
+		space_dim = hypertable_space_dimension(insert_statement_state->hypertable);
+		
 		/* Find correct partition */
-		if (epoch->num_partitions > 1)
+		if (space_dim->num_slices > 1)
 		{
-			spacepoint = partitioning_func_apply_tuple(epoch->partitioning, tuple, tupdesc);
+			spacepoint = partitioning_func_apply_tuple(space_dim->partitioning, tuple, tupdesc);
 		}
 		else
 		{

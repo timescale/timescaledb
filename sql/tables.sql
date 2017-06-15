@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     table_name              NAME                                    NOT NULL,
     associated_schema_name  NAME                                    NOT NULL,
     associated_table_prefix NAME                                    NOT NULL,
-    time_column_name        NAME                                    NOT NULL,
-    time_column_type        REGTYPE                                 NOT NULL,
-    chunk_time_interval     BIGINT                                  NOT NULL CHECK (chunk_time_interval > 0),
+--    time_column_name        NAME                                    NOT NULL,
+--    time_column_type        REGTYPE                                 NOT NULL,
+--    chunk_time_interval     BIGINT                                  NOT NULL CHECK (chunk_time_interval > 0),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix)
 );
@@ -27,14 +27,13 @@ CREATE TABLE  _timescaledb_catalog.dimension (
     id                          SERIAL   NOT NULL PRIMARY KEY,
     hypertable_id               INTEGER  NOT NULL  REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     column_name                 NAME     NOT NULL,
-    time_type                   BOOLEAN  NOT NULL,
     -- space-columns
     num_slices                  SMALLINT NULL,
     partitioning_func_schema    NAME     NULL,
     partitioning_func           NAME     NULL,  -- function name of a function of the form func(data_value) -> [0, 65535)
     -- time-columns
-    interval_length             BIGINT   NULL,
-
+    time_type                   REGTYPE  NULL,
+    interval_length             BIGINT   NULL CHECK(interval_length IS NULL OR interval_length > 0),
     CHECK (
         (partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR 
         (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)
@@ -44,8 +43,10 @@ CREATE TABLE  _timescaledb_catalog.dimension (
         (NOT time_type AND num_slices IS NOT NULL)
     )
 );
+CREATE INDEX ON  _timescaledb_catalog.dimension(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension','id'), '');
+
 
 CREATE TABLE  _timescaledb_catalog.dimension_slice (
     id            SERIAL   NOT NULL PRIMARY KEY,
@@ -55,6 +56,7 @@ CREATE TABLE  _timescaledb_catalog.dimension_slice (
     CHECK (range_start <= range_end),
     UNIQUE (dimension_id, range_start, range_end)
 );
+CREATE INDEX ON  _timescaledb_catalog.dimension_slice(dimension_id, range_start, range_end);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice','id'), '');
 
@@ -75,7 +77,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     table_name   NAME   NOT NULL,
     UNIQUE (schema_name, table_name),
 );
-CREATE INDEX ON _timescaledb_catalog.chunk(partition_id, start_time, end_time);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
 

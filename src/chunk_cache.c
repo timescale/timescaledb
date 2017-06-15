@@ -86,7 +86,10 @@ typedef struct ChunkScanCtx
 static bool
 chunk_tuple_timepoint_filter(TupleInfo *ti, void *arg)
 {
+	
+	/*
 	ChunkScanCtx *ctx = arg;
+
 	bool		starttime_is_null,
 				endtime_is_null;
 	Datum		datum;
@@ -99,7 +102,7 @@ chunk_tuple_timepoint_filter(TupleInfo *ti, void *arg)
 	if ((starttime_is_null || ctx->timepoint >= ctx->starttime) &&
 		(endtime_is_null || ctx->timepoint <= ctx->endtime))
 		return true;
-
+	*/
 	return false;
 }
 
@@ -141,10 +144,12 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 	/*
 	 * Perform an index scan on epoch ID to find the partitions for the epoch.
 	 */
+	/*
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_partition_start_time_end_time_idx_partition_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ, Int32GetDatum(partition_id));
+	*/
 
 	scanner_scan(&ctx);
 
