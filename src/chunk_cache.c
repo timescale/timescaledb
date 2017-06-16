@@ -172,7 +172,8 @@ chunk_cache_get(Cache *cache, Partition *part, int64 timepoint)
 
 	if (stub_chunk == NULL)
 	{
-		stub_chunk = chunk_insert_new(part->id, timepoint);
+		//FIXME commented out to compile
+		//stub_chunk = chunk_insert_new(part->id, timepoint);
 	}
 
 	return stub_chunk;

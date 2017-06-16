@@ -2,6 +2,7 @@
 #define TIMESCALEDB_DIMENSION_SLICE_H
 
 #include <postgres.h>
+#include <nodes/pg_list.h>
 
 #include "catalog.h"
 #include "dimension.h"
@@ -10,6 +11,8 @@ typedef struct DimensionSlice
 {
 	FormData_dimension_slice fd;
 	DimensionType type;
+	void (*storage_free)(void *);
+	void *storage; //used in the cache
 } DimensionSlice;
 
 #define MAX_SLICES 100
@@ -44,9 +47,12 @@ typedef struct DimensionAxis
 extern DimensionSlice *dimension_slice_scan(int32 dimension_id, int64 coordinate);
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
 extern Hypercube *dimension_slice_point_scan_heap(Hyperspace *space, int64 point[]);
+extern void dimension_slice_free(DimensionSlice *slice);
 extern DimensionAxis *dimension_axis_create(DimensionType type, int32 num_slices);
 extern int32 dimension_axis_add_slice(DimensionAxis **axis, DimensionSlice *slice);
 extern int32 dimension_axis_add_slice_sort(DimensionAxis **axis, DimensionSlice *slice);
 extern DimensionSlice *dimension_axis_find_slice(DimensionAxis *axis, int64 coordinate);
+extern void dimension_axis_free(DimensionAxis *axis);
+extern List *dimension_slice_get_all_for_constraints(List *chunk_constraints);
 
 #endif /* TIMESCALEDB_DIMENSION_SLICE_H */

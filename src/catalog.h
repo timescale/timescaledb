@@ -187,6 +187,13 @@ enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 	_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max,
 };
 
+enum Anum_dimension_slice_dimension_id_idx
+{
+	Anum_dimension_slice_dimension_id_idx_dimension_id = 1,
+	_Anum_dimension_slice_dimension_id_idx_max,
+};
+
+
 #define Natts_dimension_slice_dimension_id_range_start_range_end_idx \
 	(_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max - 1)
 	
@@ -262,9 +269,18 @@ typedef FormData_chunk_constraint *Form_chunk_constraint;
 
 enum
 {
-	CHUNK_CONSTRAINT_ID_IDX = 0,
+	CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_ID_IDX = 0,
 	_MAX_CHUNK_CONSTRAINT_INDEX,
 };
+
+enum Anum_chunk_constraint_chunk_id_dimension_id_idx
+{
+	Anum_chunk_constraint_chunk_id_dimension_id_idx_chunk_id = 1,
+	Anum_chunk_constraint_chunk_id_dimension_id_idx_dimension_slice_id,
+	_Anum_chunk_constraint_chunk_id_dimension_id_idx_max,
+};
+
+
 
 #define MAX(a, b) \
 	((long)(a) > (long)(b) ? (a) : (b))

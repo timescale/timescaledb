@@ -12,9 +12,7 @@ DECLARE
 BEGIN
     PERFORM _timescaledb_internal.create_chunk_index_row(c.schema_name, c.table_name, main_schema_name, main_index_name, definition)
     FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-    INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-    WHERE pe.hypertable_id = create_index_on_all_chunks.hypertable_id;
+    WHERE c.hypertable_id = create_index_on_all_chunks.hypertable_id;
 END
 $BODY$;
 

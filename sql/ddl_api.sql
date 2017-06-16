@@ -31,6 +31,7 @@ DECLARE
     tablespace_oid   OID;
     tablespace_name  NAME;
     time_column_type REGTYPE;
+    partitioning_column_type REGTYPE;
     att_row          pg_attribute;
     main_table_has_items BOOLEAN;
     is_hypertable    BOOLEAN;
@@ -65,14 +66,16 @@ BEGIN
     END IF;
 
     IF partitioning_column IS NOT NULL THEN
-        PERFORM atttypid
-        FROM pg_attribute
-        WHERE attrelid = main_table AND attname = partitioning_column;
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'column "%" does not exist', partitioning_column
-            USING ERRCODE = 'IO102';
-        END IF;
+        BEGIN
+            SELECT atttypid
+            INTO STRICT partitioning_column_type
+            FROM pg_attribute
+            WHERE attrelid = main_table AND attname = partitioning_column;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE EXCEPTION 'column "%" does not exist', partitioning_column
+                USING ERRCODE = 'IO102';
+        END;
     END IF;
 
     EXECUTE format('SELECT TRUE FROM _timescaledb_catalog.hypertable WHERE
@@ -106,6 +109,7 @@ BEGIN
             time_column_name,
             time_column_type,
             partitioning_column,
+            partitioning_column_type,
             number_partitions,
             associated_schema_name,
             associated_table_prefix,

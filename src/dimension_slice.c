@@ -7,6 +7,7 @@
 #include "hypertable.h"
 #include "scanner.h"
 #include "dimension.h"
+#include "chunk_constraint.h"
 
 static inline DimensionSlice *
 dimension_slice_from_form_data(Form_dimension_slice fd)
@@ -14,6 +15,8 @@ dimension_slice_from_form_data(Form_dimension_slice fd)
 	DimensionSlice *ds;
 	ds = palloc0(sizeof(DimensionSlice));
 	memcpy(&ds->fd, fd, sizeof(FormData_dimension_slice));
+	ds->storage_free = NULL;
+	ds->storage = NULL;
 	return ds;
 }
 
@@ -71,17 +74,61 @@ dimension_slice_scan(int32 dimension_id, int64 coordinate)
 
 	/* Perform an index scan for slice matching the dimension's ID and which
 	 * encloses the coordinate */
+	/* FIXME  MAT: I don't think this is right BTGreaterEqualStrategyNumber searches for rows >= target 
+	 * I think. Also I don't think BTLessStrategyNumber can be used with a forward scan
+	 * */
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
 	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-				BTGreaterEqualStrategyNumber, F_INT8EQ, Int64GetDatum(coordinate));
+				BTGreaterEqualStrategyNumber, F_INT8GE, Int64GetDatum(coordinate));
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-				BTLessStrategyNumber, F_INT8EQ, Int64GetDatum(coordinate));
+				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(coordinate));
 
 	scanner_scan(&scanCtx);
 
 	return slice;
 }
+
+static DimensionSlice *
+dimension_slice_scan_by_id(int32 dimension_slice_id)
+{
+	Catalog    *catalog = catalog_get();
+	DimensionSlice *slice = NULL;
+	ScanKeyData scankey[1];
+	ScannerCtx	scanCtx = {
+		.table = catalog->tables[DIMENSION_SLICE].id,
+		.index = catalog->tables[DIMENSION_SLICE].index_ids[DIMENSION_SLICE_ID_IDX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = &slice,
+		.tuple_found = dimension_slice_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_idx_dimension_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_slice_id));
+	scanner_scan(&scanCtx);
+
+	return slice;
+}
+
+List *
+dimension_slice_get_all_for_constraints(List *chunk_constraints)
+{
+	List *ds = NULL;
+	ListCell *lc;
+
+	foreach(lc, chunk_constraints)
+	{
+		ChunkConstraint *cc = lfirst(lc);
+		ds = lappend(ds, dimension_slice_scan_by_id(cc->fd.dimension_slice_id));
+	}
+	
+	return ds;
+}
+
 
 static inline bool
 scan_dimensions(Hypercube *hc, Dimension *dimensions[], int16 num_dimensions, int64 point[])
@@ -217,11 +264,20 @@ dimension_slice_point_scan_heap(Hyperspace *space, int64 point[])
 	return cube;
 }
 
+void dimension_slice_free(DimensionSlice *slice) 
+{
+	if(slice->storage_free != NULL)
+	{
+		slice->storage_free(slice->storage);
+	}
+	pfree(slice);
+}
+
 static int
 cmp_slices(const void *left, const void *right)
 {
-	const DimensionSlice *left_slice = left;
-	const DimensionSlice *right_slice = right;
+	const DimensionSlice *left_slice = *((DimensionSlice **) left);
+	const DimensionSlice *right_slice = *((DimensionSlice **) right);
 	
 	if (left_slice->fd.range_start == right_slice->fd.range_start)
 	{
@@ -244,7 +300,7 @@ static int
 cmp_coordinate_and_slice(const void *left, const void *right)
 {
 	int64 coord = *((int64 *) left);
-	const DimensionSlice *slice = right;
+	const DimensionSlice *slice = *((DimensionSlice **) right);
 
 	if (coord < slice->fd.range_start)
 		return -1;
@@ -261,7 +317,14 @@ dimension_axis_expand(DimensionAxis *axis, int32 new_size)
 	if (axis != NULL && axis->num_slots >= new_size)
 		return axis;
 
-	axis = repalloc(axis, sizeof(DimensionAxis) + sizeof(DimensionSlice *) * new_size);
+	if (axis == NULL) 
+	{
+		axis = palloc(sizeof(DimensionAxis) + sizeof(DimensionSlice *) * new_size);
+	}
+	else
+	{
+		axis = repalloc(axis, sizeof(DimensionAxis) + sizeof(DimensionSlice *) * new_size);
+	}
 	axis->num_slots = new_size;
 	return axis;
 }
@@ -290,12 +353,24 @@ int32
 dimension_axis_add_slice_sort(DimensionAxis **axis, DimensionSlice *slice)
 {
 	dimension_axis_add_slice(axis, slice);
-	qsort((*axis)->slices, sizeof(DimensionSlice *), (*axis)->num_slices, cmp_slices);
+	qsort((*axis)->slices, (*axis)->num_slices, sizeof(DimensionSlice *), cmp_slices);
 	return (*axis)->num_slices;
 }
 
 DimensionSlice *
 dimension_axis_find_slice(DimensionAxis *axis, int64 coordinate)
 {
-	return bsearch(&coordinate, axis->slices, sizeof(DimensionSlice *), axis->num_slices, cmp_coordinate_and_slice);
+  DimensionSlice ** res = bsearch(&coordinate, axis->slices, axis->num_slices, sizeof(DimensionSlice *), cmp_coordinate_and_slice);
+  if (res == NULL)
+	  return NULL;
+  return *res;
+}
+
+void dimension_axis_free(DimensionAxis *axis)
+{
+	for(int16 i = 0; i<axis->num_slices; i++)
+	{
+		dimension_slice_free(axis->slices[i]);
+	}
+	pfree(axis);
 }

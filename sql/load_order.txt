@@ -2,7 +2,6 @@ sql/schemas.sql
 sql/tables.sql
 sql/cache.sql
 sql/errors.sql
-sql/partition_epoch.sql
 sql/ddl_internal.sql
 sql/util_time.sql
 sql/util_internal_table_ddl.sql
@@ -11,7 +10,6 @@ sql/hypertable_triggers.sql
 sql/hypertable_index_triggers.sql
 sql/partitioning.sql
 sql/schema_info.sql
-sql/partition_triggers.sql
 sql/chunk_index.sql
 sql/chunk_triggers.sql
 sql/chunk_index_triggers.sql
