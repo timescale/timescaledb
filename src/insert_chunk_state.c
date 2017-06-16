@@ -1,24 +1,11 @@
 #include <postgres.h>
-#include <funcapi.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_type.h>
-#include <catalog/pg_opfamily.h>
+
 #include <utils/rel.h>
-#include <utils/tuplesort.h>
-#include <utils/tqual.h>
 #include <utils/rls.h>
-#include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/guc.h>
-#include <commands/tablecmds.h>
-#include <commands/trigger.h>
-
 #include <access/xact.h>
-#include <access/htup_details.h>
-#include <access/heapam.h>
-
 #include <miscadmin.h>
-#include <fmgr.h>
 
 #include "cache.h"
 #include "hypertable_cache.h"

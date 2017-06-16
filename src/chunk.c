@@ -29,8 +29,6 @@ chunk_create(HeapTuple tuple, TupleDesc tupdesc, MemoryContext ctx)
 	chunk = palloc0(sizeof(Chunk));
 
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
-	
-	Assert(OidIsValid(chunk->fd.table_id));
 
 	if (ctx != NULL)
 	{

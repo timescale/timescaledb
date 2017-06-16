@@ -59,8 +59,15 @@ typedef struct PartitionEpoch
 } PartitionEpoch;
 
 
-int16		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
-int16		partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
+extern PartitioningInfo *partitioning_info_create(int num_partitions,
+												  const char *schema,
+												  const char *partfunc,
+												  const char *partcol,
+												  int32 partmod,
+												  Oid relid);
+	
+extern int16		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+extern int16		partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
 
 /*
 PartitionEpoch *partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid);

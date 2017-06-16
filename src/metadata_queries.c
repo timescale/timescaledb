@@ -102,7 +102,7 @@ chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,
 
 Chunk *
 chunk_get_or_create(int32 time_dimension_id, int64 time_value,
-				 int32 space_dimension_id, int64 space_value)
+					int32 space_dimension_id, int64 space_value)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;

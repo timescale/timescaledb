@@ -50,7 +50,7 @@ partitioning_info_set_textfunc_fmgr(PartitioningInfo *pi, Oid relid)
 	fmgr_info_cxt(func_id, &pi->partfunc.textfunc_fmgr, CurrentMemoryContext);
 }
 
-static PartitioningInfo *
+PartitioningInfo *
 partitioning_info_create(int num_partitions,
 						 const char *schema,
 						 const char *partfunc,

@@ -1,24 +1,6 @@
 #include <postgres.h>
-#include <funcapi.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_type.h>
-#include <catalog/pg_opfamily.h>
 #include <utils/rel.h>
-#include <utils/tuplesort.h>
-#include <utils/tqual.h>
-#include <utils/rls.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
-#include <utils/guc.h>
-#include <commands/tablecmds.h>
 #include <commands/trigger.h>
-
-#include <access/xact.h>
-#include <access/htup_details.h>
-#include <access/heapam.h>
-
-#include <miscadmin.h>
-#include <fmgr.h>
 
 #include "cache.h"
 #include "hypertable_cache.h"
@@ -64,20 +46,11 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	HeapTuple	tuple;
-	Partition  *part;
-
-	Datum		datum;
-	bool		isnull;
-	int64		timepoint;
-	int64		spacepoint;
-	PartitionEpoch *epoch;
-	Dimension *time_dim, *space_dim;
-
+	Hypertable *ht;
+	Point *point;
 	InsertChunkState *cstate;
-
 	Oid			relid = trigdata->tg_relation->rd_id;
 	TupleDesc	tupdesc = trigdata->tg_relation->rd_att;
-
 	MemoryContext oldctx;
 
 	PG_TRY();
@@ -102,39 +75,16 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 		}
 
 		oldctx = MemoryContextSwitchTo(insert_statement_state->mctx);
+		ht = insert_statement_state->hypertable;
 
-
-		/* Get the time dimension associated with the hypertable */
-		time_dim = hypertable_time_dimension(insert_statement_state->hypertable);
-
-		/*
-		 * Get the timepoint from the tuple, converting to our internal time
-		 * representation
-		 */
-		datum = heap_getattr(tuple, insert_statement_state->time_attno, tupdesc, &isnull);
-
-		if (isnull)
-		{
-			elog(ERROR, "No time attribute in tuple");
-		}
-
-		timepoint = time_value_to_internal(datum, time_dim->fd.time_type);
-
-		space_dim = hypertable_space_dimension(insert_statement_state->hypertable);
+		/* Calculate the tuples point in the N-dimensional hyperspace */
+		point = hyperspace_calculate_point(ht->space, tuple, tupdesc);
 		
-		/* Find correct partition */
-		if (space_dim->num_slices > 1)
-		{
-			spacepoint = partitioning_func_apply_tuple(space_dim->partitioning, tuple, tupdesc);
-		}
-		else
-		{
-			spacepoint = KEYSPACE_PT_NO_PARTITIONING;
-		}
-
-		part = partition_epoch_get_partition(epoch, spacepoint);
-
-		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state, part, epoch, timepoint);
+		elog(NOTICE, "Point is %s", point_to_string(point));
+		
+		/* Find or create the insert state matching the point */
+		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state,
+															   ht->space, point);
 		insert_chunk_state_insert_tuple(cstate, tuple);
 
 		MemoryContextSwitchTo(oldctx);

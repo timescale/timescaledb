@@ -23,8 +23,8 @@ enum CatalogTable
 	HYPERTABLE = 0,
 	DIMENSION,
 	DIMENSION_SLICE,
-	CHUNK_CONSTRAINT,
 	CHUNK,
+	CHUNK_CONSTRAINT,
 	_MAX_CATALOG_TABLES,
 };
 
@@ -48,11 +48,6 @@ enum Anum_hypertable
 	Anum_hypertable_table_name,
 	Anum_hypertable_associated_schema_name,
 	Anum_hypertable_associated_table_prefix,
-	/*
-	Anum_hypertable_time_column_name,
-	Anum_hypertable_time_column_type,
-	Anum_hypertable_chunk_time_interval,
-	*/
 	_Anum_hypertable_max,
 };
 
@@ -66,11 +61,6 @@ typedef struct FormData_hypertable
     NameData table_name;
     NameData associated_schema_name;
     NameData associated_table_prefix;
-/*	
-    NameData time_column_name;
-    Oid time_column_type;
-	int64 chunk_time_interval;
-*/
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;
@@ -116,10 +106,10 @@ enum Anum_dimension
 	Anum_dimension_id = 1,
 	Anum_dimension_hypertable_id,
 	Anum_dimension_column_name,
+	Anum_dimension_column_type,
 	Anum_dimension_num_slices,
 	Anum_dimension_partitioning_func_schema,
 	Anum_dimension_partitioning_func,
-	Anum_dimension_time_type,
 	Anum_dimension_interval_length,
 	_Anum_dimension_max,
 };
@@ -132,12 +122,12 @@ typedef struct FormData_dimension
 	int32 id;
     int32 hypertable_id;
     NameData column_name;
-    /* space columns */
-    int64 num_slices;
+	Oid column_type;
+    /* closed (space) columns */
+    int16 num_slices;
     NameData partitioning_func_schema;
     NameData partitioning_func;
-    /* time columns */
-	Oid time_type;
+    /* open (time) columns */
     int64 interval_length;
 } FormData_dimension;
 
@@ -240,7 +230,7 @@ typedef FormData_chunk *Form_chunk;
 enum
 {
 	CHUNK_ID_INDEX = 0,
-	CHUNK_HYPERTABLE_INDEX,
+	CHUNK_HYPERTABLE_ID_INDEX,
 	_MAX_CHUNK_INDEX,
 };
 

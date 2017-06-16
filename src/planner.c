@@ -118,7 +118,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
 
-	if (rte->relid == hentry->main_table)
+	if (rte->relid == hentry->main_table_relid)
 	{
 		/* get latest partition epoch: TODO scan all pe */
 		PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
