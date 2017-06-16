@@ -7,12 +7,12 @@
 #include "catalog.h"
 #include "extension.h"
 
-static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {	
+static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
-	[DIMENSION] = DIMENSION_SLICE_TABLE_NAME,
+	[DIMENSION] = DIMENSION_TABLE_NAME,
 	[DIMENSION_SLICE] = DIMENSION_SLICE_TABLE_NAME,
-	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME,
-	[CHUNK] = CHUNK_TABLE_NAME
+	[CHUNK] = CHUNK_TABLE_NAME,
+	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME
 };
 
 typedef struct TableIndexDef
@@ -43,19 +43,19 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_idx",
 		}
 	},
+	[CHUNK] = {
+		.length = _MAX_CHUNK_INDEX,
+		.names = (char *[]) {
+			[CHUNK_ID_INDEX] = "chunk_pkey",
+			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
+		}
+	},
 	[CHUNK_CONSTRAINT] = {
 		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
 		.names = (char *[]) {
 			[CHUNK_CONSTRAINT_ID_IDX] = "chunk_constraint_pkey",
 		}
-	},
-	[CHUNK] = {
-		.length = _MAX_CHUNK_INDEX,
-		.names = (char *[]) {
-			[CHUNK_ID_INDEX] = "chunk_pkey",
-			[CHUNK_PARTITION_TIME_INDEX] = "chunk_partition_id_start_time_end_time_idx",
-		}
-	},
+	}
 };
 
 /* Names for proxy tables used for cache invalidation. Must match names in
@@ -88,9 +88,7 @@ catalog_get(void)
 		return &catalog;
 
 	if (!extension_is_loaded())
-	{
 		return &catalog;
-	}
 
 	memset(&catalog, 0, sizeof(Catalog));
 	catalog.database_id = MyDatabaseId;
@@ -98,9 +96,7 @@ catalog_get(void)
 	catalog.schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
 
 	if (catalog.schema_id == InvalidOid)
-	{
 		elog(ERROR, "Oid lookup failed for schema %s", CATALOG_SCHEMA_NAME);
-	}
 
 	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
 	{
@@ -111,9 +107,7 @@ catalog_get(void)
 		id = get_relname_relid(catalog_table_names[i], catalog.schema_id);
 
 		if (id == InvalidOid)
-		{
 			elog(ERROR, "Oid lookup failed for table %s", catalog_table_names[i]);
-		}
 
 		catalog.tables[i].id = id;
 
@@ -122,11 +116,12 @@ catalog_get(void)
 
 		for (j = 0; j < number_indexes; j++)
 		{
-			id = get_relname_relid(catalog_table_index_definitions[i].names[j], catalog.schema_id);
+			id = get_relname_relid(catalog_table_index_definitions[i].names[j],
+								   catalog.schema_id);
+
 			if (id == InvalidOid)
-			{
-				elog(ERROR, "Oid lookup failed for table index %s", catalog_table_index_definitions[i].names[j]);
-			}
+				elog(ERROR, "Oid lookup failed for table index %s",
+					 catalog_table_index_definitions[i].names[j]);
 
 			catalog.tables[i].index_ids[j] = id;
 		}
@@ -137,10 +132,8 @@ catalog_get(void)
 	catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
-	{
 		catalog.caches[i].inval_proxy_id = get_relname_relid(cache_proxy_table_names[i],
-													catalog.cache_schema_id);
-	}
+															 catalog.cache_schema_id);
 
 	return &catalog;
 }

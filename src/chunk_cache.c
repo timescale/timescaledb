@@ -118,6 +118,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 static Chunk *
 chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 {
+#if 0
 	ScanKeyData scankey[1];
 	Catalog    *catalog = catalog_get();
 	ChunkScanCtx cq = {
@@ -154,6 +155,8 @@ chunk_scan(int32 partition_id, int64 timepoint, bool tuplock)
 	scanner_scan(&ctx);
 
 	return cq.chunk;
+#endif
+	return NULL;
 }
 
 /*
