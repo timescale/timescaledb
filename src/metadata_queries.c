@@ -65,7 +65,7 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 				FROM _timescaledb_internal.chunk_get_or_create($1, $2, $3, $4)"
 
 /* plan for getting a chunk via get_or_create_chunk(). */
-DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 2, CHUNK_QUERY_ARGS)
+DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 4, CHUNK_QUERY_ARGS)
 
 static HeapTuple
 chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,

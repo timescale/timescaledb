@@ -56,9 +56,7 @@ DECLARE
 BEGIN
     SELECT h.time_column_name INTO STRICT time_col_name
     FROM _timescaledb_catalog.hypertable h
-    INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id)
-    INNER JOIN _timescaledb_catalog.partition p ON (p.epoch_id = pe.id)
-    INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = p.id)
+    INNER JOIN _timescaledb_catalog.chunk c ON (c.hypertable_id = h.id)
     WHERE c.schema_name = time_col_name_for_chunk.schema_name AND
     c.table_name = time_col_name_for_chunk.table_name;
     RETURN time_col_name;
@@ -79,9 +77,7 @@ DECLARE
 BEGIN
     SELECT h.time_column_type INTO STRICT time_col_type
     FROM _timescaledb_catalog.hypertable h
-    INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.hypertable_id = h.id)
-    INNER JOIN _timescaledb_catalog.partition p ON (p.epoch_id = pe.id)
-    INNER JOIN _timescaledb_catalog.chunk c ON (c.partition_id = p.id)
+    INNER JOIN _timescaledb_catalog.chunk c ON (c.hypertable_id = h.id)
     WHERE c.schema_name = time_col_type_for_chunk.schema_name AND
     c.table_name = time_col_type_for_chunk.table_name;
     RETURN time_col_type;

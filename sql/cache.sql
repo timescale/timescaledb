@@ -34,11 +34,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(proxy_oid OID)
 CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.hypertable
 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger('cache_inval_hypertable');
 
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.partition_epoch
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger('cache_inval_hypertable');
-
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.partition
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger('cache_inval_hypertable');
+--FIXME: invalidate based on dimension, dimension_slice, chunk_constraint..
 
 CREATE TRIGGER "0_cache_inval" AFTER UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.chunk
 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger('cache_inval_chunk');

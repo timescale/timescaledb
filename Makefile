@@ -30,6 +30,7 @@ SRCS = \
 	src/dimension.c \
 	src/dimension_slice.c \
 	src/chunk_cache.c \
+	src/chunk_constraint.c \
 	src/partitioning.c \
 	src/insert.c \
 	src/planner.c \

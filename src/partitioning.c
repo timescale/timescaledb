@@ -17,7 +17,7 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 {
 	FuncCandidateList funclist =
 	FuncnameGetCandidates(list_make2(makeString(pf->schema), makeString(pf->name)),
-						  2, NULL, false, false, false);
+						  1, NULL, false, false, false);
 
 	if (funclist == NULL || funclist->next)
 	{
@@ -76,7 +76,7 @@ partitioning_info_create(int num_partitions,
 	return pi;
 }
 
-int16
+int32
 partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
 	Datum text = FunctionCall1(&pinfo->partfunc.textfunc_fmgr, value);
@@ -85,10 +85,10 @@ partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 										  CStringGetTextDatum(partition_val),
 									 Int32GetDatum(pinfo->partfunc.modulos));
 
-	return DatumGetInt16(keyspace_datum);
+	return DatumGetInt32(keyspace_datum);
 }
 
-int16
+int32
 partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc)
 {
 	Datum		value;
@@ -402,16 +402,16 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 	struct varlena *data;
 	int32		mod;
 	uint32		hash_u;
-	int16		res;
+	int32		res;
 
 	data = PG_GETARG_VARLENA_PP(0);
-	mod = PG_GETARG_INT32(1);
+	mod = 65535;
 
 	hash_u = hash_any((unsigned char *) VARDATA_ANY(data),
 					  VARSIZE_ANY_EXHDR(data));
 
-	res = (int16) ((hash_u & 0x7fffffff) % mod);
+	res = (int32) ((hash_u & 0x7fffffff) % mod);
 
 	PG_FREE_IF_COPY(data, 0);
-	PG_RETURN_INT16(res);
+	PG_RETURN_INT32(res);
 }

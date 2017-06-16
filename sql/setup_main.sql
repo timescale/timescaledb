@@ -25,11 +25,6 @@ BEGIN
     AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.hypertable
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_hypertable();
 
-    DROP TRIGGER IF EXISTS trigger_main_on_change_partition
-    ON _timescaledb_catalog.partition;
-    CREATE TRIGGER trigger_main_on_change_partition AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.partition
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_partition();
-
     -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_main_on_change_hypertable_index
     ON _timescaledb_catalog.hypertable_index;
@@ -41,7 +36,7 @@ BEGIN
     -- No support for TRUNCATE currently, so have a trigger to prevent it on
     -- all meta tables.
     FOREACH table_name IN ARRAY ARRAY ['hypertable', 'hypertable_index',
-    'partition_epoch', 'partition'] :: NAME [] LOOP
+    'dimension', 'dimension_slice', 'chunk_constraint'] :: NAME [] LOOP
         EXECUTE format(
             $$
                 DROP TRIGGER IF EXISTS trigger_block_truncate ON _timescaledb_catalog.%1$s;

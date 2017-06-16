@@ -66,8 +66,8 @@ extern PartitioningInfo *partitioning_info_create(int num_partitions,
 												  int32 partmod,
 												  Oid relid);
 	
-extern int16		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
-extern int16		partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
+extern int32		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+extern int32		partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
 
 /*
 PartitionEpoch *partition_epoch_scan(int32 hypertable_id, int64 timepoint, Oid relid);

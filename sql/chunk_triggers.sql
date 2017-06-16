@@ -9,24 +9,13 @@ DECLARE
     kind                  pg_class.relkind%type;
 BEGIN
     IF TG_OP = 'INSERT' THEN
-
-        PERFORM _timescaledb_internal.create_chunk_table(NEW.schema_name, NEW.table_name,
-                                                     h.schema_name, h.table_name, p.tablespace, 
-                                                     p.keyspace_start, p.keyspace_end, pe.id)
-        FROM _timescaledb_catalog.partition p
-        INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-        INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = pe.hypertable_id)
-        WHERE p.id = NEW.partition_id;
+        PERFORM _timescaledb_internal.chunk_create_table(NEW.id);
 
         PERFORM _timescaledb_internal.create_chunk_index_row(NEW.schema_name, NEW.table_name,
                                 hi.main_schema_name, hi.main_index_name, hi.definition)
-        FROM _timescaledb_catalog.partition p
-        INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-        INNER JOIN _timescaledb_catalog.hypertable_index hi ON (hi.hypertable_id = pe.hypertable_id)
-        WHERE p.id = NEW.partition_id;
+        FROM _timescaledb_catalog.hypertable_index hi
+        WHERE hi.hypertable_id = NEW.hypertable_id;
 
-        -- todo: can go into create_local_data_table?
-        PERFORM _timescaledb_internal.set_time_constraint(NEW.schema_name, NEW.table_name, NEW.start_time, NEW.end_time);
         RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
         -- when deleting the chunk row from the metadata table,

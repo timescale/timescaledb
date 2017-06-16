@@ -104,9 +104,9 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
 
 CREATE TABLE  _timescaledb_catalog.chunk_constraint (
-    dimension_slice_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE,
+    dimension_slice_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension_slice(id) ON DELETE CASCADE,
     chunk_id            INTEGER  NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
-    PRIMARY KEY(dimension_slice_id, chunk_id)
+    PRIMARY KEY(chunk_id, dimension_slice_id)
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
 

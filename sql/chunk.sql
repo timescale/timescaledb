@@ -1,4 +1,4 @@
--- Add a new partition epoch with equally sized partitions
+-- get a chunk if it exists
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_get(
     time_dimension_id           INTEGER,
     time_value                  BIGINT,
@@ -14,14 +14,14 @@ id = (
 SELECT cc.chunk_id
 FROM _timescaledb_catalog.dimension_slice ds 
 INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-WHERE ds.dimension_id = time_dimension_id and ds.range_start <= time_value and ds.range_end >= time_value
+WHERE ds.dimension_id = time_dimension_id and ds.range_start <= time_value and ds.range_end > time_value
 
 INTERSECT
 
 SELECT cc.chunk_id
 FROM _timescaledb_catalog.dimension_slice ds 
 INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-WHERE ds.dimension_id =  space_dimension_id and ds.range_start <= space_dimension_hash and ds.range_end >= space_dimension_hash
+WHERE ds.dimension_id =  space_dimension_id and ds.range_start <= space_dimension_hash and ds.range_end > space_dimension_hash
 )
 $BODY$;
 
@@ -38,21 +38,22 @@ DECLARE
     inter BIGINT;
 BEGIN
     SELECT *
+    FROM _timescaledb_catalog.dimension
     INTO STRICT dimension_row
-    WHERE id = time_dimension_id;
+    WHERE id = dimension_id;
 
     IF dimension_row.interval_length IS NOT NULL THEN
         range_start := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
-        range_end := range_start + dimension_row.interval_length - 1;
+        range_end := range_start + dimension_row.interval_length;
     ELSE
-       inter := (32768 / dimension_row.num_slices);
+       inter := (65535 / dimension_row.num_slices);
        IF dimension_value >= inter * (dimension_row.num_slices - 1) THEN
           --put overflow from integer-division errors in last range
           range_start = inter * (dimension_row.num_slices - 1);
-          range_end = 32768 - 1;
+          range_end = 65535;
        ELSE
           range_start = (dimension_value / inter) * inter;
-          range_end := range_start + inter - 1;
+          range_end := range_start + inter;
        END IF;
     END IF;
 END
@@ -66,26 +67,29 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_calculate_new_ranges(
         fixed_dimension_id     INTEGER,
         fixed_dimension_value  BIGINT,
         align                  BOOLEAN,
-    OUT new_range_start  BIGINT = NULL,
-    OUT new_range_end    BIGINT = NULL
+    OUT new_range_start        BIGINT,
+    OUT new_range_end          BIGINT
 )
 LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     overlap_value BIGINT;
-    alignment_found := FALSE;
+    alignment_found BOOLEAN := FALSE;
 BEGIN
+    new_range_start := NULL;
+    new_range_end := NULL;
+
     IF align THEN
         --if i am aligning then fix see if other chunks have values that fit me in the free dimension
         SELECT free_slice.range_start, free_slice.range_end
         INTO new_range_start, new_range_end
         FROM _timescaledb_catalog.chunk c
-        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.chunk_id) 
-        INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (ds.id = cc.dimension_slice_id AND ds.dimension_id = free_dimension_id)
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id) 
+        INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
         WHERE 
-           free_slice.range_end >= free_dimension_value and free_slice.range_start <= free_dimension_value
+           free_slice.range_end > free_dimension_value and free_slice.range_start <= free_dimension_value
         LIMIT 1;
-        
+
         SELECT new_range_start IS NOT NULL INTO alignment_found; 
     END IF;
 
@@ -101,21 +105,21 @@ BEGIN
     SELECT free_slice.range_end 
     INTO overlap_value
     FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.chunk_id) 
-    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (ds.id = cc.dimension_slice_id AND ds.dimension_id = free_dimension_id)
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id) 
+    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
     WHERE 
     c.id = (
         SELECT cc.chunk_id
         FROM _timescaledb_catalog.dimension_slice ds 
         INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-        WHERE ds.dimension_id = free_dimension_id and ds.range_end <= new_range_end and ds.range_end >= new_range_start
+        WHERE ds.dimension_id = free_dimension_id and ds.range_end <= new_range_end and ds.range_end > new_range_start
 
         INTERSECT
 
         SELECT cc.chunk_id
         FROM _timescaledb_catalog.dimension_slice ds 
         INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-        WHERE ds.dimension_id =  fixed_dimension_id and ds.range_start <= fixed_dimension_value and ds.range_end >= fixed_dimension_value
+        WHERE ds.dimension_id =  fixed_dimension_id and ds.range_start <= fixed_dimension_value and ds.range_end > fixed_dimension_value
     )
     ORDER BY free_slice.range_end DESC 
     LIMIT 1;
@@ -127,28 +131,28 @@ BEGIN
             RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
             USING ERRCODE = 'IO501';
         END IF;
-        new_range_start := overlap_value + 1;
+        new_range_start := overlap_value;
     END IF;
 
     --check for new_range_end overlap
     SELECT free_slice.range_start
     INTO overlap_value
     FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.chunk_id) 
-    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (ds.id = cc.dimension_slice_id AND ds.dimension_id = free_dimension_id)
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id) 
+    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
     WHERE 
     c.id = (
         SELECT cc.chunk_id
         FROM _timescaledb_catalog.dimension_slice ds 
         INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-        WHERE ds.dimension_id = free_dimension_id and  ds.range_start >= new_range_start and ds.range_start <= new_range_end
+        WHERE ds.dimension_id = free_dimension_id and  ds.range_start >= new_range_start and ds.range_start < new_range_end
 
         INTERSECT
 
         SELECT cc.chunk_id
         FROM _timescaledb_catalog.dimension_slice ds 
         INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-        WHERE ds.dimension_id = fixed_dimension_id and ds.range_start <= fixed_dimension_value and ds.range_end >= fixed_dimension_value
+        WHERE ds.dimension_id = fixed_dimension_id and ds.range_start <= fixed_dimension_value and ds.range_end > fixed_dimension_value
     )
     ORDER BY free_slice.range_start ASC
     LIMIT 1;
@@ -159,7 +163,7 @@ BEGIN
             RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
             USING ERRCODE = 'IO501';
         END IF;
-        new_range_end := overlap_value - 1;
+        new_range_end := overlap_value;
     END IF;
 END
 $BODY$;
@@ -186,6 +190,7 @@ DECLARE
 BEGIN
     SELECT *
     INTO STRICT dimension_row
+    FROM _timescaledb_catalog.dimension
     WHERE id = time_dimension_id;
 
     SELECT *
@@ -225,7 +230,7 @@ BEGIN
               range_start = time_start AND
               range_end = time_end
     )
-    INSERT INTO chunk_constraint (dimension_slice_id, chunk_id)
+    INSERT INTO _timescaledb_catalog.chunk_constraint (dimension_slice_id, chunk_id)
     SELECT space_slice.id, chunk.id FROM space_slice, chunk
     UNION 
     SELECT time_slice.id, chunk.id FROM time_slice, chunk;
@@ -256,7 +261,7 @@ BEGIN
     END IF;
 
     IF chunk_row IS NULL THEN -- recheck
-        RAISE EXCEPTION 'Should never happen: chunk not found after creation on meta'
+        RAISE EXCEPTION 'Should never happen: chunk not found after creation'
         USING ERRCODE = 'IO501';
     END IF;
 

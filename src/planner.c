@@ -121,13 +121,14 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 	if (rte->relid == hentry->main_table_relid)
 	{
 		/* get latest partition epoch: TODO scan all pe */
-		PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
+		// FIXME: commented out to compile
+		/*PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
 
 		if (eps->partitioning != NULL &&
 			strncmp(eps->partitioning->column, varname, NAMEDATALEN) == 0)
 		{
 			return eps->partitioning;
-		}
+		}*/
 	}
 	return NULL;
 }
