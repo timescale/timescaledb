@@ -2,6 +2,8 @@
 #define TIMESCALEDB_DIMENSION_H
 
 #include <postgres.h>
+#include <access/attnum.h>
+#include <access/htup_details.h>
 
 #include "catalog.h"
 

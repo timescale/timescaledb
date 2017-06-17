@@ -4,6 +4,7 @@
 #include <postgres.h>
 
 #include "catalog.h"
+#include "subspace_store.h"
 
 typedef struct PartitionEpoch PartitionEpoch;
 typedef struct Hyperspace Hyperspace;
@@ -15,10 +16,8 @@ typedef struct Hypertable
 {
 	FormData_hypertable fd;
 	Oid         main_table_relid;
-	int			num_epochs;
-	/* Array of PartitionEpoch. Order by start_time */
-	PartitionEpoch *epochs[MAX_EPOCHS_PER_HYPERTABLE];
 	Hyperspace *space;
+	SubspaceStore *chunk_cache;
 } Hypertable;
 
 typedef struct HeapTupleData *HeapTuple;
@@ -26,5 +25,9 @@ typedef struct HeapTupleData *HeapTuple;
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
 extern Dimension *hypertable_get_open_dimension(Hypertable *h);
 extern Dimension *hypertable_get_closed_dimension(Hypertable *h);
+
+extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
+
+
 
 #endif /* TIMESCALEDB_HYPERTABLE_H */

@@ -15,7 +15,8 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 -- MUST DOCUMENT TODO: remove these permissions. Have c-based workaround.
 -- Everything below this line is suspect.
 GRANT INSERT ON TABLE 
-_timescaledb_catalog.hypertable, _timescaledb_catalog.chunk
+_timescaledb_catalog.hypertable, _timescaledb_catalog.chunk,
+_timescaledb_catalog.dimension, _timescaledb_catalog.dimension_slice, _timescaledb_catalog.chunk_constraint
 TO PUBLIC;
 
 -- needed for inserts to hypertable
