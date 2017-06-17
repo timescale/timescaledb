@@ -23,6 +23,7 @@
 #include "extension.h"
 #include "utils.h"
 #include "guc.h"
+#include "dimension.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -120,15 +121,11 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 
 	if (rte->relid == hentry->main_table_relid)
 	{
-		/* get latest partition epoch: TODO scan all pe */
-		// FIXME: commented out to compile
-		/*PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
-
-		if (eps->partitioning != NULL &&
-			strncmp(eps->partitioning->column, varname, NAMEDATALEN) == 0)
+		Dimension *closed_dim = hypertable_get_closed_dimension(hentry);
+		if (closed_dim != NULL) 
 		{
-			return eps->partitioning;
-		}*/
+			return closed_dim->partitioning;
+		}
 	}
 	return NULL;
 }

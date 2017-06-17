@@ -78,8 +78,6 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = hyperspace_calculate_point(ht->space, tuple, tupdesc);
 
-		elog(NOTICE, "Point is %s", point_to_string(point));
-
 		/* Find or create the insert state matching the point */
 		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state,
 															   ht->space, point);

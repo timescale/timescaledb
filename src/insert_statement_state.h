@@ -5,6 +5,7 @@
 #include "insert_chunk_state.h"
 #include "hypertable_cache.h"
 #include "cache.h"
+#include "subspace_store.h"
 
 
 typedef struct Hyperspace Hyperspace;
@@ -24,7 +25,7 @@ typedef struct
 	int			num_partitions;
 	int num_open_dimensions;
 	DimensionSlice *open_dimensions_slices[0];
-	InsertStateCache *cache; 
+	SubspaceStore *cache; 
 } InsertStatementState;
 
 InsertStatementState *insert_statement_state_new(Oid);

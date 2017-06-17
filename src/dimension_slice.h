@@ -22,14 +22,11 @@ typedef struct DimensionSlice
  */
 typedef struct Hypercube
 {
-	int16 num_dimensions;
-	int16 num_slices;
+	int16 num_dimensions; 	/* capacity of slices[] */
+	int16 num_slices; 		/* actual number of slices (should equal num_dimensions after create) */
 	/* Open slices are stored before closed slices */
 	DimensionSlice *slices[0];
 } Hypercube;
-
-#define HYPERCUBE_NUM_SLICES(hc) \
-	((hc)->num_open_slices + (hc)->num_closed_slices)
 
 #define HYPERCUBE_SIZE(num_dimensions)			\
 	(sizeof(Hypercube) + sizeof(DimensionSlice *) * num_dimensions)

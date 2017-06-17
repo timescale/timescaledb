@@ -67,8 +67,6 @@ chunk_constraint_scan(Chunk *chunk)
 		.scandirection = ForwardScanDirection,
 	};
 	
-	/* Perform an index scan for slice matching the dimension's ID and which
-	 * encloses the coordinate */
 	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_id_idx_chunk_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
 

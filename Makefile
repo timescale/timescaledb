@@ -40,6 +40,7 @@ SRCS = \
 	src/insert_chunk_state.c \
 	src/insert_statement_state.c \
 	src/agg_bookend.c \
+	src/subspace_store.c \
 	src/guc.c
 
 OBJS = $(SRCS:.c=.o)
