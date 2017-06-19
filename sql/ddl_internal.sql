@@ -121,6 +121,17 @@ $BODY$
           h.table_name = drop_hypertable.table_name
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_get_time(
+    hypertable_id INT
+)
+    RETURNS _timescaledb_catalog.dimension LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT * 
+    FROM _timescaledb_catalog.dimension d 
+    WHERE d.hypertable_id = dimension_get_time.hypertable_id AND
+          d.interval_length IS NOT NULL
+$BODY$;
+
 -- Drop chunks older than the given timestamp. If a hypertable name is given,
 -- drop only chunks associated with this table.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunks_older_than(
@@ -135,9 +146,12 @@ BEGIN
     EXECUTE format(
         $$
         DELETE FROM _timescaledb_catalog.chunk c
-        USING _timescaledb_catalog.hypertable h
-        WHERE h.id = c.hypertable_id
-        AND c.end_time < %1$L
+        USING _timescaledb_catalog.hypertable h,
+        _timescaledb_internal.dimension_get_time(h.id) time_dimension,
+        _timescaledb_catalog.dimension_slice ds,
+        _timescaledb_catalog.chunk_constraint cc
+        WHERE h.id = c.hypertable_id AND ds.dimension_id = time_dimension.id AND cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id
+        AND ds.range_end <= %1$L
         AND (%2$L IS NULL OR h.schema_name = %2$L)
         AND (%3$L IS NULL OR h.table_name = %3$L)
         $$, older_than_time, schema_name, table_name

@@ -52,6 +52,7 @@ typedef struct DimensionVec
 
 extern DimensionVec *dimension_slice_scan(int32 dimension_id, int64 coordinate);
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
+extern DimensionSlice *dimension_slice_copy(const DimensionSlice *original);
 extern void dimension_slice_free(DimensionSlice *slice);
 extern DimensionVec *dimension_vec_create(int32 initial_num_slices);
 extern DimensionVec *dimension_vec_add_slice(DimensionVec **vec, DimensionSlice *slice);

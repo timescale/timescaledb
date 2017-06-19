@@ -126,6 +126,14 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 	return slice;
 }
 
+DimensionSlice *
+dimension_slice_copy(const DimensionSlice *original)
+{
+	DimensionSlice *new = palloc(sizeof(DimensionSlice));
+	memcpy(new, original, sizeof(DimensionSlice));
+	return new;
+}
+
 static int
 cmp_slices_by_dimension_id(const void *left, const void *right)
 {
@@ -159,6 +167,7 @@ hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints)
 		hc->slices[hc->num_slices++] = slice;
 	}
 
+	hypercube_slice_sort(hc);
 	return hc;
 }
 

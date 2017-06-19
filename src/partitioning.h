@@ -36,7 +36,6 @@ typedef struct PartitioningFunc
 	 * partitioning column's text representation
 	 */
 	FmgrInfo	func_fmgr;
-	int32		modulos;
 } PartitioningFunc;
 
 
@@ -63,7 +62,6 @@ extern PartitioningInfo *partitioning_info_create(int num_partitions,
 												  const char *schema,
 												  const char *partfunc,
 												  const char *partcol,
-												  int32 partmod,
 												  Oid relid);
 	
 extern int32		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);

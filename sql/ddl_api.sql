@@ -163,10 +163,16 @@ BEGIN
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
-    UPDATE _timescaledb_catalog.hypertable h 
-    SET chunk_time_interval = set_chunk_time_interval.chunk_time_interval
-    WHERE h.schema_name = main_schema_name AND
-          h.table_name = main_table_name;
+    UPDATE _timescaledb_catalog.dimension d 
+    SET interval_length = set_chunk_time_interval.chunk_time_interval
+    FROM _timescaledb_internal.dimension_get_time(
+        (
+            SELECT id 
+            FROM _timescaledb_catalog.hypertable h 
+            WHERE h.schema_name = main_schema_name AND 
+            h.table_name = main_table_name
+    )) time_dim
+    WHERE time_dim.id = d.id;
 END
 $BODY$;
 
