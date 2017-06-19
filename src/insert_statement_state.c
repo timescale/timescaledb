@@ -102,7 +102,7 @@ insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyper
 	InsertChunkState *ics;
 
 	if (NULL == state->cache)
-		state->cache = subspace_store_init(point->cardinality);
+		state->cache = subspace_store_init(point->cardinality, state->mctx);
 	
 	ics = subspace_store_get(state->cache, point);
 
@@ -114,8 +114,6 @@ insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyper
 
 		if (NULL == new_chunk)
 			elog(ERROR, "No chunk found or created");
-
-		dimension_slice_scan(hs->open_dimensions[0]->fd.id, point->coordinates[0]);
 
 		ics = insert_chunk_state_new(new_chunk);
         subspace_store_add(state->cache, new_chunk->cube, ics, destroy_ics);

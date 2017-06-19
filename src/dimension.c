@@ -9,8 +9,6 @@
 #include "partitioning.h"
 #include "utils.h"
 
-#define PARTITIONING_MODULO (USHRT_MAX)
-
 static Dimension *
 dimension_from_tuple(HeapTuple tuple, Oid main_table_relid)
 {
@@ -29,7 +27,6 @@ dimension_from_tuple(HeapTuple tuple, Oid main_table_relid)
 												   NameStr(d->fd.partitioning_func_schema),
 												   NameStr(d->fd.partitioning_func),
 												   NameStr(d->fd.column_name),
-												   PARTITIONING_MODULO,
 												   main_table_relid);
 	}
 

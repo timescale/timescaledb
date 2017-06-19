@@ -55,13 +55,11 @@ partitioning_info_create(int num_partitions,
 						 const char *schema,
 						 const char *partfunc,
 						 const char *partcol,
-						 int32 partmod,
 						 Oid relid)
 {
 	PartitioningInfo *pi;
 
 	pi = palloc0(sizeof(PartitioningInfo));
-	pi->partfunc.modulos = partmod;
 	strncpy(pi->partfunc.name, partfunc, NAMEDATALEN);
 	strncpy(pi->column, partcol, NAMEDATALEN);
 
@@ -81,9 +79,8 @@ partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
 	Datum text = FunctionCall1(&pinfo->partfunc.textfunc_fmgr, value);
 	char	   *partition_val = DatumGetCString(text);
-	Datum		keyspace_datum = FunctionCall2(&pinfo->partfunc.func_fmgr,
-										  CStringGetTextDatum(partition_val),
-									 Int32GetDatum(pinfo->partfunc.modulos));
+	Datum		keyspace_datum = FunctionCall1(&pinfo->partfunc.func_fmgr,
+										  CStringGetTextDatum(partition_val));
 
 	return DatumGetInt32(keyspace_datum);
 }

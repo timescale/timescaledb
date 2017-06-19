@@ -7,6 +7,7 @@
 typedef struct SubspaceStore {
 	int16 num_dimensions;
 	DimensionVec *origin; /* origin of the tree */
+	MemoryContext mcxt;
 } SubspaceStore;
 
 static DimensionVec *
@@ -16,11 +17,14 @@ subspace_store_dimension_create()
 }
 
 SubspaceStore *
-subspace_store_init(int16 num_dimensions) 
+subspace_store_init(int16 num_dimensions, MemoryContext mcxt) 
 {
+	MemoryContext old = MemoryContextSwitchTo(mcxt);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
 	sst->origin = subspace_store_dimension_create();
 	sst->num_dimensions = num_dimensions;
+	sst->mcxt = mcxt;
+	MemoryContextSwitchTo(old);
 	return sst;
 }
 
@@ -30,18 +34,19 @@ subspace_store_free_internal_node(void * node)
 	dimension_vec_free((DimensionVec *)node);
 }
 
-void subspace_store_add(SubspaceStore *cache, Hypercube *hc,
+void subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
 						void *end_store, void (*end_store_free)(void *))
 {
 	DimensionVec *vec = cache->origin;
 	DimensionSlice *last = NULL;
 	int i;
+	MemoryContext old = MemoryContextSwitchTo(cache->mcxt);
 	
 	Assert(hc->num_slices == cache->num_dimensions);
 
 	for (i = 0; i < hc->num_slices; i++)
 	{
-		DimensionSlice *target = hc->slices[i];
+		const DimensionSlice *target = hc->slices[i];
 		DimensionSlice *match;
 
 		Assert(target->storage == NULL);
@@ -62,8 +67,9 @@ void subspace_store_add(SubspaceStore *cache, Hypercube *hc,
 		
 		if (match == NULL) 
 		{
-			dimension_vec_add_slice_sort(&vec, target);
-			match = target;
+			DimensionSlice *copy = dimension_slice_copy(target);
+			dimension_vec_add_slice_sort(&vec, copy);
+			match = copy;
 		}
 
 		last = match;
@@ -73,6 +79,7 @@ void subspace_store_add(SubspaceStore *cache, Hypercube *hc,
 	Assert(last->storage == NULL);
 	last->storage = end_store; /* at the end we store the object */
 	last->storage_free = end_store_free;
+	MemoryContextSwitchTo(old);
 }
 
 void *
@@ -110,4 +117,7 @@ subspace_store_free(SubspaceStore *cache)
 	pfree(cache);
 }
 
-
+MemoryContext subspace_store_mcxt(SubspaceStore *cache)
+{
+	return cache->mcxt;
+}

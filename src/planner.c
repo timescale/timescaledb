@@ -135,7 +135,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
  * all nodes given in input. */
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema,
-							 char *partitioning_func, int32 partitioning_mod)
+							 char *partitioning_func)
 {
 	Expr	   *op_expr;
 	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
@@ -151,17 +151,6 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 	FuncCall   *fc_const;
 	Node	   *f_var;
 	Node	   *f_const;
-
-	mod_const_var_call = makeConst(INT4OID,
-								   -1,
-								   InvalidOid,
-								   sizeof(int32),
-								   Int32GetDatum(partitioning_mod),
-								   false,
-								   true);
-
-	mod_const_const_call = (Const *) palloc(sizeof(Const));
-	memcpy(mod_const_const_call, mod_const_var_call, sizeof(Const));
 
 	const_for_fn_call = (Const *) palloc(sizeof(Const));
 	memcpy(const_for_fn_call, const_expr, sizeof(Const));
@@ -188,8 +177,8 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 								  COERCE_EXPLICIT_CAST, -1);
 	}
 
-	args_func_var = list_make2(var_node_for_fn_call, mod_const_var_call);
-	args_func_const = list_make2(const_node_for_fn_call, mod_const_const_call);
+	args_func_var = list_make1(var_node_for_fn_call);
+	args_func_const = list_make1(const_node_for_fn_call);
 
 	fc_var = makeFuncCall(func_name, args_func_var, -1);
 	fc_const = makeFuncCall(func_name, args_func_const, -1);
@@ -267,7 +256,7 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						{
 							/* The var is a partitioning column */
 							Expr	   *partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
-																								 pi->partfunc.schema, pi->partfunc.name, pi->partfunc.modulos);
+																								 pi->partfunc.schema, pi->partfunc.name);
 
 							return (Node *) make_andclause(list_make2(node, partitioning_clause));
 

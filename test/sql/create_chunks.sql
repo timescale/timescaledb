@@ -25,9 +25,10 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 
 SELECT * FROM ONLY chunk_test;
 SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-    LEFT JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+    LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+    LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+    LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
     ORDER BY c.id;
 
