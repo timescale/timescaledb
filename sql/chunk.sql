@@ -18,7 +18,7 @@ $BODY$;
 -- static
 CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_new_chunk_times(
         partition_id INT,
-        "time"       BIGINT,
+        time_point   BIGINT,
     OUT table_start  BIGINT,
     OUT table_end    BIGINT
 )
@@ -27,14 +27,48 @@ $BODY$
 DECLARE
     partition_epoch_row _timescaledb_catalog.partition_epoch;
     chunk_row           _timescaledb_catalog.chunk;
-    time_interval BIGINT;
+    time_interval       BIGINT;
+    start_distinct_ctn  BIGINT;
+    end_distinct_ctn    BIGINT;
 BEGIN
+
     SELECT pe.*
     INTO partition_epoch_row
     FROM _timescaledb_catalog.partition p
     INNER JOIN _timescaledb_catalog.partition_epoch pe ON (p.epoch_id = pe.id)
     WHERE p.id = partition_id
     FOR SHARE;
+
+    -- Check if there are chunks in other partitions.
+    -- If so, use their time range to keep chunks time aligned
+
+    SELECT COUNT(DISTINCT(start_time)), COUNT(DISTINCT(end_time))
+    INTO start_distinct_ctn, end_distinct_ctn
+    FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
+    WHERE c.start_time <= time_point AND
+          c.end_time >= time_point AND
+          p.epoch_id = partition_epoch_row.id;
+
+    -- Sanity check that all previous chunks between partitions are
+    -- aligned
+    IF start_distinct_ctn != 0 or end_distinct_ctn != 0 THEN
+        -- At least one chunk exists, check that all chunks 
+        -- from other partitions are aligned
+        IF start_distinct_ctn != 1 OR end_distinct_ctn != 1 THEN
+           RAISE EXCEPTION 'Unaligned chunks between partitions';
+        END IF;
+
+        SELECT start_time, end_time 
+        INTO table_start, table_end
+        FROM _timescaledb_catalog.chunk AS c
+        INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
+        WHERE c.start_time <= time_point AND
+              c.end_time >= time_point AND
+              p.epoch_id = partition_epoch_row.id LIMIT 1;    
+
+        RETURN; 
+    END IF;
 
     SELECT chunk_time_interval
     INTO time_interval
@@ -43,7 +77,7 @@ BEGIN
 
     -- Create start and stop times for the new chunk, subtract 1 from the end time
     -- as chunk intervals are inclusive.
-    table_start := ("time" / time_interval) * time_interval;
+    table_start := (time_point / time_interval) * time_interval;
     table_end := table_start + time_interval - 1;
 
     -- Check whether the new chunk interval overlaps with existing chunks.
@@ -79,7 +113,8 @@ BEGIN
 END
 $BODY$;
 
--- creates the row in the chunk table. Prerequisite: appropriate lock.
+-- creates the row in the chunk table. Prerequisite: appropriate lock and check that chunk does not
+-- already exist.
 -- static
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_row(
     part_id     INT,
@@ -90,8 +125,8 @@ $BODY$
 DECLARE
     table_start BIGINT;
     table_end   BIGINT;
-BEGIN
-
+BEGIN    
+    
     SELECT *
     INTO table_start, table_end
     FROM _timescaledb_internal.calculate_new_chunk_times(part_id, time_point);
@@ -131,7 +166,7 @@ BEGIN
     END IF;
 
     IF chunk_row IS NULL THEN -- recheck
-        RAISE EXCEPTION 'Should never happen: chunk not found after creation on meta'
+        RAISE EXCEPTION 'Should never happen: chunk not found after creation'
         USING ERRCODE = 'IO501';
     END IF;
 

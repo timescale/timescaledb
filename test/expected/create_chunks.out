@@ -78,3 +78,48 @@ SELECT * FROM _timescaledb_catalog.chunk c
   4 |            1 |         10 |       39 | _timescaledb_internal | _hyper_1_4_chunk |  1 |        1 |              0 |        16383 |            |  1 |             1 |            |          |              2 | _timescaledb_internal    | get_partition_for_key |            32768 | device_id           |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                | time             | bigint           |                  40
 (4 rows)
 
+-- Test chunk aligning between partitions
+CREATE TABLE chunk_align_test(
+        time       BIGINT,
+        metric     INTEGER,
+        device_id  TEXT
+    );
+SELECT * FROM create_hypertable('chunk_align_test', 'time', 'device_id', 2, chunk_time_interval => 10);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO chunk_align_test VALUES (1, 1, 'dev1'); -- this should create a 10 wide chunk
+SELECT c.id,partition_id,c.start_time,c.end_time,h.table_name,p.epoch_id FROM _timescaledb_catalog.chunk c
+    LEFT JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
+    LEFT JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
+    ORDER BY c.id;
+ id | partition_id | start_time | end_time |    table_name    | epoch_id 
+----+--------------+------------+----------+------------------+----------
+  5 |            3 |          0 |        9 | chunk_align_test |        2
+(1 row)
+
+SELECT * FROM set_chunk_time_interval('chunk_align_test', 40::bigint);
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+INSERT INTO chunk_align_test VALUES (5, 1, 'dev2'); -- this should still create a 10 wide chunk
+INSERT INTO chunk_align_test VALUES (45, 1, 'dev2'); -- this should create a 40 wide chunk
+SELECT c.id,partition_id,c.start_time,c.end_time,h.table_name,p.epoch_id  FROM _timescaledb_catalog.chunk c
+    LEFT JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
+    LEFT JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
+    ORDER BY c.id;
+ id | partition_id | start_time | end_time |    table_name    | epoch_id 
+----+--------------+------------+----------+------------------+----------
+  5 |            3 |          0 |        9 | chunk_align_test |        2
+  6 |            4 |          0 |        9 | chunk_align_test |        2
+  7 |            4 |         40 |       79 | chunk_align_test |        2
+(3 rows)
+
