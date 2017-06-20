@@ -16,10 +16,8 @@ WHERE OID IN (
     deptype = 'e' and classid = 'pg_catalog.pg_proc'::regclass
 ) AND pronamespace = 'public'::regnamespace
 ORDER BY proname;
-         proname          
---------------------------
- add_equi_partition_epoch
- add_partition_epoch
+         proname         
+-------------------------
  create_hypertable
  drop_chunks
  first
@@ -27,5 +25,5 @@ ORDER BY proname;
  restore_timescaledb
  set_chunk_time_interval
  time_bucket
-(9 rows)
+(7 rows)
 

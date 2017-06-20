@@ -3,6 +3,7 @@
 #include <utils/lsyscache.h>
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
+#include <utils/memutils.h>
 
 #include "hypertable.h"
 #include "dimension.h"
@@ -52,5 +53,6 @@ Chunk *hypertable_get_chunk(Hypertable *h, Point *point)
 		MemoryContextSwitchTo(old);
 	}
 
+	Assert(MemoryContextContains(subspace_store_mcxt(h->chunk_cache), chunk));
 	return chunk;
 }

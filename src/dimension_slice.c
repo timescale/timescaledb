@@ -55,6 +55,12 @@ hypercube_copy(Hypercube *hc)
 
 	copy = palloc(nbytes);
 	memcpy(copy, hc, nbytes);
+
+	for(int i = 0; i < hc->num_slices; i++)
+	{
+		copy->slices[i] = dimension_slice_copy(hc->slices[i]);
+	}
+
 	return copy;
 }
 

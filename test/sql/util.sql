@@ -7,7 +7,7 @@
 
 DO $$
 BEGIN
-  ASSERT( _timescaledb_internal.get_partition_for_key('') = 13 );
-  ASSERT( _timescaledb_internal.get_partition_for_key('dev1') = 4 );
-  ASSERT( _timescaledb_internal.get_partition_for_key('longlonglonglongpartitionkey') = 6 );
+  ASSERT( _timescaledb_internal.get_partition_for_key('') = 669664877 );
+  ASSERT( _timescaledb_internal.get_partition_for_key('dev1') = 1129986420 );
+  ASSERT( _timescaledb_internal.get_partition_for_key('longlonglonglongpartitionkey') = 1169179734);
 END$$;

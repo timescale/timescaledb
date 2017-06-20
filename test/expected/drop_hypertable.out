@@ -6,13 +6,13 @@ CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | time_column_name | time_column_type | chunk_time_interval 
-----+-------------+------------+------------------------+-------------------------+------------------+------------------+---------------------
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+------------+------------------------+-------------------------+----------------
 (0 rows)
 
-SELECT * from _timescaledb_catalog.partition_epoch;
- id | hypertable_id | start_time | end_time | num_partitions | partitioning_func_schema | partitioning_func | partitioning_mod | partitioning_column 
-----+---------------+------------+----------+----------------+--------------------------+-------------------+------------------+---------------------
+SELECT * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name | column_type | num_slices | partitioning_func_schema | partitioning_func | interval_length 
+----+---------------+-------------+-------------+------------+--------------------------+-------------------+-----------------
 (0 rows)
 
 CREATE TABLE should_drop (time timestamp, temp float8);
@@ -32,15 +32,15 @@ NOTICE:  hypertable should_drop already exists, skipping
 (1 row)
 
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
-----+-------------+-------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
-  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                | time             | timestamp without time zone |       2592000000000
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+-------------+------------------------+-------------------------+----------------
+  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1
 (1 row)
 
-SELECT * from _timescaledb_catalog.partition_epoch;
- id | hypertable_id | start_time | end_time | num_partitions | partitioning_func_schema | partitioning_func | partitioning_mod | partitioning_column 
-----+---------------+------------+----------+----------------+--------------------------+-------------------+------------------+---------------------
-  1 |             1 |            |          |              1 |                          |                   |            32768 | 
+SELECT * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |         column_type         | num_slices | partitioning_func_schema | partitioning_func | interval_length 
+----+---------------+-------------+-----------------------------+------------+--------------------------+-------------------+-----------------
+  1 |             1 | time        | timestamp without time zone |            |                          |                   |   2592000000000
 (1 row)
 
 DROP TABLE should_drop;
@@ -53,14 +53,14 @@ SELECT create_hypertable('should_drop', 'time');
 
 INSERT INTO should_drop VALUES (now(), 1.0);
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
-----+-------------+-------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
-  2 | public      | should_drop | _timescaledb_internal  | _hyper_2                | time             | timestamp without time zone |       2592000000000
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+-------------+------------------------+-------------------------+----------------
+  2 | public      | should_drop | _timescaledb_internal  | _hyper_2                |              1
 (1 row)
 
-SELECT * from _timescaledb_catalog.partition_epoch;
- id | hypertable_id | start_time | end_time | num_partitions | partitioning_func_schema | partitioning_func | partitioning_mod | partitioning_column 
-----+---------------+------------+----------+----------------+--------------------------+-------------------+------------------+---------------------
-  2 |             2 |            |          |              1 |                          |                   |            32768 | 
+SELECT * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |         column_type         | num_slices | partitioning_func_schema | partitioning_func | interval_length 
+----+---------------+-------------+-----------------------------+------------+--------------------------+-------------------+-----------------
+  2 |             2 | time        | timestamp without time zone |            |                          |                   |   2592000000000
 (1 row)
 

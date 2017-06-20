@@ -22,14 +22,15 @@ SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval 
  
 (1 row)
 
-SELECT c.id AS chunk_id, c.partition_id, pe.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
-INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-INNER JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN  _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(true)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
- chunk_id | partition_id | hypertable_id | chunk_schema | chunk_table | start_time | end_time 
-----------+--------------+---------------+--------------+-------------+------------+----------
+ chunk_id | hypertable_id | chunk_schema | chunk_table | range_start | range_end 
+----------+---------------+--------------+-------------+-------------+-----------
 (0 rows)
 
 \dt "_timescaledb_internal".*
@@ -38,16 +39,16 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 --------+------+------+-------
 (0 rows)
 
-SELECT  _timescaledb_internal.get_partition_for_key('dev1', 32768);
+SELECT  _timescaledb_internal.get_partition_for_key('dev1');
  get_partition_for_key 
 -----------------------
-                 14708
+            1129986420
 (1 row)
 
-SELECT  _timescaledb_internal.get_partition_for_key('dev7', 32768);
+SELECT  _timescaledb_internal.get_partition_for_key('dev7');
  get_partition_for_key 
 -----------------------
-                 21060
+             449729092
 (1 row)
 
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(1, 1.0, 'dev1');
@@ -62,26 +63,27 @@ INSERT INTO PUBLIC.drop_chunk_test2 VALUES(3, 3.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test2 VALUES(4, 4.0, 'dev7');
 INSERT INTO PUBLIC.drop_chunk_test2 VALUES(5, 5.0, 'dev7');
 INSERT INTO PUBLIC.drop_chunk_test2 VALUES(6, 6.0, 'dev7');
-SELECT c.id AS chunk_id, c.partition_id, pe.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
-INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-INNER JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN  _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(true)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
- chunk_id | partition_id | hypertable_id |     chunk_schema      |    chunk_table    | start_time | end_time 
-----------+--------------+---------------+-----------------------+-------------------+------------+----------
-        1 |            1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |          1 |        1
-        2 |            1 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |          2 |        2
-        3 |            1 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |          3 |        3
-        4 |            1 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |          4 |        4
-        5 |            1 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |          5 |        5
-        6 |            1 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |          6 |        6
-        7 |            2 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |          1 |        1
-        8 |            2 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |          2 |        2
-        9 |            2 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |          3 |        3
-       10 |            2 |             2 | _timescaledb_internal | _hyper_2_10_chunk |          4 |        4
-       11 |            2 |             2 | _timescaledb_internal | _hyper_2_11_chunk |          5 |        5
-       12 |            2 |             2 | _timescaledb_internal | _hyper_2_12_chunk |          6 |        6
+ chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
+----------+---------------+-----------------------+-------------------+-------------+-----------
+        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           1 |         2
+        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
+        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
+        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           1 |         2
+        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (12 rows)
 
 \dt "_timescaledb_internal".*
@@ -109,24 +111,25 @@ NOTICE:  index "1-drop_chunk_test1_time_idx" does not exist, skipping
  
 (1 row)
 
-SELECT c.id AS chunk_id, c.partition_id, pe.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
-INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-INNER JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN  _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(true)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
- chunk_id | partition_id | hypertable_id |     chunk_schema      |    chunk_table    | start_time | end_time 
-----------+--------------+---------------+-----------------------+-------------------+------------+----------
-        2 |            1 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |          2 |        2
-        3 |            1 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |          3 |        3
-        4 |            1 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |          4 |        4
-        5 |            1 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |          5 |        5
-        6 |            1 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |          6 |        6
-        8 |            2 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |          2 |        2
-        9 |            2 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |          3 |        3
-       10 |            2 |             2 | _timescaledb_internal | _hyper_2_10_chunk |          4 |        4
-       11 |            2 |             2 | _timescaledb_internal | _hyper_2_11_chunk |          5 |        5
-       12 |            2 |             2 | _timescaledb_internal | _hyper_2_12_chunk |          6 |        6
+ chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
+----------+---------------+-----------------------+-------------------+-------------+-----------
+        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
+        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
+        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (10 rows)
 
 \dt "_timescaledb_internal".*
@@ -152,23 +155,24 @@ NOTICE:  index "2-drop_chunk_test1_time_idx" does not exist, skipping
  
 (1 row)
 
-SELECT c.id AS chunk_id, c.partition_id, pe.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, c.start_time, c.end_time
+SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
-INNER JOIN _timescaledb_catalog.partition p ON (p.id = c.partition_id)
-INNER JOIN _timescaledb_catalog.partition_epoch pe ON (pe.id = p.epoch_id)
-INNER JOIN _timescaledb_catalog.hypertable h ON (pe.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN  _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(true)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
- chunk_id | partition_id | hypertable_id |     chunk_schema      |    chunk_table    | start_time | end_time 
-----------+--------------+---------------+-----------------------+-------------------+------------+----------
-        3 |            1 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |          3 |        3
-        4 |            1 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |          4 |        4
-        5 |            1 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |          5 |        5
-        6 |            1 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |          6 |        6
-        8 |            2 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |          2 |        2
-        9 |            2 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |          3 |        3
-       10 |            2 |             2 | _timescaledb_internal | _hyper_2_10_chunk |          4 |        4
-       11 |            2 |             2 | _timescaledb_internal | _hyper_2_11_chunk |          5 |        5
-       12 |            2 |             2 | _timescaledb_internal | _hyper_2_12_chunk |          6 |        6
+ chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
+----------+---------------+-----------------------+-------------------+-------------+-----------
+        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
+        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (9 rows)
 
 \dt "_timescaledb_internal".*

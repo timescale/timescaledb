@@ -60,32 +60,43 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
  * The slowpath calls  get_or_create_chunk(), and is called only if the fastpath returned no rows.
  *
  */
-#define CHUNK_QUERY_ARGS (Oid[]) {INT4OID, INT8OID, INT4OID, INT8OID}
+#define INT8ARRAYOID 1016
+
+#define CHUNK_QUERY_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
 #define CHUNK_QUERY "SELECT * \
-				FROM _timescaledb_internal.chunk_get_or_create($1, $2, $3, $4)"
+				FROM _timescaledb_internal.chunk_get_or_create($1, $2)"
 
 /* plan for getting a chunk via get_or_create_chunk(). */
 DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 4, CHUNK_QUERY_ARGS)
 
-
-#define CHUNK_CREATE_ARGS (Oid[]) {INT4OID, INT8OID, INT4OID, INT8OID}
+#define CHUNK_CREATE_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
 #define CHUNK_CREATE "SELECT * \
-				FROM _timescaledb_internal.chunk_create($1, $2, $3, $4)"
+				FROM _timescaledb_internal.chunk_create($1, $2)"
+
+#define MAX_DIMENSIONS 10
 
 /* plan for creating a chunk via create_chunk(). */
-DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 4, CHUNK_CREATE_ARGS)
+DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 2, CHUNK_CREATE_ARGS)
 
 static HeapTuple
-chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,
-								int32 space_dimension_id, int64 space_value,
+chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p,
 								TupleDesc *desc, SPIPlanPtr plan)
 {
-	/* the fastpath was n/a or returned 0 rows. */
 	int			ret;
-	Datum		args[4] = {
-		Int32GetDatum(time_dimension_id), Int64GetDatum(time_value),
-		Int32GetDatum(space_dimension_id), Int64GetDatum(space_value)
+	Datum		dimension_ids[MAX_DIMENSIONS];
+	Datum		dimension_values[MAX_DIMENSIONS];
+
+	for (int dim = 0; dim < HYPERSPACE_NUM_DIMENSIONS(hs); dim++)
+	{
+		dimension_ids[dim] = Int32GetDatum(hs->dimensions[dim].fd.id);
+		dimension_values[dim] = Int64GetDatum(p->coordinates[dim]);
+	}
+
+	Datum		args[2] = {
+         PointerGetDatum(construct_array(dimension_ids, HYPERSPACE_NUM_DIMENSIONS(hs), INT4OID, 4, true, 'i')), 
+         PointerGetDatum(construct_array(dimension_values, HYPERSPACE_NUM_DIMENSIONS(hs), INT8OID, 8, true, 'd')), 
 	};
+
 	HeapTuple	tuple;
 
 	ret = SPI_execute_plan(plan, args, NULL, false, 4);
@@ -109,9 +120,7 @@ chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,
 }
 
 Chunk *
-spi_chunk_get_or_create(int32 time_dimension_id, int64 time_value,
-						int32 space_dimension_id, int64 space_value,
-						int16 num_constraints)
+spi_chunk_get_or_create(Hyperspace *hs, Point *p)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;
@@ -122,12 +131,11 @@ spi_chunk_get_or_create(int32 time_dimension_id, int64 time_value,
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
-	tuple = chunk_tuple_create_spi_connected(time_dimension_id, time_value,
-											 space_dimension_id, space_value,
+	tuple = chunk_tuple_create_spi_connected(hs, p,
 											 &desc, plan);
 
 	old = MemoryContextSwitchTo(top);
-	chunk = chunk_create_from_tuple(tuple, num_constraints);
+	chunk = chunk_create_from_tuple(tuple, HYPERSPACE_NUM_DIMENSIONS(hs));
 	MemoryContextSwitchTo(old);
 
 	SPI_finish();
@@ -137,9 +145,7 @@ spi_chunk_get_or_create(int32 time_dimension_id, int64 time_value,
 
 
 Chunk *
-spi_chunk_create(int32 time_dimension_id, int64 time_value,
-				 int32 space_dimension_id, int64 space_value,
-				 int16 num_constraints)
+spi_chunk_create(Hyperspace *hs, Point *p)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;
@@ -150,12 +156,11 @@ spi_chunk_create(int32 time_dimension_id, int64 time_value,
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
-	tuple = chunk_tuple_create_spi_connected(time_dimension_id, time_value,
-											 space_dimension_id, space_value,
+	tuple = chunk_tuple_create_spi_connected(hs, p,
 											 &desc, plan);
 
 	old = MemoryContextSwitchTo(top);
-	chunk = chunk_create_from_tuple(tuple, num_constraints);
+	chunk = chunk_create_from_tuple(tuple,  HYPERSPACE_NUM_DIMENSIONS(hs));
 	MemoryContextSwitchTo(old);
 
 	SPI_finish();

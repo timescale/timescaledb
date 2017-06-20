@@ -123,7 +123,8 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 	{
 		Dimension *closed_dim = hyperspace_get_closed_dimension(hentry->space, 0);
 		
-		if (closed_dim != NULL) 
+		if (closed_dim != NULL && 
+			strncmp(closed_dim->fd.column_name.data, varname, NAMEDATALEN) == 0)
 			return closed_dim->partitioning;
 	}
 	return NULL;
@@ -142,8 +143,6 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 	Node	   *var_node_for_fn_call;
 	Const	   *const_for_fn_call;
 	Node	   *const_node_for_fn_call;
-	Const	   *mod_const_var_call;
-	Const	   *mod_const_const_call;
 	List	   *args_func_var;
 	List	   *args_func_const;
 	FuncCall   *fc_var;
@@ -201,8 +200,8 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 	/*
 	 * Detect partitioning_column = const. If not fall-thru. If detected,
 	 * replace with partitioning_column = const AND
-	 * partitioning_func(partition_column, partitioning_mod) =
-	 * partitioning_func(const, partitioning_mod)
+	 * partitioning_func(partition_column) =
+	 * partitioning_func(const)
 	 */
 	if (IsA(node, OpExpr))
 	{
