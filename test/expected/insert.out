@@ -31,7 +31,6 @@ SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCust
 BEGIN;
 BEGIN
 \COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
-psql:include/insert_two_partitions.sql:24: NOTICE:  Found dimension slice [0, 32767)
 COPY 7
 COMMIT;
 COMMIT
@@ -40,7 +39,6 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
-psql:include/insert_two_partitions.sql:32: NOTICE:  Found dimension slice [0, 32767)
 INSERT 0 4
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
@@ -143,6 +141,54 @@ Index "_timescaledb_internal.21-two_Partitions_timeCustom_idx"
  timeCustom | bigint | "timeCustom" | plain
 btree, for table "_timescaledb_internal._hyper_1_3_chunk"
 
+Index "_timescaledb_internal.22-two_Partitions_device_id_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ device_id  | text   | device_id    | extended
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_4_chunk", predicate (device_id IS NOT NULL)
+
+Index "_timescaledb_internal.23-two_Partitions_timeCustom_series_0_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_0   | double precision | series_0     | plain
+btree, for table "_timescaledb_internal._hyper_1_4_chunk", predicate (series_0 IS NOT NULL)
+
+Index "_timescaledb_internal.24-two_Partitions_timeCustom_series_1_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_1   | double precision | series_1     | plain
+btree, for table "_timescaledb_internal._hyper_1_4_chunk", predicate (series_1 IS NOT NULL)
+
+Index "_timescaledb_internal.25-two_Partitions_timeCustom_series_2_idx"
+   Column   |       Type       |  Definition  | Storage 
+------------+------------------+--------------+---------
+ timeCustom | bigint           | "timeCustom" | plain
+ series_2   | double precision | series_2     | plain
+btree, for table "_timescaledb_internal._hyper_1_4_chunk", predicate (series_2 IS NOT NULL)
+
+Index "_timescaledb_internal.26-two_Partitions_timeCustom_series_bool_idx"
+   Column    |  Type   |  Definition  | Storage 
+-------------+---------+--------------+---------
+ timeCustom  | bigint  | "timeCustom" | plain
+ series_bool | boolean | series_bool  | plain
+btree, for table "_timescaledb_internal._hyper_1_4_chunk", predicate (series_bool IS NOT NULL)
+
+Index "_timescaledb_internal.27-two_Partitions_timeCustom_device_id_idx"
+   Column   |  Type  |  Definition  | Storage  
+------------+--------+--------------+----------
+ timeCustom | bigint | "timeCustom" | plain
+ device_id  | text   | device_id    | extended
+btree, for table "_timescaledb_internal._hyper_1_4_chunk"
+
+Index "_timescaledb_internal.28-two_Partitions_timeCustom_idx"
+   Column   |  Type  |  Definition  | Storage 
+------------+--------+--------------+---------
+ timeCustom | bigint | "timeCustom" | plain
+btree, for table "_timescaledb_internal._hyper_1_4_chunk"
+
 Index "_timescaledb_internal.3-two_Partitions_timeCustom_series_1_idx"
    Column   |       Type       |  Definition  | Storage 
 ------------+------------------+--------------+---------
@@ -210,7 +256,7 @@ Indexes:
     "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 32767)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
 Inherits: "two_Partitions"
 
                    Table "_timescaledb_internal._hyper_1_2_chunk"
@@ -231,7 +277,7 @@ Indexes:
     "8-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
     "9-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
 Check constraints:
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 32767)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
     "constraint_3" CHECK ("timeCustom" >= '1257897600000000000'::bigint AND "timeCustom" < '1257900192000000000'::bigint)
 Inherits: "two_Partitions"
 
@@ -253,8 +299,30 @@ Indexes:
     "20-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
     "21-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 32767)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
     "constraint_5" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" < '1257988320000000000'::bigint)
+Inherits: "two_Partitions"
+
+                   Table "_timescaledb_internal._hyper_1_4_chunk"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "22-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "23-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "24-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "25-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "26-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "27-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "28-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+Check constraints:
+    "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
+    "constraint_8" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 1073741823)
 Inherits: "two_Partitions"
 
 SELECT * FROM _timescaledb_catalog.chunk;
@@ -263,23 +331,24 @@ SELECT * FROM _timescaledb_catalog.chunk;
   1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
   2 |             1 | _timescaledb_internal | _hyper_1_2_chunk
   3 |             1 | _timescaledb_internal | _hyper_1_3_chunk
-(3 rows)
+  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk
+(4 rows)
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
  1257894000000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000001000 | dev1      |      2.5 |        3 |          | 
  1257894001000000000 | dev1      |      3.5 |        4 |          | 
  1257894002000000000 | dev1      |      2.5 |        3 |          | 
  1257894002000000000 | dev1      |      5.5 |        6 |          | t
  1257894002000000000 | dev1      |      5.5 |        7 |          | f
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
- 1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
 (12 rows)
 
 SELECT * FROM ONLY "two_Partitions";
@@ -314,7 +383,9 @@ SELECT * FROM error_test;
 
 --test character(9) partition keys since there were issues with padding causing partitioning errors
 CREATE TABLE tick_character (
-    symbol      character(9) NOT NULL,                                                                                                      mid       REAL NOT NULL,                                                                                                                spread      REAL NOT NULL,
+    symbol      character(9) NOT NULL,
+    mid       REAL NOT NULL,
+    spread      REAL NOT NULL,
     time        TIMESTAMPTZ       NOT NULL
 );
 SELECT create_hypertable ('tick_character', 'time', 'symbol', 2);
@@ -328,5 +399,32 @@ SELECT * FROM tick_character;
   symbol   |   mid   | spread |              time              
 -----------+---------+--------+--------------------------------
  GBPJPY    | 142.639 |    5.8 | Mon Mar 20 09:18:22.3 2017 PDT
+(1 row)
+
+CREATE TABLE  many_partitions_test(time timestamp, temp float8, device text NOT NULL);
+SELECT create_hypertable('many_partitions_test', 'time', 'device', 1000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+--NOTE: how much slower the first two queries are -- they are creating chunks
+INSERT INTO many_partitions_test
+    SELECT to_timestamp(ser), ser, ser::text FROM generate_series(1,100) ser;
+INSERT INTO many_partitions_test
+    SELECT to_timestamp(ser), ser, ser::text FROM generate_series(101,200) ser;
+INSERT INTO many_partitions_test
+    SELECT to_timestamp(ser), ser, (ser-201)::text FROM generate_series(201,300) ser;
+SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;  
+           time           | temp | device 
+--------------------------+------+--------
+ Wed Dec 31 16:05:00 1969 |  300 | 99
+ Wed Dec 31 16:04:59 1969 |  299 | 98
+(2 rows)
+
+SELECT count(*) FROM  many_partitions_test;  
+ count 
+-------
+   300
 (1 row)
 

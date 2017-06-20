@@ -122,12 +122,12 @@ SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name  |  table_name   | associated_schema_name | associated_table_prefix | time_column_name |      time_column_type       | chunk_time_interval 
-----+--------------+---------------+------------------------+-------------------------+------------------+-----------------------------+---------------------
-  1 | public       | one_Partition | one_Partition          | _hyper_1                | timeCustom       | bigint                      |       2592000000000
-  2 | public       | 1dim          | _timescaledb_internal  | _hyper_2                | time             | timestamp without time zone |       2592000000000
-  3 | public       | Hypertable_1  | _timescaledb_internal  | _hyper_3                | time             | bigint                      |       2592000000000
-  4 | customSchema | Hypertable_1  | _timescaledb_internal  | _hyper_4                | time             | bigint                      |       2592000000000
+ id | schema_name  |  table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
+----+--------------+---------------+------------------------+-------------------------+----------------
+  1 | public       | one_Partition | one_Partition          | _hyper_1                |              1
+  2 | public       | 1dim          | _timescaledb_internal  | _hyper_2                |              1
+  3 | public       | Hypertable_1  | _timescaledb_internal  | _hyper_3                |              2
+  4 | customSchema | Hypertable_1  | _timescaledb_internal  | _hyper_4                |              1
 (4 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_index;
@@ -186,11 +186,11 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
 psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "29-Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
-psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the time column
+psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
-psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the partitioning column: Device_id
+psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the column: Device_id (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
-psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the time column
+psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
