@@ -14,7 +14,7 @@ Hypertable *
 hypertable_from_tuple(HeapTuple tuple)
 {
 	Hypertable *h;
-	Oid namespace_oid;
+	Oid			namespace_oid;
 
 	h = palloc0(sizeof(Hypertable));
 	memcpy(&h->fd, GETSTRUCT(tuple), sizeof(FormData_hypertable));
@@ -26,28 +26,29 @@ hypertable_from_tuple(HeapTuple tuple)
 	return h;
 }
 
-Chunk *hypertable_get_chunk(Hypertable *h, Point *point)
+Chunk *
+hypertable_get_chunk(Hypertable *h, Point *point)
 {
-	Chunk *chunk = subspace_store_get(h->chunk_cache, point);
+	Chunk	   *chunk = subspace_store_get(h->chunk_cache, point);
 
 	if (NULL == chunk)
 	{
 		MemoryContext old;
 
 		/*
-		  chunk_find() must execute on the transaction memory context since it
-		  allocates a lot of transient data.
+		 * chunk_find() must execute on the transaction memory context since
+		 * it allocates a lot of transient data.
 		 */
 		chunk = chunk_find(h->space, point);
-	   
+
 		old = MemoryContextSwitchTo(subspace_store_mcxt(h->chunk_cache));
 
 		if (NULL == chunk)
-			chunk = chunk_create_new(h->space, point);			
+			chunk = chunk_create_new(h->space, point);
 		else
 			/* Make a copy which lives in the chunk cache's memory context */
 			chunk = chunk_copy(chunk);
-		
+
 		Assert(NULL != chunk);
 		subspace_store_add(h->chunk_cache, chunk->cube, chunk, pfree);
 		MemoryContextSwitchTo(old);

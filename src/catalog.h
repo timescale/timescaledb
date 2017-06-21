@@ -57,12 +57,12 @@ enum Anum_hypertable
 
 typedef struct FormData_hypertable
 {
-    int32 id;
-    NameData schema_name;
-    NameData table_name;
-    NameData associated_schema_name;
-    NameData associated_table_prefix;
-	int16 num_dimensions;
+	int32		id;
+	NameData	schema_name;
+	NameData	table_name;
+	NameData	associated_schema_name;
+	NameData	associated_table_prefix;
+	int16		num_dimensions;
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;
@@ -122,17 +122,17 @@ enum Anum_dimension
 
 typedef struct FormData_dimension
 {
-	int32 id;
-    int32 hypertable_id;
-    NameData column_name;
-	Oid column_type;
-	bool aligned;
-    /* closed (space) columns */
-    int16 num_slices;
-    NameData partitioning_func_schema;
-    NameData partitioning_func;
-    /* open (time) columns */
-    int64 interval_length;
+	int32		id;
+	int32		hypertable_id;
+	NameData	column_name;
+	Oid			column_type;
+	bool		aligned;
+	/* closed (space) columns */
+	int16		num_slices;
+	NameData	partitioning_func_schema;
+	NameData	partitioning_func;
+	/* open (time) columns */
+	int64		interval_length;
 } FormData_dimension;
 
 typedef FormData_dimension *Form_dimension;
@@ -175,10 +175,10 @@ enum Anum_dimension_slice
 
 typedef struct FormData_dimension_slice
 {
-	int32 id;
-	int32 dimension_id;
-    int64 range_start;
-    int64 range_end;
+	int32		id;
+	int32		dimension_id;
+	int64		range_start;
+	int64		range_end;
 } FormData_dimension_slice;
 
 typedef FormData_dimension_slice *Form_dimension_slice;
@@ -200,7 +200,7 @@ enum Anum_dimension_slice_dimension_id_idx
 
 #define Natts_dimension_slice_dimension_id_range_start_range_end_idx \
 	(_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max - 1)
-	
+
 enum
 {
 	DIMENSION_SLICE_ID_IDX = 0,
@@ -230,10 +230,10 @@ enum Anum_chunk
 
 typedef struct FormData_chunk
 {
-	int32 id;
-	int32 hypertable_id;
-    NameData schema_name;
-	NameData table_name;
+	int32		id;
+	int32		hypertable_id;
+	NameData	schema_name;
+	NameData	table_name;
 } FormData_chunk;
 
 typedef FormData_chunk *Form_chunk;
@@ -265,8 +265,8 @@ enum Anum_chunk_constraint
 
 typedef struct FormData_chunk_constraint
 {
-	int32 chunk_id;
-	int32 dimension_slice_id;
+	int32		chunk_id;
+	int32		dimension_slice_id;
 } FormData_chunk_constraint;
 
 typedef FormData_chunk_constraint *Form_chunk_constraint;

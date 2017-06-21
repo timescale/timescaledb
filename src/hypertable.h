@@ -14,7 +14,7 @@ typedef struct HeapTupleData *HeapTuple;
 typedef struct Hypertable
 {
 	FormData_hypertable fd;
-	Oid         main_table_relid;
+	Oid			main_table_relid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 } Hypertable;
@@ -22,4 +22,4 @@ typedef struct Hypertable
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 
-#endif /* TIMESCALEDB_HYPERTABLE_H */
+#endif   /* TIMESCALEDB_HYPERTABLE_H */

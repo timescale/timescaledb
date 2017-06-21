@@ -12,8 +12,9 @@ typedef struct DimensionSlice
 {
 	FormData_dimension_slice fd;
 	DimensionType type;
-	void (*storage_free)(void *);
-	void *storage; //used in the cache
+	void		(*storage_free) (void *);
+	void	   *storage;
+			  //used in the cache
 } DimensionSlice;
 
 /*
@@ -22,8 +23,9 @@ typedef struct DimensionSlice
  */
 typedef struct Hypercube
 {
-	int16 capacity;		/* capacity of slices[] */
-	int16 num_slices;		/* actual number of slices (should equal num_dimensions after create) */
+	int16		capacity;		/* capacity of slices[] */
+	int16		num_slices;		/* actual number of slices (should equal
+								 * num_dimensions after create) */
 	/* Open slices are stored before closed slices */
 	DimensionSlice *slices[0];
 } Hypercube;
@@ -32,13 +34,14 @@ typedef struct Hypercube
 	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
 
 /*
- *  DimensionVec is a collection of slices (ranges) along one dimension for a
- *  time range.
+ *	DimensionVec is a collection of slices (ranges) along one dimension for a
+ *	time range.
  */
 typedef struct DimensionVec
 {
-	int32 capacity; /* The capacity of the slices array */
-	int32 num_slices; /* The current number of slices in slices array */
+	int32		capacity;		/* The capacity of the slices array */
+	int32		num_slices;		/* The current number of slices in slices
+								 * array */
 	DimensionSlice *slices[0];
 } DimensionVec;
 
@@ -59,4 +62,4 @@ extern void dimension_vec_free(DimensionVec *vec);
 extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);
 extern Hypercube *hypercube_copy(Hypercube *hc);
 
-#endif /* TIMESCALEDB_DIMENSION_SLICE_H */
+#endif   /* TIMESCALEDB_DIMENSION_SLICE_H */

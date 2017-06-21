@@ -133,7 +133,7 @@ catalog_get(void)
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
 		catalog.caches[i].inval_proxy_id = get_relname_relid(cache_proxy_table_names[i],
-															 catalog.cache_schema_id);
+													catalog.cache_schema_id);
 
 	return &catalog;
 }

@@ -66,13 +66,14 @@ DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 2, CHUNK_CREATE_ARGS)
 static HeapTuple
 chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p, SPIPlanPtr plan)
 {
-	int			i, ret;
+	int			i,
+				ret;
 	HeapTuple	tuple;
 	Datum		dimension_ids[HYPERSPACE_NUM_DIMENSIONS(hs)];
 	Datum		dimension_values[HYPERSPACE_NUM_DIMENSIONS(hs)];
 	Datum		args[2];
 
-	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs);i++)
+	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
 	{
 		dimension_ids[i] = Int32GetDatum(hs->dimensions[i].fd.id);
 		dimension_values[i] = Int64GetDatum(p->coordinates[i]);
@@ -99,7 +100,8 @@ spi_chunk_create(Hyperspace *hs, Point *p)
 {
 	HeapTuple	tuple;
 	Chunk	   *chunk;
-	MemoryContext old, top = CurrentMemoryContext;
+	MemoryContext old,
+				top = CurrentMemoryContext;
 	SPIPlanPtr	plan = create_chunk_plan();
 
 	if (SPI_connect() < 0)
@@ -108,7 +110,7 @@ spi_chunk_create(Hyperspace *hs, Point *p)
 	tuple = chunk_tuple_create_spi_connected(hs, p, plan);
 
 	old = MemoryContextSwitchTo(top);
-	chunk = chunk_create_from_tuple(tuple,  HYPERSPACE_NUM_DIMENSIONS(hs));
+	chunk = chunk_create_from_tuple(tuple, HYPERSPACE_NUM_DIMENSIONS(hs));
 	MemoryContextSwitchTo(old);
 
 	SPI_finish();

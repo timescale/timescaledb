@@ -80,7 +80,7 @@ partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 	Datum text = FunctionCall1(&pinfo->partfunc.textfunc_fmgr, value);
 	char	   *partition_val = DatumGetCString(text);
 	Datum		keyspace_datum = FunctionCall1(&pinfo->partfunc.func_fmgr,
-										  CStringGetTextDatum(partition_val));
+										 CStringGetTextDatum(partition_val));
 
 	return DatumGetInt32(keyspace_datum);
 }
@@ -117,7 +117,7 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 	hash_u = hash_any((unsigned char *) VARDATA_ANY(data),
 					  VARSIZE_ANY_EXHDR(data));
 
-	res = (int32) (hash_u & 0x7fffffff); /* Only positive numbers */
+	res = (int32) (hash_u & 0x7fffffff);		/* Only positive numbers */
 
 	PG_FREE_IF_COPY(data, 0);
 	PG_RETURN_INT32(res);

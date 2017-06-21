@@ -27,8 +27,8 @@ dimension_fill_in_from_tuple(Dimension *d, HeapTuple tuple, Oid main_table_relid
 
 	if (d->type == DIMENSION_TYPE_CLOSED)
 		d->partitioning = partitioning_info_create(d->fd.num_slices,
-												   NameStr(d->fd.partitioning_func_schema),
-												   NameStr(d->fd.partitioning_func),
+									 NameStr(d->fd.partitioning_func_schema),
+											NameStr(d->fd.partitioning_func),
 												   NameStr(d->fd.column_name),
 												   main_table_relid);
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
@@ -38,6 +38,7 @@ static Hyperspace *
 hyperspace_create(int32 hypertable_id, Oid main_table_relid, uint16 num_dimensions)
 {
 	Hyperspace *hs = palloc0(HYPERSPACE_SIZE(num_dimensions));
+
 	hs->hypertable_id = hypertable_id;
 	hs->main_table_relid = main_table_relid;
 	hs->capacity = num_dimensions;
@@ -50,7 +51,7 @@ dimension_tuple_found(TupleInfo *ti, void *data)
 {
 	Hyperspace *hs = data;
 	DimensionType type = dimension_type(ti->tuple);
-	Dimension *d;
+	Dimension  *d;
 
 	if (type == DIMENSION_TYPE_OPEN)
 		d = &hs->dimensions[hs->num_open_dimensions++];
@@ -68,7 +69,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 	Catalog    *catalog = catalog_get();
 	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
 	ScanKeyData scankey[1];
-	ScannerCtx  scanCtx = {
+	ScannerCtx	scanCtx = {
 		.table = catalog->tables[DIMENSION].id,
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
 		.scantype = ScannerTypeIndex,
@@ -82,7 +83,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 
 	/* Perform an index scan on hypertable_id. */
 	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
-				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
+			  BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	scanner_scan(&scanCtx);
 
@@ -92,7 +93,8 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 static Point *
 point_create(int16 num_dimensions)
 {
-	Point *p = palloc0(POINT_SIZE(num_dimensions));
+	Point	   *p = palloc0(POINT_SIZE(num_dimensions));
+
 	p->cardinality = num_dimensions;
 	p->num_closed = p->num_open = 0;
 	return p;
@@ -101,15 +103,16 @@ point_create(int16 num_dimensions)
 const char *
 point_to_string(Point *p)
 {
-	char *buf = palloc(100);
-	int i, j = 1;
+	char	   *buf = palloc(100);
+	int			i,
+				j = 1;
 
 	buf[0] = '(';
 
 	for (i = 0; i < p->cardinality; i++)
 		j += snprintf(buf + j, 100, "" INT64_FORMAT ",", p->coordinates[i]);
 
-	buf[j-1] = ')';
+	buf[j - 1] = ')';
 
 	return buf;
 }
@@ -117,17 +120,17 @@ point_to_string(Point *p)
 Point *
 hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 {
-	Point *p = point_create(HYPERSPACE_NUM_DIMENSIONS(hs));
-	int i;
+	Point	   *p = point_create(HYPERSPACE_NUM_DIMENSIONS(hs));
+	int			i;
 
 	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
 	{
-		Dimension *d = &hs->dimensions[i];
+		Dimension  *d = &hs->dimensions[i];
 
 		if (IS_OPEN_DIMENSION(d))
 		{
-			Datum       datum;
-			bool        isnull;
+			Datum		datum;
+			bool		isnull;
 
 			datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
 

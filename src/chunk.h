@@ -27,12 +27,12 @@ typedef struct Chunk
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.
-	 * Each of the N slices in the cube corresponds to a constraint on the chunk
-	 * table.
+	 * Each of the N slices in the cube corresponds to a constraint on the
+	 * chunk table.
 	 */
-	Hypercube   *cube;
-	int16 capacity;
-	int16 num_constraints;
+	Hypercube  *cube;
+	int16		capacity;
+	int16		num_constraints;
 	ChunkConstraint constraints[0];
 } Chunk;
 
@@ -50,15 +50,15 @@ typedef struct Chunk
  */
 typedef struct ChunkScanCtx
 {
-	HTAB *htab;
-	int16 num_dimensions;
+	HTAB	   *htab;
+	int16		num_dimensions;
 } ChunkScanCtx;
 
 /* The hash table entry for the ChunkScanCtx */
 typedef struct ChunkScanEntry
 {
-	int32 chunk_id;
-	Chunk *chunk;
+	int32		chunk_id;
+	Chunk	   *chunk;
 } ChunkScanEntry;
 
 extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);

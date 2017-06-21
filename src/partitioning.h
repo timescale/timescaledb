@@ -39,12 +39,12 @@ typedef struct PartitioningInfo
 
 
 extern PartitioningInfo *partitioning_info_create(int num_partitions,
-												  const char *schema,
-												  const char *partfunc,
-												  const char *partcol,
-												  Oid relid);
-	
-extern int32		partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
-extern int32		partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
+						 const char *schema,
+						 const char *partfunc,
+						 const char *partcol,
+						 Oid relid);
+
+extern int32 partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+extern int32 partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
 
 #endif   /* TIMESCALEDB_PARTITIONING_H */

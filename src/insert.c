@@ -31,8 +31,8 @@ insert_statement_state_cleanup(InsertStatementState **state_p)
 }
 
 
-Datum       insert_main_table_trigger(PG_FUNCTION_ARGS);
-Datum       insert_main_table_trigger_after(PG_FUNCTION_ARGS);
+Datum		insert_main_table_trigger(PG_FUNCTION_ARGS);
+Datum		insert_main_table_trigger_after(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(insert_main_table_trigger);
 PG_FUNCTION_INFO_V1(insert_main_table_trigger_after);
@@ -47,12 +47,12 @@ Datum
 insert_main_table_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	HeapTuple   tuple;
+	HeapTuple	tuple;
 	Hypertable *ht;
-	Point *point;
+	Point	   *point;
 	InsertChunkState *cstate;
-	Oid         relid = trigdata->tg_relation->rd_id;
-	TupleDesc   tupdesc = trigdata->tg_relation->rd_att;
+	Oid			relid = trigdata->tg_relation->rd_id;
+	TupleDesc	tupdesc = trigdata->tg_relation->rd_att;
 
 	PG_TRY();
 	{
@@ -79,7 +79,7 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 
 		/* Find or create the insert state matching the point */
 		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state,
-															   ht->space, point);
+														   ht->space, point);
 		insert_chunk_state_insert_tuple(cstate, tuple);
 	}
 	PG_CATCH();

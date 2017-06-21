@@ -121,10 +121,10 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 
 	if (rte->relid == hentry->main_table_relid)
 	{
-		Dimension *closed_dim = hyperspace_get_closed_dimension(hentry->space, 0);
-		
-		if (closed_dim != NULL && 
-			strncmp(closed_dim->fd.column_name.data, varname, NAMEDATALEN) == 0)
+		Dimension  *closed_dim = hyperspace_get_closed_dimension(hentry->space, 0);
+
+		if (closed_dim != NULL &&
+		 strncmp(closed_dim->fd.column_name.data, varname, NAMEDATALEN) == 0)
 			return closed_dim->partitioning;
 	}
 	return NULL;
@@ -135,7 +135,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
  * all nodes given in input. */
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema,
-							 char *partitioning_func)
+								   char *partitioning_func)
 {
 	Expr	   *op_expr;
 	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
@@ -200,8 +200,7 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 	/*
 	 * Detect partitioning_column = const. If not fall-thru. If detected,
 	 * replace with partitioning_column = const AND
-	 * partitioning_func(partition_column) =
-	 * partitioning_func(const)
+	 * partitioning_func(partition_column) = partitioning_func(const)
 	 */
 	if (IsA(node, OpExpr))
 	{
@@ -247,15 +246,15 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						 */
 						PartitioningInfo *pi =
 						get_partitioning_info_for_partition_column_var(var_expr,
-																	   context->parse,
-																	   context->hcache,
-																	   context->hentry);
+															  context->parse,
+															 context->hcache,
+															context->hentry);
 
 						if (pi != NULL)
 						{
 							/* The var is a partitioning column */
 							Expr	   *partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
-																								 pi->partfunc.schema, pi->partfunc.name);
+									 pi->partfunc.schema, pi->partfunc.name);
 
 							return (Node *) make_andclause(list_make2(node, partitioning_clause));
 

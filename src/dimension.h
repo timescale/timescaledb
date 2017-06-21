@@ -20,7 +20,7 @@ typedef struct Dimension
 	FormData_dimension fd;
 	DimensionType type;
 	AttrNumber	column_attno;
-	Oid main_table_relid;
+	Oid			main_table_relid;
 	PartitioningInfo *partitioning;
 } Dimension;
 
@@ -36,13 +36,13 @@ typedef struct Dimension
  */
 typedef struct Hyperspace
 {
-	int32 hypertable_id;
-	Oid main_table_relid;
-	uint16 capacity;
-	int16 num_open_dimensions;
-	int16 num_closed_dimensions;
+	int32		hypertable_id;
+	Oid			main_table_relid;
+	uint16		capacity;
+	int16		num_open_dimensions;
+	int16		num_closed_dimensions;
 	/* Open dimensions should be stored before closed dimensions */
-	Dimension dimensions[0];
+	Dimension	dimensions[0];
 } Hyperspace;
 
 #define HYPERSPACE_NUM_DIMENSIONS(hs) \
@@ -60,11 +60,11 @@ typedef struct Hyperspace
  */
 typedef struct Point
 {
-	int16 cardinality;
-	uint8 num_open;
-	uint8 num_closed;
+	int16		cardinality;
+	uint8		num_open;
+	uint8		num_closed;
 	/* Open dimension coordinates are stored before the closed coordinates */
-	int64 coordinates[0];
+	int64		coordinates[0];
 } Point;
 
 #define POINT_SIZE(cardinality)							\
@@ -84,4 +84,4 @@ extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDe
 extern const char *point_to_string(Point *p);
 
 
-#endif /* TIMESCALEDB_DIMENSION_H */
+#endif   /* TIMESCALEDB_DIMENSION_H */
