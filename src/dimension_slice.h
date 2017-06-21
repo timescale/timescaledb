@@ -28,30 +28,36 @@ typedef struct Hypercube
 	DimensionSlice *slices[0];
 } Hypercube;
 
-#define HYPERCUBE_SIZE(num_dimensions)			\
+#define HYPERCUBE_NUM_SLICES(hc)						\
+	((hc)->num_open_slices + (hc)->num_closed_slices)
+
+#define HYPERCUBE_SIZE(num_dimensions)								\
 	(sizeof(Hypercube) + sizeof(DimensionSlice *) * num_dimensions)
 
 /*
- *  DimensionAxis is a collection of all slices (ranges) along one dimension for
- *  a time range.
+ *  DimensionVec is a collection of slices (ranges) along one dimension for a
+ *  time range.
  */
-typedef struct DimensionAxis
+typedef struct DimensionVec
 {
-	DimensionType type;
 	int32 num_slots; /* The allocated num slots in slices array */
 	int32 num_slices; /* The current number of slices in slices array */
 	DimensionSlice *slices[0];
-} DimensionAxis;
+} DimensionVec;
 
-extern DimensionSlice *dimension_slice_scan(int32 dimension_id, int64 coordinate);
+#define DIMENSION_VEC_SIZE(num_slices)								\
+	(sizeof(DimensionVec) + sizeof(DimensionSlice *) * num_slices)
+
+#define DIMENSION_VEC_DEFAULT_SIZE 10
+
+extern DimensionVec *dimension_slice_scan(int32 dimension_id, int64 coordinate);
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
-extern Hypercube *dimension_slice_point_scan_heap(Hyperspace *space, int64 point[]);
 extern void dimension_slice_free(DimensionSlice *slice);
-extern DimensionAxis *dimension_axis_create(DimensionType type, int32 num_slices);
-extern int32 dimension_axis_add_slice(DimensionAxis **axis, DimensionSlice *slice);
-extern int32 dimension_axis_add_slice_sort(DimensionAxis **axis, DimensionSlice *slice);
-extern DimensionSlice *dimension_axis_find_slice(DimensionAxis *axis, int64 coordinate);
-extern void dimension_axis_free(DimensionAxis *axis);
+extern DimensionVec *dimension_vec_create(int32 initial_num_slices);
+extern DimensionVec *dimension_vec_add_slice(DimensionVec **vec, DimensionSlice *slice);
+extern DimensionVec *dimension_vec_add_slice_sort(DimensionVec **vec, DimensionSlice *slice);
+extern DimensionSlice *dimension_vec_find_slice(DimensionVec *vec, int64 coordinate);
+extern void dimension_vec_free(DimensionVec *vec);
 extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);
 
 #endif /* TIMESCALEDB_DIMENSION_SLICE_H */

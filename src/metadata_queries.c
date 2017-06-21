@@ -67,6 +67,14 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 /* plan for getting a chunk via get_or_create_chunk(). */
 DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 4, CHUNK_QUERY_ARGS)
 
+
+#define CHUNK_CREATE_ARGS (Oid[]) {INT4OID, INT8OID, INT4OID, INT8OID}
+#define CHUNK_CREATE "SELECT * \
+				FROM _timescaledb_internal.chunk_create($1, $2, $3, $4)"
+
+/* plan for creating a chunk via create_chunk(). */
+DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 4, CHUNK_CREATE_ARGS)
+
 static HeapTuple
 chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,
 								int32 space_dimension_id, int64 space_value,
@@ -119,7 +127,35 @@ spi_chunk_get_or_create(int32 time_dimension_id, int64 time_value,
 											 &desc, plan);
 
 	old = MemoryContextSwitchTo(top);
-	chunk = chunk_create(tuple, num_constraints);
+	chunk = chunk_create_from_tuple(tuple, num_constraints);
+	MemoryContextSwitchTo(old);
+
+	SPI_finish();
+
+	return chunk;
+}
+
+
+Chunk *
+spi_chunk_create(int32 time_dimension_id, int64 time_value,
+				 int32 space_dimension_id, int64 space_value,
+				 int16 num_constraints)
+{
+	HeapTuple	tuple;
+	TupleDesc	desc;
+	Chunk	   *chunk;
+	MemoryContext old, top = CurrentMemoryContext;
+	SPIPlanPtr	plan = create_chunk_plan();
+
+	if (SPI_connect() < 0)
+		elog(ERROR, "Got an SPI connect error");
+
+	tuple = chunk_tuple_create_spi_connected(time_dimension_id, time_value,
+											 space_dimension_id, space_value,
+											 &desc, plan);
+
+	old = MemoryContextSwitchTo(top);
+	chunk = chunk_create_from_tuple(tuple, num_constraints);
 	MemoryContextSwitchTo(old);
 
 	SPI_finish();

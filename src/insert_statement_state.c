@@ -85,7 +85,7 @@ insert_statement_state_is_valid_for_point(InsertStatementState *state, Point *p)
 	return true;
 }
 
-static void destroy_ics(void *ics_ptr) 
+static void destroy_ics(void *ics_ptr)
 {
 	InsertChunkState *ics = ics_ptr;
 	insert_chunk_state_destroy(ics);
@@ -100,29 +100,26 @@ insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyper
 {
 
 	InsertChunkState *ics;
-	
+
 	if (NULL == state->cache)
-	{
 		state->cache = subspace_store_init(point->cardinality);
-	}
 	
 	ics = subspace_store_get(state->cache, point);
 
-	if (NULL == ics) 
+	if (NULL == ics)
 	{
-		Chunk * new_chunk;
-		Hypercube *hc;
+		Chunk *new_chunk;
 
 		new_chunk = hypertable_get_chunk(state->hypertable, point);
 
 		if (NULL == new_chunk)
 			elog(ERROR, "No chunk found or created");
-				
+
+		dimension_slice_scan(hs->open_dimensions[0]->fd.id, point->coordinates[0]);
+
 		ics = insert_chunk_state_new(new_chunk);
-		chunk_constraint_scan(new_chunk);
-		hc = hypercube_from_constraints(new_chunk->constraints, new_chunk->num_constraints);
-        subspace_store_add(state->cache, hc, ics, destroy_ics);
+        subspace_store_add(state->cache, new_chunk->cube, ics, destroy_ics);
 	}
-	
+
 	return ics;
 }
