@@ -11,10 +11,11 @@
 -- "slices".
 --
 -- Conceptually, a partition -- called a "chunk", is a hypercube in
--- the N-dimensional space. A chunk is a sub-table that stores a
--- subset of the hypertable's tuples on disk. The slices that span the
--- chunk's hypercube each correspond to a constraint on the chunk
--- table.
+-- the N-dimensional space. A chunk stores a subset of the
+-- hypertable's tuples on disk in its own distinct table. The slices
+-- that span the chunk's hypercube each correspond to a constraint on
+-- the chunk's table, enabling constraint exclusion during queries on
+-- the hypertable's data.
 --
 --
 -- Open dimensions

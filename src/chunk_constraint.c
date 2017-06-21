@@ -111,6 +111,11 @@ chunk_constraint_dimension_id_tuple_found(TupleInfo *ti, void *data)
 
 	chunk_add_constraint(chunk, &constraint);
 
+	/* If the chunk has N constraints, it is the chunk we are looking for and
+	 * can abort the scan */
+	if (chunk->num_constraints == ctx->num_dimensions)
+		return false;
+	
 	return true;
 }
 
@@ -131,8 +136,6 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
-
-	ctx->slice = slice;
 
 	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_id_idx_dimension_slice_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.id));
