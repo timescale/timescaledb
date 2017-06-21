@@ -101,9 +101,7 @@ chunk_constraint_dimension_id_tuple_found(TupleInfo *ti, void *data)
 
 	if (!found)
 	{
-		chunk = palloc0(CHUNK_SIZE(ctx->num_dimensions));
-		chunk->fd.id = constraint.fd.chunk_id;
-		chunk->capacity = ctx->num_dimensions;
+		chunk = chunk_create_stub(constraint.fd.chunk_id, ctx->num_dimensions);
 		entry->chunk = chunk;
 	} else {
 		chunk = entry->chunk;

@@ -69,22 +69,22 @@ BEGIN
     END IF;
 
     --create time dimension
-    INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type,
+    INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type, aligned,
         num_slices, partitioning_func_schema, partitioning_func,
         interval_length
     ) VALUES (
-        hypertable_row.id, time_column_name, time_column_type,
+        hypertable_row.id, time_column_name, time_column_type, TRUE,
         NULL, NULL, NULL,
         chunk_time_interval
     );
 
     IF partitioning_column IS NOT NULL THEN
         --create space dimension
-        INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type,
+        INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type, aligned,
             num_slices, partitioning_func_schema, partitioning_func,
             interval_length
         ) VALUES (
-            hypertable_row.id, partitioning_column, partitioning_column_type,
+            hypertable_row.id, partitioning_column, partitioning_column_type, FALSE,
             number_partitions::smallint, partitioning_func_schema, partitioning_func,
             NULL
         );

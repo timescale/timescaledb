@@ -15,17 +15,28 @@
 #include "metadata_queries.h"
 #include "scanner.h"
 
+
+static void
+chunk_fill(Chunk *chunk, HeapTuple tuple) 
+{
+	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
+	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
+										get_namespace_oid(chunk->fd.schema_name.data, false));
+}
+
 Chunk *
 chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 {
 	Chunk	   *chunk;
 
 	chunk = palloc0(CHUNK_SIZE(num_constraints));
-	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->capacity = num_constraints;
 	chunk->num_constraints = 0;
-	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, false));
+
+	chunk_fill(chunk, tuple);
+
+	chunk_constraint_scan_by_chunk_id(chunk);
+	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
 
 	return chunk;
 }
@@ -38,9 +49,18 @@ chunk_create_new(Hyperspace *hs, Point *p)
 	chunk = spi_chunk_create(hs, p);
 	Assert(chunk != NULL);
 
-	chunk_constraint_scan_by_chunk_id(chunk);
-	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
+	return chunk;
+}
 
+Chunk *
+chunk_create_stub(int32 id, int16 num_constraints) {
+	Chunk *chunk;
+
+	chunk = palloc0(CHUNK_SIZE(num_constraints));
+	chunk->capacity = num_constraints;
+	chunk->num_constraints = 0;
+	
+	chunk->fd.id = id;
 	return chunk;
 }
 
@@ -48,16 +68,14 @@ static bool
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
 	Chunk *chunk = arg;
-	memcpy(&chunk->fd, GETSTRUCT(ti->tuple), sizeof(FormData_chunk));
-	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, false));
+	chunk_fill(chunk, ti->tuple);
 	return false;
 }
 
-/* Fill in a chunk stub. The stub data structure needs the chunk ID set. The
- * rest of the fields will be filled in from the table data. */
+/* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
+ * The rest of the fields will be filled in from the table data. */
 static Chunk *
-chunk_scan(Chunk *chunk_stub, bool tuplock)
+chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 {
 	ScanKeyData scankey[1];
 	Catalog    *catalog = catalog_get();
@@ -88,6 +106,8 @@ chunk_scan(Chunk *chunk_stub, bool tuplock)
 
 	if (num_found != 1)
 		elog(ERROR, "No chunk found with ID %d", chunk_stub->fd.id);
+
+	chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints, chunk_stub->num_constraints);
 
 	return chunk_stub;
 }
@@ -207,10 +227,8 @@ chunk_find(Hyperspace *hs, Point *p)
 
 	if (NULL != chunk)
 	{
-		chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
-
 		/* Fill in the rest of the chunk's data from the chunk table */
-		chunk_scan(chunk, false);
+		chunk_fill_stub(chunk, false);
 	}
 
 	return chunk;

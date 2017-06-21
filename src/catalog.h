@@ -109,6 +109,7 @@ enum Anum_dimension
 	Anum_dimension_hypertable_id,
 	Anum_dimension_column_name,
 	Anum_dimension_column_type,
+	Anum_dimension_aligned,
 	Anum_dimension_num_slices,
 	Anum_dimension_partitioning_func_schema,
 	Anum_dimension_partitioning_func,
@@ -125,6 +126,7 @@ typedef struct FormData_dimension
     int32 hypertable_id;
     NameData column_name;
 	Oid column_type;
+	bool aligned;
     /* closed (space) columns */
     int16 num_slices;
     NameData partitioning_func_schema;

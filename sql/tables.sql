@@ -68,6 +68,7 @@ CREATE TABLE  _timescaledb_catalog.dimension (
     hypertable_id               INTEGER  NOT NULL  REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     column_name                 NAME     NOT NULL,
     column_type                 REGTYPE  NOT NULL,
+    aligned                     BOOLEAN  NOT NULL,
     -- closed dimensions
     num_slices                  SMALLINT NULL,
     partitioning_func_schema    NAME     NULL,
