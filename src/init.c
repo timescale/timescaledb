@@ -22,9 +22,6 @@ PG_MODULE_MAGIC;
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
 
-extern void _chunk_cache_init(void);
-extern void _chunk_cache_fini(void);
-
 extern void _cache_invalidate_init(void);
 extern void _cache_invalidate_fini(void);
 
@@ -67,7 +64,6 @@ _PG_init(void)
 	}
 	elog(INFO, "timescaledb loaded");
 	_hypertable_cache_init();
-	_chunk_cache_init();
 	_cache_invalidate_init();
 	_planner_init();
 	_executor_init();
@@ -87,6 +83,5 @@ _PG_fini(void)
 	_executor_fini();
 	_planner_fini();
 	_cache_invalidate_fini();
-	_chunk_cache_fini();
 	_hypertable_cache_fini();
 }

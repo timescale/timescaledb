@@ -12,10 +12,8 @@
 #include "hypertable.h"
 #include "catalog.h"
 #include "cache.h"
-#include "metadata_queries.h"
 #include "utils.h"
 #include "scanner.h"
-#include "partitioning.h"
 #include "dimension.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);
@@ -106,14 +104,10 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 	};
 
 	if (NULL == hq->schema)
-	{
 		hq->schema = get_namespace_name(get_rel_namespace(hq->relid));
-	}
 
 	if (NULL == hq->table)
-	{
 		hq->table = get_rel_name(hq->relid);
-	}
 
 	/* Perform an index scan on schema and table. */
 	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
@@ -133,12 +127,11 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 			Assert(strncmp(cache_entry->hypertable->fd.schema_name.data, hq->schema, NAMEDATALEN) == 0);
 			Assert(strncmp(cache_entry->hypertable->fd.table_name.data, hq->table, NAMEDATALEN) == 0);
 			ht = cache_entry->hypertable;
-			ht->space = dimension_scan(ht->fd.id, ht->main_table_relid);
+			ht->space = dimension_scan(ht->fd.id, ht->main_table_relid, ht->fd.num_dimensions);
 			break;
 		default:
 			elog(ERROR, "Got an unexpected number of records: %d", number_found);
 			break;
-
 	}
 
 	return query->result;
@@ -157,9 +150,8 @@ Hypertable *
 hypertable_cache_get_entry(Cache *cache, Oid relid)
 {
 	if (!OidIsValid(relid))
-	{
 		return NULL;
-	}
+
 	return hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
 }
 
@@ -175,81 +167,6 @@ hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *schem
 
 	return entry->hypertable;
 }
-
-#if 0
-/* function to compare epochs */
-static int
-cmp_epochs(const void *time_pt_pointer, const void *test)
-{
-	/* note reverse order; assume oldest stuff last */
-	int64	   *time_pt = (int64 *) time_pt_pointer;
-	PartitionEpoch **entry = (PartitionEpoch **) test;
-
-	if ((*entry)->start_time <= *time_pt && (*entry)->end_time >= *time_pt)
-	{
-		return 0;
-	}
-
-	if (*time_pt < (*entry)->start_time)
-	{
-		return 1;
-	}
-	return -1;
-}
-
-PartitionEpoch *
-hypertable_cache_get_partition_epoch(Cache *cache, Hypertable *hce, int64 time_pt, Oid relid)
-{
-	MemoryContext old;
-	PartitionEpoch *epoch,
-			  **cache_entry;
-	int			j;
-
-	/* fastpath: check latest entry */
-	if (hce->num_epochs > 0)
-	{
-		epoch = hce->epochs[0];
-
-		if (epoch->start_time <= time_pt && epoch->end_time >= time_pt)
-		{
-			return epoch;
-		}
-	}
-
-	cache_entry = bsearch(&time_pt, hce->epochs, hce->num_epochs,
-						  sizeof(PartitionEpoch *), cmp_epochs);
-
-	if (cache_entry != NULL)
-	{
-		return (*cache_entry);
-	}
-
-	old = cache_switch_to_memory_context(cache);
-	epoch = partition_epoch_scan(hce->id, time_pt, relid);
-
-	/* check if full */
-	if (hce->num_epochs == MAX_EPOCHS_PER_HYPERTABLE)
-	{
-		/* remove last */
-		partition_epoch_free(hce->epochs[MAX_EPOCHS_PER_HYPERTABLE - 1]);
-		hce->epochs[MAX_EPOCHS_PER_HYPERTABLE - 1] = NULL;
-		hce->num_epochs--;
-	}
-
-	/* ordered insert */
-	for (j = hce->num_epochs - 1; j >= 0 && cmp_epochs(&time_pt, hce->epochs + j) < 0; j--)
-	{
-		hce->epochs[j + 1] = hce->epochs[j];
-	}
-	hce->epochs[j + 1] = epoch;
-	hce->num_epochs++;
-
-	MemoryContextSwitchTo(old);
-
-	return epoch;
-}
-
-#endif
 
 extern Cache *
 hypertable_cache_pin()

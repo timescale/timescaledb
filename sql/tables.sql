@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     table_name              NAME      NOT NULL,
     associated_schema_name  NAME      NOT NULL,
     associated_table_prefix NAME      NOT NULL,
+    num_dimensions          SMALLINT  NOT NULL CHECK (num_dimensions > 0),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix)
 );

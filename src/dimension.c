@@ -9,38 +9,38 @@
 #include "partitioning.h"
 #include "utils.h"
 
-static Dimension *
-dimension_from_tuple(HeapTuple tuple, Oid main_table_relid)
+
+static inline DimensionType
+dimension_type(HeapTuple tuple)
 {
-	Dimension *d;
-
-	d = palloc0(sizeof(Dimension));
-	memcpy(&d->fd, GETSTRUCT(tuple), sizeof(FormData_dimension));
-
 	/* If there is no partitioning func set we assume open dimension */
-	d->type = heap_attisnull(tuple, Anum_dimension_partitioning_func) ?
-		DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED;
+	if (heap_attisnull(tuple, Anum_dimension_partitioning_func))
+		return DIMENSION_TYPE_OPEN;
+	return DIMENSION_TYPE_CLOSED;
+}
+
+static void
+dimension_fill_in_from_tuple(Dimension *d, HeapTuple tuple, Oid main_table_relid)
+{
+	memcpy(&d->fd, GETSTRUCT(tuple), sizeof(FormData_dimension));
+	d->type = dimension_type(tuple);
 
 	if (d->type == DIMENSION_TYPE_CLOSED)
-	{
 		d->partitioning = partitioning_info_create(d->fd.num_slices,
 												   NameStr(d->fd.partitioning_func_schema),
 												   NameStr(d->fd.partitioning_func),
 												   NameStr(d->fd.column_name),
 												   main_table_relid);
-	}
-
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
-
-	return d;
 }
 
 static Hyperspace *
-hyperspace_create(int32 hypertable_id, Oid main_table_relid)
+hyperspace_create(int32 hypertable_id, Oid main_table_relid, uint16 num_dimensions)
 {
-	Hyperspace *hs = palloc0(sizeof(Hyperspace));
+	Hyperspace *hs = palloc0(HYPERSPACE_SIZE(num_dimensions));
 	hs->hypertable_id = hypertable_id;
 	hs->main_table_relid = main_table_relid;
+	hs->capacity = num_dimensions;
 	hs->num_closed_dimensions = hs->num_open_dimensions = 0;
 	return hs;
 }
@@ -49,21 +49,24 @@ static bool
 dimension_tuple_found(TupleInfo *ti, void *data)
 {
 	Hyperspace *hs = data;
-	Dimension *d = dimension_from_tuple(ti->tuple, hs->main_table_relid);
+	DimensionType type = dimension_type(ti->tuple);
+	Dimension *d;
 
-	if (IS_OPEN_DIMENSION(d))
-		hs->open_dimensions[hs->num_open_dimensions++] = d;
+	if (type == DIMENSION_TYPE_OPEN)
+		d = &hs->dimensions[hs->num_open_dimensions++];
 	else
-		hs->closed_dimensions[hs->num_closed_dimensions++] = d;
+		d = &hs->dimensions[hs->capacity - 1 - hs->num_closed_dimensions++];
+
+	dimension_fill_in_from_tuple(d, ti->tuple, hs->main_table_relid);
 
 	return true;
 }
 
 Hyperspace *
-dimension_scan(int32 hypertable_id, Oid main_table_relid)
+dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 {
 	Catalog    *catalog = catalog_get();
-	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid);
+	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
 	ScanKeyData scankey[1];
 	ScannerCtx  scanCtx = {
 		.table = catalog->tables[DIMENSION].id,
@@ -89,7 +92,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid)
 static Point *
 point_create(int16 num_dimensions)
 {
-	Point *p = palloc0(sizeof(Point) + (sizeof(int64) * num_dimensions));
+	Point *p = palloc0(POINT_SIZE(num_dimensions));
 	p->cardinality = num_dimensions;
 	p->num_closed = p->num_open = 0;
 	return p;
@@ -117,25 +120,27 @@ hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 	Point *p = point_create(HYPERSPACE_NUM_DIMENSIONS(hs));
 	int i;
 
-	for (i = 0; i < hs->num_open_dimensions; i++)
+	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
 	{
-		Dimension *d = hs->open_dimensions[i];
-		Datum       datum;
-		bool        isnull;
+		Dimension *d = &hs->dimensions[i];
 
-		datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
+		if (IS_OPEN_DIMENSION(d))
+		{
+			Datum       datum;
+			bool        isnull;
 
-		if (isnull)
-			elog(ERROR, "Time attribute not found in tuple");
+			datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
 
-		p->coordinates[p->num_open++] = time_value_to_internal(datum, d->fd.column_type);
-	}
+			if (isnull)
+				elog(ERROR, "Time attribute not found in tuple");
 
-	for (i = 0; i < hs->num_closed_dimensions; i++)
-	{
-		Dimension *d = hs->closed_dimensions[i];
-		p->coordinates[p->num_open + p->num_closed++] =
-			partitioning_func_apply_tuple(d->partitioning, tuple, tupdesc);
+			p->coordinates[p->num_open++] = time_value_to_internal(datum, d->fd.column_type);
+		}
+		else
+		{
+			p->coordinates[p->num_open + p->num_closed++] =
+				partitioning_func_apply_tuple(d->partitioning, tuple, tupdesc);
+		}
 	}
 
 	return p;

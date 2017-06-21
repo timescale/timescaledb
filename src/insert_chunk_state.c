@@ -7,16 +7,7 @@
 #include <access/xact.h>
 #include <miscadmin.h>
 
-#include "cache.h"
-#include "hypertable_cache.h"
-#include "chunk_cache.h"
 #include "errors.h"
-#include "utils.h"
-#include "metadata_queries.h"
-#include "partitioning.h"
-#include "scanner.h"
-#include "catalog.h"
-#include "chunk.h"
 #include "insert_chunk_state.h"
 
 /*
@@ -116,12 +107,9 @@ insert_chunk_state_new(Chunk *chunk)
 	ExecCheckRTPerms(range_table, true);
 
 	if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("Hypertables don't support Row level security")));
-
-	}
 
 	if (XactReadOnly && !rel->rd_islocaltemp)
 		PreventCommandIfReadOnly("COPY FROM");
@@ -129,9 +117,7 @@ insert_chunk_state_new(Chunk *chunk)
 	PreventCommandIfParallelMode("COPY FROM");
 
 	if (rel->rd_rel->relkind != RELKIND_RELATION)
-	{
 		elog(ERROR, "inserting not to table");
-	}
 
 	/*
 	 * We need a ResultRelInfo so we can use the regular executor's
@@ -148,9 +134,7 @@ insert_chunk_state_new(Chunk *chunk)
 	ExecOpenIndices(resultRelInfo, false);
 
 	if (resultRelInfo->ri_TrigDesc != NULL)
-	{
 		elog(ERROR, "triggers on chunk tables not supported");
-	}
 
 	rel_state = insert_chunk_state_rel_new(rel, resultRelInfo, range_table);
 	rel_state_list = lappend(rel_state_list, rel_state);
@@ -166,14 +150,11 @@ insert_chunk_state_destroy(InsertChunkState *state)
 	ListCell   *lc;
 
 	if (state == NULL)
-	{
 		return;
-	}
 
 	foreach(lc, state->replica_states)
 	{
 		InsertChunkStateRel *rel_state = lfirst(lc);
-
 		insert_chunk_state_rel_destroy(rel_state);
 	}
 }
@@ -186,7 +167,6 @@ insert_chunk_state_insert_tuple(InsertChunkState *state, HeapTuple tup)
 	foreach(lc, state->replica_states)
 	{
 		InsertChunkStateRel *rel_state = lfirst(lc);
-
 		insert_chunk_state_rel_insert_tuple(rel_state, tup);
 	}
 }

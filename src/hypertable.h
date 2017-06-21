@@ -4,13 +4,12 @@
 #include <postgres.h>
 
 #include "catalog.h"
-#include "subspace_store.h"
 
-typedef struct PartitionEpoch PartitionEpoch;
 typedef struct Hyperspace Hyperspace;
-typedef struct Dimension Dimension;
-
-#define MAX_EPOCHS_PER_HYPERTABLE 20
+typedef struct SubspaceStore SubspaceStore;
+typedef struct Point Point;
+typedef struct Chunk Chunk;
+typedef struct HeapTupleData *HeapTuple;
 
 typedef struct Hypertable
 {
@@ -20,12 +19,7 @@ typedef struct Hypertable
 	SubspaceStore *chunk_cache;
 } Hypertable;
 
-typedef struct HeapTupleData *HeapTuple;
-
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
-extern Dimension *hypertable_get_open_dimension(Hypertable *h);
-extern Dimension *hypertable_get_closed_dimension(Hypertable *h);
-
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 
 #endif /* TIMESCALEDB_HYPERTABLE_H */
