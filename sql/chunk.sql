@@ -203,6 +203,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create_after_lock(
 $BODY$
 DECLARE
     dimension_row _timescaledb_catalog.dimension;
+    hypertable_id INTEGER;
     free_index INTEGER;
     fixed_dimension_ids INTEGER[];
     fixed_values BIGINT[];
@@ -211,10 +212,10 @@ DECLARE
     slice_ids INTEGER[];
     slice_id INTEGER;
 BEGIN
-    SELECT *
-    INTO STRICT dimension_row
-    FROM _timescaledb_catalog.dimension
-    WHERE id = dimension_ids[1] ;
+    SELECT d.hypertable_id
+    INTO STRICT hypertable_id
+    FROM _timescaledb_catalog.dimension d
+    WHERE d.id = dimension_ids[1];
 
     slice_ids = NULL;
     FOR free_index IN 1 .. array_upper(dimension_ids, 1)
@@ -225,12 +226,16 @@ BEGIN
         fixed_values = dimension_values[:free_index-1]
                               || dimension_values[free_index+1:];
 
-        --TODO currently assumes only one dimension is aligned.
+        SELECT *
+        INTO STRICT dimension_row
+        FROM _timescaledb_catalog.dimension
+        WHERE id = dimension_ids[free_index];
+
         SELECT *
         INTO free_range_start, free_range_end
         FROM _timescaledb_internal.chunk_calculate_new_ranges(
             dimension_ids[free_index], dimension_values[free_index],
-            fixed_dimension_ids, fixed_values, free_index = 1);
+            fixed_dimension_ids, fixed_values, dimension_row.aligned);
 
         --do not use RETURNING here (ON CONFLICT DO NOTHING)
         INSERT INTO  _timescaledb_catalog.dimension_slice
@@ -253,7 +258,7 @@ BEGIN
         FROM
         nextval(pg_get_serial_sequence('_timescaledb_catalog.chunk','id')) seq_id,
         _timescaledb_catalog.hypertable h
-        WHERE h.id = dimension_row.hypertable_id
+        WHERE h.id = hypertable_id
         RETURNING *
     )
     INSERT INTO _timescaledb_catalog.chunk_constraint (dimension_slice_id, chunk_id)
