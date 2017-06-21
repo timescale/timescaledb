@@ -2,21 +2,57 @@
 \set ON_ERROR_STOP 0
 
 SET client_min_messages = ERROR;
-drop tablespace if exists tspace1;
+DROP TABLESPACE IF EXISTS tablespace1;
+DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 
 --test hypertable with tables space
-create tablespace tspace1 location :TEST_TABLESPACE_PATH;
-create table test_tspace(time timestamp, temp float, device_id text) tablespace tspace1;
-select create_hypertable('test_tspace', 'time', 'device_id', 2);
-select * from _timescaledb_catalog.partition p;
-insert into test_tspace values ('2017-01-20T09:00:01', 24.3, 'dev1');
-insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
-\dt test_tspace
+CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+
+--assigning a tablespace via the main table should work
+CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
+
+INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
 
 --verify that the table chunk has the correct tablespace
-\d+ _timescaledb_internal.*
+SELECT relname, spcname FROM pg_class c
+INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+
+--attach another tablespace without first creating it --> should generate error
+SELECT attach_tablespace('tspace_2dim', 'tablespace2');
+--attach the same tablespace twice to same table should also generate error
+SELECT attach_tablespace('tspace_2dim', 'tablespace1');
+
+CREATE TABLESPACE tablespace2 LOCATION :TEST_TABLESPACE2_PATH;
+
+--attach after creating --> should work
+SELECT attach_tablespace('tspace_2dim', 'tablespace2');
+
+SELECT * FROM _timescaledb_catalog.tablespace;
+
+--insert into another chunk
+INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'brown');
+
+SELECT relname, spcname FROM pg_class c
+INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+
+--
+CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+SELECT create_hypertable('tspace_1dim', 'time');
+SELECT attach_tablespace('tspace_1dim', 'tablespace2');
+
+INSERT INTO tspace_1dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
+INSERT INTO tspace_1dim VALUES ('2017-03-20T09:00:01', 24.3, 'brown');
+
+SELECT relname, spcname FROM pg_class c
+INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 
 --cleanup
-drop table test_tspace cascade;
-drop tablespace tspace1;
+DROP TABLE tspace_1dim CASCADE;
+DROP TABLE tspace_2dim CASCADE;
+DROP TABLESPACE tablespace1;
+DROP TABLESPACE tablespace2;

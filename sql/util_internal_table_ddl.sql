@@ -26,20 +26,9 @@ DECLARE
     chunk_row _timescaledb_catalog.chunk;
     hypertable_row _timescaledb_catalog.hypertable;
     tablespace_clause TEXT := '';
+    tablespace_name NAME;
+    tablespace_oid  OID;
 BEGIN
-    --TODO: handle tablespaces
-    --SELECT t.oid
-    --INTO tablespace_oid
-    --FROM pg_catalog.pg_tablespace t
-    --WHERE t.spcname = tablespace_name;
-
-    --IF tablespace_oid IS NOT NULL THEN
-    --    tablespace_clause := format('TABLESPACE %s', tablespace_name);
-    --ELSIF tablespace_name IS NOT NULL THEN
-    --    RAISE EXCEPTION 'No tablespace % in database %', tablespace_name, current_database()
-    --    USING ERRCODE = 'IO501';
-    --END IF;
-
     SELECT * INTO STRICT chunk_row
     FROM _timescaledb_catalog.chunk
     WHERE id = chunk_id;
@@ -47,6 +36,20 @@ BEGIN
     SELECT * INTO STRICT hypertable_row
     FROM _timescaledb_catalog.hypertable
     WHERE id = chunk_row.hypertable_id;
+
+    tablespace_name := _timescaledb_internal.select_tablespace(chunk_row.hypertable_id,
+                                                               chunk_row.id);
+    SELECT t.oid
+    INTO tablespace_oid
+    FROM pg_catalog.pg_tablespace t
+    WHERE t.spcname = tablespace_name;
+
+    IF tablespace_oid IS NOT NULL THEN
+        tablespace_clause := format('TABLESPACE %s', tablespace_name);
+    ELSIF tablespace_name IS NOT NULL THEN
+        RAISE EXCEPTION 'No tablespace % in database %', tablespace_name, current_database()
+        USING ERRCODE = 'IO501';
+    END IF;
 
     EXECUTE format(
         $$
@@ -105,8 +108,8 @@ $BODY$
 DECLARE
     constraint_row record;
 BEGIN
-    FOR constraint_row IN 
-        SELECT c.schema_name, c.table_name, ds.id as dimension_slice_id 
+    FOR constraint_row IN
+        SELECT c.schema_name, c.table_name, ds.id as dimension_slice_id
         FROM _timescaledb_catalog.chunk c
         INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
         INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)

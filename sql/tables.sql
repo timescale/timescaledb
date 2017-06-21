@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
 
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.tablespace (
+   id                SERIAL PRIMARY KEY,
+   hypertable_id     INT  NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+   tablespace_name   NAME NOT NULL,
+   UNIQUE (hypertable_id, tablespace_name)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.tablespace', '');
+
 CREATE TABLE  _timescaledb_catalog.dimension (
     id                          SERIAL   NOT NULL PRIMARY KEY,
     hypertable_id               INTEGER  NOT NULL  REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
