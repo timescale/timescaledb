@@ -1,5 +1,32 @@
 # TimescaleDB Changelog
 
+## 0.0.12-beta (2017-06-21)
+
+**High-level changes**
+* A major cleanup and refactoring was done to remove legacy code and
+currently unused code paths. This change is **backwards incompatible**
+and will require a database to be re-initialized and data re-imported.
+This refactoring will allow us to provide upgrade paths starting with
+the next release.
+* `COPY` and `INSERT` commands now return the correct number of rows
+* Default indexes no longer duplicate existing indexes
+* Cleanup of the Docker image and build processBatches
+* Chunks are now time-aligned across partitions 
+
+**Notable commits**
+* [3192c8a] Remove Dockerfile and docker.mk
+* [2a01ebc] Ensure that chunks are aligned.
+* [73622bf] Fix default index creation duplication of indexes
+* [c8872fe] Fix command-tag for COPY and INSERT
+* [bfe58b6] Refactor towards supporting version upgrades
+* [db01c84] Make time-bucket function parallel safe
+* [18db11c] Fix timestamp test
+* [97bbb59] Make constraint exclusion work with non-text partition keys
+* [f2b42eb] Fix problems with partitioning logic for padded fields
+* [997029a] if_not_exist flag to create_hypertable now works on hypertables with data as well
+* [347a8bd] Reference the correct column when scanning partition epochs
+* [88a9849] Fix bug with timescaledb.allow_install_without_preload GUC not working
+
 ## 0.0.11-beta (2017-05-24)
 
 **High-level changes**
