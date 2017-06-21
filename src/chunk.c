@@ -17,11 +17,11 @@
 
 
 static void
-chunk_fill(Chunk *chunk, HeapTuple tuple) 
+chunk_fill(Chunk *chunk, HeapTuple tuple)
 {
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, false));
+					   get_namespace_oid(chunk->fd.schema_name.data, false));
 }
 
 Chunk *
@@ -44,7 +44,7 @@ chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 Chunk *
 chunk_create_new(Hyperspace *hs, Point *p)
 {
-	Chunk *chunk;
+	Chunk	   *chunk;
 
 	chunk = spi_chunk_create(hs, p);
 	Assert(chunk != NULL);
@@ -53,13 +53,14 @@ chunk_create_new(Hyperspace *hs, Point *p)
 }
 
 Chunk *
-chunk_create_stub(int32 id, int16 num_constraints) {
-	Chunk *chunk;
+chunk_create_stub(int32 id, int16 num_constraints)
+{
+	Chunk	   *chunk;
 
 	chunk = palloc0(CHUNK_SIZE(num_constraints));
 	chunk->capacity = num_constraints;
 	chunk->num_constraints = 0;
-	
+
 	chunk->fd.id = id;
 	return chunk;
 }
@@ -67,7 +68,8 @@ chunk_create_stub(int32 id, int16 num_constraints) {
 static bool
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
-	Chunk *chunk = arg;
+	Chunk	   *chunk = arg;
+
 	chunk_fill(chunk, ti->tuple);
 	return false;
 }
@@ -79,7 +81,7 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 {
 	ScanKeyData scankey[1];
 	Catalog    *catalog = catalog_get();
-	int num_found;
+	int			num_found;
 	ScannerCtx	ctx = {
 		.table = catalog->tables[CHUNK].id,
 		.index = catalog->tables[CHUNK].index_ids[CHUNK_ID_INDEX],
@@ -99,7 +101,7 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	/*
 	 * Perform an index scan on chunk ID.
 	 */
-	ScanKeyInit(&scankey[0], Anum_chunk_id,	BTEqualStrategyNumber,
+	ScanKeyInit(&scankey[0], Anum_chunk_id, BTEqualStrategyNumber,
 				F_INT4EQ, Int32GetDatum(chunk_stub->fd.id));
 
 	num_found = scanner_scan(&ctx);
@@ -164,7 +166,7 @@ chunk_scan_ctx_find_chunk(ChunkScanCtx *ctx)
 		 entry != NULL;
 		 entry = hash_seq_search(&status))
 	{
-		Chunk *chunk = entry->chunk;
+		Chunk	   *chunk = entry->chunk;
 
 		if (chunk->num_constraints == ctx->num_dimensions)
 		{
@@ -182,14 +184,14 @@ chunk_scan_ctx_find_chunk(ChunkScanCtx *ctx)
  * This involves:
  *
  * 1) For each dimension:
- *    - Find all dimension slices that match the dimension
+ *	  - Find all dimension slices that match the dimension
  * 2) For each dimension slice:
- *    - Find all chunk constraints matching the dimension slice
+ *	  - Find all chunk constraints matching the dimension slice
  * 3) For each matching chunk constraint
- *    - Insert a (stub) chunk in a hash table and add the constraint to the chunk
- *    - If chunk already exists in hash table, add the constraint to the chunk
+ *	  - Insert a (stub) chunk in a hash table and add the constraint to the chunk
+ *	  - If chunk already exists in hash table, add the constraint to the chunk
  * 4) At the end of the scan, only one chunk in the hash table should have
- *    N number of constraints. This is the matching chunk.
+ *	  N number of constraints. This is the matching chunk.
  *
  * NOTE: this function allocates transient data, e.g., dimension slice,
  * constraints and chunks, that in the end are not part of the returned
@@ -200,10 +202,11 @@ chunk_scan_ctx_find_chunk(ChunkScanCtx *ctx)
 Chunk *
 chunk_find(Hyperspace *hs, Point *p)
 {
-	Chunk *chunk;
+	Chunk	   *chunk;
 	ChunkScanCtx ctx;
-	int16 num_dimensions = HYPERSPACE_NUM_DIMENSIONS(hs);
-	int i, j;
+	int16		num_dimensions = HYPERSPACE_NUM_DIMENSIONS(hs);
+	int			i,
+				j;
 
 	/* The scan context will keep the state accumulated during the scan */
 	chunk_scan_ctx_init(&ctx, num_dimensions);
@@ -216,8 +219,11 @@ chunk_find(Hyperspace *hs, Point *p)
 		vec = dimension_slice_scan(hs->dimensions[i].fd.id, p->coordinates[i]);
 
 		for (j = 0; j < vec->num_slices; j++)
-			/* For each dimension slice, find matching constraints. These will
-			 * be saved in the scan context */
+
+			/*
+			 * For each dimension slice, find matching constraints. These will
+			 * be saved in the scan context
+			 */
 			chunk_constraint_scan_by_dimension_slice_id(vec->slices[j], &ctx);
 	}
 
@@ -237,8 +243,8 @@ chunk_find(Hyperspace *hs, Point *p)
 Chunk *
 chunk_copy(Chunk *chunk)
 {
-	Chunk *copy;
-	size_t nbytes = CHUNK_SIZE(chunk->capacity);
+	Chunk	   *copy;
+	size_t		nbytes = CHUNK_SIZE(chunk->capacity);
 
 	copy = palloc(nbytes);
 	memcpy(copy, chunk, nbytes);

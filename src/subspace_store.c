@@ -4,10 +4,11 @@
 #include "dimension_slice.h"
 #include "subspace_store.h"
 
-typedef struct SubspaceStore {
+typedef struct SubspaceStore
+{
 	MemoryContext mcxt;
-	int16 num_dimensions;
-	DimensionVec *origin; /* origin of the tree */
+	int16		num_dimensions;
+	DimensionVec *origin;		/* origin of the tree */
 } SubspaceStore;
 
 static inline DimensionVec *
@@ -21,6 +22,7 @@ subspace_store_init(int16 num_dimensions, MemoryContext mcxt)
 {
 	MemoryContext old = MemoryContextSwitchTo(mcxt);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
+
 	sst->origin = subspace_store_dimension_create();
 	sst->num_dimensions = num_dimensions;
 	sst->mcxt = mcxt;
@@ -29,18 +31,19 @@ subspace_store_init(int16 num_dimensions, MemoryContext mcxt)
 }
 
 static inline void
-subspace_store_free_internal_node(void * node)
+subspace_store_free_internal_node(void *node)
 {
-	dimension_vec_free((DimensionVec *)node);
+	dimension_vec_free((DimensionVec *) node);
 }
 
-void subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
-						void *end_store, void (*end_store_free)(void *))
+void
+subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
+				   void *end_store, void (*end_store_free) (void *))
 {
 	DimensionVec **vecptr = &cache->origin;
 	DimensionSlice *last = NULL;
 	MemoryContext old = MemoryContextSwitchTo(cache->mcxt);
-	int i;
+	int			i;
 
 	Assert(hc->num_slices == cache->num_dimensions);
 
@@ -69,17 +72,18 @@ void subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
 		if (match == NULL)
 		{
 			DimensionSlice *copy = dimension_slice_copy(target);
+
 			dimension_vec_add_slice_sort(vecptr, copy);
 			match = copy;
 		}
 
 		last = match;
 		/* internal nodes point to the next dimension's vector */
-		vecptr = (DimensionVec **)&last->storage;
+		vecptr = (DimensionVec **) &last->storage;
 	}
 
 	Assert(last->storage == NULL);
-	last->storage = end_store; /* at the end we store the object */
+	last->storage = end_store;	/* at the end we store the object */
 	last->storage_free = end_store_free;
 	MemoryContextSwitchTo(old);
 }
@@ -87,7 +91,7 @@ void subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
 void *
 subspace_store_get(SubspaceStore *cache, Point *target)
 {
-	int i;
+	int			i;
 	DimensionVec *vec = cache->origin;
 	DimensionSlice *match = NULL;
 
@@ -112,7 +116,8 @@ subspace_store_free(SubspaceStore *cache)
 	pfree(cache);
 }
 
-MemoryContext subspace_store_mcxt(SubspaceStore *cache)
+MemoryContext
+subspace_store_mcxt(SubspaceStore *cache)
 {
 	return cache->mcxt;
 }

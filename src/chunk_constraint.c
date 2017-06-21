@@ -10,6 +10,7 @@ static inline ChunkConstraint *
 chunk_constraint_from_form_data(Form_chunk_constraint fd)
 {
 	ChunkConstraint *cc;
+
 	cc = palloc0(sizeof(ChunkConstraint));
 	memcpy(&cc->fd, fd, sizeof(FormData_chunk_constraint));
 	return cc;
@@ -25,12 +26,12 @@ chunk_constraint_fill(ChunkConstraint *cc, HeapTuple tuple)
 static inline ChunkConstraint *
 chunk_constraint_from_tuple(HeapTuple tuple)
 {
-	return chunk_constraint_from_form_data((Form_chunk_constraint ) GETSTRUCT(tuple));
+	return chunk_constraint_from_form_data((Form_chunk_constraint) GETSTRUCT(tuple));
 }
 
 typedef struct ChunkConstraintCtx
 {
-	Chunk *chunk;
+	Chunk	   *chunk;
 } ChunkConstraintCtx;
 
 static bool
@@ -60,7 +61,7 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 	ChunkConstraintCtx data = {
 		.chunk = chunk,
 	};
-	int num_found;
+	int			num_found;
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[CHUNK_CONSTRAINT].id,
 		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX],
@@ -91,9 +92,9 @@ chunk_constraint_dimension_id_tuple_found(TupleInfo *ti, void *data)
 {
 	ChunkScanCtx *ctx = data;
 	ChunkConstraint constraint;
-	Chunk *chunk;
+	Chunk	   *chunk;
 	ChunkScanEntry *entry;
-	bool found;
+	bool		found;
 
 	chunk_constraint_fill(&constraint, ti->tuple);
 
@@ -103,17 +104,21 @@ chunk_constraint_dimension_id_tuple_found(TupleInfo *ti, void *data)
 	{
 		chunk = chunk_create_stub(constraint.fd.chunk_id, ctx->num_dimensions);
 		entry->chunk = chunk;
-	} else {
+	}
+	else
+	{
 		chunk = entry->chunk;
 	}
 
 	chunk_add_constraint(chunk, &constraint);
 
-	/* If the chunk has N constraints, it is the chunk we are looking for and
-	 * can abort the scan */
+	/*
+	 * If the chunk has N constraints, it is the chunk we are looking for and
+	 * can abort the scan
+	 */
 	if (chunk->num_constraints == ctx->num_dimensions)
 		return false;
-	
+
 	return true;
 }
 
@@ -122,7 +127,7 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 {
 	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
-	int num_found;
+	int			num_found;
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[CHUNK_CONSTRAINT].id,
 		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX],

@@ -61,7 +61,7 @@ hypertable_cache_create()
 		.get_key = hypertable_cache_get_key,
 		.create_entry = hypertable_cache_create_entry,
 	};
-	
+
 	*cache = template;
 
 	cache_init(cache);
@@ -78,6 +78,7 @@ static bool
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	HypertableNameCacheEntry *entry = data;
+
 	entry->hypertable = hypertable_from_tuple(ti->tuple);
 	return false;
 }

@@ -20,7 +20,7 @@ insert_statement_state_new(Oid relid)
 											   ALLOCSET_DEFAULT_SIZES);
 	InsertStatementState *state;
 	Hypertable *ht;
-	Cache *hypertable_cache;
+	Cache	   *hypertable_cache;
 
 	oldctx = MemoryContextSwitchTo(mctx);
 
@@ -50,9 +50,11 @@ insert_statement_state_destroy(InsertStatementState *state)
 	MemoryContextDelete(state->mctx);
 }
 
-static void destroy_insert_chunk_state(void *ics_ptr)
+static void
+destroy_insert_chunk_state(void *ics_ptr)
 {
 	InsertChunkState *ics = ics_ptr;
+
 	insert_chunk_state_destroy(ics);
 }
 
@@ -69,7 +71,7 @@ insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyper
 
 	if (NULL == ics)
 	{
-		Chunk *new_chunk;
+		Chunk	   *new_chunk;
 		MemoryContext old;
 
 		new_chunk = hypertable_get_chunk(state->hypertable, point);

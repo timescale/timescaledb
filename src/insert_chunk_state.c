@@ -155,6 +155,7 @@ insert_chunk_state_destroy(InsertChunkState *state)
 	foreach(lc, state->replica_states)
 	{
 		InsertChunkStateRel *rel_state = lfirst(lc);
+
 		insert_chunk_state_rel_destroy(rel_state);
 	}
 }
@@ -167,6 +168,7 @@ insert_chunk_state_insert_tuple(InsertChunkState *state, HeapTuple tup)
 	foreach(lc, state->replica_states)
 	{
 		InsertChunkStateRel *rel_state = lfirst(lc);
+
 		insert_chunk_state_rel_insert_tuple(rel_state, tup);
 	}
 }
