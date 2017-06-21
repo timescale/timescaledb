@@ -1,7 +1,6 @@
 #include <postgres.h>
 #include <access/relscan.h>
 #include <utils/lsyscache.h>
-#include <inttypes.h>
 
 #include "catalog.h"
 #include "dimension.h"
@@ -108,7 +107,7 @@ point_to_string(Point *p)
 	buf[0] = '(';
 
 	for (i = 0; i < p->cardinality; i++)
-		j += snprintf(buf + j, 100, "%" PRId64 ",", p->coordinates[i]);
+		j += snprintf(buf + j, 100, "" INT64_FORMAT ",", p->coordinates[i]);
 
 	buf[j-1] = ')';
 

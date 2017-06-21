@@ -28,6 +28,4 @@ extern Dimension *hypertable_get_closed_dimension(Hypertable *h);
 
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 
-
-
 #endif /* TIMESCALEDB_HYPERTABLE_H */

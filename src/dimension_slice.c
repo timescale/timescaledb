@@ -9,6 +9,8 @@
 #include "dimension.h"
 #include "chunk_constraint.h"
 
+static DimensionVec *dimension_vec_expand(DimensionVec *vec, int32 new_size);
+
 static inline DimensionSlice *
 dimension_slice_from_form_data(Form_dimension_slice fd)
 {
@@ -46,18 +48,21 @@ hypercube_free(Hypercube *hc)
 }
 
 static bool
-dimension_slice_tuple_found(TupleInfo *ti, void *data)
+dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionSlice **ds = data;
-	*ds = dimension_slice_from_tuple(ti->tuple);
-	return false;
+	DimensionVec **vecptr = data;
+	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	elog(NOTICE, "Found dimension slice [" INT64_FORMAT ", " INT64_FORMAT ")",
+		 slice->fd.range_start, slice->fd.range_end);
+	dimension_vec_add_slice(vecptr, slice);
+	return true;
 }
 
-DimensionSlice *
+DimensionVec *
 dimension_slice_scan(int32 dimension_id, int64 coordinate)
 {
 	Catalog    *catalog = catalog_get();
-	DimensionSlice *slice = NULL;
+	DimensionVec *vec = dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
 	ScanKeyData scankey[3];
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
@@ -65,27 +70,35 @@ dimension_slice_scan(int32 dimension_id, int64 coordinate)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 3,
 		.scankey = scankey,
-		.data = &slice,
-		.tuple_found = dimension_slice_tuple_found,
+		.data = &vec,
+		.tuple_found = dimension_vec_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
 
+	elog(NOTICE, "Scanning dimension %d for coordinate " INT64_FORMAT "",
+		 dimension_id, coordinate);
+
 	/* Perform an index scan for slice matching the dimension's ID and which
 	 * encloses the coordinate */
-	/* FIXME  MAT: I don't think this is right BTGreaterEqualStrategyNumber searches for rows >= target 
-	 * I think. Also I don't think BTLessStrategyNumber can be used with a forward scan
-	 * */
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
 	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-				BTGreaterEqualStrategyNumber, F_INT8GE, Int64GetDatum(coordinate));
+				BTLessEqualStrategyNumber, F_INT8LE, Int64GetDatum(coordinate));
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(coordinate));
+				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(coordinate));
 
 	scanner_scan(&scanCtx);
 
-	return slice;
+	return vec;
+}
+
+static bool
+dimension_slice_tuple_found(TupleInfo *ti, void *data)
+{
+	DimensionSlice **slice = data;
+	*slice = dimension_slice_from_tuple(ti->tuple);
+	return false;
 }
 
 static DimensionSlice *
@@ -138,7 +151,7 @@ hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints)
 {
 	Hypercube *hc = hypercube_alloc(num_constraints);
 	int i;
-	
+
 	for (i = 0; i < num_constraints; i++)
 	{
 		DimensionSlice *slice = dimension_slice_scan_by_id(constraints[i].fd.dimension_slice_id);
@@ -146,136 +159,10 @@ hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints)
 		hc->slices[hc->num_slices++] = slice;
 	}
 
-	Assert(hc->num_slices == hc->num_dimensions);
-	hypercube_slice_sort(hc);
 	return hc;
 }
 
-static inline bool
-scan_dimensions(Hypercube *hc, Dimension *dimensions[], int16 num_dimensions, int64 point[])
-{
-	int i;
-
-	for (i = 0; i < num_dimensions; i++)
-	{
-		Dimension *d = dimensions[i];
-		DimensionSlice *slice = dimension_slice_scan(d->fd.id, point[i]);
-
-		if (slice == NULL)
-			return false;
-
-		hc->slices[hc->num_slices++] = slice;
-	}
-	return true;
-}
-
-Hypercube *
-dimension_slice_point_scan(Hyperspace *space, int64 point[])
-{
-	Hypercube *cube = hypercube_alloc(HYPERSPACE_NUM_DIMENSIONS(space));
-
-	if (!scan_dimensions(cube, space->open_dimensions, space->num_open_dimensions, point)) {
-		hypercube_free(cube);
-		return NULL;
-	}
-
-	if (!scan_dimensions(cube, space->closed_dimensions, space->num_closed_dimensions, point)) {
-		hypercube_free(cube);
-		return NULL;
-	}
-	return cube;
-}
-
-typedef struct PointScanCtx
-{
-	Hyperspace *hs;
-	Hypercube *hc;
-	int64 *point;
-} PointScanCtx;
-
-static inline
-DimensionSlice *match_dimension_slice(Form_dimension_slice slice, int64 point[],
-									  Dimension *dimensions[], int16 num_dimensions)
-{
-	int i;
-
-	for (i = 0; i < num_dimensions; i++)
-	{
-		int32 dimension_id = dimensions[i]->fd.id;
-		int64 coordinate = point[i];
-
-		if (slice->dimension_id == dimension_id && point_coordinate_is_in_slice(slice, coordinate))
-			return dimension_slice_from_form_data(slice);
-	}
-
-	return NULL;
-}
-
-static bool
-point_filter(TupleInfo *ti, void *data)
-{
-	PointScanCtx *ctx = data;
-	Hyperspace *hs = ctx->hs;
-	Hypercube *hc = ctx->hc;
-	DimensionSlice *slice;
-
-	/* Match open dimension */
-	slice = match_dimension_slice((Form_dimension_slice) GETSTRUCT(ti->tuple), ctx->point,
-								  hs->open_dimensions, hs->num_open_dimensions);
-
-	if (slice != NULL)
-	{
-		hc->slices[hc->num_slices++] = slice;
-		return HYPERSPACE_NUM_DIMENSIONS(hs) == hc->num_slices;
-	}
-	
-	/* Match closed dimension */
-	slice = match_dimension_slice((Form_dimension_slice) GETSTRUCT(ti->tuple), ctx->point,
-								  hs->closed_dimensions, hs->num_closed_dimensions);
-
-	if (slice != NULL)
-	{
-		hc->slices[hc->num_slices++] = slice;
-		return HYPERSPACE_NUM_DIMENSIONS(hs) == hc->num_slices;
-	}
-
-	return true;
-}
-
-/*
- * Given a N-dimensional point, scan for the hypercube that encloses it.
- *
- * NOTE: This assumes non-overlapping slices.
- */
-Hypercube *
-dimension_slice_point_scan_heap(Hyperspace *space, int64 point[])
-{
-	Catalog    *catalog = catalog_get();
-	Hypercube *cube = hypercube_alloc(HYPERSPACE_NUM_DIMENSIONS(space));
-	PointScanCtx ctx = {
-		.hs = space,
-		.hc = cube,
-		.point = point,
-	};
-	ScannerCtx	scanCtx = {
-		.table = catalog->tables[DIMENSION_SLICE].id,
-		.scantype = ScannerTypeHeap,
-		.nkeys = 0,
-		.data = &ctx,
-		.filter = point_filter,
-		.tuple_found = dimension_slice_tuple_found,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-	};
-
-	cube->num_slices = 0;
-
-	scanner_scan(&scanCtx);
-
-	return cube;
-}
-
-void dimension_slice_free(DimensionSlice *slice) 
+void dimension_slice_free(DimensionSlice *slice)
 {
 	if (slice->storage_free != NULL)
 		slice->storage_free(slice->storage);
@@ -320,66 +207,69 @@ cmp_coordinate_and_slice(const void *left, const void *right)
 	return 0;
 }
 
-static DimensionAxis *
-dimension_axis_expand(DimensionAxis *axis, int32 new_size)
+static DimensionVec *
+dimension_vec_expand(DimensionVec *vec, int32 new_size)
 {
-	if (axis != NULL && axis->num_slots >= new_size)
-		return axis;
+	if (vec != NULL && vec->num_slots >= new_size)
+		return vec;
 
-	if (axis == NULL) 
-	{
-		axis = palloc(sizeof(DimensionAxis) + sizeof(DimensionSlice *) * new_size);
-	}
+	if (NULL == vec)
+		vec = palloc(DIMENSION_VEC_SIZE(new_size));
 	else
-	{
-		axis = repalloc(axis, sizeof(DimensionAxis) + sizeof(DimensionSlice *) * new_size);
-	}
-	axis->num_slots = new_size;
-	return axis;
+		vec = repalloc(vec, DIMENSION_VEC_SIZE(new_size));
+
+	vec->num_slots = new_size;
+
+	return vec;
 }
 
-DimensionAxis *
-dimension_axis_create(DimensionType type, int32 num_slices)
+DimensionVec *
+dimension_vec_create(int32 initial_num_slices)
 {
-	DimensionAxis *axis = dimension_axis_expand(NULL, num_slices);
-	axis->type = type;
-	axis->num_slices = 0;
-	return axis;
+	DimensionVec *vec = dimension_vec_expand(NULL, initial_num_slices);
+	vec->num_slots = initial_num_slices;
+	vec->num_slices = 0;
+	return vec;
 }
 
-int32
-dimension_axis_add_slice(DimensionAxis **axis, DimensionSlice *slice)
+DimensionVec *
+dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 {
-	if ((*axis)->num_slices + 1 > (*axis)->num_slots)
-		*axis = dimension_axis_expand(*axis, (*axis)->num_slots + 10);
+	DimensionVec *vec = *vecptr;
 
-	(*axis)->slices[(*axis)->num_slices++] = slice;
+	if (vec->num_slices + 1 > vec->num_slots)
+		*vecptr = vec = dimension_vec_expand(vec, vec->num_slots + 10);
 
-	return (*axis)->num_slices;
+	vec->slices[vec->num_slices++] = slice;
+
+	return vec;
 }
 
-int32
-dimension_axis_add_slice_sort(DimensionAxis **axis, DimensionSlice *slice)
+DimensionVec *
+dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 {
-	dimension_axis_add_slice(axis, slice);
-	qsort((*axis)->slices, (*axis)->num_slices, sizeof(DimensionSlice *), cmp_slices);
-	return (*axis)->num_slices;
+	DimensionVec *vec = *vecptr;
+	*vecptr = vec = dimension_vec_add_slice(vecptr, slice);
+	qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
+	return vec;
 }
 
 DimensionSlice *
-dimension_axis_find_slice(DimensionAxis *axis, int64 coordinate)
+dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 {
-  DimensionSlice ** res = bsearch(&coordinate, axis->slices, axis->num_slices, sizeof(DimensionSlice *), cmp_coordinate_and_slice);
+  DimensionSlice **res = bsearch(&coordinate, vec->slices, vec->num_slices,
+								 sizeof(DimensionSlice *), cmp_coordinate_and_slice);
   if (res == NULL)
 	  return NULL;
+
   return *res;
 }
 
-void dimension_axis_free(DimensionAxis *axis)
+void dimension_vec_free(DimensionVec *vec)
 {
 	int i;
-	
-	for (i = 0; i < axis->num_slices; i++)
-		dimension_slice_free(axis->slices[i]);
-	pfree(axis);
+
+	for (i = 0; i < vec->num_slices; i++)
+		dimension_slice_free(vec->slices[i]);
+	pfree(vec);
 }

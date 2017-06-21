@@ -32,14 +32,34 @@ typedef struct Chunk
 	 * table.
 	 */
 	Hypercube   *cube;
+	int16 num_constraint_slots;
 	int16 num_constraints;
 	ChunkConstraint constraints[0];
 } Chunk;
 
-#define CHUNK_SIZE(num_constraints)				\
-	(sizeof(Chunk) + sizeof(ChunkConstraint) * num_constraints)
+#define CHUNK_SIZE(num_constraints)								\
+	(sizeof(Chunk) + sizeof(ChunkConstraint) * (num_constraints))
 
-extern Chunk *chunk_create(HeapTuple tuple, int16 num_constraints);
-extern Chunk *chunk_get_or_create(Hyperspace *hs, Point *p);
+typedef struct ChunkScanState
+{
+	HTAB *htab;
+	MemoryContext elm_mctx;
+	DimensionSlice *slice;
+	int16 num_dimensions;
+	int16 num_elements;   
+} ChunkScanState;
+
+typedef struct ChunkScanEntry
+{
+	int32 chunk_id;
+	Chunk *chunk;
+} ChunkScanEntry;
+ 	
+extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);
+extern Chunk *chunk_create_new(Hyperspace *hs, Point *p);
+extern Chunk *chunk_get_or_create_new(Hyperspace *hs, Point *p);
+extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
+extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);
+extern Chunk *chunk_find(Hyperspace *hs, Point *p);
 
 #endif   /* TIMESCALEDB_CHUNK_H */

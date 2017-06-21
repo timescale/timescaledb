@@ -251,8 +251,8 @@ enum
 
 enum Anum_chunk_constraint
 {
-	Anum_chunk_constraint_dimension_slice_id = 1,
-	Anum_chunk_constraint_chunk_id,
+	Anum_chunk_constraint_chunk_id = 1,
+	Anum_chunk_constraint_dimension_slice_id,
 	_Anum_chunk_constraint_max,
 };
 
@@ -261,25 +261,24 @@ enum Anum_chunk_constraint
 
 typedef struct FormData_chunk_constraint
 {
-	int32 dimension_slice_id;
 	int32 chunk_id;
+	int32 dimension_slice_id;
 } FormData_chunk_constraint;
 
 typedef FormData_chunk_constraint *Form_chunk_constraint;
 
 enum
 {
-	CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_ID_IDX = 0,
+	CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX = 0,
 	_MAX_CHUNK_CONSTRAINT_INDEX,
 };
 
-enum Anum_chunk_constraint_chunk_id_dimension_id_idx
+enum Anum_chunk_constraint_chunk_id_dimension_slice_id_idx
 {
 	Anum_chunk_constraint_chunk_id_dimension_id_idx_chunk_id = 1,
 	Anum_chunk_constraint_chunk_id_dimension_id_idx_dimension_slice_id,
 	_Anum_chunk_constraint_chunk_id_dimension_id_idx_max,
 };
-
 
 
 #define MAX(a, b) \
