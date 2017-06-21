@@ -48,7 +48,8 @@ typedef struct Hyperspace
 } Hyperspace;
 
 #define HYPERSPACE_NUM_DIMENSIONS(hs) \
-	((hs)->num_open_dimensions + (hs)->num_closed_dimensions)
+	((hs)->num_open_dimensions + \
+	 (hs)->num_closed_dimensions)
 
 /*
  * A point in an N-dimensional hyperspace.

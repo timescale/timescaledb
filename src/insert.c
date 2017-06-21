@@ -29,8 +29,8 @@ insert_main_table_cleanup(InsertStatementState **state_p)
 
 InsertStatementState *insert_statement_state = NULL;
 
-Datum		insert_main_table_trigger(PG_FUNCTION_ARGS);
-Datum		insert_main_table_trigger_after(PG_FUNCTION_ARGS);
+Datum       insert_main_table_trigger(PG_FUNCTION_ARGS);
+Datum       insert_main_table_trigger_after(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(insert_main_table_trigger);
 PG_FUNCTION_INFO_V1(insert_main_table_trigger_after);
@@ -45,12 +45,12 @@ Datum
 insert_main_table_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	HeapTuple	tuple;
+	HeapTuple   tuple;
 	Hypertable *ht;
 	Point *point;
 	InsertChunkState *cstate;
-	Oid			relid = trigdata->tg_relation->rd_id;
-	TupleDesc	tupdesc = trigdata->tg_relation->rd_att;
+	Oid         relid = trigdata->tg_relation->rd_id;
+	TupleDesc   tupdesc = trigdata->tg_relation->rd_att;
 	MemoryContext oldctx;
 
 	PG_TRY();
@@ -70,18 +70,16 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 			elog(ERROR, "Unsupported event for trigger");
 
 		if (NULL == insert_statement_state)
-		{
 			insert_statement_state = insert_statement_state_new(relid);
-		}
 
 		oldctx = MemoryContextSwitchTo(insert_statement_state->mctx);
 		ht = insert_statement_state->hypertable;
 
-		/* Calculate the tuples point in the N-dimensional hyperspace */
+		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = hyperspace_calculate_point(ht->space, tuple, tupdesc);
-		
+
 		elog(NOTICE, "Point is %s", point_to_string(point));
-		
+
 		/* Find or create the insert state matching the point */
 		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state,
 															   ht->space, point);

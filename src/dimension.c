@@ -19,7 +19,7 @@ dimension_from_tuple(HeapTuple tuple, Oid main_table_relid)
 
 	d = palloc0(sizeof(Dimension));
 	memcpy(&d->fd, GETSTRUCT(tuple), sizeof(FormData_dimension));
-	
+
 	/* If there is no partitioning func set we assume open dimension */
 	d->type = heap_attisnull(tuple, Anum_dimension_partitioning_func) ?
 		DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED;
@@ -33,7 +33,7 @@ dimension_from_tuple(HeapTuple tuple, Oid main_table_relid)
 												   PARTITIONING_MODULO,
 												   main_table_relid);
 	}
-	
+
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
 
 	return d;
@@ -69,7 +69,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid)
 	Catalog    *catalog = catalog_get();
 	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid);
 	ScanKeyData scankey[1];
-	ScannerCtx	scanCtx = {
+	ScannerCtx  scanCtx = {
 		.table = catalog->tables[DIMENSION].id,
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
 		.scantype = ScannerTypeIndex,
@@ -86,7 +86,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid)
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	scanner_scan(&scanCtx);
-	
+
 	return space;
 }
 
@@ -104,17 +104,17 @@ point_to_string(Point *p)
 {
 	char *buf = palloc(100);
 	int i, j = 1;
-	
+
 	buf[0] = '(';
 
 	for (i = 0; i < p->cardinality; i++)
 		j += snprintf(buf + j, 100, "%" PRId64 ",", p->coordinates[i]);
-	
+
 	buf[j-1] = ')';
 
 	return buf;
 }
-	
+
 Point *
 hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 {
@@ -124,8 +124,8 @@ hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 	for (i = 0; i < hs->num_open_dimensions; i++)
 	{
 		Dimension *d = hs->open_dimensions[i];
-		Datum		datum;
-		bool		isnull;
+		Datum       datum;
+		bool        isnull;
 
 		datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
 

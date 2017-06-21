@@ -101,13 +101,14 @@ chunk_tuple_create_spi_connected(int32 time_dimension_id, int64 time_value,
 }
 
 Chunk *
-chunk_get_or_create(int32 time_dimension_id, int64 time_value,
-					int32 space_dimension_id, int64 space_value)
+spi_chunk_get_or_create(int32 time_dimension_id, int64 time_value,
+						int32 space_dimension_id, int64 space_value,
+						int16 num_constraints)
 {
 	HeapTuple	tuple;
 	TupleDesc	desc;
 	Chunk	   *chunk;
-	MemoryContext top = CurrentMemoryContext;
+	MemoryContext old, top = CurrentMemoryContext;
 	SPIPlanPtr	plan = get_chunk_plan();
 
 	if (SPI_connect() < 0)
@@ -116,7 +117,10 @@ chunk_get_or_create(int32 time_dimension_id, int64 time_value,
 	tuple = chunk_tuple_create_spi_connected(time_dimension_id, time_value,
 											 space_dimension_id, space_value,
 											 &desc, plan);
-	chunk = chunk_create(tuple, desc, top);
+
+	old = MemoryContextSwitchTo(top);
+	chunk = chunk_create(tuple, num_constraints);
+	MemoryContextSwitchTo(old);
 
 	SPI_finish();
 

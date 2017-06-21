@@ -111,7 +111,8 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 {
 	ChunkScanCtx *ctx = arg;
 
-	ctx->chunk = chunk_create(ti->tuple, ti->desc, NULL);
+	ctx->chunk = chunk_create(ti->tuple, 1);
+	
 	return false;
 }
 
