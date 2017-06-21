@@ -51,7 +51,6 @@ typedef struct Chunk
 typedef struct ChunkScanCtx
 {
 	HTAB *htab;
-	DimensionSlice *slice;
 	int16 num_dimensions;
 } ChunkScanCtx;
 
@@ -64,7 +63,6 @@ typedef struct ChunkScanEntry
 
 extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);
 extern Chunk *chunk_create_new(Hyperspace *hs, Point *p);
-extern Chunk *chunk_get_or_create_new(Hyperspace *hs, Point *p);
 extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
 extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);
 extern Chunk *chunk_find(Hyperspace *hs, Point *p);

@@ -44,20 +44,6 @@ chunk_create_new(Hyperspace *hs, Point *p)
 	return chunk;
 }
 
-Chunk *
-chunk_get_or_create_new(Hyperspace *hs, Point *p)
-{
-	Chunk *chunk;
-
-	chunk = spi_chunk_get_or_create(hs, p);
-	Assert(chunk != NULL);
-
-	chunk_constraint_scan_by_chunk_id(chunk);
-	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
-
-	return chunk;
-}
-
 static bool
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {

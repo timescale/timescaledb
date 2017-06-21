@@ -1,17 +1,11 @@
 #include <postgres.h>
-#include "catalog/pg_type.h"
-#include "commands/trigger.h"
-#include "utils/inval.h"
-#include "utils/memutils.h"
-#include "utils/catcache.h"
-#include "utils/builtins.h"
-#include "executor/spi.h"
-#include "access/xact.h"
+#include <catalog/pg_type.h>
+#include <commands/trigger.h>
+#include <executor/spi.h>
 
 #include "metadata_queries.h"
-#include "utils.h"
-#include "partitioning.h"
 #include "chunk.h"
+#include "dimension.h"
 
 /* Utility function to prepare an SPI plan */
 static SPIPlanPtr
@@ -62,57 +56,38 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
  */
 #define INT8ARRAYOID 1016
 
-#define CHUNK_QUERY_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
-#define CHUNK_QUERY "SELECT * \
-				FROM _timescaledb_internal.chunk_get_or_create($1, $2)"
-
-/* plan for getting a chunk via get_or_create_chunk(). */
-DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 4, CHUNK_QUERY_ARGS)
-
 #define CHUNK_CREATE_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
 #define CHUNK_CREATE "SELECT * \
 				FROM _timescaledb_internal.chunk_create($1, $2)"
-
-#define MAX_DIMENSIONS 10
 
 /* plan for creating a chunk via create_chunk(). */
 DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 2, CHUNK_CREATE_ARGS)
 
 static HeapTuple
-chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p,
-								TupleDesc *desc, SPIPlanPtr plan)
+chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p, SPIPlanPtr plan)
 {
-	int			ret;
-	Datum		dimension_ids[MAX_DIMENSIONS];
-	Datum		dimension_values[MAX_DIMENSIONS];
+	int			i, ret;
+	HeapTuple	tuple;
+	Datum		dimension_ids[HYPERSPACE_NUM_DIMENSIONS(hs)];
+	Datum		dimension_values[HYPERSPACE_NUM_DIMENSIONS(hs)];
+	Datum		args[2];
 
-	for (int dim = 0; dim < HYPERSPACE_NUM_DIMENSIONS(hs); dim++)
+	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs);i++)
 	{
-		dimension_ids[dim] = Int32GetDatum(hs->dimensions[dim].fd.id);
-		dimension_values[dim] = Int64GetDatum(p->coordinates[dim]);
+		dimension_ids[i] = Int32GetDatum(hs->dimensions[i].fd.id);
+		dimension_values[i] = Int64GetDatum(p->coordinates[i]);
 	}
 
-	Datum		args[2] = {
-         PointerGetDatum(construct_array(dimension_ids, HYPERSPACE_NUM_DIMENSIONS(hs), INT4OID, 4, true, 'i')), 
-         PointerGetDatum(construct_array(dimension_values, HYPERSPACE_NUM_DIMENSIONS(hs), INT8OID, 8, true, 'd')), 
-	};
-
-	HeapTuple	tuple;
+	args[0] = PointerGetDatum(construct_array(dimension_ids, HYPERSPACE_NUM_DIMENSIONS(hs), INT4OID, 4, true, 'i'));
+	args[1] = PointerGetDatum(construct_array(dimension_values, HYPERSPACE_NUM_DIMENSIONS(hs), INT8OID, 8, true, 'd'));
 
 	ret = SPI_execute_plan(plan, args, NULL, false, 4);
 
 	if (ret <= 0)
-	{
 		elog(ERROR, "Got an SPI error %d", ret);
-	}
 
 	if (SPI_processed != 1)
-	{
 		elog(ERROR, "Got not 1 row but %lu", SPI_processed);
-	}
-
-	if (desc != NULL)
-		*desc = SPI_tuptable->tupdesc;
 
 	tuple = SPI_tuptable->vals[0];
 
@@ -120,35 +95,9 @@ chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p,
 }
 
 Chunk *
-spi_chunk_get_or_create(Hyperspace *hs, Point *p)
-{
-	HeapTuple	tuple;
-	TupleDesc	desc;
-	Chunk	   *chunk;
-	MemoryContext old, top = CurrentMemoryContext;
-	SPIPlanPtr	plan = get_chunk_plan();
-
-	if (SPI_connect() < 0)
-		elog(ERROR, "Got an SPI connect error");
-
-	tuple = chunk_tuple_create_spi_connected(hs, p,
-											 &desc, plan);
-
-	old = MemoryContextSwitchTo(top);
-	chunk = chunk_create_from_tuple(tuple, HYPERSPACE_NUM_DIMENSIONS(hs));
-	MemoryContextSwitchTo(old);
-
-	SPI_finish();
-
-	return chunk;
-}
-
-
-Chunk *
 spi_chunk_create(Hyperspace *hs, Point *p)
 {
 	HeapTuple	tuple;
-	TupleDesc	desc;
 	Chunk	   *chunk;
 	MemoryContext old, top = CurrentMemoryContext;
 	SPIPlanPtr	plan = create_chunk_plan();
@@ -156,8 +105,7 @@ spi_chunk_create(Hyperspace *hs, Point *p)
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
-	tuple = chunk_tuple_create_spi_connected(hs, p,
-											 &desc, plan);
+	tuple = chunk_tuple_create_spi_connected(hs, p, plan);
 
 	old = MemoryContextSwitchTo(top);
 	chunk = chunk_create_from_tuple(tuple,  HYPERSPACE_NUM_DIMENSIONS(hs));
