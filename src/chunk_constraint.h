@@ -7,12 +7,14 @@
 
 #include "catalog.h"
 
-typedef struct ChunkConstraint{
+typedef struct ChunkConstraint
+{
 	FormData_chunk_constraint fd;
 } ChunkConstraint;
 
-List *
-chunk_constraint_scan(int32 chunk_id);
+typedef struct Chunk Chunk;
+
+extern Chunk *chunk_constraint_scan(Chunk *chunk);
 
 #endif /* TIMESCALEDB_CHUNK_CONSTRAINT_H */
 

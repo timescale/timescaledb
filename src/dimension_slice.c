@@ -27,9 +27,11 @@ dimension_slice_from_tuple(HeapTuple tuple)
 }
 
 static inline Hypercube *
-hypercube_alloc(void)
+hypercube_alloc(int16 num_dimensions)
 {
-	return palloc0(sizeof(Hypercube));
+	Hypercube *hc = palloc0(HYPERCUBE_SIZE(num_dimensions));
+	hc->num_dimensions = num_dimensions;
+	return hc;
 }
 
 static inline void
@@ -37,11 +39,8 @@ hypercube_free(Hypercube *hc)
 {
 	int i;
 
-	for (i = 0; i < hc->num_closed_slices; i++)
-		pfree(hc->closed_slices[i]);
-
-	for (i = 0; i < hc->num_open_slices; i++)
-		pfree(hc->open_slices[i]);
+	for (i = 0; i < hc->num_dimensions; i++)
+		pfree(hc->slices[i]);
 
 	pfree(hc);
 }
@@ -114,21 +113,21 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 	return slice;
 }
 
-List *
-dimension_slice_get_all_for_constraints(List *chunk_constraints)
+Hypercube *
+hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints)
 {
-	List *ds = NULL;
-	ListCell *lc;
-
-	foreach(lc, chunk_constraints)
+	Hypercube *hc = hypercube_alloc(num_constraints);
+	int i;
+	
+	for (i = 0; i < num_constraints; i++)
 	{
-		ChunkConstraint *cc = lfirst(lc);
-		ds = lappend(ds, dimension_slice_scan_by_id(cc->fd.dimension_slice_id));
+		DimensionSlice *slice = dimension_slice_scan_by_id(constraints[i].fd.dimension_slice_id);
+		Assert(slice != NULL);
+		hc->slices[hc->num_slices++] = slice;
 	}
 	
-	return ds;
+	return hc;
 }
-
 
 static inline bool
 scan_dimensions(Hypercube *hc, Dimension *dimensions[], int16 num_dimensions, int64 point[])
@@ -143,10 +142,7 @@ scan_dimensions(Hypercube *hc, Dimension *dimensions[], int16 num_dimensions, in
 		if (slice == NULL)
 			return false;
 
-		if (IS_CLOSED_DIMENSION(d))
-			hc->closed_slices[hc->num_closed_slices++] = slice;
-		else
-			hc->open_slices[hc->num_open_slices++] = slice;
+		hc->slices[hc->num_slices++] = slice;
 	}
 	return true;
 }
@@ -154,18 +150,17 @@ scan_dimensions(Hypercube *hc, Dimension *dimensions[], int16 num_dimensions, in
 Hypercube *
 dimension_slice_point_scan(Hyperspace *space, int64 point[])
 {
-	Hypercube *cube = hypercube_alloc();
-
-	if (!scan_dimensions(cube, space->closed_dimensions, space->num_closed_dimensions, point)) {
-		hypercube_free(cube);
-		return NULL;
-	}
+	Hypercube *cube = hypercube_alloc(HYPERSPACE_NUM_DIMENSIONS(space));
 
 	if (!scan_dimensions(cube, space->open_dimensions, space->num_open_dimensions, point)) {
 		hypercube_free(cube);
 		return NULL;
 	}
 
+	if (!scan_dimensions(cube, space->closed_dimensions, space->num_closed_dimensions, point)) {
+		hypercube_free(cube);
+		return NULL;
+	}
 	return cube;
 }
 
@@ -186,7 +181,7 @@ DimensionSlice *match_dimension_slice(Form_dimension_slice slice, int64 point[],
 	{
 		int32 dimension_id = dimensions[i]->fd.id;
 		int64 coordinate = point[i];
-		
+
 		if (slice->dimension_id == dimension_id && point_coordinate_is_in_slice(slice, coordinate))
 			return dimension_slice_from_form_data(slice);
 	}
@@ -202,26 +197,24 @@ point_filter(TupleInfo *ti, void *data)
 	Hypercube *hc = ctx->hc;
 	DimensionSlice *slice;
 
-	/* Match closed dimension */
-	slice = match_dimension_slice((Form_dimension_slice) GETSTRUCT(ti->tuple), ctx->point,
-								  hs->closed_dimensions, hs->num_closed_dimensions);
-
-	if (slice != NULL)
-	{
-		hc->closed_slices[hc->num_closed_slices++] = slice;
-		return hs->num_closed_dimensions != hc->num_closed_slices &&
-			hs->num_open_dimensions != hc->num_closed_slices;
-	}
-
 	/* Match open dimension */
 	slice = match_dimension_slice((Form_dimension_slice) GETSTRUCT(ti->tuple), ctx->point,
 								  hs->open_dimensions, hs->num_open_dimensions);
 
 	if (slice != NULL)
 	{
-		hc->open_slices[hc->num_open_slices++] = slice;
-		return hs->num_closed_dimensions != hc->num_closed_slices &&
-			hs->num_open_dimensions != hc->num_closed_slices;
+		hc->slices[hc->num_slices++] = slice;
+		return HYPERSPACE_NUM_DIMENSIONS(hs) == hc->num_slices;
+	}
+	
+	/* Match closed dimension */
+	slice = match_dimension_slice((Form_dimension_slice) GETSTRUCT(ti->tuple), ctx->point,
+								  hs->closed_dimensions, hs->num_closed_dimensions);
+
+	if (slice != NULL)
+	{
+		hc->slices[hc->num_slices++] = slice;
+		return HYPERSPACE_NUM_DIMENSIONS(hs) == hc->num_slices;
 	}
 
 	return true;
@@ -236,7 +229,7 @@ Hypercube *
 dimension_slice_point_scan_heap(Hyperspace *space, int64 point[])
 {
 	Catalog    *catalog = catalog_get();
-	Hypercube *cube = palloc0(sizeof(Hypercube));
+	Hypercube *cube = hypercube_alloc(HYPERSPACE_NUM_DIMENSIONS(space));
 	PointScanCtx ctx = {
 		.hs = space,
 		.hc = cube,
@@ -253,23 +246,17 @@ dimension_slice_point_scan_heap(Hyperspace *space, int64 point[])
 		.scandirection = ForwardScanDirection,
 	};
 
-	cube->num_open_slices = cube->num_closed_slices = 0;
+	cube->num_slices = 0;
 
 	scanner_scan(&scanCtx);
-
-	if (cube->num_open_slices != space->num_open_dimensions ||
-		cube->num_closed_slices != space->num_closed_dimensions)
-		return NULL;
 
 	return cube;
 }
 
 void dimension_slice_free(DimensionSlice *slice) 
 {
-	if(slice->storage_free != NULL)
-	{
+	if (slice->storage_free != NULL)
 		slice->storage_free(slice->storage);
-	}
 	pfree(slice);
 }
 
@@ -278,7 +265,7 @@ cmp_slices(const void *left, const void *right)
 {
 	const DimensionSlice *left_slice = *((DimensionSlice **) left);
 	const DimensionSlice *right_slice = *((DimensionSlice **) right);
-	
+
 	if (left_slice->fd.range_start == right_slice->fd.range_start)
 	{
 		if (left_slice->fd.range_end == right_slice->fd.range_end)
@@ -289,10 +276,10 @@ cmp_slices(const void *left, const void *right)
 
 		return -1;
 	}
-	
+
 	if (left_slice->fd.range_start > right_slice->fd.range_start)
 		return 1;
-	
+
 	return -1;
 }
 
@@ -368,9 +355,9 @@ dimension_axis_find_slice(DimensionAxis *axis, int64 coordinate)
 
 void dimension_axis_free(DimensionAxis *axis)
 {
-	for(int16 i = 0; i<axis->num_slices; i++)
-	{
+	int i;
+	
+	for (i = 0; i < axis->num_slices; i++)
 		dimension_slice_free(axis->slices[i]);
-	}
 	pfree(axis);
 }

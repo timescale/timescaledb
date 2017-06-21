@@ -6,9 +6,12 @@
 #include <access/tupdesc.h>
 
 #include "catalog.h"
+#include "chunk_constraint.h"
 
-typedef struct DimensionSlice DimensionSlice;
 typedef struct Hypercube Hypercube;
+typedef struct ChunkConstraint ChunkConstraint;
+typedef struct Point Point;
+typedef struct Hyperspace Hyperspace;
 
 /*
  * A chunk represents a table that stores data, part of a partitioned
@@ -29,8 +32,14 @@ typedef struct Chunk
 	 * table.
 	 */
 	Hypercube   *cube;
+	int16 num_constraints;
+	ChunkConstraint constraints[0];
 } Chunk;
 
-extern Chunk *chunk_create(HeapTuple tuple, TupleDesc tupdesc, MemoryContext ctx);
+#define CHUNK_SIZE(num_constraints)				\
+	(sizeof(Chunk) + sizeof(ChunkConstraint) * num_constraints)
+
+extern Chunk *chunk_create(HeapTuple tuple, int16 num_constraints);
+extern Chunk *chunk_get_or_create(Hyperspace *hs, Point *p);
 
 #endif   /* TIMESCALEDB_CHUNK_H */

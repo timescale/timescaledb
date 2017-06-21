@@ -6,6 +6,7 @@
 
 #include "catalog.h"
 #include "dimension.h"
+#include "chunk_constraint.h"
 
 typedef struct DimensionSlice
 {
@@ -15,22 +16,23 @@ typedef struct DimensionSlice
 	void *storage; //used in the cache
 } DimensionSlice;
 
-#define MAX_SLICES 100
-
 /*
  * Hypercube is a collection of slices from N distinct dimensions, i.e., the
  * N-dimensional analogue of a square or a cube.
  */
 typedef struct Hypercube
 {
-	int16 num_open_slices;
-	int16 num_closed_slices;
-	DimensionSlice *open_slices[MAX_OPEN_DIMENSIONS];
-	DimensionSlice *closed_slices[MAX_CLOSED_DIMENSIONS];
+	int16 num_dimensions;
+	int16 num_slices;
+	/* Open slices are stored before closed slices */
+	DimensionSlice *slices[0];
 } Hypercube;
 
 #define HYPERCUBE_NUM_SLICES(hc) \
 	((hc)->num_open_slices + (hc)->num_closed_slices)
+
+#define HYPERCUBE_SIZE(num_dimensions)			\
+	(sizeof(Hypercube) + sizeof(DimensionSlice *) * num_dimensions)
 
 /*
  *  DimensionAxis is a collection of all slices (ranges) along one dimension for
@@ -53,6 +55,6 @@ extern int32 dimension_axis_add_slice(DimensionAxis **axis, DimensionSlice *slic
 extern int32 dimension_axis_add_slice_sort(DimensionAxis **axis, DimensionSlice *slice);
 extern DimensionSlice *dimension_axis_find_slice(DimensionAxis *axis, int64 coordinate);
 extern void dimension_axis_free(DimensionAxis *axis);
-extern List *dimension_slice_get_all_for_constraints(List *chunk_constraints);
+extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);
 
 #endif /* TIMESCALEDB_DIMENSION_SLICE_H */

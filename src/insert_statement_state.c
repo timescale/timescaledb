@@ -42,27 +42,31 @@ insert_state_cache_free_internal_node(void * node)
 	dimension_axis_free((DimensionAxis *)node);
 }
 
-static void insert_state_cache_add(InsertStateCache *cache, List *dimension_slices, void *end_store, void (*end_store_free)(void *))
+static void insert_state_cache_add(InsertStateCache *cache, Hypercube *hc,
+								   void *end_store, void (*end_store_free)(void *))
 {
 	DimensionAxis *axis = cache->origin;
 	DimensionSlice *last = NULL;
-	ListCell *lc;
+	int i;
+	
+	Assert(hc->num_slices == cache->num_dimensions);
 
-	Assert(list_length(dimension_slices) == cache->num_dimensions);
-	foreach(lc, dimension_slices) 
+	for (i = 0; i < hc->num_slices; i++)
 	{
-		DimensionSlice *target = lfirst(lc); 
+		DimensionSlice *target = hc->slices[i];
 		DimensionSlice *match;
 
 		Assert(target->storage == NULL);
 		
-		if(axis == NULL) {
+		if (axis == NULL)
+		{
 			last->storage = insert_state_cache_dimension_create();
 			last->storage_free = insert_state_cache_free_internal_node;
 			axis = last->storage;
 		}
 		
 		match = dimension_axis_find_slice(axis, target->fd.range_start);
+		
 		if (match == NULL) 
 		{
 			dimension_axis_add_slice_sort(&axis, target);
@@ -72,6 +76,7 @@ static void insert_state_cache_add(InsertStateCache *cache, List *dimension_slic
 		last = match;
 		axis = last->storage; /* Internal nodes point to the next Dimension's Axis */ 
 	}
+	
 	last->storage = end_store; /* at the end we store the object */
 	last->storage_free = end_store_free;
 }
@@ -85,13 +90,13 @@ insert_state_cache_get(InsertStateCache *cache, Point *target)
 	
 	Assert(target->cardinality == cache->num_dimensions);
 
-	for (i=0; i < target->cardinality; i++)
+	for (i = 0; i < target->cardinality; i++)
 	{
 		match = dimension_axis_find_slice(axis, target->coordinates[i]);
+
 		if (NULL == match) 
-		{
 			return NULL;
-		}
+
 		axis = match->storage;
 	}
 	return match->storage;
@@ -112,11 +117,6 @@ insert_state_cache_free(InsertStateCache *cache)
 }
 
 
-
-
-
-
-
 InsertStatementState *
 insert_statement_state_new(Oid relid)
 {
@@ -134,7 +134,8 @@ insert_statement_state_new(Oid relid)
 
 	ht = hypertable_cache_get_entry(hypertable_cache, relid);
 
-	state = palloc(sizeof(InsertStatementState) + sizeof(DimensionSlice *) * ht->space->num_open_dimensions);
+	state = palloc(sizeof(InsertStatementState) +
+				   sizeof(DimensionSlice *) * ht->space->num_open_dimensions);
 	state->mctx = mctx;
 	state->chunk_cache = chunk_cache_pin();
 	state->hypertable_cache = hypertable_cache;
@@ -157,9 +158,7 @@ insert_statement_state_destroy(InsertStatementState *state)
 	for (i = 0; i < state->num_partitions; i++)
 	{
 		if (state->cstates[i] != NULL)
-		{
 			insert_chunk_state_destroy(state->cstates[i]);
-		}
 	}
 
 	insert_state_cache_free(state->cache);
@@ -168,22 +167,6 @@ insert_statement_state_destroy(InsertStatementState *state)
 	cache_release(state->hypertable_cache);
 
 	MemoryContextDelete(state->mctx);
-}
-
-static void
-set_or_update_new_entry(InsertStatementState *state, Hyperspace *hs, Point *point)
-{
-	/*
-	Chunk	   *chunk;
-
-	if (state->cstates[partition->index] != NULL)
-	{
-		insert_chunk_state_destroy(state->cstates[partition->index]);
-	}
-
-	chunk = chunk_cache_get(state->chunk_cache, partition, timepoint);
-	state->cstates[partition->index] = insert_chunk_state_new(chunk);
-	*/
 }
 
 /*
@@ -219,79 +202,35 @@ static void destroy_ics(void *ics_ptr)
 extern InsertChunkState *
 insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyperspace *hs, Point *point)
 {
-	if (state->cache == NULL)
+
+	InsertChunkState *ics;
+	
+	if (NULL == state->cache)
 	{
 		state->cache = palloc(sizeof(InsertStateCache));
 		insert_state_cache_init(state->cache, point->cardinality);
 	}
-	InsertChunkState *ics = insert_state_cache_get(state->cache, point);
+	
+	ics = insert_state_cache_get(state->cache, point);
+
 	if (NULL == ics) 
 	{
 		Chunk * new_chunk;
-		List *constraints;
-		List *slices;
+		Hypercube *hc;
+
 		elog(WARNING, "LOOKUP");
-		//NOTE: assumes 1 or 2 dims
-		Assert(hs->num_open_dimensions == 1 && hs->num_closed_dimensions <= 1);
-		if (hs->num_closed_dimensions == 1) 
-		{
-			new_chunk = chunk_get_or_create(hs->open_dimensions[0]->fd.id, point->coordinates[0],
-											hs->closed_dimensions[0]->fd.id, point->coordinates[1]);
-		} else 
-		{
-			new_chunk = chunk_get_or_create(hs->open_dimensions[0]->fd.id, point->coordinates[0],
-											0, 0);
-		}
+		
+		/* NOTE: assumes 1 or 2 dims */
+		new_chunk = chunk_get_or_create(hs, point);
 
+		if (NULL == new_chunk)
+			elog(ERROR, "No chunk found or created");
+				
 		ics = insert_chunk_state_new(new_chunk);
-		constraints = chunk_constraint_scan(new_chunk->fd.id);
-		slices = dimension_slice_get_all_for_constraints(constraints);
-
-        insert_state_cache_add(state->cache, slices, ics, destroy_ics);
-
+		chunk_constraint_scan(new_chunk);
+		hc = hypercube_from_constraints(new_chunk->constraints, new_chunk->num_constraints);
+        insert_state_cache_add(state->cache, hc, ics, destroy_ics);
 	}
-	return ics;
-	//if (!insert_statement_state_is_valid_for_point(state, point))
-	//{
-		/* setup new chunk insert state... */
-	//}
-
-	/* Binary search slices in each of the closed dimensions */
-
-	/* 1) If chunk state found -> use
-	   2) If not found -> add chunk state and slice in each dimension
-	*/
 	
-#if 0
-	/* First call, set up mem */
-	if (state->num_partitions == 0)
-	{
-		state->num_partitions = epoch->num_partitions;
-		state->cstates = palloc(sizeof(InsertChunkState) * state->num_partitions);
-		memset(state->cstates, 0, sizeof(InsertChunkState) * state->num_partitions);
-	}
-
-	/*
-	 * Currently we only support one epoch. To support multiple epochs here,
-	 * we could either do a realloc to a larger array if we see a larger
-	 * num_partitions or keep track of max partitions among epochs and
-	 * configure the state using that at initialization.
-	 */
-	if (state->num_partitions != epoch->num_partitions)
-	{
-		elog(ERROR, "multiple epochs not supported");
-	}
-
-	/*
-	 * Check if first insert to partition or if the tuple should go to another
-	 * chunk in the partition
-	 */
-	if (NULL == state->cstates[partition->index] ||
-		!chunk_timepoint_is_member(state->cstates[partition->index]->chunk, timepoint))
-	{
-		set_or_update_new_entry(state, partition, timepoint);
-	}
-
-	return state->cstates[partition->index];
-#endif
+	return ics;
 }
