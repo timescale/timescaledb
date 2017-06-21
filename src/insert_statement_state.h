@@ -17,16 +17,10 @@ typedef struct InsertStateCache InsertStateCache;
 /* State used for every tuple in an insert statement */
 typedef struct
 {
-	InsertChunkState **cstates; /* keep an open state for the most recently
-								 * accessed chunk per partition */
-	Cache	   *chunk_cache;
 	MemoryContext mctx;
 	Cache	   *hypertable_cache;
 	Hypertable *hypertable;
-	int			num_partitions;
-	int num_open_dimensions;
-	DimensionSlice *open_dimensions_slices[0];
-	SubspaceStore *cache; 
+	SubspaceStore *cache;
 } InsertStatementState;
 
 InsertStatementState *insert_statement_state_new(Oid);

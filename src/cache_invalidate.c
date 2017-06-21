@@ -29,7 +29,6 @@
 #include <unistd.h>
 
 #include "hypertable_cache.h"
-#include "chunk_cache.h"
 #include "catalog.h"
 #include "extension.h"
 
@@ -53,7 +52,6 @@ inval_cache_callback(Datum arg, Oid relid)
 	{
 		/* Extension was dropped or entire cache invalidated. Reset state. */
 		hypertable_cache_invalidate_callback();
-		chunk_cache_invalidate_callback();
 		extension_reset();
 		return;
 	}
@@ -61,12 +59,7 @@ inval_cache_callback(Datum arg, Oid relid)
 	catalog = catalog_get();
 
 	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
-	{
 		hypertable_cache_invalidate_callback();
-	}
-
-	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_CHUNK))
-		chunk_cache_invalidate_callback();
 }
 
 PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);

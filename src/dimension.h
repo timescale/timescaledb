@@ -25,33 +25,35 @@ typedef struct Dimension
 } Dimension;
 
 
-#define IS_OPEN_DIMENSION(d) \
+#define IS_OPEN_DIMENSION(d)					\
 	((d)->type == DIMENSION_TYPE_OPEN)
 
-#define IS_CLOSED_DIMENSION(d) \
+#define IS_CLOSED_DIMENSION(d)					\
 	((d)->type == DIMENSION_TYPE_CLOSED)
 
-/* We currently support only one open dimension and one closed dimension */
-#define MAX_OPEN_DIMENSIONS 1 /* Cannot exceed 255 */
-#define MAX_CLOSED_DIMENSIONS 1 /* Cannot exceed 255 */
-#define MAX_DIMENSIONS (MAX_OPEN_DIMENSIONS + MAX_CLOSED_DIMENSIONS)
-
 /*
- * Hyperspace defines the current partitioning in a N-dimensional space.
+ * A hyperspace defines how to partition in a N-dimensional space.
  */
 typedef struct Hyperspace
 {
 	int32 hypertable_id;
 	Oid main_table_relid;
-	uint8 num_open_dimensions;
-	uint8 num_closed_dimensions;
-	Dimension *open_dimensions[MAX_OPEN_DIMENSIONS];
-	Dimension *closed_dimensions[MAX_CLOSED_DIMENSIONS];
+	uint16 capacity;
+	int16 num_open_dimensions;
+	int16 num_closed_dimensions;
+	/* Open dimensions should be stored before closed dimensions */
+	Dimension dimensions[0];
 } Hyperspace;
 
 #define HYPERSPACE_NUM_DIMENSIONS(hs) \
 	((hs)->num_open_dimensions + \
 	 (hs)->num_closed_dimensions)
+
+#define HYPERSPACE_SIZE(num_dimensions)							\
+	(sizeof(Hyperspace) + (sizeof(Dimension) * (num_dimensions)))
+
+#define hyperspace_get_closed_dimension(hs, i)		\
+	(&(hs)->dimensions[(hs)->num_open_dimensions + i])
 
 /*
  * A point in an N-dimensional hyperspace.
@@ -65,6 +67,9 @@ typedef struct Point
 	int64 coordinates[0];
 } Point;
 
+#define POINT_SIZE(cardinality)							\
+	(sizeof(Point) + (sizeof(int64) * (cardinality)))
+
 #define point_coordinate_is_in_slice(slice, coord)					\
 	(coord >= (slice)->range_start && coord < (slice)->range_end)
 
@@ -74,7 +79,7 @@ typedef struct Point
 #define point_get_closed_dimension_coordinate(p, i) \
 	(p)->coordinates[(p)->num_open + i]
 
-extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid);
+extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
 extern const char *point_to_string(Point *p);
 

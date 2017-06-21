@@ -121,11 +121,10 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 
 	if (rte->relid == hentry->main_table_relid)
 	{
-		Dimension *closed_dim = hypertable_get_closed_dimension(hentry);
+		Dimension *closed_dim = hyperspace_get_closed_dimension(hentry->space, 0);
+		
 		if (closed_dim != NULL) 
-		{
 			return closed_dim->partitioning;
-		}
 	}
 	return NULL;
 }
@@ -249,8 +248,9 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						 */
 						PartitioningInfo *pi =
 						get_partitioning_info_for_partition_column_var(var_expr,
-															  context->parse,
-										   context->hcache, context->hentry);
+																	   context->parse,
+																	   context->hcache,
+																	   context->hentry);
 
 						if (pi != NULL)
 						{

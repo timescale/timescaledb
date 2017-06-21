@@ -22,11 +22,11 @@ chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 
 	chunk = palloc0(CHUNK_SIZE(num_constraints));
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
-	chunk->num_constraint_slots = num_constraints;
+	chunk->capacity = num_constraints;
 	chunk->num_constraints = 0;
-    chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
+	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, false));
-	
+
 	return chunk;
 }
 
@@ -34,26 +34,25 @@ Chunk *
 chunk_create_new(Hyperspace *hs, Point *p)
 {
 	Chunk *chunk;
-	
-	/* NOTE: Currently supports only two dimensions */
-	Assert(hs->num_open_dimensions == 1 && hs->num_closed_dimensions <= 1);	
 
-	if (hs->num_closed_dimensions == 1) 
-		chunk = spi_chunk_create(hs->open_dimensions[0]->fd.id,
+	/* NOTE: Currently supports only two dimensions */
+	Assert(hs->num_open_dimensions == 1 && hs->num_closed_dimensions <= 1);
+
+	if (hs->num_closed_dimensions == 1)
+		chunk = spi_chunk_create(hs->dimensions[0].fd.id,
 								 p->coordinates[0],
-								 hs->closed_dimensions[0]->fd.id,
+								 hs->dimensions[1].fd.id,
 								 p->coordinates[1],
 								 HYPERSPACE_NUM_DIMENSIONS(hs));
 	else
-		chunk = spi_chunk_create(hs->open_dimensions[0]->fd.id,
+		chunk = spi_chunk_create(hs->dimensions[0].fd.id,
 								 p->coordinates[0], 0, 0,
 								 HYPERSPACE_NUM_DIMENSIONS(hs));
 	Assert(chunk != NULL);
-	
-	chunk_constraint_scan(chunk);
 
+	chunk_constraint_scan_by_chunk_id(chunk);
 	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
-	
+
 	return chunk;
 }
 
@@ -61,23 +60,24 @@ Chunk *
 chunk_get_or_create_new(Hyperspace *hs, Point *p)
 {
 	Chunk *chunk;
-	
-	/* NOTE: Currently supports only two dimensions */
-	Assert(hs->num_open_dimensions == 1 && hs->num_closed_dimensions <= 1);	
 
-	if (hs->num_closed_dimensions == 1) 
-		chunk = spi_chunk_get_or_create(hs->open_dimensions[0]->fd.id,
+	/* NOTE: Currently supports only two dimensions */
+	Assert(hs->num_open_dimensions == 1 && hs->num_closed_dimensions <= 1);
+
+	if (hs->num_closed_dimensions == 1)
+		chunk = spi_chunk_get_or_create(hs->dimensions[0].fd.id,
 										p->coordinates[0],
-										hs->closed_dimensions[0]->fd.id,
+										hs->dimensions[1].fd.id,
 										p->coordinates[1],
 										HYPERSPACE_NUM_DIMENSIONS(hs));
 	else
-		chunk = spi_chunk_get_or_create(hs->open_dimensions[0]->fd.id,
+		chunk = spi_chunk_get_or_create(hs->dimensions[0].fd.id,
 										p->coordinates[0], 0, 0,
 										HYPERSPACE_NUM_DIMENSIONS(hs));
 	Assert(chunk != NULL);
-	
-	chunk_constraint_scan(chunk);
+
+	chunk_constraint_scan_by_chunk_id(chunk);
+	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
 
 	return chunk;
 }
@@ -86,10 +86,12 @@ static bool
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
 	Chunk *chunk = arg;
-	memcpy(&chunk->fd, GETSTRUCT(ti->tuple), sizeof(FormData_chunk));   
+	memcpy(&chunk->fd, GETSTRUCT(ti->tuple), sizeof(FormData_chunk));
 	return false;
 }
 
+/* Fill in a chunk stub. The stub data structure needs the chunk ID set. The
+ * rest of the fields will be filled in from the table data. */
 static Chunk *
 chunk_scan(Chunk *chunk_stub, bool tuplock)
 {
@@ -129,9 +131,9 @@ chunk_scan(Chunk *chunk_stub, bool tuplock)
 bool
 chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint)
 {
-	if (chunk->num_constraint_slots == chunk->num_constraints)
+	if (chunk->capacity == chunk->num_constraints)
 		return false;
-	
+
 	memcpy(&chunk->constraints[chunk->num_constraints++], constraint, sizeof(ChunkConstraint));
 	return true;
 }
@@ -139,7 +141,7 @@ chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint)
 bool
 chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple)
 {
-	if (chunk->num_constraint_slots == chunk->num_constraints)
+	if (chunk->capacity == chunk->num_constraints)
 		return false;
 
 	memcpy(&chunk->constraints[chunk->num_constraints++],
@@ -148,34 +150,30 @@ chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple)
 }
 
 static void
-chunk_scan_ctx_init(ChunkScanState *ctx, int16 num_dimensions, MemoryContext elm_mctx)
+chunk_scan_ctx_init(ChunkScanCtx *ctx, int16 num_dimensions)
 {
 	struct HASHCTL hctl = {
 		.keysize = sizeof(int32),
 		.entrysize = sizeof(ChunkScanEntry),
-		.hcxt =  AllocSetContextCreate(CurrentMemoryContext,
-									   "chunk-scan",
-									   ALLOCSET_DEFAULT_SIZES),
+		.hcxt = CurrentMemoryContext,
 	};
 
-	ctx->htab = hash_create("chunk-scan", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
-	ctx->elm_mctx = elm_mctx;
+	ctx->htab = hash_create("chunk-scan-context", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 	ctx->num_dimensions = num_dimensions;
-	ctx->num_elements = 0;
 }
 
 static void
-chunk_scan_ctx_destroy(ChunkScanState *cs)
+chunk_scan_ctx_destroy(ChunkScanCtx *ctx)
 {
-	hash_destroy(cs->htab);
+	hash_destroy(ctx->htab);
 }
 
 static Chunk *
-chunk_scan_ctx_find_chunk(ChunkScanState *ctx)
-{   
+chunk_scan_ctx_find_chunk(ChunkScanCtx *ctx)
+{
 	HASH_SEQ_STATUS status;
 	ChunkScanEntry *entry;
-	
+
 	hash_seq_init(&status, ctx->htab);
 
 	for (entry = hash_seq_search(&status);
@@ -186,67 +184,85 @@ chunk_scan_ctx_find_chunk(ChunkScanState *ctx)
 
 		if (chunk->num_constraints == ctx->num_dimensions)
 		{
-			elog(NOTICE, "Found chunk %d", chunk->fd.id);
 			hash_seq_term(&status);
 			return chunk;
 		}
-
-		elog(NOTICE, "Found non-matching chunk %d with %d constraints",
-			 chunk->fd.id, chunk->num_constraints);
 	}
 
 	return NULL;
 }
 
+/*
+ * Find a chunk matching a point in a hypertable's N-dimensional hyperspace.
+ *
+ * This involves:
+ *
+ * 1) For each dimension:
+ *    - Find all dimension slices that match the dimension
+ * 2) For each dimension slice:
+ *    - Find all chunk constraints matching the dimension slice
+ * 3) For each matching chunk constraint
+ *    - Insert a (stub) chunk in a hash table and add the constraint to the chunk
+ *    - If chunk already exists in hash table, add the constraint to the chunk
+ * 4) At the end of the scan, only one chunk in the hash table should have
+ *    N number of constraints. This is the matching chunk.
+ *
+ * NOTE: this function allocates transient data, e.g., dimension slice,
+ * constraints and chunks, that in the end are not part of the returned
+ * chunk. Therefore, this scan should be executed on a transient memory
+ * context. The returned chunk needs to be copied into another memory context in
+ * case it needs to live beyond the lifetime of the other data.
+ */
 Chunk *
 chunk_find(Hyperspace *hs, Point *p)
 {
 	Chunk *chunk;
-	ChunkScanState scanCtx;
+	ChunkScanCtx ctx;
 	int16 num_dimensions = HYPERSPACE_NUM_DIMENSIONS(hs);
 	int i, j;
-	
-	chunk_scan_ctx_init(&scanCtx, num_dimensions, CurrentMemoryContext);
 
-	elog(NOTICE, "##### Scanning for chunk");
-	
-	for (i = 0; i < hs->num_open_dimensions; i++)
+	/* The scan context will keep the state accumulated during the scan */
+	chunk_scan_ctx_init(&ctx, num_dimensions);
+
+	/* First, scan all dimensions for matching slices */
+	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
 	{
 		DimensionVec *vec;
 
-		elog(NOTICE, "Scanning dimension %s", NameStr(hs->open_dimensions[i]->fd.column_name));
+		vec = dimension_slice_scan(hs->dimensions[i].fd.id, p->coordinates[i]);
 
-		vec = dimension_slice_scan(hs->open_dimensions[i]->fd.id, p->coordinates[i]);
-
-		elog(NOTICE, "Found %d slices", vec->num_slices);
-		
 		for (j = 0; j < vec->num_slices; j++)
-			chunk_constraint_scan_by_dimension_slice(vec->slices[j], &scanCtx);
+			/* For each dimension slice, find matching constraints. These will
+			 * be saved in the scan context */
+			chunk_constraint_scan_by_dimension_slice_id(vec->slices[j], &ctx);
 	}
 
-	for (i = 0; i < hs->num_closed_dimensions; i++)
+	/* Find the chunk that has N matching constraints */
+	chunk = chunk_scan_ctx_find_chunk(&ctx);
+	chunk_scan_ctx_destroy(&ctx);
+
+	if (NULL != chunk)
 	{
-		DimensionVec *vec;
-
-		elog(NOTICE, "Scanning dimension %s", NameStr(hs->closed_dimensions[i]->fd.column_name));
-
-		vec = dimension_slice_scan(hs->closed_dimensions[i]->fd.id,
-								   p->coordinates[hs->num_open_dimensions + i]);
-
-		elog(NOTICE, "Found %d slices", vec->num_slices);
-		
-		for (j = 0; j < vec->num_slices; j++)
-			chunk_constraint_scan_by_dimension_slice(vec->slices[j], &scanCtx);
-	}
-
-	chunk = chunk_scan_ctx_find_chunk(&scanCtx);
-
-	chunk_scan_ctx_destroy(&scanCtx);
-
-	if (NULL != chunk) {
 		chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
+
+		/* Fill in the rest of the chunk's data from the chunk table */
 		chunk_scan(chunk, false);
 	}
-	
+
 	return chunk;
+}
+
+Chunk *
+chunk_copy(Chunk *chunk)
+{
+	Chunk *copy;
+	size_t nbytes = CHUNK_SIZE(chunk->capacity);
+
+	copy = palloc(nbytes);
+	memcpy(copy, chunk, nbytes);
+
+	if (NULL != chunk->cube)
+		copy->cube = hypercube_copy(chunk->cube);
+
+	return copy;
 }

@@ -22,17 +22,14 @@ typedef struct DimensionSlice
  */
 typedef struct Hypercube
 {
-	int16 num_dimensions; 	/* capacity of slices[] */
-	int16 num_slices; 		/* actual number of slices (should equal num_dimensions after create) */
+	int16 capacity;		/* capacity of slices[] */
+	int16 num_slices;		/* actual number of slices (should equal num_dimensions after create) */
 	/* Open slices are stored before closed slices */
 	DimensionSlice *slices[0];
 } Hypercube;
 
-#define HYPERCUBE_NUM_SLICES(hc)						\
-	((hc)->num_open_slices + (hc)->num_closed_slices)
-
 #define HYPERCUBE_SIZE(num_dimensions)								\
-	(sizeof(Hypercube) + sizeof(DimensionSlice *) * num_dimensions)
+	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
 
 /*
  *  DimensionVec is a collection of slices (ranges) along one dimension for a
@@ -40,7 +37,7 @@ typedef struct Hypercube
  */
 typedef struct DimensionVec
 {
-	int32 num_slots; /* The allocated num slots in slices array */
+	int32 capacity; /* The capacity of the slices array */
 	int32 num_slices; /* The current number of slices in slices array */
 	DimensionSlice *slices[0];
 } DimensionVec;
@@ -60,5 +57,6 @@ extern DimensionVec *dimension_vec_add_slice_sort(DimensionVec **vec, DimensionS
 extern DimensionSlice *dimension_vec_find_slice(DimensionVec *vec, int64 coordinate);
 extern void dimension_vec_free(DimensionVec *vec);
 extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);
+extern Hypercube *hypercube_copy(Hypercube *hc);
 
 #endif /* TIMESCALEDB_DIMENSION_SLICE_H */

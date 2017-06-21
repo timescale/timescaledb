@@ -16,6 +16,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
 $BODY$
 DECLARE
     id                       INTEGER;
+    number_dimensions        INTEGER = 1;
     hypertable_row           _timescaledb_catalog.hypertable;
     partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_for_key';
     partitioning_func_schema _timescaledb_catalog.dimension.partitioning_func_schema%TYPE = '_timescaledb_internal';
@@ -42,6 +43,8 @@ BEGIN
     ELSIF number_partitions IS NULL THEN
         RAISE EXCEPTION 'The number of partitions must be specified when there is a partitioning column'
         USING ERRCODE ='IO101';
+    ELSE
+        number_dimensions = number_dimensions + 1;
     END IF;
 
     IF number_partitions IS NOT NULL AND
@@ -52,10 +55,11 @@ BEGIN
 
     INSERT INTO _timescaledb_catalog.hypertable (
         id, schema_name, table_name,
-        associated_schema_name, associated_table_prefix)
+        associated_schema_name, associated_table_prefix, num_dimensions)
     VALUES (
         id, schema_name, table_name,
-        associated_schema_name, associated_table_prefix
+        associated_schema_name, associated_table_prefix,
+        number_dimensions
     )
     RETURNING * INTO hypertable_row;
 
