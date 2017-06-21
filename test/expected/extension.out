@@ -18,6 +18,7 @@ WHERE OID IN (
 ORDER BY proname;
          proname         
 -------------------------
+ attach_tablespace
  create_hypertable
  drop_chunks
  first
@@ -25,5 +26,5 @@ ORDER BY proname;
  restore_timescaledb
  set_chunk_time_interval
  time_bucket
-(7 rows)
+(8 rows)
 

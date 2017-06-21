@@ -7,96 +7,98 @@ CREATE DATABASE single;
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 \set ON_ERROR_STOP 0
 SET client_min_messages = ERROR;
-drop tablespace if exists tspace1;
+DROP TABLESPACE IF EXISTS tablespace1;
+DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 --test hypertable with tables space
-create tablespace tspace1 location :TEST_TABLESPACE_PATH;
-create table test_tspace(time timestamp, temp float, device_id text) tablespace tspace1;
-select create_hypertable('test_tspace', 'time', 'device_id', 2);
+CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+--assigning a tablespace via the main table should work
+CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
  create_hypertable 
 -------------------
  
 (1 row)
 
-select * from _timescaledb_catalog.partition p;
- id | epoch_id | keyspace_start | keyspace_end | tablespace 
-----+----------+----------------+--------------+------------
-  1 |        1 |              0 |        16383 | tspace1
-  2 |        1 |          16384 |        32767 | tspace1
-(2 rows)
-
-insert into test_tspace values ('2017-01-20T09:00:01', 24.3, 'dev1');
-insert into test_tspace values ('2017-01-20T09:00:02', 22.3, 'dev7');
-\dt test_tspace
-            List of relations
- Schema |    Name     | Type  |  Owner   
---------+-------------+-------+----------
- public | test_tspace | table | postgres
+INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
+--verify that the table chunk has the correct tablespace
+SELECT relname, spcname FROM pg_class c
+INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+     relname      |   spcname   
+------------------+-------------
+ _hyper_1_1_chunk | tablespace1
 (1 row)
 
---verify that the table chunk has the correct tablespace
-\d+ _timescaledb_internal.*
- Index "_timescaledb_internal.1-test_tspace_device_id_time_idx"
-  Column   |            Type             | Definition | Storage  
------------+-----------------------------+------------+----------
- device_id | text                        | device_id  | extended
- time      | timestamp without time zone | "time"     | plain
-btree, for table "_timescaledb_internal._hyper_1_1_chunk"
+--attach another tablespace without first creating it --> should generate error
+SELECT attach_tablespace('tspace_2dim', 'tablespace2');
+ERROR:  No tablespace "tablespace2" exists. A tablespace needs to be created before assigning it to a hypertable dimension
+--attach the same tablespace twice to same table should also generate error
+SELECT attach_tablespace('tspace_2dim', 'tablespace1');
+ERROR:  Tablespace "tablespace1" already assigned to hypertable "tspace_2dim"
+CREATE TABLESPACE tablespace2 LOCATION :TEST_TABLESPACE2_PATH;
+--attach after creating --> should work
+SELECT attach_tablespace('tspace_2dim', 'tablespace2');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
 
-    Index "_timescaledb_internal.2-test_tspace_time_idx"
- Column |            Type             | Definition | Storage 
---------+-----------------------------+------------+---------
- time   | timestamp without time zone | "time"     | plain
-btree, for table "_timescaledb_internal._hyper_1_1_chunk"
+SELECT * FROM _timescaledb_catalog.tablespace;
+ id | hypertable_id | tablespace_name 
+----+---------------+-----------------
+  1 |             1 | tablespace1
+  3 |             1 | tablespace2
+(2 rows)
 
- Index "_timescaledb_internal.3-test_tspace_device_id_time_idx"
-  Column   |            Type             | Definition | Storage  
------------+-----------------------------+------------+----------
- device_id | text                        | device_id  | extended
- time      | timestamp without time zone | "time"     | plain
-btree, for table "_timescaledb_internal._hyper_1_2_chunk"
+--insert into another chunk
+INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'brown');
+SELECT relname, spcname FROM pg_class c
+INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+     relname      |   spcname   
+------------------+-------------
+ _hyper_1_1_chunk | tablespace1
+ _hyper_1_2_chunk | tablespace2
+(2 rows)
 
-    Index "_timescaledb_internal.4-test_tspace_time_idx"
- Column |            Type             | Definition | Storage 
---------+-----------------------------+------------+---------
- time   | timestamp without time zone | "time"     | plain
-btree, for table "_timescaledb_internal._hyper_1_2_chunk"
+--
+CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+SELECT create_hypertable('tspace_1dim', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
 
-                       Table "_timescaledb_internal._hyper_1_1_chunk"
-  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
------------+-----------------------------+-----------+----------+--------------+-------------
- time      | timestamp without time zone |           | plain    |              | 
- temp      | double precision            |           | plain    |              | 
- device_id | text                        |           | extended |              | 
-Indexes:
-    "1-test_tspace_device_id_time_idx" btree (device_id, "time" DESC)
-    "2-test_tspace_time_idx" btree ("time" DESC)
-Check constraints:
-    "partition" CHECK (_timescaledb_internal.get_partition_for_key(device_id, 32768) >= '0'::smallint AND _timescaledb_internal.get_partition_for_key(device_id, 32768) <= '16383'::smallint)
-    "time_range" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" <= 'Mon Jan 23 15:59:59.999999 2017'::timestamp without time zone)
-Inherits: test_tspace
-Tablespace: "tspace1"
+SELECT attach_tablespace('tspace_1dim', 'tablespace2');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
 
-                       Table "_timescaledb_internal._hyper_1_2_chunk"
-  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
------------+-----------------------------+-----------+----------+--------------+-------------
- time      | timestamp without time zone |           | plain    |              | 
- temp      | double precision            |           | plain    |              | 
- device_id | text                        |           | extended |              | 
-Indexes:
-    "3-test_tspace_device_id_time_idx" btree (device_id, "time" DESC)
-    "4-test_tspace_time_idx" btree ("time" DESC)
-Check constraints:
-    "partition" CHECK (_timescaledb_internal.get_partition_for_key(device_id, 32768) >= '16384'::smallint AND _timescaledb_internal.get_partition_for_key(device_id, 32768) <= '32767'::smallint)
-    "time_range" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" <= 'Mon Jan 23 15:59:59.999999 2017'::timestamp without time zone)
-Inherits: test_tspace
-Tablespace: "tspace1"
+INSERT INTO tspace_1dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
+INSERT INTO tspace_1dim VALUES ('2017-03-20T09:00:01', 24.3, 'brown');
+SELECT relname, spcname FROM pg_class c
+INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+     relname      |   spcname   
+------------------+-------------
+ _hyper_1_1_chunk | tablespace1
+ _hyper_1_2_chunk | tablespace2
+ _hyper_2_3_chunk | tablespace1
+ _hyper_2_4_chunk | tablespace2
+(4 rows)
 
 --cleanup
-drop table test_tspace cascade;
+DROP TABLE tspace_1dim CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  index "2-test_tspace_time_idx" does not exist, skipping
-NOTICE:  index "4-test_tspace_time_idx" does not exist, skipping
-NOTICE:  index "1-test_tspace_device_id_time_idx" does not exist, skipping
-NOTICE:  index "3-test_tspace_device_id_time_idx" does not exist, skipping
-drop tablespace tspace1;
+NOTICE:  index "5-tspace_1dim_time_idx" does not exist, skipping
+NOTICE:  index "6-tspace_1dim_time_idx" does not exist, skipping
+DROP TABLE tspace_2dim CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  index "1-tspace_2dim_time_idx" does not exist, skipping
+NOTICE:  index "2-tspace_2dim_device_time_idx" does not exist, skipping
+NOTICE:  index "3-tspace_2dim_time_idx" does not exist, skipping
+NOTICE:  index "4-tspace_2dim_device_time_idx" does not exist, skipping
+DROP TABLESPACE tablespace1;
+DROP TABLESPACE tablespace2;

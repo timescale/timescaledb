@@ -163,13 +163,13 @@ BEGIN
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
-    UPDATE _timescaledb_catalog.dimension d 
+    UPDATE _timescaledb_catalog.dimension d
     SET interval_length = set_chunk_time_interval.chunk_time_interval
     FROM _timescaledb_internal.dimension_get_time(
         (
-            SELECT id 
-            FROM _timescaledb_catalog.hypertable h 
-            WHERE h.schema_name = main_schema_name AND 
+            SELECT id
+            FROM _timescaledb_catalog.hypertable h
+            WHERE h.schema_name = main_schema_name AND
             h.table_name = main_table_name
     )) time_dim
     WHERE time_dim.id = d.id;
@@ -213,5 +213,38 @@ DECLARE
 BEGIN
     older_than_ts := now() - older_than;
     PERFORM drop_chunks(older_than_ts, table_name, schema_name);
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION attach_tablespace(
+       hypertable REGCLASS,
+       tablespace NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    main_schema_name  NAME;
+    main_table_name   NAME;
+    hypertable_id     INTEGER;
+    tablespace_oid    OID;
+BEGIN
+    SELECT nspname, relname
+    FROM pg_class c INNER JOIN pg_namespace n
+    ON (c.relnamespace = n.oid)
+    WHERE c.oid = hypertable
+    INTO STRICT main_schema_name, main_table_name;
+
+    SELECT id
+    FROM _timescaledb_catalog.hypertable h
+    WHERE (h.schema_name = main_schema_name)
+    AND (h.table_name = main_table_name)
+    INTO hypertable_id;
+
+    IF hypertable_id IS NULL THEN
+       RAISE EXCEPTION 'No hypertable "%" exists', main_table_name
+       USING ERRCODE = 'IO101';
+    END IF;
+
+    PERFORM _timescaledb_internal.attach_tablespace(hypertable_id, tablespace);
 END
 $BODY$;

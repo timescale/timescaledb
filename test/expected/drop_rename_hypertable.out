@@ -394,7 +394,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | dimension_slice  | table | postgres
  _timescaledb_catalog | hypertable       | table | postgres
  _timescaledb_catalog | hypertable_index | table | postgres
-(7 rows)
+ _timescaledb_catalog | tablespace       | table | postgres
+(8 rows)
 
 \dt+ "_timescaledb_internal".*
                  List of relations

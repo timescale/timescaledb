@@ -1,16 +1,16 @@
 -- Creates a hypertable row.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
-    schema_name             NAME,
-    table_name              NAME,
-    time_column_name        NAME,
-    time_column_type        REGTYPE,
-    partitioning_column     NAME,
+    schema_name              NAME,
+    table_name               NAME,
+    time_column_name         NAME,
+    time_column_type         REGTYPE,
+    partitioning_column      NAME,
     partitioning_column_type REGTYPE,
-    number_partitions       INTEGER,
-    associated_schema_name  NAME,
-    associated_table_prefix NAME,
-    chunk_time_interval        BIGINT,
-    tablespace              NAME
+    number_partitions        INTEGER,
+    associated_schema_name   NAME,
+    associated_table_prefix  NAME,
+    chunk_time_interval      BIGINT,
+    tablespace               NAME
 )
     RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -63,9 +63,14 @@ BEGIN
     )
     RETURNING * INTO hypertable_row;
 
+    --add default tablespace, if any
+    IF tablespace IS NOT NULL THEN
+       PERFORM _timescaledb_internal.attach_tablespace(hypertable_row.id, tablespace);
+    END IF;
+
     --create time dimension
     INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type,
-        num_slices, partitioning_func_schema, partitioning_func, 
+        num_slices, partitioning_func_schema, partitioning_func,
         interval_length
     ) VALUES (
         hypertable_row.id, time_column_name, time_column_type,
@@ -73,10 +78,10 @@ BEGIN
         chunk_time_interval
     );
 
-    IF partitioning_column IS NOT NULL THEN 
+    IF partitioning_column IS NOT NULL THEN
         --create space dimension
         INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type,
-            num_slices, partitioning_func_schema, partitioning_func, 
+            num_slices, partitioning_func_schema, partitioning_func,
             interval_length
         ) VALUES (
             hypertable_row.id, partitioning_column, partitioning_column_type,
@@ -130,8 +135,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_get_time(
 )
     RETURNS _timescaledb_catalog.dimension LANGUAGE SQL STABLE AS
 $BODY$
-    SELECT * 
-    FROM _timescaledb_catalog.dimension d 
+    SELECT *
+    FROM _timescaledb_catalog.dimension d
     WHERE d.hypertable_id = dimension_get_time.hypertable_id AND
           d.interval_length IS NOT NULL
 $BODY$;

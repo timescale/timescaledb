@@ -6,10 +6,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_get_dimension_constraint_
 $BODY$
 SELECT format($$
     SELECT cc.chunk_id
-    FROM _timescaledb_catalog.dimension_slice ds 
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id) 
-    WHERE ds.dimension_id = %1$L and ds.range_start <= %2$L and ds.range_end > %2$L 
-    $$, 
+    FROM _timescaledb_catalog.dimension_slice ds
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (ds.id = cc.dimension_slice_id)
+    WHERE ds.dimension_id = %1$L and ds.range_start <= %2$L and ds.range_end > %2$L
+    $$,
     dimension_id, dimension_value);
 $BODY$;
 
@@ -21,7 +21,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_get_dimensions_constraint
     RETURNS TEXT LANGUAGE SQL STABLE AS
 $BODY$
 
-SELECT string_agg(_timescaledb_internal.chunk_get_dimension_constraint_sql(dimension_id, 
+SELECT string_agg(_timescaledb_internal.chunk_get_dimension_constraint_sql(dimension_id,
                                                                 dimension_value),
                                                             ' INTERSECT ')
 FROM (SELECT unnest(dimension_ids) AS dimension_id,
@@ -37,7 +37,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_id_get_by_dimensions(
 $BODY$
 BEGIN
     IF array_length(dimension_ids, 1) > 0 THEN
-        RETURN QUERY EXECUTE _timescaledb_internal.chunk_get_dimensions_constraint_sql(dimension_ids, 
+        RETURN QUERY EXECUTE _timescaledb_internal.chunk_get_dimensions_constraint_sql(dimension_ids,
         dimension_values);
     END IF;
 END
@@ -124,13 +124,13 @@ BEGIN
         SELECT free_slice.range_start, free_slice.range_end
         INTO new_range_start, new_range_end
         FROM _timescaledb_catalog.chunk c
-        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id) 
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
         INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
-        WHERE 
+        WHERE
            free_slice.range_end > free_dimension_value and free_slice.range_start <= free_dimension_value
         LIMIT 1;
 
-        SELECT new_range_start IS NOT NULL INTO alignment_found; 
+        SELECT new_range_start IS NOT NULL INTO alignment_found;
     END IF;
 
     IF NOT alignment_found THEN
@@ -141,18 +141,18 @@ BEGIN
     END IF;
 
     -- Check whether the new chunk interval overlaps with existing chunks.
-    -- new_range_start overlaps 
-    SELECT free_slice.range_end 
+    -- new_range_start overlaps
+    SELECT free_slice.range_end
     INTO overlap_value
     FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id) 
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
     INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
-    WHERE 
+    WHERE
     c.id = (
                SELECT _timescaledb_internal.chunk_id_get_by_dimensions(free_dimension_id || fixed_dimension_ids,
                                                          new_range_start || fixed_dimension_values)
            )
-    ORDER BY free_slice.range_end DESC 
+    ORDER BY free_slice.range_end DESC
     LIMIT 1;
 
     IF FOUND THEN
@@ -169,9 +169,9 @@ BEGIN
     SELECT free_slice.range_start
     INTO overlap_value
     FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id) 
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
     INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
-    WHERE 
+    WHERE
     c.id = (
         SELECT _timescaledb_internal.chunk_id_get_by_dimensions(free_dimension_id || fixed_dimension_ids,
                                                          new_range_end || fixed_dimension_values)
@@ -234,11 +234,11 @@ BEGIN
 
         --do not use RETURNING here (ON CONFLICT DO NOTHING)
         INSERT INTO  _timescaledb_catalog.dimension_slice
-        (dimension_id, range_start, range_end) 
-        VALUES(dimension_ids[free_index], free_range_start, free_range_end) 
+        (dimension_id, range_start, range_end)
+        VALUES(dimension_ids[free_index], free_range_start, free_range_end)
         ON CONFLICT DO NOTHING;
 
-        SELECT id INTO STRICT slice_id 
+        SELECT id INTO STRICT slice_id
         FROM _timescaledb_catalog.dimension_slice ds
         WHERE ds.dimension_id = dimension_ids[free_index] AND
         ds.range_start = free_range_start AND ds.range_end = free_range_end;
@@ -250,9 +250,9 @@ BEGIN
         INSERT INTO _timescaledb_catalog.chunk (id, hypertable_id, schema_name, table_name)
         SELECT seq_id, h.id, h.associated_schema_name,
            format('%s_%s_chunk', h.associated_table_prefix, seq_id)
-        FROM 
+        FROM
         nextval(pg_get_serial_sequence('_timescaledb_catalog.chunk','id')) seq_id,
-        _timescaledb_catalog.hypertable h 
+        _timescaledb_catalog.hypertable h
         WHERE h.id = dimension_row.hypertable_id
         RETURNING *
     )
@@ -302,12 +302,12 @@ $BODY$
 DECLARE
     chunk_row _timescaledb_catalog.chunk;
     dimension_ids INTEGER[];
-    dimension_values bigint[]; 
+    dimension_values bigint[];
 BEGIN
-    CASE WHEN space_dimension_id IS NOT NULL AND space_dimension_id <> 0 THEN 
+    CASE WHEN space_dimension_id IS NOT NULL AND space_dimension_id <> 0 THEN
         dimension_ids :=  ARRAY[time_dimension_id, space_dimension_id];
         dimension_values := ARRAY[time_value, space_value];
-    ELSE 
+    ELSE
         dimension_ids :=  ARRAY[time_dimension_id];
         dimension_values := ARRAY[time_value];
     END CASE;
