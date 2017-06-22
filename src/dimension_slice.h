@@ -24,7 +24,7 @@ typedef struct Hypercube
 {
 	int16		capacity;		/* capacity of slices[] */
 	int16		num_slices;		/* actual number of slices (should equal
-								 * num_dimensions after create) */
+								 * capacity after create) */
 	/* Open slices are stored before closed slices */
 	DimensionSlice *slices[0];
 } Hypercube;
@@ -54,8 +54,8 @@ extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
 extern DimensionSlice *dimension_slice_copy(const DimensionSlice *original);
 extern void dimension_slice_free(DimensionSlice *slice);
 extern DimensionVec *dimension_vec_create(int32 initial_num_slices);
-extern DimensionVec *dimension_vec_add_slice(DimensionVec **vec, DimensionSlice *slice);
 extern DimensionVec *dimension_vec_add_slice_sort(DimensionVec **vec, DimensionSlice *slice);
+extern void dimension_vec_remove_slice(DimensionVec **vecptr, int32 index);
 extern DimensionSlice *dimension_vec_find_slice(DimensionVec *vec, int64 coordinate);
 extern void dimension_vec_free(DimensionVec *vec);
 extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);

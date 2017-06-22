@@ -4,6 +4,14 @@
 #include "dimension_slice.h"
 #include "subspace_store.h"
 
+/*
+ * In terms of datastructures, the subspace store is actually a tree. At the
+ * root of a tree is a DimensionVec representing the different DimensionSlices
+ * for the first dimension. Each of the DimensionSlices of the
+ * first dimension point to a DimensionVec of the second dimension. This recurses
+ * for the N dimensions. The leaf DimensionSlice points to the data being stored.
+ *
+ * */
 typedef struct SubspaceStore
 {
 	MemoryContext mcxt;
@@ -37,15 +45,15 @@ subspace_store_free_internal_node(void *node)
 }
 
 void
-subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
-				   void *end_store, void (*end_store_free) (void *))
+subspace_store_add(SubspaceStore *store, const Hypercube *hc,
+				   void *object, void (*object_free) (void *))
 {
-	DimensionVec **vecptr = &cache->origin;
+	DimensionVec **vecptr = &store->origin;
 	DimensionSlice *last = NULL;
-	MemoryContext old = MemoryContextSwitchTo(cache->mcxt);
+	MemoryContext old = MemoryContextSwitchTo(store->mcxt);
 	int			i;
 
-	Assert(hc->num_slices == cache->num_dimensions);
+	Assert(hc->num_slices == store->num_dimensions);
 
 	for (i = 0; i < hc->num_slices; i++)
 	{
@@ -71,6 +79,15 @@ subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
 
 		if (match == NULL)
 		{
+			if (i == 0 && vec->num_slices > 0)
+			{
+				/*
+				 * At dimension 0 only keep one slice. This is an optimization
+				 * to prevent this store from growing too large.
+				 */
+				Assert(vec->num_slices = 1);
+				dimension_vec_remove_slice(vecptr, 0);
+			}
 			DimensionSlice *copy = dimension_slice_copy(target);
 
 			dimension_vec_add_slice_sort(vecptr, copy);
@@ -83,19 +100,20 @@ subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
 	}
 
 	Assert(last->storage == NULL);
-	last->storage = end_store;	/* at the end we store the object */
-	last->storage_free = end_store_free;
+	last->storage = object;		/* at the end we store the object */
+	last->storage_free = object_free;
 	MemoryContextSwitchTo(old);
 }
 
+
 void *
-subspace_store_get(SubspaceStore *cache, Point *target)
+subspace_store_get(SubspaceStore *store, Point *target)
 {
 	int			i;
-	DimensionVec *vec = cache->origin;
+	DimensionVec *vec = store->origin;
 	DimensionSlice *match = NULL;
 
-	Assert(target->cardinality == cache->num_dimensions);
+	Assert(target->cardinality == store->num_dimensions);
 
 	for (i = 0; i < target->cardinality; i++)
 	{
@@ -110,14 +128,14 @@ subspace_store_get(SubspaceStore *cache, Point *target)
 }
 
 void
-subspace_store_free(SubspaceStore *cache)
+subspace_store_free(SubspaceStore *store)
 {
-	dimension_vec_free(cache->origin);
-	pfree(cache);
+	dimension_vec_free(store->origin);
+	pfree(store);
 }
 
 MemoryContext
-subspace_store_mcxt(SubspaceStore *cache)
+subspace_store_mcxt(SubspaceStore *store)
 {
-	return cache->mcxt;
+	return store->mcxt;
 }

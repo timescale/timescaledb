@@ -10,6 +10,7 @@
 #include "chunk_constraint.h"
 
 static DimensionVec *dimension_vec_expand(DimensionVec *vec, int32 new_size);
+static DimensionVec *dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice);
 
 static inline DimensionSlice *
 dimension_slice_from_form_data(Form_dimension_slice fd)
@@ -262,7 +263,7 @@ dimension_vec_create(int32 initial_num_slices)
 	return vec;
 }
 
-DimensionVec *
+static DimensionVec *
 dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec = *vecptr;
@@ -284,6 +285,17 @@ dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 	qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
 	return vec;
 }
+
+void
+dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
+{
+	DimensionVec *vec = *vecptr;
+
+	dimension_slice_free(vec->slices[index]);
+	memcpy(vec->slices + index, vec->slices + (index + 1), sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
+	vec->num_slices--;
+}
+
 
 DimensionSlice *
 dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
