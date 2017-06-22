@@ -21,3 +21,17 @@ INSERT INTO "1dim" SELECT * FROM regular_table;
 SELECT * FROM "1dim";
 SELECT "1dim" FROM "1dim";
 
+-- Create a three-dimensional table
+CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
+SELECT create_hypertable('"3dim"', 'time', 'device', 2);
+SELECT add_dimension('"3dim"', 'location', 2);
+INSERT INTO "3dim" VALUES('2017-01-20T09:00:01', 22.5, 'blue', 'nyc');
+INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
+INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
+
+--show the constraints on the three-dimensional chunk
+\d+ _timescaledb_internal._hyper_3_6_chunk
+
+--queries should work in three dimensions
+SELECT * FROM "3dim";
+

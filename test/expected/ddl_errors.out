@@ -20,7 +20,7 @@ ERROR:  relation "public.Hypertable_1_mispelled" does not exist at character 33
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2);
 ERROR:  column "time_mispelled" does not exist
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id', 2);
-ERROR:  illegal type for time column "Device_id": text
+ERROR:  illegal type for column "Device_id": text
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled', 2);
 ERROR:  column "Device_id_mispelled" does not exist
 INSERT INTO PUBLIC."Hypertable_1" VALUES(1,'dev_1', 3); 
