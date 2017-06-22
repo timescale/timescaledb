@@ -32,7 +32,7 @@ chunk_constraint_from_tuple(HeapTuple tuple)
 static bool
 chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 {
-	Chunk *chunk = data;
+	Chunk	   *chunk = data;
 
 	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
 

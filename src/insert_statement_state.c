@@ -54,6 +54,7 @@ static void
 destroy_insert_chunk_state(void *ics_ptr)
 {
 	InsertChunkState *ics = ics_ptr;
+
 	insert_chunk_state_destroy(ics);
 }
 

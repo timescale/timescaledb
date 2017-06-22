@@ -18,10 +18,10 @@ typedef enum DimensionType
 typedef struct Dimension
 {
 	FormData_dimension fd;
-	DimensionType      type;
-	AttrNumber	       column_attno;
-	Oid			       main_table_relid;
-	PartitioningInfo  *partitioning;
+	DimensionType type;
+	AttrNumber	column_attno;
+	Oid			main_table_relid;
+	PartitioningInfo *partitioning;
 } Dimension;
 
 
@@ -36,7 +36,7 @@ typedef struct Dimension
  */
 typedef struct Hyperspace
 {
-	int32	    hypertable_id;
+	int32		hypertable_id;
 	Oid			main_table_relid;
 	uint16		capacity;
 	int16		num_open_dimensions;

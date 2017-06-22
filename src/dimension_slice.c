@@ -33,6 +33,7 @@ static inline Hypercube *
 hypercube_alloc(int16 num_dimensions)
 {
 	Hypercube  *hc = palloc0(HYPERCUBE_SIZE(num_dimensions));
+
 	hc->capacity = num_dimensions;
 	return hc;
 }
