@@ -21,12 +21,15 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE
 )
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
 $BODY$
 DECLARE
     hypertable_row   _timescaledb_catalog.hypertable;
     table_name       NAME;
     schema_name      NAME;
+    table_owner      NAME;
     tablespace_oid   OID;
     tablespace_name  NAME;
     time_column_type REGTYPE;
@@ -40,6 +43,17 @@ BEGIN
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
+
+    SELECT tableowner
+    INTO STRICT table_owner
+    FROM pg_catalog.pg_tables
+    WHERE schemaname = schema_name
+          AND tablename = table_name;
+
+    IF table_owner <> session_user THEN
+        RAISE 'Must be owner of relation %', table_name
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
 
     -- tables that don't have an associated tablespace has reltablespace OID set to 0
     -- in pg_class and there is no matching row in pg_tablespace

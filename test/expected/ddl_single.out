@@ -367,7 +367,7 @@ $BODY$;
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:24: ERROR:  ALTER INDEX not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:24: ERROR:  ALTER INDEX not supported on hypertable public."Hypertable_1"
 CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
 FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
 psql:include/ddl_ops_2.sql:26: ERROR:  CREATE TRIGGER not supported on hypertable "Hypertable_1"
