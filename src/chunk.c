@@ -42,7 +42,7 @@ chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 }
 
 Chunk *
-chunk_create_new(Hyperspace *hs, Point *p)
+chunk_create(Hyperspace *hs, Point *p)
 {
 	Chunk	   *chunk;
 

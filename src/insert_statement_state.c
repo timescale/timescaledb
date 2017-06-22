@@ -54,13 +54,12 @@ static void
 destroy_insert_chunk_state(void *ics_ptr)
 {
 	InsertChunkState *ics = ics_ptr;
-
 	insert_chunk_state_destroy(ics);
 }
 
 /*
- * Get an insert context to the chunk corresponding to the partition and
- * timepoint of a tuple.
+ * Get the insert state for the chunk that matches the given point in the
+ * partitioned hyperspace.
  */
 extern InsertChunkState *
 insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyperspace *hs, Point *point)

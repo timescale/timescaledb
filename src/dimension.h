@@ -70,18 +70,7 @@ typedef struct Point
 #define POINT_SIZE(cardinality)							\
 	(sizeof(Point) + (sizeof(int64) * (cardinality)))
 
-#define point_coordinate_is_in_slice(slice, coord)					\
-	(coord >= (slice)->range_start && coord < (slice)->range_end)
-
-#define point_get_open_dimension_coordinate(p, i)	\
-	(p)->coordinates[i]
-
-#define point_get_closed_dimension_coordinate(p, i) \
-	(p)->coordinates[(p)->num_open + i]
-
 extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
-extern const char *point_to_string(Point *p);
-
 
 #endif   /* TIMESCALEDB_DIMENSION_H */

@@ -59,7 +59,7 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 };
 
 /* Names for proxy tables used for cache invalidation. Must match names in
- * sql/common/caches.sql */
+ * sql/cache.sql */
 static const char *cache_proxy_table_names[_MAX_CACHE_TYPES] = {
 	[CACHE_TYPE_HYPERTABLE] = "cache_inval_hypertable",
 	[CACHE_TYPE_CHUNK] = "cache_inval_chunk",

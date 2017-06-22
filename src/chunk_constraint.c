@@ -29,19 +29,14 @@ chunk_constraint_from_tuple(HeapTuple tuple)
 	return chunk_constraint_from_form_data((Form_chunk_constraint) GETSTRUCT(tuple));
 }
 
-typedef struct ChunkConstraintCtx
-{
-	Chunk	   *chunk;
-} ChunkConstraintCtx;
-
 static bool
 chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 {
-	ChunkConstraintCtx *ctx = data;
+	Chunk *chunk = data;
 
-	chunk_constraint_fill(&ctx->chunk->constraints[ctx->chunk->num_constraints++], ti->tuple);
+	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
 
-	if (ctx->chunk->capacity == ctx->chunk->num_constraints)
+	if (chunk->capacity == chunk->num_constraints)
 		return false;
 
 	return true;
@@ -58,9 +53,6 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 {
 	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
-	ChunkConstraintCtx data = {
-		.chunk = chunk,
-	};
 	int			num_found;
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[CHUNK_CONSTRAINT].id,
@@ -68,7 +60,7 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
-		.data = &data,
+		.data = chunk,
 		.tuple_found = chunk_constraint_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
@@ -114,7 +106,7 @@ chunk_constraint_dimension_id_tuple_found(TupleInfo *ti, void *data)
 
 	/*
 	 * If the chunk has N constraints, it is the chunk we are looking for and
-	 * can abort the scan
+	 * the scan can be aborted.
 	 */
 	if (chunk->num_constraints == ctx->num_dimensions)
 		return false;

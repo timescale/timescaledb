@@ -10,7 +10,6 @@
 -- associated_table_prefix - (Optional) Prefix for internal hypertable table names
 -- chunk_time_interval - (Optional) Initial time interval for a chunk
 -- create_default_indexes - (Optional) Whether or not to create the default indexes.
--- TODO: order of params doesn't match docs.
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,

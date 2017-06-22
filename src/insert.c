@@ -39,9 +39,8 @@ PG_FUNCTION_INFO_V1(insert_main_table_trigger_after);
 
 /*
  * This row-level trigger is called for every row INSERTed into a hypertable. We
- * use it to redirect inserted tuples to the correct hypertable chunk in space
- * and time.
- *
+ * use it to redirect inserted tuples to the correct hypertable chunk in an
+ * N-dimensional hyperspace.
  */
 Datum
 insert_main_table_trigger(PG_FUNCTION_ARGS)
@@ -80,6 +79,7 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 		/* Find or create the insert state matching the point */
 		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state,
 														   ht->space, point);
+		/* Insert the tuple into the chunk */
 		insert_chunk_state_insert_tuple(cstate, tuple);
 	}
 	PG_CATCH();

@@ -33,7 +33,6 @@ static inline Hypercube *
 hypercube_alloc(int16 num_dimensions)
 {
 	Hypercube  *hc = palloc0(HYPERCUBE_SIZE(num_dimensions));
-
 	hc->capacity = num_dimensions;
 	return hc;
 }
@@ -94,8 +93,8 @@ dimension_slice_scan(int32 dimension_id, int64 coordinate)
 	};
 
 	/*
-	 * Perform an index scan for slice matching the dimension's ID and which
-	 * encloses the coordinate
+	 * Perform an index scan for slices matching the dimension's ID and which
+	 * encloses the coordinate.
 	 */
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
@@ -288,8 +287,10 @@ dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 DimensionSlice *
 dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 {
-	DimensionSlice **res = bsearch(&coordinate, vec->slices, vec->num_slices,
-						 sizeof(DimensionSlice *), cmp_coordinate_and_slice);
+	DimensionSlice **res;
+
+	res = bsearch(&coordinate, vec->slices, vec->num_slices,
+				  sizeof(DimensionSlice *), cmp_coordinate_and_slice);
 
 	if (res == NULL)
 		return NULL;

@@ -169,8 +169,10 @@ BEGIN
     SELECT free_slice.range_start
     INTO overlap_value
     FROM _timescaledb_catalog.chunk c
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
-    INNER JOIN _timescaledb_catalog.dimension_slice free_slice ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc
+    ON (cc.chunk_id = c.id)
+    INNER JOIN _timescaledb_catalog.dimension_slice free_slice
+    ON (free_slice.id = cc.dimension_slice_id AND free_slice.dimension_id = free_dimension_id)
     WHERE
     c.id = (
         SELECT _timescaledb_internal.chunk_id_get_by_dimensions(free_dimension_id || fixed_dimension_ids,
@@ -190,11 +192,7 @@ BEGIN
 END
 $BODY$;
 
-
-
-
 -- creates the row in the chunk table. Prerequisite: appropriate lock.
--- static
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create_after_lock(
     dimension_ids           INTEGER[],
     dimension_values        BIGINT[]
@@ -290,37 +288,6 @@ BEGIN
     IF chunk_row IS NULL THEN -- recheck
         RAISE EXCEPTION 'Should never happen: chunk not found after creation'
         USING ERRCODE = 'IO501';
-    END IF;
-
-    RETURN chunk_row;
-END
-$BODY$;
-
--- Return a chunk, creating one if it doesn't exist.
--- This is the only non-static function in this file.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_get_or_create(
-    dimension_ids           INTEGER[],
-    dimension_values        BIGINT[]
-)
-    RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    chunk_row _timescaledb_catalog.chunk;
-    dimension_ids INTEGER[];
-    dimension_values bigint[];
-BEGIN
-    CASE WHEN space_dimension_id IS NOT NULL AND space_dimension_id <> 0 THEN
-        dimension_ids :=  ARRAY[time_dimension_id, space_dimension_id];
-        dimension_values := ARRAY[time_value, space_value];
-    ELSE
-        dimension_ids :=  ARRAY[time_dimension_id];
-        dimension_values := ARRAY[time_value];
-    END CASE;
-
-    chunk_row := _timescaledb_internal.chunk_get(dimension_ids, dimension_values);
-
-    IF chunk_row IS NULL THEN
-        chunk_row := _timescaledb_internal.chunk_create(dimension_ids, dimension_values);
     END IF;
 
     RETURN chunk_row;

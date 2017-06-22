@@ -38,7 +38,6 @@ static Hyperspace *
 hyperspace_create(int32 hypertable_id, Oid main_table_relid, uint16 num_dimensions)
 {
 	Hyperspace *hs = palloc0(HYPERSPACE_SIZE(num_dimensions));
-
 	hs->hypertable_id = hypertable_id;
 	hs->main_table_relid = main_table_relid;
 	hs->capacity = num_dimensions;
@@ -94,27 +93,9 @@ static Point *
 point_create(int16 num_dimensions)
 {
 	Point	   *p = palloc0(POINT_SIZE(num_dimensions));
-
 	p->cardinality = num_dimensions;
 	p->num_closed = p->num_open = 0;
 	return p;
-}
-
-const char *
-point_to_string(Point *p)
-{
-	char	   *buf = palloc(100);
-	int			i,
-				j = 1;
-
-	buf[0] = '(';
-
-	for (i = 0; i < p->cardinality; i++)
-		j += snprintf(buf + j, 100, "" INT64_FORMAT ",", p->coordinates[i]);
-
-	buf[j - 1] = ')';
-
-	return buf;
 }
 
 Point *
