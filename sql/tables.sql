@@ -79,7 +79,8 @@ CREATE TABLE _timescaledb_catalog.dimension (
     CHECK (
         (num_slices IS NULL AND interval_length IS NOT NULL) OR
         (num_slices IS NOT NULL AND interval_length IS NULL)
-    )
+    ),
+    UNIQUE (hypertable_id, column_name)
 );
 CREATE INDEX ON  _timescaledb_catalog.dimension(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
