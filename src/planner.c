@@ -23,6 +23,7 @@
 #include "extension.h"
 #include "utils.h"
 #include "guc.h"
+#include "dimension.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -118,16 +119,13 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
 	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
 
-	if (rte->relid == hentry->main_table)
+	if (rte->relid == hentry->main_table_relid)
 	{
-		/* get latest partition epoch: TODO scan all pe */
-		PartitionEpoch *eps = hypertable_cache_get_partition_epoch(hcache, hentry, OPEN_END_TIME - 1, rte->relid);
+		Dimension  *closed_dim = hyperspace_get_closed_dimension(hentry->space, 0);
 
-		if (eps->partitioning != NULL &&
-			strncmp(eps->partitioning->column, varname, NAMEDATALEN) == 0)
-		{
-			return eps->partitioning;
-		}
+		if (closed_dim != NULL &&
+		 strncmp(closed_dim->fd.column_name.data, varname, NAMEDATALEN) == 0)
+			return closed_dim->partitioning;
 	}
 	return NULL;
 }
@@ -137,7 +135,7 @@ get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cach
  * all nodes given in input. */
 static Expr *
 create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema,
-							 char *partitioning_func, int32 partitioning_mod)
+								   char *partitioning_func)
 {
 	Expr	   *op_expr;
 	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
@@ -145,25 +143,12 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 	Node	   *var_node_for_fn_call;
 	Const	   *const_for_fn_call;
 	Node	   *const_node_for_fn_call;
-	Const	   *mod_const_var_call;
-	Const	   *mod_const_const_call;
 	List	   *args_func_var;
 	List	   *args_func_const;
 	FuncCall   *fc_var;
 	FuncCall   *fc_const;
 	Node	   *f_var;
 	Node	   *f_const;
-
-	mod_const_var_call = makeConst(INT4OID,
-								   -1,
-								   InvalidOid,
-								   sizeof(int32),
-								   Int32GetDatum(partitioning_mod),
-								   false,
-								   true);
-
-	mod_const_const_call = (Const *) palloc(sizeof(Const));
-	memcpy(mod_const_const_call, mod_const_var_call, sizeof(Const));
 
 	const_for_fn_call = (Const *) palloc(sizeof(Const));
 	memcpy(const_for_fn_call, const_expr, sizeof(Const));
@@ -190,8 +175,8 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 								  COERCE_EXPLICIT_CAST, -1);
 	}
 
-	args_func_var = list_make2(var_node_for_fn_call, mod_const_var_call);
-	args_func_const = list_make2(const_node_for_fn_call, mod_const_const_call);
+	args_func_var = list_make1(var_node_for_fn_call);
+	args_func_const = list_make1(const_node_for_fn_call);
 
 	fc_var = makeFuncCall(func_name, args_func_var, -1);
 	fc_const = makeFuncCall(func_name, args_func_const, -1);
@@ -215,8 +200,7 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 	/*
 	 * Detect partitioning_column = const. If not fall-thru. If detected,
 	 * replace with partitioning_column = const AND
-	 * partitioning_func(partition_column, partitioning_mod) =
-	 * partitioning_func(const, partitioning_mod)
+	 * partitioning_func(partition_column) = partitioning_func(const)
 	 */
 	if (IsA(node, OpExpr))
 	{
@@ -263,13 +247,14 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						PartitioningInfo *pi =
 						get_partitioning_info_for_partition_column_var(var_expr,
 															  context->parse,
-										   context->hcache, context->hentry);
+															 context->hcache,
+															context->hentry);
 
 						if (pi != NULL)
 						{
 							/* The var is a partitioning column */
 							Expr	   *partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
-																								 pi->partfunc.schema, pi->partfunc.name, pi->partfunc.modulos);
+									 pi->partfunc.schema, pi->partfunc.name);
 
 							return (Node *) make_andclause(list_make2(node, partitioning_clause));
 

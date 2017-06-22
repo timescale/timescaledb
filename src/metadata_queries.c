@@ -1,17 +1,11 @@
 #include <postgres.h>
-#include "catalog/pg_type.h"
-#include "commands/trigger.h"
-#include "utils/inval.h"
-#include "utils/memutils.h"
-#include "utils/catcache.h"
-#include "utils/builtins.h"
-#include "executor/spi.h"
-#include "access/xact.h"
+#include <catalog/pg_type.h>
+#include <commands/trigger.h>
+#include <executor/spi.h>
 
 #include "metadata_queries.h"
-#include "utils.h"
-#include "partitioning.h"
 #include "chunk.h"
+#include "dimension.h"
 
 /* Utility function to prepare an SPI plan */
 static SPIPlanPtr
@@ -49,46 +43,39 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 		return plan;							\
 	}
 
-/*
- * Retrieving chunks:
- *
- * Locked chunk retrieval has to occur on every row. So we have a fast and slowpath.
- * The fastpath retrieves and locks the chunk only if it already exists locally. The
- * fastpath is faster since it does not call a plpgsql function but calls sql directly.
- * This was found to make a performance difference in tests.
- *
- * The slowpath calls  get_or_create_chunk(), and is called only if the fastpath returned no rows.
- *
- */
-#define CHUNK_QUERY_ARGS (Oid[]) {INT4OID, INT8OID}
-#define CHUNK_QUERY "SELECT * \
-				FROM _timescaledb_internal.get_or_create_chunk($1, $2)"
+#define INT8ARRAYOID 1016
+#define CHUNK_CREATE_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
+#define CHUNK_CREATE "SELECT * FROM _timescaledb_internal.chunk_create($1, $2)"
 
-/* plan for getting a chunk via get_or_create_chunk(). */
-DEFINE_PLAN(get_chunk_plan, CHUNK_QUERY, 2, CHUNK_QUERY_ARGS)
+/* plan for creating a chunk via create_chunk(). */
+DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 2, CHUNK_CREATE_ARGS)
 
 static HeapTuple
-chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, TupleDesc *desc, SPIPlanPtr plan)
+chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p, SPIPlanPtr plan)
 {
-	/* the fastpath was n/a or returned 0 rows. */
-	int			ret;
-	Datum		args[3] = {Int32GetDatum(partition_id), Int64GetDatum(timepoint)};
+	int			i,
+				ret;
 	HeapTuple	tuple;
+	Datum		dimension_ids[HYPERSPACE_NUM_DIMENSIONS(hs)];
+	Datum		dimension_values[HYPERSPACE_NUM_DIMENSIONS(hs)];
+	Datum		args[2];
 
-	ret = SPI_execute_plan(plan, args, NULL, false, 2);
+	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
+	{
+		dimension_ids[i] = Int32GetDatum(hs->dimensions[i].fd.id);
+		dimension_values[i] = Int64GetDatum(p->coordinates[i]);
+	}
+
+	args[0] = PointerGetDatum(construct_array(dimension_ids, HYPERSPACE_NUM_DIMENSIONS(hs), INT4OID, 4, true, 'i'));
+	args[1] = PointerGetDatum(construct_array(dimension_values, HYPERSPACE_NUM_DIMENSIONS(hs), INT8OID, 8, true, 'd'));
+
+	ret = SPI_execute_plan(plan, args, NULL, false, 4);
 
 	if (ret <= 0)
-	{
 		elog(ERROR, "Got an SPI error %d", ret);
-	}
 
 	if (SPI_processed != 1)
-	{
 		elog(ERROR, "Got not 1 row but %lu", SPI_processed);
-	}
-
-	if (desc != NULL)
-		*desc = SPI_tuptable->tupdesc;
 
 	tuple = SPI_tuptable->vals[0];
 
@@ -96,19 +83,22 @@ chunk_tuple_create_spi_connected(int32 partition_id, int64 timepoint, TupleDesc 
 }
 
 Chunk *
-chunk_insert_new(int32 partition_id, int64 timepoint)
+spi_chunk_create(Hyperspace *hs, Point *p)
 {
 	HeapTuple	tuple;
-	TupleDesc	desc;
 	Chunk	   *chunk;
-	MemoryContext top = CurrentMemoryContext;
-	SPIPlanPtr	plan = get_chunk_plan();
+	MemoryContext old,
+				top = CurrentMemoryContext;
+	SPIPlanPtr	plan = create_chunk_plan();
 
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
-	tuple = chunk_tuple_create_spi_connected(partition_id, timepoint, &desc, plan);
-	chunk = chunk_create(tuple, desc, top);
+	tuple = chunk_tuple_create_spi_connected(hs, p, plan);
+
+	old = MemoryContextSwitchTo(top);
+	chunk = chunk_create_from_tuple(tuple, HYPERSPACE_NUM_DIMENSIONS(hs));
+	MemoryContextSwitchTo(old);
 
 	SPI_finish();
 

@@ -1,41 +1,27 @@
 #include <postgres.h>
-#include <funcapi.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_type.h>
-#include <catalog/pg_opfamily.h>
 #include <utils/rel.h>
-#include <utils/tuplesort.h>
-#include <utils/tqual.h>
-#include <utils/rls.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
-#include <utils/guc.h>
-#include <commands/tablecmds.h>
 #include <commands/trigger.h>
 
-#include <access/xact.h>
-#include <access/htup_details.h>
-#include <access/heapam.h>
-
-#include <miscadmin.h>
-#include <fmgr.h>
-
-#include "cache.h"
-#include "hypertable_cache.h"
-#include "chunk_cache.h"
+#include "dimension.h"
 #include "errors.h"
 #include "utils.h"
-#include "metadata_queries.h"
-#include "partitioning.h"
-#include "scanner.h"
-#include "catalog.h"
 #include "chunk.h"
+#include "hypertable.h"
 #include "insert_chunk_state.h"
 #include "insert_statement_state.h"
 #include "executor.h"
 
-static void
-insert_main_table_cleanup(InsertStatementState **state_p)
+static InsertStatementState *insert_statement_state = NULL;
+
+static inline void
+insert_statement_state_init(InsertStatementState **state_p, Oid relid)
+{
+	if (*state_p == NULL)
+		*state_p = insert_statement_state_new(relid);
+}
+
+static inline void
+insert_statement_state_cleanup(InsertStatementState **state_p)
 {
 	if (*state_p != NULL)
 	{
@@ -44,7 +30,6 @@ insert_main_table_cleanup(InsertStatementState **state_p)
 	}
 }
 
-InsertStatementState *insert_statement_state = NULL;
 
 Datum		insert_main_table_trigger(PG_FUNCTION_ARGS);
 Datum		insert_main_table_trigger_after(PG_FUNCTION_ARGS);
@@ -54,29 +39,19 @@ PG_FUNCTION_INFO_V1(insert_main_table_trigger_after);
 
 /*
  * This row-level trigger is called for every row INSERTed into a hypertable. We
- * use it to redirect inserted tuples to the correct hypertable chunk in space
- * and time.
- *
+ * use it to redirect inserted tuples to the correct hypertable chunk in an
+ * N-dimensional hyperspace.
  */
 Datum
 insert_main_table_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	HeapTuple	tuple;
-	Partition  *part;
-
-	Datum		datum;
-	bool		isnull;
-	int64		timepoint;
-	int64		spacepoint;
-	PartitionEpoch *epoch;
-
+	Hypertable *ht;
+	Point	   *point;
 	InsertChunkState *cstate;
-
 	Oid			relid = trigdata->tg_relation->rd_id;
 	TupleDesc	tupdesc = trigdata->tg_relation->rd_att;
-
-	MemoryContext oldctx;
 
 	PG_TRY();
 	{
@@ -94,49 +69,22 @@ insert_main_table_trigger(PG_FUNCTION_ARGS)
 		else
 			elog(ERROR, "Unsupported event for trigger");
 
-		if (NULL == insert_statement_state)
-		{
-			insert_statement_state = insert_statement_state_new(relid);
-		}
+		insert_statement_state_init(&insert_statement_state, relid);
 
-		oldctx = MemoryContextSwitchTo(insert_statement_state->mctx);
+		ht = insert_statement_state->hypertable;
 
-		/*
-		 * Get the timepoint from the tuple, converting to our internal time
-		 * representation
-		 */
-		datum = heap_getattr(tuple, insert_statement_state->time_attno, tupdesc, &isnull);
+		/* Calculate the tuple's point in the N-dimensional hyperspace */
+		point = hyperspace_calculate_point(ht->space, tuple, tupdesc);
 
-		if (isnull)
-		{
-			elog(ERROR, "No time attribute in tuple");
-		}
-
-		timepoint = time_value_to_internal(datum, insert_statement_state->hypertable->time_column_type);
-
-		epoch = hypertable_cache_get_partition_epoch(insert_statement_state->hypertable_cache, insert_statement_state->hypertable,
-													 timepoint, relid);
-
-		/* Find correct partition */
-		if (epoch->num_partitions > 1)
-		{
-			spacepoint = partitioning_func_apply_tuple(epoch->partitioning, tuple, tupdesc);
-		}
-		else
-		{
-			spacepoint = KEYSPACE_PT_NO_PARTITIONING;
-		}
-
-		part = partition_epoch_get_partition(epoch, spacepoint);
-
-		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state, part, epoch, timepoint);
+		/* Find or create the insert state matching the point */
+		cstate = insert_statement_state_get_insert_chunk_state(insert_statement_state,
+														   ht->space, point);
+		/* Insert the tuple into the chunk */
 		insert_chunk_state_insert_tuple(cstate, tuple);
-
-		MemoryContextSwitchTo(oldctx);
 	}
 	PG_CATCH();
 	{
-		insert_main_table_cleanup(&insert_statement_state);
+		insert_statement_state_cleanup(&insert_statement_state);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -169,12 +117,12 @@ insert_main_table_trigger_after(PG_FUNCTION_ARGS)
 	}
 	PG_CATCH();
 	{
-		insert_main_table_cleanup(&insert_statement_state);
+		insert_statement_state_cleanup(&insert_statement_state);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
-	insert_main_table_cleanup(&insert_statement_state);
+	insert_statement_state_cleanup(&insert_statement_state);
 
 	return PointerGetDatum(NULL);
 }

@@ -3,107 +3,86 @@
 
 #include "insert_statement_state.h"
 #include "insert_chunk_state.h"
-#include "chunk_cache.h"
 #include "chunk.h"
 #include "cache.h"
 #include "hypertable_cache.h"
-#include "partitioning.h"
+#include "dimension.h"
+#include "dimension_slice.h"
+#include "hypertable.h"
+#include "chunk_constraint.h"
 
 InsertStatementState *
 insert_statement_state_new(Oid relid)
 {
 	MemoryContext oldctx;
 	MemoryContext mctx = AllocSetContextCreate(CacheMemoryContext,
-											   "Insert context",
+											   "Insert statement state",
 											   ALLOCSET_DEFAULT_SIZES);
 	InsertStatementState *state;
+	Hypertable *ht;
+	Cache	   *hypertable_cache;
 
 	oldctx = MemoryContextSwitchTo(mctx);
 
+	hypertable_cache = hypertable_cache_pin();
+
+	ht = hypertable_cache_get_entry(hypertable_cache, relid);
+
+	if (NULL == ht)
+		elog(ERROR, "No hypertable for relid %d", relid);
+
 	state = palloc(sizeof(InsertStatementState));
 	state->mctx = mctx;
-
-	state->chunk_cache = chunk_cache_pin();
-	state->hypertable_cache = hypertable_cache_pin();
-
-	/* Find hypertable and the time field column */
-	state->hypertable = hypertable_cache_get_entry(state->hypertable_cache, relid);
-	state->time_attno = get_attnum(relid, state->hypertable->time_column_name);
-
-	state->num_partitions = 0;
+	state->hypertable_cache = hypertable_cache;
+	state->hypertable = ht;
+	state->cache = subspace_store_init(HYPERSPACE_NUM_DIMENSIONS(ht->space), mctx);
 
 	MemoryContextSwitchTo(oldctx);
+
 	return state;
 }
 
 void
 insert_statement_state_destroy(InsertStatementState *state)
 {
-	int			i;
-
-	for (i = 0; i < state->num_partitions; i++)
-	{
-		if (state->cstates[i] != NULL)
-		{
-			insert_chunk_state_destroy(state->cstates[i]);
-		}
-	}
-
-	cache_release(state->chunk_cache);
+	subspace_store_free(state->cache);
 	cache_release(state->hypertable_cache);
-
 	MemoryContextDelete(state->mctx);
 }
 
 static void
-set_or_update_new_entry(InsertStatementState *state, Partition *partition, int64 timepoint)
+destroy_insert_chunk_state(void *ics_ptr)
 {
-	Chunk	   *chunk;
-
-	if (state->cstates[partition->index] != NULL)
-	{
-		insert_chunk_state_destroy(state->cstates[partition->index]);
-	}
-
-	chunk = chunk_cache_get(state->chunk_cache, partition, timepoint);
-	state->cstates[partition->index] = insert_chunk_state_new(chunk);
+	InsertChunkState *ics = ics_ptr;
+	insert_chunk_state_destroy(ics);
 }
 
 /*
- * Get an insert context to the chunk corresponding to the partition and
- * timepoint of a tuple.
+ * Get the insert state for the chunk that matches the given point in the
+ * partitioned hyperspace.
  */
 extern InsertChunkState *
-insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Partition *partition, PartitionEpoch *epoch, int64 timepoint)
+insert_statement_state_get_insert_chunk_state(InsertStatementState *state, Hyperspace *hs, Point *point)
 {
-	/* First call, set up mem */
-	if (state->num_partitions == 0)
+	InsertChunkState *ics;
+
+	ics = subspace_store_get(state->cache, point);
+
+	if (NULL == ics)
 	{
-		state->num_partitions = epoch->num_partitions;
-		state->cstates = palloc(sizeof(InsertChunkState) * state->num_partitions);
-		memset(state->cstates, 0, sizeof(InsertChunkState) * state->num_partitions);
+		Chunk	   *new_chunk;
+		MemoryContext old;
+
+		new_chunk = hypertable_get_chunk(state->hypertable, point);
+
+		if (NULL == new_chunk)
+			elog(ERROR, "No chunk found or created");
+
+		old = MemoryContextSwitchTo(state->mctx);
+		ics = insert_chunk_state_new(new_chunk);
+		subspace_store_add(state->cache, new_chunk->cube, ics, destroy_insert_chunk_state);
+		MemoryContextSwitchTo(old);
 	}
 
-	/*
-	 * Currently we only support one epoch. To support multiple epochs here,
-	 * we could either do a realloc to a larger array if we see a larger
-	 * num_partitions or keep track of max partitions among epochs and
-	 * configure the state using that at initialization.
-	 */
-	if (state->num_partitions != epoch->num_partitions)
-	{
-		elog(ERROR, "multiple epochs not supported");
-	}
-
-	/*
-	 * Check if first insert to partition or if the tuple should go to another
-	 * chunk in the partition
-	 */
-	if (NULL == state->cstates[partition->index] ||
-		!chunk_timepoint_is_member(state->cstates[partition->index]->chunk, timepoint))
-	{
-		set_or_update_new_entry(state, partition, timepoint);
-	}
-
-	return state->cstates[partition->index];
+	return ics;
 }

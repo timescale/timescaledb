@@ -10,7 +10,6 @@
 -- associated_table_prefix - (Optional) Prefix for internal hypertable table names
 -- chunk_time_interval - (Optional) Initial time interval for a chunk
 -- create_default_indexes - (Optional) Whether or not to create the default indexes.
--- TODO: order of params doesn't match docs.
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -31,6 +30,7 @@ DECLARE
     tablespace_oid   OID;
     tablespace_name  NAME;
     time_column_type REGTYPE;
+    partitioning_column_type REGTYPE;
     att_row          pg_attribute;
     main_table_has_items BOOLEAN;
     is_hypertable    BOOLEAN;
@@ -65,14 +65,16 @@ BEGIN
     END IF;
 
     IF partitioning_column IS NOT NULL THEN
-        PERFORM atttypid
-        FROM pg_attribute
-        WHERE attrelid = main_table AND attname = partitioning_column;
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'column "%" does not exist', partitioning_column
-            USING ERRCODE = 'IO102';
-        END IF;
+        BEGIN
+            SELECT atttypid
+            INTO STRICT partitioning_column_type
+            FROM pg_attribute
+            WHERE attrelid = main_table AND attname = partitioning_column;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE EXCEPTION 'column "%" does not exist', partitioning_column
+                USING ERRCODE = 'IO102';
+        END;
     END IF;
 
     EXECUTE format('SELECT TRUE FROM _timescaledb_catalog.hypertable WHERE
@@ -106,6 +108,7 @@ BEGIN
             time_column_name,
             time_column_type,
             partitioning_column,
+            partitioning_column_type,
             number_partitions,
             associated_schema_name,
             associated_table_prefix,
@@ -159,10 +162,16 @@ BEGIN
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
-    UPDATE _timescaledb_catalog.hypertable h 
-    SET chunk_time_interval = set_chunk_time_interval.chunk_time_interval
-    WHERE h.schema_name = main_schema_name AND
-          h.table_name = main_table_name;
+    UPDATE _timescaledb_catalog.dimension d
+    SET interval_length = set_chunk_time_interval.chunk_time_interval
+    FROM _timescaledb_internal.dimension_get_time(
+        (
+            SELECT id
+            FROM _timescaledb_catalog.hypertable h
+            WHERE h.schema_name = main_schema_name AND
+            h.table_name = main_table_name
+    )) time_dim
+    WHERE time_dim.id = d.id;
 END
 $BODY$;
 
@@ -203,5 +212,38 @@ DECLARE
 BEGIN
     older_than_ts := now() - older_than;
     PERFORM drop_chunks(older_than_ts, table_name, schema_name);
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION attach_tablespace(
+       hypertable REGCLASS,
+       tablespace NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    main_schema_name  NAME;
+    main_table_name   NAME;
+    hypertable_id     INTEGER;
+    tablespace_oid    OID;
+BEGIN
+    SELECT nspname, relname
+    FROM pg_class c INNER JOIN pg_namespace n
+    ON (c.relnamespace = n.oid)
+    WHERE c.oid = hypertable
+    INTO STRICT main_schema_name, main_table_name;
+
+    SELECT id
+    FROM _timescaledb_catalog.hypertable h
+    WHERE (h.schema_name = main_schema_name)
+    AND (h.table_name = main_table_name)
+    INTO hypertable_id;
+
+    IF hypertable_id IS NULL THEN
+       RAISE EXCEPTION 'No hypertable "%" exists', main_table_name
+       USING ERRCODE = 'IO101';
+    END IF;
+
+    PERFORM _timescaledb_internal.attach_tablespace(hypertable_id, tablespace);
 END
 $BODY$;

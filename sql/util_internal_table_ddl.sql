@@ -17,22 +17,28 @@ $BODY$
 SET client_min_messages = WARNING -- suppress NOTICE on IF EXISTS
 ;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_table(
-    schema_name        NAME,
-    table_name         NAME,
-    parent_schema_name NAME,
-    parent_table_name  NAME,
-    tablespace_name    NAME,
-    keyspace_start     SMALLINT,
-    keyspace_end       SMALLINT,
-    epoch_id           INT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create_table(
+    chunk_id INT
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    tablespace_oid  pg_catalog.pg_tablespace.oid%type;
-    tablespace_clause TEXT = '';
+    chunk_row _timescaledb_catalog.chunk;
+    hypertable_row _timescaledb_catalog.hypertable;
+    tablespace_clause TEXT := '';
+    tablespace_name NAME;
+    tablespace_oid  OID;
 BEGIN
+    SELECT * INTO STRICT chunk_row
+    FROM _timescaledb_catalog.chunk
+    WHERE id = chunk_id;
+
+    SELECT * INTO STRICT hypertable_row
+    FROM _timescaledb_catalog.hypertable
+    WHERE id = chunk_row.hypertable_id;
+
+    tablespace_name := _timescaledb_internal.select_tablespace(chunk_row.hypertable_id,
+                                                               chunk_row.id);
     SELECT t.oid
     INTO tablespace_oid
     FROM pg_catalog.pg_tablespace t
@@ -49,89 +55,75 @@ BEGIN
         $$
             CREATE TABLE IF NOT EXISTS %1$I.%2$I () INHERITS(%3$I.%4$I) %5$s;
         $$,
-        schema_name, table_name, parent_schema_name, parent_table_name, tablespace_clause);
+        chunk_row.schema_name, chunk_row.table_name,
+        hypertable_row.schema_name, hypertable_row.table_name, tablespace_clause
+    );
 
-    PERFORM _timescaledb_internal.add_partition_constraint(schema_name, table_name, keyspace_start, keyspace_end, epoch_id);
+    PERFORM _timescaledb_internal.chunk_add_constraints(chunk_id);
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_slice_get_constraint_sql(
+    dimension_slice_id  INTEGER
+)
+    RETURNS TEXT LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    dimension_slice_row _timescaledb_catalog.dimension_slice;
+    dimension_row _timescaledb_catalog.dimension;
+BEGIN
+    SELECT * INTO STRICT dimension_slice_row
+    FROM _timescaledb_catalog.dimension_slice
+    WHERE id = dimension_slice_id;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.add_partition_constraint(
-    schema_name    NAME,
-    table_name     NAME,
-    keyspace_start SMALLINT,
-    keyspace_end   SMALLINT,
-    epoch_id       INT
+    SELECT * INTO STRICT dimension_row
+    FROM _timescaledb_catalog.dimension
+    WHERE id = dimension_slice_row.dimension_id;
+
+    IF dimension_row.partitioning_func IS NOT NULL THEN
+        return format(
+            $$
+                %1$I.%2$s(%3$I::text) >= %4$L AND %1$I.%2$s(%3$I::text) <  %5$L
+            $$,
+            dimension_row.partitioning_func_schema, dimension_row.partitioning_func,
+            dimension_row.column_name, dimension_slice_row.range_start, dimension_slice_row.range_end);
+    ELSE
+        --TODO: only works with time for now
+        return format(
+            $$
+                %1$I >= %2$s AND %1$I < %3$s
+            $$,
+            dimension_row.column_name,
+            _timescaledb_internal.time_literal_sql(dimension_slice_row.range_start, dimension_row.column_type),
+            _timescaledb_internal.time_literal_sql(dimension_slice_row.range_end, dimension_row.column_type));
+    END IF;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_add_constraints(
+    chunk_id  INTEGER
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    epoch_row _timescaledb_catalog.partition_epoch;
+    constraint_row record;
 BEGIN
-    SELECT *
-    INTO STRICT epoch_row
-    FROM _timescaledb_catalog.partition_epoch pe
-    WHERE pe.id = epoch_id;
-
-    IF epoch_row.partitioning_column IS NOT NULL THEN
+    FOR constraint_row IN
+        SELECT c.schema_name, c.table_name, ds.id as dimension_slice_id
+        FROM _timescaledb_catalog.chunk c
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
+        INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+        WHERE c.id = chunk_add_constraints.chunk_id
+        LOOP
         EXECUTE format(
             $$
                 ALTER TABLE %1$I.%2$I
-                ADD CONSTRAINT partition CHECK(%3$I.%4$s(%5$I::text, %6$L) BETWEEN %7$L AND %8$L)
+                ADD CONSTRAINT constraint_%3$s CHECK(%4$s)
             $$,
-            schema_name, table_name,
-            epoch_row.partitioning_func_schema, epoch_row.partitioning_func, epoch_row.partitioning_column,
-            epoch_row.partitioning_mod, keyspace_start, keyspace_end);
-    END IF;
+            constraint_row.schema_name, constraint_row.table_name,
+            constraint_row.dimension_slice_id,
+            _timescaledb_internal.dimension_slice_get_constraint_sql(constraint_row.dimension_slice_id)
+        );
+    END LOOP;
 END
 $BODY$;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.set_time_constraint(
-    schema_name NAME,
-    table_name  NAME,
-    start_time  BIGINT,
-    end_time    BIGINT
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    time_col_type regtype;
-BEGIN
-    time_col_type := _timescaledb_internal.time_col_type_for_chunk(schema_name, table_name);
-
-    EXECUTE format(
-        $$
-            ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS time_range
-        $$,
-            schema_name, table_name);
-
-    IF start_time IS NOT NULL AND end_time IS NOT NULL THEN
-        EXECUTE format(
-            $$
-            ALTER TABLE %2$I.%3$I ADD CONSTRAINT time_range CHECK(%1$I >= %4$s AND %1$I <= %5$s)
-        $$,
-            _timescaledb_internal.time_col_name_for_chunk(schema_name, table_name),
-            schema_name, table_name,
-            _timescaledb_internal.time_literal_sql(start_time, time_col_type),
-            _timescaledb_internal.time_literal_sql(end_time, time_col_type));
-    ELSIF start_time IS NOT NULL THEN
-        EXECUTE format(
-            $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I >= %s)
-        $$,
-            schema_name, table_name,
-            _timescaledb_internal.time_col_name_for_chunk(schema_name, table_name),
-            _timescaledb_internal.time_literal_sql(start_time, time_col_type));
-    ELSIF end_time IS NOT NULL THEN
-        EXECUTE format(
-            $$
-            ALTER TABLE %I.%I ADD CONSTRAINT time_range CHECK(%I <= %s)
-            $$,
-            schema_name, table_name,
-            _timescaledb_internal.time_col_name_for_chunk(schema_name, table_name),
-            _timescaledb_internal.time_literal_sql(end_time, time_col_type));
-    END IF;
-END
-$BODY$
-SET client_min_messages = WARNING -- supress notice by drop constraint if exists.
-;

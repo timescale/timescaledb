@@ -1,96 +1,128 @@
 -- This file contains table definitions for various abstractions and data
--- structures for representing hypertables and lower level concepts.
+-- structures for representing hypertables and lower-level concepts.
 
--- The hypertable is an abstraction that represents a replicated table that is
--- partitioned on 2 dimensions: time and another (user-)chosen one.
+-- Hypertable
+-- ==========
 --
--- The table representing the hypertable is named by `schema_name`.`table_name`
+-- The hypertable is an abstraction that represents a table that is
+-- partitioned in N dimensions, where each dimension maps to a column
+-- in the table. A dimension can either be 'open' or 'closed', which
+-- reflects the scheme that divides the dimension's keyspace into
+-- "slices".
 --
--- The name and type of the time column (used to partition on time) are defined
--- in `time_column_name` and `time_column_type`.
+-- Conceptually, a partition -- called a "chunk", is a hypercube in
+-- the N-dimensional space. A chunk stores a subset of the
+-- hypertable's tuples on disk in its own distinct table. The slices
+-- that span the chunk's hypercube each correspond to a constraint on
+-- the chunk's table, enabling constraint exclusion during queries on
+-- the hypertable's data.
+--
+--
+-- Open dimensions
+------------------
+-- An open dimension does on-demand slicing, creating a new slice
+-- based on a configurable interval whenever a tuple falls outside the
+-- existing slices. Open dimensions fit well with columns that are
+-- incrementally increasing, such as time-based ones.
+--
+-- Closed dimensions
+--------------------
+-- A closed dimension completely divides its keyspace into a
+-- configurable number of slices. The number of slices can be
+-- reconfigured, but the new partitioning only affects newly created
+-- chunks.
+--
+-- NOTE: Due to current restrictions, a maximum of two dimensions are
+-- allowed, typically one open (time) and one closed (space)
+-- dimension.
+--
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
-    id                      SERIAL                                  PRIMARY KEY,
-    schema_name             NAME                                    NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
-    table_name              NAME                                    NOT NULL,
-    associated_schema_name  NAME                                    NOT NULL,
-    associated_table_prefix NAME                                    NOT NULL,
-    time_column_name        NAME                                    NOT NULL,
-    time_column_type        REGTYPE                                 NOT NULL,
-    chunk_time_interval     BIGINT                                  NOT NULL CHECK (chunk_time_interval > 0),
+    id                      SERIAL    PRIMARY KEY,
+    schema_name             NAME      NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
+    table_name              NAME      NOT NULL,
+    associated_schema_name  NAME      NOT NULL,
+    associated_table_prefix NAME      NOT NULL,
+    num_dimensions          SMALLINT  NOT NULL CHECK (num_dimensions > 0),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix)
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
 
--- A partition_epoch represents a different partitioning of the data.
--- It has a start and end time (data time). Data needs to be placed in the correct epoch by time.
--- Partitionings are defined by a function, column, and modulo:
---   1) partitioning_func - Takes the partitioning_column and returns a number
---      which is modulo'd to place the data correctly
---   2) partitioning_mod - Number used in modulo operation
---   3) partitioning_column - column in data to partition by (input to partitioning_func)
---
--- Changing a data's partitioning, and thus creating a new epoch, should be done
--- INFREQUENTLY as it's expensive operation.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.partition_epoch (
-    id                          SERIAL   NOT NULL  PRIMARY KEY,
-    hypertable_id               INTEGER  NOT NULL  REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    start_time                  BIGINT   NULL      CHECK (start_time >= 0),
-    end_time                    BIGINT   NULL      CHECK (end_time >= 0),
-    num_partitions              SMALLINT NOT NULL  CHECK (num_partitions >= 0),
+-- The tablespace table maps tablespaces to hypertables.
+-- This allows spreading a hypertable's chunks across multiple disks.
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.tablespace (
+   id                SERIAL PRIMARY KEY,
+   hypertable_id     INT  NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+   tablespace_name   NAME NOT NULL,
+   UNIQUE (hypertable_id, tablespace_name)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.tablespace', '');
+
+-- A dimension represents an axis along which data is partitioned.
+CREATE TABLE _timescaledb_catalog.dimension (
+    id                          SERIAL   NOT NULL PRIMARY KEY,
+    hypertable_id               INTEGER  NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    column_name                 NAME     NOT NULL,
+    column_type                 REGTYPE  NOT NULL,
+    aligned                     BOOLEAN  NOT NULL,
+    -- closed dimensions
+    num_slices                  SMALLINT NULL,
     partitioning_func_schema    NAME     NULL,
-    partitioning_func           NAME     NULL,  -- function name of a function of the form func(data_value, partitioning_mod) -> [0, partitioning_mod)
-    partitioning_mod            INT      NOT NULL  CHECK (partitioning_mod < 65536),
-    partitioning_column         NAME     NULL,
-    UNIQUE (hypertable_id, start_time),
-    UNIQUE (hypertable_id, end_time),
-    CHECK (start_time <= end_time),
-    CHECK (num_partitions <= partitioning_mod),
-    CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL))
+    partitioning_func           NAME     NULL,
+    -- open dimensions (e.g., time)
+    interval_length             BIGINT   NULL CHECK(interval_length IS NULL OR interval_length > 0),
+    CHECK (
+        (partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR
+        (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)
+    ),
+    CHECK (
+        (num_slices IS NULL AND interval_length IS NOT NULL) OR
+        (num_slices IS NOT NULL AND interval_length IS NULL)
+    )
 );
-CREATE INDEX ON  _timescaledb_catalog.partition_epoch(hypertable_id, start_time, end_time);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.partition_epoch', '');
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.partition_epoch','id'), '');
+CREATE INDEX ON  _timescaledb_catalog.dimension(hypertable_id);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension','id'), '');
 
--- A partition defines a partition witin a partition_epoch.
--- For any partition the keyspace is defined as [keyspace_start, keyspace_end].
--- For any epoch, there must be a partition that covers every element in the
--- keyspace, i.e. from [0, partition_epoch.partitioning_mod].
---   Parent: "hypertable.schema_name"."hypertable.table_name"
---   Children: "chunk.schema_name"."chunk.table_name"
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.partition (
-    id             SERIAL   NOT NULL PRIMARY KEY,
-    epoch_id       INT      NOT NULL REFERENCES _timescaledb_catalog.partition_epoch (id) ON DELETE CASCADE,
-    keyspace_start SMALLINT NOT NULL CHECK (keyspace_start >= 0), -- start inclusive
-    keyspace_end   SMALLINT NOT NULL CHECK (keyspace_end > 0), -- end inclusive; compatible with between operator
-    tablespace     NAME     NULL,
-    UNIQUE (epoch_id, keyspace_start),
-    CHECK (keyspace_end > keyspace_start)
+-- A dimension slice defines a keyspace range along a dimension axis.
+CREATE TABLE _timescaledb_catalog.dimension_slice (
+    id            SERIAL   NOT NULL PRIMARY KEY,
+    dimension_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE,
+    range_start   BIGINT   NOT NULL CHECK (range_start >= 0),
+    range_end     BIGINT   NOT NULL CHECK (range_end >= 0),
+    CHECK (range_start <= range_end),
+    UNIQUE (dimension_id, range_start, range_end)
 );
-CREATE INDEX ON _timescaledb_catalog.partition(epoch_id);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.partition', '');
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.partition','id'), '');
+CREATE INDEX ON  _timescaledb_catalog.dimension_slice(dimension_id, range_start, range_end);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice','id'), '');
 
--- Represent a chunk of data, which is data in a hypertable that is
--- partitioned by both the partition_column and time.
+-- A chunk is a partition (hypercube) in an N-dimensional
+-- hyperspace. Each chunk is associated with N constraints that define
+-- the chunk's hypercube. Tuples that fall within the chunk's
+-- hypercube are stored in the chunk's data table, as given by
+-- 'schema_name' and 'table_name'.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
-    id           SERIAL NOT NULL    PRIMARY KEY,
-    partition_id INT    NOT NULL    REFERENCES _timescaledb_catalog.partition (id) ON DELETE CASCADE,
-    start_time   BIGINT NOT NULL    CHECK (start_time >= 0),
-    end_time     BIGINT NOT NULL    CHECK (end_time >= 0),
-    schema_name  NAME   NOT NULL,
-    table_name   NAME   NOT NULL,
-    UNIQUE (schema_name, table_name),
-    UNIQUE (partition_id, start_time),
-    UNIQUE (partition_id, end_time),
-    CHECK (start_time <= end_time)
+    id              SERIAL  NOT NULL    PRIMARY KEY,
+    hypertable_id   INT     NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    schema_name     NAME    NOT NULL,
+    table_name      NAME    NOT NULL,
+    UNIQUE (schema_name, table_name)
 );
-CREATE UNIQUE INDEX ON  _timescaledb_catalog.chunk (partition_id) WHERE start_time IS NULL;
-CREATE UNIQUE INDEX ON  _timescaledb_catalog.chunk (partition_id) WHERE end_time IS NULL;
-CREATE INDEX ON _timescaledb_catalog.chunk(partition_id, start_time, end_time);
+CREATE INDEX ON _timescaledb_catalog.chunk(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
+
+-- A chunk constraint maps a dimension slice to a chunk. Each
+-- constraint associated with a chunk will also be a table constraint
+-- on the chunk's data table.
+CREATE TABLE _timescaledb_catalog.chunk_constraint (
+    chunk_id            INTEGER  NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
+    dimension_slice_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension_slice(id) ON DELETE CASCADE,
+    PRIMARY KEY(chunk_id, dimension_slice_id)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
 
 -- Represents an index on the hypertable
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_index (

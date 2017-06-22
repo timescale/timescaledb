@@ -4,7 +4,9 @@
 #include <postgres.h>
 
 typedef struct Chunk Chunk;
+typedef struct Hyperspace Hyperspace;
+typedef struct Point Point;
 
-Chunk	   *chunk_insert_new(int32 partition_id, int64 timepoint);
+extern Chunk *spi_chunk_create(Hyperspace *hs, Point *p);
 
 #endif   /* TIMESCALEDB_METADATA_QUERIES_H */

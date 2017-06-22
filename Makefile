@@ -26,7 +26,10 @@ SRCS = \
 	src/chunk.c \
 	src/scanner.c \
 	src/hypertable_cache.c \
-	src/chunk_cache.c \
+	src/hypertable.c \
+	src/dimension.c \
+	src/dimension_slice.c \
+	src/chunk_constraint.c \
 	src/partitioning.c \
 	src/insert.c \
 	src/planner.c \
@@ -36,6 +39,7 @@ SRCS = \
 	src/insert_chunk_state.c \
 	src/insert_statement_state.c \
 	src/agg_bookend.c \
+	src/subspace_store.c \
 	src/guc.c
 
 OBJS = $(SRCS:.c=.o)
@@ -92,10 +96,13 @@ check-sql-files:
 
 install: $(EXT_SQL_FILE)
 
-clean: clean-sql-files
+clean: clean-sql-files clean-extra
 
 clean-sql-files:
 	@rm -f sql/$(EXTENSION)--*.sql
+
+clean-extra:
+	@rm -f src/*~
 
 package: clean $(EXT_SQL_FILE)
 	@mkdir -p package/lib
