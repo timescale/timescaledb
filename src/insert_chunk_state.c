@@ -97,14 +97,14 @@ insert_chunk_state_new(Chunk *chunk)
 
 	rel = heap_open(chunk->table_id, RowExclusiveLock);
 
-	/* permission check */
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
 	rte->relid = RelationGetRelid(rel);
 	rte->relkind = rel->rd_rel->relkind;
 	rte->requiredPerms = ACL_INSERT;
 	range_table = list_make1(rte);
-	ExecCheckRTPerms(range_table, true);
+
+	/* permissions NOT checked here; were checked at hypertable level */
 
 	if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
 		ereport(ERROR,

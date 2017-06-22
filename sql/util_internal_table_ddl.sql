@@ -27,6 +27,7 @@ DECLARE
     hypertable_row _timescaledb_catalog.hypertable;
     tablespace_clause TEXT := '';
     tablespace_name NAME;
+    table_owner     NAME;
     tablespace_oid  OID;
 BEGIN
     SELECT * INTO STRICT chunk_row
@@ -44,6 +45,12 @@ BEGIN
     FROM pg_catalog.pg_tablespace t
     WHERE t.spcname = tablespace_name;
 
+    SELECT tableowner
+    INTO STRICT table_owner
+    FROM pg_catalog.pg_tables
+    WHERE schemaname = hypertable_row.schema_name
+          AND tablename = hypertable_row.table_name;
+
     IF tablespace_oid IS NOT NULL THEN
         tablespace_clause := format('TABLESPACE %s', tablespace_name);
     ELSIF tablespace_name IS NOT NULL THEN
@@ -57,6 +64,14 @@ BEGIN
         $$,
         chunk_row.schema_name, chunk_row.table_name,
         hypertable_row.schema_name, hypertable_row.table_name, tablespace_clause
+    );
+
+    EXECUTE format(
+        $$
+            ALTER TABLE %1$I.%2$I OWNER TO %3$I
+        $$,
+        chunk_row.schema_name, chunk_row.table_name,
+        table_owner
     );
 
     PERFORM _timescaledb_internal.chunk_add_constraints(chunk_id);

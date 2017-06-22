@@ -36,4 +36,4 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2);
-ERROR:  hypertable "Hypertable_1" already exists
+ERROR:  hypertable public."Hypertable_1" already exists

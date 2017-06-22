@@ -270,7 +270,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create(
     dimension_ids           INTEGER[],
     dimension_values        BIGINT[]
 )
-    RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _timescaledb_catalog.chunk LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
 $BODY$
 DECLARE
     chunk_row     _timescaledb_catalog.chunk;

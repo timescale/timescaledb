@@ -25,7 +25,7 @@ SELECT create_hypertable('should_drop', 'time');
 -- Calling create hypertable again will increment hypertable ID
 -- although no new hypertable is created. Make sure we can handle this.
 SELECT create_hypertable('should_drop', 'time', if_not_exists => true);
-NOTICE:  hypertable should_drop already exists, skipping
+NOTICE:  hypertable public.should_drop already exists, skipping
  create_hypertable 
 -------------------
  

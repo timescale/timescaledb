@@ -1,5 +1,6 @@
 #include <postgres.h>
 #include <utils/lsyscache.h>
+#include <catalog/pg_class.h>
 
 #include "insert_statement_state.h"
 #include "insert_chunk_state.h"
@@ -21,6 +22,7 @@ insert_statement_state_new(Oid relid)
 	InsertStatementState *state;
 	Hypertable *ht;
 	Cache	   *hypertable_cache;
+	RangeTblEntry *rte;
 
 	oldctx = MemoryContextSwitchTo(mctx);
 
@@ -36,6 +38,14 @@ insert_statement_state_new(Oid relid)
 	state->hypertable_cache = hypertable_cache;
 	state->hypertable = ht;
 	state->cache = subspace_store_init(HYPERSPACE_NUM_DIMENSIONS(ht->space), mctx);
+
+	/* permission check: check hypertable permissions */
+	rte = makeNode(RangeTblEntry);
+	rte->rtekind = RTE_RELATION;
+	rte->relid = relid;
+	rte->relkind = RELKIND_RELATION;
+	rte->requiredPerms = ACL_INSERT;
+	ExecCheckRTPerms(list_make1(rte), true);
 
 	MemoryContextSwitchTo(oldctx);
 
