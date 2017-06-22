@@ -76,6 +76,7 @@ static bool
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	HypertableNameCacheEntry *entry = data;
+
 	entry->hypertable = hypertable_from_tuple(ti->tuple);
 	return false;
 }

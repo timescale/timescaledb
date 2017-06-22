@@ -72,6 +72,7 @@ subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
 		if (match == NULL)
 		{
 			DimensionSlice *copy = dimension_slice_copy(target);
+
 			dimension_vec_add_slice_sort(vecptr, copy);
 			match = copy;
 		}
