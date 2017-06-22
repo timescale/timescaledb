@@ -156,8 +156,8 @@ BEGIN
     LIMIT 1;
 
     IF FOUND THEN
-        -- there is at least one ends inside cut the
-        -- start to match the last one
+        -- There is a chunk that overlaps with new_range_start, cut
+        -- new_range_start to begin where that chunk ends
         IF alignment_found THEN
             RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
             USING ERRCODE = 'IO501';

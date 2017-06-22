@@ -77,7 +77,8 @@ CREATE TABLE _timescaledb_catalog.dimension (
         (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)
     ),
     CHECK (
-        (interval_length IS NOT NULL) OR (num_slices IS NOT NULL)
+        (num_slices IS NULL AND interval_length IS NOT NULL) OR
+        (num_slices IS NOT NULL AND interval_length IS NULL)
     )
 );
 CREATE INDEX ON  _timescaledb_catalog.dimension(hypertable_id);
