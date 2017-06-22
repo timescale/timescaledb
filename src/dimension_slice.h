@@ -14,7 +14,6 @@ typedef struct DimensionSlice
 	DimensionType type;
 	void		(*storage_free) (void *);
 	void	   *storage;
-			  //used in the cache
 } DimensionSlice;
 
 /*

@@ -43,22 +43,9 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 		return plan;							\
 	}
 
-/*
- * Retrieving chunks:
- *
- * Locked chunk retrieval has to occur on every row. So we have a fast and slowpath.
- * The fastpath retrieves and locks the chunk only if it already exists locally. The
- * fastpath is faster since it does not call a plpgsql function but calls sql directly.
- * This was found to make a performance difference in tests.
- *
- * The slowpath calls  get_or_create_chunk(), and is called only if the fastpath returned no rows.
- *
- */
 #define INT8ARRAYOID 1016
-
 #define CHUNK_CREATE_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
-#define CHUNK_CREATE "SELECT * \
-				FROM _timescaledb_internal.chunk_create($1, $2)"
+#define CHUNK_CREATE "SELECT * FROM _timescaledb_internal.chunk_create($1, $2)"
 
 /* plan for creating a chunk via create_chunk(). */
 DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 2, CHUNK_CREATE_ARGS)

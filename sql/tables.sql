@@ -1,5 +1,5 @@
 -- This file contains table definitions for various abstractions and data
--- structures for representing hypertables and lower level concepts.
+-- structures for representing hypertables and lower-level concepts.
 
 -- Hypertable
 -- ==========
@@ -32,16 +32,10 @@
 -- reconfigured, but the new partitioning only affects newly created
 -- chunks.
 --
--- NOTE: Due to current restrictions, only two dimensions are allowed,
--- typically one open (time) and one closed (space) dimension.
+-- NOTE: Due to current restrictions, a maximum of two dimensions are
+-- allowed, typically one open (time) and one closed (space)
+-- dimension.
 --
---
--- Schema notes
----------------
--- The table representing the hypertable is named by `schema_name`.`table_name`
---
--- The name and type of the time column (used to partition on time) are defined
--- in `time_column_name` and `time_column_type`.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     id                      SERIAL    PRIMARY KEY,
     schema_name             NAME      NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
@@ -55,6 +49,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
 
+-- The tablespace table maps tablespaces to hypertables.
+-- This allows spreading a hypertable's chunks across multiple disks.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.tablespace (
    id                SERIAL PRIMARY KEY,
    hypertable_id     INT  NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
@@ -63,9 +59,10 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.tablespace (
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.tablespace', '');
 
-CREATE TABLE  _timescaledb_catalog.dimension (
+-- A dimension represents an axis along which data is partitioned.
+CREATE TABLE _timescaledb_catalog.dimension (
     id                          SERIAL   NOT NULL PRIMARY KEY,
-    hypertable_id               INTEGER  NOT NULL  REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    hypertable_id               INTEGER  NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     column_name                 NAME     NOT NULL,
     column_type                 REGTYPE  NOT NULL,
     aligned                     BOOLEAN  NOT NULL,
@@ -87,12 +84,12 @@ CREATE INDEX ON  _timescaledb_catalog.dimension(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension','id'), '');
 
-
+-- A dimension slice defines a keyspace range along a dimension axis.
 CREATE TABLE _timescaledb_catalog.dimension_slice (
     id            SERIAL   NOT NULL PRIMARY KEY,
     dimension_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE,
     range_start   BIGINT   NOT NULL CHECK (range_start >= 0),
-    range_end    BIGINT   NOT NULL CHECK (range_end >= 0),
+    range_end     BIGINT   NOT NULL CHECK (range_end >= 0),
     CHECK (range_start <= range_end),
     UNIQUE (dimension_id, range_start, range_end)
 );
@@ -100,20 +97,25 @@ CREATE INDEX ON  _timescaledb_catalog.dimension_slice(dimension_id, range_start,
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice','id'), '');
 
-
--- Represent a chunk of data, which is data in a hypertable that is
--- partitioned by both the partition_column and time.
+-- A chunk is a partition (hypercube) in an N-dimensional
+-- hyperspace. Each chunk is associated with N constraints that define
+-- the chunk's hypercube. Tuples that fall within the chunk's
+-- hypercube are stored in the chunk's data table, as given by
+-- 'schema_name' and 'table_name'.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     id              SERIAL  NOT NULL    PRIMARY KEY,
     hypertable_id   INT     NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     schema_name     NAME    NOT NULL,
-    table_name      NAME     NOT NULL,
+    table_name      NAME    NOT NULL,
     UNIQUE (schema_name, table_name)
 );
 CREATE INDEX ON _timescaledb_catalog.chunk(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk','id'), '');
 
+-- A chunk constraint maps a dimension slice to a chunk. Each
+-- constraint associated with a chunk will also be a table constraint
+-- on the chunk's data table.
 CREATE TABLE _timescaledb_catalog.chunk_constraint (
     chunk_id            INTEGER  NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
     dimension_slice_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension_slice(id) ON DELETE CASCADE,

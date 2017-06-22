@@ -96,10 +96,13 @@ check-sql-files:
 
 install: $(EXT_SQL_FILE)
 
-clean: clean-sql-files
+clean: clean-sql-files clean-extra
 
 clean-sql-files:
 	@rm -f sql/$(EXTENSION)--*.sql
+
+clean-extra:
+	@rm -f src/*~
 
 package: clean $(EXT_SQL_FILE)
 	@mkdir -p package/lib

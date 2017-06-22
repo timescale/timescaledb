@@ -4,11 +4,10 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <access/hash.h>
+#include <access/htup_details.h>
 #include <parser/parse_coerce.h>
 
 #include "partitioning.h"
-#include "metadata_queries.h"
-#include "scanner.h"
 #include "catalog.h"
 #include "utils.h"
 
@@ -20,9 +19,7 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 						  1, NULL, false, false, false);
 
 	if (funclist == NULL || funclist->next)
-	{
 		elog(ERROR, "Could not resolve the partitioning function");
-	}
 
 	fmgr_info_cxt(funclist->oid, &pf->func_fmgr, CurrentMemoryContext);
 }
@@ -64,9 +61,7 @@ partitioning_info_create(int num_partitions,
 	strncpy(pi->column, partcol, NAMEDATALEN);
 
 	if (schema != NULL)
-	{
 		strncpy(pi->partfunc.schema, schema, NAMEDATALEN);
-	}
 
 	partitioning_func_set_func_fmgr(&pi->partfunc);
 	partitioning_info_set_textfunc_fmgr(pi, relid);
@@ -94,17 +89,14 @@ partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDes
 	value = heap_getattr(tuple, pinfo->column_attnum, desc, &isnull);
 
 	if (isnull)
-	{
 		return 0;
-	}
 
 	return partitioning_func_apply(pinfo, value);
 }
 
 /* _timescaledb_catalog.get_partition_for_key(key TEXT) RETURNS INT */
-Datum		get_partition_for_key(PG_FUNCTION_ARGS);
-
 PG_FUNCTION_INFO_V1(get_partition_for_key);
+
 Datum
 get_partition_for_key(PG_FUNCTION_ARGS)
 {

@@ -62,7 +62,7 @@ typedef struct ChunkScanEntry
 } ChunkScanEntry;
 
 extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);
-extern Chunk *chunk_create_new(Hyperspace *hs, Point *p);
+extern Chunk *chunk_create(Hyperspace *hs, Point *p);
 extern Chunk *chunk_create_stub(int32 id, int16 num_constraints);
 extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
 extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);

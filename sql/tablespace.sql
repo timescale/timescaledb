@@ -1,3 +1,6 @@
+-- select_tablespace() is used to assign a tablespace to a chunk.  A
+-- tablespace is selected from a set of tablespaces associated with
+-- the chunk's hypertable, if any.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.select_tablespace(
     hypertable_id INTEGER,
     chunk_id      INTEGER
@@ -54,7 +57,8 @@ BEGIN
     WHERE dimension_slices[i] = chunk_slice_id
     INTO STRICT chunk_slice_index;
 
-    -- Use the chunk's dimension slice index to pick a tablespace in the tablespaces array
+    -- Use the chunk's dimension slice index to pick a tablespace in
+    -- the tablespaces array
     RETURN tablespaces[chunk_slice_index % array_length(tablespaces, 1) + 1];
 END
 $BODY$;
