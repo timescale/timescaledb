@@ -9,6 +9,12 @@ cache_init(Cache *cache)
 		return;
 	}
 
+	/*
+	 * The cache object should have been created in its own context
+	 * so that cache_destroy can just delete the context to free everything.
+	 */
+	Assert(MemoryContextContains(cache_memory_ctx(cache), cache));
+
 	cache->htab = hash_create(cache->name, cache->numelements,
 							  &cache->hctl, cache->flags);
 	cache->refcount = 1;
@@ -27,9 +33,7 @@ cache_destroy(Cache *cache)
 		cache->pre_destroy_hook(cache);
 
 	hash_destroy(cache->htab);
-	cache->htab = NULL;
 	MemoryContextDelete(cache->hctl.hcxt);
-	cache->hctl.hcxt = NULL;
 }
 
 void
