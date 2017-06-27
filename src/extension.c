@@ -165,6 +165,8 @@ extension_invalidate(Oid relid)
 				}
 			}
 			return false;
+		default:
+			elog(ERROR, "unknown state: %d", extstate);
 	}
 }
 
@@ -180,12 +182,13 @@ extension_is_loaded(void)
 
 	switch (extstate)
 	{
+		case EXTENSION_STATE_CREATED:
+			return true;
 		case EXTENSION_STATE_NOT_INSTALLED:
 		case EXTENSION_STATE_UNKNOWN:
 		case EXTENSION_STATE_TRANSITIONING:
 			return false;
-		case EXTENSION_STATE_CREATED:
-			return true;
-
+		default:
+			elog(ERROR, "unknown state: %d", extstate);
 	}
 }
