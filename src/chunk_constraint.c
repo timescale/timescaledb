@@ -7,26 +7,10 @@
 #include "chunk.h"
 
 static inline ChunkConstraint *
-chunk_constraint_from_form_data(Form_chunk_constraint fd)
-{
-	ChunkConstraint *cc;
-
-	cc = palloc0(sizeof(ChunkConstraint));
-	memcpy(&cc->fd, fd, sizeof(FormData_chunk_constraint));
-	return cc;
-}
-
-static inline ChunkConstraint *
 chunk_constraint_fill(ChunkConstraint *cc, HeapTuple tuple)
 {
 	memcpy(&cc->fd, GETSTRUCT(tuple), sizeof(FormData_chunk_constraint));
 	return cc;
-}
-
-static inline ChunkConstraint *
-chunk_constraint_from_tuple(HeapTuple tuple)
-{
-	return chunk_constraint_from_form_data((Form_chunk_constraint) GETSTRUCT(tuple));
 }
 
 static bool
