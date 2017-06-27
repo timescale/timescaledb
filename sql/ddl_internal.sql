@@ -1,11 +1,10 @@
 -- Creates a hypertable row.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
+    main_table               REGCLASS,
     schema_name              NAME,
     table_name               NAME,
     time_column_name         NAME,
-    time_column_type         REGTYPE,
     partitioning_column      NAME,
-    partitioning_column_type REGTYPE,
     number_partitions        INTEGER,
     associated_schema_name   NAME,
     associated_table_prefix  NAME,
@@ -16,10 +15,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
 $BODY$
 DECLARE
     id                       INTEGER;
-    number_dimensions        INTEGER = 1;
     hypertable_row           _timescaledb_catalog.hypertable;
-    partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_for_key';
-    partitioning_func_schema _timescaledb_catalog.dimension.partitioning_func_schema%TYPE = '_timescaledb_internal';
 BEGIN
     id :=  nextval(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'));
 
@@ -34,22 +30,12 @@ BEGIN
     IF partitioning_column IS NULL THEN
         IF number_partitions IS NULL THEN
             number_partitions := 1;
-            partitioning_func := NULL;
-            partitioning_func_schema := NULL;
         ELSIF number_partitions <> 1 THEN
             RAISE EXCEPTION 'The number of partitions must be 1 without a partitioning column'
             USING ERRCODE ='IO101';
         END IF;
     ELSIF number_partitions IS NULL THEN
         RAISE EXCEPTION 'The number of partitions must be specified when there is a partitioning column'
-        USING ERRCODE ='IO101';
-    ELSE
-        number_dimensions = number_dimensions + 1;
-    END IF;
-
-    IF number_partitions IS NOT NULL AND
-       (number_partitions < 1 OR number_partitions > 32767) THEN
-        RAISE EXCEPTION 'Invalid number of partitions'
         USING ERRCODE ='IO101';
     END IF;
 
@@ -58,8 +44,7 @@ BEGIN
         associated_schema_name, associated_table_prefix, num_dimensions)
     VALUES (
         id, schema_name, table_name,
-        associated_schema_name, associated_table_prefix,
-        number_dimensions
+        associated_schema_name, associated_table_prefix, 1
     )
     RETURNING * INTO hypertable_row;
 
@@ -69,28 +54,109 @@ BEGIN
     END IF;
 
     --create time dimension
-    INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type, aligned,
-        num_slices, partitioning_func_schema, partitioning_func,
-        interval_length
-    ) VALUES (
-        hypertable_row.id, time_column_name, time_column_type, TRUE,
-        NULL, NULL, NULL,
-        chunk_time_interval
-    );
+    PERFORM _timescaledb_internal.add_dimension(main_table,
+                                                hypertable_row,
+                                                time_column_name,
+                                                NULL,
+                                                chunk_time_interval,
+                                                FALSE);
 
     IF partitioning_column IS NOT NULL THEN
         --create space dimension
-        INSERT INTO _timescaledb_catalog.dimension(hypertable_id, column_name, column_type, aligned,
-            num_slices, partitioning_func_schema, partitioning_func,
-            interval_length
-        ) VALUES (
-            hypertable_row.id, partitioning_column, partitioning_column_type, FALSE,
-            number_partitions::smallint, partitioning_func_schema, partitioning_func,
-            NULL
-        );
+        PERFORM _timescaledb_internal.add_dimension(main_table,
+                                                    hypertable_row,
+                                                    partitioning_column,
+                                                    number_partitions,
+                                                    NULL);
     END IF;
 
     RETURN hypertable_row;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
+    main_table               REGCLASS,
+    hypertable_row           _timescaledb_catalog.hypertable, -- should be locked FOR UPDATE
+    column_name              NAME,
+    num_slices               INTEGER = NULL,
+    interval_length          BIGINT = NULL,
+    increment_num_dimensions BOOLEAN = TRUE
+)
+    RETURNS _timescaledb_catalog.dimension LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_for_key';
+    partitioning_func_schema _timescaledb_catalog.dimension.partitioning_func_schema%TYPE = '_timescaledb_internal';
+    default_interval         BIGINT = _timescaledb_internal.interval_to_usec('1 month');
+    aligned BOOL;
+    column_type              REGTYPE;
+    dimension_row            _timescaledb_catalog.dimension;
+    table_has_items          BOOLEAN;
+BEGIN
+    IF num_slices IS NULL AND interval_length IS NULL THEN
+        RAISE EXCEPTION 'The number of slices/partitions or an interval must be specified'
+        USING ERRCODE = 'IO101';
+    END IF;
+
+    EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO table_has_items;
+
+    IF table_has_items THEN
+        RAISE EXCEPTION 'Cannot add new dimension to a non-empty table'
+        USING ERRCODE = 'IO102';
+    END IF;
+
+    BEGIN
+        SELECT atttypid
+        INTO STRICT column_type
+        FROM pg_attribute
+        WHERE attrelid = main_table AND attname = column_name;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'column "%" does not exist', column_name
+            USING ERRCODE = 'IO102';
+    END;
+
+    IF num_slices IS NULL THEN
+        -- Open dimension
+        IF column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
+            RAISE EXCEPTION 'illegal type for column "%": %', column_name, column_type
+            USING ERRCODE = 'IO102';
+        END IF;
+        partitioning_func := NULL;
+        partitioning_func_schema := NULL;
+        aligned = TRUE;
+    ELSE
+        -- Closed dimension
+        IF (num_slices < 1 OR num_slices > 32767) THEN
+            RAISE EXCEPTION 'Invalid number of partitions'
+            USING ERRCODE ='IO101';
+        END IF;
+        aligned = FALSE;
+    END IF;
+
+    BEGIN
+        INSERT INTO _timescaledb_catalog.dimension(
+            hypertable_id, column_name, column_type, aligned,
+            num_slices, partitioning_func_schema, partitioning_func,
+            interval_length
+        ) VALUES (
+            hypertable_row.id, column_name, column_type, aligned,
+            num_slices::smallint, partitioning_func_schema, partitioning_func,
+            interval_length
+        ) RETURNING * INTO dimension_row;
+    EXCEPTION
+        WHEN unique_violation THEN
+            RAISE EXCEPTION 'A dimension on column "%" already exists', column_name
+            USING ERRCODE = 'IO101';
+    END;
+
+    IF increment_num_dimensions THEN
+        UPDATE _timescaledb_catalog.hypertable
+        SET num_dimensions = hypertable_row.num_dimensions + 1
+        WHERE id = hypertable_row.id;
+    END IF;
+
+    RETURN dimension_row;
 END
 $BODY$;
 

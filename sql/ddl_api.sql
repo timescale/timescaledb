@@ -32,9 +32,6 @@ DECLARE
     table_owner      NAME;
     tablespace_oid   OID;
     tablespace_name  NAME;
-    time_column_type REGTYPE;
-    partitioning_column_type REGTYPE;
-    att_row          pg_attribute;
     main_table_has_items BOOLEAN;
     is_hypertable    BOOLEAN;
 BEGIN
@@ -62,35 +59,6 @@ BEGIN
     FROM pg_tablespace t
     WHERE t.OID = tablespace_oid;
 
-    BEGIN
-        SELECT atttypid
-        INTO STRICT time_column_type
-        FROM pg_attribute
-        WHERE attrelid = main_table AND attname = time_column_name;
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RAISE EXCEPTION 'column "%" does not exist', time_column_name
-            USING ERRCODE = 'IO102';
-    END;
-
-    IF time_column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
-        RAISE EXCEPTION 'illegal type for time column "%": %', time_column_name, time_column_type
-        USING ERRCODE = 'IO102';
-    END IF;
-
-    IF partitioning_column IS NOT NULL THEN
-        BEGIN
-            SELECT atttypid
-            INTO STRICT partitioning_column_type
-            FROM pg_attribute
-            WHERE attrelid = main_table AND attname = partitioning_column;
-        EXCEPTION
-            WHEN NO_DATA_FOUND THEN
-                RAISE EXCEPTION 'column "%" does not exist', partitioning_column
-                USING ERRCODE = 'IO102';
-        END;
-    END IF;
-
     EXECUTE format('SELECT TRUE FROM _timescaledb_catalog.hypertable WHERE
                     hypertable.schema_name = %L AND
                     hypertable.table_name = %L',
@@ -117,12 +85,11 @@ BEGIN
         SELECT *
         INTO hypertable_row
         FROM  _timescaledb_internal.create_hypertable_row(
+            main_table,
             schema_name,
             table_name,
             time_column_name,
-            time_column_type,
             partitioning_column,
-            partitioning_column_type,
             number_partitions,
             associated_schema_name,
             associated_table_prefix,
@@ -156,6 +123,41 @@ BEGIN
     IF create_default_indexes THEN
         PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
     END IF;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION  add_dimension(
+    main_table              REGCLASS,
+    column_name             NAME,
+    number_partitions       INTEGER = NULL,
+    interval_length         BIGINT = NULL
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+<<main_block>>
+DECLARE
+    table_name       NAME;
+    schema_name      NAME;
+    hypertable_row   _timescaledb_catalog.hypertable;
+BEGIN
+    SELECT relname, nspname
+    INTO STRICT table_name, schema_name
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    WHERE c.OID = main_table;
+
+    SELECT *
+    INTO STRICT hypertable_row
+    FROM _timescaledb_catalog.hypertable h
+    WHERE h.schema_name = main_block.schema_name
+    AND h.table_name = main_block.table_name
+    FOR UPDATE;
+
+    PERFORM _timescaledb_internal.add_dimension(main_table,
+                                                hypertable_row,
+                                                column_name,
+                                                number_partitions,
+                                                interval_length);
 END
 $BODY$;
 
