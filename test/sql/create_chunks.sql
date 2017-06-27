@@ -64,3 +64,18 @@ SELECT * FROM _timescaledb_catalog.chunk c
     WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
           AND d.column_name = 'time'
     ORDER BY c.id, d.id;
+
+    --check the cut-to-size with aligned dimensions code
+    INSERT INTO chunk_align_test VALUES (35, 1, 'dev1');
+    INSERT INTO chunk_align_test VALUES (35, 1, 'dev2');
+    INSERT INTO chunk_align_test VALUES (81, 1, 'dev1');
+    INSERT INTO chunk_align_test VALUES (81, 1, 'dev2');
+SELECT * FROM _timescaledb_catalog.chunk c
+    LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+    LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+    LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
+    LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
+          AND d.column_name = 'time'
+    ORDER BY c.id, d.id;
+

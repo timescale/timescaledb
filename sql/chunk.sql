@@ -159,7 +159,9 @@ BEGIN
         -- There is a chunk that overlaps with new_range_start, cut
         -- new_range_start to begin where that chunk ends
         IF alignment_found THEN
-            RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
+            RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension.
+            Free_dimension %. Existing(end): %, New(start):%',
+            free_dimension_id, overlap_value, new_range_start
             USING ERRCODE = 'IO501';
         END IF;
         new_range_start := overlap_value;
@@ -176,7 +178,7 @@ BEGIN
     WHERE
     c.id = (
         SELECT _timescaledb_internal.chunk_id_get_by_dimensions(free_dimension_id || fixed_dimension_ids,
-                                                         new_range_end || fixed_dimension_values)
+                                                         new_range_end - 1 || fixed_dimension_values)
     )
     ORDER BY free_slice.range_start ASC
     LIMIT 1;
@@ -184,7 +186,9 @@ BEGIN
     IF FOUND THEN
         -- there is at least one table that starts inside, cut the end to match
         IF alignment_found THEN
-            RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension'
+            RAISE EXCEPTION 'Should never happen: needed to cut an aligned dimension.
+            Free_dimension %. Existing(start): %, New(end):%',
+            free_dimension_id, overlap_value, new_range_end
             USING ERRCODE = 'IO501';
         END IF;
         new_range_end := overlap_value;
