@@ -39,17 +39,6 @@ hypercube_alloc(int16 num_dimensions)
 	return hc;
 }
 
-static inline void
-hypercube_free(Hypercube *hc)
-{
-	int			i;
-
-	for (i = 0; i < hc->num_slices; i++)
-		pfree(hc->slices[i]);
-
-	pfree(hc);
-}
-
 Hypercube *
 hypercube_copy(Hypercube *hc)
 {
