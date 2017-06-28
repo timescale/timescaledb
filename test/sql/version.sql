@@ -1,0 +1,4 @@
+-- Just test that the function does not error out as the output
+-- will change.
+select count(*) from _timescaledb_internal.get_git_commit();
+
