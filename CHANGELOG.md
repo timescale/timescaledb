@@ -1,5 +1,45 @@
 # TimescaleDB Changelog
 
+## 0.1.0 (2017-06-28)
+
+**IMPORTANT NOTE**
+Starting with this release, TimescaleDB will now
+support upgrading between extension versions using the typical
+`ALTER EXTENSION` command, unless otherwise noted in future release notes. This
+important step should make it easier to test TimescaleDB and be able
+to get the latest benefits from new versions of TimescaleDB. If you
+were previously using a version with the `-beta` tag, you will need
+to `DROP` any databases currently using TimescaleDB and re-create them
+in order to upgrade to this new version. To backup and migrate data,
+use `pg_dump` to save the table schemas and `COPY` to write hypertable
+data to CSV for re-importing after upgrading is complete. We describe
+a similar process on [our docs](http://docs.timescale.com/getting-started/setup/migrate-from-postgresql#different-db).
+
+**High-level changes**
+* More refactoring to stabilize and cleanup the code base for supporting upgrades (see above note)
+* Correct handling of ownership and permission propagation for hypertables
+* Multiple bug fixes
+
+**Notable commits**
+* [696cc4c] Provide API for adding hypertable dimensions
+* [97681c2] Fixes permission handling
+* [aca7f32] Fix extension drop handling
+* [9b8a447] Limit the SubspaceStore size; Add documentation.
+* [14ac892] Fix possible segfault
+* [0f4169c] Fix check constraint on dimension table
+* [71c5e78] Fix and refactor tablespace support
+* [5452dc5] Fix partiton functions; bug fixes (including memory)
+* [e75cd7e] Finer grained memory management
+* [3c460f0] Fix partitioning, memory, and tests
+* [fe51d8d] Add native scan for the chunk table
+* [fc68baa] Separate out subspace_store and add it to the hypertable object as well
+* [c8124b8] Use hypercube instead of dimension slice list
+* [f5d7786] Change the semantics of range_end to be exclusive
+* [700c9c8] Refactor insert path in C.
+* [0584c47] Created chunk_get_or_create in sql with an SPI connector in C
+* [7b8de0c] Refactor catalog for new schema and add native data types
+* [d3bdcba] Start refactoring to support any number of partitioning dimensions
+
 ## 0.0.12-beta (2017-06-21)
 
 **High-level changes**
@@ -10,8 +50,8 @@ This refactoring will allow us to provide upgrade paths starting with
 the next release.
 * `COPY` and `INSERT` commands now return the correct number of rows
 * Default indexes no longer duplicate existing indexes
-* Cleanup of the Docker image and build processBatches
-* Chunks are now time-aligned across partitions 
+* Cleanup of the Docker image and build process
+* Chunks are now time-aligned across partitions
 
 **Notable commits**
 * [3192c8a] Remove Dockerfile and docker.mk
