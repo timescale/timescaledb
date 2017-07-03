@@ -31,14 +31,14 @@ void		_planner_fini(void);
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 
-typedef struct ChangeTableNameCtx
+typedef struct HypertableQueryCtx
 {
 	Query	   *parse;
 	Query	   *parent;
-	CmdType		commandType;
+	CmdType		cmdtype;
 	Cache	   *hcache;
 	Hypertable *hentry;
-} ChangeTableNameCtx;
+} HypertableQueryCtx;
 
 typedef struct AddPartFuncQualCtx
 {
@@ -55,32 +55,27 @@ typedef struct GlobalPlannerCtx
 static GlobalPlannerCtx *global_planner_ctx = NULL;
 
 /*
- * Change all main tables to one of the replicas in the parse tree.
- *
+ * Identify queries on a hypertable by walking the query tree. If the query is
+ * indeed on a hypertable, setup the necessary state and/or make modifications
+ * to the query tree.
  */
 static bool
-change_table_name_walker(Node *node, void *context)
+hypertable_query_walker(Node *node, void *context)
 {
 	if (node == NULL)
-	{
 		return false;
-	}
 
 	if (IsA(node, RangeTblEntry))
 	{
-		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) node;
-		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
+		RangeTblEntry *rte = (RangeTblEntry *) node;
+		HypertableQueryCtx *ctx = (HypertableQueryCtx *) context;
 
-		if (rangeTableEntry->rtekind == RTE_RELATION && rangeTableEntry->inh
-			&& ctx->commandType != CMD_INSERT
-			)
+		if (rte->rtekind == RTE_RELATION && rte->inh && ctx->cmdtype != CMD_INSERT)
 		{
-			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rangeTableEntry->relid);
+			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rte->relid);
 
 			if (hentry != NULL)
-			{
 				ctx->hentry = hentry;
-			}
 		}
 
 		return false;
@@ -90,25 +85,26 @@ change_table_name_walker(Node *node, void *context)
 	if (IsA(node, Query))
 	{
 		bool		result;
-		ChangeTableNameCtx *ctx = (ChangeTableNameCtx *) context;
-		CmdType		old = ctx->commandType;
+		HypertableQueryCtx *ctx = (HypertableQueryCtx *) context;
+		CmdType		old = ctx->cmdtype;
+		Query      *query = (Query *) node;
 		Query	   *oldparent = ctx->parent;
 
 		/* adjust context */
-		ctx->commandType = ((Query *) node)->commandType;
-		ctx->parent = (Query *) node;
+		ctx->cmdtype = query->commandType;
+		ctx->parent = query;
 
-		result = query_tree_walker(ctx->parent, change_table_name_walker,
+		result = query_tree_walker(ctx->parent, hypertable_query_walker,
 								   context, QTW_EXAMINE_RTES);
 
 		/* restore context */
-		ctx->commandType = old;
+		ctx->cmdtype = old;
 		ctx->parent = oldparent;
 
 		return result;
 	}
 
-	return expression_tree_walker(node, change_table_name_walker, context);
+	return expression_tree_walker(node, hypertable_query_walker, context);
 }
 
 /* Returns the partitioning info for a var if the var is a partitioning
@@ -300,7 +296,7 @@ add_partitioning_func_qual(Query *parse, Cache *hcache, Hypertable *hentry)
 }
 
 static PlannedStmt *
-timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
+timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *rv = NULL;
 	GlobalPlannerCtx gpc;
@@ -309,15 +305,16 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 	if (extension_is_loaded())
 	{
-		ChangeTableNameCtx context;
+		HypertableQueryCtx context;
 
 		/* replace call to main table with call to the replica table */
 		context.hcache = hypertable_cache_pin();
 		context.parse = parse;
 		context.parent = parse;
-		context.commandType = parse->commandType;
+		context.cmdtype = parse->commandType;
 		context.hentry = NULL;
-		change_table_name_walker((Node *) parse, &context);
+		hypertable_query_walker((Node *) parse, &context);
+
 		/* note assumes 1 hypertable per query */
 		if (context.hentry != NULL)
 		{
@@ -326,17 +323,17 @@ timescaledb_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		}
 
 		cache_release(context.hcache);
-
 	}
+
 	if (prev_planner_hook != NULL)
 	{
 		/* Call any earlier hooks */
-		rv = (prev_planner_hook) (parse, cursorOptions, boundParams);
+		rv = (prev_planner_hook) (parse, cursor_opts, bound_params);
 	}
 	else
 	{
 		/* Call the standard planner */
-		rv = standard_planner(parse, cursorOptions, boundParams);
+		rv = standard_planner(parse, cursor_opts, bound_params);
 	}
 
 	global_planner_ctx = NULL;

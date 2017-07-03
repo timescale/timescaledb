@@ -17,37 +17,36 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 /* Calls the default ProcessUtility */
 static void
 prev_ProcessUtility(Node *parsetree,
-					const char *queryString,
+					const char *query_string,
 					ProcessUtilityContext context,
 					ParamListInfo params,
 					DestReceiver *dest,
-					char *completionTag)
+					char *completion_tag)
 {
 	if (prev_ProcessUtility_hook != NULL)
 	{
 		/* Call any earlier hooks */
-		(prev_ProcessUtility_hook) (parsetree, queryString, context, params, dest, completionTag);
+		(prev_ProcessUtility_hook) (parsetree, query_string, context, params, dest, completion_tag);
 	}
 	else
 	{
 		/* Call the standard */
-		standard_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
+		standard_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
 	}
 }
 
-/* Hook-intercept for ProcessUtility. Used to make COPY use a temp copy table and */
-/* blocking renaming of hypertables. */
+/* Hook-intercept for ProcessUtility. */
 static void
 timescaledb_ProcessUtility(Node *parsetree,
-						   const char *queryString,
+						   const char *query_string,
 						   ProcessUtilityContext context,
 						   ParamListInfo params,
 						   DestReceiver *dest,
-						   char *completionTag)
+						   char *completion_tag)
 {
 	if (!extension_is_loaded())
 	{
-		prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
+		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
 		return;
 	}
 
@@ -55,12 +54,12 @@ timescaledb_ProcessUtility(Node *parsetree,
 	if (IsA(parsetree, RenameStmt))
 	{
 		RenameStmt *renamestmt = (RenameStmt *) parsetree;
-		Oid			relId = RangeVarGetRelid(renamestmt->relation, NoLock, true);
+		Oid			relid = RangeVarGetRelid(renamestmt->relation, NoLock, true);
 
-		if (OidIsValid(relId))
+		if (OidIsValid(relid))
 		{
 			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
+			Hypertable *hentry = hypertable_cache_get_entry(hcache, relid);
 
 			if (hentry != NULL && renamestmt->renameType == OBJECT_TABLE)
 				ereport(ERROR,
@@ -68,7 +67,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 					   errmsg("Renaming hypertables is not yet supported")));
 			cache_release(hcache);
 		}
-		prev_ProcessUtility((Node *) renamestmt, queryString, context, params, dest, completionTag);
+		prev_ProcessUtility((Node *) renamestmt, query_string, context, params, dest, completion_tag);
 		return;
 	}
 	if (IsA(parsetree, CopyStmt))
@@ -80,16 +79,17 @@ timescaledb_ProcessUtility(Node *parsetree,
 		uint64		processed;
 
 		executor_level_enter();
-		DoCopy((CopyStmt *) parsetree, queryString, &processed);
+		DoCopy((CopyStmt *) parsetree, query_string, &processed);
 		executor_level_exit();
 		processed += executor_get_additional_tuples_processed();
-		if (completionTag)
-			snprintf(completionTag, COMPLETION_TAG_BUFSIZE,
+
+		if (completion_tag)
+			snprintf(completion_tag, COMPLETION_TAG_BUFSIZE,
 					 "COPY " UINT64_FORMAT, processed);
 		return;
 	}
 
-	prev_ProcessUtility(parsetree, queryString, context, params, dest, completionTag);
+	prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
 }
 
 void
