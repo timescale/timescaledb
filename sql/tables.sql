@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     associated_schema_name  NAME      NOT NULL,
     associated_table_prefix NAME      NOT NULL,
     num_dimensions          SMALLINT  NOT NULL CHECK (num_dimensions > 0),
+    UNIQUE (id, schema_name), -- So hypertable_index can use it as foreign key
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix)
 );
@@ -127,10 +128,11 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constrain
 
 -- Represents an index on the hypertable
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_index (
-    hypertable_id    INTEGER             NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    hypertable_id    INTEGER             NOT NULL,
     main_schema_name NAME                NOT NULL, -- schema name of main table (needed for a uniqueness constraint)
     main_index_name  NAME                NOT NULL, -- index name on main table
     definition       TEXT                NOT NULL, -- def with /*INDEX_NAME*/ and /*TABLE_NAME*/ placeholders
+    FOREIGN KEY (hypertable_id, main_schema_name) REFERENCES _timescaledb_catalog.hypertable(id, schema_name) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (hypertable_id, main_index_name),
     UNIQUE(main_schema_name, main_index_name) -- globally unique since index names globally unique
 );
@@ -147,7 +149,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_index (
     definition        TEXT    NOT NULL,
     UNIQUE (schema_name, table_name, index_name),
     FOREIGN KEY (schema_name, table_name) REFERENCES _timescaledb_catalog.chunk (schema_name, table_name) ON DELETE CASCADE,
-    FOREIGN KEY (main_schema_name, main_index_name) REFERENCES _timescaledb_catalog.hypertable_index (main_schema_name, main_index_name) ON DELETE CASCADE
+    FOREIGN KEY (main_schema_name, main_index_name) REFERENCES _timescaledb_catalog.hypertable_index (main_schema_name, main_index_name) ON DELETE CASCADE ON UPDATE CASCADE
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk_index','id'), '');

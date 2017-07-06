@@ -358,3 +358,31 @@ BEGIN
     END IF;
 END
 $BODY$;
+
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_hypertable(
+    old_schema     NAME,
+    old_table_name NAME,
+    new_schema     TEXT,
+    new_table_name TEXT
+)
+    RETURNS VOID
+    LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
+$BODY$
+DECLARE
+    hypertable_row _timescaledb_catalog.hypertable;
+BEGIN
+    SELECT * INTO STRICT hypertable_row
+    FROM _timescaledb_catalog.hypertable
+    WHERE schema_name = old_schema AND table_name = old_table_name;
+
+    UPDATE _timescaledb_catalog.hypertable SET
+            schema_name = new_schema,
+            table_name = new_table_name
+            WHERE
+            schema_name = old_schema AND
+            table_name = old_table_name;
+END
+$BODY$;

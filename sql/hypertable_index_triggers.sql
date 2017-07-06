@@ -38,7 +38,6 @@ DECLARE
   hypertable_row _timescaledb_catalog.hypertable;
 BEGIN
     IF TG_OP = 'UPDATE' THEN
-        PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
         RETURN NEW;
     ELSIF TG_OP = 'INSERT' THEN
         -- create index on all chunks

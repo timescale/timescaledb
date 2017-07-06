@@ -8,6 +8,7 @@
 #include "hypertable_cache.h"
 #include "extension.h"
 #include "executor.h"
+#include "metadata_queries.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -35,7 +36,8 @@ prev_ProcessUtility(Node *parsetree,
 	}
 }
 
-/* Hook-intercept for ProcessUtility. */
+/* Hook-intercept for ProcessUtility. Used to set COPY completion tag and */
+/* renaming of hypertables. */
 static void
 timescaledb_ProcessUtility(Node *parsetree,
 						   const char *query_string,
@@ -50,7 +52,31 @@ timescaledb_ProcessUtility(Node *parsetree,
 		return;
 	}
 
-	/* We don't support renaming hypertables yet so we need to block it */
+	/* Change the schema of hypertable */
+	if (IsA(parsetree, AlterObjectSchemaStmt))
+	{
+		AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) parsetree;
+		Oid			relId = RangeVarGetRelid(alterstmt->relation, NoLock, true);
+
+		if (OidIsValid(relId))
+		{
+			Cache	   *hcache = hypertable_cache_pin();
+			Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
+
+			if (hentry != NULL && alterstmt->objectType == OBJECT_TABLE) {
+				executor_level_enter();
+				spi_hypertable_rename(hentry,
+									  alterstmt->newschema,
+									  NameStr(hentry->fd.table_name));
+				executor_level_exit();
+			}
+			cache_release(hcache);
+		}
+		prev_ProcessUtility((Node *) alterstmt, query_string, context, params, dest, completion_tag);
+		return;
+	}
+
+	/* Rename hypertable */
 	if (IsA(parsetree, RenameStmt))
 	{
 		RenameStmt *renamestmt = (RenameStmt *) parsetree;
@@ -61,15 +87,19 @@ timescaledb_ProcessUtility(Node *parsetree,
 			Cache	   *hcache = hypertable_cache_pin();
 			Hypertable *hentry = hypertable_cache_get_entry(hcache, relid);
 
-			if (hentry != NULL && renamestmt->renameType == OBJECT_TABLE)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					   errmsg("Renaming hypertables is not yet supported")));
+			if (hentry != NULL && renamestmt->renameType == OBJECT_TABLE) {
+				executor_level_enter();
+				spi_hypertable_rename(hentry,
+									  NameStr(hentry->fd.schema_name),
+									  renamestmt->newname);
+				executor_level_exit();
+			}
 			cache_release(hcache);
 		}
 		prev_ProcessUtility((Node *) renamestmt, query_string, context, params, dest, completion_tag);
 		return;
 	}
+
 	if (IsA(parsetree, CopyStmt))
 	{
 		/*

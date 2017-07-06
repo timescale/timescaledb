@@ -11,6 +11,8 @@ BEGIN
     ELSIF TG_OP = 'DELETE' THEN
         EXECUTE format('DROP INDEX IF EXISTS %I.%I', OLD.schema_name, OLD.index_name);
         RETURN OLD;
+    ELSIF TG_OP = 'UPDATE' THEN
+        RETURN NEW;
     END IF;
 
     PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
