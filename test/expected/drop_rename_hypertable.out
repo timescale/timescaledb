@@ -317,32 +317,97 @@ Check constraints:
     "constraint_8" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 1073741823)
 Inherits: "two_Partitions"
 
--- Test that renaming hypertable is blocked
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
+-- Test that renaming hypertable works 
+\d _timescaledb_internal._hyper_1_1_chunk
+Table "_timescaledb_internal._hyper_1_1_chunk"
+   Column    |       Type       | Modifiers 
+-------------+------------------+-----------
+ timeCustom  | bigint           | not null
+ device_id   | text             | not null
+ series_0    | double precision | 
+ series_1    | double precision | 
+ series_2    | double precision | 
+ series_bool | boolean          | 
+Indexes:
+    "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "2-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "3-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "4-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "5-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+Check constraints:
+    "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+Inherits: "two_Partitions"
+
 ALTER TABLE "two_Partitions" RENAME TO "newname";
-ERROR:  Renaming hypertables is not yet supported
-\set ON_ERROR_STOP 1
--- Test that renaming ordinary table works
-CREATE TABLE renametable (foo int);
-ALTER TABLE "renametable" RENAME TO "newname";
 SELECT * FROM "newname";
- foo 
------
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+(12 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+------------+------------------------+-------------------------+----------------
+  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2
+(1 row)
+
+CREATE SCHEMA "newschema";
+ALTER TABLE "newname" SET SCHEMA "newschema";
+SELECT * FROM "newschema"."newname";
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+(12 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+------------+------------------------+-------------------------+----------------
+  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_index WHERE main_schema_name <> 'newschema';
+ hypertable_id | main_schema_name | main_index_name | definition 
+---------------+------------------+-----------------+------------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_index WHERE main_schema_name <> 'newschema';
+ id | schema_name | table_name | index_name | main_schema_name | main_index_name | definition 
+----+-------------+------------+------------+------------------+-----------------+------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
-----+-------------+----------------+------------------------+-------------------------+----------------
-  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+------------+------------------------+-------------------------+----------------
+  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2
 (1 row)
 
-DROP TABLE "two_Partitions" CASCADE;
+DROP TABLE "newschema"."newname" CASCADE;
 NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_1_1_chunk
-drop cascades to table _timescaledb_internal._hyper_1_2_chunk
-drop cascades to table _timescaledb_internal._hyper_1_3_chunk
-drop cascades to table _timescaledb_internal._hyper_1_4_chunk
 NOTICE:  index "1-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
 NOTICE:  index "2-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
 NOTICE:  index "3-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
@@ -377,11 +442,10 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (0 rows)
 
 \dt  "public".*
-          List of relations
- Schema |  Name   | Type  |  Owner   
---------+---------+-------+----------
- public | newname | table | postgres
-(1 row)
+      List of relations
+ Schema | Name | Type | Owner 
+--------+------+------+-------
+(0 rows)
 
 \dt  "_timescaledb_catalog".*
                      List of relations
@@ -401,5 +465,13 @@ SELECT * FROM _timescaledb_catalog.hypertable;
                  List of relations
  Schema | Name | Type | Owner | Size | Description 
 --------+------+------+-------+------+-------------
+(0 rows)
+
+-- Test that renaming ordinary table works
+CREATE TABLE renametable (foo int);
+ALTER TABLE "renametable" RENAME TO "newname_none_ht";
+SELECT * FROM "newname_none_ht";
+ foo 
+-----
 (0 rows)
 
