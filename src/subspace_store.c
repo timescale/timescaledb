@@ -80,6 +80,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 		if (match == NULL)
 		{
 			DimensionSlice *copy;
+
 			if (i == 0 && vec->num_slices > 0)
 			{
 				/*

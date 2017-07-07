@@ -74,9 +74,7 @@ BEGIN
             FROM pg_catalog.pg_trigger
             WHERE oid = info.objid;
 
-            IF _timescaledb_internal.is_main_table(table_oid) 
-                AND trigger_name <> ALL(_timescaledb_internal.timescale_trigger_names())
-            THEN
+            IF _timescaledb_internal.is_main_table(table_oid) THEN
                 hypertable_row := _timescaledb_internal.hypertable_from_main_table(table_oid);
                 PERFORM _timescaledb_internal.add_trigger(hypertable_row.id, index_oid);
             END IF;
@@ -183,7 +181,7 @@ END
 $BODY$;
 
  CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_table()
-    RETURNS event_trigger LANGUAGE plpgsql 
+    RETURNS event_trigger LANGUAGE plpgsql
     SECURITY DEFINER SET search_path = ''
     AS
 $BODY$
@@ -207,7 +205,7 @@ BEGIN
             FOR chunk_row IN
                 SELECT *
                 FROM _timescaledb_catalog.chunk
-                WHERE hypertable_id = hypertable_row.id 
+                WHERE hypertable_id = hypertable_row.id
                 LOOP
                     EXECUTE format(
                         $$

@@ -28,7 +28,7 @@ CREATE TABLE tick_character (
 );
 
 SELECT create_hypertable ('tick_character', 'time', 'symbol', 2);
-INSERT INTO tick_character ( symbol, mid, spread, time ) VALUES ( 'GBPJPY', 142.639000, 5.80, 'Mon Mar 20 09:18:22.3 2017');
+INSERT INTO tick_character ( symbol, mid, spread, time ) VALUES ( 'GBPJPY', 142.639000, 5.80, 'Mon Mar 20 09:18:22.3 2017') RETURNING time, symbol, mid;
 SELECT * FROM tick_character;
 
 

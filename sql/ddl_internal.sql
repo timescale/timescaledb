@@ -185,23 +185,9 @@ DECLARE
 BEGIN
     SELECT * INTO STRICT trigger_row FROM pg_trigger WHERE OID = trigger_oid;
 
-    IF trigger_row.tgname = ANY(_timescaledb_internal.timescale_trigger_names()) THEN
-        RETURN FALSE;
-    END IF;
-
-    IF (trigger_row.tgtype & (1 << 2) != 0) THEN
-        --is INSERT trigger
-        IF (trigger_row.tgtype & (1 << 3) != 0) OR  (trigger_row.tgtype & (1 << 4) != 0) THEN
-            RAISE 'Combining INSERT triggers with UPDATE or DELETE triggers is not supported.'
-            USING HINT = 'Please define separate triggers for each operation';
-        END IF;
-        IF (trigger_row.tgtype & ((1 << 1) | (1 << 6)) = 0) THEN
-            RAISE 'AFTER trigger on INSERT is not supported: %.', trigger_row.tgname;
-        END IF;
-    ELSE
-        IF (trigger_row.tgtype & (1 << 0) != 0) THEN
-            RETURN TRUE;
-        END IF;
+    IF (trigger_row.tgtype & (1 << 0) != 0) THEN
+        -- row trigger
+        RETURN TRUE;
     END IF;
     RETURN FALSE;
 END
@@ -219,7 +205,7 @@ DECLARE
 BEGIN
     IF _timescaledb_internal.need_chunk_trigger(hypertable_id, trigger_oid) THEN
         SELECT * INTO STRICT trigger_row FROM pg_trigger WHERE OID = trigger_oid;
-        PERFORM _timescaledb_internal.create_trigger_on_all_chunks(hypertable_id, trigger_row.tgname, 
+        PERFORM _timescaledb_internal.create_trigger_on_all_chunks(hypertable_id, trigger_row.tgname,
                 _timescaledb_internal.get_general_trigger_definition(trigger_oid));
     END IF;
 END
@@ -474,13 +460,6 @@ BEGIN
             table_name = old_table_name;
 END
 $BODY$;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.timescale_trigger_names()
-    RETURNS text[] LANGUAGE SQL IMMUTABLE AS
-$BODY$
-   SELECT array['_timescaledb_main_insert_trigger', '_timescaledb_main_after_insert_trigger'];
-$BODY$;
-
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
     schema_name     NAME,
