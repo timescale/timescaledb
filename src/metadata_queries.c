@@ -148,11 +148,13 @@ spi_hypertable_rename(Hypertable *ht, char *new_schema_name, char *new_table_nam
 	SPIPlanPtr	plan = rename_hypertable_plan();
 
 
-	if (strlen(new_schema_name) > sizeof(NameData) - 1) {
+	if (strlen(new_schema_name) > sizeof(NameData) - 1)
+	{
 		elog(ERROR, "New schema name '%s' is too long", new_schema_name);
 	}
 
-	if (strlen(new_table_name) > sizeof(NameData) - 1) {
+	if (strlen(new_table_name) > sizeof(NameData) - 1)
+	{
 		elog(ERROR, "New schema name '%s' is too long", new_table_name);
 	}
 

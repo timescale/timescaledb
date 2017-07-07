@@ -118,9 +118,6 @@ Indexes:
     "two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
     "two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "two_Partitions" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "two_Partitions" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 SELECT * FROM "two_Partitions";
  timeCustom | device_id | series_0 | series_1 | series_2 | series_bool 

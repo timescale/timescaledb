@@ -119,9 +119,6 @@ ALTER TABLE my_ht ADD COLUMN val2 integer;
  val2   | integer | 
 Indexes:
     "my_ht_time_idx" btree ("time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 -- Should error when adding again
 \set ON_ERROR_STOP 0
@@ -140,9 +137,6 @@ ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
  val3   | integer | 
 Indexes:
     "my_ht_time_idx" btree ("time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -157,9 +151,6 @@ psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" alread
  val3   | integer | 
 Indexes:
     "my_ht_time_idx" btree ("time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 -- Should drop
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
@@ -172,9 +163,6 @@ ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
  val2   | integer | 
 Indexes:
     "my_ht_time_idx" btree ("time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
@@ -188,9 +176,6 @@ psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does n
  val2   | integer | 
 Indexes:
     "my_ht_time_idx" btree ("time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON my_ht FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON my_ht FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 --default indexes--
 --both created
@@ -216,9 +201,6 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
 Indexes:
     "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
     "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 ROLLBACK;
 --only time
@@ -245,9 +227,6 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
 Indexes:
     "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
     "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 ROLLBACK;
 --only partition
@@ -274,9 +253,6 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
 Indexes:
     "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
     "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 ROLLBACK;
 --null space
@@ -301,9 +277,6 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  sensor_1  | numeric | default 1 | main     |              | 
 Indexes:
     "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 ROLLBACK;
 --disable index creation
@@ -326,9 +299,6 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  Time      | bigint  | not null  | plain    |              | 
  Device_id | text    | not null  | extended |              | 
  sensor_1  | numeric | default 1 | main     |              | 
-Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1_with_default_index_enabled" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
 
 ROLLBACK;
 SELECT * FROM PUBLIC."Hypertable_1";
@@ -396,8 +366,6 @@ Indexes:
     "Hypertable_1_time_idx" btree ("time" DESC)
     "ind_humidity" btree ("time", humidity)
 Triggers:
-    _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
-    _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
     test_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func()
 Child tables: _timescaledb_internal._hyper_1_1_chunk
 

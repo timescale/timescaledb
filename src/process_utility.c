@@ -9,6 +9,7 @@
 #include "extension.h"
 #include "executor.h"
 #include "metadata_queries.h"
+#include "copy.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -91,7 +92,8 @@ timescaledb_ProcessUtility(Node *parsetree,
 			Cache	   *hcache = hypertable_cache_pin();
 			Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
 
-			if (hentry != NULL && alterstmt->objectType == OBJECT_TABLE) {
+			if (hentry != NULL && alterstmt->objectType == OBJECT_TABLE)
+			{
 				executor_level_enter();
 				spi_hypertable_rename(hentry,
 									  alterstmt->newschema,
@@ -116,7 +118,8 @@ timescaledb_ProcessUtility(Node *parsetree,
 			Cache	   *hcache = hypertable_cache_pin();
 			Hypertable *hentry = hypertable_cache_get_entry(hcache, relid);
 
-			if (hentry != NULL && renamestmt->renameType == OBJECT_TABLE) {
+			if (hentry != NULL && renamestmt->renameType == OBJECT_TABLE)
+			{
 				executor_level_enter();
 				spi_hypertable_rename(hentry,
 									  NameStr(hentry->fd.schema_name),
@@ -131,20 +134,44 @@ timescaledb_ProcessUtility(Node *parsetree,
 
 	if (IsA(parsetree, CopyStmt))
 	{
+		CopyStmt   *stmt = (CopyStmt *) parsetree;
+
 		/*
 		 * Needed to add the appropriate number of tuples to the completion
 		 * tag
 		 */
 		uint64		processed;
+		Hypertable *ht = NULL;
+		Cache	   *hcache = NULL;
 
 		executor_level_enter();
-		DoCopy((CopyStmt *) parsetree, query_string, &processed);
+
+		if (stmt->is_from)
+		{
+			Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+			if (OidIsValid(relid))
+			{
+				hcache = hypertable_cache_pin();
+				ht = hypertable_cache_get_entry(hcache, relid);
+			}
+		}
+
+		if (stmt->is_from && ht != NULL)
+			timescaledb_DoCopy(stmt, query_string, &processed, ht);
+		else
+			DoCopy(stmt, query_string, &processed);
+
 		executor_level_exit();
 		processed += executor_get_additional_tuples_processed();
 
 		if (completion_tag)
 			snprintf(completion_tag, COMPLETION_TAG_BUFSIZE,
 					 "COPY " UINT64_FORMAT, processed);
+
+		if (NULL != hcache)
+			cache_release(hcache);
+
 		return;
 	}
 

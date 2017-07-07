@@ -79,6 +79,3 @@ BEGIN
     WHERE c.hypertable_id = drop_trigger_on_all_chunks.hypertable_id;
 END
 $BODY$;
-
-
-

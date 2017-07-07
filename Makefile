@@ -50,16 +50,19 @@ SRCS = \
 	src/ddl_utils.c \
 	src/chunk_constraint.c \
 	src/partitioning.c \
-	src/insert.c \
 	src/planner.c \
 	src/executor.c \
 	src/process_utility.c \
+	src/copy.c \
 	src/sort_transform.c \
-	src/insert_chunk_state.c \
-	src/insert_statement_state.c \
+	src/chunk_dispatch.c \
+	src/chunk_dispatch_state.c \
+	src/chunk_dispatch_plan.c \
+	src/chunk_insert_state.c \
 	src/agg_bookend.c \
 	src/subspace_store.c \
 	src/guc.c \
+	src/compat.c \
 	src/version.c
 
 OBJS = $(SRCS:.c=.o)
