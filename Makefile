@@ -10,6 +10,7 @@ EXTENSION = timescaledb
 SQL_FILES = $(shell cat sql/load_order.txt)
 
 EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^.*'\(.*\)'$\/\1/g")
+EXT_GIT_COMMIT := $(shell git describe --abbrev=4 --dirty --always --tags || echo $(EXT_GIT_COMMIT))
 EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 
 DATA = $(EXT_SQL_FILE)
@@ -41,7 +42,8 @@ SRCS = \
 	src/insert_statement_state.c \
 	src/agg_bookend.c \
 	src/subspace_store.c \
-	src/guc.c
+	src/guc.c \
+	src/version.c
 
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
@@ -83,7 +85,7 @@ PGXS := $(shell $(PG_CONFIG) --pgxs)
 EXTRA_CLEAN = $(EXT_SQL_FILE) $(DEPS)
 
 include $(PGXS)
-override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0 -MMD
+override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0 -MMD -DEXT_GIT_COMMIT=\"$(EXT_GIT_COMMIT)\"
 override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/ $(TEST_CLUSTER)
 -include $(DEPS)
 

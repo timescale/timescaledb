@@ -10,7 +10,7 @@ You can help in different ways:
 * Fork this repository and submit a pull request
 
 For any particular improvement you want to make, it can be beneficial to
-begin discussion in on the GitHub issues page. This is the best place to
+begin discussion on the GitHub issues page. This is the best place to
 discuss your proposed improvement (and its implementation) with the core
 development team.
 
@@ -21,7 +21,7 @@ contributions.
 
 ## Getting and building TimescaleDB
 
-Please following our README for [instructions on installing from source](https://github.com/timescale/timescaledb/blob/master/README.md#option-3---from-source).
+Please follow our README for [instructions on installing from source](https://github.com/timescale/timescaledb/blob/master/README.md#option-3---from-source).
 
 ## Style guide
 
@@ -48,8 +48,8 @@ our [Style Guide](docs/StyleGuide.md).
       merge-append query optimization for time aggregate."  In the case of
       non-trivial changes, include a longer description in the commit message
       body explaining and detailing the changes.  That is, a commit message
-      should have a short title, following by a empty line, followed by the
-      longer description.
+      should have a short title, followed by a empty line, and then
+      followed by the longer description.
 
 * Push your changes to an upstream branch:
 

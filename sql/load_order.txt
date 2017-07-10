@@ -22,3 +22,4 @@ sql/bookend.sql
 sql/time_bucket.sql
 sql/permissions.sql
 sql/init.sql
+sql/version.sql
