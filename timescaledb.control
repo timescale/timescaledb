@@ -1,5 +1,5 @@
 # timescaledb extension
 comment = 'Enables scalable inserts and complex queries for time-series data'
-default_version = '0.1.0'
+default_version = '0.1.1-dev'
 module_pathname = '$libdir/timescaledb'
 relocatable = true

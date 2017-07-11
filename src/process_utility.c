@@ -52,6 +52,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 		return;
 	}
 
+
 	/* Change the schema of hypertable */
 	if (IsA(parsetree, AlterObjectSchemaStmt))
 	{
@@ -72,6 +73,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 			}
 			cache_release(hcache);
 		}
+
 		prev_ProcessUtility((Node *) alterstmt, query_string, context, params, dest, completion_tag);
 		return;
 	}

@@ -1,3 +1,4 @@
+--NOTICE: UPGRADE-SCRIPT-NEEDED contents in this file are not auto-upgraded.
 -- This sets up the permissions for entities created by this extension.
 
 -- schema permisions

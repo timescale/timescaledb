@@ -1,4 +1,6 @@
--- Initializes a data node in the cluster.
+--NOTICE: UPGRADE-SCRIPT-NEEDED contents in this file are not auto-upgraded. setup_main will be redefined 
+--but not re-run so changes need to be included in upgrade scripts.
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.setup_main(restore BOOLEAN = FALSE)
     RETURNS void LANGUAGE PLPGSQL AS
 $BODY$
