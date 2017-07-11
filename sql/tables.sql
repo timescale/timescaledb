@@ -1,3 +1,5 @@
+--NOTICE: UPGRADE-SCRIPT-NEEDED contents in this file are not auto-upgraded.
+
 -- This file contains table definitions for various abstractions and data
 -- structures for representing hypertables and lower-level concepts.
 

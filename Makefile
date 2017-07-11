@@ -7,13 +7,15 @@ $(error "TimescaleDB requires PostgreSQL $(MIN_SUPPORTED_VERSION)")
 endif
 
 EXTENSION = timescaledb
-SQL_FILES = $(shell cat sql/load_order.txt)
-
+SQL_FILES = $(shell cat sql/setup_load_order.txt sql/functions_load_order.txt sql/init_load_order.txt)
 EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^.*'\(.*\)'$\/\1/g")
+UPDATE_VERSIONS = $(shell ls -1 sql/updates/*.sql | xargs basename | grep $(EXT_VERSION) | sed "s/\.sql//g")
+UPDATE_FILES = $(shell echo sql/updates/${UPDATE_VERSIONS}.sql && cat sql/functions_load_order.txt)
+UPDATE_FILE = sql/$(EXTENSION)--$(UPDATE_VERSIONS).sql
 EXT_GIT_COMMIT := $(shell git describe --abbrev=4 --dirty --always --tags || echo $(EXT_GIT_COMMIT))
 EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 
-DATA = $(EXT_SQL_FILE)
+DATA = $(EXT_SQL_FILE) $(UPDATE_FILE)
 MODULE_big = $(EXTENSION)
 
 SRCS = \
@@ -89,15 +91,20 @@ override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0 -MMD -DEXT_GIT_COMMIT=\"$(EXT_GIT
 override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/ $(TEST_CLUSTER)
 -include $(DEPS)
 
-all: $(EXT_SQL_FILE)
+all: $(EXT_SQL_FILE) $(UPDATE_FILE) $(SQL_FILES) $(UPDATE_FILES)
 
 $(EXT_SQL_FILE): $(SQL_FILES)
+	@echo generating $(EXT_SQL_FILE)
+	@cat $^ > $@
+
+$(UPDATE_FILE): $(UPDATE_FILES)
+	@echo generating $(UPDATE_FILE)
 	@cat $^ > $@
 
 check-sql-files:
 	@echo $(SQL_FILES)
 
-install: $(EXT_SQL_FILE)
+install: $(EXT_SQL_FILES)
 
 clean: clean-sql-files clean-extra
 

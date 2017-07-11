@@ -1,6 +1,3 @@
-sql/schemas.sql
-sql/tables.sql
-sql/cache.sql
 sql/errors.sql
 sql/ddl_internal.sql
 sql/util_time.sql
@@ -20,6 +17,5 @@ sql/ddl_triggers.sql
 sql/tablespace.sql
 sql/bookend.sql
 sql/time_bucket.sql
-sql/permissions.sql
-sql/init.sql
 sql/version.sql
+sql/cache_functions.sql
