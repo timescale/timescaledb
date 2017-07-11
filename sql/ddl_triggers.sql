@@ -56,26 +56,55 @@ $BODY$;
 
 -- Handles ddl create trigger commands on hypertables
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_create_trigger()
-    RETURNS event_trigger LANGUAGE plpgsql AS
+    RETURNS event_trigger LANGUAGE plpgsql
+    SECURITY DEFINER SET search_path = ''
+    AS
 $BODY$
 DECLARE
-    info           record;
-    table_oid      regclass;
-    trigger_name            TEXT;
+    info            record;
+    table_oid       regclass;
+    index_oid       OID;
+    trigger_name    TEXT;
+    hypertable_row _timescaledb_catalog.hypertable;
 BEGIN
+    --NOTE:  pg_event_trigger_ddl_commands prevents this SECURITY DEFINER function from being called outside trigger.
     FOR info IN SELECT * FROM pg_event_trigger_ddl_commands()
         LOOP
-            SELECT tgrelid, tgname INTO STRICT table_oid, trigger_name
+            SELECT OID, tgrelid, tgname INTO STRICT index_oid, table_oid, trigger_name
             FROM pg_catalog.pg_trigger
             WHERE oid = info.objid;
 
             IF _timescaledb_internal.is_main_table(table_oid) 
-                AND trigger_name != '_timescaledb_main_insert_trigger'
-                AND trigger_name != '_timescaledb_main_after_insert_trigger'
-                AND trigger_name != '_timescaledb_modify_trigger'
+                AND trigger_name <> ALL(_timescaledb_internal.timescale_trigger_names())
             THEN
-                RAISE EXCEPTION 'CREATE TRIGGER not supported on hypertable %', table_oid
-                USING ERRCODE = 'IO101';
+                hypertable_row := _timescaledb_internal.hypertable_from_main_table(table_oid);
+                PERFORM _timescaledb_internal.add_trigger(hypertable_row.id, index_oid);
+            END IF;
+        END LOOP;
+END
+$BODY$;
+
+-- Handles ddl drop index commands on hypertables
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_trigger()
+    RETURNS event_trigger LANGUAGE plpgsql
+    SECURITY DEFINER SET search_path = ''
+    AS
+$BODY$
+DECLARE
+    info           record;
+    hypertable_row _timescaledb_catalog.hypertable;
+BEGIN
+    --NOTE:  pg_event_trigger_ddl_commands prevents this SECURITY DEFINER function from being called outside trigger.
+    FOR info IN SELECT * FROM pg_event_trigger_dropped_objects()
+        LOOP
+            IF info.classid = 'pg_trigger'::regclass THEN
+                SELECT * INTO hypertable_row
+                FROM _timescaledb_catalog.hypertable
+                WHERE schema_name = info.address_names[1] AND table_name = info.address_names[2];
+
+                IF hypertable_row IS NOT NULL THEN
+                    PERFORM _timescaledb_internal.drop_trigger_on_all_chunks(hypertable_row.id, info.address_names[3]);
+                END IF;
             END IF;
         END LOOP;
 END
