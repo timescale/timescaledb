@@ -134,8 +134,15 @@ insert_chunk_state_new(Chunk *chunk)
 	ExecOpenIndices(resultRelInfo, false);
 
 	if (resultRelInfo->ri_TrigDesc != NULL)
-		elog(ERROR, "triggers on chunk tables not supported");
-
+	{
+		if (resultRelInfo->ri_TrigDesc->trig_insert_instead_row ||
+			resultRelInfo->ri_TrigDesc->trig_insert_after_row ||
+			resultRelInfo->ri_TrigDesc->trig_insert_before_row ||
+			resultRelInfo->ri_TrigDesc->trig_insert_after_statement ||
+			resultRelInfo->ri_TrigDesc->trig_insert_before_statement
+			)
+			elog(ERROR, "Insert trigger on chunk tables not supported");
+	}
 	rel_state = insert_chunk_state_rel_new(rel, resultRelInfo, range_table);
 	rel_state_list = lappend(rel_state_list, rel_state);
 

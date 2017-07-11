@@ -18,12 +18,13 @@ BEGIN
 END
 $BODY$;
 
+CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
+FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
+
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
-FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
 \set ON_ERROR_STOP 1
 
 --create column with same name as previously renamed one

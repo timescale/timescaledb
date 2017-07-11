@@ -424,14 +424,13 @@ $BODY$
 BEGIN
 END
 $BODY$;
+CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
+FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
 --expect error cases
 \set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:24: ERROR:  ALTER INDEX not supported on hypertable public."Hypertable_1"
-CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
-FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
-psql:include/ddl_ops_2.sql:26: ERROR:  CREATE TRIGGER not supported on hypertable "Hypertable_1"
+psql:include/ddl_ops_2.sql:27: ERROR:  ALTER INDEX not supported on hypertable public."Hypertable_1"
 \set ON_ERROR_STOP 1
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
@@ -460,6 +459,7 @@ Indexes:
 Triggers:
     _timescaledb_main_after_insert_trigger AFTER INSERT ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
     _timescaledb_main_insert_trigger BEFORE INSERT ON "Hypertable_1" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+    test_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func()
 Child tables: _timescaledb_internal._hyper_1_1_chunk
 
 SELECT * FROM PUBLIC."Hypertable_1";
