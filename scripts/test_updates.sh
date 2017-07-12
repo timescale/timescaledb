@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 PGTEST_TMPDIR=${PGTEST_TMPDIR:-/tmp}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
@@ -32,6 +33,7 @@ docker run -d --name timescaledb-orig -v ${PGTEST_TMPDIR}/pg_data:/var/lib/postg
 
 wait_for_pg ${UPDATE_PG_PORT}
 
+echo "Executing setup script on 0.1.0"
 psql -h localhost -U postgres -p ${UPDATE_PG_PORT} -f test/sql/updates/setup.sql
 docker rm -vf timescaledb-orig
 
@@ -39,18 +41,26 @@ docker run -d --name timescaledb-updated -v /tmp/pg_data:/var/lib/postgresql/dat
 
 wait_for_pg ${UPDATE_PG_PORT}
 
+echo "Executing ALTER EXTENSION timescaledb UPDATE"
 psql -h localhost -U postgres -d single -p ${UPDATE_PG_PORT} -c "ALTER EXTENSION timescaledb UPDATE"
 
 
 wait_for_pg ${CLEAN_PG_PORT}
 
+echo "Executing setup script on new version"
 psql -h localhost -U postgres -p ${CLEAN_PG_PORT} -f test/sql/updates/setup.sql
-psql -h localhost -U postgres -d single -p ${UPDATE_PG_PORT} -f test/sql/updates/test-0.1.1.sql > /tmp/updated.out
-psql -h localhost -U postgres -d single -p ${CLEAN_PG_PORT} -f test/sql/updates/test-0.1.1.sql > /tmp/clean.out
+
+echo "Restarting clean container"
+#below is needed so the clean container looks like updated, which has been restarted after the setup script
+#(especially needed for sequences which might otherwise be in different states -- e.g. some backends may have reserved batches)
+docker rm -vf timescaledb-clean
+docker run -d --name timescaledb-clean -v /tmp/pg_data_clean:/var/lib/postgresql/data -p ${CLEAN_PG_PORT}:5432 update_test:latest
+wait_for_pg ${CLEAN_PG_PORT}
+
+echo "Testing"
+psql -X -v ECHO=ALL -h localhost -U postgres -d single -p ${UPDATE_PG_PORT} -f test/sql/updates/test-0.1.1.sql > /tmp/updated.out
+psql -X -v ECHO=ALL -h localhost -U postgres -d single -p ${CLEAN_PG_PORT} -f test/sql/updates/test-0.1.1.sql > /tmp/clean.out
 
 docker rm -f timescaledb-updated timescaledb-clean || rm -rf  ${PGTEST_TMPDIR}/pg_data ${PGTEST_TMPDIR}/pg_data_clean
 
-diff ${PGTEST_TMPDIR}/clean.out ${PGTEST_TMPDIR}/updated.out > ${PGTEST_TMPDIR}/update_test.output
-cat ${PGTEST_TMPDIR}/update_test.output
-
-cmp ${PGTEST_TMPDIR}/clean.out ${PGTEST_TMPDIR}/updated.out > ${PGTEST_TMPDIR}/update_test.output
+diff ${PGTEST_TMPDIR}/clean.out ${PGTEST_TMPDIR}/updated.out | tee ${PGTEST_TMPDIR}/update_test.output
