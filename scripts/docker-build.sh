@@ -15,7 +15,7 @@ TAG_NAME=${TAG_NAME:-$GIT_BRANCH}
 docker rm -f $(docker ps -a -q -f name=${BUILD_CONTAINER_NAME} 2>/dev/null) 2>/dev/null
 
 # Run a Postgres container
-docker run -u postgres -d --name ${BUILD_CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
+docker run -d --name ${BUILD_CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
 
 # Install build dependencies
 docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && mkdir -p /build"
