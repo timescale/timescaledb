@@ -1,8 +1,23 @@
 # TimescaleDB Changelog
 
+## 0.2.0 (2017-07-12)
+
+**High-level changes**
+* Users can now define their own triggers on hypertables (except for `INSERT AFTER`)
+* Hypertables can now be renamed or moved to a different schema
+* Utility functions added so you can examine the size hypertables, chunks, and indices
+
+**Notable commits**
+* [83c75fd] Add support for triggers on hypertables for all triggers except `INSERT AFTER`
+* [e0eeeb9] Add hypertable, chunk, and indexes size utils functions.
+* [4d2a65d] Add infrastructure to build update script files.
+* [a5725d9] Add support to rename and change schema on hypertable.
+* [142f58c] Cleanup planner and process utility hooks
+
 ## 0.1.0 (2017-06-28)
 
 **IMPORTANT NOTE**
+
 Starting with this release, TimescaleDB will now
 support upgrading between extension versions using the typical
 `ALTER EXTENSION` command, unless otherwise noted in future release notes. This
