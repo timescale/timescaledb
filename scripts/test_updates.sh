@@ -3,20 +3,23 @@
 set -e
 set -o pipefail
 
+SCRIPT_DIR=$(dirname $0)
+BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 PGTEST_TMPDIR=${PGTEST_TMPDIR:-/tmp}
-CLEAN_DATA_DIR=${CLEAN_DATA_DIR:-$PGTEST_TMPDIR/pg_data_clean}
-UPDATED_DATA_DIR=${UPDATED_DATA_DIR:-$PGTEST_TMPDIR/pg_data_update}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
 
+UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
+UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
+UPDATE_TO_TAG=${UPDATE_TO_TAG:-latest}
 
 wait_for_pg () {
 set +e
 for i in {1..10}; do
   sleep 2
 
-  pg_isready -h localhost -U postgres -p $1
+  docker exec -it $1 /bin/bash -c "pg_isready -U postgres"
 
   if [[ $? == 0 ]] ; then
     set -e
@@ -27,42 +30,45 @@ exit 1
 }
 
 docker rm -f timescaledb-orig timescaledb-updated timescaledb-clean || true
-rm -rf  ${CLEAN_DATA_DIR} ${UPDATED_DATA_DIR}
 IMAGE_NAME=update_test TAG_NAME=latest bash scripts/docker-build.sh
 
-docker run -d --name timescaledb-orig -v ${UPDATED_DATA_DIR}:/var/lib/postgresql/data -p ${UPDATE_PG_PORT}:5432 timescale/timescaledb:${UPDATE_FROM_TAG}
-docker run -d --name timescaledb-clean -v ${CLEAN_DATA_DIR}:/var/lib/postgresql/data -p ${CLEAN_PG_PORT}:5432 update_test:latest
+docker run -d --name timescaledb-orig -v ${BASE_DIR}:/src ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
+docker run -d --name timescaledb-clean -v ${BASE_DIR}:/src ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
-wait_for_pg ${UPDATE_PG_PORT}
+CLEAN_VOLUME=$(docker inspect timescaledb-clean --format='{{range .Mounts }}{{.Name}}{{end}}')
+UPDATE_VOLUME=$(docker inspect timescaledb-orig --format='{{range .Mounts }}{{.Name}}{{end}}')
+
+wait_for_pg timescaledb-orig
 
 echo "Executing setup script on 0.1.0"
-psql -h localhost -U postgres -p ${UPDATE_PG_PORT} -f test/sql/updates/setup.sql
-docker rm -vf timescaledb-orig
+docker exec -it timescaledb-orig /bin/bash -c "psql -h localhost -U postgres -f /src/test/sql/updates/setup.sql"
+docker rm -f timescaledb-orig
 
-docker run -d --name timescaledb-updated -v ${UPDATED_DATA_DIR}:/var/lib/postgresql/data -p ${UPDATE_PG_PORT}:5432 update_test:latest
+docker run -d --name timescaledb-updated -v ${BASE_DIR}:/src -v ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
-wait_for_pg ${UPDATE_PG_PORT}
+wait_for_pg timescaledb-updated
 
 echo "Executing ALTER EXTENSION timescaledb UPDATE"
-psql -h localhost -U postgres -d single -p ${UPDATE_PG_PORT} -c "ALTER EXTENSION timescaledb UPDATE"
+docker exec -it timescaledb-updated /bin/bash -c "psql -h localhost -U postgres -d single -c \"ALTER EXTENSION timescaledb UPDATE\""
 
-
-wait_for_pg ${CLEAN_PG_PORT}
+wait_for_pg timescaledb-clean
 
 echo "Executing setup script on new version"
-psql -h localhost -U postgres -p ${CLEAN_PG_PORT} -f test/sql/updates/setup.sql
+docker exec -it timescaledb-clean /bin/bash -c "psql -h localhost -U postgres -f /src/test/sql/updates/setup.sql"
 
 echo "Restarting clean container"
 #below is needed so the clean container looks like updated, which has been restarted after the setup script
 #(especially needed for sequences which might otherwise be in different states -- e.g. some backends may have reserved batches)
-docker rm -vf timescaledb-clean
-docker run -d --name timescaledb-clean -v ${CLEAN_DATA_DIR}:/var/lib/postgresql/data -p ${CLEAN_PG_PORT}:5432 update_test:latest
-wait_for_pg ${CLEAN_PG_PORT}
+docker rm -f timescaledb-clean
+docker run -d --name timescaledb-clean -v ${BASE_DIR}:/src -v ${CLEAN_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+wait_for_pg timescaledb-clean
 
 echo "Testing"
-psql -X -v ECHO=ALL -h localhost -U postgres -d single -p ${UPDATE_PG_PORT} -f test/sql/updates/test-0.1.1.sql > ${PGTEST_TMPDIR}/updated.out
-psql -X -v ECHO=ALL -h localhost -U postgres -d single -p ${CLEAN_PG_PORT} -f test/sql/updates/test-0.1.1.sql > ${PGTEST_TMPDIR}/clean.out
+docker exec timescaledb-updated /bin/bash \
+  -c "psql -X -v ECHO=ALL -h localhost -U postgres -d single -f /src/test/sql/updates/test-0.1.1.sql" > ${PGTEST_TMPDIR}/updated.out
+docker exec timescaledb-clean /bin/bash \
+  -c "psql -X -v ECHO=ALL -h localhost -U postgres -d single -f /src/test/sql/updates/test-0.1.1.sql" > ${PGTEST_TMPDIR}/clean.out
 
-docker rm -f timescaledb-updated timescaledb-clean || rm -rf  ${CLEAN_DATA_DIR} ${UPDATED_DATA_DIR}
+docker rm -vf timescaledb-updated timescaledb-clean
 
 diff ${PGTEST_TMPDIR}/clean.out ${PGTEST_TMPDIR}/updated.out | tee ${PGTEST_TMPDIR}/update_test.output
