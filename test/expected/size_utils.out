@@ -1,0 +1,73 @@
+\ir include/insert_two_partitions.sql
+\ir create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\c single
+CREATE TABLE PUBLIC."two_Partitions" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+\set QUIET off
+BEGIN;
+BEGIN
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COPY 7
+COMMIT;
+COMMIT
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+INSERT 0 4
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 2);
+INSERT 0 1
+\set QUIET on
+SELECT * FROM hypertable_relation_size('"public"."two_Partitions"');
+ table_bytes | index_bytes | toast_bytes | total_bytes | table_size | index_size | toast_size | total_size 
+-------------+-------------+-------------+-------------+------------+------------+------------+------------
+       32768 |      417792 |       32768 |      483328 | 32 kB      | 408 kB     | 32 kB      | 472 kB
+(1 row)
+
+SELECT * FROM chunk_relation_size('"public"."two_Partitions"');
+ chunk_id |                chunk_table                 |       dimensions       |                                 ranges                                  | table_bytes | index_bytes | toast_bytes | total_bytes | table_size | index_size | toast_size | total_size 
+----------+--------------------------------------------+------------------------+-------------------------------------------------------------------------+-------------+-------------+-------------+-------------+------------+------------+------------+------------
+        1 | "_timescaledb_internal"."_hyper_1_1_chunk" | {timeCustom,device_id} | {"[1257892416000000000,1257895008000000000)","[1073741823,2147483647)"} |        8192 |      114688 |        8192 |      131072 | 8192 bytes | 112 kB     | 8192 bytes | 128 kB
+        2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {device_id,timeCustom} | {"[1073741823,2147483647)","[1257897600000000000,1257900192000000000)"} |        8192 |      106496 |        8192 |      122880 | 8192 bytes | 104 kB     | 8192 bytes | 120 kB
+        3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {device_id,timeCustom} | {"[1073741823,2147483647)","[1257985728000000000,1257988320000000000)"} |        8192 |       98304 |        8192 |      114688 | 8192 bytes | 96 kB      | 8192 bytes | 112 kB
+        4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {"[1257892416000000000,1257895008000000000)","[0,1073741823)"}          |        8192 |       98304 |        8192 |      114688 | 8192 bytes | 96 kB      | 8192 bytes | 112 kB
+(4 rows)
+
+SELECT * FROM indexes_relation_size('"public"."two_Partitions"');
+                    index_name                    | total_bytes | total_size 
+--------------------------------------------------+-------------+------------
+ public.two_Partitions_device_id_timeCustom_idx   |       65536 | 64 kB
+ public.two_Partitions_timeCustom_device_id_idx   |       65536 | 64 kB
+ public.two_Partitions_timeCustom_idx             |       65536 | 64 kB
+ public.two_Partitions_timeCustom_series_0_idx    |       65536 | 64 kB
+ public.two_Partitions_timeCustom_series_1_idx    |       65536 | 64 kB
+ public.two_Partitions_timeCustom_series_2_idx    |       40960 | 40 kB
+ public.two_Partitions_timeCustom_series_bool_idx |       49152 | 48 kB
+(7 rows)
+
