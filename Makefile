@@ -43,6 +43,7 @@ SRCS = \
 	src/cache_invalidate.c \
 	src/chunk.c \
 	src/scanner.c \
+	src/histogram.c \
 	src/hypertable_cache.c \
 	src/hypertable.c \
 	src/dimension.c \
@@ -146,6 +147,6 @@ pgindent: typedef.list
 	pgindent --typedef=typedef.list
 
 manualupdate:
-	git diff origin/master $(MANUAL_UPDATE_FILES)
+	echo $(MANUAL_UPDATE_FILES)
 
 .PHONY: check-sql-files all
