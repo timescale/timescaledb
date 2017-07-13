@@ -146,6 +146,6 @@ pgindent: typedef.list
 	pgindent --typedef=typedef.list
 
 manualupdate:
-	git diff origin/master $(MANUAL_UPDATE_FILES)
+	echo $(MANUAL_UPDATE_FILES)
 
 .PHONY: check-sql-files all
