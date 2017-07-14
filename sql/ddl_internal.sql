@@ -480,3 +480,28 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.timescale_trigger_names()
 $BODY$
    SELECT array['_timescaledb_main_insert_trigger', '_timescaledb_main_after_insert_trigger'];
 $BODY$;
+
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
+    schema_name     NAME,
+    table_name      NAME
+)
+    RETURNS VOID
+    LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
+$BODY$
+DECLARE
+    hypertable_row _timescaledb_catalog.hypertable;
+BEGIN
+
+    SELECT * INTO STRICT hypertable_row
+    FROM _timescaledb_catalog.hypertable ht
+    WHERE ht.schema_name = truncate_hypertable.schema_name
+    AND ht.table_name = truncate_hypertable.table_name;
+
+    DELETE FROM _timescaledb_catalog.chunk
+    WHERE hypertable_id = hypertable_row.id;
+
+END
+$BODY$;

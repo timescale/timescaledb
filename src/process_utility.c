@@ -52,6 +52,33 @@ timescaledb_ProcessUtility(Node *parsetree,
 		return;
 	}
 
+	/* Truncate a hypertable */
+	if (IsA(parsetree, TruncateStmt)) {
+		TruncateStmt *truncatestmt = (TruncateStmt *) parsetree;
+		ListCell   *cell;
+
+		foreach(cell, truncatestmt->relations)
+		{
+			Oid			relId = RangeVarGetRelid(lfirst(cell), NoLock, true);
+
+			if (OidIsValid(relId))
+			{
+				Cache	   *hcache = hypertable_cache_pin();
+				Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
+
+				if (hentry != NULL) {
+					executor_level_enter();
+					spi_hypertable_truncate(hentry);
+					executor_level_exit();
+				}
+				cache_release(hcache);
+			}
+
+		}
+
+		prev_ProcessUtility((Node *) truncatestmt, query_string, context, params, dest, completion_tag);
+		return;
+	}
 
 	/* Change the schema of hypertable */
 	if (IsA(parsetree, AlterObjectSchemaStmt))
