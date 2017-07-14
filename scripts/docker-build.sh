@@ -21,7 +21,7 @@ docker run -d --name ${BUILD_CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_I
 docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && mkdir -p /build"
 
 # Build and install the extension
-docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "cp -a /src/{src,sql,test,Makefile,timescaledb.control} /build/ &&  make -C /build clean && make -C /build install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample"
+docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "cp -a /src/{src,sql,test,Makefile,timescaledb.control,extra_extension_files.txt} /build/ &&  make -C /build clean && make -C /build install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample"
 
 docker commit -a $USER -m "TimescaleDB development image" ${BUILD_CONTAINER_NAME} ${IMAGE_NAME}:${TAG_NAME}
 

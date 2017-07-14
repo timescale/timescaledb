@@ -7,18 +7,30 @@ $(error "TimescaleDB requires PostgreSQL $(MIN_SUPPORTED_VERSION)")
 endif
 
 EXTENSION = timescaledb
+EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^.*\'\(.*\)\'/\1/g")
+
+# Get list of SQL files that need to be loaded. 
 SQL_FILES = $(shell cat sql/setup_load_order.txt sql/functions_load_order.txt sql/init_load_order.txt)
-MANUAL_UPDATE_FILES = $(shell echo sql/setup_main.sql && cat sql/setup_load_order.txt sql/init_load_order.txt)
-EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^.*'\(.*\)'$\/\1/g")
-UPDATE_VERSIONS = $(shell ls -1 sql/updates/*.sql | xargs basename | grep $(EXT_VERSION) | sed "s/\.sql//g"| sed "s/^pre-//g;s/^post-//g"| head -1)
+
+# Get versions that update scripts should be generated for. (ex. '0.1.0--0.1.1').
+UPDATE_VERSIONS = $(shell ls -1 sql/updates/*.sql | xargs -0 basename | grep "$(EXT_VERSION).sql" | sed "s/\.sql//g"| sed "s/^pre-//g;s/^post-//g"| head -1)
+
 UPDATE_VERSIONS_PRE = $(shell ls -1 sql/updates/pre-$(UPDATE_VERSIONS).sql)
 UPDATE_VERSIONS_POST = $(shell ls -1 sql/updates/post-$(UPDATE_VERSIONS).sql)
-UPDATE_FILES = $(shell echo ${UPDATE_VERSIONS_PRE} && cat sql/functions_load_order.txt && echo ${UPDATE_VERSIONS_POST} )
-UPDATE_FILE = sql/$(EXTENSION)--$(UPDATE_VERSIONS).sql
-EXT_GIT_COMMIT := $(shell git describe --abbrev=4 --dirty --always --tags || echo $(EXT_GIT_COMMIT))
-EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 
-DATA = $(EXT_SQL_FILE) $(UPDATE_FILE)
+# Get SQL files that are needed to build update script.
+UPDATE_SQL_FILES = $(shell echo ${UPDATE_VERSIONS_PRE} && cat sql/functions_load_order.txt && echo ${UPDATE_VERSIONS_POST} )
+
+EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
+UPDATE_FILE = sql/$(EXTENSION)--$(UPDATE_VERSIONS).sql
+
+MANUAL_UPDATE_FILES = $(shell echo sql/setup_main.sql && cat sql/setup_load_order.txt sql/init_load_order.txt)
+
+# List of files to add to extension apart from the ones built now, typically previous update files.
+EXTRA_DATA_FILES = $(shell cat extra_extension_files.txt )
+EXT_GIT_COMMIT := $(shell git describe --abbrev=4 --dirty --always --tags || echo $(EXT_GIT_COMMIT))
+
+DATA = $(EXT_SQL_FILE) $(UPDATE_FILE) $(EXTRA_DATA_FILES)
 MODULE_big = $(EXTENSION)
 
 SRCS = \
@@ -94,13 +106,13 @@ override CFLAGS += -DINCLUDE_PACKAGE_SUPPORT=0 -MMD -DEXT_GIT_COMMIT=\"$(EXT_GIT
 override pg_regress_clean_files = test/results/ test/regression.diffs test/regression.out tmp_check/ log/ $(TEST_CLUSTER)
 -include $(DEPS)
 
-all: $(EXT_SQL_FILE) $(UPDATE_FILE) $(SQL_FILES) $(UPDATE_FILES)
+all: $(EXT_SQL_FILE) $(UPDATE_FILE) $(SQL_FILES) $(UPDATE_SQL_FILES)
 
 $(EXT_SQL_FILE): $(SQL_FILES)
 	@echo generating $(EXT_SQL_FILE)
 	@cat $^ > $@
 
-$(UPDATE_FILE): $(UPDATE_FILES)
+$(UPDATE_FILE): $(UPDATE_SQL_FILES)
 	@echo generating $(UPDATE_FILE)
 	@cat $^ > $@
 
@@ -112,7 +124,7 @@ install: $(EXT_SQL_FILES)
 clean: clean-sql-files clean-extra
 
 clean-sql-files:
-	@rm -f sql/$(EXTENSION)--*.sql
+	@rm -f $(EXT_SQL_FILE) $(UPDATE_FILE)
 
 clean-extra:
 	@rm -f src/*~
