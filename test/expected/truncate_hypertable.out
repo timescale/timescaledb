@@ -1,0 +1,129 @@
+\o /dev/null
+\ir include/insert_two_partitions.sql
+\ir create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+\c single
+CREATE TABLE PUBLIC."two_Partitions" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2);
+\set QUIET off
+BEGIN;
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COMMIT;
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 2);
+\set QUIET on
+\o
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+----------------+------------------------+-------------------------+----------------
+  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    
+----+---------------+-----------------------+------------------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk
+  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk
+(4 rows)
+
+\dt "_timescaledb_internal".*
+                      List of relations
+        Schema         |       Name       | Type  |  Owner   
+-----------------------+------------------+-------+----------
+ _timescaledb_internal | _hyper_1_1_chunk | table | postgres
+ _timescaledb_internal | _hyper_1_2_chunk | table | postgres
+ _timescaledb_internal | _hyper_1_3_chunk | table | postgres
+ _timescaledb_internal | _hyper_1_4_chunk | table | postgres
+(4 rows)
+
+SELECT * FROM "two_Partitions";
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+(12 rows)
+
+SET client_min_messages = WARNING;
+TRUNCATE "two_Partitions";
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+----------------+------------------------+-------------------------+----------------
+  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id | schema_name | table_name 
+----+---------------+-------------+------------
+(0 rows)
+
+-- should be empty
+\set ON_ERROR_STOP 0
+\dt "_timescaledb_internal".*
+      List of relations
+ Schema | Name | Type | Owner 
+--------+------+------+-------
+(0 rows)
+
+\set ON_ERROR_STOP 1
+\d+ "two_Partitions"
+                           Table "public.two_Partitions"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+Triggers:
+    _timescaledb_main_after_insert_trigger AFTER INSERT ON "two_Partitions" FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_internal.main_table_after_insert_trigger()
+    _timescaledb_main_insert_trigger BEFORE INSERT ON "two_Partitions" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.main_table_insert_trigger()
+
+SELECT * FROM "two_Partitions";
+ timeCustom | device_id | series_0 | series_1 | series_2 | series_bool 
+------------+-----------+----------+----------+----------+-------------
+(0 rows)
+

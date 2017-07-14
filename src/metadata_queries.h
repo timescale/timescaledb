@@ -10,5 +10,6 @@ typedef struct Hypertable Hypertable;
 
 extern Chunk *spi_chunk_create(Hyperspace *hs, Point *p);
 extern void spi_hypertable_rename(Hypertable *ht, char *new_schema_name, char *new_table_name);
+extern void spi_hypertable_truncate(Hypertable *ht);
 
 #endif   /* TIMESCALEDB_METADATA_QUERIES_H */
