@@ -74,7 +74,7 @@ SELECT time_bucket('15 minutes', time) AS fifteen_min,
     MAX(temperature) AS max_temp,
     MAX(humidity) AS max_hum
   FROM conditions
-  WHERE time = NOW() - interval '3 hours'
+  WHERE time > NOW() - interval '3 hours'
   GROUP BY fifteen_min, location
   ORDER BY fifteen_min DESC, max_temp DESC;
 ```
