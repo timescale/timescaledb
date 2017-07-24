@@ -7,7 +7,7 @@ $(error "TimescaleDB requires PostgreSQL $(MIN_SUPPORTED_VERSION)")
 endif
 
 EXTENSION = timescaledb
-EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^.*\'\(.*\)\'/\1/g")
+EXT_VERSION = $(shell cat timescaledb.control | grep 'default' | sed "s/^default_version = '\(.*\)'/\1/g")
 
 # Get list of SQL files that need to be loaded. 
 SQL_FILES = $(shell cat sql/setup_load_order.txt sql/functions_load_order.txt sql/init_load_order.txt)
