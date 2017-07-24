@@ -69,3 +69,68 @@ SELECT time_bucket('1 second', ts) sec, last(i, j) FROM "test" GROUP BY sec ORDE
  Wed Dec 31 16:00:04 1969 | 4999
 (5 rows)
 
+--test variants of histogram
+EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
+                 QUERY PLAN                  
+---------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Seq Scan on test
+(5 rows)
+
+SELECT histogram(i, 1, 1000000, 2) FROM "test";
+      histogram      
+---------------------
+ {0,500000,499999,1}
+(1 row)
+
+EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
+                 QUERY PLAN                  
+---------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Seq Scan on test
+(5 rows)
+
+SELECT histogram(i, 1, 1000001, 10) FROM "test";
+                                  histogram                                  
+-----------------------------------------------------------------------------
+ {0,100000,100000,100000,100000,100000,100000,100000,100000,100000,100000,0}
+(1 row)
+
+EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
+                 QUERY PLAN                  
+---------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Seq Scan on test
+(5 rows)
+
+SELECT histogram(i, 0, 100000, 5) FROM "test";
+                histogram                 
+------------------------------------------
+ {0,19999,20000,20000,20000,20000,900001}
+(1 row)
+
+EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
+                 QUERY PLAN                  
+---------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Seq Scan on test
+(5 rows)
+
+SELECT histogram(i, 10, 100000, 5) FROM "test";
+                histogram                 
+------------------------------------------
+ {9,19998,19998,19998,19998,19998,900001}
+(1 row)
+
