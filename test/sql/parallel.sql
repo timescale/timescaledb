@@ -18,3 +18,15 @@ SELECT last(i, j) FROM "test";
 EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j) FROM "test" GROUP BY sec ORDER BY sec LIMIT 5;
 SELECT time_bucket('1 second', ts) sec, last(i, j) FROM "test" GROUP BY sec ORDER BY sec LIMIT 5;
 
+--test variants of histogram
+EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
+SELECT histogram(i, 1, 1000000, 2) FROM "test";
+
+EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
+SELECT histogram(i, 1, 1000001, 10) FROM "test";
+
+EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
+SELECT histogram(i, 0, 100000, 5) FROM "test";
+
+EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
+SELECT histogram(i, 10, 100000, 5) FROM "test";
