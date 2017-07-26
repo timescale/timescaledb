@@ -4,15 +4,14 @@
 #include <nodes/extensible.h>
 
 #include "chunk_dispatch_state.h"
+#include "chunk_dispatch_plan.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
 #include "chunk.h"
 #include "cache.h"
 #include "hypertable_cache.h"
 #include "dimension.h"
-#include "dimension_slice.h"
 #include "hypertable.h"
-#include "chunk_constraint.h"
 
 static void
 chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
@@ -32,7 +31,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = chunk_dispatch_create(ht, estate);
+	state->dispatch = chunk_dispatch_create(ht, estate, state->parse);
 	state->subplan_state = ExecInitNode(state->subplan, estate, eflags);
 }
 
@@ -42,6 +41,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	TupleTableSlot *slot;
 
+	/* Get the next tuple from the subplan state node */
 	slot = ExecProcNode(state->subplan_state);
 
 	if (!TupIsNull(slot))
@@ -69,6 +69,15 @@ chunk_dispatch_exec(CustomScanState *node)
 
 		/* Find or create the insert state matching the point */
 		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
+
+		/*
+		 * Update the arbiter indexes for ON CONFLICT statements so that they
+		 * match the chunk. Note that this requires updating the existing List
+		 * head (not replacing it), or otherwise the ModifyTableState node
+		 * won't pick it up.
+		 */
+		if (cis->arbiter_indexes != NIL)
+			*state->mt->arbiterIndexes = *cis->arbiter_indexes;
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
@@ -109,12 +118,14 @@ static CustomExecMethods chunk_dispatch_state_methods = {
 };
 
 ChunkDispatchState *
-chunk_dispatch_state_create(Oid relid, Plan *subplan)
+chunk_dispatch_state_create(ChunkDispatchInfo *info, Plan *subplan)
 {
 	ChunkDispatchState *state;
 
 	state = (ChunkDispatchState *) newNode(sizeof(ChunkDispatchState), T_CustomScanState);
-	state->hypertable_relid = relid;
+	state->hypertable_relid = info->hypertable_relid;
+	state->mt = info->mt;
+	state->parse = info->parse;
 	state->subplan = subplan;
 	state->cscan_state.methods = &chunk_dispatch_state_methods;
 	return state;

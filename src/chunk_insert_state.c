@@ -4,7 +4,10 @@
 #include <utils/rls.h>
 #include <utils/lsyscache.h>
 #include <utils/guc.h>
+#include <nodes/plannodes.h>
+#include <nodes/relation.h>
 #include <access/xact.h>
+#include <optimizer/plancat.h>
 #include <miscadmin.h>
 
 #include "errors.h"
@@ -69,6 +72,25 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 }
 
 /*
+ * Infer a chunk's set of arbiter indexes. This is a subset of the chunk's
+ * indexes that match the ON CONFLICT statement.
+ */
+static List *
+chunk_infer_arbiter_indexes(int rindex, List *rtable, Query *parse)
+{
+	Query		query = *parse;
+	PlannerInfo info = {
+		.type = T_PlannerInfo,
+		.parse = &query,
+	};
+
+	query.resultRelation = rindex;
+	query.rtable = rtable;
+
+	return infer_arbiter_indexes(&info);
+}
+
+/*
  * Create new insert chunk state.
  *
  * This is essentially a ResultRelInfo for a chunk. Initialization of the
@@ -81,6 +103,11 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	Relation	rel;
 	Index		rti;
 	MemoryContext old_mcxt;
+	Query *parse = dispatch->parse;
+	OnConflictAction onconflict = ONCONFLICT_NONE;
+
+	if (parse && parse->onConflict)
+		onconflict = parse->onConflict->action;
 
 	/* permissions NOT checked here; were checked at hypertable level */
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
@@ -106,7 +133,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	if (state->result_relation_info->ri_RelationDesc->rd_rel->relhasindex &&
 		state->result_relation_info->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(state->result_relation_info, false);
+		ExecOpenIndices(state->result_relation_info, onconflict != ONCONFLICT_NONE);
 
 	if (state->result_relation_info->ri_TrigDesc != NULL)
 	{
@@ -115,6 +142,10 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 			state->result_relation_info->ri_TrigDesc->trig_insert_before_statement)
 			elog(ERROR, "Insert trigger on chunk table not supported");
 	}
+
+	/* Set the chunk's arbiter indexes for ON CONFLICT statements */
+	if (parse != NULL && parse->onConflict != NULL)
+		state->arbiter_indexes = chunk_infer_arbiter_indexes(rti, dispatch->estate->es_range_table, dispatch->parse);
 
 	MemoryContextSwitchTo(old_mcxt);
 

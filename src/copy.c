@@ -53,7 +53,7 @@ copy_chunk_state_create(Hypertable *ht, CopyState cstate)
 
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->estate = estate;
-	ccstate->dispatch = chunk_dispatch_create(ht, estate);
+	ccstate->dispatch = chunk_dispatch_create(ht, estate, NULL);
 	ccstate->cstate = cstate;
 	return ccstate;
 }

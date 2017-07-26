@@ -16,9 +16,7 @@
 static Node *
 create_chunk_dispatch_state(CustomScan *cscan)
 {
-	ChunkDispatchInfo *info = linitial(cscan->custom_private);
-
-	return (Node *) chunk_dispatch_state_create(info->hypertable_relid,
+	return (Node *) chunk_dispatch_state_create(linitial(cscan->custom_private),
 											  linitial(cscan->custom_plans));
 }
 
@@ -36,16 +34,21 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
  * in the custom_private field.
  *
  * The chunk dispatch plan takes the original tuple-producing subplan, which was
- * part of a ModifyTable node, and uses this subplan to produce new tuples to
- * dispatch.
+ * part of a ModifyTable node, and imposes itself inbetween the ModifyTable plan
+ * and the subplan. During execution, the subplan will produce the new tuples
+ * that the chunk dispatch node routes before passing them up to the ModifyTable
+ * node.
  */
 CustomScan *
-chunk_dispatch_plan_create(Plan *subplan, Oid hypertable_relid)
+chunk_dispatch_plan_create(ModifyTable *mt, Plan *subplan, Oid hypertable_relid, Query *parse)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 	ChunkDispatchInfo *info = palloc(sizeof(ChunkDispatchInfo));
 
 	info->hypertable_relid = hypertable_relid;
+	info->mt = mt;
+	info->parse = parse;
+
 	cscan->custom_private = list_make1(info);
 	cscan->methods = &chunk_dispatch_plan_methods;
 	cscan->custom_plans = list_make1(subplan);
