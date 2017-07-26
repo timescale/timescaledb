@@ -6,6 +6,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \o
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
@@ -73,6 +74,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \o
 drop schema public cascade;
 NOTICE:  drop cascades to extension timescaledb

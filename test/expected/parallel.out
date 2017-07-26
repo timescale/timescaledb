@@ -7,6 +7,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 CREATE TABLE test (i int, j double precision, ts timestamp);
 --has to be big enough to force at least 2 workers below.
 INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(1,1000000) AS x;

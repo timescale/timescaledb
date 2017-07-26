@@ -6,6 +6,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \o
 \ir include/ddl_ops_1.sql
 CREATE TABLE PUBLIC."Hypertable_1" (

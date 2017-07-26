@@ -6,7 +6,7 @@
 bool		guc_disable_optimizations = false;
 bool		guc_optimize_non_hypertables = false;
 bool		guc_restoring = false;
-
+bool		guc_constraint_aware_append = true;
 
 void
 _guc_init(void)
@@ -41,6 +41,16 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable("timescaledb.constraint_aware_append", "Enable constraint-aware append scans",
+							 "Enable constraint exclusion at execution time",
+							 &guc_constraint_aware_append,
+							 true,
+							 PGC_USERSET
+							 ,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 }
 
 void

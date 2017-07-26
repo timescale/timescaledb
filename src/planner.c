@@ -9,15 +9,18 @@
 #include <parser/parsetree.h>
 #include <parser/parse_func.h>
 #include <parser/parse_oper.h>
-#include <utils/guc.h>
-#include <optimizer/clauses.h>
-#include <optimizer/planner.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_type.h>
-#include <optimizer/paths.h>
-#include <utils/lsyscache.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_collate.h>
+#include <optimizer/clauses.h>
+#include <optimizer/planner.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
+#include <optimizer/cost.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_type.h>
+#include <catalog/pg_class.h>
+#include <utils/lsyscache.h>
+#include <utils/guc.h>
 #include <miscadmin.h>
 
 #include "hypertable_cache.h"
@@ -29,6 +32,7 @@
 #include "chunk_dispatch_plan.h"
 #include "planner_utils.h"
 #include "hypertable_insert.h"
+#include "constraint_aware_append.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -58,7 +62,11 @@ typedef struct AddPartFuncQualCtx
 } AddPartFuncQualCtx;
 
 
-static GlobalPlannerCtx gpc = {0};
+static GlobalPlannerCtx gpc = {
+	.extension_is_loaded = false,
+	.has_hypertables = false,
+	.hcache = NULL,
+};
 
 /*
  * Identify queries on a hypertable by walking the query tree. If the query is
@@ -76,7 +84,7 @@ hypertable_query_walker(Node *node, void *context)
 		RangeTblEntry *rte = (RangeTblEntry *) node;
 		HypertableQueryCtx *ctx = (HypertableQueryCtx *) context;
 
-		if (rte->rtekind == RTE_RELATION && rte->inh)
+		if (rte->rtekind == RTE_RELATION)
 		{
 			Hypertable *hentry = hypertable_cache_get_entry(gpc.hcache, rte->relid);
 
@@ -369,7 +377,7 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 
 		if (mt->operation == CMD_INSERT)
 		{
-			bool        hypertable_found = false;
+			bool		hypertable_found = false;
 			ListCell   *lc_plan,
 					   *lc_rel;
 
@@ -413,18 +421,17 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 static void
 global_planner_context_init()
 {
-	memset(&gpc, 0, sizeof(GlobalPlannerCtx));
 	gpc.extension_is_loaded = extension_is_loaded();
-
-	if (gpc.extension_is_loaded)
-		gpc.hcache = hypertable_cache_pin();
+	gpc.hcache = hypertable_cache_pin();
 }
 
 static void
 global_planner_context_cleanup()
 {
-	if (gpc.hcache)
-		cache_release(gpc.hcache);
+	Assert(gpc.hcache != NULL);
+
+	if (cache_release(gpc.hcache) <= 1)
+		gpc.hcache = NULL;
 }
 
 static PlannedStmt *
@@ -473,6 +480,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 		planned_stmt_walker(plan_stmt, modifytable_plan_walker, &ctx);
 	}
+
 	global_planner_context_cleanup();
 
 	return plan_stmt;
@@ -489,22 +497,82 @@ should_optimize_query()
 
 extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 
+static inline bool
+should_optimize_append(const Path *path)
+{
+	RelOptInfo *rel = path->parent;
+	ListCell   *lc;
+
+	if (!guc_constraint_aware_append ||
+		constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
+		return false;
+
+	/*
+	 * If there are clauses that have mutable functions, this path is ripe for
+	 * execution-time optimization
+	 */
+	foreach(lc, rel->baserestrictinfo)
+	{
+		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+		if (contain_mutable_functions((Node *) rinfo->clause))
+			return true;
+	}
+	return false;
+}
+
 static void
 timescaledb_set_rel_pathlist(PlannerInfo *root,
 							 RelOptInfo *rel,
 							 Index rti,
 							 RangeTblEntry *rte)
 {
-	if (extension_is_loaded() && !IS_DUMMY_REL(rel) && should_optimize_query())
-	{
-		if (OidIsValid(rte->relid))
-		{
-			sort_transform_optimization(root, rel);
-		}
-	}
+	Hypertable *ht;
+
+	global_planner_context_init();
 
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook) (root, rel, rti, rte);
+
+	if (!extension_is_loaded() ||
+		IS_DUMMY_REL(rel) ||
+		!should_optimize_query() ||
+		!OidIsValid(rte->relid))
+		goto out_release;
+
+	sort_transform_optimization(root, rel);
+
+	if (rel->rtekind != RTE_RELATION ||
+		rte->relkind != RELKIND_RELATION ||
+	/* Do not optimize result relations (INSERT, UPDATE, DELETE) */
+		rti == (Index) root->parse->resultRelation)
+		goto out_release;
+
+	ht = hypertable_cache_get_entry(gpc.hcache, rte->relid);
+
+	if (ht != NULL)
+	{
+		ListCell   *lc;
+
+		foreach(lc, rel->pathlist)
+		{
+			Path	  **pathptr = (Path **) &lfirst(lc);
+			Path	   *path = *pathptr;
+
+			switch (nodeTag(path))
+			{
+				case T_AppendPath:
+				case T_MergeAppendPath:
+					if (should_optimize_append(path))
+						*pathptr = constraint_aware_append_path_create(root, ht, path);
+				default:
+					break;
+			}
+		}
+	}
+
+out_release:
+	global_planner_context_cleanup();
 }
 
 void
@@ -514,7 +582,6 @@ _planner_init(void)
 	planner_hook = timescaledb_planner;
 	prev_set_rel_pathlist_hook = set_rel_pathlist_hook;
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
-
 }
 
 void
