@@ -363,6 +363,7 @@ planned_stmt_walker(PlannedStmt *stmt, void (*walker) (Plan *, void *), void *co
 
 typedef struct ModifyTableWalkerCtx
 {
+	Query	   *parse;
 	List	   *rtable;
 } ModifyTableWalkerCtx;
 
@@ -427,6 +428,12 @@ modifytable_plan_walker(Plan *plan, void *pctx)
 			ListCell   *lc_plan,
 					   *lc_rel;
 
+			if (ctx->parse->onConflict != NULL && ctx->parse->onConflict->constraint != InvalidOid)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("Hypertables do not support ON CONFLICT statements that reference constraints"),
+					 errhint("Use column names to infer indexes instead.")));
+
 			/*
 			 * To match up tuple-producing subplans with result relations, we
 			 * simultaneously loop over subplans and resultRelations, although
@@ -439,14 +446,14 @@ modifytable_plan_walker(Plan *plan, void *pctx)
 
 				if (ht != NULL)
 				{
-					void	  **planptr = &lfirst(lc_plan);
-					Plan	   *plan = *planptr;
+					void	  **subplan_ptr = &lfirst(lc_plan);
+					Plan	   *subplan = *subplan_ptr;
 
 					/*
 					 * We replace the plan with our custom chunk dispatch
 					 * plan.
 					 */
-					*planptr = chunk_dispatch_plan_create(plan, rte->relid);
+					*subplan_ptr = chunk_dispatch_plan_create(mt, subplan, rte->relid, ctx->parse);
 				}
 			}
 		}
@@ -510,6 +517,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	if (gpc.extension_is_loaded)
 	{
 		ModifyTableWalkerCtx ctx = {
+			.parse = parse,
 			.rtable = plan_stmt->rtable,
 		};
 

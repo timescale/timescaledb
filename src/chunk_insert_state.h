@@ -12,6 +12,7 @@ typedef struct ChunkInsertState
 	Chunk	   *chunk;
 	Relation	rel;
 	ResultRelInfo *result_relation_info;
+	List	   *arbiter_indexes;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

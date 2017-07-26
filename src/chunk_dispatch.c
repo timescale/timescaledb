@@ -11,13 +11,14 @@
 #include "dimension.h"
 
 ChunkDispatch *
-chunk_dispatch_create(Hypertable *ht, EState *estate)
+chunk_dispatch_create(Hypertable *ht, EState *estate, Query *parse)
 {
 	ChunkDispatch *cp = palloc(sizeof(ChunkDispatch));
 
 	cp->hypertable = ht;
 	cp->estate = estate;
 	cp->hypertable_result_rel_info = NULL;
+	cp->parse = parse;
 	cp->cache = subspace_store_init(HYPERSPACE_NUM_DIMENSIONS(ht->space), estate->es_query_cxt);
 	return cp;
 }
