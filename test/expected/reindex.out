@@ -5,6 +5,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 CREATE TABLE reindex_test(time timestamp, temp float);
 CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
 -- create hypertable with three chunks

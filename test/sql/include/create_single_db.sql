@@ -5,3 +5,4 @@ CREATE DATABASE single;
 
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;

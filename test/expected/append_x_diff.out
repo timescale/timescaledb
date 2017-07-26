@@ -1,0 +1,199 @@
+--make sure diff only has explain output not result output
+\! diff ../results/append_unoptimized.out ../results/append.out 
+1c1
+< \set DISABLE_OPTIMIZATIONS on
+---
+> \set DISABLE_OPTIMIZATIONS off
+60,71c60,68
+<                              QUERY PLAN                              
+< ---------------------------------------------------------------------
+<  Append
+<    ->  Seq Scan on append_test
+<          Filter: ("time" > (now_s() - '@ 2 mons'::interval))
+<    ->  Index Scan using "1-append_test_time_idx" on _hyper_1_1_chunk
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<    ->  Index Scan using "2-append_test_time_idx" on _hyper_1_2_chunk
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<    ->  Index Scan using "3-append_test_time_idx" on _hyper_1_3_chunk
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+< (9 rows)
+---
+> psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
+>                                 QUERY PLAN                                 
+> ---------------------------------------------------------------------------
+>  Custom Scan (ConstraintAwareAppend)
+>    Hypertable: append_test
+>    ->  Append
+>          ->  Index Scan using "3-append_test_time_idx" on _hyper_1_3_chunk
+>                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+> (5 rows)
+81d77
+< psql:include/append.sql:50: NOTICE:  Stable function now_s() called!
+96,97c92,94
+<                                      QUERY PLAN                                     
+< ------------------------------------------------------------------------------------
+---
+> psql:include/append.sql:56: NOTICE:  Stable function now_s() called!
+>                                         QUERY PLAN                                        
+> ------------------------------------------------------------------------------------------
+99,109c96,102
+<    ->  Merge Append
+<          Sort Key: append_test."time"
+<          ->  Index Scan Backward using append_test_time_idx on append_test
+<                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<          ->  Index Scan Backward using "1-append_test_time_idx" on _hyper_1_1_chunk
+<                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<          ->  Index Scan Backward using "2-append_test_time_idx" on _hyper_1_2_chunk
+<                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<          ->  Index Scan Backward using "3-append_test_time_idx" on _hyper_1_3_chunk
+<                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+< (11 rows)
+---
+>    ->  Custom Scan (ConstraintAwareAppend)
+>          Hypertable: append_test
+>          ->  Merge Append
+>                Sort Key: _hyper_1_3_chunk."time"
+>                ->  Index Scan Backward using "3-append_test_time_idx" on _hyper_1_3_chunk
+>                      Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+> (7 rows)
+120,121d112
+< psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
+< psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
+155,156c146,147
+<                             QUERY PLAN                             
+< -------------------------------------------------------------------
+---
+>                                QUERY PLAN                                
+> -------------------------------------------------------------------------
+159,167c150,158
+<    ->  Append
+<          ->  Seq Scan on append_test
+<                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+<          ->  Seq Scan on _hyper_1_1_chunk
+<                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+<          ->  Seq Scan on _hyper_1_2_chunk
+<                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+<          ->  Seq Scan on _hyper_1_3_chunk
+<                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+---
+>    ->  Custom Scan (ConstraintAwareAppend)
+>          Hypertable: append_test
+>          ->  Append
+>                ->  Seq Scan on _hyper_1_1_chunk
+>                      Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+>                ->  Seq Scan on _hyper_1_2_chunk
+>                      Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+>                ->  Seq Scan on _hyper_1_3_chunk
+>                      Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+194,195d184
+< psql:include/append.sql:86: NOTICE:  Stable function now_s() called!
+< psql:include/append.sql:86: NOTICE:  Stable function now_s() called!
+203,215c192,201
+<                                   QUERY PLAN                                  
+< ------------------------------------------------------------------------------
+<  Merge Append
+<    Sort Key: append_test."time"
+<    ->  Index Scan Backward using append_test_time_idx on append_test
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<    ->  Index Scan Backward using "1-append_test_time_idx" on _hyper_1_1_chunk
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<    ->  Index Scan Backward using "2-append_test_time_idx" on _hyper_1_2_chunk
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+<    ->  Index Scan Backward using "3-append_test_time_idx" on _hyper_1_3_chunk
+<          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+< (10 rows)
+---
+> psql:include/append.sql:89: NOTICE:  Stable function now_s() called!
+>                                      QUERY PLAN                                     
+> ------------------------------------------------------------------------------------
+>  Custom Scan (ConstraintAwareAppend)
+>    Hypertable: append_test
+>    ->  Merge Append
+>          Sort Key: _hyper_1_3_chunk."time"
+>          ->  Index Scan Backward using "3-append_test_time_idx" on _hyper_1_3_chunk
+>                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
+> (6 rows)
+243a230
+> psql:include/append.sql:102: NOTICE:  Stable function now_s() called!
+250c237,238
+<          ->  Result
+---
+>          ->  Custom Scan (ConstraintAwareAppend)
+>                Hypertable: append_test
+252,255d239
+<                      ->  Seq Scan on append_test
+<                            Filter: ("time" > (now_s() - '@ 4 mons'::interval))
+<                      ->  Index Scan using "1-append_test_time_idx" on _hyper_1_1_chunk
+<                            Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+260c244
+< (14 rows)
+---
+> (11 rows)
+303,304c287,288
+<                                  QUERY PLAN                                 
+< ----------------------------------------------------------------------------
+---
+>                                     QUERY PLAN                                    
+> ----------------------------------------------------------------------------------
+307,336c291,320
+<    ->  Append
+<          ->  Seq Scan on append_test a
+<                Filter: ("time" > (now() - '@ 3 hours'::interval))
+<          ->  Bitmap Heap Scan on _hyper_1_1_chunk a_1
+<                Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+<                ->  Bitmap Index Scan on "1-append_test_time_idx"
+<                      Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+<          ->  Bitmap Heap Scan on _hyper_1_2_chunk a_2
+<                Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+<                ->  Bitmap Index Scan on "2-append_test_time_idx"
+<                      Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+<          ->  Bitmap Heap Scan on _hyper_1_3_chunk a_3
+<                Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+<                ->  Bitmap Index Scan on "3-append_test_time_idx"
+<                      Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+<    ->  Append
+<          ->  Seq Scan on join_test j
+<                Filter: ("time" > (now() - '@ 3 hours'::interval))
+<          ->  Bitmap Heap Scan on _hyper_2_4_chunk j_1
+<                Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+<                ->  Bitmap Index Scan on "4-join_test_time_idx"
+<                      Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+<          ->  Bitmap Heap Scan on _hyper_2_5_chunk j_2
+<                Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+<                ->  Bitmap Index Scan on "5-join_test_time_idx"
+<                      Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+<          ->  Bitmap Heap Scan on _hyper_2_6_chunk j_3
+<                Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+<                ->  Bitmap Index Scan on "6-join_test_time_idx"
+<                      Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+---
+>    ->  Custom Scan (ConstraintAwareAppend)
+>          Hypertable: append_test
+>          ->  Append
+>                ->  Bitmap Heap Scan on _hyper_1_1_chunk a_1
+>                      Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                      ->  Bitmap Index Scan on "1-append_test_time_idx"
+>                            Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                ->  Bitmap Heap Scan on _hyper_1_2_chunk a_2
+>                      Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                      ->  Bitmap Index Scan on "2-append_test_time_idx"
+>                            Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                ->  Bitmap Heap Scan on _hyper_1_3_chunk a_3
+>                      Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                      ->  Bitmap Index Scan on "3-append_test_time_idx"
+>                            Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+>    ->  Custom Scan (ConstraintAwareAppend)
+>          Hypertable: join_test
+>          ->  Append
+>                ->  Bitmap Heap Scan on _hyper_2_4_chunk j_1
+>                      Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                      ->  Bitmap Index Scan on "4-join_test_time_idx"
+>                            Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                ->  Bitmap Heap Scan on _hyper_2_5_chunk j_2
+>                      Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                      ->  Bitmap Index Scan on "5-join_test_time_idx"
+>                            Index Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                ->  Bitmap Heap Scan on _hyper_2_6_chunk j_3
+>                      Recheck Cond: ("time" > (now() - '@ 3 hours'::interval))
+>                      ->  Bitmap Index Scan on "6-join_test_time_idx"
+>                            Index Cond: ("time" > (now() - '@ 3 hours'::interval))

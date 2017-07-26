@@ -6,6 +6,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \o
 \ir include/sql_query_results.sql
 CREATE TABLE PUBLIC.hyper_1 (
@@ -123,14 +124,13 @@ LIMIT 2;
  Limit
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
-         ->  Result
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: hyper_1
                ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
-                     ->  Index Scan using time_plain on hyper_1
-                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+                     Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
                      ->  Index Scan using "1-time_plain" on _hyper_1_1_chunk
                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(10 rows)
+(9 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
 FROM hyper_1 
@@ -379,18 +379,14 @@ WHERE time < to_timestamp(900)
 GROUP BY t 
 ORDER BY t DESC 
 LIMIT 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
  Limit
-   ->  Sort
-         Sort Key: (date_trunc('minute'::text, "time")) DESC
-         ->  HashAggregate
-               Group Key: date_trunc('minute'::text, "time")
-               ->  Bitmap Heap Scan on plain_table
-                     Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-                     ->  Bitmap Index Scan on time_plain_plain_table
-                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(9 rows)
+   ->  GroupAggregate
+         Group Key: date_trunc('minute'::text, "time")
+         ->  Index Scan using time_plain_plain_table on plain_table
+               Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(5 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
 FROM plain_table 

@@ -5,6 +5,7 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 SELECT * from _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------

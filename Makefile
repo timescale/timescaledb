@@ -62,6 +62,7 @@ SRCS = \
 	src/chunk_dispatch_state.c \
 	src/chunk_dispatch_plan.c \
 	src/chunk_insert_state.c \
+	src/constraint_aware_append.c \
 	src/agg_bookend.c \
 	src/subspace_store.c \
 	src/guc.c \
