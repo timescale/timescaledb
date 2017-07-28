@@ -54,7 +54,8 @@ timescaledb_ProcessUtility(Node *parsetree,
 	}
 
 	/* Truncate a hypertable */
-	if (IsA(parsetree, TruncateStmt)) {
+	if (IsA(parsetree, TruncateStmt))
+	{
 		TruncateStmt *truncatestmt = (TruncateStmt *) parsetree;
 		ListCell   *cell;
 
@@ -67,7 +68,8 @@ timescaledb_ProcessUtility(Node *parsetree,
 				Cache	   *hcache = hypertable_cache_pin();
 				Hypertable *hentry = hypertable_cache_get_entry(hcache, relId);
 
-				if (hentry != NULL) {
+				if (hentry != NULL)
+				{
 					executor_level_enter();
 					spi_hypertable_truncate(hentry);
 					executor_level_exit();

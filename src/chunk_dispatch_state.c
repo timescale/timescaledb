@@ -5,6 +5,7 @@
 
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
+#include "chunk_dispatch_info.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
 #include "chunk.h"
@@ -19,6 +20,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	Hypertable *ht;
 	Cache	   *hypertable_cache;
+	PlanState  *ps;
 
 	hypertable_cache = hypertable_cache_pin();
 
@@ -29,10 +31,10 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 		cache_release(hypertable_cache);
 		elog(ERROR, "No hypertable for relid %d", state->hypertable_relid);
 	}
-
+	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
 	state->dispatch = chunk_dispatch_create(ht, estate, state->parse);
-	state->subplan_state = ExecInitNode(state->subplan, estate, eflags);
+	node->custom_ps = list_make1(ps);
 }
 
 static TupleTableSlot *
@@ -40,9 +42,10 @@ chunk_dispatch_exec(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	TupleTableSlot *slot;
+	PlanState  *substate = linitial(node->custom_ps);
 
 	/* Get the next tuple from the subplan state node */
-	slot = ExecProcNode(state->subplan_state);
+	slot = ExecProcNode(substate);
 
 	if (!TupIsNull(slot))
 	{
@@ -77,7 +80,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		 * won't pick it up.
 		 */
 		if (cis->arbiter_indexes != NIL)
-			*state->mt->arbiterIndexes = *cis->arbiter_indexes;
+			state->parent->mt_arbiterindexes = cis->arbiter_indexes;
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
@@ -96,8 +99,9 @@ static void
 chunk_dispatch_end(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
+	PlanState  *substate = linitial(node->custom_ps);
 
-	ExecEndNode(state->subplan_state);
+	ExecEndNode(substate);
 	chunk_dispatch_destroy(state->dispatch);
 	cache_release(state->hypertable_cache);
 }
@@ -105,12 +109,13 @@ chunk_dispatch_end(CustomScanState *node)
 static void
 chunk_dispatch_rescan(CustomScanState *node)
 {
-	ChunkDispatchState *state = (ChunkDispatchState *) node;
+	PlanState  *substate = linitial(node->custom_ps);
 
-	ExecReScan(state->subplan_state);
+	ExecReScan(substate);
 }
 
 static CustomExecMethods chunk_dispatch_state_methods = {
+	.CustomName = CHUNK_DISPATCH_STATE_NAME,
 	.BeginCustomScan = chunk_dispatch_begin,
 	.EndCustomScan = chunk_dispatch_end,
 	.ExecCustomScan = chunk_dispatch_exec,
@@ -124,7 +129,6 @@ chunk_dispatch_state_create(ChunkDispatchInfo *info, Plan *subplan)
 
 	state = (ChunkDispatchState *) newNode(sizeof(ChunkDispatchState), T_CustomScanState);
 	state->hypertable_relid = info->hypertable_relid;
-	state->mt = info->mt;
 	state->parse = info->parse;
 	state->subplan = subplan;
 	state->cscan_state.methods = &chunk_dispatch_state_methods;

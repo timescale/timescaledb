@@ -22,7 +22,6 @@ static inline Index
 create_chunk_range_table_entry(EState *estate, Relation rel)
 {
 	RangeTblEntry *rte;
-	int			length = list_length(estate->es_range_table);
 
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
@@ -30,12 +29,16 @@ create_chunk_range_table_entry(EState *estate, Relation rel)
 	rte->relkind = rel->rd_rel->relkind;
 	rte->requiredPerms = ACL_INSERT;
 
-	if (length == 1)
+	/*
+	 * If this is the first tuple, we make a copy of the range table to avoid
+	 * modifying the old list.
+	 */
+	if (estate->es_processed == 0)
 		estate->es_range_table = list_copy(estate->es_range_table);
 
 	estate->es_range_table = lappend(estate->es_range_table, rte);
 
-	return length + 1;
+	return list_length(estate->es_range_table);
 }
 
 /*
@@ -103,7 +106,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	Relation	rel;
 	Index		rti;
 	MemoryContext old_mcxt;
-	Query *parse = dispatch->parse;
+	Query	   *parse = dispatch->parse;
 	OnConflictAction onconflict = ONCONFLICT_NONE;
 
 	if (parse && parse->onConflict)

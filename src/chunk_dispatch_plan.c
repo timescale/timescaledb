@@ -2,11 +2,13 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/readfuncs.h>
 #include <utils/rel.h>
 #include <catalog/pg_type.h>
 
 #include "chunk_dispatch_plan.h"
 #include "chunk_dispatch_state.h"
+#include "chunk_dispatch_info.h"
 
 /*
  * Create a ChunkDispatchState node from this plan. This is the full execution
@@ -40,14 +42,10 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
  * node.
  */
 CustomScan *
-chunk_dispatch_plan_create(ModifyTable *mt, Plan *subplan, Oid hypertable_relid, Query *parse)
+chunk_dispatch_plan_create(Plan *subplan, Oid hypertable_relid, Query *parse)
 {
 	CustomScan *cscan = makeNode(CustomScan);
-	ChunkDispatchInfo *info = palloc(sizeof(ChunkDispatchInfo));
-
-	info->hypertable_relid = hypertable_relid;
-	info->mt = mt;
-	info->parse = parse;
+	ChunkDispatchInfo *info = chunk_dispatch_info_create(hypertable_relid, parse);
 
 	cscan->custom_private = list_make1(info);
 	cscan->methods = &chunk_dispatch_plan_methods;

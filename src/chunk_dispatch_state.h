@@ -3,6 +3,7 @@
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
+#include <nodes/parsenodes.h>
 
 typedef struct ChunkDispatch ChunkDispatch;
 typedef struct ChunkDispatchInfo ChunkDispatchInfo;
@@ -13,17 +14,16 @@ typedef struct ChunkDispatchState
 {
 	CustomScanState cscan_state;
 	Plan	   *subplan;
-	PlanState  *subplan_state;
 	Cache	   *hypertable_cache;
 	Oid			hypertable_relid;
 
 	/*
-	 * Keep pointers to the original parsed Query and the ModifyTable plan
-	 * node. We need these to compute and update the arbiter indexes for each
-	 * chunk we INSERT into.
+	 * Keep pointers to the original parsed Query and the ModifyTableState
+	 * plan node. We need these to compute and update the arbiter indexes for
+	 * each chunk we INSERT into.
 	 */
 	Query	   *parse;
-	ModifyTable *mt;
+	ModifyTableState *parent;
 
 	/*
 	 * The chunk dispatch state. Keeps cached insert states (result relations)
@@ -31,6 +31,8 @@ typedef struct ChunkDispatchState
 	 */
 	ChunkDispatch *dispatch;
 } ChunkDispatchState;
+
+#define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
 
 ChunkDispatchState *chunk_dispatch_state_create(ChunkDispatchInfo *, Plan *);
 

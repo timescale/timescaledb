@@ -50,12 +50,15 @@ SRCS = \
 	src/ddl_utils.c \
 	src/chunk_constraint.c \
 	src/partitioning.c \
+	src/planner_utils.c \
 	src/planner.c \
 	src/executor.c \
 	src/process_utility.c \
 	src/copy.c \
 	src/sort_transform.c \
+	src/hypertable_insert.c \
 	src/chunk_dispatch.c \
+	src/chunk_dispatch_info.c \
 	src/chunk_dispatch_state.c \
 	src/chunk_dispatch_plan.c \
 	src/chunk_insert_state.c \
