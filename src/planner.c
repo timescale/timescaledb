@@ -27,6 +27,8 @@
 #include "guc.h"
 #include "dimension.h"
 #include "chunk_dispatch_plan.h"
+#include "planner_utils.h"
+#include "hypertable_insert.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -57,8 +59,6 @@ typedef struct AddPartFuncQualCtx
 
 
 static GlobalPlannerCtx gpc = {0};
-
-static void plantree_walker(Plan *plan, void (*walker) (Plan *, void *), void *ctx);
 
 /*
  * Identify queries on a hypertable by walking the query tree. If the query is
@@ -299,68 +299,6 @@ add_partitioning_func_qual(Query *parse, Hypertable *hentry)
 	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
 }
 
-static inline void
-plantree_walk_subplans(List *plans, void (*walker) (Plan *, void *), void *ctx)
-{
-	ListCell   *lc;
-
-	foreach(lc, plans)
-		plantree_walker((Plan *) lfirst(lc), walker, ctx);
-}
-
-/* A plan tree walker. Similar to planstate_tree_walker in nodeFuncs.h */
-static void
-plantree_walker(Plan *plan, void (*walker) (Plan *, void *), void *context)
-{
-	if (plan == NULL)
-		return;
-
-	check_stack_depth();
-
-	/* special child plans */
-	switch (nodeTag(plan))
-	{
-		case T_ModifyTable:
-			plantree_walk_subplans(((ModifyTable *) plan)->plans, walker, context);
-			break;
-		case T_Append:
-			plantree_walk_subplans(((Append *) plan)->appendplans, walker, context);
-			break;
-		case T_MergeAppend:
-			plantree_walk_subplans(((MergeAppend *) plan)->mergeplans, walker, context);
-			break;
-		case T_BitmapAnd:
-			plantree_walk_subplans(((BitmapAnd *) plan)->bitmapplans, walker, context);
-			break;
-		case T_BitmapOr:
-			plantree_walk_subplans(((BitmapOr *) plan)->bitmapplans, walker, context);
-			break;
-		case T_SubqueryScan:
-			walker(((SubqueryScan *) plan)->subplan, context);
-			break;
-		case T_CustomScan:
-			plantree_walk_subplans(((CustomScan *) plan)->custom_plans, walker, context);
-			break;
-		default:
-			break;
-	}
-
-	plantree_walker(plan->lefttree, walker, context);
-	plantree_walker(plan->righttree, walker, context);
-	walker(plan, context);
-}
-
-static void
-planned_stmt_walker(PlannedStmt *stmt, void (*walker) (Plan *, void *), void *context)
-{
-	ListCell   *lc;
-
-	plantree_walker(stmt->planTree, walker, context);
-
-	foreach(lc, stmt->subplans)
-		plantree_walker((Plan *) lfirst(lc), walker, context);
-}
-
 typedef struct ModifyTableWalkerCtx
 {
 	Query	   *parse;
@@ -369,7 +307,7 @@ typedef struct ModifyTableWalkerCtx
 
 /*
  * Traverse the plan tree to find ModifyTable nodes that indicate an INSERT
- * operation. We'd like to modify these nodes to redirect tuples to chunks
+ * operation. We'd like to modify these plans to redirect tuples to chunks
  * instead of the parent table.
  *
  * From the ModifyTable description: "Each ModifyTable node contains
@@ -387,13 +325,17 @@ typedef struct ModifyTableWalkerCtx
  * the chunk, sets the executor's resultRelation to the chunk table and finally
  * returns the tuple to the ModifyTable node.
  *
+ * We also need to wrap the ModifyTable plan node with a HypertableInsert node
+ * to give the ChunkDispatchState node access to the ModifyTableState node in
+ * the execution phase.
+ *
  * Conceptually, the plan modification looks like this:
  *
  * Original plan:
  *
  *		  ^
  *		  |
- *	[ ModifyTable]	-> resultRelation
+ *	[ ModifyTable ] -> resultRelation
  *		  ^
  *		  | Tuple
  *		  |
@@ -402,9 +344,10 @@ typedef struct ModifyTableWalkerCtx
  *
  * Modified plan:
  *
+ *	[ HypertableInsert ]
  *		  ^
  *		  |
- *	[ ModifyTable]	-> resultRelation
+ *	[ ModifyTable ] -> resultRelation
  *		  ^			   ^
  *		  | Tuple	  / <Set resultRelation to the matching chunk table>
  *		  |			 /
@@ -415,9 +358,10 @@ typedef struct ModifyTableWalkerCtx
  *	  [ subplan ]
  */
 static void
-modifytable_plan_walker(Plan *plan, void *pctx)
+modifytable_plan_walker(Plan **planptr, void *pctx)
 {
 	ModifyTableWalkerCtx *ctx = (ModifyTableWalkerCtx *) pctx;
+	Plan	   *plan = *planptr;
 
 	if (IsA(plan, ModifyTable))
 	{
@@ -425,10 +369,12 @@ modifytable_plan_walker(Plan *plan, void *pctx)
 
 		if (mt->operation == CMD_INSERT)
 		{
+			bool        hypertable_found = false;
 			ListCell   *lc_plan,
 					   *lc_rel;
 
-			if (ctx->parse->onConflict != NULL && ctx->parse->onConflict->constraint != InvalidOid)
+			if (ctx->parse->onConflict != NULL &&
+				ctx->parse->onConflict->constraint != InvalidOid)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("Hypertables do not support ON CONFLICT statements that reference constraints"),
@@ -453,9 +399,13 @@ modifytable_plan_walker(Plan *plan, void *pctx)
 					 * We replace the plan with our custom chunk dispatch
 					 * plan.
 					 */
-					*subplan_ptr = chunk_dispatch_plan_create(mt, subplan, rte->relid, ctx->parse);
+					*subplan_ptr = chunk_dispatch_plan_create(subplan, rte->relid, ctx->parse);
+					hypertable_found = true;
 				}
 			}
+
+			if (hypertable_found)
+				*planptr = hypertable_insert_plan_create(mt);
 		}
 	}
 }

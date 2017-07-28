@@ -246,14 +246,19 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
 (12 rows)
 
 --test that we can insert data into a 1-dimensional table (only time partitioning)
-CREATE TABLE "1dim"(time timestamp, temp float);
+CREATE TABLE "1dim"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim"', 'time');
  create_hypertable 
 -------------------
  
 (1 row)
 
-INSERT INTO "1dim" VALUES('2017-01-20T09:00:01', 22.5);
+INSERT INTO "1dim" VALUES('2017-01-20T09:00:01', 22.5) RETURNING *;
+           time           | temp 
+--------------------------+------
+ Fri Jan 20 09:00:01 2017 | 22.5
+(1 row)
+
 INSERT INTO "1dim" VALUES('2017-01-20T09:00:21', 21.2);
 INSERT INTO "1dim" VALUES('2017-01-20T09:00:47', 25.1);
 SELECT * FROM "1dim";
@@ -337,5 +342,72 @@ SELECT * FROM "3dim";
  Fri Jan 20 09:00:01 2017 | 22.5 | blue   | nyc
  Fri Jan 20 09:00:47 2017 | 25.1 | yellow | la
  Fri Jan 20 09:00:21 2017 | 21.2 | brown  | sthlm
+(3 rows)
+
+-- test that explain works
+EXPLAIN
+INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
+                         ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.03 rows=2 width=80)
+   ->  Insert on "3dim"  (cost=0.00..0.03 rows=2 width=80)
+         ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.03 rows=2 width=80)
+               ->  Values Scan on "*VALUES*"  (cost=0.00..0.03 rows=2 width=80)
+(4 rows)
+
+EXPLAIN
+WITH "3dim_insert" AS (
+     INSERT INTO "3dim" VALUES('2017-01-21T09:01:44', 19.3, 'black', 'la') RETURNING time, temp
+), regular_insert AS (
+   INSERT INTO regular_table VALUES('2017-01-21T10:00:51', 14.3) RETURNING time, temp
+) INSERT INTO "1dim" (SELECT time, temp FROM "3dim_insert" UNION SELECT time, temp FROM regular_insert);
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.09..0.12 rows=2 width=16)
+   ->  Insert on "1dim"  (cost=0.09..0.12 rows=2 width=16)
+         CTE 3dim_insert
+           ->  Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=80)
+                 ->  Insert on "3dim"  (cost=0.00..0.01 rows=1 width=80)
+                       ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=80)
+                             ->  Result  (cost=0.00..0.01 rows=1 width=80)
+         CTE regular_insert
+           ->  Insert on regular_table  (cost=0.00..0.01 rows=1 width=16)
+                 ->  Result  (cost=0.00..0.01 rows=1 width=16)
+         ->  Custom Scan (ChunkDispatch)  (cost=0.07..0.09 rows=2 width=16)
+               ->  Unique  (cost=0.07..0.09 rows=2 width=16)
+                     ->  Sort  (cost=0.07..0.08 rows=2 width=16)
+                           Sort Key: "3dim_insert"."time", "3dim_insert".temp
+                           ->  Append  (cost=0.00..0.06 rows=2 width=16)
+                                 ->  CTE Scan on "3dim_insert"  (cost=0.00..0.02 rows=1 width=16)
+                                 ->  CTE Scan on regular_insert  (cost=0.00..0.02 rows=1 width=16)
+(17 rows)
+
+-- test prepared statement INSERT
+PREPARE "1dim_plan" (timestamp, float) AS
+INSERT INTO "1dim" VALUES($1, $2) ON CONFLICT (time) DO NOTHING;
+EXECUTE "1dim_plan" ('2017-04-17 23:35', 31.4);
+EXECUTE "1dim_plan" ('2017-04-17 23:35', 32.6);
+-- test prepared statement with generic plan (forced when no parameters)
+PREPARE "1dim_plan_generic" AS
+INSERT INTO "1dim" VALUES('2017-05-18 17:24', 18.3);
+EXECUTE "1dim_plan_generic";
+SELECT * FROM "1dim" ORDER BY time;
+           time           | temp 
+--------------------------+------
+ Fri Jan 20 09:00:01 2017 | 22.5
+ Fri Jan 20 09:00:21 2017 | 21.2
+ Fri Jan 20 09:00:47 2017 | 25.1
+ Fri Jan 20 09:00:59 2017 | 29.2
+ Mon Apr 17 23:35:00 2017 | 31.4
+ Thu May 18 17:24:00 2017 | 18.3
+(6 rows)
+
+SELECT * FROM "3dim" ORDER BY (time, device);
+           time           | temp | device | location 
+--------------------------+------+--------+----------
+ Fri Jan 20 09:00:01 2017 | 22.5 | blue   | nyc
+ Fri Jan 20 09:00:21 2017 | 21.2 | brown  | sthlm
+ Fri Jan 20 09:00:47 2017 | 25.1 | yellow | la
 (3 rows)
 

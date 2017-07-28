@@ -18,8 +18,11 @@ typedef struct ChunkDispatch
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState	   *estate;
-	/* Keep a pointer to the original (hypertable's) ResultRelInfo since we will
-	 * reset the pointer in EState as we lookup new chunks. */
+
+	/*
+	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
+	 * will reset the pointer in EState as we lookup new chunks.
+	 */
 	ResultRelInfo *hypertable_result_rel_info;
 	Query	   *parse;
 } ChunkDispatch;
