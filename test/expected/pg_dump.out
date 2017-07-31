@@ -42,7 +42,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   124
+   126
 (1 row)
 
 \c postgres
@@ -66,7 +66,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   124
+   126
 (1 row)
 
 \c single
