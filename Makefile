@@ -134,6 +134,8 @@ clean-sql-files:
 
 clean-extra:
 	@rm -f src/*~
+	@rm -f src/*.d
+	@rm -f src/*.o
 
 package: clean $(EXT_SQL_FILE)
 	@mkdir -p package/lib
