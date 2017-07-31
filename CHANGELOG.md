@@ -1,5 +1,17 @@
 # TimescaleDB Changelog
 
+## 0.3.0 (2017-07-31)
+
+**High-level changes**
+* "Upserts" are now supported via normal `ON CONFLICT DO UPDATE`/`ON CONFLICT DO NOTHING` syntax. However, `ON CONFLICT ON CONSTRAINT` is not yet supported.
+* Improved support for user-defined triggers on hypertables. Now handles both INSERT BEFORE and INSERT AFTER triggers, and triggers can be named arbitrarily (before, a \_0\_ prefix was required to ensure correct execution priority).
+* `TRUNCATE` on a hypertable now deletes empty chunks.
+
+**Notable commits**
+* [23f9d3c] Add support for upserts (`ON CONFLICT DO UPDATE`)
+* [1f3dcd8] Make `INSERT`s use a custom plan instead of triggers
+* [f23bf58] Remove empty chunks on `TRUNCATE` hypertable.
+
 ## 0.2.0 (2017-07-12)
 
 **High-level changes**
