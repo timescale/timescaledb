@@ -42,6 +42,8 @@ extern MemoryContext cache_memory_ctx(Cache *cache);
 extern MemoryContext cache_switch_to_memory_context(Cache *cache);
 
 extern Cache *cache_pin(Cache *cache);
-extern void cache_release(Cache *cache);
+extern int	cache_release(Cache *cache);
+extern void _cache_init(void);
+extern void _cache_fini(void);
 
 #endif   /* TIMESCALEDB_CACHE_H */
