@@ -1,4 +1,11 @@
+#include <postgres.h>
+#include <access/xact.h>
+
 #include "cache.h"
+
+/* List of pinned caches. A cache occurs once in this list for every pin
+ * taken */
+static List *pinned_caches = NIL;
 
 void
 cache_init(Cache *cache)
@@ -46,10 +53,11 @@ cache_invalidate(Cache *cache)
 }
 
 /*
- * Pinning is needed if any items returned by the cache
- * may need to survive invalidation events (i.e. AcceptInvalidationMessages() may be called).
+ * Pinning is needed if any items returned by the cache may need to survive
+ * invalidation events (i.e. AcceptInvalidationMessages() may be called).
  *
- * Invalidation messages may be processed on any internal function that takes a lock (e.g. heap_open).
+ * Invalidation messages may be processed on any internal function that takes a
+ * lock (e.g. heap_open).
  *
  * Each call to cache_pin MUST BE paired with a call to cache_release.
  *
@@ -57,16 +65,25 @@ cache_invalidate(Cache *cache)
 extern Cache *
 cache_pin(Cache *cache)
 {
+	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+
+	pinned_caches = lappend(pinned_caches, cache);
+	MemoryContextSwitchTo(old);
 	cache->refcount++;
 	return cache;
 }
 
-extern void
+extern int
 cache_release(Cache *cache)
 {
+	int			refcount = cache->refcount - 1;
+
 	Assert(cache->refcount > 0);
 	cache->refcount--;
+	pinned_caches = list_delete_ptr(pinned_caches, cache);
 	cache_destroy(cache);
+
+	return refcount;
 }
 
 
@@ -132,8 +149,64 @@ cache_remove(Cache *cache, void *key)
 	hash_search(cache->htab, key, HASH_REMOVE, &found);
 
 	if (found)
-	{
 		cache->stats.numelements--;
-	}
+
 	return found;
+}
+
+
+/*
+ * Transaction end callback that cleans up any pinned caches. This is a
+ * safeguard that protects against indefinitely pinned caches (memory leaks)
+ * that may occur if a transaction ends (normally or abnormally) while a pin is
+ * held. Without this, a cache_pin() call always needs to be paired with a
+ * cache_release() call and wrapped in a PG_TRY() block to capture and handle
+ * any exceptions that occur.
+ *
+ * Note that this makes cache_release() optional, although timely
+ * cache_release() calls are still encouraged to release memory as early as
+ * possible during long-running transactions. PG_TRY() blocks are not needed,
+ * however.
+ */
+static void
+cache_xact_end(XactEvent event, void *arg)
+{
+	switch (event)
+	{
+		case XACT_EVENT_COMMIT:
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			{
+				ListCell   *lc;
+
+				/*
+				 * release once for every occurence of a cache in the pinned
+				 * caches list
+				 */
+				foreach(lc, pinned_caches)
+				{
+					Cache	   *cache = lfirst(lc);
+
+					cache->refcount--;
+					cache_destroy(cache);
+				}
+			}
+		default:
+			break;
+	}
+	list_free(pinned_caches);
+	pinned_caches = NIL;
+}
+
+
+void
+_cache_init(void)
+{
+	RegisterXactCallback(cache_xact_end, NULL);
+}
+
+void
+_cache_fini(void)
+{
+	UnregisterXactCallback(cache_xact_end, NULL);
 }
