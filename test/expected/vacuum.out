@@ -1,0 +1,70 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE TABLE vacuum_test(time timestamp, temp float);
+-- create hypertable with three chunks
+SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO vacuum_test VALUES ('2017-01-20T09:00:01', 17.5),
+                               ('2017-01-21T09:00:01', 19.1),
+                               ('2017-04-20T09:00:01', 89.5),
+                               ('2017-04-21T09:00:01', 17.1),
+                               ('2017-06-20T09:00:01', 18.5),
+                               ('2017-06-21T09:00:01', 11.0);
+-- no stats
+SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
+WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
+ tablename | attname | histogram_bounds | n_distinct 
+-----------+---------+------------------+------------
+(0 rows)
+
+VACUUM (VERBOSE, ANALYZE) vacuum_test;
+INFO:  vacuuming "_timescaledb_internal._hyper_1_1_chunk"
+INFO:  index "1-vacuum_test_time_idx" now contains 2 row versions in 2 pages
+INFO:  "_hyper_1_1_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
+INFO:  analyzing "_timescaledb_internal._hyper_1_1_chunk"
+INFO:  "_hyper_1_1_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+INFO:  vacuuming "_timescaledb_internal._hyper_1_2_chunk"
+INFO:  index "2-vacuum_test_time_idx" now contains 2 row versions in 2 pages
+INFO:  "_hyper_1_2_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
+INFO:  analyzing "_timescaledb_internal._hyper_1_2_chunk"
+INFO:  "_hyper_1_2_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+INFO:  vacuuming "_timescaledb_internal._hyper_1_3_chunk"
+INFO:  index "3-vacuum_test_time_idx" now contains 2 row versions in 2 pages
+INFO:  "_hyper_1_3_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
+INFO:  analyzing "_timescaledb_internal._hyper_1_3_chunk"
+INFO:  "_hyper_1_3_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+-- stats should exist for all three chunks
+SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
+WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
+    tablename     | attname |                    histogram_bounds                     | n_distinct 
+------------------+---------+---------------------------------------------------------+------------
+ _hyper_1_1_chunk | time    | {"Fri Jan 20 09:00:01 2017","Sat Jan 21 09:00:01 2017"} |         -1
+ _hyper_1_1_chunk | temp    | {17.5,19.1}                                             |         -1
+ _hyper_1_2_chunk | time    | {"Thu Apr 20 09:00:01 2017","Fri Apr 21 09:00:01 2017"} |         -1
+ _hyper_1_2_chunk | temp    | {17.1,89.5}                                             |         -1
+ _hyper_1_3_chunk | time    | {"Tue Jun 20 09:00:01 2017","Wed Jun 21 09:00:01 2017"} |         -1
+ _hyper_1_3_chunk | temp    | {11,18.5}                                               |         -1
+(6 rows)
+
+-- Run vacuum on a normal (non-hypertable) table
+CREATE TABLE vacuum_norm(time timestamp, temp float);
+INSERT INTO vacuum_norm VALUES ('2017-01-20T09:00:01', 17.5),
+                               ('2017-01-21T09:00:01', 19.1),
+                               ('2017-04-20T09:00:01', 89.5),
+                               ('2017-04-21T09:00:01', 17.1),
+                               ('2017-06-20T09:00:01', 18.5),
+                               ('2017-06-21T09:00:01', 11.0);
+VACUUM (VERBOSE, ANALYZE) vacuum_norm;
+INFO:  vacuuming "public.vacuum_norm"
+INFO:  "vacuum_norm": found 0 removable, 6 nonremovable row versions in 1 out of 1 pages
+INFO:  analyzing "public.vacuum_norm"
+INFO:  "vacuum_norm": scanned 1 of 1 pages, containing 6 live rows and 0 dead rows; 6 rows in sample, 6 estimated total rows

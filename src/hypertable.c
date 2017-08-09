@@ -9,6 +9,7 @@
 #include "dimension.h"
 #include "chunk.h"
 #include "subspace_store.h"
+#include "hypertable_cache.h"
 
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple)
@@ -57,4 +58,32 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 
 	Assert(MemoryContextContains(subspace_store_mcxt(h->chunk_cache), chunk));
 	return chunk;
+}
+
+static inline Oid
+hypertable_relid_lookup(Oid relid)
+{
+	Cache	   *hcache = hypertable_cache_pin();
+	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	Oid			result = ht == NULL ? InvalidOid : ht->main_table_relid;
+
+	cache_release(hcache);
+
+	return result;
+}
+
+/*
+ * Returns a hypertable's relation ID (OID) iff the given RangeVar corresponds to
+ * a hypertable, otherwise InvalidOid.
+*/
+Oid
+hypertable_relid(RangeVar *rv)
+{
+	return hypertable_relid_lookup(RangeVarGetRelid(rv, NoLock, true));
+}
+
+bool
+is_hypertable(Oid relid)
+{
+	return hypertable_relid_lookup(relid) != InvalidOid;
 }
