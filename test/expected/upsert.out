@@ -1,3 +1,10 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE TABLE upsert_test(time timestamp PRIMARY KEY, temp float, color text);
 SELECT create_hypertable('upsert_test', 'time');
  create_hypertable 

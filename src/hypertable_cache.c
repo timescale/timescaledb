@@ -1,11 +1,5 @@
 #include <postgres.h>
-#include <access/relscan.h>
-#include <catalog/namespace.h>
 #include <utils/catcache.h>
-#include <utils/rel.h>
-#include <utils/fmgroids.h>
-#include <utils/tqual.h>
-#include <utils/acl.h>
 #include <utils/lsyscache.h>
 
 #include "hypertable_cache.h"

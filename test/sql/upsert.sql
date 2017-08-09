@@ -1,3 +1,5 @@
+\ir include/create_single_db.sql
+
 CREATE TABLE upsert_test(time timestamp PRIMARY KEY, temp float, color text);
 SELECT create_hypertable('upsert_test', 'time');
 INSERT INTO upsert_test VALUES ('2017-01-20T09:00:01', 22.5, 'yellow') RETURNING *;

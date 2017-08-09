@@ -1,0 +1,58 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE TABLE reindex_test(time timestamp, temp float);
+CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
+-- create hypertable with three chunks
+SELECT create_hypertable('reindex_test', 'time', chunk_time_interval => 2628000000000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO reindex_test VALUES ('2017-01-20T09:00:01', 17.5),
+                                ('2017-01-21T09:00:01', 19.1),
+                                ('2017-04-20T09:00:01', 89.5),
+                                ('2017-04-21T09:00:01', 17.1),
+                                ('2017-06-20T09:00:01', 18.5),
+                                ('2017-06-21T09:00:01', 11.0);
+\d+ reindex_test
+                               Table "public.reindex_test"
+ Column |            Type             | Modifiers | Storage | Stats target | Description 
+--------+-----------------------------+-----------+---------+--------------+-------------
+ time   | timestamp without time zone |           | plain   |              | 
+ temp   | double precision            |           | plain   |              | 
+Indexes:
+    "reindex_test_time_unique_idx" UNIQUE, btree ("time")
+Child tables: _timescaledb_internal._hyper_1_1_chunk,
+              _timescaledb_internal._hyper_1_2_chunk,
+              _timescaledb_internal._hyper_1_3_chunk
+
+-- show reindexing
+REINDEX (VERBOSE) TABLE reindex_test;
+INFO:  index "1-reindex_test_time_unique_idx" was reindexed
+INFO:  index "2-reindex_test_time_unique_idx" was reindexed
+INFO:  index "3-reindex_test_time_unique_idx" was reindexed
+\set ON_ERROR_STOP 0
+-- this one currently doesn't recurse to chunks and instead gives an
+-- error
+REINDEX (VERBOSE) INDEX reindex_test_time_unique_idx;
+ERROR:  Reindexing of a specific index on a hypertable is currently unsupported.
+\set ON_ERROR_STOP 1
+-- show reindexing on a normal table
+CREATE TABLE reindex_norm(time timestamp, temp float);
+CREATE UNIQUE INDEX reindex_norm_time_unique_idx ON reindex_norm(time);
+INSERT INTO reindex_norm VALUES ('2017-01-20T09:00:01', 17.5),
+                                ('2017-01-21T09:00:01', 19.1),
+                                ('2017-04-20T09:00:01', 89.5),
+                                ('2017-04-21T09:00:01', 17.1),
+                                ('2017-06-20T09:00:01', 18.5),
+                                ('2017-06-21T09:00:01', 11.0);
+REINDEX (VERBOSE) TABLE reindex_norm;
+INFO:  index "reindex_norm_time_unique_idx" was reindexed
+REINDEX (VERBOSE) INDEX reindex_norm_time_unique_idx;
+INFO:  index "reindex_norm_time_unique_idx" was reindexed
