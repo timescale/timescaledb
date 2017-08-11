@@ -369,7 +369,7 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 
 		if (mt->operation == CMD_INSERT)
 		{
-			bool        hypertable_found = false;
+			bool		hypertable_found = false;
 			ListCell   *lc_plan,
 					   *lc_rel;
 

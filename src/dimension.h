@@ -6,6 +6,7 @@
 #include <access/htup_details.h>
 
 #include "catalog.h"
+#include "scanner.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
 
@@ -70,7 +71,15 @@ typedef struct Point
 #define POINT_SIZE(cardinality)							\
 	(sizeof(Point) + (sizeof(int64) * (cardinality)))
 
-extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
+extern int dimension_scan_lock(int32 hypertable_id, tuple_found_func ontuple, void *data,
+			   LOCKMODE tablock, LockTupleMode tuplock, bool enable_tuplock);
+extern Hyperspace *dimension_space_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
+
+#define dimension_scan_update(hypertable_id, ontuple, data) \
+	dimension_scan_lock(hypertable_id, ontuple, data, RowExclusiveLock, 0, false)
+
+#define dimension_scan(hypertable_id, ontuple, data) \
+	dimension_scan_lock(hypertable_id, ontuple, data, RowExclusiveLock, 0, false)
 
 #endif   /* TIMESCALEDB_DIMENSION_H */

@@ -63,11 +63,11 @@ dimension_tuple_found(TupleInfo *ti, void *data)
 	return true;
 }
 
-Hyperspace *
-dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
+int
+dimension_scan_lock(int32 hypertable_id, tuple_found_func ontuple, void *data,
+				LOCKMODE tablock, LockTupleMode tuplock, bool enable_tuplock)
 {
 	Catalog    *catalog = catalog_get();
-	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
 	ScanKeyData scankey[1];
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[DIMENSION].id,
@@ -75,9 +75,13 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
-		.data = space,
-		.tuple_found = dimension_tuple_found,
-		.lockmode = AccessShareLock,
+		.tuple_found = ontuple,
+		.data = data,
+		.lockmode = tablock,
+		.tuplock = {
+			.lockmode = tuplock,
+			.enabled = enable_tuplock,
+		},
 		.scandirection = ForwardScanDirection,
 	};
 
@@ -85,7 +89,15 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
 			  BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
-	scanner_scan(&scanCtx);
+	return scanner_scan(&scanCtx);
+}
+
+Hyperspace *
+dimension_space_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
+{
+	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
+
+	dimension_scan(hypertable_id, dimension_tuple_found, space);
 
 	return space;
 }
