@@ -81,9 +81,9 @@ EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
 (5 rows)
 
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
-     histogram     
--------------------
- {500000,499999,1}
+      histogram      
+---------------------
+ {0,500000,499999,1}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
@@ -97,9 +97,9 @@ EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
 (5 rows)
 
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
-                                histogram                                
--------------------------------------------------------------------------
- {100000,100000,100000,100000,100000,100000,100000,100000,100000,100000}
+                                  histogram                                  
+-----------------------------------------------------------------------------
+ {0,100000,100000,100000,100000,100000,100000,100000,100000,100000,100000,0}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
@@ -113,9 +113,9 @@ EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
 (5 rows)
 
 SELECT histogram(i, 0, 100000, 5) FROM "test";
-               histogram                
-----------------------------------------
- {19999,20000,20000,20000,20000,900001}
+                histogram                 
+------------------------------------------
+ {0,19999,20000,20000,20000,20000,900001}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
@@ -129,8 +129,8 @@ EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
 (5 rows)
 
 SELECT histogram(i, 10, 100000, 5) FROM "test";
-                   histogram                    
-------------------------------------------------
- [0:6]={9,19998,19998,19998,19998,19998,900001}
+                histogram                 
+------------------------------------------
+ {9,19998,19998,19998,19998,19998,900001}
 (1 row)
 
