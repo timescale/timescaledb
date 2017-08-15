@@ -83,8 +83,17 @@ BEGIN
     WHERE id = dimension_id;
 
     IF dimension_row.interval_length IS NOT NULL THEN
-        range_start := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
-        range_end := range_start + dimension_row.interval_length;
+        -- For positive values, integer division finds a lower bound which is BEFORE
+        -- the value we want. For negative values, integer divsion finds a upper bound which
+        -- is AFTER the value we want. Therefore for positive numbers we find the
+        -- range_start via integer division, while for negative we find the range_end.
+        IF dimension_value >= 0 THEN
+            range_start := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
+            range_end := range_start + dimension_row.interval_length;
+        ELSE
+            range_end := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
+            range_start := range_end - dimension_row.interval_length;
+        END IF;
     ELSE
        inter := (2147483647 / dimension_row.num_slices);
        IF dimension_value >= inter * (dimension_row.num_slices - 1) THEN

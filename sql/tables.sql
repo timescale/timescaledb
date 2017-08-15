@@ -89,8 +89,8 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 CREATE TABLE _timescaledb_catalog.dimension_slice (
     id            SERIAL   NOT NULL PRIMARY KEY,
     dimension_id  INTEGER  NOT NULL REFERENCES _timescaledb_catalog.dimension(id) ON DELETE CASCADE,
-    range_start   BIGINT   NOT NULL CHECK (range_start >= 0),
-    range_end     BIGINT   NOT NULL CHECK (range_end >= 0),
+    range_start   BIGINT   NOT NULL,
+    range_end     BIGINT   NOT NULL,
     CHECK (range_start <= range_end),
     UNIQUE (dimension_id, range_start, range_end)
 );
