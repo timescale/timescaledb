@@ -1,0 +1,3 @@
+ALTER TABLE _timescaledb_catalog.dimension_slice
+DROP CONSTRAINT dimension_slice_range_start_check,
+DROP CONSTRAINT dimension_slice_range_end_check;
