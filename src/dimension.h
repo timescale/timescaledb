@@ -8,6 +8,7 @@
 #include "catalog.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
+typedef struct DimensionSlice DimensionSlice;
 
 typedef enum DimensionType
 {
@@ -39,21 +40,13 @@ typedef struct Hyperspace
 	int32		hypertable_id;
 	Oid			main_table_relid;
 	uint16		capacity;
-	int16		num_open_dimensions;
-	int16		num_closed_dimensions;
+	uint16		num_dimensions;
 	/* Open dimensions should be stored before closed dimensions */
 	Dimension	dimensions[0];
 } Hyperspace;
 
-#define HYPERSPACE_NUM_DIMENSIONS(hs) \
-	((hs)->num_open_dimensions + \
-	 (hs)->num_closed_dimensions)
-
 #define HYPERSPACE_SIZE(num_dimensions)							\
 	(sizeof(Hyperspace) + (sizeof(Dimension) * (num_dimensions)))
-
-#define hyperspace_get_closed_dimension(hs, i)		\
-	(&(hs)->dimensions[(hs)->num_open_dimensions + i])
 
 /*
  * A point in an N-dimensional hyperspace.
@@ -61,8 +54,7 @@ typedef struct Hyperspace
 typedef struct Point
 {
 	int16		cardinality;
-	uint8		num_open;
-	uint8		num_closed;
+	uint8		num_coords;
 	/* Open dimension coordinates are stored before the closed coordinates */
 	int64		coordinates[0];
 } Point;
@@ -71,6 +63,14 @@ typedef struct Point
 	(sizeof(Point) + (sizeof(int64) * (cardinality)))
 
 extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
+extern DimensionSlice *dimension_calculate_default_slice(Dimension *dim, int64 value);
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
+extern Dimension *hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
+extern Dimension *hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
+
+#define hyperspace_get_open_dimension(space, i)				\
+	hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)
+#define hyperspace_get_closed_dimension(space, i )				\
+	hyperspace_get_dimension(space, DIMENSION_TYPE_CLOSED, i)
 
 #endif   /* TIMESCALEDB_DIMENSION_H */

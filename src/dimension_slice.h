@@ -11,54 +11,34 @@
 typedef struct DimensionSlice
 {
 	FormData_dimension_slice fd;
-	DimensionType type;
 	void		(*storage_free) (void *);
 	void	   *storage;
 } DimensionSlice;
 
-/*
- * Hypercube is a collection of slices from N distinct dimensions, i.e., the
- * N-dimensional analogue of a square or a cube.
- */
-typedef struct Hypercube
-{
-	int16		capacity;		/* capacity of slices[] */
-	int16		num_slices;		/* actual number of slices (should equal
-								 * capacity after create) */
-	/* Open slices are stored before closed slices */
-	DimensionSlice *slices[0];
-} Hypercube;
+typedef struct DimensionVec DimensionVec;
+typedef struct Hypercube Hypercube;
 
-#define HYPERCUBE_SIZE(num_dimensions)								\
-	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
-
-/*
- *	DimensionVec is a collection of slices (ranges) along one dimension for a
- *	time range.
- */
-typedef struct DimensionVec
-{
-	int32		capacity;		/* The capacity of the slices array */
-	int32		num_slices;		/* The current number of slices in slices
-								 * array */
-	DimensionSlice *slices[0];
-} DimensionVec;
-
-#define DIMENSION_VEC_SIZE(num_slices)								\
-	(sizeof(DimensionVec) + sizeof(DimensionSlice *) * num_slices)
-
-#define DIMENSION_VEC_DEFAULT_SIZE 10
-
-extern DimensionVec *dimension_slice_scan(int32 dimension_id, int64 coordinate);
+extern DimensionVec *dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit);
+extern DimensionVec *dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit);
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
+extern DimensionSlice *dimension_slice_scan_for_existing(DimensionSlice *slice);
+extern DimensionSlice *dimension_slice_scan_by_id(int32 dimension_slice_id);
+extern DimensionSlice *dimension_slice_create(int dimension_id, int64 range_start, int64 range_end);
 extern DimensionSlice *dimension_slice_copy(const DimensionSlice *original);
+extern bool dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);
+extern bool dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2);
+extern bool dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
 extern void dimension_slice_free(DimensionSlice *slice);
-extern DimensionVec *dimension_vec_create(int32 initial_num_slices);
-extern DimensionVec *dimension_vec_add_slice_sort(DimensionVec **vec, DimensionSlice *slice);
-extern void dimension_vec_remove_slice(DimensionVec **vecptr, int32 index);
-extern DimensionSlice *dimension_vec_find_slice(DimensionVec *vec, int64 coordinate);
-extern void dimension_vec_free(DimensionVec *vec);
-extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);
-extern Hypercube *hypercube_copy(Hypercube *hc);
+extern void dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
+
+#define dimension_slice_insert(slice) \
+	dimension_slice_insert_multi(&(slice), 1)
+
+#define dimension_slice_scan(dimension_id, coordinate)	\
+	dimension_slice_scan_limit(dimension_id, coordinate, 0)
+
+#define dimension_slice_collision_scan(dimension_id, range_start, range_end)		\
+	dimension_slice_collision_scan_limit(dimension_id, range_start, range_end, 0)
+
 
 #endif   /* TIMESCALEDB_DIMENSION_SLICE_H */

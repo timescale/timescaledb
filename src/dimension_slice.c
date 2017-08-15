@@ -1,6 +1,10 @@
 #include <stdlib.h>
 #include <postgres.h>
 #include <access/relscan.h>
+#include <access/xact.h>
+#include <access/heapam.h>
+#include <utils/rel.h>
+#include <catalog/indexing.h>
 
 #include "catalog.h"
 #include "dimension_slice.h"
@@ -8,20 +12,24 @@
 #include "scanner.h"
 #include "dimension.h"
 #include "chunk_constraint.h"
+#include "dimension_vector.h"
 
-static DimensionVec *dimension_vec_expand(DimensionVec *vec, int32 new_size);
-static DimensionVec *dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice);
+static inline DimensionSlice *
+dimension_slice_alloc(void)
+{
+	return palloc0(sizeof(DimensionSlice));
+}
 
 static inline DimensionSlice *
 dimension_slice_from_form_data(Form_dimension_slice fd)
 {
-	DimensionSlice *ds;
+	DimensionSlice *slice = dimension_slice_alloc();
 
-	ds = palloc0(sizeof(DimensionSlice));
-	memcpy(&ds->fd, fd, sizeof(FormData_dimension_slice));
-	ds->storage_free = NULL;
-	ds->storage = NULL;
-	return ds;
+	slice = palloc0(sizeof(DimensionSlice));
+	memcpy(&slice->fd, fd, sizeof(FormData_dimension_slice));
+	slice->storage_free = NULL;
+	slice->storage = NULL;
+	return slice;
 }
 
 static inline DimensionSlice *
@@ -30,62 +38,77 @@ dimension_slice_from_tuple(HeapTuple tuple)
 	return dimension_slice_from_form_data((Form_dimension_slice) GETSTRUCT(tuple));
 }
 
-static inline Hypercube *
-hypercube_alloc(int16 num_dimensions)
+DimensionSlice *
+dimension_slice_create(int dimension_id, int64 range_start, int64 range_end)
 {
-	Hypercube  *hc = palloc0(HYPERCUBE_SIZE(num_dimensions));
+	DimensionSlice *slice = dimension_slice_alloc();
 
-	hc->capacity = num_dimensions;
-	return hc;
+	slice->fd.dimension_id = dimension_id;
+	slice->fd.range_start = range_start;
+	slice->fd.range_end = range_end;
+
+	return slice;
 }
 
-Hypercube *
-hypercube_copy(Hypercube *hc)
+typedef struct DimensionSliceScanData
 {
-	Hypercube  *copy;
-	size_t		nbytes = HYPERCUBE_SIZE(hc->capacity);
-	int			i;
-
-	copy = palloc(nbytes);
-	memcpy(copy, hc, nbytes);
-
-	for (i = 0; i < hc->num_slices; i++)
-		copy->slices[i] = dimension_slice_copy(hc->slices[i]);
-
-	return copy;
-}
+	DimensionVec *slices;
+	int			limit;
+} DimensionSliceScanData;
 
 static bool
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionVec **vecptr = data;
+	DimensionSliceScanData *scandata = data;
 	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
 
-	dimension_vec_add_slice(vecptr, slice);
+	dimension_vec_add_slice(&scandata->slices, slice);
+
+	if (scandata->limit == ti->count)
+		return false;
+
 	return true;
 }
 
-DimensionVec *
-dimension_slice_scan(int32 dimension_id, int64 coordinate)
+static int
+dimension_slice_scan_limit_internal(ScanKeyData *scankey,
+									Size num_scankeys,
+									tuple_found_func on_tuple_found,
+									void *scandata)
 {
 	Catalog    *catalog = catalog_get();
-	DimensionVec *vec = dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
-	ScanKeyData scankey[3];
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
 		.index = catalog->tables[DIMENSION_SLICE].index_ids[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX],
 		.scantype = ScannerTypeIndex,
-		.nkeys = 3,
+		.nkeys = num_scankeys,
 		.scankey = scankey,
-		.data = &vec,
-		.tuple_found = dimension_vec_tuple_found,
+		.data = scandata,
+		.tuple_found = on_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
 
+	return scanner_scan(&scanCtx);
+}
+
+/*
+ * Scan for slices that enclose the coordinate in the given dimension.
+ *
+ * Returns a dimension vector of slices that enclose the coordinate.
+ */
+DimensionVec *
+dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
+{
+	ScanKeyData scankey[3];
+	DimensionSliceScanData data = {
+		.slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE),
+		.limit = limit,
+	};
+
 	/*
 	 * Perform an index scan for slices matching the dimension's ID and which
-	 * encloses the coordinate.
+	 * enclose the coordinate.
 	 */
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
@@ -94,9 +117,66 @@ dimension_slice_scan(int32 dimension_id, int64 coordinate)
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(coordinate));
 
-	scanner_scan(&scanCtx);
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &data);
 
-	return vec;
+	return dimension_vec_sort(&data.slices);
+}
+
+/*
+ * Scan for slices that collide/overlap with the given range.
+ *
+ * Returns a dimension vector of colliding slices.
+ */
+DimensionVec *
+dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit)
+{
+	ScanKeyData scankey[3];
+	DimensionSliceScanData data = {
+		.slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE),
+		.limit = limit,
+	};
+
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
+	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(range_end));
+	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+			  BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(range_start));
+
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &data);
+
+	return dimension_vec_sort(&data.slices);
+}
+
+
+static bool
+dimension_slice_fill(TupleInfo *ti, void *data)
+{
+	DimensionSlice **slice = data;
+
+	memcpy(&(*slice)->fd, GETSTRUCT(ti->tuple), sizeof(FormData_dimension_slice));
+	return false;
+}
+
+/*
+ * Scan for an existing slice that exactly matches the given slice's dimension
+ * and range. If a match is found, the given slice is updated with slice ID.
+ */
+DimensionSlice *
+dimension_slice_scan_for_existing(DimensionSlice *slice)
+{
+	ScanKeyData scankey[3];
+
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+	 BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.dimension_id));
+	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+	  BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_start));
+	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+		BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_end));
+
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_slice_fill, &slice);
+
+	return slice;
 }
 
 static bool
@@ -108,7 +188,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 	return false;
 }
 
-static DimensionSlice *
+DimensionSlice *
 dimension_slice_scan_by_id(int32 dimension_slice_id)
 {
 	Catalog    *catalog = catalog_get();
@@ -142,42 +222,75 @@ dimension_slice_copy(const DimensionSlice *original)
 	return new;
 }
 
-static int
-cmp_slices_by_dimension_id(const void *left, const void *right)
+/*
+ * Check if two dimensions slices overlap by doing collision detection in one
+ * dimension.
+ *
+ * Returns true if the slices collide, otherwise false.
+ */
+bool
+dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
 {
-	const DimensionSlice *left_slice = *((DimensionSlice **) left);
-	const DimensionSlice *right_slice = *((DimensionSlice **) right);
+	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);
 
-	if (left_slice->fd.dimension_id == right_slice->fd.dimension_id)
-		return 0;
-	if (left_slice->fd.dimension_id < right_slice->fd.dimension_id)
-		return -1;
-	return 1;
+	return (slice1->fd.range_start < slice2->fd.range_end &&
+			slice1->fd.range_end > slice2->fd.range_start);
 }
 
-
-static void
-hypercube_slice_sort(Hypercube *hc)
+/*
+ * Check whether two slices are identical.
+ *
+ * We require by assertion that the slices are in the same dimension and we only
+ * compare the ranges (i.e., the slice ID is not important for equality).
+ *
+ * Returns true if the slices have identical ranges, otherwise false.
+ */
+bool
+dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2)
 {
-	qsort(hc->slices, hc->num_slices, sizeof(DimensionSlice *), cmp_slices_by_dimension_id);
+	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);
+
+	return slice1->fd.range_start == slice2->fd.range_start &&
+		slice1->fd.range_end == slice2->fd.range_end;
 }
 
-Hypercube *
-hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints)
+/*-
+ * Cut a slice that collides with another slice. The coordinate is the point of
+ * insertion, and determines which end of the slice to cut.
+ *
+ * Case where we cut "after" the coordinate:
+ *
+ * ' [-x--------]
+ * '      [--------]
+ *
+ * Case where we cut "before" the coordinate:
+ *
+ * '      [------x--]
+ * ' [--------]
+ *
+ * Returns true if the slice was cut, otherwise false.
+ */
+bool
+dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 {
-	Hypercube  *hc = hypercube_alloc(num_constraints);
-	int			i;
+	Assert(to_cut->fd.dimension_id == other->fd.dimension_id);
 
-	for (i = 0; i < num_constraints; i++)
+	if (other->fd.range_end <= coord &&
+		other->fd.range_end > to_cut->fd.range_start)
 	{
-		DimensionSlice *slice = dimension_slice_scan_by_id(constraints[i].fd.dimension_slice_id);
-
-		Assert(slice != NULL);
-		hc->slices[hc->num_slices++] = slice;
+		/* Cut "before" the coordinate */
+		to_cut->fd.range_start = other->fd.range_end;
+		return true;
+	}
+	else if (other->fd.range_start > coord &&
+			 other->fd.range_start < to_cut->fd.range_end)
+	{
+		/* Cut "after" the coordinate */
+		to_cut->fd.range_end = other->fd.range_start;
+		return true;
 	}
 
-	hypercube_slice_sort(hc);
-	return hc;
+	return false;
 }
 
 void
@@ -188,124 +301,43 @@ dimension_slice_free(DimensionSlice *slice)
 	pfree(slice);
 }
 
-static int
-cmp_slices(const void *left, const void *right)
+static bool
+dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 {
-	const DimensionSlice *left_slice = *((DimensionSlice **) left);
-	const DimensionSlice *right_slice = *((DimensionSlice **) right);
+	TupleDesc	desc = RelationGetDescr(rel);
+	Datum		values[Natts_dimension_slice];
+	bool		nulls[Natts_dimension_slice] = {false};
 
-	if (left_slice->fd.range_start == right_slice->fd.range_start)
-	{
-		if (left_slice->fd.range_end == right_slice->fd.range_end)
-			return 0;
+	if (slice->fd.id > 0)
+		/* Slice already exists in table */
+		return false;
 
-		if (left_slice->fd.range_end > right_slice->fd.range_end)
-			return 1;
+	memset(values, 0, sizeof(values));
+	slice->fd.id = catalog_table_next_seq_id(catalog_get(), DIMENSION_SLICE);
+	values[Anum_dimension_slice_id - 1] = slice->fd.id;
+	values[Anum_dimension_slice_dimension_id - 1] = slice->fd.dimension_id;
+	values[Anum_dimension_slice_range_start - 1] = slice->fd.range_start;
+	values[Anum_dimension_slice_range_end - 1] = slice->fd.range_end;
 
-		return -1;
-	}
+	catalog_insert_values(rel, desc, values, nulls);
 
-	if (left_slice->fd.range_start > right_slice->fd.range_start)
-		return 1;
-
-	return -1;
+	return true;
 }
 
-static int
-cmp_coordinate_and_slice(const void *left, const void *right)
-{
-	int64		coord = *((int64 *) left);
-	const DimensionSlice *slice = *((DimensionSlice **) right);
-
-	if (coord < slice->fd.range_start)
-		return -1;
-
-	if (coord >= slice->fd.range_end)
-		return 1;
-
-	return 0;
-}
-
-static DimensionVec *
-dimension_vec_expand(DimensionVec *vec, int32 new_capacity)
-{
-	if (vec != NULL && vec->capacity >= new_capacity)
-		return vec;
-
-	if (NULL == vec)
-		vec = palloc(DIMENSION_VEC_SIZE(new_capacity));
-	else
-		vec = repalloc(vec, DIMENSION_VEC_SIZE(new_capacity));
-
-	vec->capacity = new_capacity;
-
-	return vec;
-}
-
-DimensionVec *
-dimension_vec_create(int32 initial_num_slices)
-{
-	DimensionVec *vec = dimension_vec_expand(NULL, initial_num_slices);
-
-	vec->capacity = initial_num_slices;
-	vec->num_slices = 0;
-	return vec;
-}
-
-static DimensionVec *
-dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
-{
-	DimensionVec *vec = *vecptr;
-
-	if (vec->num_slices + 1 > vec->capacity)
-		*vecptr = vec = dimension_vec_expand(vec, vec->capacity + 10);
-
-	vec->slices[vec->num_slices++] = slice;
-
-	return vec;
-}
-
-DimensionVec *
-dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
-{
-	DimensionVec *vec = *vecptr;
-
-	*vecptr = vec = dimension_vec_add_slice(vecptr, slice);
-	qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
-	return vec;
-}
-
+/*
+ * Insert slices into the catalog.
+ */
 void
-dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
+dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 {
-	DimensionVec *vec = *vecptr;
+	Catalog    *catalog = catalog_get();
+	Relation	rel;
+	Size		i;
 
-	dimension_slice_free(vec->slices[index]);
-	memcpy(vec->slices + index, vec->slices + (index + 1), sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
-	vec->num_slices--;
-}
+	rel = heap_open(catalog->tables[DIMENSION_SLICE].id, RowExclusiveLock);
 
+	for (i = 0; i < num_slices; i++)
+		dimension_slice_insert_relation(rel, slices[i]);
 
-DimensionSlice *
-dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
-{
-	DimensionSlice **res;
-
-	res = bsearch(&coordinate, vec->slices, vec->num_slices,
-				  sizeof(DimensionSlice *), cmp_coordinate_and_slice);
-
-	if (res == NULL)
-		return NULL;
-
-	return *res;
-}
-
-void
-dimension_vec_free(DimensionVec *vec)
-{
-	int			i;
-
-	for (i = 0; i < vec->num_slices; i++)
-		dimension_slice_free(vec->slices[i]);
-	pfree(vec);
+	heap_close(rel, RowExclusiveLock);
 }

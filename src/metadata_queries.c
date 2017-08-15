@@ -45,13 +45,6 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 		return plan;							\
 	}
 
-#define INT8ARRAYOID 1016
-#define CHUNK_CREATE_ARGS (Oid[]) {INT4ARRAYOID, INT8ARRAYOID}
-#define CHUNK_CREATE "SELECT * FROM _timescaledb_internal.chunk_create($1, $2)"
-
-/* plan for creating a chunk via create_chunk(). */
-DEFINE_PLAN(create_chunk_plan, CHUNK_CREATE, 2, CHUNK_CREATE_ARGS)
-
 /* old_schema, old_name, new_schema, new_name */
 #define RENAME_HYPERTABLE_ARGS (Oid[]) {NAMEOID, NAMEOID, TEXTOID, TEXTOID}
 #define RENAME_HYPERTABLE "SELECT * FROM _timescaledb_internal.rename_hypertable($1, $2, $3, $4)"
@@ -66,64 +59,36 @@ DEFINE_PLAN(rename_hypertable_plan, RENAME_HYPERTABLE, 4, RENAME_HYPERTABLE_ARGS
 /* plan to truncate hypertable */
 DEFINE_PLAN(truncate_hypertable_plan, TRUNCATE_HYPERTABLE, 2, TRUNCATE_HYPERTABLE_ARGS)
 
-static HeapTuple
-chunk_tuple_create_spi_connected(Hyperspace *hs, Point *p, SPIPlanPtr plan)
+#define CHUNK_INSERT_ARGS (Oid[]) {INT4OID, INT4OID, NAMEOID, NAMEOID}
+#define CHUNK_INSERT "INSERT INTO _timescaledb_catalog.chunk VALUES ($1, $2, $3, $4)"
+
+DEFINE_PLAN(chunk_insert_plan, CHUNK_INSERT, 4, CHUNK_INSERT_ARGS)
+
+void
+spi_chunk_insert(int32 chunk_id, int32 hypertable_id, const char *schema_name, const char *table_name)
 {
-	int			i,
-				ret;
-	HeapTuple	tuple;
-	Datum		dimension_ids[HYPERSPACE_NUM_DIMENSIONS(hs)];
-	Datum		dimension_values[HYPERSPACE_NUM_DIMENSIONS(hs)];
-	Datum		args[2];
-
-	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
-	{
-		dimension_ids[i] = Int32GetDatum(hs->dimensions[i].fd.id);
-		dimension_values[i] = Int64GetDatum(p->coordinates[i]);
-	}
-
-	args[0] = PointerGetDatum(construct_array(dimension_ids, HYPERSPACE_NUM_DIMENSIONS(hs), INT4OID, 4, true, 'i'));
-	args[1] = PointerGetDatum(construct_array(dimension_values, HYPERSPACE_NUM_DIMENSIONS(hs), INT8OID, 8, true, 'd'));
-
-	ret = SPI_execute_plan(plan, args, NULL, false, 4);
-
-	if (ret <= 0)
-		elog(ERROR, "Got an SPI error %d", ret);
-
-	if (SPI_processed != 1)
-		elog(ERROR, "Got not 1 row but %lu", SPI_processed);
-
-	tuple = SPI_tuptable->vals[0];
-
-	return tuple;
-}
-
-Chunk *
-spi_chunk_create(Hyperspace *hs, Point *p)
-{
-	HeapTuple	tuple;
-	Chunk	   *chunk;
-	MemoryContext old,
-				top = CurrentMemoryContext;
-	SPIPlanPtr	plan = create_chunk_plan();
+	SPIPlanPtr	plan = chunk_insert_plan();
+	Datum		args[4] = {
+		Int32GetDatum(chunk_id),
+		Int32GetDatum(hypertable_id),
+		CStringGetDatum(schema_name),
+		CStringGetDatum(table_name)
+	};
+	int			ret;
 
 	if (SPI_connect() < 0)
 		elog(ERROR, "Got an SPI connect error");
 
-	tuple = chunk_tuple_create_spi_connected(hs, p, plan);
+	ret = SPI_execute_plan(plan, args, NULL, false, 0);
 
-	old = MemoryContextSwitchTo(top);
-	chunk = chunk_create_from_tuple(tuple, HYPERSPACE_NUM_DIMENSIONS(hs));
-	MemoryContextSwitchTo(old);
+	if (ret <= 0)
+		elog(ERROR, "Got an SPI error %d", ret);
 
 	SPI_finish();
-
-	return chunk;
 }
 
-
 static void
-hypertable_rename_spi_connected(Hypertable *ht, char *new_schema_name, char *new_table_name, SPIPlanPtr plan)
+hypertable_rename_spi_connected(Hypertable *ht, const char *new_schema_name, const char *new_table_name, SPIPlanPtr plan)
 {
 	int			ret;
 	Datum		args[4];
@@ -143,7 +108,7 @@ hypertable_rename_spi_connected(Hypertable *ht, char *new_schema_name, char *new
 }
 
 void
-spi_hypertable_rename(Hypertable *ht, char *new_schema_name, char *new_table_name)
+spi_hypertable_rename(Hypertable *ht, const char *new_schema_name, const char *new_table_name)
 {
 	SPIPlanPtr	plan = rename_hypertable_plan();
 

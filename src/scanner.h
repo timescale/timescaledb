@@ -28,7 +28,10 @@ typedef struct TupleInfo
 	 * in lockresult.
 	 */
 	HTSU_Result lockresult;
+	int			count;
 } TupleInfo;
+
+typedef bool (*tuple_found_func) (TupleInfo *ti, void *data);
 
 typedef struct ScannerCtx
 {

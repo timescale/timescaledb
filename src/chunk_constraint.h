@@ -25,5 +25,6 @@ typedef struct ChunkScanCtx ChunkScanCtx;
 
 extern Chunk *chunk_constraint_scan_by_chunk_id(Chunk *chunk);
 extern int	chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx *ctx);
+extern void chunk_constraint_insert_multi(ChunkConstraint *constraints, Size num_constraints);
 
 #endif   /* TIMESCALEDB_CHUNK_CONSTRAINT_H */

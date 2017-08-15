@@ -154,7 +154,6 @@ scanner_scan(ScannerCtx *ctx)
 {
 	TupleDesc	tuple_desc;
 	bool		is_valid;
-	int			num_tuples = 0;
 	Scanner    *scanner = &scanners[ctx->scantype];
 	InternalScannerCtx ictx = {
 		.sctx = ctx,
@@ -179,7 +178,7 @@ scanner_scan(ScannerCtx *ctx)
 
 		if (ctx->filter == NULL || ctx->filter(&ictx.tinfo, ctx->data))
 		{
-			num_tuples++;
+			ictx.tinfo.count++;
 
 			if (ctx->tuplock.enabled)
 			{
@@ -209,10 +208,10 @@ scanner_scan(ScannerCtx *ctx)
 
 	/* Call post-scan handler, if any. */
 	if (ctx->postscan != NULL)
-		ctx->postscan(num_tuples, ctx->data);
+		ctx->postscan(ictx.tinfo.count, ctx->data);
 
 	scanner->endscan(&ictx);
 	scanner->close(&ictx);
 
-	return num_tuples;
+	return ictx.tinfo.count;
 }

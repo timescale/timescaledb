@@ -22,7 +22,7 @@ hypertable_from_tuple(HeapTuple tuple)
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
-	h->chunk_cache = subspace_store_init(HYPERSPACE_NUM_DIMENSIONS(h->space), CurrentMemoryContext);
+	h->chunk_cache = subspace_store_init(h->space->num_dimensions, CurrentMemoryContext);
 
 	return h;
 }
@@ -43,13 +43,17 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 		 */
 		chunk = chunk_find(h->space, point);
 
+		if (NULL == chunk)
+			chunk = chunk_create(h->space, point,
+								 NameStr(h->fd.associated_schema_name),
+								 NameStr(h->fd.associated_table_prefix));
+
+		Assert(chunk != NULL);
+
 		old = MemoryContextSwitchTo(subspace_store_mcxt(h->chunk_cache));
 
-		if (NULL == chunk)
-			chunk = chunk_create(h->space, point);
-		else
-			/* Make a copy which lives in the chunk cache's memory context */
-			chunk = chunk_copy(chunk);
+		/* Make a copy which lives in the chunk cache's memory context */
+		chunk = chunk_copy(chunk);
 
 		Assert(NULL != chunk);
 		subspace_store_add(h->chunk_cache, chunk->cube, chunk, pfree);

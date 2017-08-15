@@ -33,8 +33,3 @@ FROM _timescaledb_internal.dimension_calculate_default_range_closed(0,2::smallin
 
 SELECT assert_equal(1073741823::bigint, actual_range_start), assert_equal(2147483647::bigint, actual_range_end)
 FROM _timescaledb_internal.dimension_calculate_default_range_closed(1073741823,2::smallint) AS res(actual_range_start, actual_range_end);
-
-
-
-
-

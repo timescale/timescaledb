@@ -19,7 +19,7 @@ chunk_dispatch_create(Hypertable *ht, EState *estate, Query *parse)
 	cp->estate = estate;
 	cp->hypertable_result_rel_info = NULL;
 	cp->parse = parse;
-	cp->cache = subspace_store_init(HYPERSPACE_NUM_DIMENSIONS(ht->space), estate->es_query_cxt);
+	cp->cache = subspace_store_init(ht->space->num_dimensions, estate->es_query_cxt);
 	return cp;
 }
 

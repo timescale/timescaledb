@@ -301,7 +301,7 @@ Indexes:
     "21-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
-    "constraint_5" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" < '1257988320000000000'::bigint)
+    "constraint_4" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" < '1257988320000000000'::bigint)
 Inherits: "two_Partitions"
 
                    Table "_timescaledb_internal._hyper_1_4_chunk"
@@ -323,7 +323,7 @@ Indexes:
     "28-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_8" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 1073741823)
+    "constraint_5" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 1073741823)
 Inherits: "two_Partitions"
 
 SELECT * FROM _timescaledb_catalog.chunk;
