@@ -3,6 +3,8 @@
 
 #include <postgres.h>
 
+#include <utils/rel.h>
+#include <access/heapam.h>
 /*
  * TimescaleDB catalog.
  *
@@ -312,6 +314,7 @@ typedef struct Catalog
 		const char *name;
 		Oid			id;
 		Oid			index_ids[_MAX_TABLE_INDEXES];
+		Oid			serial_relid;
 	}			tables[_MAX_CATALOG_TABLES];
 
 	Oid			cache_schema_id;
@@ -319,7 +322,15 @@ typedef struct Catalog
 	{
 		Oid			inval_proxy_id;
 	}			caches[_MAX_CACHE_TYPES];
+	Oid			owner_uid;
 } Catalog;
+
+
+typedef struct CatalogSecurityContext
+{
+	Oid			saved_uid;
+	int			saved_security_context;
+} CatalogSecurityContext;
 
 bool		catalog_is_valid(Catalog *catalog);
 Catalog    *catalog_get(void);
@@ -329,5 +340,13 @@ Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 Oid			catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname);
 
 const char *catalog_get_cache_proxy_name(CacheType type);
+
+bool		catalog_become_owner(Catalog *catalog, CatalogSecurityContext *sec_ctx);
+void		catalog_restore_user(CatalogSecurityContext *sec_ctx);
+
+int64		catalog_table_next_seq_id(Catalog *catalog, enum CatalogTable table);
+
+void		catalog_insert(Relation rel, HeapTuple tuple);
+void		catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls);
 
 #endif   /* TIMESCALEDB_CATALOG_H */

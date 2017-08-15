@@ -2,6 +2,8 @@
 
 #include "dimension.h"
 #include "dimension_slice.h"
+#include "dimension_vector.h"
+#include "hypercube.h"
 #include "subspace_store.h"
 
 /*

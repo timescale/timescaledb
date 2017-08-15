@@ -4,6 +4,7 @@
 #include <postgres.h>
 #include <access/htup.h>
 #include <access/tupdesc.h>
+#include <utils/hsearch.h>
 
 #include "catalog.h"
 #include "chunk_constraint.h"
@@ -40,18 +41,19 @@ typedef struct Chunk
 	(sizeof(Chunk) + sizeof(ChunkConstraint) * (num_constraints))
 
 /*
- * ChunkScanCtx is used to scan for a chunk matching a specific point in a
- * hypertable's N-dimensional hyperspace.
+ * ChunkScanCtx is used to scan for chunks in a hypertable's N-dimensional
+ * hyperspace.
  *
  * For every matching constraint, a corresponding chunk will be created in the
- * context's hash table, keyed on the chunk ID. At the end of the scan, there
- * will be only one chunk in the hash table that has N number of matching
- * constraints, and this is the chunk that encloses the point.
+ * context's hash table, keyed on the chunk ID.
  */
 typedef struct ChunkScanCtx
 {
 	HTAB	   *htab;
-	int16		num_dimensions;
+	Hyperspace *space;
+	Point	   *point;
+	bool		early_abort;
+	void	   *data;
 } ChunkScanCtx;
 
 /* The hash table entry for the ChunkScanCtx */
@@ -62,7 +64,7 @@ typedef struct ChunkScanEntry
 } ChunkScanEntry;
 
 extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);
-extern Chunk *chunk_create(Hyperspace *hs, Point *p);
+extern Chunk *chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix);
 extern Chunk *chunk_create_stub(int32 id, int16 num_constraints);
 extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
 extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);

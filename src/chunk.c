@@ -1,20 +1,26 @@
 #include <postgres.h>
 #include <catalog/namespace.h>
-#include <fmgr.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/hsearch.h>
-#include <utils/memutils.h>
-#include <access/htup_details.h>
 
 #include "chunk.h"
 #include "catalog.h"
 #include "dimension.h"
 #include "dimension_slice.h"
+#include "dimension_vector.h"
 #include "partitioning.h"
+#include "hypertable.h"
+#include "hypercube.h"
 #include "metadata_queries.h"
 #include "scanner.h"
 
+typedef bool (*on_chunk_func) (ChunkScanCtx *ctx, Chunk *chunk);
+
+static void chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p);
+static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
+static void chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube);
+static int	chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 limit);
 
 static void
 chunk_fill(Chunk *chunk, HeapTuple tuple)
@@ -41,12 +47,288 @@ chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 	return chunk;
 }
 
-Chunk *
-chunk_create(Hyperspace *hs, Point *p)
+/*-
+ * Align a chunk's hypercube in 'aligned' dimensions.
+ *
+ * Alignment ensures that chunks line up in a particular dimension, i.e., their
+ * ranges should either be identical or not overlap at all.
+ *
+ * Non-aligned:
+ *
+ * ' [---------]      <- existing slice
+ * '      [---------] <- calculated (new) slice
+ *
+ * To align the slices above there are two cases depending on where the
+ * insertion point happens:
+ *
+ * Case 1 (reuse slice):
+ *
+ * ' [---------]
+ * '      [--x------]
+ *
+ * The insertion point x falls within the range of the existing slice. We should
+ * reuse the existing slice rather than creating a new one.
+ *
+ * Case 2 (cut to align):
+ *
+ * ' [---------]
+ * '      [-------x-]
+ *
+ * The insertion point falls outside the range of the existing slice and we need
+ * to cut the new slice to line up.
+ *
+ * ' [---------]
+ * '        cut [---]
+ * '
+ *
+ * Note that slice reuse (case 1) happens already when calculating the tentative
+ * hypercube for the chunk, and is thus already performed once reaching this
+ * function. Thus, we deal only with case 2 here. Also note that a new slice
+ * might overlap in complicated ways, requiring multiple cuts. For instance,
+ * consider the following situation:
+ *
+ * ' [------]   [-] [---]
+ * '      [---x-------]  <- calculated slice
+ *
+ * This should but cut-to-align as follows:
+ *
+ * ' [------]   [-] [---]
+ * '         [x]
+ *
+ * After a chunk collision scan, this function is called for each chunk in the
+ * chunk scan context. Chunks in the scan context may have only a partial set of
+ * slices if they only overlap in some, but not all, dimensions (see
+ * illustrations below). Still, partial chunks may still be of interest for
+ * alignment in a particular dimension. Thus, if a chunk has an overlapping
+ * slice in an aligned dimension, we cut to not overlap with that slice.
+ */
+static bool
+do_dimension_alignment(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	Chunk	   *chunk;
+	Hypercube  *cube = scanctx->data;
+	Hyperspace *space = scanctx->space;
+	int			i;
 
-	chunk = spi_chunk_create(hs, p);
+	for (i = 0; i < space->num_dimensions; i++)
+	{
+		Dimension  *dim = &space->dimensions[i];
+		DimensionSlice *chunk_slice,
+				   *cube_slice;
+		int64		coord = scanctx->point->coordinates[i];
+
+		if (!dim->fd.aligned)
+			continue;
+
+		/*
+		 * The chunk might not have a slice for each dimension, so we cannot
+		 * use array indexing. Fetch slice by dimension ID instead.
+		 */
+		chunk_slice = hypercube_get_slice_by_dimension_id(chunk->cube, dim->fd.id);
+
+		if (NULL == chunk_slice)
+			continue;
+
+		cube_slice = cube->slices[i];
+
+		/*
+		 * Only cut-to-align if the slices collide and are not identical
+		 * (i.e., if we are reusing an existing slice we should not cut it)
+		 */
+		if (!dimension_slices_equal(cube_slice, chunk_slice) &&
+			dimension_slices_collide(cube_slice, chunk_slice))
+			dimension_slice_cut(cube_slice, chunk_slice, coord);
+	}
+
+	return true;
+}
+
+/*
+ * Resolve chunk collisions.
+ *
+ * After a chunk collision scan, this function is called for each chunk in the
+ * chunk scan context. We only care about chunks that have a full set of
+ * slices/constraints that overlap with our tentative hypercube, i.e., they
+ * fully collide. We resolve those collisions by cutting the hypercube.
+ */
+static bool
+do_collision_resolution(ChunkScanCtx *scanctx, Chunk *chunk)
+{
+	Hypercube  *cube = scanctx->data;
+	Hyperspace *space = scanctx->space;
+	int			i;
+
+	if (chunk->cube->num_slices != space->num_dimensions ||
+		!hypercubes_collide(cube, chunk->cube))
+		return true;
+
+	for (i = 0; i < space->num_dimensions; i++)
+	{
+		DimensionSlice *cube_slice = cube->slices[i];
+		DimensionSlice *chunk_slice = chunk->cube->slices[i];
+		int64		coord = scanctx->point->coordinates[i];
+
+		/*
+		 * Only cut if we aren't reusing an existing slice and there is a
+		 * collision
+		 */
+		if (!dimension_slices_equal(cube_slice, chunk_slice) &&
+			dimension_slices_collide(cube_slice, chunk_slice))
+		{
+			dimension_slice_cut(cube_slice, chunk_slice, coord);
+
+			/*
+			 * Redo the collision check after each cut since cutting in one
+			 * dimension might have resolved the collision in another
+			 */
+			if (!hypercubes_collide(cube, chunk->cube))
+				return true;
+		}
+	}
+
+	Assert(!hypercubes_collide(cube, chunk->cube));
+
+	return true;
+}
+
+/*-
+ * Resolve collisions and perform alignmment.
+ *
+ * Chunks collide only if their hypercubes overlap in all dimensions. For
+ * instance, the 2D chunks below collide because they overlap in both the X and
+ * Y dimensions:
+ *
+ * ' _____
+ * ' |    |
+ * ' | ___|__
+ * ' |_|__|  |
+ * '   |     |
+ * '   |_____|
+ *
+ * While the following chunks do not collide, although they still overlap in the
+ * X dimension:
+ *
+ * ' _____
+ * ' |    |
+ * ' |    |
+ * ' |____|
+ * '   ______
+ * '   |     |
+ * '   |    *|
+ * '   |_____|
+ *
+ * For the collision case above we obviously want to cut our hypercube to no
+ * longer collide with existing chunks. However, the second case might still be
+ * of interest for alignment in case X is an 'aligned' dimension. If '*' is the
+ * insertion point, then we still want to cut the hypercube to ensure that the
+ * dimension remains aligned, like so:
+ *
+ * ' _____
+ * ' |    |
+ * ' |    |
+ * ' |____|
+ * '       ___
+ * '       | |
+ * '       |*|
+ * '       |_|
+ *
+ *
+ * We perform alignment first as that might actually resolve chunk
+ * collisions. After alignment we check for any remaining collisions.
+ */
+static void
+chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
+{
+	ChunkScanCtx scanctx;
+
+	chunk_scan_ctx_init(&scanctx, hs, p);
+
+	/* Scan for all chunks that collide with the hypercube of the new chunk */
+	chunk_collision_scan(&scanctx, cube);
+	scanctx.data = cube;
+
+	/* Cut the hypercube in any aligned dimensions */
+	chunk_scan_ctx_foreach_chunk(&scanctx, do_dimension_alignment, 0);
+
+	/*
+	 * If there are any remaining collisions with chunks, then cut-to-fit to
+	 * resolve those collisions
+	 */
+	chunk_scan_ctx_foreach_chunk(&scanctx, do_collision_resolution, 0);
+
+	chunk_scan_ctx_destroy(&scanctx);
+}
+
+static Chunk *
+chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
+{
+	Oid			schema_oid = get_namespace_oid(schema, false);
+	Catalog    *catalog = catalog_get();
+	CatalogSecurityContext sec_ctx;
+	Hypercube  *cube;
+	Chunk	   *chunk;
+	int			i;
+
+	catalog_become_owner(catalog, &sec_ctx);
+
+	/* Calculate the hypercube for a new chunk that covers the tuple's point */
+	cube = hypercube_calculate_from_point(hs, p);
+
+	/* Resolve collisions with other chunks by cutting the new hypercube */
+	chunk_collision_resolve(hs, cube, p);
+
+	/* Create a new chunk based on the hypercube */
+	chunk = chunk_create_stub(catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	chunk->fd.hypertable_id = hs->hypertable_id;
+	chunk->cube = cube;
+	chunk->num_constraints = chunk->capacity;
+	namestrcpy(&chunk->fd.schema_name, schema);
+
+	snprintf(chunk->fd.table_name.data, NAMEDATALEN,
+			 "%s_%d_chunk", prefix, chunk->fd.id);
+
+	/* Insert any new dimension slices */
+	dimension_slice_insert_multi(cube->slices, cube->num_slices);
+
+	/* All slices now have assigned ID's so update the chunk's constraints */
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		chunk->constraints[i].fd.chunk_id = chunk->fd.id;
+		chunk->constraints[i].fd.dimension_slice_id = cube->slices[i]->fd.id;
+	}
+
+	/* Insert the new chunk constraints */
+	chunk_constraint_insert_multi(chunk->constraints, chunk->num_constraints);
+
+	/*
+	 * Create the chunk table entry. This will also create the chunk table as
+	 * a side-effect
+	 */
+	spi_chunk_insert(chunk->fd.id, hs->hypertable_id, schema, NameStr(chunk->fd.table_name));
+
+	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_oid);
+
+	catalog_restore_user(&sec_ctx);
+
+	return chunk;
+}
+
+Chunk *
+chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
+{
+	Catalog    *catalog = catalog_get();
+	Chunk	   *chunk;
+	Relation	rel;
+
+	rel = heap_open(catalog->tables[CHUNK].id, ExclusiveLock);
+
+	/* Recheck if someone else created the chunk before we got the table lock */
+	chunk = chunk_find(hs, p);
+
+	if (NULL == chunk)
+		chunk = chunk_create_after_lock(hs, p, schema, prefix);
+
+	heap_close(rel, ExclusiveLock);
+
 	Assert(chunk != NULL);
 
 	return chunk;
@@ -60,8 +342,8 @@ chunk_create_stub(int32 id, int16 num_constraints)
 	chunk = palloc0(CHUNK_SIZE(num_constraints));
 	chunk->capacity = num_constraints;
 	chunk->num_constraints = 0;
-
 	chunk->fd.id = id;
+
 	return chunk;
 }
 
@@ -109,7 +391,16 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	if (num_found != 1)
 		elog(ERROR, "No chunk found with ID %d", chunk_stub->fd.id);
 
-	chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints, chunk_stub->num_constraints);
+	if (NULL == chunk_stub->cube)
+		chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints,
+												chunk_stub->num_constraints);
+	else
+
+		/*
+		 * The hypercube slices were filled in during the scan. Now we need to
+		 * sort them in dimension order.
+		 */
+		hypercube_slice_sort(chunk_stub->cube);
 
 	return chunk_stub;
 }
@@ -135,8 +426,14 @@ chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple)
 	return true;
 }
 
+/*
+ * Initialize a chunk scan context.
+ *
+ * A chunk scan context is used to join chunk-related information from metadata
+ * tables during scans.
+ */
 static void
-chunk_scan_ctx_init(ChunkScanCtx *ctx, int16 num_dimensions)
+chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p)
 {
 	struct HASHCTL hctl = {
 		.keysize = sizeof(int32),
@@ -145,20 +442,120 @@ chunk_scan_ctx_init(ChunkScanCtx *ctx, int16 num_dimensions)
 	};
 
 	ctx->htab = hash_create("chunk-scan-context", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
-	ctx->num_dimensions = num_dimensions;
+	ctx->space = hs;
+	ctx->point = p;
+	ctx->early_abort = false;
 }
 
+/*
+ * Destroy the chunk scan context.
+ *
+ * This will free the hash table in the context, but not the chunks within since
+ * they are not allocated on the hash tables memory context.
+ */
 static void
 chunk_scan_ctx_destroy(ChunkScanCtx *ctx)
 {
 	hash_destroy(ctx->htab);
 }
 
-static Chunk *
-chunk_scan_ctx_find_chunk(ChunkScanCtx *ctx)
+static inline void
+dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, DimensionVec *vec)
+{
+	int			i;
+
+	for (i = 0; i < vec->num_slices; i++)
+	{
+		/*
+		 * For each dimension slice, find matching constraints. These will be
+		 * saved in the scan context
+		 */
+		chunk_constraint_scan_by_dimension_slice_id(vec->slices[i], scanctx);
+	}
+}
+
+/*
+ * Scan for the chunk that encloses the given point.
+ *
+ * In each dimension there can be one or more slices that match the point's
+ * coordinate in that dimension. Slices are collected in the scan context's hash
+ * table according to the chunk IDs they are associated with. A slice might
+ * represent the dimensional bound of multiple chunks, and thus is added to all
+ * the hash table slots of those chunks. At the end of the scan there will be at
+ * most one chunk that has a complete set of slices, since a point cannot belong
+ * to two chunks.
+ */
+static void
+chunk_point_scan(ChunkScanCtx *scanctx, Point *p)
+{
+	int			i;
+
+	/* Scan all dimensions for slices enclosing the point */
+	for (i = 0; i < scanctx->space->num_dimensions; i++)
+	{
+		DimensionVec *vec;
+
+		vec = dimension_slice_scan(scanctx->space->dimensions[i].fd.id,
+								   p->coordinates[i]);
+
+		dimension_slice_and_chunk_constraint_join(scanctx, vec);
+	}
+}
+
+/*
+ * Scan for chunks that collide with the given hypercube.
+ *
+ * Collisions are determined using axis-aligned bounding box collision detection
+ * generalized to N dimensions. Slices are collected in the scan context's hash
+ * table according to the chunk IDs they are associated with. A slice might
+ * represent the dimensional bound of multiple chunks, and thus is added to all
+ * the hash table slots of those chunks. At the end of the scan, those chunks
+ * that have a full set of slices are the ones that actually collide with the
+ * given hypercube.
+ *
+ * Chunks in the scan context that do not collide (do not have a full set of
+ * slices), might still be important for ensuring alignment in those dimensions
+ * that require alignment.
+ */
+static void
+chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube)
+{
+	int			i;
+
+	/* Scan all dimensions for colliding slices */
+	for (i = 0; i < scanctx->space->num_dimensions; i++)
+	{
+		DimensionVec *vec;
+		DimensionSlice *slice = cube->slices[i];
+
+		vec = dimension_slice_collision_scan(slice->fd.dimension_id,
+											 slice->fd.range_start,
+											 slice->fd.range_end);
+
+		/* Add the slices to all the chunks they are associated with */
+		dimension_slice_and_chunk_constraint_join(scanctx, vec);
+	}
+}
+
+
+/*
+ * Apply a function to each chunk in the scan context's hash table. If the limit
+ * is greater than zero only a limited number of chunks will be processed.
+ *
+ * The chunk handler function (on_chunk_func) should return true if the chunk
+ * should be considered processed and count towards the given limit, otherwise
+ * false.
+ *
+ * Returns the number of processed chunks.
+ */
+static int
+chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx,
+							 on_chunk_func on_chunk,
+							 uint16 limit)
 {
 	HASH_SEQ_STATUS status;
 	ChunkScanEntry *entry;
+	uint16		num_found = 0;
 
 	hash_seq_init(&status, ctx->htab);
 
@@ -166,16 +563,45 @@ chunk_scan_ctx_find_chunk(ChunkScanCtx *ctx)
 		 entry != NULL;
 		 entry = hash_seq_search(&status))
 	{
-		Chunk	   *chunk = entry->chunk;
-
-		if (chunk->num_constraints == ctx->num_dimensions)
+		if (on_chunk(ctx, entry->chunk))
 		{
-			hash_seq_term(&status);
-			return chunk;
+			num_found++;
+
+			if (limit > 0 && num_found == limit)
+			{
+				hash_seq_term(&status);
+				return num_found;
+			}
 		}
 	}
 
-	return NULL;
+	return num_found;
+}
+
+/* Returns true if the chunk has a full set of constraints, otherwise
+ * false. Used to find a chunk matching a point in an N-dimensional
+ * hyperspace. */
+static bool
+chunk_is_complete(ChunkScanCtx *scanctx, Chunk *chunk)
+{
+	if (scanctx->space->num_dimensions != chunk->num_constraints)
+		return false;
+
+	scanctx->data = chunk;
+	return true;
+}
+
+/* Finds the first chunk that has a complete set of constraints. There should be
+ * only one such chunk in the scan context when scanning for the chunk that
+ * holds a particular tuple/point. */
+static Chunk *
+chunk_scan_ctx_get_chunk(ChunkScanCtx *ctx)
+{
+	ctx->data = NULL;
+
+	chunk_scan_ctx_foreach_chunk(ctx, chunk_is_complete, 1);
+
+	return ctx->data;
 }
 
 /*
@@ -204,38 +630,24 @@ chunk_find(Hyperspace *hs, Point *p)
 {
 	Chunk	   *chunk;
 	ChunkScanCtx ctx;
-	int16		num_dimensions = HYPERSPACE_NUM_DIMENSIONS(hs);
-	int			i,
-				j;
 
 	/* The scan context will keep the state accumulated during the scan */
-	chunk_scan_ctx_init(&ctx, num_dimensions);
+	chunk_scan_ctx_init(&ctx, hs, p);
 
-	/* First, scan all dimensions for matching slices */
-	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(hs); i++)
-	{
-		DimensionVec *vec;
+	/* Abort the scan when the chunk is found */
+	ctx.early_abort = true;
 
-		vec = dimension_slice_scan(hs->dimensions[i].fd.id, p->coordinates[i]);
-
-		for (j = 0; j < vec->num_slices; j++)
-
-			/*
-			 * For each dimension slice, find matching constraints. These will
-			 * be saved in the scan context
-			 */
-			chunk_constraint_scan_by_dimension_slice_id(vec->slices[j], &ctx);
-	}
+	/* Scan for the chunk matching the point */
+	chunk_point_scan(&ctx, p);
 
 	/* Find the chunk that has N matching constraints */
-	chunk = chunk_scan_ctx_find_chunk(&ctx);
+	chunk = chunk_scan_ctx_get_chunk(&ctx);
+
 	chunk_scan_ctx_destroy(&ctx);
 
 	if (NULL != chunk)
-	{
 		/* Fill in the rest of the chunk's data from the chunk table */
 		chunk_fill_stub(chunk, false);
-	}
 
 	return chunk;
 }

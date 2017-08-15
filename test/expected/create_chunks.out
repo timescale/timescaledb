@@ -6,155 +6,113 @@ CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
-CREATE TABLE chunk_test(
-        time       BIGINT,
-        metric     INTEGER,
-        device_id  TEXT
-    );
--- Test chunk closing/creation
-SELECT * FROM create_hypertable('chunk_test', 'time', 'device_id', 2, chunk_time_interval => 10);
+--
+--  This test will create chunks in two dimenisions, time (x) and
+--  space (y), where the time dimension is aligned. The figure below
+--  shows the expected result. The chunk number in the figure
+--  indicates the creation order.
+--
+--  +
+--  +
+--  +     +-----+     +-----+
+--  +     |  2  |     |  3  |
+--  +     |     +---+-+     |
+--  +     +-----+ 5 |6+-----+
+--  +     |  1  +---+-+-----+     +---------+
+--  +     |     |   |4|  7  |     |    8    |
+--  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+--  0         5         10        15        20
+--
+-- Partitioning:
+--
+-- Chunk #  |  time  | space
+--    1     |   3    |   2
+--    4     |   1    |   3
+--    5     |   5    |   3
+--
+CREATE TABLE chunk_test(time integer, temp float8, tag integer, color integer);
+SELECT create_hypertable('chunk_test', 'time', 'tag', 2, chunk_time_interval => 3);
  create_hypertable 
 -------------------
  
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
-----+-------------+------------+------------------------+-------------------------+----------------
-  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-(1 row)
+INSERT INTO chunk_test VALUES (4, 24.3, 3, 1);
+SELECT * FROM _timescaledb_catalog.dimension_slice;
+ id | dimension_id | range_start | range_end  
+----+--------------+-------------+------------
+  1 |            1 |           3 |          6
+  2 |            2 |           0 | 1073741823
+(2 rows)
 
-INSERT INTO chunk_test VALUES (1, 1, 'dev1'),
-                              (2, 2, 'dev2'),
-                              (45, 2, 'dev2'),
-                              (46, 2, 'dev2');
-SELECT * FROM set_chunk_time_interval('chunk_test', 40::bigint);
+INSERT INTO chunk_test VALUES (4, 24.3, 1, 1);
+INSERT INTO chunk_test VALUES (10, 24.3, 1, 1);
+SELECT c.table_name AS chunk_name, d.id AS dimension_id, ds.id AS slice_id, range_start, range_end FROM _timescaledb_catalog.chunk c
+LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
+ORDER BY c.id, d.id;
+    chunk_name    | dimension_id | slice_id | range_start | range_end  
+------------------+--------------+----------+-------------+------------
+ _hyper_1_1_chunk |            1 |        1 |           3 |          6
+ _hyper_1_1_chunk |            2 |        2 |           0 | 1073741823
+ _hyper_1_2_chunk |            1 |        1 |           3 |          6
+ _hyper_1_2_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_3_chunk |            1 |        4 |           9 |         12
+ _hyper_1_3_chunk |            2 |        3 |  1073741823 | 2147483647
+(6 rows)
+
+UPDATE _timescaledb_catalog.dimension SET num_slices = 3 WHERE id = 2;
+SELECT set_chunk_time_interval('chunk_test', 1::bigint);
  set_chunk_time_interval 
 -------------------------
  
 (1 row)
 
-INSERT INTO chunk_test VALUES(23, 3, 'dev3');
-SELECT * FROM chunk_test order by time, metric, device_id;
- time | metric | device_id 
-------+--------+-----------
-    1 |      1 | dev1
-    2 |      2 | dev2
-   23 |      3 | dev3
-   45 |      2 | dev2
-   46 |      2 | dev2
-(5 rows)
-
-SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    
-----+---------------+-----------------------+------------------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk
-(4 rows)
-
-SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
-----+-------------+------------+------------------------+-------------------------+----------------
-  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-(1 row)
-
-SELECT * FROM ONLY chunk_test;
- time | metric | device_id 
-------+--------+-----------
-(0 rows)
-
-SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-    LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
-    LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
-    ORDER BY c.id, d.id;
- id | hypertable_id |      schema_name      |    table_name    | chunk_id | dimension_slice_id | id | dimension_id | range_start | range_end  | id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
-----+---------------+-----------------------+------------------+----------+--------------------+----+--------------+-------------+------------+----+---------------+-------------+-------------+---------+------------+--------------------------+-----------------------+-----------------+----+-------------+------------+------------------------+-------------------------+----------------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |        1 |                  1 |  1 |            1 |           0 |         10 |  1 |             1 | time        | bigint      | t       |            |                          |                       |              40 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |        1 |                  2 |  2 |            2 |  1073741823 | 2147483647 |  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |        2 |                  1 |  1 |            1 |           0 |         10 |  1 |             1 | time        | bigint      | t       |            |                          |                       |              40 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |        2 |                  4 |  4 |            2 |           0 | 1073741823 |  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |        3 |                  5 |  5 |            1 |          40 |         50 |  1 |             1 | time        | bigint      | t       |            |                          |                       |              40 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |        3 |                  4 |  4 |            2 |           0 | 1073741823 |  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |        4 |                  7 |  7 |            1 |          10 |         40 |  1 |             1 | time        | bigint      | t       |            |                          |                       |              40 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |        4 |                  4 |  4 |            2 |           0 | 1073741823 |  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                 |  1 | public      | chunk_test | _timescaledb_internal  | _hyper_1                |              2
-(8 rows)
-
--- Test chunk aligning between partitions
-CREATE TABLE chunk_align_test(
-        time       BIGINT,
-        metric     INTEGER,
-        device_id  TEXT
-    );
-SELECT * FROM create_hypertable('chunk_align_test', 'time', 'device_id', 2, chunk_time_interval => 10);
- create_hypertable 
--------------------
- 
-(1 row)
-
-INSERT INTO chunk_align_test VALUES (1, 1, 'dev1'); -- this should create a 10 wide chunk
-SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-    LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
-    LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
-          AND d.column_name = 'time'
-    ORDER BY c.id, d.id;
- id | hypertable_id |      schema_name      |    table_name    | chunk_id | dimension_slice_id | id | dimension_id | range_start | range_end | id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | id | schema_name |    table_name    | associated_schema_name | associated_table_prefix | num_dimensions 
-----+---------------+-----------------------+------------------+----------+--------------------+----+--------------+-------------+-----------+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+----+-------------+------------------+------------------------+-------------------------+----------------
-  5 |             2 | _timescaledb_internal | _hyper_2_5_chunk |        5 |                  9 |  9 |            3 |           0 |        10 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              10 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-(1 row)
-
-    
-SELECT * FROM set_chunk_time_interval('chunk_align_test', 40::bigint);
+INSERT INTO chunk_test VALUES (8, 24.3, 79669, 1);
+SELECT set_chunk_time_interval('chunk_test', 5::bigint);
  set_chunk_time_interval 
 -------------------------
  
 (1 row)
 
-INSERT INTO chunk_align_test VALUES (5, 1, 'dev2'); -- this should still create a 10 wide chunk
-INSERT INTO chunk_align_test VALUES (45, 1, 'dev2'); -- this should create a 40 wide chunk
-SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-    LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
-    LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
-          AND d.column_name = 'time'
-    ORDER BY c.id, d.id;
- id | hypertable_id |      schema_name      |    table_name    | chunk_id | dimension_slice_id | id | dimension_id | range_start | range_end | id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | id | schema_name |    table_name    | associated_schema_name | associated_table_prefix | num_dimensions 
-----+---------------+-----------------------+------------------+----------+--------------------+----+--------------+-------------+-----------+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+----+-------------+------------------+------------------------+-------------------------+----------------
-  5 |             2 | _timescaledb_internal | _hyper_2_5_chunk |        5 |                  9 |  9 |            3 |           0 |        10 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-  6 |             2 | _timescaledb_internal | _hyper_2_6_chunk |        6 |                  9 |  9 |            3 |           0 |        10 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-  7 |             2 | _timescaledb_internal | _hyper_2_7_chunk |        7 |                 13 | 13 |            3 |          40 |        80 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-(3 rows)
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-----------------------+-----------------
+  2 |             1 | tag         | integer     | f       |          3 | _timescaledb_internal    | get_partition_for_key |                
+  1 |             1 | time        | integer     | t       |            |                          |                       |               5
+(2 rows)
 
-    --check the cut-to-size with aligned dimensions code
-    INSERT INTO chunk_align_test VALUES (35, 1, 'dev1');
-    INSERT INTO chunk_align_test VALUES (35, 1, 'dev2');
-    INSERT INTO chunk_align_test VALUES (81, 1, 'dev1');
-    INSERT INTO chunk_align_test VALUES (81, 1, 'dev2');
-SELECT * FROM _timescaledb_catalog.chunk c
-    LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-    LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
-    LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
-    LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
-    WHERE h.schema_name = 'public' AND h.table_name = 'chunk_align_test'
-          AND d.column_name = 'time'
-    ORDER BY c.id, d.id;
- id | hypertable_id |      schema_name      |    table_name     | chunk_id | dimension_slice_id | id | dimension_id | range_start | range_end | id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | id | schema_name |    table_name    | associated_schema_name | associated_table_prefix | num_dimensions 
-----+---------------+-----------------------+-------------------+----------+--------------------+----+--------------+-------------+-----------+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+----+-------------+------------------+------------------------+-------------------------+----------------
-  5 |             2 | _timescaledb_internal | _hyper_2_5_chunk  |        5 |                  9 |  9 |            3 |           0 |        10 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-  6 |             2 | _timescaledb_internal | _hyper_2_6_chunk  |        6 |                  9 |  9 |            3 |           0 |        10 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-  7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |        7 |                 13 | 13 |            3 |          40 |        80 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-  8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |        8 |                 15 | 15 |            3 |          10 |        40 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-  9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |        9 |                 15 | 15 |            3 |          10 |        40 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
- 10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |       10 |                 19 | 19 |            3 |          80 |       120 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
- 11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |       11 |                 19 | 19 |            3 |          80 |       120 |  3 |             2 | time        | bigint      | t       |            |                          |                   |              40 |  2 | public      | chunk_align_test | _timescaledb_internal  | _hyper_2                |              2
-(7 rows)
+INSERT INTO chunk_test VALUES (7, 24.3, 11233, 1);
+INSERT INTO chunk_test VALUES (8, 24.3, 11233, 1);
+INSERT INTO chunk_test VALUES (10, 24.3, 79669, 1);
+INSERT INTO chunk_test VALUES (16, 24.3, 79669, 1);
+SELECT c.table_name AS chunk_name, d.id AS dimension_id, ds.id AS slice_id, range_start, range_end FROM _timescaledb_catalog.chunk c
+LEFT JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
+ORDER BY c.id, d.id;
+    chunk_name    | dimension_id | slice_id | range_start | range_end  
+------------------+--------------+----------+-------------+------------
+ _hyper_1_1_chunk |            1 |        1 |           3 |          6
+ _hyper_1_1_chunk |            2 |        2 |           0 | 1073741823
+ _hyper_1_2_chunk |            1 |        1 |           3 |          6
+ _hyper_1_2_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_3_chunk |            1 |        4 |           9 |         12
+ _hyper_1_3_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_4_chunk |            1 |        5 |           8 |          9
+ _hyper_1_4_chunk |            2 |        6 |           0 |  715827882
+ _hyper_1_5_chunk |            1 |        7 |           6 |          8
+ _hyper_1_5_chunk |            2 |        8 |   715827882 | 1431655764
+ _hyper_1_6_chunk |            1 |        5 |           8 |          9
+ _hyper_1_6_chunk |            2 |        8 |   715827882 | 1431655764
+ _hyper_1_7_chunk |            1 |        4 |           9 |         12
+ _hyper_1_7_chunk |            2 |        6 |           0 |  715827882
+ _hyper_1_8_chunk |            1 |        9 |          15 |         20
+ _hyper_1_8_chunk |            2 |        6 |           0 |  715827882
+(16 rows)
 
