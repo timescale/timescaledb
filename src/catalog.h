@@ -28,8 +28,17 @@ enum CatalogTable
 	_MAX_CATALOG_TABLES,
 };
 
+typedef enum InternalFunction
+{
+	DDL_CHANGE_OWNER = 0,
+	DDL_ADD_CONSTRAINT,
+	DDL_DROP_CONSTRAINT,
+	_MAX_INTERNAL_FUNCTIONS,
+} InternalFunction;
+
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
+#define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
 #define EXTENSION_NAME "timescaledb"
 
 /******************************
@@ -257,6 +266,8 @@ enum Anum_chunk_constraint
 {
 	Anum_chunk_constraint_chunk_id = 1,
 	Anum_chunk_constraint_dimension_slice_id,
+	Anum_chunk_constraint_constraint_name,
+	Anum_chunk_constraint_hypertable_constraint_name,
 	_Anum_chunk_constraint_max,
 };
 
@@ -267,6 +278,8 @@ typedef struct FormData_chunk_constraint
 {
 	int32		chunk_id;
 	int32		dimension_slice_id;
+	NameData	constraint_name;
+	NameData	hypertable_constraint_name;
 } FormData_chunk_constraint;
 
 typedef FormData_chunk_constraint *Form_chunk_constraint;
@@ -279,9 +292,9 @@ enum
 
 enum Anum_chunk_constraint_chunk_id_dimension_slice_id_idx
 {
-	Anum_chunk_constraint_chunk_id_dimension_id_idx_chunk_id = 1,
-	Anum_chunk_constraint_chunk_id_dimension_id_idx_dimension_slice_id,
-	_Anum_chunk_constraint_chunk_id_dimension_id_idx_max,
+	Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id = 1,
+	Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
+	_Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_max,
 };
 
 
@@ -319,6 +332,11 @@ typedef struct Catalog
 	{
 		Oid			inval_proxy_id;
 	}			caches[_MAX_CACHE_TYPES];
+	Oid			internal_schema_id;
+	struct
+	{
+		Oid			function_id;
+	}			functions[_MAX_INTERNAL_FUNCTIONS];
 } Catalog;
 
 bool		catalog_is_valid(Catalog *catalog);
@@ -327,6 +345,8 @@ void		catalog_reset(void);
 
 Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 Oid			catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname);
+
+Oid			catalog_get_internal_function_id(Catalog *catalog, InternalFunction func);
 
 const char *catalog_get_cache_proxy_name(CacheType type);
 

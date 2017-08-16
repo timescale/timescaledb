@@ -63,6 +63,11 @@ docker rm -f timescaledb-clean
 docker run -d --name timescaledb-clean -v ${BASE_DIR}:/src -v ${CLEAN_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 wait_for_pg timescaledb-clean
 
+#same restart of sequences needed on update container in case the update script modified sequences
+docker rm -f timescaledb-updated
+docker run -d --name timescaledb-updated -v ${BASE_DIR}:/src -v ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+wait_for_pg timescaledb-updated
+
 echo "Testing"
 docker exec timescaledb-updated /bin/bash \
   -c "psql -X -v ECHO=ALL -h localhost -U postgres -d single -f /src/test/sql/updates/test-0.1.1.sql" > ${PGTEST_TMPDIR}/updated.out

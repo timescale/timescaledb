@@ -73,8 +73,6 @@ BEGIN
         chunk_row.schema_name, chunk_row.table_name,
         table_owner
     );
-
-    PERFORM _timescaledb_internal.chunk_add_constraints(chunk_id);
 END
 $BODY$;
 
@@ -115,30 +113,4 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_add_constraints(
-    chunk_id  INTEGER
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    constraint_row record;
-BEGIN
-    FOR constraint_row IN
-        SELECT c.schema_name, c.table_name, ds.id as dimension_slice_id
-        FROM _timescaledb_catalog.chunk c
-        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
-        INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
-        WHERE c.id = chunk_add_constraints.chunk_id
-        LOOP
-        EXECUTE format(
-            $$
-                ALTER TABLE %1$I.%2$I
-                ADD CONSTRAINT constraint_%3$s CHECK(%4$s)
-            $$,
-            constraint_row.schema_name, constraint_row.table_name,
-            constraint_row.dimension_slice_id,
-            _timescaledb_internal.dimension_slice_get_constraint_sql(constraint_row.dimension_slice_id)
-        );
-    END LOOP;
-END
-$BODY$;
+
