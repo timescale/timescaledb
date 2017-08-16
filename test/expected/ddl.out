@@ -53,13 +53,13 @@ SELECT * FROM _timescaledb_catalog.hypertable;
   2 | customSchema | Hypertable_1 | _timescaledb_internal  | _hyper_2                |              1
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.hypertable_index;
+SELECT * FROM _timescaledb_catalog.hypertable_index ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
  hypertable_id | main_schema_name |         main_index_name         |                                      definition                                      
 ---------------+------------------+---------------------------------+--------------------------------------------------------------------------------------
              1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
              1 | public           | Hypertable_1_Device_id_time_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("Device_id", "time" DESC)
-             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
 (5 rows)
 
@@ -74,13 +74,13 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
-SELECT * FROM _timescaledb_catalog.hypertable_index;
+SELECT * FROM _timescaledb_catalog.hypertable_index  ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
  hypertable_id | main_schema_name |         main_index_name         |                                       definition                                       
 ---------------+------------------+---------------------------------+----------------------------------------------------------------------------------------
              1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
+             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
              1 | public           | Hypertable_1_Device_id_time_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("Device_id", "time" DESC)
-             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
              2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
              1 | public           | Hypertable_1_time_temp_c_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", temp_c)
              1 | public           | ind_humidity                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", humidity)

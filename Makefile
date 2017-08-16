@@ -47,7 +47,6 @@ SRCS = \
 	src/hypertable.c \
 	src/dimension.c \
 	src/dimension_slice.c \
-	src/ddl_utils.c \
 	src/chunk_constraint.c \
 	src/partitioning.c \
 	src/planner_utils.c \

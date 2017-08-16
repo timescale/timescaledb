@@ -18,8 +18,10 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 {
 	Chunk	   *chunk = data;
 
-	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
-
+	if (!heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id))
+	{
+		chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
+	}
 	if (chunk->capacity == chunk->num_constraints)
 		return false;
 
@@ -52,7 +54,7 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 
 	chunk->num_constraints = 0;
 
-	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_id_idx_chunk_id,
+	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
 
 	num_found = scanner_scan(&scanCtx);
@@ -116,7 +118,7 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 		.scandirection = ForwardScanDirection,
 	};
 
-	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_id_idx_dimension_slice_id,
+	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.id));
 
 	num_found = scanner_scan(&scanCtx);

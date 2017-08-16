@@ -138,6 +138,10 @@ BEGIN
             USING ERRCODE = 'IO101';
     END;
 
+    PERFORM _timescaledb_internal.add_constraint(hypertable_row.id, oid)
+    FROM pg_constraint
+    WHERE conrelid = main_table;
+
     PERFORM 1
     FROM pg_index,
     LATERAL _timescaledb_internal.add_index(
@@ -146,7 +150,8 @@ BEGIN
         (SELECT relname FROM pg_class WHERE oid = indexrelid::regclass),
         _timescaledb_internal.get_general_index_definition(indexrelid, indrelid, hypertable_row)
     )
-    WHERE indrelid = main_table;
+    WHERE indrelid = main_table AND _timescaledb_internal.need_chunk_index(hypertable_row.id, pg_index.indexrelid)
+    ORDER BY pg_index.indexrelid;
 
     PERFORM 1
     FROM pg_trigger,

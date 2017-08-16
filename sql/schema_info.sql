@@ -42,6 +42,17 @@ $BODY$
     WHERE c.OID = table_oid;
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.main_table_from_hypertable(
+    hypertable_id int
+)
+    RETURNS regclass LANGUAGE SQL STABLE AS
+$BODY$
+    SELECT format('%I.%I',h.schema_name, h.table_name)::regclass
+    FROM _timescaledb_catalog.hypertable h
+    WHERE id = hypertable_id;
+$BODY$;
+
+
 -- Get the name of the time column for a chunk.
 --
 -- schema_name, table_name - name of the schema and table for the table represented by the crn.
