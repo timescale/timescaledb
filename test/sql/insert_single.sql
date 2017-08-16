@@ -60,3 +60,19 @@ EXECUTE "1dim_plan_generic";
 
 SELECT * FROM "1dim" ORDER BY time;
 SELECT * FROM "3dim" ORDER BY (time, device);
+
+-- Test that large intervals and no interval fail for INTEGER
+\set ON_ERROR_STOP 0
+CREATE TABLE "inttime_err"(time INTEGER PRIMARY KEY, temp float);
+SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483648);
+SELECT create_hypertable('"inttime_err"', 'time');
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483647);
+
+-- Test that large intervals and no interval fail for SMALLINT
+\set ON_ERROR_STOP 0
+CREATE TABLE "smallinttime_err"(time SMALLINT PRIMARY KEY, temp float);
+SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65536);
+SELECT create_hypertable('"smallinttime_err"', 'time');
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65535);

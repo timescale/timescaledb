@@ -20,7 +20,7 @@ CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_0) 
 CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition' );
+SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
  create_hypertable 
 -------------------
  
@@ -410,4 +410,32 @@ SELECT * FROM "3dim" ORDER BY (time, device);
  Fri Jan 20 09:00:21 2017 | 21.2 | brown  | sthlm
  Fri Jan 20 09:00:47 2017 | 25.1 | yellow | la
 (3 rows)
+
+-- Test that large intervals and no interval fail for INTEGER
+\set ON_ERROR_STOP 0
+CREATE TABLE "inttime_err"(time INTEGER PRIMARY KEY, temp float);
+SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483648);
+ERROR:  chunk_time_interval is too large for type INTEGER (max: 2147483647)
+SELECT create_hypertable('"inttime_err"', 'time');
+ERROR:  chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483647);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+-- Test that large intervals and no interval fail for SMALLINT
+\set ON_ERROR_STOP 0
+CREATE TABLE "smallinttime_err"(time SMALLINT PRIMARY KEY, temp float);
+SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65536);
+ERROR:  chunk_time_interval is too large for type SMALLINT (max: 65535)
+SELECT create_hypertable('"smallinttime_err"', 'time');
+ERROR:  chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65535);
+ create_hypertable 
+-------------------
+ 
+(1 row)
 

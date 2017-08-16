@@ -1,10 +1,10 @@
 \ir include/create_single_db.sql
 
 create schema test_schema;
-create table test_schema.test_table(time bigint, temp float8, device_id text, device_type text, location text, id int);
+create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int);
 
 \dt "test_schema".*
-select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2);
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 
 --test adding one more closed dimension
 select add_dimension('test_schema.test_table', 'location', 2);
