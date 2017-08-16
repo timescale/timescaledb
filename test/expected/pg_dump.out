@@ -43,7 +43,15 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
+<<<<<<< HEAD
    121
+=======
+<<<<<<< HEAD
+   120
+=======
+   135
+>>>>>>> 98565c0... Add support for hypertable constraints
+>>>>>>> Add support for hypertable constraints
 (1 row)
 
 \c postgres
@@ -67,7 +75,15 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
+<<<<<<< HEAD
    121
+=======
+<<<<<<< HEAD
+   120
+=======
+   135
+>>>>>>> 98565c0... Add support for hypertable constraints
+>>>>>>> Add support for hypertable constraints
 (1 row)
 
 \c single

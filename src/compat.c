@@ -20,3 +20,21 @@ insert_main_table_trigger_after(PG_FUNCTION_ARGS)
 	elog(ERROR, "Deprecated trigger function should not be invoked");
 	PG_RETURN_NULL();
 }
+
+PG_FUNCTION_INFO_V1(ddl_is_change_owner);
+
+Datum
+ddl_is_change_owner(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "Deprecated function should not be invoked");
+	PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(ddl_change_owner_to);
+
+Datum
+ddl_change_owner_to(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "Deprecated function should not be invoked");
+	PG_RETURN_NULL();
+}

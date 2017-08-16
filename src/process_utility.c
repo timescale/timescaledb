@@ -4,11 +4,14 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
 #include <catalog/index.h>
+#include <catalog/objectaddress.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
+#include <commands/tablecmds.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
+#include <utils/builtins.h>
 #include <miscadmin.h>
 
 #include "utils.h"
@@ -308,6 +311,185 @@ process_reindex(Node *parsetree)
 	return false;
 }
 
+static void
+process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
+{
+	RoleSpec   *role;
+
+	Assert(IsA(cmd->newowner, RoleSpec));
+	role = (RoleSpec *) cmd->newowner;
+	OidFunctionCall2(catalog_get_internal_function_id(catalog_get(), DDL_CHANGE_OWNER),
+				   ObjectIdGetDatum(relid), CStringGetDatum(role->rolename));
+}
+
+static void
+process_altertable_add_constraint(Hypertable *ht, const char* constraint_name)
+{
+	Assert(constraint_name != NULL);
+	OidFunctionCall2(catalog_get_internal_function_id(catalog_get(), DDL_ADD_CONSTRAINT),
+				 Int32GetDatum(ht->fd.id), CStringGetDatum(constraint_name));
+}
+
+
+static void
+process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
+{
+	char	   *constraint_name = NULL;
+
+	constraint_name = cmd->name;
+	Assert(constraint_name != NULL);
+	OidFunctionCall2(catalog_get_internal_function_id(catalog_get(), DDL_DROP_CONSTRAINT),
+				 Int32GetDatum(ht->fd.id), CStringGetDatum(constraint_name));
+}
+
+/* foreign-key constraints to hypertables are not allowed */
+static void
+verify_constraint(Constraint *stmt)
+{
+	if (stmt->contype == CONSTR_FOREIGN)
+	{
+		RangeVar   *primary_table = stmt->pktable;
+		Oid			primary_oid = RangeVarGetRelid(primary_table, NoLock, true);
+
+		if (OidIsValid(primary_oid))
+		{
+			Cache	   *hcache = hypertable_cache_pin();
+			Hypertable *ht = hypertable_cache_get_entry(hcache, primary_oid);
+
+			if (NULL != ht)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				  errmsg("Foreign keys to hypertables are not supported.")));
+			}
+			cache_release(hcache);
+		}
+	}
+}
+
+static void
+verify_constraint_list(List *constraint_list)
+{
+	ListCell   *lc;
+
+	foreach(lc, constraint_list)
+	{
+		Constraint *constraint = (Constraint *) lfirst(lc);
+
+		verify_constraint(constraint);
+	}
+}
+
+/* process all create table commands to make sure their constraints are kosher */
+static void
+process_create_table(Node *parsetree)
+{
+	CreateStmt *stmt = (CreateStmt *) parsetree;
+	ListCell   *lc;
+
+	verify_constraint_list(stmt->constraints);
+	foreach(lc, stmt->tableElts)
+	{
+		ColumnDef  *column_def = (ColumnDef *) lfirst(lc);
+
+		verify_constraint_list(column_def->constraints);
+	}
+}
+
+/* process all regular-table alter commands to make sure they aren't adding
+ * foreign-key constraints to hypertables */
+static void
+process_altertable_plain_table(Node *parsetree)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+	ListCell   *lc;
+
+	foreach(lc, stmt->cmds)
+	{
+		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+		switch (cmd->subtype)
+		{
+			case AT_AddConstraint:
+			case AT_AddConstraintRecurse:
+				{
+					Constraint *constraint = (Constraint *) cmd->def;
+
+					Assert(IsA(cmd->def, Constraint));
+
+					verify_constraint(constraint);
+				}
+			default:
+				break;
+		}
+	}
+}
+
+static void
+process_altertable(Node *parsetree)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+	Oid			relid = AlterTableLookupRelation(stmt, NoLock);
+	Cache	   *hcache = NULL;
+	ListCell   *lc;
+	Hypertable *ht;
+
+	if (!OidIsValid(relid))
+		return;
+
+	hcache = hypertable_cache_pin();
+
+	ht = hypertable_cache_get_entry(hcache, relid);
+	if (NULL == ht)
+	{
+		cache_release(hcache);
+		process_altertable_plain_table(parsetree);
+		return;
+	}
+
+	foreach(lc, stmt->cmds)
+	{
+		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+		switch (cmd->subtype)
+		{
+			case AT_ChangeOwner:
+				process_altertable_change_owner(ht, cmd, relid);
+				break;
+			case AT_AddIndex:
+				{
+					Assert(IsA(cmd->def, IndexStmt));
+					IndexStmt  *stmt = (IndexStmt *) cmd->def;
+
+					Assert(stmt->isconstraint);
+					process_altertable_add_constraint(ht, stmt->idxname);
+				}
+				/*
+				 * AddConstraint sometimes transformed to AddIndex if Index is
+				 * involved. different path than CREATE INDEX.
+				 */
+			case AT_AddConstraint:
+			case AT_AddConstraintRecurse:
+				{
+					Assert(IsA(cmd->def, Constraint));
+					Constraint *stmt = (Constraint *) cmd->def;
+
+					process_altertable_add_constraint(ht, stmt->conname);
+				}
+
+				break;
+			case AT_DropConstraint:
+			case AT_DropConstraintRecurse:
+				process_altertable_drop_constraint(ht, cmd, relid);
+				break;
+			default:
+				break;
+		}
+	}
+
+	cache_release(hcache);
+}
+
 
 /* Hook-intercept for ProcessUtility. */
 static void
@@ -329,11 +511,19 @@ timescaledb_ProcessUtility(Node *parsetree,
 		case T_TruncateStmt:
 			process_truncate(parsetree);
 			break;
+		case T_AlterTableStmt:
+			/* Process main table first to error out if not a valid alter */
+			prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+			process_altertable(parsetree);
+			return;
 		case T_AlterObjectSchemaStmt:
 			process_alterobjectschema(parsetree);
 			break;
 		case T_RenameStmt:
 			process_rename(parsetree);
+			break;
+		case T_CreateStmt:
+			process_create_table(parsetree);
 			break;
 		case T_CopyStmt:
 			if (process_copy(parsetree, query_string, completion_tag))
