@@ -19,12 +19,18 @@ chunk_constraint_fill(ChunkConstraint *cc, HeapTuple tuple)
 }
 
 static bool
+chunk_constraint_for_dimension_slice(TupleInfo *ti, void *data)
+{
+	return !heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id);
+}
+
+static bool
 chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 {
 	Chunk	   *chunk = data;
 
 	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
-
+	
 	if (chunk->capacity == chunk->num_constraints)
 		return false;
 
@@ -50,6 +56,7 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = chunk,
+		.filter = chunk_constraint_for_dimension_slice,
 		.tuple_found = chunk_constraint_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
@@ -57,7 +64,7 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 
 	chunk->num_constraints = 0;
 
-	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_id_idx_chunk_id,
+	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
 
 	num_found = scanner_scan(&scanCtx);
@@ -132,12 +139,13 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &data,
+		.filter = chunk_constraint_for_dimension_slice,
 		.tuple_found = chunk_constraint_dimension_id_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
 
-	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_id_idx_dimension_slice_id,
+	ScanKeyInit(&scankey[0], Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.id));
 
 	num_found = scanner_scan(&scanCtx);
@@ -151,10 +159,16 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *constraint)
 	TupleDesc	desc = RelationGetDescr(rel);
 	Datum		values[Natts_chunk_constraint];
 	bool		nulls[Natts_chunk_constraint] = {false};
+	NameData    constraint_name;
+
+	sprintf(constraint_name.data, "constraint_%d", constraint->fd.dimension_slice_id);
 
 	memset(values, 0, sizeof(values));
 	values[Anum_chunk_constraint_chunk_id - 1] = constraint->fd.chunk_id;
 	values[Anum_chunk_constraint_dimension_slice_id - 1] = constraint->fd.dimension_slice_id;
+	values[Anum_chunk_constraint_constraint_name - 1] = NameGetDatum(&constraint_name);
+
+	nulls[Anum_chunk_constraint_hypertable_constraint_name - 1] = true;
 
 	catalog_insert_values(rel, desc, values, nulls);
 }

@@ -9,14 +9,6 @@
 
 */
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_is_change_owner(pg_ddl_command)
-   RETURNS bool IMMUTABLE STRICT
-   AS '$libdir/timescaledb' LANGUAGE C;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner_to(pg_ddl_command)
-   RETURNS name IMMUTABLE STRICT
-   AS '$libdir/timescaledb' LANGUAGE C;
-
 -- Handles ddl create index commands on hypertables
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_create_index()
     RETURNS event_trigger LANGUAGE plpgsql
@@ -49,7 +41,7 @@ BEGIN
                 hypertable_row.schema_name,
                 (SELECT relname FROM pg_class WHERE oid = info.objid::regclass),
                 def
-            );
+            ) WHERE _timescaledb_internal.need_chunk_index(hypertable_row.id, info.objid);
         END LOOP;
 END
 $BODY$;
@@ -135,6 +127,9 @@ BEGIN
 END
 $BODY$;
 
+
+
+
 -- Handles ddl drop index commands on hypertables
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_index()
     RETURNS event_trigger LANGUAGE plpgsql
@@ -180,42 +175,29 @@ BEGIN
 END
 $BODY$;
 
- CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_alter_table()
-    RETURNS event_trigger LANGUAGE plpgsql
+ CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
+    RETURNS void LANGUAGE plpgsql
     SECURITY DEFINER SET search_path = ''
     AS
 $BODY$
 DECLARE
-    info           record;
-    new_table_owner           TEXT;
-    chunk_row      _timescaledb_catalog.chunk;
     hypertable_row _timescaledb_catalog.hypertable;
+    chunk_row      _timescaledb_catalog.chunk;
 BEGIN
-    --NOTE:  pg_event_trigger_ddl_commands prevents this SECURITY DEFINER function from being called outside trigger.
-    FOR info IN SELECT * FROM pg_event_trigger_ddl_commands() LOOP
-        IF NOT _timescaledb_internal.is_main_table(info.objid) THEN
-            RETURN;
-        END IF;
-
-        IF _timescaledb_internal.ddl_is_change_owner(info.command) THEN
-            --if change owner then change owners on all chunks
-            new_table_owner := _timescaledb_internal.ddl_change_owner_to(info.command);
-            hypertable_row := _timescaledb_internal.hypertable_from_main_table(info.objid);
-
-            FOR chunk_row IN
-                SELECT *
-                FROM _timescaledb_catalog.chunk
-                WHERE hypertable_id = hypertable_row.id
-                LOOP
-                    EXECUTE format(
-                        $$
-                            ALTER TABLE %1$I.%2$I OWNER TO %3$I
-                        $$,
-                        chunk_row.schema_name, chunk_row.table_name,
-                        new_table_owner
-                    );
-                END LOOP;
-        END IF;
+    hypertable_row := _timescaledb_internal.hypertable_from_main_table(main_table);
+    FOR chunk_row IN
+        SELECT *
+        FROM _timescaledb_catalog.chunk
+        WHERE hypertable_id = hypertable_row.id
+        LOOP
+            EXECUTE format(
+                $$
+                ALTER TABLE %1$I.%2$I OWNER TO %3$I
+                $$,
+                chunk_row.schema_name, chunk_row.table_name,
+                new_table_owner
+            );
     END LOOP;
 END
 $BODY$;
+

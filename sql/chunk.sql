@@ -12,6 +12,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
     OUT range_end         BIGINT)
     AS '$libdir/timescaledb', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 
+
 -- Trigger for when chunk rows are changed.
 -- On Insert: create chunk table, add indexes, add triggers.
 -- On Delete: drop table
@@ -21,6 +22,7 @@ $BODY$
 DECLARE
     kind                  pg_class.relkind%type;
     hypertable_row        _timescaledb_catalog.hypertable;
+    main_table_oid        OID;
 BEGIN
     IF TG_OP = 'INSERT' THEN
         PERFORM _timescaledb_internal.chunk_create_table(NEW.id);
@@ -28,14 +30,21 @@ BEGIN
         PERFORM _timescaledb_internal.create_chunk_index_row(NEW.schema_name, NEW.table_name,
                                 hi.main_schema_name, hi.main_index_name, hi.definition)
         FROM _timescaledb_catalog.hypertable_index hi
-        WHERE hi.hypertable_id = NEW.hypertable_id;
+        WHERE hi.hypertable_id = NEW.hypertable_id
+        ORDER BY format('%I.%I',main_schema_name, main_index_name)::regclass;
 
         SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = NEW.hypertable_id;
+        main_table_oid := format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass;
+
+        PERFORM _timescaledb_internal.create_chunk_constraint(NEW.id, oid)
+        FROM pg_constraint
+        WHERE conrelid = main_table_oid
+        AND _timescaledb_internal.need_chunk_constraint(NEW.hypertable_id, oid);
 
         PERFORM _timescaledb_internal.create_chunk_trigger(NEW.id, tgname,
             _timescaledb_internal.get_general_trigger_definition(oid))
         FROM pg_trigger
-        WHERE tgrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass
+        WHERE tgrelid = main_table_oid
         AND _timescaledb_internal.need_chunk_trigger(NEW.hypertable_id, oid);
 
         RETURN NEW;

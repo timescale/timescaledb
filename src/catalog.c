@@ -10,6 +10,7 @@
 #include <miscadmin.h>
 #include <commands/dbcommands.h>
 #include <commands/sequence.h>
+#include <access/xact.h>
 
 #include "catalog.h"
 #include "extension.h"
@@ -60,7 +61,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 	[CHUNK_CONSTRAINT] = {
 		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
 		.names = (char *[]) {
-			[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_pkey",
+			[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_chunk_id_dimension_slice_id_idx",
 		}
 	}
 };
@@ -71,6 +72,27 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
 	[CHUNK_CONSTRAINT] = NULL,
+};
+
+typedef struct InternalFunctionDef
+{
+	char	   *name;
+	size_t		args;
+} InternalFunctionDef;
+
+const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
+	[DDL_CHANGE_OWNER] = {
+		.name = "ddl_change_owner",
+		.args = 2,
+	},
+	[DDL_ADD_CONSTRAINT] = {
+		.name = "add_constraint_by_name",
+		.args = 2,
+	},
+	[DDL_DROP_CONSTRAINT] = {
+		.name = "drop_constraint",
+		.args = 2,
+	}
 };
 
 /* Names for proxy tables used for cache invalidation. Must match names in
@@ -126,7 +148,7 @@ catalog_get(void)
 	if (MyDatabaseId == catalog.database_id)
 		return &catalog;
 
-	if (!extension_is_loaded())
+	if (!extension_is_loaded() || !IsTransactionState())
 		return &catalog;
 
 	memset(&catalog, 0, sizeof(Catalog));
@@ -187,6 +209,21 @@ catalog_get(void)
 		catalog.caches[i].inval_proxy_id = get_relname_relid(cache_proxy_table_names[i],
 													catalog.cache_schema_id);
 
+	catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
+	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
+	{
+		InternalFunctionDef def = internal_function_definitions[i];
+		FuncCandidateList funclist =
+		FuncnameGetCandidates(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(def.name)),
+							  def.args, NULL, false, false, false);
+
+		if (funclist == NULL || funclist->next)
+			elog(ERROR, "Oid lookup failed for the function %s with %lu args", def.name, def.args);
+
+		catalog.functions[i].function_id = funclist->oid;
+	}
+
+
 	return &catalog;
 }
 
@@ -206,6 +243,12 @@ Oid
 catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 {
 	return catalog->caches[type].inval_proxy_id;
+}
+
+Oid
+catalog_get_internal_function_id(Catalog *catalog, InternalFunction func)
+{
+	return catalog->functions[func].function_id;
 }
 
 Oid

@@ -161,6 +161,24 @@ BEGIN
 END
 $BODY$;
 
+-- do I need to add a hypertable index to the chunks?;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.need_chunk_index(
+    hypertable_id INTEGER,
+    index_oid OID
+)
+    RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    associated_constraint BOOLEAN;
+BEGIN
+    --do not add an index with associated constraints
+    SELECT count(*) > 0 INTO STRICT associated_constraint FROM pg_constraint WHERE conindid = index_oid;
+
+    RETURN NOT associated_constraint;
+END
+$BODY$;
+
+
 -- Add an index to a hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.add_index(
     hypertable_id    INTEGER,
@@ -174,25 +192,20 @@ INSERT INTO _timescaledb_catalog.hypertable_index (hypertable_id, main_schema_na
 VALUES (hypertable_id, main_schema_name, main_index_name, definition);
 $BODY$;
 
--- Add a trigger to a hypertable
+CREATE OR REPLACE FUNCTION _timescaledb_internal.trigger_is_row_trigger(tgtype int2) RETURNS BOOLEAN
+	AS '$libdir/timescaledb', 'trigger_is_row_trigger' LANGUAGE C IMMUTABLE STRICT;
+
+-- do I need to add a hypertable trigger to the chunks?
 CREATE OR REPLACE FUNCTION _timescaledb_internal.need_chunk_trigger(
     hypertable_id INTEGER,
     trigger_oid OID
 )
-    RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS BOOLEAN LANGUAGE SQL STABLE  AS
 $BODY$
-DECLARE
-    trigger_row record;
-BEGIN
-    SELECT * INTO STRICT trigger_row FROM pg_trigger WHERE OID = trigger_oid;
-
-    IF (trigger_row.tgtype & (1 << 0) != 0) THEN
-        -- row trigger
-        RETURN TRUE;
-    END IF;
-    RETURN FALSE;
-END
+-- row trigger and not an internal trigger used for constraints
+SELECT  _timescaledb_internal.trigger_is_row_trigger(t.tgtype) AND NOT t.tgisinternal FROM pg_trigger t WHERE OID = trigger_oid;
 $BODY$;
+
 
 -- Add a trigger to a hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.add_trigger(
@@ -273,6 +286,37 @@ BEGIN
 END
 $BODY$;
 
+--Makes sure the index is valid for a hypertable.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.check_index(index_oid REGCLASS, hypertable_row  _timescaledb_catalog.hypertable)
+RETURNS VOID LANGUAGE plpgsql STABLE AS
+$BODY$
+DECLARE
+    index_row       RECORD;
+    missing_column  TEXT;
+BEGIN
+    SELECT * INTO STRICT index_row FROM pg_index WHERE indexrelid = index_oid;
+    IF index_row.indisunique OR index_row.indisexclusion THEN
+        -- unique/exclusion index must contain time and all partition dimension columns.
+
+        -- get any partitioning columns that are not included in the index.
+        SELECT d.column_name INTO missing_column
+        FROM _timescaledb_catalog.dimension d
+        WHERE d.hypertable_id = hypertable_row.id AND
+              d.column_name NOT IN (
+                SELECT attname
+                FROM pg_attribute
+                WHERE attrelid = index_row.indrelid AND
+                attnum = ANY(index_row.indkey)
+            );
+
+        IF missing_column IS NOT NULL THEN
+            RAISE EXCEPTION 'Cannot create a unique index without the column: % (used in partitioning)', missing_column
+            USING ERRCODE = 'IO103';
+        END IF;
+    END IF;
+END
+$BODY$;
+
 -- Create the "general definition" of an index. The general definition
 -- is the corresponding create index command with the placeholders /*TABLE_NAME*/
 -- and  /*INDEX_NAME*/
@@ -288,8 +332,6 @@ DECLARE
     def             TEXT;
     index_name      TEXT;
     c               INTEGER;
-    index_row       RECORD;
-    missing_column  TEXT;
 BEGIN
     -- Get index definition
     def := pg_get_indexdef(index_oid);
@@ -298,28 +340,7 @@ BEGIN
         RAISE EXCEPTION 'Cannot process index with no definition: %', index_oid::TEXT;
     END IF;
 
-    SELECT * INTO STRICT index_row FROM pg_index WHERE indexrelid = index_oid;
-
-    IF index_row.indisunique THEN
-        -- unique index must contain time and all partition dimension columns.
-
-        -- get any partitioning columns that are not included in the index.
-        SELECT d.column_name INTO missing_column
-        FROM _timescaledb_catalog.dimension d
-        WHERE d.hypertable_id = hypertable_row.id AND
-              d.column_name NOT IN (
-                SELECT attname
-                FROM pg_attribute
-                WHERE attrelid = table_oid AND
-                attnum = ANY(index_row.indkey)
-            );
-
-        IF missing_column IS NOT NULL THEN
-            RAISE EXCEPTION 'Cannot create a unique index without the column: % (used in partitioning)', missing_column
-            USING ERRCODE = 'IO103';
-        END IF;
-    END IF;
-
+    PERFORM _timescaledb_internal.check_index(index_oid, hypertable_row);
 
     SELECT count(*) INTO c
     FROM regexp_matches(def, 'ON '||table_oid::TEXT || ' USING', 'g');
