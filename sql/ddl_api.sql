@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       INTEGER = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    chunk_time_interval     BIGINT =  _timescaledb_internal.interval_to_usec('1 month'),
+    chunk_time_interval     BIGINT = NULL,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE
 )
@@ -25,15 +25,18 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     SECURITY DEFINER SET search_path = ''
     AS
 $BODY$
+<<vars>>
 DECLARE
     hypertable_row   _timescaledb_catalog.hypertable;
-    table_name       NAME;
-    schema_name      NAME;
-    table_owner      NAME;
-    tablespace_oid   OID;
-    tablespace_name  NAME;
-    main_table_has_items BOOLEAN;
-    is_hypertable    BOOLEAN;
+    table_name                 NAME;
+    schema_name                NAME;
+    table_owner                NAME;
+    tablespace_oid             OID;
+    tablespace_name            NAME;
+    main_table_has_items       BOOLEAN;
+    is_hypertable              BOOLEAN;
+    chunk_time_interval_actual BIGINT;
+    time_type                  REGTYPE;
 BEGIN
     SELECT relname, nspname, reltablespace
     INTO STRICT table_name, schema_name, tablespace_oid
@@ -81,6 +84,31 @@ BEGIN
         USING ERRCODE = 'IO102';
     END IF;
 
+    -- We don't use INTO STRICT here because that error (no column) is surfaced later.
+    SELECT atttypid
+    INTO time_type
+    FROM pg_attribute
+    WHERE attrelid = main_table AND attname = time_column_name;
+
+    -- Timestamp types can use default value, integral should be an error if NULL
+    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ') AND chunk_time_interval IS NULL THEN
+        chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
+    ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') AND chunk_time_interval IS NULL THEN
+        RAISE EXCEPTION 'chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT'
+        USING ERRCODE = 'IO102';
+    ELSE
+        chunk_time_interval_actual := chunk_time_interval;
+    END IF;
+
+    -- Bounds check for integral timestamp types
+    IF time_type = 'INTEGER'::REGTYPE AND chunk_time_interval_actual > 2147483647 THEN
+        RAISE EXCEPTION 'chunk_time_interval is too large for type INTEGER (max: 2147483647)'
+        USING ERRCODE = 'IO102';
+    ELSIF time_type = 'SMALLINT'::REGTYPE AND chunk_time_interval_actual > 65535 THEN
+        RAISE EXCEPTION 'chunk_time_interval is too large for type SMALLINT (max: 65535)'
+        USING ERRCODE = 'IO102';
+    END IF;
+
     BEGIN
         SELECT *
         INTO hypertable_row
@@ -93,7 +121,7 @@ BEGIN
             number_partitions,
             associated_schema_name,
             associated_table_prefix,
-            chunk_time_interval,
+            chunk_time_interval_actual,
             tablespace_name
         );
     EXCEPTION

@@ -87,8 +87,7 @@ $BODY$
 DECLARE
     partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_for_key';
     partitioning_func_schema _timescaledb_catalog.dimension.partitioning_func_schema%TYPE = '_timescaledb_internal';
-    default_interval         BIGINT = _timescaledb_internal.interval_to_usec('1 month');
-    aligned BOOL;
+    aligned                  BOOL;
     column_type              REGTYPE;
     dimension_row            _timescaledb_catalog.dimension;
     table_has_items          BOOLEAN;
@@ -97,7 +96,6 @@ BEGIN
         RAISE EXCEPTION 'The number of slices/partitions or an interval must be specified'
         USING ERRCODE = 'IO101';
     END IF;
-
     EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO table_has_items;
 
     IF table_has_items THEN
