@@ -6,8 +6,9 @@ set -e
 PG_REGRESS_PSQL=$1
 PSQL=${PSQL:-$PG_REGRESS_PSQL}
 TEST_PGUSER=${TEST_PGUSER:-postgres}
-TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-$(mktemp -d)}
-TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-$(mktemp -d)}
+# This mktemp line will work on both OSX and GNU systems
+TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
+TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
 
 shift
 
@@ -29,4 +30,4 @@ mkdir -p dump
 # current/local user
 ${PSQL} $@ -v ECHO=none -c "ALTER USER ${TEST_PGUSER} WITH SUPERUSER;"
 
-exec ${PSQL} -U ${TEST_PGUSER} -v ON_ERROR_STOP=1 -v VERBOSITY=terse -v ECHO=all -v TEST_TABLESPACE1_PATH=\'${TEST_TABLESPACE1_PATH}\' -v TEST_TABLESPACE2_PATH=\'${TEST_TABLESPACE2_PATH}\' $@
+${PSQL} -U ${TEST_PGUSER} -v ON_ERROR_STOP=1 -v VERBOSITY=terse -v ECHO=all -v TEST_TABLESPACE1_PATH=\'${TEST_TABLESPACE1_PATH}\' -v TEST_TABLESPACE2_PATH=\'${TEST_TABLESPACE2_PATH}\' $@
