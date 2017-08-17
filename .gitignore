@@ -10,3 +10,4 @@
 *.bak
 typedef.list
 /test/testcluster
+/test/log
