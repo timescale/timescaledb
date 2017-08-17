@@ -110,7 +110,7 @@ make
 make install
 ```
 
-Please see our [additional configuration instructions](http://docs.timescale.com/getting-started/installation?OS=mac&method=From+Source#update-postgresql-conf-).
+Please see our [additional configuration instructions](http://docs.timescale.com/getting-started/installation#update-postgresql-conf).
 
 
 ### Additional documentation
