@@ -56,8 +56,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	ResultRelInfo *rri,
 			   *rri_orig;
 
-	rri = palloc(sizeof(ResultRelInfo));
-	MemSet(rri, 0, sizeof(ResultRelInfo));
+	rri = palloc0(sizeof(ResultRelInfo));
 	NodeSetTag(rri, T_ResultRelInfo);
 
 	InitResultRelInfo(rri, rel, rti, 0);
@@ -163,4 +162,6 @@ chunk_insert_state_destroy(ChunkInsertState *state)
 
 	ExecCloseIndices(state->result_relation_info);
 	heap_close(state->rel, NoLock);
+	pfree(state->result_relation_info);
+	pfree(state);
 }

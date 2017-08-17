@@ -223,6 +223,9 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 
 		CHECK_FOR_INTERRUPTS();
 
+		/* Reset the per-tuple exprcontext */
+		ResetPerTupleExprContext(estate);
+
 		/* Switch into its memory context */
 		MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
@@ -241,13 +244,6 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		 */
 		tuple->t_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
 
-		/* Triggers and stuff need to be invoked in query context. */
-		MemoryContextSwitchTo(oldcontext);
-
-		/* Place tuple in tuple slot --- but slot shouldn't free it */
-		slot = myslot;
-		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
-
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = hyperspace_calculate_point(ht->space, tuple, tupDesc);
 
@@ -265,6 +261,13 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 				ReleaseBuffer(bistate->current_buf);
 			bistate->current_buf = InvalidBuffer;
 		}
+
+		/* Triggers and stuff need to be invoked in query context. */
+		MemoryContextSwitchTo(oldcontext);
+
+		/* Place tuple in tuple slot --- but slot shouldn't free it */
+		slot = myslot;
+		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.

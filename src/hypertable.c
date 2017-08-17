@@ -37,9 +37,9 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 		MemoryContext old;
 
 		/*
-		 * chunk_find() must execute on the transaction memory context since
-		 * it allocates a lot of transient data. We don't want this allocated
-		 * on the cache's memory context.
+		 * chunk_find() must execute on a per-tuple memory context since it
+		 * allocates a lot of transient data. We don't want this allocated on
+		 * the cache's memory context.
 		 */
 		chunk = chunk_find(h->space, point);
 
