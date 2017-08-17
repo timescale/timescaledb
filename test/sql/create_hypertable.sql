@@ -1,7 +1,7 @@
 \ir include/create_single_db.sql
 
 create schema test_schema;
-create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int);
+create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 
 \dt "test_schema".*
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
@@ -17,11 +17,14 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 
 \set ON_ERROR_STOP 0
---adding the same dimension twice should afail
+--adding the same dimension twice should fail
 select add_dimension('test_schema.test_table', 'location', 2);
 
+--adding dimension with both number_partitions and interval_length should fail
+select add_dimension('test_schema.test_table', 'id2', number_partitions => 2, interval_length => 1000);
+
 --adding a new dimension on a non-empty table should also fail
-insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'nyc', 1);
+insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'nyc', 1, 1);
 select add_dimension('test_schema.test_table', 'device_type', 2);
 \set ON_ERROR_STOP 1
 

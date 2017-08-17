@@ -34,10 +34,6 @@
 -- reconfigured, but the new partitioning only affects newly created
 -- chunks.
 --
--- NOTE: Due to current restrictions, a maximum of two dimensions are
--- allowed, typically one open (time) and one closed (space)
--- dimension.
---
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     id                      SERIAL    PRIMARY KEY,
     schema_name             NAME      NOT NULL CHECK (schema_name != '_timescaledb_catalog'),

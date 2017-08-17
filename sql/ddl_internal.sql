@@ -95,6 +95,9 @@ BEGIN
     IF num_slices IS NULL AND interval_length IS NULL THEN
         RAISE EXCEPTION 'The number of slices/partitions or an interval must be specified'
         USING ERRCODE = 'IO101';
+    ELSIF num_slices IS NOT NULL AND interval_length IS NOT NULL THEN
+        RAISE EXCEPTION 'Cannot specify both interval and number of slices/partitions for a single dimension'
+        USING ERRCODE = 'IO101';
     END IF;
     EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO table_has_items;
 
