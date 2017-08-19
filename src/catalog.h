@@ -2,6 +2,8 @@
 #define TIMESCALEDB_CATALOG_H
 
 #include <postgres.h>
+#include <access/relscan.h>
+#include <access/heapam.h>
 
 /*
  * TimescaleDB catalog.
@@ -238,10 +240,17 @@ typedef struct FormData_chunk
 
 typedef FormData_chunk *Form_chunk;
 
+enum Anum_chunk_schema_name_idx
+{
+	Anum_chunk_schema_name_idx_schema_name = 1,
+	Anum_chunk_schema_name_idx_table_name,
+};
+
 enum
 {
 	CHUNK_ID_INDEX = 0,
 	CHUNK_HYPERTABLE_ID_INDEX,
+	CHUNK_SCHEMA_NAME_INDEX,
 	_MAX_CHUNK_INDEX,
 };
 
@@ -257,6 +266,7 @@ enum Anum_chunk_constraint
 {
 	Anum_chunk_constraint_chunk_id = 1,
 	Anum_chunk_constraint_dimension_slice_id,
+	Anum_chunk_constraint_constraint_name,
 	_Anum_chunk_constraint_max,
 };
 
@@ -267,6 +277,7 @@ typedef struct FormData_chunk_constraint
 {
 	int32		chunk_id;
 	int32		dimension_slice_id;
+	NameData	constraint_name;
 } FormData_chunk_constraint;
 
 typedef FormData_chunk_constraint *Form_chunk_constraint;
@@ -329,5 +340,7 @@ Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 Oid			catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname);
 
 const char *catalog_get_cache_proxy_name(CacheType type);
+
+void		catalog_update(Relation rel, HeapTuple tuple);
 
 #endif   /* TIMESCALEDB_CATALOG_H */

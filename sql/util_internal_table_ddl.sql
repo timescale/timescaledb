@@ -124,7 +124,7 @@ DECLARE
     constraint_row record;
 BEGIN
     FOR constraint_row IN
-        SELECT c.schema_name, c.table_name, ds.id as dimension_slice_id
+        SELECT c.schema_name, c.table_name, ds.id as dimension_slice_id, cc.constraint_name
         FROM _timescaledb_catalog.chunk c
         INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
         INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
@@ -133,10 +133,11 @@ BEGIN
         EXECUTE format(
             $$
                 ALTER TABLE %1$I.%2$I
-                ADD CONSTRAINT constraint_%3$s CHECK(%4$s)
+                ADD CONSTRAINT %3$s CHECK(%4$s)
             $$,
-            constraint_row.schema_name, constraint_row.table_name,
-            constraint_row.dimension_slice_id,
+            constraint_row.schema_name,
+            constraint_row.table_name,
+            constraint_row.constraint_name,
             _timescaledb_internal.dimension_slice_get_constraint_sql(constraint_row.dimension_slice_id)
         );
     END LOOP;

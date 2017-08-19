@@ -21,7 +21,7 @@ hypertable_from_tuple(HeapTuple tuple)
 	memcpy(&h->fd, GETSTRUCT(tuple), sizeof(FormData_hypertable));
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
-	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
+	h->space = dimension_space_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
 	h->chunk_cache = subspace_store_init(HYPERSPACE_NUM_DIMENSIONS(h->space), CurrentMemoryContext);
 
 	return h;
@@ -86,4 +86,20 @@ bool
 is_hypertable(Oid relid)
 {
 	return hypertable_relid_lookup(relid) != InvalidOid;
+}
+
+Dimension *
+hypertable_get_dimension(Hypertable *ht, const char *dimname)
+{
+	int			i;
+
+	for (i = 0; i < HYPERSPACE_NUM_DIMENSIONS(ht->space); i++)
+	{
+		Dimension  *dim = &ht->space->dimensions[i];
+
+		if (strncmp(NameStr(dim->fd.column_name), dimname, NAMEDATALEN) == 0)
+			return dim;
+	}
+
+	return NULL;
 }

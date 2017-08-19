@@ -30,6 +30,8 @@ typedef struct TupleInfo
 	HTSU_Result lockresult;
 } TupleInfo;
 
+typedef bool (*tuple_found_func) (TupleInfo *ti, void *data);
+
 typedef struct ScannerCtx
 {
 	Oid			table;

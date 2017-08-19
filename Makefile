@@ -42,6 +42,7 @@ SRCS = \
 	src/cache.c \
 	src/cache_invalidate.c \
 	src/chunk.c \
+	src/constraint.c \
 	src/scanner.c \
 	src/hypertable_cache.c \
 	src/hypertable.c \

@@ -5,12 +5,12 @@
 #include <nodes/primnodes.h>
 
 #include "catalog.h"
+#include "dimension.h"
 
-typedef struct Hyperspace Hyperspace;
 typedef struct SubspaceStore SubspaceStore;
-typedef struct Point Point;
 typedef struct Chunk Chunk;
 typedef struct HeapTupleData *HeapTuple;
+
 
 typedef struct Hypertable
 {
@@ -24,5 +24,6 @@ extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);
 extern bool is_hypertable(Oid relid);
+extern Dimension *hypertable_get_dimension(Hypertable *ht, const char *dimname);
 
 #endif   /* TIMESCALEDB_HYPERTABLE_H */

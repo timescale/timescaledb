@@ -272,8 +272,9 @@ BEGIN
         WHERE h.id = hypertable_id
         RETURNING *
     )
-    INSERT INTO _timescaledb_catalog.chunk_constraint (dimension_slice_id, chunk_id)
-    SELECT slice_id_to_insert, chunk.id FROM chunk, unnest(slice_ids) AS slice_id_to_insert;
+    INSERT INTO _timescaledb_catalog.chunk_constraint (dimension_slice_id, chunk_id, constraint_name)
+    SELECT slice_id_to_insert, chunk.id, 'constraint_' || slice_id_to_insert
+    FROM chunk, unnest(slice_ids) AS slice_id_to_insert;
 END
 $BODY$;
 

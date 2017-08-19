@@ -1,10 +1,13 @@
 #include <postgres.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_inherits.h>
+#include <catalog/indexing.h>
 #include <fmgr.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/hsearch.h>
 #include <utils/memutils.h>
+#include <utils/rel.h>
 #include <access/htup_details.h>
 
 #include "chunk.h"
@@ -14,7 +17,48 @@
 #include "partitioning.h"
 #include "metadata_queries.h"
 #include "scanner.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
 
+static Oid
+chunk_relation_get_parent_oid(Relation inherits_rel, Oid child_relid)
+{
+	SysScanDesc scan;
+	ScanKeyData key;
+	HeapTuple	tuple;
+	Oid			parent_relid = InvalidOid;
+
+	ScanKeyInit(&key,
+				Anum_pg_inherits_inhrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				child_relid);
+
+	scan = systable_beginscan(inherits_rel, InheritsRelidSeqnoIndexId,
+							  true, NULL, 1, &key);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		Form_pg_inherits inh = (Form_pg_inherits) GETSTRUCT(tuple);
+
+		parent_relid = inh->inhparent;
+	}
+	systable_endscan(scan);
+
+	return parent_relid;
+}
+
+static Oid
+chunk_get_parent_oid(Oid chunk_relid)
+{
+	Relation	rel;
+	Oid			parent_relid;
+
+	rel = heap_open(InheritsRelationId, AccessShareLock);
+	parent_relid = chunk_relation_get_parent_oid(rel, chunk_relid);
+	heap_close(rel, AccessShareLock);
+
+	return parent_relid;
+}
 
 static void
 chunk_fill(Chunk *chunk, HeapTuple tuple)
@@ -22,6 +66,7 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 					   get_namespace_oid(chunk->fd.schema_name.data, false));
+	chunk->parent_id = chunk_get_parent_oid(chunk->table_id);
 }
 
 Chunk *
@@ -60,8 +105,8 @@ chunk_create_stub(int32 id, int16 num_constraints)
 	chunk = palloc0(CHUNK_SIZE(num_constraints));
 	chunk->capacity = num_constraints;
 	chunk->num_constraints = 0;
-
 	chunk->fd.id = id;
+
 	return chunk;
 }
 
@@ -253,4 +298,153 @@ chunk_copy(Chunk *chunk)
 		copy->cube = hypercube_copy(chunk->cube);
 
 	return copy;
+}
+
+
+Chunk *
+chunk_get(int32 id, int16 num_constraints)
+{
+	return chunk_fill_stub(chunk_create_stub(id, num_constraints), false);
+}
+
+
+Chunk *
+chunk_get_by_name(const char *schema_name, const char *table_name,
+				  int16 num_constraints, bool fail_if_not_found)
+{
+	ScanKeyData scankey[2];
+	Catalog    *catalog = catalog_get();
+	int			num_found;
+	Chunk	   *chunk = chunk_create_stub(0, num_constraints);
+	ScannerCtx	ctx = {
+		.table = catalog->tables[CHUNK].id,
+		.index = catalog->tables[CHUNK].index_ids[CHUNK_SCHEMA_NAME_INDEX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 2,
+		.data = chunk,
+		.scankey = scankey,
+		.tuple_found = chunk_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	/*
+	 * Perform an index scan on chunk name.
+	 */
+	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
+				F_NAMEEQ, CStringGetDatum(schema_name));
+
+	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
+				F_NAMEEQ, CStringGetDatum(table_name));
+
+	num_found = scanner_scan(&ctx);
+
+	if (num_found > 1)
+		elog(ERROR, "Unexpected number of chunks found");
+
+	if (num_found == 0 && fail_if_not_found)
+		elog(ERROR, "Chunk with name %s.%s not found", schema_name, table_name);
+
+	if (num_found == 1)
+	{
+		chunk = chunk_constraint_scan_by_chunk_id(chunk);
+		chunk->cube = hypercube_from_constraints(chunk->constraints, num_constraints);
+		return chunk;
+	}
+
+	return NULL;
+}
+
+Chunk *
+chunk_get_by_oid(Oid chunk_relid)
+{
+	Relation	rel;
+	Oid			parent_relid;
+	Cache	   *htcache;
+	Chunk	   *chunk = NULL;
+
+	rel = heap_open(InheritsRelationId, AccessShareLock);
+
+	parent_relid = chunk_relation_get_parent_oid(rel, chunk_relid);
+
+	htcache = hypertable_cache_pin();
+
+	if (OidIsValid(parent_relid))
+	{
+		Hypertable *ht;
+
+		ht = hypertable_cache_get_entry(htcache, parent_relid);
+
+		if (NULL != ht)
+		{
+			const char *schema = get_namespace_name(get_rel_namespace(chunk_relid));
+			const char *relname = get_rel_name(chunk_relid);
+
+			chunk = chunk_get_by_name(schema, relname, ht->fd.num_dimensions, false);
+		}
+	}
+
+	heap_close(rel, AccessShareLock);
+	cache_release(htcache);
+
+	return chunk;
+}
+
+DimensionSlice *
+chunk_get_dimension_slice(Chunk *chunk, int32 dimension_id)
+{
+	int			i;
+
+	for (i = 0; i < chunk->cube->num_slices; i++)
+	{
+		DimensionSlice *slice = chunk->cube->slices[i];
+
+		if (slice->fd.dimension_id == dimension_id)
+			return slice;
+	}
+	return NULL;
+}
+
+ChunkConstraint *
+chunk_get_dimension_constraint_by_slice_id(Chunk *chunk, int32 slice_id)
+{
+	int			i;
+
+	for (i = 0; i < chunk->num_constraints; i++)
+	{
+		ChunkConstraint *constraint = &chunk->constraints[i];
+
+		if (constraint->fd.dimension_slice_id == slice_id)
+			return constraint;
+	}
+	return NULL;
+}
+
+ChunkConstraint *
+chunk_get_dimension_constraint_by_constraint_name(Chunk *chunk, const char *conname)
+{
+	int			i;
+
+	for (i = 0; i < chunk->num_constraints; i++)
+	{
+		ChunkConstraint *constraint = &chunk->constraints[i];
+
+		if (strncmp(NameStr(constraint->fd.constraint_name), conname, NAMEDATALEN) == 0)
+			return constraint;
+	}
+	return NULL;
+}
+
+/*
+ * Get a chunk's constraint for a given dimension.
+ */
+ChunkConstraint *
+chunk_get_dimension_constraint(Chunk *chunk, int32 dimension_id)
+{
+	DimensionSlice *slice = chunk_get_dimension_slice(chunk, dimension_id);
+
+	if (NULL == slice)
+		return NULL;
+
+	return chunk_get_dimension_constraint_by_slice_id(chunk, slice->fd.id);
 }

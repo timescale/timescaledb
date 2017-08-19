@@ -4,13 +4,12 @@
 #include <postgres.h>
 #include <access/htup.h>
 #include <access/tupdesc.h>
+#include <utils/hsearch.h>
 
 #include "catalog.h"
 #include "chunk_constraint.h"
-
-typedef struct Hypercube Hypercube;
-typedef struct Point Point;
-typedef struct Hyperspace Hyperspace;
+#include "dimension.h"
+#include "dimension_slice.h"
 
 /*
  * A chunk represents a table that stores data, part of a partitioned
@@ -24,6 +23,7 @@ typedef struct Chunk
 {
 	FormData_chunk fd;
 	Oid			table_id;
+	Oid			parent_id;
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.
@@ -68,5 +68,12 @@ extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
 extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);
 extern Chunk *chunk_find(Hyperspace *hs, Point *p);
 extern Chunk *chunk_copy(Chunk *chunk);
+extern Chunk *chunk_get(int32 id, int16 num_constraints);
+extern Chunk *chunk_get_by_name(const char *schema_name, const char *table_name, int16 num_constraints, bool fail_if_not_found);
+extern Chunk *chunk_get_by_oid(Oid chunk_relid);
+extern ChunkConstraint *chunk_get_dimension_constraint(Chunk *chunk, int32 dimension_id);
+extern ChunkConstraint *chunk_get_dimension_constraint_by_slice_id(Chunk *chunk, int32 slice_id);
+extern ChunkConstraint *chunk_get_dimension_constraint_by_constraint_name(Chunk *chunk, const char *conname);
+extern DimensionSlice *chunk_get_dimension_slice(Chunk *chunk, int32 dimension_id);
 
 #endif   /* TIMESCALEDB_CHUNK_H */

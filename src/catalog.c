@@ -1,8 +1,11 @@
 #include <postgres.h>
 #include <catalog/namespace.h>
+#include <catalog/indexing.h>
 #include <utils/lsyscache.h>
-#include <miscadmin.h>
 #include <commands/dbcommands.h>
+#include <access/relscan.h>
+#include <access/heapam.h>
+#include <miscadmin.h>
 
 #include "catalog.h"
 #include "extension.h"
@@ -48,6 +51,7 @@ const static TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
+			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
 		}
 	},
 	[CHUNK_CONSTRAINT] = {
@@ -174,4 +178,11 @@ catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname)
 		return InvalidOid;
 
 	return catalog->caches[i].inval_proxy_id;
+}
+
+void
+catalog_update(Relation rel, HeapTuple tuple)
+{
+	simple_heap_update(rel, &tuple->t_self, tuple);
+	CatalogUpdateIndexes(rel, tuple);
 }
