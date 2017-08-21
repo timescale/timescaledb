@@ -1,5 +1,24 @@
 # TimescaleDB Changelog
 
+## 0.4.0 (2017-08-21)
+
+**High-level changes**
+* Exclude chunks when constraints can be constifyed even if they are
+considered mutable like `NOW()`.
+* Support for negative values in the dimension range which allows for pre-1970 dates.
+* Improve handling of default chunk times for integral date times by forcing it to be explicit rather than guessing the units of the time.
+* Improve memory usage for long-running `COPY` operations (previously it would grow unbounded).
+* `VACUUM` and `REINDEX` on hypertables now recurse down to chunks.
+
+**Notable commits**
+* [139fe34] Implement constraint-aware appends to exclude chunks at execution time
+* [2a51cf0] Add support for negative values in dimension range
+* [f2d5c3f] Error if add_dimension given both partition number and interval length
+* [f3df02d] Improve handling of non-TIMESTAMP/TZ timestamps
+* [6a5a7eb] Reduce memory usage on long-running COPY operations
+* [953346c] Make VACUUM and REINDEX recurse to chunks
+* [55bfdf7] Release all cache pins when a transaction ends
+
 ## 0.3.0 (2017-07-31)
 
 **High-level changes**
