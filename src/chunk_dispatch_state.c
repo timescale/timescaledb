@@ -1,5 +1,6 @@
 #include <postgres.h>
 #include <utils/lsyscache.h>
+#include <utils/rel.h>
 #include <catalog/pg_class.h>
 #include <nodes/extensible.h>
 
@@ -90,6 +91,9 @@ chunk_dispatch_exec(CustomScanState *node)
 		estate->es_result_relation_info = cis->result_relation_info;
 
 		MemoryContextSwitchTo(old);
+
+		/* Convert the tuple to the chunk's rowtype, if necessary */
+		tuple = chunk_insert_state_convert_tuple(cis, tuple, &slot);
 	}
 
 	return slot;

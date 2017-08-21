@@ -41,6 +41,36 @@ create_chunk_range_table_entry(EState *estate, Relation rel)
 	return list_length(estate->es_range_table);
 }
 
+
+/*
+ * Convert a tuple to match the chunk's rowtype. This might be necessary if the
+ * main table has been modified, e.g., a column was dropped. The dropped column
+ * will remain on existing tables (marked as dropped) but won't be created on
+ * new tables (chunks). This leads to a situation where the root table and
+ * chunks can have different attnums for columns.
+ */
+HeapTuple
+chunk_insert_state_convert_tuple(ChunkInsertState *state,
+								 HeapTuple tuple,
+								 TupleTableSlot **existing_slot)
+{
+	Relation	chunkrel = state->result_relation_info->ri_RelationDesc;
+
+	if (NULL == state->tup_conv_map)
+		/* No conversion needed */
+		return tuple;
+
+	tuple = do_convert_tuple(tuple, state->tup_conv_map);
+
+	ExecSetSlotDescriptor(state->slot, RelationGetDescr(chunkrel));
+	ExecStoreTuple(tuple, state->slot, InvalidBuffer, true);
+
+	if (NULL != existing_slot)
+		*existing_slot = state->slot;
+
+	return tuple;
+}
+
 /*
  * Create a new ResultRelInfo for a chunk.
  *
@@ -102,7 +132,8 @@ extern ChunkInsertState *
 chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
-	Relation	rel;
+	Relation	rel,
+				parent_rel;
 	Index		rti;
 	MemoryContext old_mcxt;
 	Query	   *parse = dispatch->parse;
@@ -149,6 +180,19 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (parse != NULL && parse->onConflict != NULL)
 		state->arbiter_indexes = chunk_infer_arbiter_indexes(rti, dispatch->estate->es_range_table, dispatch->parse);
 
+	/* Set tuple conversion map, if tuple needs conversion */
+	parent_rel = heap_open(dispatch->hypertable->main_table_relid, AccessShareLock);
+
+	state->tup_conv_map = convert_tuples_by_name(RelationGetDescr(parent_rel),
+												 RelationGetDescr(rel),
+								 gettext_noop("could not convert row type"));
+
+	/* Need a tuple table slot to store converted tuples */
+	if (state->tup_conv_map)
+		state->slot = MakeTupleTableSlot();
+
+	heap_close(parent_rel, AccessShareLock);
+
 	MemoryContextSwitchTo(old_mcxt);
 
 	return state;
@@ -163,5 +207,12 @@ chunk_insert_state_destroy(ChunkInsertState *state)
 	ExecCloseIndices(state->result_relation_info);
 	heap_close(state->rel, NoLock);
 	pfree(state->result_relation_info);
+
+	if (NULL != state->tup_conv_map)
+		free_conversion_map(state->tup_conv_map);
+
+	if (NULL != state->slot)
+		ExecDropSingleTupleTableSlot(state->slot);
+
 	pfree(state);
 }

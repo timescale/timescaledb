@@ -238,12 +238,6 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		if (loaded_oid != InvalidOid)
 			HeapTupleSetOid(tuple, loaded_oid);
 
-		/*
-		 * Constraints might reference the tableoid column, so initialize
-		 * t_tableOid before evaluating them.
-		 */
-		tuple->t_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
-
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = hyperspace_calculate_point(ht->space, tuple, tupDesc);
 
@@ -269,6 +263,9 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		slot = myslot;
 		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
 
+		/* Convert the tuple to match the chunk's rowtype */
+		tuple = chunk_insert_state_convert_tuple(cis, tuple, &slot);
+
 		/*
 		 * Set the result relation in the executor state to the target chunk.
 		 * This makes sure that the tuple gets inserted into the correct
@@ -277,8 +274,13 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		saved_resultRelInfo = resultRelInfo;
 		resultRelInfo = cis->result_relation_info;
 		estate->es_result_relation_info = resultRelInfo;
-		tuple->t_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
 		prev_cis = cis;
+
+		/*
+		 * Constraints might reference the tableoid column, so initialize
+		 * t_tableOid before evaluating them.
+		 */
+		tuple->t_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
 
 		skip_tuple = false;
 
