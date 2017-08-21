@@ -2,6 +2,7 @@
 #define TIMESCALEDB_CHUNK_DISPATCH_H
 
 #include <postgres.h>
+#include <nodes/parsenodes.h>
 #include <nodes/execnodes.h>
 
 #include "hypertable_cache.h"
