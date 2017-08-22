@@ -128,8 +128,8 @@ set enable_material = 'off';
 
 EXPLAIN (costs off)
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
-WHERE a.time > now() - interval '3 hours' AND j.time > now() - interval '3 hours';
+WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
 
 -- result should be the same as when optimizations are turned off
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
-WHERE a.time > now() - interval '3 hours' AND j.time > now() - interval '3 hours';
+WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
