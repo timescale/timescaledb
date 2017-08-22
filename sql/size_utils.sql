@@ -85,8 +85,10 @@ $BODY$;
 -- main_table - hypertable to get size of
 --
 -- Returns:
--- chunk_id          - timescaledb id of a chunk
--- chunk_table       - table used for the chunk
+-- chunk_id          - Timescaledb id of a chunk
+-- chunk_table       - Table used for the chunk
+-- dimensions        - Partitioning dimension names
+-- ranges            - Partition ranges for each dimension of the chunk
 -- table_bytes       - Disk space used by main_table
 -- index_bytes       - Disk space used by indexes
 -- toast_bytes       - Disc space of toast tables
@@ -149,9 +151,10 @@ BEGIN
                pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"') AS total_bytes,
                pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"') AS index_bytes,
                pg_total_relation_size(reltoastrelid) AS toast_bytes,
-               array_agg(d.column_name) as dimensions,
-               array_agg(int8range(range_start, range_end)) as ranges
+               array_agg(d.column_name ORDER BY d.column_name DESC) as dimensions,
+               array_agg(int8range(range_start, range_end) ORDER BY d.column_name DESC) as ranges
                FROM
+
                _timescaledb_catalog.hypertable h,
                _timescaledb_catalog.chunk c,
                _timescaledb_catalog.chunk_constraint cc,
@@ -169,7 +172,6 @@ BEGIN
                      AND c.id = cc.chunk_id
                      AND cc.dimension_slice_id = ds.id
                      AND ds.dimension_id = d.id
-  
                GROUP BY c.id, pgc.reltoastrelid, pgc.oid ORDER BY c.id
                ) sub1
         ) sub2;
