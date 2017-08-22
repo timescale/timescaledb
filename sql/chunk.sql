@@ -65,6 +65,58 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_closed(
+        dimension_value   BIGINT,
+        num_slices        SMALLINT,
+        range_max         BIGINT = 2147483647,
+    OUT range_start  BIGINT,
+    OUT range_end    BIGINT)
+LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    inter BIGINT;
+BEGIN
+       IF dimension_value < 0 THEN 
+            RAISE 'Dimension values for closed dimensions should be positive. Got: %', dimension_value;
+       END IF;
+       inter := ( range_max / num_slices);
+       IF dimension_value >= inter * (num_slices - 1) THEN
+          --put overflow from integer-division errors in last range
+          range_start = inter * (num_slices - 1);
+          range_end = range_max;
+       ELSE
+          range_start = (dimension_value / inter) * inter;
+          range_end := range_start + inter;
+       END IF;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_open(
+        dimension_value   BIGINT,
+        interval_length   BIGINT,
+    OUT range_start  BIGINT,
+    OUT range_end    BIGINT)
+LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+BEGIN
+    -- For positive values, integer division finds a lower bound which is BEFORE
+    -- the value we want. For negative values, integer division finds a upper bound which
+    -- is AFTER the value we want. Therefore for positive numbers we find the
+    -- range_start via integer division, while for negative we find the range_end.
+    IF dimension_value >= 0 THEN
+        range_start := (dimension_value / interval_length) * interval_length;
+        range_end := range_start + interval_length;
+    ELSE
+        --the +1 in (dimension_value + 1) makes this work with inclusive range_start exclusive range_end
+        range_end := ((dimension_value + 1) / interval_length) * interval_length;
+        range_start := range_end - interval_length;
+    END IF;
+END
+$BODY$;
+
+
+
 --todo: unit test
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range(
         dimension_id      INTEGER,
@@ -75,7 +127,6 @@ LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     dimension_row _timescaledb_catalog.dimension;
-    inter BIGINT;
 BEGIN
     SELECT *
     FROM _timescaledb_catalog.dimension
@@ -83,27 +134,12 @@ BEGIN
     WHERE id = dimension_id;
 
     IF dimension_row.interval_length IS NOT NULL THEN
-        -- For positive values, integer division finds a lower bound which is BEFORE
-        -- the value we want. For negative values, integer divsion finds a upper bound which
-        -- is AFTER the value we want. Therefore for positive numbers we find the
-        -- range_start via integer division, while for negative we find the range_end.
-        IF dimension_value >= 0 THEN
-            range_start := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
-            range_end := range_start + dimension_row.interval_length;
-        ELSE
-            range_end := (dimension_value / dimension_row.interval_length) * dimension_row.interval_length;
-            range_start := range_end - dimension_row.interval_length;
-        END IF;
+        SELECT * INTO STRICT range_start, range_end 
+        FROM _timescaledb_internal.dimension_calculate_default_range_open(dimension_value,  dimension_row.interval_length);
     ELSE
-       inter := (2147483647 / dimension_row.num_slices);
-       IF dimension_value >= inter * (dimension_row.num_slices - 1) THEN
-          --put overflow from integer-division errors in last range
-          range_start = inter * (dimension_row.num_slices - 1);
-          range_end = 2147483647;
-       ELSE
-          range_start = (dimension_value / inter) * inter;
-          range_end := range_start + inter;
-       END IF;
+        SELECT * INTO STRICT range_start, range_end 
+        FROM _timescaledb_internal.dimension_calculate_default_range_closed(dimension_value,  
+            dimension_row.num_slices);
     END IF;
 END
 $BODY$;
