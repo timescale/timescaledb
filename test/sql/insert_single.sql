@@ -24,11 +24,22 @@ SELECT "1dim" FROM "1dim";
 --test that we can insert pre-1970 dates
 CREATE TABLE "1dim_pre1970"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_pre1970"', 'time');
-INSERT INTO "1dim_pre1970" VALUES('1969-11-20T09:00:00', 21.2);
+INSERT INTO "1dim_pre1970" VALUES('1969-12-01T19:00:00', 21.2);
 INSERT INTO "1dim_pre1970" VALUES('1969-12-20T09:00:00', 25.1);
 INSERT INTO "1dim_pre1970" VALUES('1970-01-20T09:00:00', 26.6);
 INSERT INTO "1dim_pre1970" VALUES('1969-02-20T09:00:00', 29.9);
+
+CREATE TABLE "1dim_neg"(time INTEGER, temp float);
+SELECT create_hypertable('"1dim_neg"', 'time', chunk_time_interval=>10);
+INSERT INTO "1dim_neg" VALUES (-20, 21.2);
+INSERT INTO "1dim_neg" VALUES (-19, 21.2);
+INSERT INTO "1dim_neg" VALUES (-1, 21.2);
+INSERT INTO "1dim_neg" VALUES (0, 21.2);
+INSERT INTO "1dim_neg" VALUES (1, 21.2);
+INSERT INTO "1dim_neg" VALUES (19, 21.2);
+INSERT INTO "1dim_neg" VALUES (20, 21.2);
 SELECT * FROM "1dim_pre1970";
+SELECT * FROM "1dim_neg";
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
 

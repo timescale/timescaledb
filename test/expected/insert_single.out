@@ -309,22 +309,48 @@ SELECT create_hypertable('"1dim_pre1970"', 'time');
  
 (1 row)
 
-INSERT INTO "1dim_pre1970" VALUES('1969-11-20T09:00:00', 21.2);
+INSERT INTO "1dim_pre1970" VALUES('1969-12-01T19:00:00', 21.2);
 INSERT INTO "1dim_pre1970" VALUES('1969-12-20T09:00:00', 25.1);
 INSERT INTO "1dim_pre1970" VALUES('1970-01-20T09:00:00', 26.6);
 INSERT INTO "1dim_pre1970" VALUES('1969-02-20T09:00:00', 29.9);
+CREATE TABLE "1dim_neg"(time INTEGER, temp float);
+SELECT create_hypertable('"1dim_neg"', 'time', chunk_time_interval=>10);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "1dim_neg" VALUES (-20, 21.2);
+INSERT INTO "1dim_neg" VALUES (-19, 21.2);
+INSERT INTO "1dim_neg" VALUES (-1, 21.2);
+INSERT INTO "1dim_neg" VALUES (0, 21.2);
+INSERT INTO "1dim_neg" VALUES (1, 21.2);
+INSERT INTO "1dim_neg" VALUES (19, 21.2);
+INSERT INTO "1dim_neg" VALUES (20, 21.2);
 SELECT * FROM "1dim_pre1970";
            time           | temp 
 --------------------------+------
- Thu Nov 20 09:00:00 1969 | 21.2
+ Mon Dec 01 19:00:00 1969 | 21.2
  Sat Dec 20 09:00:00 1969 | 25.1
  Tue Jan 20 09:00:00 1970 | 26.6
  Thu Feb 20 09:00:00 1969 | 29.9
 (4 rows)
 
+SELECT * FROM "1dim_neg";
+ time | temp 
+------+------
+  -20 | 21.2
+  -19 | 21.2
+   -1 | 21.2
+    0 | 21.2
+    1 | 21.2
+   19 | 21.2
+   20 | 21.2
+(7 rows)
+
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    
-----+---------------+-----------------------+------------------
+ id | hypertable_id |      schema_name      |    table_name     
+----+---------------+-----------------------+-------------------
   1 |             1 | one_Partition         | _hyper_1_1_chunk
   2 |             1 | one_Partition         | _hyper_1_2_chunk
   3 |             1 | one_Partition         | _hyper_1_3_chunk
@@ -332,8 +358,12 @@ SELECT * FROM _timescaledb_catalog.chunk;
   5 |             3 | _timescaledb_internal | _hyper_3_5_chunk
   6 |             3 | _timescaledb_internal | _hyper_3_6_chunk
   7 |             3 | _timescaledb_internal | _hyper_3_7_chunk
-  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk
-(8 rows)
+  8 |             4 | _timescaledb_internal | _hyper_4_8_chunk
+  9 |             4 | _timescaledb_internal | _hyper_4_9_chunk
+ 10 |             4 | _timescaledb_internal | _hyper_4_10_chunk
+ 11 |             4 | _timescaledb_internal | _hyper_4_11_chunk
+ 12 |             4 | _timescaledb_internal | _hyper_4_12_chunk
+(12 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
  id | dimension_id |     range_start     |      range_end      
@@ -342,11 +372,15 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
   2 |            1 | 1257897600000000000 | 1257900192000000000
   3 |            1 | 1257985728000000000 | 1257988320000000000
   4 |            2 |    1482624000000000 |    1485216000000000
-  5 |            3 |      -5184000000000 |      -2592000000000
-  6 |            3 |      -2592000000000 |                   0
-  7 |            3 |                   0 |       2592000000000
-  8 |            3 |     -28512000000000 |     -25920000000000
-(8 rows)
+  5 |            3 |      -2592000000000 |                   0
+  6 |            3 |                   0 |       2592000000000
+  7 |            3 |     -28512000000000 |     -25920000000000
+  8 |            4 |                 -20 |                 -10
+  9 |            4 |                 -10 |                   0
+ 10 |            4 |                   0 |                  10
+ 11 |            4 |                  10 |                  20
+ 12 |            4 |                  20 |                  30
+(12 rows)
 
 -- Create a three-dimensional table
 CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
@@ -367,21 +401,16 @@ INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
 --show the constraints on the three-dimensional chunk
 \d+ _timescaledb_internal._hyper_4_10_chunk
-                      Table "_timescaledb_internal._hyper_4_10_chunk"
-  Column  |            Type             | Modifiers | Storage  | Stats target | Description 
-----------+-----------------------------+-----------+----------+--------------+-------------
- time     | timestamp without time zone |           | plain    |              | 
- temp     | double precision            |           | plain    |              | 
- device   | text                        |           | extended |              | 
- location | text                        |           | extended |              | 
+               Table "_timescaledb_internal._hyper_4_10_chunk"
+ Column |       Type       | Modifiers | Storage | Stats target | Description 
+--------+------------------+-----------+---------+--------------+-------------
+ time   | integer          |           | plain   |              | 
+ temp   | double precision |           | plain   |              | 
 Indexes:
-    "26-3dim_time_idx" btree ("time" DESC)
-    "27-3dim_device_time_idx" btree (device, "time" DESC)
+    "25-1dim_neg_time_idx" btree ("time" DESC)
 Check constraints:
-    "constraint_13" CHECK (_timescaledb_internal.get_partition_for_key(device) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device) < 2147483647)
-    "constraint_14" CHECK (_timescaledb_internal.get_partition_for_key(location) >= 0 AND _timescaledb_internal.get_partition_for_key(location) < 1073741823)
-    "constraint_9" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone)
-Inherits: "3dim"
+    "constraint_10" CHECK ("time" >= 0 AND "time" < 10)
+Inherits: "1dim_neg"
 
 --queries should work in three dimensions
 SELECT * FROM "3dim";
