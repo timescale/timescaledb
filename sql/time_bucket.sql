@@ -7,6 +7,10 @@ CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAM
 CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
 	AS '$libdir/timescaledb', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+--bucketing on date should not do any timezone conversion
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
+	AS '$libdir/timescaledb', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
     RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
@@ -19,6 +23,13 @@ CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts TIMESTAM
 $BODY$
     SELECT public.time_bucket(bucket_width, ts-"offset")+"offset";
 $BODY$;
+
+CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width INTERVAL, ts DATE, "offset" INTERVAL)
+    RETURNS DATE LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
+$BODY$
+    SELECT (public.time_bucket(bucket_width, ts-"offset")+"offset")::date;
+$BODY$;
+
 
 CREATE OR REPLACE FUNCTION public.time_bucket(bucket_width BIGINT, ts BIGINT)
     RETURNS BIGINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
