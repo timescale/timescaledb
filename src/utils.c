@@ -6,6 +6,7 @@
 #include <catalog/pg_type.h>
 #include <catalog/namespace.h>
 #include <utils/guc.h>
+#include <utils/date.h>
 
 #include "utils.h"
 #include "nodes/nodes.h"
@@ -322,4 +323,53 @@ timestamptz_bucket(PG_FUNCTION_ARGS)
 		result *= period;
 	}
 	PG_RETURN_TIMESTAMPTZ(result);
+}
+
+static inline void
+check_period_is_daily(int64 period)
+{
+#ifdef HAVE_INT64_TIMESTAMP
+	int64		day = USECS_PER_DAY;
+#else
+	int64		day = SECS_PER_DAY;
+#endif
+	if (period < day)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("interval must not have sub-day precision")
+				 ));
+	}
+	if (period % day != 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("interval must be a multiple of a day")
+				 ));
+
+	}
+}
+
+PG_FUNCTION_INFO_V1(date_bucket);
+
+Datum
+date_bucket(PG_FUNCTION_ARGS)
+{
+	Interval   *interval = PG_GETARG_INTERVAL_P(0);
+	DateADT		date = PG_GETARG_DATEADT(1);
+	Datum		converted_ts,
+				bucketed;
+	int64		period = -1;
+
+	if (DATE_NOT_FINITE(date))
+		PG_RETURN_DATEADT(date);
+
+	period = get_interval_period(interval);
+	/* check the period aligns on a date */
+	check_period_is_daily(period);
+
+	/* convert to timestamp (NOT tz), bucket, convert back to date */
+	converted_ts = DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(1));
+	bucketed = DirectFunctionCall2(timestamp_bucket, PG_GETARG_DATUM(0), converted_ts);
+	return DirectFunctionCall1(timestamp_date, bucketed);
 }

@@ -144,6 +144,11 @@ SELECT _timescaledb_internal.to_unix_microseconds('294247-01-01 23:59:59.999999'
 SELECT timestamp '294247-01-01 23:59:59.999999' + interval '1 us';
 SELECT _timescaledb_internal.to_unix_microseconds(timestamp '294247-01-01 23:59:59.999999' + interval '1 us');
 
+--no time_bucketing of dates not by integer # of days
+
+SELECT time_bucket('1 hour', DATE '2012-01-01');
+SELECT time_bucket('25 hour', DATE '2012-01-01');
+
 \set ON_ERROR_STOP 1
 
 SELECT time_bucket(INTERVAL '1 day', TIMESTAMP '2011-01-02 01:01:01');
@@ -328,3 +333,26 @@ FROM unnest(ARRAY[
      '107',
      '108'
     ]::int[]) AS time;
+
+
+SELECT time, time_bucket(INTERVAL '1 day', time::date)
+FROM unnest(ARRAY[
+    date '2017-11-05',
+    date '2017-11-06'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '4 day', time::date)
+FROM unnest(ARRAY[
+    date '2017-11-02',
+    date '2017-11-03',
+    date '2017-11-06',
+    date '2017-11-07'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '4 day', time::date, INTERVAL '2 day')
+FROM unnest(ARRAY[
+    date '2017-11-04',
+    date '2017-11-05',
+    date '2017-11-08',
+    date '2017-11-09'
+    ]) AS time;
