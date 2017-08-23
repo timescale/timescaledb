@@ -91,7 +91,7 @@ BEGIN
     WHERE attrelid = main_table AND attname = time_column_name;
 
     -- Timestamp types can use default value, integral should be an error if NULL
-    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ') AND chunk_time_interval IS NULL THEN
+    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') AND chunk_time_interval IS NULL THEN
         chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
     ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') AND chunk_time_interval IS NULL THEN
         RAISE EXCEPTION 'chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT'

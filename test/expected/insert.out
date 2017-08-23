@@ -421,16 +421,33 @@ INSERT INTO many_partitions_test
     SELECT to_timestamp(ser), ser, ser::text FROM generate_series(101,200) ser;
 INSERT INTO many_partitions_test
     SELECT to_timestamp(ser), ser, (ser-201)::text FROM generate_series(201,300) ser;
-SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;  
+SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;
            time           | temp | device 
 --------------------------+------+--------
  Wed Dec 31 16:05:00 1969 |  300 | 99
  Wed Dec 31 16:04:59 1969 |  299 | 98
 (2 rows)
 
-SELECT count(*) FROM  many_partitions_test;  
+SELECT count(*) FROM  many_partitions_test;
  count 
 -------
    300
 (1 row)
+
+CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
+SELECT create_hypertable('date_col_test', 'time', 'device', 1000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO date_col_test
+VALUES ('2001-02-01', 98, 'dev1'),
+('2001-03-02', 98, 'dev1');
+SELECT * FROM date_col_test WHERE time > '2001-01-01';
+    time    | temp | device 
+------------+------+--------
+ 02-01-2001 |   98 | dev1
+ 03-02-2001 |   98 | dev1
+(2 rows)
 

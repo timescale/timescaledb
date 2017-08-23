@@ -87,6 +87,33 @@ transform_timestamp_cast(FuncExpr *func)
 	return (Expr *) copyObject(first);
 }
 
+static Expr *
+transform_timestamptz_cast(FuncExpr *func)
+{
+	/*
+	 * Transform cast from date to timestamptz, or timestamp to timestamptz,
+	 * or abstime to timestamptz Handles only single-argument versions of the
+	 * cast to avoid explicit timezone specifiers
+	 *
+	 *
+	 * timestamptz(var) => var
+	 *
+	 * proof: timestamptz(time1) > timestamptz(time2) iff time1 > time2
+	 *
+	 */
+
+	Expr	   *first;
+
+	if (list_length(func->args) != 1)
+		return (Expr *) func;
+
+	first = sort_transform_expr(linitial(func->args));
+	if (!IsA(first, Var))
+		return (Expr *) func;
+
+	return (Expr *) copyObject(first);
+}
+
 
 static inline Expr *
 transform_time_op_const_interval(OpExpr *op)
@@ -102,7 +129,8 @@ transform_time_op_const_interval(OpExpr *op)
 		Oid			right = exprType((Node *) lsecond(op->args));
 
 		if ((left == TIMESTAMPOID && right == INTERVALOID) ||
-			(left == TIMESTAMPTZOID && right == INTERVALOID))
+			(left == TIMESTAMPTZOID && right == INTERVALOID) ||
+			(left == DATEOID && right == INTERVALOID))
 		{
 			char	   *name = get_opname(op->opno);
 
@@ -215,13 +243,17 @@ sort_transform_expr(Expr *orig_expr)
 			return transform_time_bucket(func);
 		if (strncmp(func_name, "timestamp", NAMEDATALEN) == 0)
 			return transform_timestamp_cast(func);
+		if (strncmp(func_name, "timestamptz", NAMEDATALEN) == 0)
+			return transform_timestamptz_cast(func);
 	}
 	if (IsA(orig_expr, OpExpr))
 	{
 		OpExpr	   *op = (OpExpr *) orig_expr;
 		Oid			type_first = exprType((Node *) linitial(op->args));
 
-		if (type_first == TIMESTAMPOID || type_first == TIMESTAMPTZOID)
+		if (type_first == TIMESTAMPOID ||
+			type_first == TIMESTAMPTZOID ||
+			type_first == DATEOID)
 		{
 			return transform_time_op_const_interval(op);
 		}

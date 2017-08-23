@@ -119,8 +119,14 @@ BEGIN
 
     IF num_slices IS NULL THEN
         -- Open dimension
-        IF column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
+        IF column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'DATE', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
             RAISE EXCEPTION 'illegal type for column "%": %', column_name, column_type
+            USING ERRCODE = 'IO102';
+        END IF;
+        IF column_type = 'DATE'::regtype AND 
+            (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0) 
+            THEN
+            RAISE EXCEPTION 'The interval for a hypertable with a DATE time column must be at least one day and given in multiples of days'
             USING ERRCODE = 'IO102';
         END IF;
         partitioning_func := NULL;

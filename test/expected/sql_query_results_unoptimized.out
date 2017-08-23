@@ -55,6 +55,23 @@ SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name
 
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+CREATE TABLE PUBLIC.hyper_1_date (
+  time date NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+CREATE INDEX "time_plain_date" ON PUBLIC.hyper_1_date (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_date"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>86400000000, create_default_indexes=>FALSE);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+--below needed to create enough unique dates to trigger an index scan
+INSERT INTO hyper_1_date SELECT to_timestamp(ser*100)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 CREATE TABLE PUBLIC.plain_table (
   time TIMESTAMPTZ NOT NULL,
   series_0 DOUBLE PRECISION NULL,
@@ -97,6 +114,33 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                            ->  Seq Scan on hyper_1
                            ->  Seq Scan on _hyper_1_1_chunk
 (9 rows)
+
+EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone)) DESC
+         ->  HashAggregate
+               Group Key: date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone)
+               ->  Result
+                     ->  Append
+                           ->  Seq Scan on hyper_1_date
+                           ->  Seq Scan on _hyper_4_6_chunk
+                           ->  Seq Scan on _hyper_4_7_chunk
+                           ->  Seq Scan on _hyper_4_8_chunk
+                           ->  Seq Scan on _hyper_4_9_chunk
+                           ->  Seq Scan on _hyper_4_10_chunk
+                           ->  Seq Scan on _hyper_4_11_chunk
+                           ->  Seq Scan on _hyper_4_12_chunk
+                           ->  Seq Scan on _hyper_4_13_chunk
+                           ->  Seq Scan on _hyper_4_14_chunk
+                           ->  Seq Scan on _hyper_4_15_chunk
+                           ->  Seq Scan on _hyper_4_16_chunk
+                           ->  Seq Scan on _hyper_4_17_chunk
+                           ->  Seq Scan on _hyper_4_18_chunk
+(21 rows)
 
 --the minute and second results should be diff
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -155,8 +199,8 @@ DROP INDEX "time_plain";
 CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
 ANALYZE;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
@@ -164,7 +208,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                ->  Merge Append
                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
                      ->  Index Scan Backward using time_trunc on hyper_1
-                     ->  Index Scan Backward using "6-time_trunc" on _hyper_1_1_chunk
+                     ->  Index Scan Backward using "19-time_trunc" on _hyper_1_1_chunk
 (8 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -178,8 +222,8 @@ SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
 ANALYZE;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
@@ -187,7 +231,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                ->  Merge Append
                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
                      ->  Index Scan Backward using time_trunc on hyper_1
-                     ->  Index Scan Backward using "6-time_trunc" on _hyper_1_1_chunk
+                     ->  Index Scan Backward using "19-time_trunc" on _hyper_1_1_chunk
 (8 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;

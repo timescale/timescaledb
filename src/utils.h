@@ -15,7 +15,6 @@ extern Datum timestamp_bucket(PG_FUNCTION_ARGS);
  * Convert a column value into the internal time representation.
  */
 extern int64 time_value_to_internal(Datum time_val, Oid type);
-extern char *internal_time_to_column_literal_sql(int64 internal_time, Oid type);
 
 #if 0
 #define CACHE1_elog(a,b)				elog(a,b)
