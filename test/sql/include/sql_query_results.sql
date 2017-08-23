@@ -34,6 +34,20 @@ SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 
+CREATE TABLE PUBLIC.hyper_1_date (
+  time date NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+
+CREATE INDEX "time_plain_date" ON PUBLIC.hyper_1_date (time DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_1_date"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>86400000000, create_default_indexes=>FALSE);
+INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+--below needed to create enough unique dates to trigger an index scan
+INSERT INTO hyper_1_date SELECT to_timestamp(ser*100)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+
 CREATE TABLE PUBLIC.plain_table (
   time TIMESTAMPTZ NOT NULL,
   series_0 DOUBLE PRECISION NULL,
@@ -54,6 +68,10 @@ SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
 
 --aggregates use MergeAppend only in optimized
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+
+EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
+
 
 --the minute and second results should be diff
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;

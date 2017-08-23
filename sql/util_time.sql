@@ -35,6 +35,8 @@ BEGIN
       WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype THEN
         -- assume time_value is in microsec
         RETURN format('%2$s %1$L', _timescaledb_internal.to_timestamp(time_value), column_type); -- microseconds
+      WHEN 'DATE'::regtype THEN
+        RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
     END CASE;
 END
 $BODY$;

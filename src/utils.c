@@ -167,32 +167,14 @@ time_value_to_internal(Datum time_val, Oid type)
 
 		return DatumGetInt64(res);
 	}
-
-	elog(ERROR, "unkown time type oid '%d'", type);
-}
-
-char *
-internal_time_to_column_literal_sql(int64 internal_time, Oid type)
-{
-	char	   *sql = palloc(100 * sizeof(char));
-
-	/* ok to waste a little space */
-	if (type == INT8OID || type == INT4OID || type == INT8OID)
+	if (type == DATEOID)
 	{
-		snprintf(sql, 100, "%ld", internal_time);
-		return sql;
+		Datum		tz = DirectFunctionCall1(date_timestamptz, time_val);
+		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, tz);
+
+		return DatumGetInt64(res);
 	}
-	/* todo avoid these function calls */
-	if (type == TIMESTAMPOID)
-	{
-		snprintf(sql, 100, "_timescaledb_internal.to_timestamp(%ld)::TIMESTAMP", internal_time);
-		return sql;
-	}
-	if (type == TIMESTAMPTZOID)
-	{
-		snprintf(sql, 100, "_timescaledb_internal.to_timestamp(%ld)", internal_time);
-		return sql;
-	}
+
 	elog(ERROR, "unkown time type oid '%d'", type);
 }
 
