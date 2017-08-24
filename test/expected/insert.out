@@ -435,7 +435,7 @@ SELECT count(*) FROM  many_partitions_test;
 (1 row)
 
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
-SELECT create_hypertable('date_col_test', 'time', 'device', 1000);
+SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
  create_hypertable 
 -------------------
  

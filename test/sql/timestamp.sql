@@ -356,3 +356,23 @@ FROM unnest(ARRAY[
     date '2017-11-08',
     date '2017-11-09'
     ]) AS time;
+
+------------------------------------
+-- Test time input functions --
+------------------------------------
+SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', INTERVAL '1 day', INTERVAL '1 month', 'test_name');
+SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', 86400000000, INTERVAL '1 month', 'test_name');
+--should give warning
+SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', 86400, INTERVAL '1 month', 'test_name');
+
+SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', NULL::bigint, INTERVAL '1 month', 'test_name');
+SELECT _timescaledb_internal.time_interval_specification_to_internal('BIGINT', 2147483649::bigint, INTERVAL '1 month', 'test_name');
+
+\set VERBOSITY terse
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.time_interval_specification_to_internal('INT', NULL::bigint, INTERVAL '1 month', 'test_name');
+SELECT _timescaledb_internal.time_interval_specification_to_internal('INT', 2147483649::bigint, INTERVAL '1 month', 'test_name');
+SELECT _timescaledb_internal.time_interval_specification_to_internal('SMALLINT', 65536::bigint, INTERVAL '1 month', 'test_name');
+SELECT _timescaledb_internal.time_interval_specification_to_internal('TEXT', 65536::bigint, INTERVAL '1 month', 'test_name');
+SELECT _timescaledb_internal.time_interval_specification_to_internal('INT', INTERVAL '1 day', INTERVAL '1 month', 'test_name');
+\set ON_ERROR_STOP 1

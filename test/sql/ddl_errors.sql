@@ -33,5 +33,5 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 INSERT INTO "Hypertable_1" VALUES (0, 1, 0);
 
 \set ON_ERROR_STOP 0
-ALTER TABLE _timescaledb_internal._hyper_4_1_chunk ALTER COLUMN temp_c DROP NOT NULL;
+ALTER TABLE _timescaledb_internal._hyper_2_1_chunk ALTER COLUMN temp_c DROP NOT NULL;
 \set ON_ERROR_STOP 1
