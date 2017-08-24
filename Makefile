@@ -43,6 +43,7 @@ SRCS = \
 	src/cache_invalidate.c \
 	src/chunk.c \
 	src/scanner.c \
+	src/histogram.c \
 	src/hypertable_cache.c \
 	src/hypertable.c \
 	src/dimension.c \
