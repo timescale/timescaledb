@@ -74,6 +74,39 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_type(
+    main_table REGCLASS,
+    column_name NAME,
+    is_open BOOLEAN
+)
+ RETURNS REGTYPE LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    column_type              REGTYPE;
+BEGIN
+    BEGIN
+        SELECT atttypid
+        INTO STRICT column_type
+        FROM pg_attribute
+        WHERE attrelid = main_table AND attname = column_name;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'column "%" does not exist', column_name
+            USING ERRCODE = 'IO102';
+    END;
+
+    IF is_open THEN
+        -- Open dimension
+        IF column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'DATE', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
+            RAISE EXCEPTION 'illegal type for column "%": %', column_name, column_type
+            USING ERRCODE = 'IO102';
+        END IF;
+    END IF;
+    RETURN column_type;
+END
+$BODY$;
+
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
     main_table               REGCLASS,
     hypertable_row           _timescaledb_catalog.hypertable, -- should be locked FOR UPDATE
@@ -106,29 +139,16 @@ BEGIN
         USING ERRCODE = 'IO102';
     END IF;
 
-    BEGIN
-        SELECT atttypid
-        INTO STRICT column_type
-        FROM pg_attribute
-        WHERE attrelid = main_table AND attname = column_name;
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RAISE EXCEPTION 'column "%" does not exist', column_name
-            USING ERRCODE = 'IO102';
-    END;
+    column_type = _timescaledb_internal.dimension_type(main_table, column_name, num_slices IS NULL);
+
+    IF column_type = 'DATE'::regtype AND interval_length IS NOT NULL AND
+        (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0) 
+        THEN
+        RAISE EXCEPTION 'The interval for a hypertable with a DATE time column must be at least one day and given in multiples of days'
+        USING ERRCODE = 'IO102';
+    END IF;
 
     IF num_slices IS NULL THEN
-        -- Open dimension
-        IF column_type NOT IN ('BIGINT', 'INTEGER', 'SMALLINT', 'DATE', 'TIMESTAMP', 'TIMESTAMPTZ') THEN
-            RAISE EXCEPTION 'illegal type for column "%": %', column_name, column_type
-            USING ERRCODE = 'IO102';
-        END IF;
-        IF column_type = 'DATE'::regtype AND 
-            (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0) 
-            THEN
-            RAISE EXCEPTION 'The interval for a hypertable with a DATE time column must be at least one day and given in multiples of days'
-            USING ERRCODE = 'IO102';
-        END IF;
         partitioning_func := NULL;
         partitioning_func_schema := NULL;
         aligned = TRUE;
