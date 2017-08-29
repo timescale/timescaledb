@@ -185,16 +185,25 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
+	state->num_append_subplans = list_length(*appendplans);
 	node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
 }
 
 static TupleTableSlot *
 ca_append_exec(CustomScanState *node)
 {
+	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
 	TupleTableSlot *subslot;
 	TupleTableSlot *resultslot;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	ExprDoneCond isDone;
+
+	/*
+	 * Check if all append subplans were pruned. In that case there is nothing
+	 * to do.
+	 */
+	if (state->num_append_subplans == 0)
+		return NULL;
 
 	if (node->ss.ps.ps_TupFromTlist)
 	{
