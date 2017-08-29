@@ -39,6 +39,11 @@ INSERT INTO append_test VALUES ('2017-03-22T09:18:22', 23.5, 1),
                                ('2017-05-22T09:18:23', 15.2, 2),
                                ('2017-08-22T09:18:22', 34.1, 3);
 
+-- query should exclude all chunks with optimization on
+EXPLAIN (costs off)
+SELECT * FROM append_test WHERE time > now_s() + '1 month';
+SELECT * FROM append_test WHERE time > now_s() + '1 month';
+
 -- when optimized, the plan should be a constraint-aware append and
 -- cover only one chunk. It should be a backward index scan due to
 -- descending index on time. Should also skip the main table, since it
