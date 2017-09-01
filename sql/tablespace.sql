@@ -3,7 +3,7 @@
 -- the chunk's hypertable, if any.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.select_tablespace(
     hypertable_id INTEGER,
-    chunk_id      INTEGER
+    chunk_dimension_slice_ids      INTEGER[]
 )
     RETURNS NAME LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -18,7 +18,7 @@ DECLARE
         WHERE (t.hypertable_id = select_tablespace.hypertable_id)
         ORDER BY id DESC
     );
-    dimension_slices INT[];
+    all_dimension_slice_ids_for_dimension INT[];
     partitioning_func TEXT;
 BEGIN
 
@@ -38,28 +38,44 @@ BEGIN
     INTO dimension_id, partitioning_func;
 
     -- Find all dimension slices for the chosen dimension
-    dimension_slices := ARRAY(
+    all_dimension_slice_ids_for_dimension := ARRAY(
         SELECT s.id FROM _timescaledb_catalog.dimension_slice s
         WHERE (s.dimension_id = main_block.dimension_id)
+        ORDER BY s.id
     );
 
-    -- Find the chunk's dimension slice for the chosen dimension
-    SELECT s.id FROM _timescaledb_catalog.dimension_slice s
-    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = s.id)
-    INNER JOIN _timescaledb_catalog.chunk c ON (cc.chunk_id = c.id)
-    WHERE (s.dimension_id = main_block.dimension_id)
-    AND (c.id = select_tablespace.chunk_id)
-    INTO STRICT chunk_slice_id;
-
     -- Find the array index of the chunk's dimension slice
+    -- Here chunk_dimension_slice_ids has one slice per dimension of the hypercube
+    -- while all_dimension_slice_ids_for_dimension has all the slice for a single dimension.
     SELECT i
-    FROM generate_subscripts(dimension_slices, 1) AS i
-    WHERE dimension_slices[i] = chunk_slice_id
+    FROM generate_subscripts(all_dimension_slice_ids_for_dimension, 1) AS i
+    WHERE all_dimension_slice_ids_for_dimension[i] = ANY(chunk_dimension_slice_ids)
     INTO STRICT chunk_slice_index;
 
     -- Use the chunk's dimension slice index to pick a tablespace in
     -- the tablespaces array
     RETURN tablespaces[chunk_slice_index % array_length(tablespaces, 1) + 1];
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.select_tablespace(
+    hypertable_id INTEGER,
+    chunk_id      INTEGER
+)
+    RETURNS NAME LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    chunk_dimension_slice_ids INTEGER[];
+BEGIN
+    -- Find the chunk's dimension slice ids
+    chunk_dimension_slice_ids = ARRAY (
+        SELECT s.id FROM _timescaledb_catalog.dimension_slice s
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = s.id)
+        INNER JOIN _timescaledb_catalog.chunk c ON (cc.chunk_id = c.id)
+        WHERE (c.id = select_tablespace.chunk_id)
+    );
+
+    RETURN _timescaledb_internal.select_tablespace(hypertable_id, chunk_dimension_slice_ids);
 END
 $BODY$;
 

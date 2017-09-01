@@ -380,7 +380,7 @@ PG_FUNCTION_INFO_V1(trigger_is_row_trigger);
 Datum
 trigger_is_row_trigger(PG_FUNCTION_ARGS)
 {
-	int16   tgtype = PG_GETARG_INT16(0);
+	int16		tgtype = PG_GETARG_INT16(0);
 
 	PG_RETURN_BOOL(TRIGGER_FOR_ROW(tgtype));
 }

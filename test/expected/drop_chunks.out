@@ -106,7 +106,6 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (12 rows)
 
 SELECT _timescaledb_internal.drop_chunks_older_than(2);
-NOTICE:  index "1-drop_chunk_test1_time_idx" does not exist, skipping
  drop_chunks_older_than 
 ------------------------
  
@@ -150,7 +149,6 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (10 rows)
 
 SELECT _timescaledb_internal.drop_chunks_older_than(3, 'drop_chunk_test1');
-NOTICE:  index "2-drop_chunk_test1_time_idx" does not exist, skipping
  drop_chunks_older_than 
 ------------------------
  

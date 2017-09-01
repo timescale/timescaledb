@@ -30,7 +30,7 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 	Chunk	   *chunk = data;
 
 	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
-	
+
 	if (chunk->capacity == chunk->num_constraints)
 		return false;
 
@@ -159,9 +159,9 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *constraint)
 	TupleDesc	desc = RelationGetDescr(rel);
 	Datum		values[Natts_chunk_constraint];
 	bool		nulls[Natts_chunk_constraint] = {false};
-	NameData    constraint_name;
+	NameData	constraint_name;
 
-	sprintf(constraint_name.data, "constraint_%d", constraint->fd.dimension_slice_id);
+	snprintf(constraint_name.data, NAMEDATALEN, "constraint_%d", constraint->fd.dimension_slice_id);
 
 	memset(values, 0, sizeof(values));
 	values[Anum_chunk_constraint_chunk_id - 1] = constraint->fd.chunk_id;

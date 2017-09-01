@@ -105,7 +105,7 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- 'schema_name' and 'table_name'.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
     id              SERIAL  NOT NULL    PRIMARY KEY,
-    hypertable_id   INT     NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    hypertable_id   INT     NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id),
     schema_name     NAME    NOT NULL,
     table_name      NAME    NOT NULL,
     UNIQUE (schema_name, table_name)
@@ -118,8 +118,8 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- constraint associated with a chunk will also be a table constraint
 -- on the chunk's data table.
 CREATE TABLE _timescaledb_catalog.chunk_constraint (
-    chunk_id            INTEGER  NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
-    dimension_slice_id  INTEGER  NULL REFERENCES _timescaledb_catalog.dimension_slice(id) ON DELETE CASCADE,
+    chunk_id            INTEGER  NOT NULL REFERENCES _timescaledb_catalog.chunk(id),
+    dimension_slice_id  INTEGER  NULL REFERENCES _timescaledb_catalog.dimension_slice(id),
     constraint_name     NAME NOT NULL,
     hypertable_constraint_name NAME NULL,
     UNIQUE(chunk_id, constraint_name)

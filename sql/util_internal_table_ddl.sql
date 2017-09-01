@@ -18,7 +18,8 @@ SET client_min_messages = WARNING -- suppress NOTICE on IF EXISTS
 ;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create_table(
-    chunk_id INT
+    chunk_id INT,
+    tablespace_name NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -26,7 +27,6 @@ DECLARE
     chunk_row _timescaledb_catalog.chunk;
     hypertable_row _timescaledb_catalog.hypertable;
     tablespace_clause TEXT := '';
-    tablespace_name NAME;
     table_owner     NAME;
     tablespace_oid  OID;
 BEGIN
@@ -38,8 +38,6 @@ BEGIN
     FROM _timescaledb_catalog.hypertable
     WHERE id = chunk_row.hypertable_id;
 
-    tablespace_name := _timescaledb_internal.select_tablespace(chunk_row.hypertable_id,
-                                                               chunk_row.id);
     SELECT t.oid
     INTO tablespace_oid
     FROM pg_catalog.pg_tablespace t

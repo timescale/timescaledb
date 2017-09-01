@@ -160,22 +160,7 @@ BEGIN
 END
 $BODY$;
 
--- Handles drop table command
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_process_drop_table()
-        RETURNS event_trigger LANGUAGE plpgsql AS $BODY$
-DECLARE
-    obj record;
-BEGIN
-    FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
-    LOOP
-        IF tg_tag = 'DROP TABLE' AND  _timescaledb_internal.is_main_table(obj.schema_name, obj.object_name) THEN
-            PERFORM _timescaledb_internal.drop_hypertable(obj.schema_name, obj.object_name);
-        END IF;
-    END LOOP;
-END
-$BODY$;
-
- CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
     RETURNS void LANGUAGE plpgsql
     SECURITY DEFINER SET search_path = ''
     AS

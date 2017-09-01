@@ -92,6 +92,14 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 	[DDL_DROP_CONSTRAINT] = {
 		.name = "drop_constraint",
 		.args = 2,
+	},
+	[DDL_DROP_HYPERTABLE] = {
+		.name = "drop_hypertable",
+		.args = 2
+	},
+	[CHUNK_CREATE] = {
+		.name = "chunk_create",
+		.args = 4
 	}
 };
 
