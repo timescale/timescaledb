@@ -40,18 +40,12 @@ void		_planner_fini(void);
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 
-typedef struct GlobalPlannerCtx
-{
-	bool		extension_is_loaded;
-	Cache	   *hcache;
-	bool		has_hypertables;
-} GlobalPlannerCtx;
-
 typedef struct HypertableQueryCtx
 {
 	Query	   *parse;
 	Query	   *parent;
 	CmdType		cmdtype;
+	Cache	   *hcache;
 	Hypertable *hentry;
 } HypertableQueryCtx;
 
@@ -61,12 +55,6 @@ typedef struct AddPartFuncQualCtx
 	Hypertable *hentry;
 } AddPartFuncQualCtx;
 
-
-static GlobalPlannerCtx gpc = {
-	.extension_is_loaded = false,
-	.has_hypertables = false,
-	.hcache = NULL,
-};
 
 /*
  * Identify queries on a hypertable by walking the query tree. If the query is
@@ -86,7 +74,7 @@ hypertable_query_walker(Node *node, void *context)
 
 		if (rte->rtekind == RTE_RELATION)
 		{
-			Hypertable *hentry = hypertable_cache_get_entry(gpc.hcache, rte->relid);
+			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rte->relid);
 
 			if (hentry != NULL)
 				ctx->hentry = hentry;
@@ -123,14 +111,14 @@ hypertable_query_walker(Node *node, void *context)
 /* Returns the partitioning info for a var if the var is a partitioning
  * column. If the var is not a partitioning column return NULL */
 static PartitioningInfo *
-get_partitioning_info_for_partition_column_var(Var *var_expr, Query *parse, Cache *hcache, Hypertable *hentry)
+get_partitioning_info_for_partition_column_var(Var *var_expr, AddPartFuncQualCtx *context)
 {
-	RangeTblEntry *rte = rt_fetch(var_expr->varno, parse->rtable);
+	RangeTblEntry *rte = rt_fetch(var_expr->varno, context->parse->rtable);
 	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
 
-	if (rte->relid == hentry->main_table_relid)
+	if (rte->relid == context->hentry->main_table_relid)
 	{
-		Dimension  *closed_dim = hyperspace_get_closed_dimension(hentry->space, 0);
+		Dimension  *closed_dim = hyperspace_get_closed_dimension(context->hentry->space, 0);
 
 		if (closed_dim != NULL &&
 		 strncmp(closed_dim->fd.column_name.data, varname, NAMEDATALEN) == 0)
@@ -255,9 +243,7 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						 */
 						PartitioningInfo *pi =
 						get_partitioning_info_for_partition_column_var(var_expr,
-															  context->parse,
-																  gpc.hcache,
-															context->hentry);
+																	context);
 
 						if (pi != NULL)
 						{
@@ -310,6 +296,7 @@ add_partitioning_func_qual(Query *parse, Hypertable *hentry)
 typedef struct ModifyTableWalkerCtx
 {
 	Query	   *parse;
+	Cache	   *hcache;
 	List	   *rtable;
 } ModifyTableWalkerCtx;
 
@@ -396,7 +383,7 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 			forboth(lc_plan, mt->plans, lc_rel, mt->resultRelations)
 			{
 				RangeTblEntry *rte = rt_fetch(lfirst_int(lc_rel), ctx->rtable);
-				Hypertable *ht = hypertable_cache_get_entry(gpc.hcache, rte->relid);
+				Hypertable *ht = hypertable_cache_get_entry(ctx->hcache, rte->relid);
 
 				if (ht != NULL)
 				{
@@ -418,46 +405,33 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 	}
 }
 
-static void
-global_planner_context_init()
-{
-	gpc.extension_is_loaded = extension_is_loaded();
-	gpc.hcache = hypertable_cache_pin();
-}
 
-static void
-global_planner_context_cleanup()
-{
-	Assert(gpc.hcache != NULL);
-
-	if (cache_release(gpc.hcache) <= 1)
-		gpc.hcache = NULL;
-}
 
 static PlannedStmt *
 timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *plan_stmt = NULL;
 
-	global_planner_context_init();
-
-	if (gpc.extension_is_loaded)
+	if (extension_is_loaded())
 	{
-		HypertableQueryCtx context;
+		HypertableQueryCtx context = {
+			.parse = parse,
+			.parent = parse,
+			.cmdtype = parse->commandType,
+			.hcache = hypertable_cache_pin(),
+			.hentry = NULL,
+		};
 
 		/* replace call to main table with call to the replica table */
-		context.parse = parse;
-		context.parent = parse;
-		context.cmdtype = parse->commandType;
-		context.hentry = NULL;
 		hypertable_query_walker((Node *) parse, &context);
 
 		/* note assumes 1 hypertable per query */
 		if (context.hentry != NULL)
 		{
 			add_partitioning_func_qual(parse, context.hentry);
-			gpc.has_hypertables = true;
 		}
+
+		cache_release(context.hcache);
 	}
 
 	if (prev_planner_hook != NULL)
@@ -471,27 +445,27 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		plan_stmt = standard_planner(parse, cursor_opts, bound_params);
 	}
 
-	if (gpc.extension_is_loaded)
+	if (extension_is_loaded())
 	{
 		ModifyTableWalkerCtx ctx = {
 			.parse = parse,
+			.hcache = hypertable_cache_pin(),
 			.rtable = plan_stmt->rtable,
 		};
 
 		planned_stmt_walker(plan_stmt, modifytable_plan_walker, &ctx);
+		cache_release(ctx.hcache);
 	}
-
-	global_planner_context_cleanup();
 
 	return plan_stmt;
 }
 
 
 static inline bool
-should_optimize_query()
+should_optimize_query(Hypertable *ht)
 {
 	return !guc_disable_optimizations &&
-		(guc_optimize_non_hypertables || (gpc.extension_is_loaded && gpc.has_hypertables));
+		(guc_optimize_non_hypertables || ht != NULL);
 }
 
 
@@ -521,6 +495,26 @@ should_optimize_append(const Path *path)
 	return false;
 }
 
+
+static inline bool
+is_append_child(RelOptInfo *rel, RangeTblEntry *rte)
+{
+	return rel->reloptkind == RELOPT_OTHER_MEMBER_REL &&
+		rte->inh == false &&
+		rel->rtekind == RTE_RELATION &&
+		rte->relkind == RELKIND_RELATION;
+}
+
+static inline bool
+is_append_parent(RelOptInfo *rel, RangeTblEntry *rte)
+{
+	return rel->reloptkind == RELOPT_BASEREL &&
+		rte->inh == true &&
+		rel->rtekind == RTE_RELATION &&
+		rte->relkind == RELKIND_RELATION;
+}
+
+
 static void
 timescaledb_set_rel_pathlist(PlannerInfo *root,
 							 RelOptInfo *rel,
@@ -528,29 +522,69 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 							 RangeTblEntry *rte)
 {
 	Hypertable *ht;
-
-	global_planner_context_init();
+	Cache	   *hcache;
 
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook) (root, rel, rti, rte);
 
-	if (!extension_is_loaded() ||
-		IS_DUMMY_REL(rel) ||
-		!should_optimize_query() ||
-		!OidIsValid(rte->relid))
+	if (!extension_is_loaded() || IS_DUMMY_REL(rel) || !OidIsValid(rte->relid))
+		return;
+
+	/* quick abort if only optimizing hypertables */
+	if (!guc_optimize_non_hypertables && !(is_append_parent(rel, rte) || is_append_child(rel, rte)))
+		return;
+
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry(hcache, rte->relid);
+
+	if (!should_optimize_query(ht))
 		goto out_release;
 
-	sort_transform_optimization(root, rel);
+	if (guc_optimize_non_hypertables)
+	{
+		/* if optimizing all tables, apply optimization to any table */
+		sort_transform_optimization(root, rel);
+	}
+	else if (ht != NULL && is_append_child(rel, rte))
+	{
+		/* Otherwise, apply only to hypertables */
 
-	if (rel->rtekind != RTE_RELATION ||
-		rte->relkind != RELKIND_RELATION ||
+		/*
+		 * When applying to hypertables, apply when you get the first append
+		 * relation child (indicated by RELOPT_OTHER_MEMBER_REL) which is the
+		 * main table. Then apply to all other children of that hypertable. We
+		 * can't wait to get the parent of the append relation b/c by that
+		 * time it's too late.
+		 */
+		ListCell   *l;
+
+		foreach(l, root->append_rel_list)
+		{
+			AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
+			RelOptInfo *siblingrel;
+
+			/*
+			 * Note: check against the reloid not the index in the
+			 * simple_rel_array since the current rel is not the parent but
+			 * just the child of the append_rel representing the main table.
+			 */
+			if (appinfo->parent_reloid != rte->relid)
+				continue;
+			siblingrel = root->simple_rel_array[appinfo->child_relid];
+			sort_transform_optimization(root, siblingrel);
+		}
+	}
+
+	if (
+
+	/*
+	 * Right now this optimization applies only to hypertables (ht used
+	 * below). Can be relaxed later to apply to reg tables but needs testing
+	 */
+		ht != NULL &&
+		is_append_parent(rel, rte) &&
 	/* Do not optimize result relations (INSERT, UPDATE, DELETE) */
-		rti == (Index) root->parse->resultRelation)
-		goto out_release;
-
-	ht = hypertable_cache_get_entry(gpc.hcache, rte->relid);
-
-	if (ht != NULL)
+		rti != (Index) root->parse->resultRelation)
 	{
 		ListCell   *lc;
 
@@ -572,7 +606,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 	}
 
 out_release:
-	global_planner_context_cleanup();
+	cache_release(hcache);
 }
 
 void
