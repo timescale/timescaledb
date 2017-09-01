@@ -407,36 +407,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
   1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2
 (1 row)
 
-DROP TABLE "newschema"."newname" CASCADE;
-NOTICE:  drop cascades to 4 other objects
-NOTICE:  index "1-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "2-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "3-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "4-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "5-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "6-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "7-two_Partitions_timeCustom_idx" does not exist, skipping
-NOTICE:  index "10-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "11-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "12-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "13-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "14-two_Partitions_timeCustom_idx" does not exist, skipping
-NOTICE:  index "8-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "9-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "15-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "16-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "17-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "18-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "19-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "20-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "21-two_Partitions_timeCustom_idx" does not exist, skipping
-NOTICE:  index "22-two_Partitions_device_id_timeCustom_idx" does not exist, skipping
-NOTICE:  index "23-two_Partitions_timeCustom_series_0_idx" does not exist, skipping
-NOTICE:  index "24-two_Partitions_timeCustom_series_1_idx" does not exist, skipping
-NOTICE:  index "25-two_Partitions_timeCustom_series_2_idx" does not exist, skipping
-NOTICE:  index "26-two_Partitions_timeCustom_series_bool_idx" does not exist, skipping
-NOTICE:  index "27-two_Partitions_timeCustom_device_id_idx" does not exist, skipping
-NOTICE:  index "28-two_Partitions_timeCustom_idx" does not exist, skipping
+DROP TABLE "newschema"."newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
