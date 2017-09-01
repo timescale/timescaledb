@@ -21,7 +21,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_index WHERE main_schema_name <> 'n
 SELECT * FROM _timescaledb_catalog.chunk_index WHERE main_schema_name <> 'newschema';
 
 SELECT * FROM _timescaledb_catalog.hypertable;
-DROP TABLE "newschema"."newname" CASCADE;
+DROP TABLE "newschema"."newname";
 
 SELECT * FROM _timescaledb_catalog.hypertable;
 \dt  "public".*

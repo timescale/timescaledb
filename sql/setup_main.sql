@@ -14,18 +14,6 @@ BEGIN
     AFTER INSERT OR UPDATE OR DELETE ON _timescaledb_catalog.chunk_index
     FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_chunk_index();
 
-    DROP TRIGGER IF EXISTS trigger_main_on_change_chunk
-    ON _timescaledb_catalog.chunk;
-    CREATE TRIGGER trigger_main_on_change_chunk
-    AFTER UPDATE OR DELETE OR INSERT ON _timescaledb_catalog.chunk
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_chunk();
-
-    DROP TRIGGER IF EXISTS trigger_main_on_change_chunk_constraint
-    ON _timescaledb_catalog.chunk_constraint;
-    CREATE TRIGGER trigger_main_on_change_chunk_constraint
-    AFTER UPDATE OR DELETE OR INSERT ON _timescaledb_catalog.chunk_constraint
-    FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.on_change_chunk_constraint();
-
     -- no DELETE: it would be a no-op
     DROP TRIGGER IF EXISTS trigger_1_main_on_change_hypertable
     ON _timescaledb_catalog.hypertable;
@@ -73,17 +61,12 @@ BEGIN
        ON sql_drop
        EXECUTE PROCEDURE _timescaledb_internal.ddl_process_drop_trigger();
 
-    CREATE EVENT TRIGGER ddl_check_drop_command
-       ON sql_drop
-       EXECUTE PROCEDURE _timescaledb_internal.ddl_process_drop_table();
-
     IF restore THEN
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_index;
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_alter_index;
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_drop_index;
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_trigger;
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_drop_trigger;
-        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_check_drop_command;
     END IF;
 
 END

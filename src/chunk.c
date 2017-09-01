@@ -299,11 +299,8 @@ chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char
 	/* Insert the new chunk constraints */
 	chunk_constraint_insert_multi(chunk->constraints, chunk->num_constraints);
 
-	/*
-	 * Create the chunk table entry. This will also create the chunk table as
-	 * a side-effect
-	 */
-	spi_chunk_insert(chunk->fd.id, hs->hypertable_id, schema, NameStr(chunk->fd.table_name));
+	CatalogInternalCall4(CHUNK_CREATE, Int32GetDatum(chunk->fd.id), Int32GetDatum(hs->hypertable_id),
+			   CStringGetDatum(schema), NameGetDatum(&chunk->fd.table_name));
 
 	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_oid);
 

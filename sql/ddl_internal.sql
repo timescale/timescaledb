@@ -238,14 +238,20 @@ $BODY$;
 
 -- Drops a hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_hypertable(
-    schema_name NAME,
-    table_name  NAME
+    hypertable_id INT,
+    is_cascade BOOLEAN
 )
-    RETURNS VOID LANGUAGE SQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
+BEGIN 
+    PERFORM _timescaledb_internal.drop_chunk(c.id, is_cascade)
+    FROM _timescaledb_catalog.hypertable h
+    INNER JOIN _timescaledb_catalog.chunk c ON (c.hypertable_id = h.id)
+    WHERE h.id = drop_hypertable.hypertable_id;
+
     DELETE FROM _timescaledb_catalog.hypertable h
-    WHERE h.schema_name = drop_hypertable.schema_name AND
-          h.table_name = drop_hypertable.table_name
+    WHERE h.id = drop_hypertable.hypertable_id;
+END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_get_time(
@@ -268,21 +274,18 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunks_older_than(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE
 BEGIN
-    EXECUTE format(
-        $$
-        DELETE FROM _timescaledb_catalog.chunk c
-        USING _timescaledb_catalog.hypertable h,
-        _timescaledb_internal.dimension_get_time(h.id) time_dimension,
-        _timescaledb_catalog.dimension_slice ds,
-        _timescaledb_catalog.chunk_constraint cc
-        WHERE h.id = c.hypertable_id AND ds.dimension_id = time_dimension.id AND cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id
-        AND ds.range_end <= %1$L
-        AND (%2$L IS NULL OR h.schema_name = %2$L)
-        AND (%3$L IS NULL OR h.table_name = %3$L)
-        $$, older_than_time, schema_name, table_name
-    );
+    PERFORM _timescaledb_internal.drop_chunk(c.id, false)
+    FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = c.hypertable_id)
+    INNER JOIN  _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(true)
+    INNER JOIN _timescaledb_catalog.dimension_slice ds
+        ON (ds.dimension_id =  time_dimension.id)
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc
+        ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+    WHERE ds.range_end <= older_than_time
+    AND (drop_chunks_older_than.schema_name IS NULL OR h.schema_name = drop_chunks_older_than.schema_name)
+    AND (drop_chunks_older_than.table_name IS NULL OR h.table_name = drop_chunks_older_than.table_name);
 END
 $BODY$;
 
@@ -501,8 +504,8 @@ BEGIN
     WHERE ht.schema_name = truncate_hypertable.schema_name
     AND ht.table_name = truncate_hypertable.table_name;
 
-    DELETE FROM _timescaledb_catalog.chunk
+    PERFORM  _timescaledb_internal.drop_chunk(c.id, FALSE)
+    FROM _timescaledb_catalog.chunk c
     WHERE hypertable_id = hypertable_row.id;
-
 END
 $BODY$;

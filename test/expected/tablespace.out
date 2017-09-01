@@ -92,14 +92,6 @@ INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 
 --cleanup
 DROP TABLE tspace_1dim CASCADE;
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  index "5-tspace_1dim_time_idx" does not exist, skipping
-NOTICE:  index "6-tspace_1dim_time_idx" does not exist, skipping
 DROP TABLE tspace_2dim CASCADE;
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  index "1-tspace_2dim_time_idx" does not exist, skipping
-NOTICE:  index "2-tspace_2dim_device_time_idx" does not exist, skipping
-NOTICE:  index "3-tspace_2dim_time_idx" does not exist, skipping
-NOTICE:  index "4-tspace_2dim_device_time_idx" does not exist, skipping
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

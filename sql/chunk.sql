@@ -12,67 +12,98 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
     OUT range_end         BIGINT)
     AS '$libdir/timescaledb', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 
-
--- Trigger for when chunk rows are changed.
--- On Insert: create chunk table, add indexes, add triggers.
--- On Delete: drop table
-CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_chunk()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk(
+    chunk_id int,
+    is_cascade BOOLEAN
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    kind                  pg_class.relkind%type;
-    hypertable_row        _timescaledb_catalog.hypertable;
-    main_table_oid        OID;
+    chunk_row _timescaledb_catalog.chunk;
+    cascade_mod TEXT := '';
 BEGIN
-    IF TG_OP = 'INSERT' THEN
-        PERFORM _timescaledb_internal.chunk_create_table(NEW.id);
+    -- when deleting the chunk row from the metadata table,
+    -- also DROP the actual chunk table that holds data.
+    -- Note that the table could already be deleted in case this
+    -- is executed as a result of a DROP TABLE on the hypertable
+    -- that this chunk belongs to.
 
-        PERFORM _timescaledb_internal.create_chunk_index_row(NEW.schema_name, NEW.table_name,
-                                hi.main_schema_name, hi.main_index_name, hi.definition)
-        FROM _timescaledb_catalog.hypertable_index hi
-        WHERE hi.hypertable_id = NEW.hypertable_id
-        ORDER BY format('%I.%I',main_schema_name, main_index_name)::regclass;
+    PERFORM _timescaledb_internal.drop_chunk_constraint(cc.chunk_id, cc.constraint_name)
+    FROM _timescaledb_catalog.chunk_constraint cc
+    WHERE cc.chunk_id = drop_chunk.chunk_id;
 
-        SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = NEW.hypertable_id;
-        main_table_oid := format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass;
+    DELETE FROM _timescaledb_catalog.chunk WHERE id = chunk_id
+    RETURNING * INTO STRICT chunk_row;
 
-        PERFORM _timescaledb_internal.create_chunk_constraint(NEW.id, oid)
-        FROM pg_constraint
-        WHERE conrelid = main_table_oid
-        AND _timescaledb_internal.need_chunk_constraint(NEW.hypertable_id, oid);
+    PERFORM 1
+    FROM pg_class c
+    WHERE relname = quote_ident(chunk_row.table_name) AND relnamespace = quote_ident(chunk_row.schema_name)::regnamespace;
 
-        PERFORM _timescaledb_internal.create_chunk_trigger(NEW.id, tgname,
-            _timescaledb_internal.get_general_trigger_definition(oid))
-        FROM pg_trigger
-        WHERE tgrelid = main_table_oid
-        AND _timescaledb_internal.need_chunk_trigger(NEW.hypertable_id, oid);
-
-        RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN
-        -- when deleting the chunk row from the metadata table,
-        -- also DROP the actual chunk table that holds data.
-        -- Note that the table could already be deleted in case this
-        -- trigger fires as a result of a DROP TABLE on the hypertable
-        -- that this chunk belongs to.
-
-        EXECUTE format(
-                $$
-                SELECT c.relkind FROM pg_class c WHERE relname = '%I' AND relnamespace = '%I'::regnamespace
-                $$, OLD.table_name, OLD.schema_name
-        ) INTO kind;
-
-        IF kind IS NULL THEN
-            RETURN OLD;
+    IF FOUND THEN
+        IF is_cascade THEN
+            cascade_mod = 'CASCADE';
         END IF;
 
         EXECUTE format(
-            $$
-            DROP TABLE %I.%I
-            $$, OLD.schema_name, OLD.table_name
+                $$
+                DROP TABLE %I.%I %s
+                $$, chunk_row.schema_name, chunk_row.table_name, cascade_mod
         );
-        RETURN OLD;
     END IF;
+END
+$BODY$;
 
-    PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_create(
+    chunk_id INTEGER,
+    hypertable_id INTEGER,
+    schema_name NAME,
+    table_name NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    chunk_row _timescaledb_catalog.chunk;
+    hypertable_row _timescaledb_catalog.hypertable;
+    tablespace_name NAME;
+    main_table_oid  OID;
+    dimension_slice_ids INT[];
+BEGIN
+    INSERT INTO _timescaledb_catalog.chunk (id, hypertable_id, schema_name, table_name)
+    VALUES (chunk_id, hypertable_id, schema_name, table_name) RETURNING * INTO STRICT chunk_row;
+
+    SELECT array_agg(cc.dimension_slice_id)::int[] INTO STRICT dimension_slice_ids
+    FROM _timescaledb_catalog.chunk_constraint cc
+    WHERE cc.chunk_id = chunk_create.chunk_id AND cc.dimension_slice_id IS NOT NULL;
+
+    tablespace_name := _timescaledb_internal.select_tablespace(chunk_row.hypertable_id, dimension_slice_ids);
+
+    PERFORM _timescaledb_internal.chunk_create_table(chunk_row.id, tablespace_name);
+
+    --create the dimension-slice-constraints
+    PERFORM _timescaledb_internal.chunk_constraint_add_table_constraint(cc)
+    FROM _timescaledb_catalog.chunk_constraint cc
+    WHERE cc.chunk_id = chunk_create.chunk_id AND cc.dimension_slice_id IS NOT NULL;
+
+    PERFORM _timescaledb_internal.create_chunk_index_row(chunk_row.schema_name, chunk_row.table_name,
+                            hi.main_schema_name, hi.main_index_name, hi.definition)
+    FROM _timescaledb_catalog.hypertable_index hi
+    WHERE hi.hypertable_id = chunk_row.hypertable_id
+    ORDER BY format('%I.%I',main_schema_name, main_index_name)::regclass;
+
+    SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = chunk_row.hypertable_id;
+    main_table_oid := format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass;
+
+    --create the hypertable-constraints copy
+    PERFORM _timescaledb_internal.create_chunk_constraint(chunk_row.id, oid)
+    FROM pg_constraint
+    WHERE conrelid = main_table_oid
+    AND _timescaledb_internal.need_chunk_constraint(oid);
+
+    PERFORM _timescaledb_internal.create_chunk_trigger(chunk_row.id, tgname,
+        _timescaledb_internal.get_general_trigger_definition(oid))
+    FROM pg_trigger
+    WHERE tgrelid = main_table_oid
+    AND _timescaledb_internal.need_chunk_trigger(chunk_row.hypertable_id, oid);
+
 END
 $BODY$;

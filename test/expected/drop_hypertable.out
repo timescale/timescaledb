@@ -23,6 +23,48 @@ SELECT create_hypertable('should_drop', 'time');
  
 (1 row)
 
+CREATE TABLE hyper_with_dependencies (time timestamp, temp float8);
+SELECT create_hypertable('hyper_with_dependencies', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+CREATE VIEW dependent_view AS SELECT * FROM hyper_with_dependencies;
+INSERT INTO hyper_with_dependencies VALUES (now(), 1.0);
+\set ON_ERROR_STOP 0
+DROP TABLE hyper_with_dependencies;
+ERROR:  cannot drop table hyper_with_dependencies because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE hyper_with_dependencies CASCADE;
+NOTICE:  drop cascades to view dependent_view
+\dv
+      List of relations
+ Schema | Name | Type | Owner 
+--------+------+------+-------
+(0 rows)
+
+CREATE TABLE chunk_with_dependencies (time timestamp, temp float8);
+SELECT create_hypertable('chunk_with_dependencies', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO chunk_with_dependencies VALUES (now(), 1.0);
+CREATE VIEW dependent_view_chunk AS SELECT * FROM _timescaledb_internal._hyper_3_2_chunk;
+\set ON_ERROR_STOP 0
+DROP TABLE chunk_with_dependencies;
+ERROR:  cannot drop table _timescaledb_internal._hyper_3_2_chunk because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TABLE chunk_with_dependencies CASCADE;
+NOTICE:  drop cascades to view dependent_view_chunk
+\dv
+      List of relations
+ Schema | Name | Type | Owner 
+--------+------+------+-------
+(0 rows)
+
 -- Calling create hypertable again will increment hypertable ID
 -- although no new hypertable is created. Make sure we can handle this.
 SELECT create_hypertable('should_drop', 'time', if_not_exists => true);
@@ -56,12 +98,12 @@ INSERT INTO should_drop VALUES (now(), 1.0);
 SELECT * from _timescaledb_catalog.hypertable;
  id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+-------------+------------------------+-------------------------+----------------
-  2 | public      | should_drop | _timescaledb_internal  | _hyper_2                |              1
+  4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length 
 ----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------
-  2 |             2 | time        | timestamp without time zone | t       |            |                          |                   |   2592000000000
+  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |   2592000000000
 (1 row)
 

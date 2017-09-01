@@ -59,34 +59,6 @@ DEFINE_PLAN(rename_hypertable_plan, RENAME_HYPERTABLE, 4, RENAME_HYPERTABLE_ARGS
 /* plan to truncate hypertable */
 DEFINE_PLAN(truncate_hypertable_plan, TRUNCATE_HYPERTABLE, 2, TRUNCATE_HYPERTABLE_ARGS)
 
-#define CHUNK_INSERT_ARGS (Oid[]) {INT4OID, INT4OID, NAMEOID, NAMEOID}
-#define CHUNK_INSERT "INSERT INTO _timescaledb_catalog.chunk VALUES ($1, $2, $3, $4)"
-
-DEFINE_PLAN(chunk_insert_plan, CHUNK_INSERT, 4, CHUNK_INSERT_ARGS)
-
-void
-spi_chunk_insert(int32 chunk_id, int32 hypertable_id, const char *schema_name, const char *table_name)
-{
-	SPIPlanPtr	plan = chunk_insert_plan();
-	Datum		args[4] = {
-		Int32GetDatum(chunk_id),
-		Int32GetDatum(hypertable_id),
-		CStringGetDatum(schema_name),
-		CStringGetDatum(table_name)
-	};
-	int			ret;
-
-	if (SPI_connect() < 0)
-		elog(ERROR, "Got an SPI connect error");
-
-	ret = SPI_execute_plan(plan, args, NULL, false, 0);
-
-	if (ret <= 0)
-		elog(ERROR, "Got an SPI error %d", ret);
-
-	SPI_finish();
-}
-
 static void
 hypertable_rename_spi_connected(Hypertable *ht, const char *new_schema_name, const char *new_table_name, SPIPlanPtr plan)
 {
