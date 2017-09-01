@@ -229,35 +229,13 @@
 >                            ->  Seq Scan on _hyper_3_4_chunk
 >                            ->  Seq Scan on _hyper_3_5_chunk
 > (11 rows)
-382,383c396,397
+417,418c431,432
 <                                           QUERY PLAN                                           
 < -----------------------------------------------------------------------------------------------
 ---
 >                                                 QUERY PLAN                                                 
 > -----------------------------------------------------------------------------------------------------------
-385,389c399,407
-<    ->  GroupAggregate
-<          Group Key: date_trunc('minute'::text, "time")
-<          ->  Index Scan using time_plain_plain_table on plain_table
-<                Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-< (5 rows)
----
->    ->  Sort
->          Sort Key: (date_trunc('minute'::text, "time")) DESC
->          ->  HashAggregate
->                Group Key: date_trunc('minute'::text, "time")
->                ->  Bitmap Heap Scan on plain_table
->                      Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
->                      ->  Bitmap Index Scan on time_plain_plain_table
->                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-> (9 rows)
-413,414c431,432
-<                                           QUERY PLAN                                           
-< -----------------------------------------------------------------------------------------------
----
->                                                 QUERY PLAN                                                 
-> -----------------------------------------------------------------------------------------------------------
-416,420c434,442
+420,424c434,442
 <    ->  GroupAggregate
 <          Group Key: date_trunc('minute'::text, "time")
 <          ->  Index Scan using time_plain_plain_table on plain_table
