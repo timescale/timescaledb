@@ -175,7 +175,6 @@ scanner_scan(ScannerCtx *ctx)
 
 	while (is_valid)
 	{
-
 		if (ctx->filter == NULL || ctx->filter(&ictx.tinfo, ctx->data))
 		{
 			ictx.tinfo.count++;
@@ -202,6 +201,10 @@ scanner_scan(ScannerCtx *ctx)
 			if (!ctx->tuple_found(&ictx.tinfo, ctx->data))
 				break;
 		}
+
+		/* Check if limit is reached */
+		if (ctx->limit > 0 && ictx.tinfo.count >= ctx->limit)
+			break;
 
 		is_valid = scanner->getnext(&ictx);
 	}

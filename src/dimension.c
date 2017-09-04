@@ -255,6 +255,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
+		.limit = num_dimensions,
 		.scankey = scankey,
 		.data = space,
 		.tuple_found = dimension_tuple_found,

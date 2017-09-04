@@ -534,7 +534,6 @@ chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube)
 	}
 }
 
-
 /*
  * Apply a function to each chunk in the scan context's hash table. If the limit
  * is greater than zero only a limited number of chunks will be processed.
