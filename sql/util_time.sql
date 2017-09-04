@@ -11,8 +11,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIGINT) RETURNS TIMESTAMPTZ
     AS '@MODULE_PATHNAME@', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-
-
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
 -- with or without timezones). In or metatables and other internal systems all time values are stored as bigint.
 -- Converting from int* columns to internal representation is a cast to bigint.
@@ -53,5 +51,5 @@ $BODY$
     SELECT (int_sec * 1000000)::bigint from extract(epoch from chunk_interval) as int_sec;
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_element anyelement, time_type REGTYPE) RETURNS BIGINT
-    AS '@MODULE_PATHNAME@', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_element anyelement) RETURNS BIGINT
+AS '@MODULE_PATHNAME@', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;

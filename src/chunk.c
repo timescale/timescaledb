@@ -177,6 +177,57 @@ do_dimension_alignment(ChunkScanCtx *scanctx, Chunk *chunk)
 }
 
 /*
+ * Calculate, and potentially set, a new chunk interval for an open dimension.
+ */
+static bool
+calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
+{
+	Hyperspace *hs = ht->space;
+	Dimension  *dim = NULL;
+	Datum		datum;
+	int64		chunk_interval,
+				coord;
+	int			i;
+
+	if (!OidIsValid(ht->chunk_sizing_func) ||
+		ht->fd.chunk_target_size <= 0)
+		return false;
+
+	/* Find first open dimension */
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		dim = &hs->dimensions[i];
+
+		if (IS_OPEN_DIMENSION(dim))
+			break;
+
+		dim = NULL;
+	}
+
+	/* Nothing to do if no open dimension */
+	if (NULL == dim)
+	{
+		elog(WARNING, "adaptive chunking enabled on hypertable \"%s\" without an open (time) dimension",
+			 get_rel_name(ht->main_table_relid));
+
+		return false;
+	}
+
+	coord = p->coordinates[i];
+	datum = OidFunctionCall3(ht->chunk_sizing_func, dim->fd.id, coord, ht->fd.chunk_target_size);
+	chunk_interval = DatumGetInt64(datum);
+
+	/* Check if the function didn't set and interval or nothing changed */
+	if (chunk_interval <= 0 || chunk_interval == dim->fd.interval_length)
+		return false;
+
+	/* Update the dimension */
+	dimension_set_chunk_interval(dim, chunk_interval);
+
+	return true;
+}
+
+/*
  * Resolve chunk collisions.
  *
  * After a chunk collision scan, this function is called for each chunk in the
@@ -505,6 +556,12 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	Hypercube  *cube;
 	Chunk	   *chunk;
 
+	/*
+	 * If the user has enabled adaptive chunking, call the function to
+	 * calculate and set the new chunk time interval.
+	 */
+	calculate_and_set_new_chunk_interval(ht, p);
+
 	/* Calculate the hypercube for a new chunk that covers the tuple's point */
 	cube = hypercube_calculate_from_point(hs, p);
 
@@ -592,6 +649,7 @@ chunk_create_stub(int32 id, int16 num_constraints)
 
 	return chunk;
 }
+
 
 static bool
 chunk_tuple_found(TupleInfo *ti, void *arg)
@@ -703,7 +761,7 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, DimensionVec *v
 		 * For each dimension slice, find matching constraints. These will be
 		 * saved in the scan context
 		 */
-		chunk_constraint_scan_by_dimension_slice(vec->slices[i], scanctx);
+		chunk_constraint_scan_by_dimension_slice(vec->slices[i], scanctx, CurrentMemoryContext);
 	}
 }
 
@@ -976,6 +1034,7 @@ chunk_scan_internal(int indexid,
 					tuple_found_func tuple_found,
 					void *data,
 					int limit,
+					ScanDirection scandir,
 					LOCKMODE lockmode,
 					MemoryContext mctx)
 {
@@ -989,11 +1048,59 @@ chunk_scan_internal(int indexid,
 		.tuple_found = tuple_found,
 		.limit = limit,
 		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
+		.scandirection = scandir,
 		.result_mctx = mctx,
 	};
 
 	return scanner_scan(&ctx);
+}
+
+#define DEFAULT_CHUNKS_PER_INTERVAL 4
+
+/*
+ * Get a window of chunks that "preceed" the given dimensional point.
+ *
+ * For instance, if the dimension is "time", then given a point in time the
+ * function returns the recent chunks that come before the chunk that includes
+ * that point. The count parameter determines the number or slices the window
+ * should include in the given dimension.
+ *
+ * Note that the returned chunks will be allocated on the given memory
+ * context, inlcuding the list itself. So, beware of not leaking the list if
+ * the chunks are later cached somewhere else.
+ */
+List *
+chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx)
+{
+	List	   *chunks = NIL;
+	DimensionVec *dimvec = dimension_slice_scan_by_dimension_before_point(dimension_id, point, count, mctx);
+	int			i;
+
+	for (i = 0; i < dimvec->num_slices; i++)
+	{
+		DimensionSlice *slice = dimvec->slices[i];
+		ChunkConstraints *ccs = chunk_constraints_alloc(DEFAULT_CHUNKS_PER_INTERVAL, mctx);
+		int			j;
+
+		chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, ccs, mctx);
+
+		for (j = 0; j < ccs->num_constraints; j++)
+		{
+			ChunkConstraint *cc = &ccs->constraints[j];
+			Chunk	   *chunk = chunk_get_by_id(cc->fd.chunk_id, 0, true);
+			MemoryContext old;
+
+			chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
+			chunk->cube = hypercube_from_constraints(chunk->constraints, mctx);
+
+			/* Allocate the list on the same memory context as the chunks */
+			old = MemoryContextSwitchTo(mctx);
+			chunks = lappend(chunks, chunk);
+			MemoryContextSwitchTo(old);
+		}
+	}
+
+	return chunks;
 }
 
 static Chunk *
@@ -1013,6 +1120,7 @@ chunk_scan_find(int indexid,
 									chunk_tuple_found,
 									chunk,
 									num_constraints,
+									ForwardScanDirection,
 									AccessShareLock,
 									mctx);
 
@@ -1130,7 +1238,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 		 * referencing it
 		 */
 		if (is_dimension_constraint(cc) &&
-			chunk_constraint_scan_by_dimension_slice_id(cc->fd.dimension_slice_id, NULL) == 0)
+			chunk_constraint_scan_by_dimension_slice_id(cc->fd.dimension_slice_id, NULL, CurrentMemoryContext) == 0)
 			dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
 	}
 
@@ -1153,6 +1261,7 @@ chunk_delete_by_name(const char *schema, const char *table)
 
 	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
 							   chunk_tuple_delete, NULL, 0,
+							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext);
 }
@@ -1176,6 +1285,7 @@ chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	return chunk_scan_internal(CHUNK_HYPERTABLE_ID_INDEX, scankey, 1,
 							   chunk_tuple_delete, NULL, 0,
+							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext);
 }
@@ -1209,7 +1319,7 @@ chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id)
 	chunk_scan_ctx_init(&chunkctx, hs, NULL);
 
 	for (i = 0; i < slices->num_slices; i++)
-		chunk_constraint_scan_by_dimension_slice(slices->slices[i], &chunkctx);
+		chunk_constraint_scan_by_dimension_slice(slices->slices[i], &chunkctx, CurrentMemoryContext);
 
 	chunk_scan_ctx_foreach_chunk(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);
@@ -1249,6 +1359,7 @@ chunk_update_form(FormData_chunk *form)
 							   chunk_tuple_update,
 							   form,
 							   0,
+							   ForwardScanDirection,
 							   AccessShareLock,
 							   CurrentMemoryContext) > 0;
 }

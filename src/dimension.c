@@ -359,6 +359,37 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions, 
 	return space;
 }
 
+static bool
+dimension_find_hypertable_id_tuple_found(TupleInfo *ti, void *data)
+{
+	int32	   *hypertable_id = data;
+	bool		isnull = false;
+
+	*hypertable_id = heap_getattr(ti->tuple, Anum_dimension_hypertable_id, ti->desc, &isnull);
+
+	return false;
+}
+
+int32
+dimension_get_hypertable_id(int32 dimension_id)
+{
+	int32		hypertable_id;
+	ScanKeyData scankey[1];
+	int			ret;
+
+	/* Perform an index scan dimension_id. */
+	ScanKeyInit(&scankey[0], Anum_dimension_id_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
+
+	ret = dimension_scan_internal(scankey, 1, dimension_find_hypertable_id_tuple_found,
+								  &hypertable_id, 1, AccessShareLock, CurrentMemoryContext);
+
+	if (ret == 1)
+		return hypertable_id;
+
+	return -1;
+}
+
 DimensionVec *
 dimension_get_slices(Dimension *dim)
 {
@@ -538,6 +569,14 @@ int
 dimension_set_name(Dimension *dim, const char *newname)
 {
 	namestrcpy(&dim->fd.column_name, newname);
+
+	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
+}
+
+int
+dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval)
+{
+	dim->fd.interval_length = chunk_interval;
 
 	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }

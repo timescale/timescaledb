@@ -79,6 +79,7 @@ extern int	chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int	chunk_delete_by_name(const char *schema, const char *table);
 extern bool chunk_set_name(Chunk *chunk, const char *newname);
 extern bool chunk_set_schema(Chunk *chunk, const char *newschema);
+extern List *chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found) \
 	chunk_get_by_name_with_memory_context(schema_name, table_name, num_constraints, \

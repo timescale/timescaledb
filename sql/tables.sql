@@ -35,12 +35,15 @@
 -- chunks.
 --
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
-    id                      SERIAL    PRIMARY KEY,
-    schema_name             NAME      NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
-    table_name              NAME      NOT NULL,
-    associated_schema_name  NAME      NOT NULL,
-    associated_table_prefix NAME      NOT NULL,
-    num_dimensions          SMALLINT  NOT NULL CHECK (num_dimensions > 0),
+    id                       SERIAL    PRIMARY KEY,
+    schema_name              NAME      NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
+    table_name               NAME      NOT NULL,
+    associated_schema_name   NAME      NOT NULL,
+    associated_table_prefix  NAME      NOT NULL,
+    num_dimensions           SMALLINT  NOT NULL CHECK (num_dimensions > 0),
+    chunk_sizing_func_schema NAME      NOT NULL,
+    chunk_sizing_func_name   NAME      NOT NULL,
+    chunk_target_size        BIGINT    NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
     UNIQUE (id, schema_name),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix)

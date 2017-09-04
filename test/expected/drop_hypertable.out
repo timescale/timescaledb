@@ -1,6 +1,6 @@
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
-----+-------------+------------+------------------------+-------------------------+----------------
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------
 (0 rows)
 
 SELECT * from _timescaledb_catalog.dimension;
@@ -70,9 +70,9 @@ NOTICE:  table "should_drop" is already a hypertable, skipping
 (1 row)
 
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
-----+-------------+-------------+------------------------+-------------------------+----------------
-  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+----+-------------+-------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
+  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;
@@ -92,9 +92,9 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO should_drop VALUES (now(), 1.0);
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
-----+-------------+-------------+------------------------+-------------------------+----------------
-  4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
+----+-------------+-------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
+  4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
 (1 row)
 
 SELECT * from _timescaledb_catalog.dimension;

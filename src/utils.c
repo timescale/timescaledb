@@ -155,20 +155,11 @@ TS_FUNCTION_INFO_V1(time_to_internal);
 Datum
 time_to_internal(PG_FUNCTION_ARGS)
 {
-	Datum		val;
-	Oid			type_oid;
-	int64		res;
-
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	val = PG_GETARG_DATUM(0);
-	type_oid = PG_GETARG_OID(1);
-
-	res = time_value_to_internal(val, type_oid, false);
-	PG_RETURN_INT64(res);
+	PG_RETURN_INT64(time_value_to_internal(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 0), false));
 }
-
 
 /*	*/
 int64
