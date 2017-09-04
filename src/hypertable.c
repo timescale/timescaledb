@@ -10,11 +10,13 @@
 #include <utils/snapmgr.h>
 #include <nodes/memnodes.h>
 #include <nodes/makefuncs.h>
+#include <nodes/value.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
 #include <catalog/pg_constraint_fn.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/indexing.h>
+#include <catalog/pg_proc.h>
 #include <commands/tablespace.h>
 #include <commands/dbcommands.h>
 #include <commands/schemacmds.h>
@@ -26,6 +28,7 @@
 #include "hypertable.h"
 #include "dimension.h"
 #include "chunk.h"
+#include "chunk_adaptive.h"
 #include "compat.h"
 #include "subspace_store.h"
 #include "hypertable_cache.h"
@@ -81,7 +84,6 @@ hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	return ownerid;
 }
 
-
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx)
 {
@@ -94,6 +96,22 @@ hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx)
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);
 	h->chunk_cache = subspace_store_init(h->space, mctx, guc_max_cached_chunks_per_hypertable);
+
+	if (!heap_attisnull(tuple, Anum_hypertable_chunk_sizing_func_schema) &&
+		!heap_attisnull(tuple, Anum_hypertable_chunk_sizing_func_name))
+	{
+		FuncCandidateList func =
+		FuncnameGetCandidates(list_make2(makeString(NameStr(h->fd.chunk_sizing_func_schema)),
+										 makeString(NameStr(h->fd.chunk_sizing_func_name))),
+							  3, NIL, false, false, false);
+
+		if (NULL == func || NULL != func->next)
+			elog(ERROR, "could not find the adaptive chunking function \"%s.%s\"",
+				 NameStr(h->fd.chunk_sizing_func_schema),
+				 NameStr(h->fd.chunk_sizing_func_name));
+
+		h->chunk_sizing_func = func->oid;
+	}
 
 	return h;
 }
@@ -187,38 +205,70 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 static bool
 hypertable_tuple_update(TupleInfo *ti, void *data)
 {
-	HeapTuple	tuple = heap_copytuple(ti->tuple);
-	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(tuple);
-	FormData_hypertable *update = data;
+	Hypertable *ht = data;
+	Datum		values[Natts_hypertable];
+	bool		nulls[Natts_hypertable];
+	HeapTuple	copy;
 	CatalogSecurityContext sec_ctx;
 
-	namecpy(&form->schema_name, &update->schema_name);
-	namecpy(&form->table_name, &update->table_name);
-	form->num_dimensions = update->num_dimensions;
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+	values[Anum_hypertable_schema_name - 1] = NameGetDatum(&ht->fd.schema_name);
+	values[Anum_hypertable_table_name - 1] = NameGetDatum(&ht->fd.table_name);
+	values[Anum_hypertable_associated_schema_name - 1] = NameGetDatum(&ht->fd.associated_schema_name);
+	values[Anum_hypertable_associated_table_prefix - 1] = NameGetDatum(&ht->fd.associated_table_prefix);
+	values[Anum_hypertable_num_dimensions - 1] = Int16GetDatum(ht->fd.num_dimensions);
+	values[Anum_hypertable_chunk_target_size - 1] = Int64GetDatum(ht->fd.chunk_target_size);
+
+	memset(nulls, 0, sizeof(nulls));
+
+	if (OidIsValid(ht->chunk_sizing_func))
+	{
+		ChunkSizingInfo info = {
+			.func = ht->chunk_sizing_func,
+		};
+
+		chunk_adaptive_validate_sizing_info(&info);
+
+		namestrcpy(&ht->fd.chunk_sizing_func_schema, NameStr(info.func_schema));
+		namestrcpy(&ht->fd.chunk_sizing_func_name, NameStr(info.func_name));
+
+		values[Anum_hypertable_chunk_sizing_func_schema - 1] =
+			NameGetDatum(&ht->fd.chunk_sizing_func_schema);
+		values[Anum_hypertable_chunk_sizing_func_name - 1] =
+			NameGetDatum(&ht->fd.chunk_sizing_func_name);
+	}
+	else
+	{
+		nulls[Anum_hypertable_chunk_sizing_func_schema - 1] = true;
+		nulls[Anum_hypertable_chunk_sizing_func_name - 1] = true;
+	}
+
+	copy = heap_form_tuple(ti->desc, values, nulls);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
-	catalog_update(ti->scanrel, tuple);
+	catalog_update_tid(ti->scanrel, &ti->tuple->t_self, copy);
 	catalog_restore_user(&sec_ctx);
 
-	heap_freetuple(tuple);
+	heap_freetuple(copy);
 
 	return false;
 }
 
-static int
-hypertable_update_form(FormData_hypertable *update)
+int
+hypertable_update(Hypertable *ht)
 {
 	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
 				BTEqualStrategyNumber, F_INT4EQ,
-				Int32GetDatum(update->id));
+				Int32GetDatum(ht->fd.id));
 
 	return hypertable_scan_limit_internal(scankey,
 										  1,
 										  HYPERTABLE_ID_INDEX,
 										  hypertable_tuple_update,
-										  update,
+										  ht,
 										  1,
 										  RowExclusiveLock,
 										  false,
@@ -455,7 +505,7 @@ hypertable_set_name(Hypertable *ht, const char *newname)
 {
 	namestrcpy(&ht->fd.table_name, newname);
 
-	return hypertable_update_form(&ht->fd);
+	return hypertable_update(ht);
 }
 
 int
@@ -463,7 +513,7 @@ hypertable_set_schema(Hypertable *ht, const char *newname)
 {
 	namestrcpy(&ht->fd.schema_name, newname);
 
-	return hypertable_update_form(&ht->fd);
+	return hypertable_update(ht);
 }
 
 int
@@ -471,7 +521,7 @@ hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 {
 	Assert(num_dimensions > 0);
 	ht->fd.num_dimensions = num_dimensions;
-	return hypertable_update_form(&ht->fd);
+	return hypertable_update(ht);
 }
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
@@ -482,6 +532,9 @@ hypertable_insert_relation(Relation rel,
 						   Name table_name,
 						   Name associated_schema_name,
 						   Name associated_table_prefix,
+						   Name chunk_sizing_func_schema,
+						   Name chunk_sizing_func_name,
+						   int64 chunk_target_size,
 						   int16 num_dimensions)
 {
 	TupleDesc	desc = RelationGetDescr(rel);
@@ -494,6 +547,22 @@ hypertable_insert_relation(Relation rel,
 	values[Anum_hypertable_table_name - 1] = NameGetDatum(table_name);
 	values[Anum_hypertable_associated_schema_name - 1] = NameGetDatum(associated_schema_name);
 	values[Anum_hypertable_num_dimensions - 1] = Int16GetDatum(num_dimensions);
+
+	if (NULL != chunk_sizing_func_schema && NULL != chunk_sizing_func_name)
+	{
+		values[Anum_hypertable_chunk_sizing_func_schema - 1] = NameGetDatum(chunk_sizing_func_schema);
+		values[Anum_hypertable_chunk_sizing_func_name - 1] = NameGetDatum(chunk_sizing_func_name);
+	}
+	else
+	{
+		nulls[Anum_hypertable_chunk_sizing_func_schema - 1] = true;
+		nulls[Anum_hypertable_chunk_sizing_func_name - 1] = true;
+	}
+
+	if (chunk_target_size < 0)
+		chunk_target_size = 0;
+
+	values[Anum_hypertable_chunk_target_size - 1] = Int64GetDatum(chunk_target_size);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	values[Anum_hypertable_id - 1] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), HYPERTABLE));
@@ -520,6 +589,9 @@ hypertable_insert(Name schema_name,
 				  Name table_name,
 				  Name associated_schema_name,
 				  Name associated_table_prefix,
+				  Name chunk_sizing_func_schema,
+				  Name chunk_sizing_func_name,
+				  int64 chunk_target_size,
 				  int16 num_dimensions)
 {
 	Catalog    *catalog = catalog_get();
@@ -531,6 +603,9 @@ hypertable_insert(Name schema_name,
 							   table_name,
 							   associated_schema_name,
 							   associated_table_prefix,
+							   chunk_sizing_func_schema,
+							   chunk_sizing_func_name,
+							   chunk_target_size,
 							   num_dimensions);
 	heap_close(rel, RowExclusiveLock);
 }
@@ -1108,6 +1183,9 @@ TS_FUNCTION_INFO_V1(hypertable_create);
  * create_default_indexes  BOOLEAN = TRUE
  * if_not_exists           BOOLEAN = FALSE
  * partitioning_func       REGPROC = NULL
+ * migrate_data            BOOLEAN = FALSE
+ * chunk_sizing_func       OID = NULL
+ * chunk_target_size       TEXT = NULL
  */
 Datum
 hypertable_create(PG_FUNCTION_ARGS)
@@ -1130,6 +1208,10 @@ hypertable_create(PG_FUNCTION_ARGS)
 		.num_slices = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3),
 		.num_slices_is_set = !PG_ARGISNULL(3),
 		.partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9),
+	};
+	ChunkSizingInfo chunk_sizing_info = {
+		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
+		.func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12),
 	};
 	Cache	   *hcache;
 	Hypertable *ht;
@@ -1286,10 +1368,17 @@ hypertable_create(PG_FUNCTION_ARGS)
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
 	namestrcpy(&table_name, get_rel_name(table_relid));
 
+	/* Validate and set chunk sizing information */
+	if (OidIsValid(chunk_sizing_info.func))
+		chunk_adaptive_validate_sizing_info(&chunk_sizing_info);
+
 	hypertable_insert(&schema_name,
 					  &table_name,
 					  associated_schema_name,
 					  associated_table_prefix,
+					  &chunk_sizing_info.func_schema,
+					  &chunk_sizing_info.func_name,
+					  chunk_sizing_info.target_size_bytes,
 					  DIMENSION_INFO_IS_SET(&space_dim_info) ? 2 : 1);
 
 	/* Get the a Hypertable object via the cache */

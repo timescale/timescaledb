@@ -22,7 +22,6 @@ static inline void
  * nodeFuncs.c, but this walks a Plan tree as opposed to a PlanState tree. */
 static void
 			plantree_walker(Plan **planptr, void (*walker) (Plan **, void *), void *context)
-
 {
 	Plan	   *plan = *planptr;
 

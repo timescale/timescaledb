@@ -47,7 +47,7 @@ ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "DROP DATABASE $T
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE $TEST_DBNAME;"
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE $TEST_DBNAME2;"
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d single -v ECHO=none -c "CREATE EXTENSION timescaledb;"
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d single -v ECHO=none < ${EXE_DIR}/sql/utils/testsupport.sql >/dev/null 2>&1 || :
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d single -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" < ${EXE_DIR}/sql/utils/testsupport.sql >/dev/null 2>&1 || :
 
 ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \

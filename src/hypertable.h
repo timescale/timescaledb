@@ -17,6 +17,7 @@ typedef struct Hypertable
 {
 	FormData_hypertable fd;
 	Oid			main_table_relid;
+	Oid			chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 } Hypertable;
@@ -32,6 +33,7 @@ extern int	hypertable_scan_with_memory_context(const char *schema, const char *t
 extern int	hypertable_scan_relid(Oid table_relid, tuple_found_func tuple_found, void *data, LOCKMODE lockmode, bool tuplock);
 extern HTSU_Result hypertable_lock_tuple(Oid table_relid);
 extern bool hypertable_lock_tuple_simple(Oid table_relid);
+extern int	hypertable_update(Hypertable *ht);
 extern int	hypertable_set_name(Hypertable *ht, const char *newname);
 extern int	hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int	hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);

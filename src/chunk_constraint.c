@@ -518,7 +518,8 @@ chunk_constraint_dimension_slice_id_tuple_found(TupleInfo *ti, void *data)
 static int
 scan_by_dimension_slice_id(int32 dimension_slice_id,
 						   tuple_found_func tuple_found,
-						   void *data)
+						   void *data,
+						   MemoryContext mctx)
 {
 	ScanKeyData scankey[1];
 
@@ -535,7 +536,7 @@ scan_by_dimension_slice_id(int32 dimension_slice_id,
 										  chunk_constraint_for_dimension_slice,
 										  data,
 										  AccessShareLock,
-										  CurrentMemoryContext);
+										  mctx);
 }
 
 /*
@@ -543,7 +544,7 @@ scan_by_dimension_slice_id(int32 dimension_slice_id,
  * constraints are saved in the chunk scan context.
  */
 int
-chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx)
+chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx, MemoryContext mctx)
 {
 	ChunkConstraintScanData data = {
 		.scanctx = ctx,
@@ -552,7 +553,8 @@ chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ct
 
 	return scan_by_dimension_slice_id(slice->fd.id,
 									  chunk_constraint_dimension_slice_id_tuple_found,
-									  &data);
+									  &data,
+									  mctx);
 }
 
 /*
@@ -561,11 +563,12 @@ chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ct
  * Optionally, collect all chunk constraints if ChunkConstraints is non-NULL.
  */
 int
-chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs)
+chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs, MemoryContext mctx)
 {
 	return scan_by_dimension_slice_id(dimension_slice_id,
 									  chunk_constraint_tuple_found,
-									  ccs);
+									  ccs,
+									  mctx);
 }
 
 static bool

@@ -120,7 +120,7 @@ dimension_slice_scan_limit_internal(int indexid,
 									MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
-	ScannerCtx	scanCtx = {
+	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
 		.index = catalog->tables[DIMENSION_SLICE].index_ids[indexid],
 		.nkeys = nkeys,
@@ -133,7 +133,7 @@ dimension_slice_scan_limit_internal(int indexid,
 		.result_mctx = mctx,
 	};
 
-	return scanner_scan(&scanCtx);
+	return scanner_scan(&scanctx);
 }
 
 /*
@@ -298,6 +298,37 @@ dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 										limit,
 										AccessShareLock,
 										CurrentMemoryContext);
+
+	return dimension_vec_sort(&slices);
+}
+
+/*
+ * Return slices that occur "before" the given point.
+ *
+ * The slices will be allocated on the given memory context. Note, however, that
+ * the returned dimension vector is allocated on the current memory context.
+ */
+DimensionVec *
+dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, int limit, MemoryContext mctx)
+{
+	ScanKeyData scankey[3];
+	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
+	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(point));
+	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(point));
+
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										3,
+										dimension_vec_tuple_found,
+										&slices,
+										limit,
+										AccessShareLock,
+										mctx);
 
 	return dimension_vec_sort(&slices);
 }

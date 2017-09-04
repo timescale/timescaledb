@@ -45,6 +45,39 @@ BEGIN
     RETURN NEW;
 END
 $BODY$;
+-- Test that a custom chunk sizing function is restored
+CREATE OR REPLACE FUNCTION custom_calculate_chunk_interval(
+        dimension_id INTEGER,
+        dimension_coord BIGINT,
+        chunk_target_size BIGINT
+)
+    RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+BEGIN
+    RETURN -1;
+END
+$BODY$;
+SELECT * FROM set_adaptive_chunk_sizing('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
+        chunk_sizing_func        | chunk_target_size 
+---------------------------------+-------------------
+ custom_calculate_chunk_interval |           1048576
+(1 row)
+
+-- Chunk sizing func set
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size 
+----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+---------------------------------+-------------------
+  1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | public                   | custom_calculate_chunk_interval |           1048576
+(1 row)
+
+SELECT proname, pronamespace, pronargs
+FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
+             proname             | pronamespace | pronargs 
+---------------------------------+--------------+----------
+ custom_calculate_chunk_interval |         2200 |        3
+(1 row)
+
 CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 SELECT count(*)
@@ -53,7 +86,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-    95
+    97
 (1 row)
 
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
@@ -251,7 +284,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-    95
+    97
 (1 row)
 
 --main table and chunk schemas should be the same
@@ -418,6 +451,20 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
         4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
 (12 rows)
+
+--Chunk sizing function should have been restored
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size 
+----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+---------------------------------+-------------------
+  1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | public                   | custom_calculate_chunk_interval |           1048576
+(1 row)
+
+SELECT proname, pronamespace, pronargs
+FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
+             proname             | pronamespace | pronargs 
+---------------------------------+--------------+----------
+ custom_calculate_chunk_interval |         2200 |        3
+(1 row)
 
 --check simple ddl still works
 ALTER TABLE "test_schema"."two_Partitions" ADD COLUMN series_3 integer;

@@ -13,6 +13,8 @@
 -- if_not_exists - (Optional) Do not fail if table is already a hypertable
 -- partitioning_func - (Optional) The partitioning function to use for spatial partitioning
 -- migrate_data - (Optional) Set to true to migrate any existing data in the table to chunks
+-- chunk_target_size - (Optional) The target size for chunks (e.g., '1000MB', 'estimate', or 'off')
+-- chunk_sizing_func - (Optional) A function to calculate the chunk time interval for new chunks
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -24,8 +26,18 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
     partitioning_func       REGPROC = NULL,
-    migrate_data            BOOLEAN = FALSE
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'hypertable_create' LANGUAGE C VOLATILE;
+
+-- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
+CREATE OR REPLACE FUNCTION  set_adaptive_chunk_sizing(
+    hypertable                     REGCLASS,
+    chunk_target_size              TEXT,
+    INOUT chunk_sizing_func        REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    OUT chunk_target_size          BIGINT
+) RETURNS RECORD AS '@MODULE_PATHNAME@', 'chunk_adaptive_set_chunk_sizing' LANGUAGE C VOLATILE;
 
 -- Update chunk_time_interval for a hypertable.
 --
@@ -64,7 +76,7 @@ BEGIN
     END IF;
 
     PERFORM  _timescaledb_internal.drop_chunks_type_check(pg_typeof(older_than), table_name, schema_name);
-    SELECT _timescaledb_internal.time_to_internal(older_than, pg_typeof(older_than)) INTO older_than_internal;
+    SELECT _timescaledb_internal.time_to_internal(older_than) INTO older_than_internal;
     PERFORM _timescaledb_internal.drop_chunks_impl(older_than_internal, table_name, schema_name, cascade);
 END
 $BODY$;

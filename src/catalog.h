@@ -75,6 +75,9 @@ enum Anum_hypertable
 	Anum_hypertable_associated_schema_name,
 	Anum_hypertable_associated_table_prefix,
 	Anum_hypertable_num_dimensions,
+	Anum_hypertable_chunk_sizing_func_schema,
+	Anum_hypertable_chunk_sizing_func_name,
+	Anum_hypertable_chunk_target_size,
 	_Anum_hypertable_max,
 };
 
@@ -89,6 +92,9 @@ typedef struct FormData_hypertable
 	NameData	associated_schema_name;
 	NameData	associated_table_prefix;
 	int16		num_dimensions;
+	NameData	chunk_sizing_func_schema;
+	NameData	chunk_sizing_func_name;
+	int64		chunk_target_size;
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;
@@ -119,7 +125,6 @@ enum
 	HYPERTABLE_NAME_INDEX,
 	_MAX_HYPERTABLE_INDEX,
 };
-
 
 /******************************
  *
