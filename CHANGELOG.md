@@ -1,5 +1,26 @@
 # TimescaleDB Changelog
 
+## 0.4.1 (2017-09-04)
+
+**High-level changes**
+* Bug fix for a segmentation fault in the planner
+* Shortcut when constraint-aware append excludes all chunks
+* Fix edge case with negative timestamps when points fell right on the boundary
+* Fix behavior of `time_bucket` for `DATE` types by not converting to `TIMESTAMPTZ`
+* Make the output of `chunk_relation_size` consistent
+
+**Notable commits**
+* [50c8c4c] Fix possible segfault in planner
+* [e49e45c] Fix failure when constraint-aware append excludes all chunks
+* [c3b6fb9] Fix bug with negative dimension values
+* [3c69e4f] Fix semantics of time_bucket on DATE input
+* [0137c92] Fix output order of chunk dimensions and ranges in chunk_relation_size.
+* [645b530] Convert inserted tuples to the chunk's rowtype
+
+**Thanks**
+* @yadid for reporting a segfault (fixed in 50c8c4c)
+* @ryan-shaw for reporting tuples not being correctly converted to a chunk's rowtype (fixed in 645b530)
+
 ## 0.4.0 (2017-08-21)
 
 **High-level changes**
