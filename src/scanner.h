@@ -40,7 +40,9 @@ typedef struct ScannerCtx
 	ScannerType scantype;
 	ScanKey		scankey;
 	int			nkeys,
-				norderbys;
+				norderbys,
+				limit;			/* Limit on number of tuples to return. 0 or
+								 * less means no limit */
 	bool		want_itup;
 	LOCKMODE	lockmode;
 	struct

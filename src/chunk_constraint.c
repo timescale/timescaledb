@@ -31,9 +31,6 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 
 	chunk_constraint_fill(&chunk->constraints[chunk->num_constraints++], ti->tuple);
 
-	if (chunk->capacity == chunk->num_constraints)
-		return false;
-
 	return true;
 }
 
@@ -55,6 +52,7 @@ chunk_constraint_scan_by_chunk_id(Chunk *chunk)
 		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
+		.limit = chunk->num_constraints,
 		.data = chunk,
 		.filter = chunk_constraint_for_dimension_slice,
 		.tuple_found = chunk_constraint_tuple_found,
