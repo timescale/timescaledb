@@ -79,9 +79,20 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 	if (!CALLED_AS_TRIGGER(fcinfo))
 		elog(ERROR, "not called by trigger manager");
 
-	/* arg 0 = relid of the proxy table */
+	/* arg 0 = name of the proxy table */
 	proxy_oid = catalog_get_cache_proxy_id_by_name(catalog, trigdata->tg_trigger->tgargs[0]);
-	CacheInvalidateRelcacheByRelid(proxy_oid);
+	if (proxy_oid != 0)
+	{
+		CacheInvalidateRelcacheByRelid(proxy_oid);
+	}
+	else
+	{
+		/*
+		 * This can happen during  upgrade scripts when the catalog is
+		 * unavailable
+		 */
+		CacheInvalidateRelcacheByRelid(get_relname_relid(trigdata->tg_trigger->tgargs[0], get_namespace_oid(CACHE_SCHEMA_NAME, false)));
+	}
 
 	/* tuple to return to executor */
 	if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))

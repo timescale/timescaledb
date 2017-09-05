@@ -31,7 +31,7 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 
 SELECT * FROM _timescaledb_catalog.hypertable;
-SELECT * FROM _timescaledb_catalog.hypertable_index;
+SELECT * FROM _timescaledb_catalog.hypertable_index ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
@@ -49,7 +49,7 @@ VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
 
-SELECT * FROM _timescaledb_catalog.hypertable_index;
+SELECT * FROM _timescaledb_catalog.hypertable_index  ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
 
 --expect error cases
 \set ON_ERROR_STOP 0
