@@ -8,6 +8,11 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 create schema test_schema;
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
+\set ON_ERROR_STOP 0
+-- get_create_command should fail since hypertable isn't made yet
+SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+ERROR:  hypertable test_table not found
+\set ON_ERROR_STOP 1
 \dt "test_schema".*
               List of relations
    Schema    |    Name    | Type  |  Owner   
@@ -19,6 +24,12 @@ select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2
  create_hypertable 
 -------------------
  
+(1 row)
+
+SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+                                                                 get_create_command                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_table', '"time"', 'device_id', 2, chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
 (1 row)
 
 --test adding one more closed dimension
@@ -42,6 +53,11 @@ select * from _timescaledb_catalog.dimension;
   3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
 (3 rows)
 
+\set ON_ERROR_STOP 0
+-- get_create_command only works on tables w/ 1 or 2 dimensions
+SELECT * FROM _timescaledb_internal.get_create_command('test_table');
+ERROR:  get_create_command only supports hypertables with up to 2 dimensions
+\set ON_ERROR_STOP 1
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', interval_length => 1000);
  add_dimension 
@@ -82,6 +98,12 @@ select create_hypertable('test_schema.test_1dim', 'time');
  create_hypertable 
 -------------------
  
+(1 row)
+
+SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
+                                                        get_create_command                                                         
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_1dim', '"time"', chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
 (1 row)
 
 \dt "test_schema".*
