@@ -39,3 +39,7 @@ DROP FUNCTION _timescaledb_internal.rename_hypertable(name, name, text, text);
 ALTER EXTENSION timescaledb
 DROP FUNCTION create_hypertable(REGCLASS, NAME, NAME,INTEGER,NAME,NAME,BIGINT,BOOLEAN, BOOLEAN);
 DROP FUNCTION create_hypertable(REGCLASS, NAME, NAME,INTEGER,NAME,NAME,BIGINT,BOOLEAN, BOOLEAN);
+
+DROP FUNCTION IF EXISTS hypertable_relation_size(regclass);
+DROP FUNCTION IF EXISTS chunk_relation_size(regclass);
+DROP FUNCTION IF EXISTS indexes_relation_size(regclass);
