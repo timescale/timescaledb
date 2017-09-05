@@ -17,20 +17,23 @@ WHERE OID IN (
     deptype = 'e' and classid = 'pg_catalog.pg_proc'::regclass
 ) AND pronamespace = 'public'::regnamespace
 ORDER BY proname;
-         proname          
---------------------------
+             proname             
+---------------------------------
  add_dimension
  attach_tablespace
  chunk_relation_size
+ chunk_relation_size_pretty
  create_hypertable
  drop_chunks
  first
  histogram
  hypertable_relation_size
+ hypertable_relation_size_pretty
  indexes_relation_size
+ indexes_relation_size_pretty
  last
  restore_timescaledb
  set_chunk_time_interval
  time_bucket
-(13 rows)
+(16 rows)
 
