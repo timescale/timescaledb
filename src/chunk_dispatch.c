@@ -59,5 +59,6 @@ chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 		subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
 	}
 
+	Assert(cis != NULL);
 	return cis;
 }

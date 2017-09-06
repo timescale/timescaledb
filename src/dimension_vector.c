@@ -94,7 +94,7 @@ dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 DimensionVec *
 dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 {
-	DimensionVec *vec = *vecptr;
+	DimensionVec *vec;
 
 	*vecptr = vec = dimension_vec_add_slice(vecptr, slice);
 	return dimension_vec_sort(vecptr);

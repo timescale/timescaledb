@@ -248,6 +248,8 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		/* Find or create the insert state matching the point */
 		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
+		Assert(cis != NULL);
+
 		if (cis != prev_cis)
 		{
 			/* Different chunk so must release BulkInsertState */
