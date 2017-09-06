@@ -2,3 +2,4 @@ sql/timescaledb--0.1.0--0.2.0.sql
 sql/timescaledb--0.2.0--0.3.0.sql
 sql/timescaledb--0.3.0--0.4.0.sql
 sql/timescaledb--0.4.0--0.4.1.sql
+sql/timescaledb--0.4.1--0.4.2.sql
