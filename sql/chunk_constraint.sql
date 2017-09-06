@@ -1,20 +1,41 @@
 -- Creates a constraint on a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_constraint(
     chunk_id INTEGER,
-    constraint_oid OID
+    constraint_oid OID = NULL,
+    dimension_slice_id INT = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     sql_code    TEXT;
-    constraint_row pg_constraint;
     chunk_row _timescaledb_catalog.chunk;
+    constraint_row pg_constraint;
+    def TEXT;
+    constraint_name TEXT;
+    hypertable_constraint_name TEXT = NULL;
 BEGIN
-    SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
-    SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk WHERE id = chunk_id;
+    SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_id;
 
-    INSERT INTO _timescaledb_catalog.chunk_constraint (hypertable_constraint_name, chunk_id, constraint_name)
-    SELECT constraint_row.conname, chunk_row.id, format('%s_%s_%s', chunk_id,  nextval('_timescaledb_catalog.chunk_constraint_name'), constraint_row.conname);
+    IF dimension_slice_id IS NOT NULL THEN
+        def := format('CHECK (%s)',  _timescaledb_internal.dimension_slice_get_constraint_sql(dimension_slice_id));
+        constraint_name := format('constraint_%s', dimension_slice_id);
+    ELSIF constraint_oid IS NOT NULL THEN
+        SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
+        hypertable_constraint_name := constraint_row.conname;
+        def := pg_get_constraintdef(constraint_oid);
+        constraint_name := format('%s_%s_%s', chunk_id,  nextval('_timescaledb_catalog.chunk_constraint_name'), hypertable_constraint_name); 
+    ELSE
+        RAISE 'Unknown constraint type';
+    END IF; 
+
+    sql_code := format(
+        $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
+        chunk_row.schema_name, chunk_row.table_name, constraint_name, def
+    );
+    EXECUTE sql_code;
+
+    INSERT INTO _timescaledb_catalog.chunk_constraint (chunk_id, constraint_name, dimension_slice_id, hypertable_constraint_name)
+    VALUES (chunk_id, constraint_name, dimension_slice_id, hypertable_constraint_name);
 END
 $BODY$;
 
@@ -28,10 +49,20 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk_constraint(
 $BODY$
 DECLARE
     chunk_row _timescaledb_catalog.chunk;
+    chunk_constraint_row _timescaledb_catalog.chunk_constraint;
 BEGIN
-    DELETE FROM _timescaledb_catalog.chunk_constraint c
-    WHERE c.hypertable_constraint_name = drop_chunk_constraint.constraint_name 
-    AND c.chunk_id = drop_chunk_constraint.chunk_id;
+    SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_id;
+
+    DELETE FROM _timescaledb_catalog.chunk_constraint cc 
+    WHERE  cc.constraint_name = drop_chunk_constraint.constraint_name 
+    AND cc.chunk_id = drop_chunk_constraint.chunk_id
+    RETURNING * INTO STRICT chunk_constraint_row;
+
+    EXECUTE format(
+        $$  ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
+            chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name
+    );
+
 END
 $BODY$;
 
@@ -81,7 +112,7 @@ BEGIN
             SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = hypertable_id;
             PERFORM _timescaledb_internal.check_index(constraint_row.conindid, hypertable_row);
         END IF;
-        PERFORM _timescaledb_internal.create_chunk_constraint(c.id, constraint_oid)
+        PERFORM _timescaledb_internal.create_chunk_constraint(c.id, constraint_oid=>constraint_oid)
         FROM _timescaledb_catalog.chunk c
         WHERE c.hypertable_id = add_constraint.hypertable_id;
     END IF;
@@ -104,70 +135,19 @@ BEGIN
 END
 $BODY$;
 
-
 -- Drops constraint on all chunks for a hypertable.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_constraint(
     hypertable_id INTEGER,
-    constraint_name NAME
+    hypertable_constraint_name NAME
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-BEGIN
-    PERFORM _timescaledb_internal.drop_chunk_constraint(c.id, constraint_name)
-    FROM _timescaledb_catalog.chunk c
-    WHERE c.hypertable_id = drop_constraint.hypertable_id;
-END
-$BODY$;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.on_change_chunk_constraint()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
 DECLARE
-    chunk_row _timescaledb_catalog.chunk;
-    constraint_oid OID;
-    ds_row _timescaledb_catalog.dimension_slice;
-    sql_code TEXT;
 BEGIN
-    IF TG_OP = 'INSERT' THEN
-        SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = NEW.chunk_id;
-        IF NEW.dimension_slice_id IS NOT NULL THEN
-            SELECT * INTO STRICT ds_row FROM _timescaledb_catalog.dimension_slice ds WHERE ds.id = NEW.dimension_slice_id;
-            EXECUTE format(
-                $$
-                    ALTER TABLE %1$I.%2$I
-                    ADD CONSTRAINT %3$s CHECK(%4$s)
-                $$,
-                chunk_row.schema_name, chunk_row.table_name,
-                NEW.constraint_name,
-                _timescaledb_internal.dimension_slice_get_constraint_sql(ds_row.id)
-            );
-        ELSIF NEW.hypertable_constraint_name IS NOT NULL THEN
-            SELECT con.oid INTO STRICT constraint_oid 
-            FROM _timescaledb_catalog.chunk c
-            INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = c.hypertable_id)
-            INNER JOIN pg_constraint con ON (con.conrelid = format('%I.%I',h.schema_name, h.table_name)::regclass 
-                AND con.conname = NEW.hypertable_constraint_name)
-            WHERE c.id = NEW.chunk_id;
-
-            sql_code := format($$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
-            chunk_row.schema_name, chunk_row.table_name, NEW.constraint_name, pg_get_constraintdef(constraint_oid)
-            );
-            EXECUTE sql_code;
-        ELSE
-            RAISE 'Unknown constraint type';
-        END IF;
-        RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN
-        SELECT * INTO chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = OLD.chunk_id;
-        IF FOUND THEN
-            EXECUTE format($$  ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
-                chunk_row.schema_name, chunk_row.table_name, OLD.constraint_name
-            );
-        END IF;
-        RETURN OLD;
-    END IF;
-
-    PERFORM _timescaledb_internal.on_trigger_error(TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME);
+    PERFORM _timescaledb_internal.drop_chunk_constraint(cc.chunk_id, cc.constraint_name)
+    FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.chunk_id = c.id)
+    WHERE c.hypertable_id = drop_constraint.hypertable_id AND cc.hypertable_constraint_name = drop_constraint.hypertable_constraint_name;
 END
 $BODY$;
 

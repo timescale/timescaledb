@@ -28,11 +28,18 @@ enum CatalogTable
 	_MAX_CATALOG_TABLES,
 };
 
+#define CatalogInternalCall1(func, datum1) \
+	OidFunctionCall1(catalog_get_internal_function_id(catalog_get(), func), datum1);
+#define CatalogInternalCall2(func, datum1, datum2) \
+	OidFunctionCall2(catalog_get_internal_function_id(catalog_get(), func), datum1, datum2);
+
+
 typedef enum InternalFunction
 {
 	DDL_CHANGE_OWNER = 0,
 	DDL_ADD_CONSTRAINT,
 	DDL_DROP_CONSTRAINT,
+	DDL_DROP_HYPERTABLE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
 
