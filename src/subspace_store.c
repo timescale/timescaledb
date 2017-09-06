@@ -67,6 +67,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 
 		if (vec == NULL)
 		{
+			Assert(last != NULL);
 			last->storage = subspace_store_dimension_create();
 			last->storage_free = subspace_store_free_internal_node;
 			vec = last->storage;
@@ -103,7 +104,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 		vecptr = (DimensionVec **) &last->storage;
 	}
 
-	Assert(last->storage == NULL);
+	Assert(last != NULL && last->storage == NULL);
 	last->storage = object;		/* at the end we store the object */
 	last->storage_free = object_free;
 	MemoryContextSwitchTo(old);
@@ -128,6 +129,7 @@ subspace_store_get(SubspaceStore *store, Point *target)
 
 		vec = match->storage;
 	}
+	Assert(match != NULL);
 	return match->storage;
 }
 

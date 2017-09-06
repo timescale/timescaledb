@@ -25,7 +25,6 @@ dimension_slice_from_form_data(Form_dimension_slice fd)
 {
 	DimensionSlice *slice = dimension_slice_alloc();
 
-	slice = palloc0(sizeof(DimensionSlice));
 	memcpy(&slice->fd, fd, sizeof(FormData_dimension_slice));
 	slice->storage_free = NULL;
 	slice->storage = NULL;
