@@ -1,5 +1,13 @@
 # TimescaleDB Changelog
 
+## 0.4.2 (2017-09-06)
+
+**High-level changes**
+* Provide scripts for backing up and restoring single hypertables
+
+**Notable commits**
+* [683c078] Add backup/restore scripts for single hypertables
+
 ## 0.4.1 (2017-09-04)
 
 **High-level changes**
