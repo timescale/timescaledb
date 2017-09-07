@@ -468,8 +468,8 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_hypertable(
     old_schema     NAME,
     old_table_name NAME,
-    new_schema     TEXT,
-    new_table_name TEXT
+    new_schema     NAME,
+    new_table_name NAME
 )
     RETURNS VOID
     LANGUAGE PLPGSQL VOLATILE
@@ -491,6 +491,24 @@ BEGIN
             table_name = old_table_name;
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_column(
+    hypertable_id INT,
+    old_name NAME,
+    new_name NAME
+)
+    RETURNS VOID
+    LANGUAGE SQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
+$BODY$
+    UPDATE _timescaledb_catalog.dimension d 
+    SET column_name = new_name
+    WHERE d.column_name = old_name AND d.hypertable_id = rename_column.hypertable_id;
+
+    SELECT ''::void; --don't return NULL
+$BODY$;
+
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
     schema_name     NAME,

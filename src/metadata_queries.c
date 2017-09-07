@@ -46,11 +46,7 @@ prepare_plan(const char *src, int nargs, Oid *argtypes)
 	}
 
 /* old_schema, old_name, new_schema, new_name */
-#define RENAME_HYPERTABLE_ARGS (Oid[]) {NAMEOID, NAMEOID, TEXTOID, TEXTOID}
 #define RENAME_HYPERTABLE "SELECT * FROM _timescaledb_internal.rename_hypertable($1, $2, $3, $4)"
-
-/* plan to rename hypertable */
-DEFINE_PLAN(rename_hypertable_plan, RENAME_HYPERTABLE, 4, RENAME_HYPERTABLE_ARGS)
 
 /* schema, name */
 #define TRUNCATE_HYPERTABLE_ARGS (Oid[]) {NAMEOID, NAMEOID}
@@ -58,52 +54,6 @@ DEFINE_PLAN(rename_hypertable_plan, RENAME_HYPERTABLE, 4, RENAME_HYPERTABLE_ARGS
 
 /* plan to truncate hypertable */
 DEFINE_PLAN(truncate_hypertable_plan, TRUNCATE_HYPERTABLE, 2, TRUNCATE_HYPERTABLE_ARGS)
-
-static void
-hypertable_rename_spi_connected(Hypertable *ht, const char *new_schema_name, const char *new_table_name, SPIPlanPtr plan)
-{
-	int			ret;
-	Datum		args[4];
-
-	args[0] = PointerGetDatum(NameStr(ht->fd.schema_name));
-	args[1] = PointerGetDatum(NameStr(ht->fd.table_name));
-
-	args[2] = CStringGetTextDatum(new_schema_name);
-	args[3] = CStringGetTextDatum(new_table_name);
-
-	ret = SPI_execute_plan(plan, args, NULL, false, 4);
-
-	if (ret <= 0)
-		elog(ERROR, "Got an SPI error %d", ret);
-
-	return;
-}
-
-void
-spi_hypertable_rename(Hypertable *ht, const char *new_schema_name, const char *new_table_name)
-{
-	SPIPlanPtr	plan = rename_hypertable_plan();
-
-
-	if (strlen(new_schema_name) > sizeof(NameData) - 1)
-	{
-		elog(ERROR, "New schema name '%s' is too long", new_schema_name);
-	}
-
-	if (strlen(new_table_name) > sizeof(NameData) - 1)
-	{
-		elog(ERROR, "New schema name '%s' is too long", new_table_name);
-	}
-
-	if (SPI_connect() < 0)
-		elog(ERROR, "Got an SPI connect error");
-
-	hypertable_rename_spi_connected(ht, new_schema_name, new_table_name, plan);
-
-	SPI_finish();
-
-	return;
-}
 
 static void
 hypertable_truncate_spi_connected(Hypertable *ht, SPIPlanPtr plan)

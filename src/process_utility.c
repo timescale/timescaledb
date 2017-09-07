@@ -96,39 +96,16 @@ process_alterobjectschema(Node *parsetree)
 
 	if (ht != NULL)
 	{
-		executor_level_enter();
-		spi_hypertable_rename(ht,
-							  alterstmt->newschema,
-							  NameStr(ht->fd.table_name));
-		executor_level_exit();
-	}
+		NameData	new_schema;
 
-	cache_release(hcache);
-}
+		namestrcpy(&new_schema, alterstmt->newschema);
 
-/* Rename hypertable */
-static void
-process_rename(Node *parsetree)
-{
-	RenameStmt *renamestmt = (RenameStmt *) parsetree;
-	Oid			relid = RangeVarGetRelid(renamestmt->relation, NoLock, true);
-	Cache	   *hcache;
-	Hypertable *ht;
-
-	if (!OidIsValid(relid) ||
-		renamestmt->renameType != OBJECT_TABLE)
-		return;
-
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
-
-	if (ht != NULL)
-	{
-		executor_level_enter();
-		spi_hypertable_rename(ht,
-							  NameStr(ht->fd.schema_name),
-							  renamestmt->newname);
-		executor_level_exit();
+		CatalogInternalCall4(DDL_RENAME_HYPERTABLE,
+							 NameGetDatum(&ht->fd.schema_name),
+							 NameGetDatum(&ht->fd.table_name),
+							 NameGetDatum(&new_schema),
+							 NameGetDatum(&ht->fd.table_name)
+			);
 	}
 
 	cache_release(hcache);
@@ -355,6 +332,75 @@ process_reindex(Node *parsetree)
 
 	return false;
 }
+
+static void
+process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
+{
+	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	NameData	new_name;
+
+	if (NULL == ht)
+		return;
+
+	namestrcpy(&new_name, stmt->newname);
+
+	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,
+						 NameGetDatum(&ht->fd.schema_name),
+						 NameGetDatum(&ht->fd.table_name),
+						 NameGetDatum(&ht->fd.schema_name),
+						 NameGetDatum(&new_name)
+		);
+}
+
+static void
+process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
+{
+	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	NameData	old_name,
+				new_name;
+
+	if (NULL == ht)
+		return;
+
+	namestrcpy(&old_name, stmt->subname);
+	namestrcpy(&new_name, stmt->newname);
+
+	CatalogInternalCall3(DDL_RENAME_COLUMN,
+						 Int32GetDatum(ht->fd.id),
+						 NameGetDatum(&old_name),
+						 NameGetDatum(&new_name)
+		);
+}
+
+static void
+process_rename(Node *parsetree)
+{
+	RenameStmt *stmt = (RenameStmt *) parsetree;
+	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	Cache	   *hcache;
+
+	/* TODO: forbid all rename op on chunk table */
+
+	if (!OidIsValid(relid))
+		return;
+
+	hcache = hypertable_cache_pin();
+
+	switch (stmt->renameType)
+	{
+		case OBJECT_TABLE:
+			process_rename_table(hcache, relid, stmt);
+			break;
+		case OBJECT_COLUMN:
+			process_rename_column(hcache, relid, stmt);
+			break;
+		default:
+			break;
+	}
+
+	cache_release(hcache);
+}
+
 
 static void
 process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
