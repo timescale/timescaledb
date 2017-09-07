@@ -1,0 +1,275 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+NOTICE:  extension "timescaledb" already exists, skipping
+CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
+-- create hypertable with two chunks
+SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO alter_test VALUES ('2017-01-20T09:00:01', 17.5, 'blue'),
+                              ('2017-01-21T09:00:01', 19.1, 'yellow'),
+                              ('2017-04-20T09:00:01', 89.5, 'green'),
+                              ('2017-04-21T09:00:01', 17.1, 'black');
+\d+ alter_test
+                               Table "public.alter_test"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ time   | timestamp with time zone |           | plain    |              | 
+ temp   | double precision         |           | plain    |              | 
+ color  | character varying(10)    |           | extended |              | 
+Indexes:
+    "alter_test_color_time_idx" btree (color, "time" DESC)
+    "alter_test_time_idx" btree ("time" DESC)
+Child tables: _timescaledb_internal._hyper_1_1_chunk,
+              _timescaledb_internal._hyper_1_2_chunk,
+              _timescaledb_internal._hyper_1_3_chunk
+
+\d+ _timescaledb_internal.*
+   Index "_timescaledb_internal.1-alter_test_time_idx"
+ Column |           Type           | Definition | Storage 
+--------+--------------------------+------------+---------
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_chunk"
+
+ Index "_timescaledb_internal.2-alter_test_color_time_idx"
+ Column |           Type           | Definition | Storage  
+--------+--------------------------+------------+----------
+ color  | character varying(10)    | color      | extended
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_1_chunk"
+
+   Index "_timescaledb_internal.3-alter_test_time_idx"
+ Column |           Type           | Definition | Storage 
+--------+--------------------------+------------+---------
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_chunk"
+
+ Index "_timescaledb_internal.4-alter_test_color_time_idx"
+ Column |           Type           | Definition | Storage  
+--------+--------------------------+------------+----------
+ color  | character varying(10)    | color      | extended
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_2_chunk"
+
+   Index "_timescaledb_internal.5-alter_test_time_idx"
+ Column |           Type           | Definition | Storage 
+--------+--------------------------+------------+---------
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_3_chunk"
+
+ Index "_timescaledb_internal.6-alter_test_color_time_idx"
+ Column |           Type           | Definition | Storage  
+--------+--------------------------+------------+----------
+ color  | character varying(10)    | color      | extended
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_1_3_chunk"
+
+                    Table "_timescaledb_internal._hyper_1_1_chunk"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ time   | timestamp with time zone |           | plain    |              | 
+ temp   | double precision         |           | plain    |              | 
+ color  | character varying(10)    |           | extended |              | 
+Indexes:
+    "1-alter_test_time_idx" btree ("time" DESC)
+    "2-alter_test_color_time_idx" btree (color, "time" DESC)
+Check constraints:
+    "constraint_1" CHECK ("time" >= 'Thu Jan 19 02:00:00 2017 PST'::timestamp with time zone AND "time" < 'Sat Feb 18 12:00:00 2017 PST'::timestamp with time zone)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(color::text) >= 0 AND _timescaledb_internal.get_partition_for_key(color::text) < 1073741823)
+Inherits: alter_test
+
+                    Table "_timescaledb_internal._hyper_1_2_chunk"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ time   | timestamp with time zone |           | plain    |              | 
+ temp   | double precision         |           | plain    |              | 
+ color  | character varying(10)    |           | extended |              | 
+Indexes:
+    "3-alter_test_time_idx" btree ("time" DESC)
+    "4-alter_test_color_time_idx" btree (color, "time" DESC)
+Check constraints:
+    "constraint_3" CHECK ("time" >= 'Thu Apr 20 09:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sat May 20 19:00:00 2017 PDT'::timestamp with time zone)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(color::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(color::text) < 2147483647)
+Inherits: alter_test
+
+                    Table "_timescaledb_internal._hyper_1_3_chunk"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ time   | timestamp with time zone |           | plain    |              | 
+ temp   | double precision         |           | plain    |              | 
+ color  | character varying(10)    |           | extended |              | 
+Indexes:
+    "5-alter_test_time_idx" btree ("time" DESC)
+    "6-alter_test_color_time_idx" btree (color, "time" DESC)
+Check constraints:
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(color::text) >= 0 AND _timescaledb_internal.get_partition_for_key(color::text) < 1073741823)
+    "constraint_3" CHECK ("time" >= 'Thu Apr 20 09:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sat May 20 19:00:00 2017 PDT'::timestamp with time zone)
+Inherits: alter_test
+
+-- show the column name and type of the partitioning dimension in the
+-- metadata table
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |   2628000000000
+  2 |             1 | color       | character varying        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+(2 rows)
+
+EXPLAIN (costs off)
+SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on alter_test
+         Filter: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+   ->  Bitmap Heap Scan on _hyper_1_2_chunk
+         Recheck Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+         ->  Bitmap Index Scan on "3-alter_test_time_idx"
+               Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+   ->  Bitmap Heap Scan on _hyper_1_3_chunk
+         Recheck Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+         ->  Bitmap Index Scan on "5-alter_test_time_idx"
+               Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+(11 rows)
+
+-- rename column and change its type
+ALTER TABLE alter_test RENAME COLUMN time TO time_us;
+ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamp;
+ALTER TABLE alter_test RENAME COLUMN color TO colorname;
+ALTER TABLE alter_test ALTER COLUMN colorname TYPE text;
+\d+ alter_test
+                                  Table "public.alter_test"
+  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
+-----------+-----------------------------+-----------+----------+--------------+-------------
+ time_us   | timestamp without time zone |           | plain    |              | 
+ temp      | double precision            |           | plain    |              | 
+ colorname | text                        |           | extended |              | 
+Indexes:
+    "alter_test_color_time_idx" btree (colorname, time_us DESC)
+    "alter_test_time_idx" btree (time_us DESC)
+Child tables: _timescaledb_internal._hyper_1_1_chunk,
+              _timescaledb_internal._hyper_1_2_chunk,
+              _timescaledb_internal._hyper_1_3_chunk
+
+\d+ _timescaledb_internal.*
+     Index "_timescaledb_internal.1-alter_test_time_idx"
+ Column  |            Type             | Definition | Storage 
+---------+-----------------------------+------------+---------
+ time_us | timestamp without time zone | time_us    | plain
+btree, for table "_timescaledb_internal._hyper_1_1_chunk"
+
+    Index "_timescaledb_internal.2-alter_test_color_time_idx"
+  Column   |            Type             | Definition | Storage  
+-----------+-----------------------------+------------+----------
+ colorname | text                        | colorname  | extended
+ time_us   | timestamp without time zone | time_us    | plain
+btree, for table "_timescaledb_internal._hyper_1_1_chunk"
+
+     Index "_timescaledb_internal.3-alter_test_time_idx"
+ Column  |            Type             | Definition | Storage 
+---------+-----------------------------+------------+---------
+ time_us | timestamp without time zone | time_us    | plain
+btree, for table "_timescaledb_internal._hyper_1_2_chunk"
+
+    Index "_timescaledb_internal.4-alter_test_color_time_idx"
+  Column   |            Type             | Definition | Storage  
+-----------+-----------------------------+------------+----------
+ colorname | text                        | colorname  | extended
+ time_us   | timestamp without time zone | time_us    | plain
+btree, for table "_timescaledb_internal._hyper_1_2_chunk"
+
+     Index "_timescaledb_internal.5-alter_test_time_idx"
+ Column  |            Type             | Definition | Storage 
+---------+-----------------------------+------------+---------
+ time_us | timestamp without time zone | time_us    | plain
+btree, for table "_timescaledb_internal._hyper_1_3_chunk"
+
+    Index "_timescaledb_internal.6-alter_test_color_time_idx"
+  Column   |            Type             | Definition | Storage  
+-----------+-----------------------------+------------+----------
+ colorname | text                        | colorname  | extended
+ time_us   | timestamp without time zone | time_us    | plain
+btree, for table "_timescaledb_internal._hyper_1_3_chunk"
+
+                       Table "_timescaledb_internal._hyper_1_1_chunk"
+  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
+-----------+-----------------------------+-----------+----------+--------------+-------------
+ time_us   | timestamp without time zone |           | plain    |              | 
+ temp      | double precision            |           | plain    |              | 
+ colorname | text                        |           | extended |              | 
+Indexes:
+    "1-alter_test_time_idx" btree (time_us DESC)
+    "2-alter_test_color_time_idx" btree (colorname, time_us DESC)
+Check constraints:
+    "constraint_1" CHECK (time_us >= 'Thu Jan 19 02:00:00 2017'::timestamp without time zone AND time_us < 'Sat Feb 18 12:00:00 2017'::timestamp without time zone)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(colorname) >= 0 AND _timescaledb_internal.get_partition_for_key(colorname) < 1073741823)
+Inherits: alter_test
+
+                       Table "_timescaledb_internal._hyper_1_2_chunk"
+  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
+-----------+-----------------------------+-----------+----------+--------------+-------------
+ time_us   | timestamp without time zone |           | plain    |              | 
+ temp      | double precision            |           | plain    |              | 
+ colorname | text                        |           | extended |              | 
+Indexes:
+    "3-alter_test_time_idx" btree (time_us DESC)
+    "4-alter_test_color_time_idx" btree (colorname, time_us DESC)
+Check constraints:
+    "constraint_3" CHECK (time_us >= 'Thu Apr 20 09:00:00 2017'::timestamp without time zone AND time_us < 'Sat May 20 19:00:00 2017'::timestamp without time zone)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(colorname) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(colorname) < 2147483647)
+Inherits: alter_test
+
+                       Table "_timescaledb_internal._hyper_1_3_chunk"
+  Column   |            Type             | Modifiers | Storage  | Stats target | Description 
+-----------+-----------------------------+-----------+----------+--------------+-------------
+ time_us   | timestamp without time zone |           | plain    |              | 
+ temp      | double precision            |           | plain    |              | 
+ colorname | text                        |           | extended |              | 
+Indexes:
+    "5-alter_test_time_idx" btree (time_us DESC)
+    "6-alter_test_color_time_idx" btree (colorname, time_us DESC)
+Check constraints:
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(colorname) >= 0 AND _timescaledb_internal.get_partition_for_key(colorname) < 1073741823)
+    "constraint_3" CHECK (time_us >= 'Thu Apr 20 09:00:00 2017'::timestamp without time zone AND time_us < 'Sat May 20 19:00:00 2017'::timestamp without time zone)
+Inherits: alter_test
+
+-- show that the metadata has been updated
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time_us     | timestamp without time zone | t       |            |                          |                       |   2628000000000
+  2 |             1 | colorname   | text                        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+(2 rows)
+
+-- constraint exclusion should still work with updated column
+EXPLAIN (costs off)
+SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on alter_test
+         Filter: (time_us > 'Sat May 20 10:00:01 2017'::timestamp without time zone)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (time_us > 'Sat May 20 10:00:01 2017'::timestamp without time zone)
+   ->  Seq Scan on _hyper_1_3_chunk
+         Filter: (time_us > 'Sat May 20 10:00:01 2017'::timestamp without time zone)
+(7 rows)
+
+\set ON_ERROR_STOP 0
+-- verify that we cannot change the column type to something incompatible
+ALTER TABLE alter_test ALTER COLUMN colorname TYPE varchar(3);
+ERROR:  value too long for type character varying(3)
+-- conversion that messes up partitioning fails
+ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamptz USING time_us::timestamptz+INTERVAL '1 year';
+ERROR:  check constraint "constraint_1" is violated by some row
+\set ON_ERROR_STOP 1

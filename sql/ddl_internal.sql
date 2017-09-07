@@ -509,6 +509,42 @@ $BODY$
     SELECT ''::void; --don't return NULL
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.change_column_type(
+    hypertable_id INT,
+    column_name NAME,
+    new_type REGTYPE
+)
+    RETURNS VOID
+    LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
+$BODY$
+DECLARE
+    chunk_row _timescaledb_catalog.chunk;
+    dimension_row  _timescaledb_catalog.dimension;
+BEGIN
+    UPDATE _timescaledb_catalog.dimension d 
+    SET column_type = new_type
+    WHERE d.column_name = change_column_type.column_name AND d.hypertable_id = change_column_type.hypertable_id
+    RETURNING * INTO dimension_row;
+
+    IF FOUND THEN
+        PERFORM _timescaledb_internal.chunk_constraint_drop_table_constraint(cc)
+        FROM _timescaledb_catalog.dimension d
+        INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = d.id)
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id)
+        WHERE d.id = dimension_row.id;
+
+        PERFORM _timescaledb_internal.chunk_constraint_add_table_constraint(cc)
+        FROM _timescaledb_catalog.dimension d
+        INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = d.id)
+        INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id)
+        WHERE d.id = dimension_row.id;
+    END IF;
+END
+$BODY$;
+
+
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
     schema_name     NAME,

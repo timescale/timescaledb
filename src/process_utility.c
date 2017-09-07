@@ -514,6 +514,34 @@ process_altertable_plain_table(Node *parsetree)
 	}
 }
 
+static inline const char *
+typename_get_unqual_name(TypeName *tn)
+{
+	Value	   *name = llast(tn->names);
+
+	return name->val.str;
+}
+
+static void
+process_alter_column_type(Cache *hcache, AlterTableCmd *cmd, Oid relid)
+{
+	Hypertable *ht;
+	ColumnDef  *coldef = (ColumnDef *) cmd->def;
+	Oid			new_type;
+	NameData	column_name;
+
+	ht = hypertable_cache_get_entry(hcache, relid);
+
+	if (NULL == ht)
+		return;
+
+	namestrcpy(&column_name, cmd->name);
+	new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
+
+	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE, Int32GetDatum(ht->fd.id),
+					 NameGetDatum(&column_name), ObjectIdGetDatum(new_type));
+}
+
 static void
 process_altertable(Node *parsetree)
 {
@@ -527,6 +555,8 @@ process_altertable(Node *parsetree)
 		return;
 
 	hcache = hypertable_cache_pin();
+
+	/* TODO: forbid all alter_table on chunk table */
 
 	ht = hypertable_cache_get_entry(hcache, relid);
 	if (NULL == ht)
@@ -573,6 +603,9 @@ process_altertable(Node *parsetree)
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:
 				process_altertable_drop_constraint(ht, cmd, relid);
+				break;
+			case AT_AlterColumnType:
+				process_alter_column_type(hcache, cmd, relid);
 				break;
 			default:
 				break;
