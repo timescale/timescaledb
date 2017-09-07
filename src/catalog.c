@@ -105,6 +105,10 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 		.name = "rename_column",
 		.args = 3
 	},
+	[DDL_CHANGE_COLUMN_TYPE] = {
+		.name = "change_column_type",
+		.args = 3
+	},
 	[CHUNK_CREATE] = {
 		.name = "chunk_create",
 		.args = 4

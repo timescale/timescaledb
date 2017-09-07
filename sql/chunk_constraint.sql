@@ -33,6 +33,26 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_constraint_drop_table_constraint(
+    chunk_constraint_row  _timescaledb_catalog.chunk_constraint
+)
+    RETURNS VOID LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    sql_code    TEXT;
+    chunk_row _timescaledb_catalog.chunk;
+BEGIN
+    SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_constraint_row.chunk_id;
+
+    sql_code := format(
+        $$ ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
+        chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name
+    );
+
+    EXECUTE sql_code;
+END
+$BODY$;
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_constraint(
     chunk_id INTEGER,
     constraint_oid OID
