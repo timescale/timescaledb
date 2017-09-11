@@ -1,4 +1,5 @@
 \ir include/create_single_db.sql
+\ir include/switch_regular_user.sql
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));

@@ -499,7 +499,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_column(
 )
     RETURNS VOID
     LANGUAGE SQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
     AS
 $BODY$
     UPDATE _timescaledb_catalog.dimension d 
@@ -516,7 +515,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.change_column_type(
 )
     RETURNS VOID
     LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
     AS
 $BODY$
 DECLARE
