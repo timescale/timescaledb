@@ -358,6 +358,7 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
 	NameData	old_name,
 				new_name;
+	CatalogSecurityContext sec_ctx;
 
 	if (NULL == ht)
 		return;
@@ -365,11 +366,13 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 	namestrcpy(&old_name, stmt->subname);
 	namestrcpy(&new_name, stmt->newname);
 
+	catalog_become_owner(catalog_get(), &sec_ctx);
 	CatalogInternalCall3(DDL_RENAME_COLUMN,
 						 Int32GetDatum(ht->fd.id),
 						 NameGetDatum(&old_name),
 						 NameGetDatum(&new_name)
 		);
+	catalog_restore_user(&sec_ctx);
 }
 
 static void
@@ -529,6 +532,7 @@ process_alter_column_type(Cache *hcache, AlterTableCmd *cmd, Oid relid)
 	ColumnDef  *coldef = (ColumnDef *) cmd->def;
 	Oid			new_type;
 	NameData	column_name;
+	CatalogSecurityContext sec_ctx;
 
 	ht = hypertable_cache_get_entry(hcache, relid);
 
@@ -538,8 +542,10 @@ process_alter_column_type(Cache *hcache, AlterTableCmd *cmd, Oid relid)
 	namestrcpy(&column_name, cmd->name);
 	new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
 
+	catalog_become_owner(catalog_get(), &sec_ctx);
 	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE, Int32GetDatum(ht->fd.id),
 					 NameGetDatum(&column_name), ObjectIdGetDatum(new_type));
+	catalog_restore_user(&sec_ctx);
 }
 
 static void
