@@ -14,7 +14,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk(
     chunk_id int,
-    is_cascade BOOLEAN
+    is_cascade BOOLEAN,
+    drop_table BOOLEAN = TRUE
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -28,7 +29,7 @@ BEGIN
     -- is executed as a result of a DROP TABLE on the hypertable
     -- that this chunk belongs to.
 
-    PERFORM _timescaledb_internal.drop_chunk_constraint(cc.chunk_id, cc.constraint_name)
+    PERFORM _timescaledb_internal.drop_chunk_constraint(cc.chunk_id, cc.constraint_name, false)
     FROM _timescaledb_catalog.chunk_constraint cc
     WHERE cc.chunk_id = drop_chunk.chunk_id;
 
@@ -39,7 +40,7 @@ BEGIN
     FROM pg_class c
     WHERE relname = quote_ident(chunk_row.table_name) AND relnamespace = quote_ident(chunk_row.schema_name)::regnamespace;
 
-    IF FOUND THEN
+    IF FOUND AND drop_table THEN
         IF is_cascade THEN
             cascade_mod = 'CASCADE';
         END IF;

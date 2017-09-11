@@ -56,6 +56,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
+			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
 		}
 	},
 	[CHUNK_CONSTRAINT] = {
@@ -107,6 +108,10 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 	},
 	[DDL_CHANGE_COLUMN_TYPE] = {
 		.name = "change_column_type",
+		.args = 3
+	},
+	[DDL_DROP_CHUNK] = {
+		.name = "drop_chunk",
 		.args = 3
 	},
 	[CHUNK_CREATE] = {

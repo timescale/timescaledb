@@ -80,7 +80,8 @@ $BODY$;
 -- static
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk_constraint(
     chunk_id INTEGER,
-    constraint_name NAME
+    constraint_name NAME,
+    alter_table BOOLEAN = true
 )
     RETURNS VOID LANGUAGE PLPGSQL AS
 $BODY$
@@ -95,10 +96,12 @@ BEGIN
     AND cc.chunk_id = drop_chunk_constraint.chunk_id
     RETURNING * INTO STRICT chunk_constraint_row;
 
-    EXECUTE format(
-        $$  ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
-            chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name
-    );
+    IF alter_table THEN 
+        EXECUTE format(
+            $$  ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
+                chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name
+        );
+    END IF;
 
 END
 $BODY$;
