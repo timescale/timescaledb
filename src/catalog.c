@@ -20,7 +20,8 @@ static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[DIMENSION] = DIMENSION_TABLE_NAME,
 	[DIMENSION_SLICE] = DIMENSION_SLICE_TABLE_NAME,
 	[CHUNK] = CHUNK_TABLE_NAME,
-	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME
+	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME,
+	[CHUNK_INDEX] = CHUNK_INDEX_TABLE_NAME,
 };
 
 typedef struct TableIndexDef
@@ -63,6 +64,13 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
 		.names = (char *[]) {
 			[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_chunk_id_dimension_slice_id_idx",
+		}
+	},
+	[CHUNK_INDEX] = {
+		.length = _MAX_CHUNK_INDEX_INDEX,
+		.names = (char *[]) {
+			[CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX] = "chunk_index_chunk_id_index_name_key",
+			[CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX] = "chunk_index_hypertable_id_hypertable_index_name_idx",
 		}
 	}
 };
@@ -368,4 +376,26 @@ catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *null
 
 	catalog_insert(rel, tuple);
 	heap_freetuple(tuple);
+}
+
+void
+catalog_update(Relation rel, HeapTuple tuple)
+{
+	simple_heap_update(rel, &tuple->t_self, tuple);
+	CatalogUpdateIndexes(rel, tuple);
+	/* Make changes visible */
+	CommandCounterIncrement();
+}
+
+void
+catalog_delete_tid(Relation rel, ItemPointer tid)
+{
+	simple_heap_delete(rel, tid);
+	CommandCounterIncrement();
+}
+
+void
+catalog_delete(Relation rel, HeapTuple tuple)
+{
+	catalog_delete_tid(rel, &tuple->t_self);
 }

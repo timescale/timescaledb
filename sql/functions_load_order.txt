@@ -5,11 +5,8 @@ sql/util_time.sql
 sql/util_internal_table_ddl.sql
 sql/chunk_constraint.sql
 sql/hypertable_triggers.sql
-sql/hypertable_index_triggers.sql
 sql/partitioning.sql
 sql/schema_info.sql
-sql/chunk_index.sql
-sql/chunk_index_triggers.sql
 sql/setup_main.sql
 sql/ddl_api.sql
 sql/ddl_triggers.sql

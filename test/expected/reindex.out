@@ -35,9 +35,9 @@ Child tables: _timescaledb_internal._hyper_1_1_chunk,
 
 -- show reindexing
 REINDEX (VERBOSE) TABLE reindex_test;
-INFO:  index "1-reindex_test_time_unique_idx" was reindexed
-INFO:  index "2-reindex_test_time_unique_idx" was reindexed
-INFO:  index "3-reindex_test_time_unique_idx" was reindexed
+INFO:  index "_hyper_1_1_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "_hyper_1_2_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "_hyper_1_3_chunk_reindex_test_time_unique_idx" was reindexed
 \set ON_ERROR_STOP 0
 -- this one currently doesn't recurse to chunks and instead gives an
 -- error

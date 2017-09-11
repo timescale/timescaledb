@@ -57,8 +57,34 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   134
+   116
 (1 row)
+
+\d+ public."two_Partitions"
+                           Table "public.two_Partitions"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
+    "two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+Triggers:
+    restore_trigger BEFORE INSERT ON "two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+Child tables: _timescaledb_internal._hyper_1_1_chunk,
+              _timescaledb_internal._hyper_1_2_chunk,
+              _timescaledb_internal._hyper_1_3_chunk,
+              _timescaledb_internal._hyper_1_4_chunk
 
 \d+ _timescaledb_internal._hyper_1_1_chunk
                    Table "_timescaledb_internal._hyper_1_1_chunk"
@@ -72,13 +98,13 @@ SELECT count(*)
  series_bool | boolean          |           | plain    |              | 
 Indexes:
     "1_1_timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
-    "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "3-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
-    "4-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "5-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "6-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "7-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
     "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
@@ -121,6 +147,40 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
 
+-- Show all index mappings
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
+----------+------------------------------------------------------------+---------------+-------------------------------------------
+        1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+        2 | _hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+        3 | _hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+        4 | _hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+(28 rows)
+
 \c postgres
 \! pg_dump -h localhost -U postgres -Fc single > dump/single.sql
 \! dropdb -h localhost -U postgres single
@@ -142,10 +202,36 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   134
+   116
 (1 row)
 
---chunk schema should be the same
+--main table and chunk schemas should be the same
+\d+ public."two_Partitions"
+                           Table "public.two_Partitions"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
+    "two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+Triggers:
+    restore_trigger BEFORE INSERT ON "two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+Child tables: _timescaledb_internal._hyper_1_1_chunk,
+              _timescaledb_internal._hyper_1_2_chunk,
+              _timescaledb_internal._hyper_1_3_chunk,
+              _timescaledb_internal._hyper_1_4_chunk
+
 \d+ _timescaledb_internal._hyper_1_1_chunk
                    Table "_timescaledb_internal._hyper_1_1_chunk"
    Column    |       Type       | Modifiers | Storage  | Stats target | Description 
@@ -158,13 +244,13 @@ SELECT count(*)
  series_bool | boolean          |           | plain    |              | 
 Indexes:
     "1_1_timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
-    "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "3-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
-    "4-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "5-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "6-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "7-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
     "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
@@ -207,6 +293,39 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 ---------------------+-----------+----------+----------+----------+-------------
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
+
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
+----------+------------------------------------------------------------+---------------+-------------------------------------------
+        1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+        2 | _hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+        3 | _hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+        4 | _hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
+        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
+(28 rows)
 
 --check simple ddl still works
 ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;

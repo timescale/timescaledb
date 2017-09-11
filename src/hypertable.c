@@ -69,7 +69,7 @@ hypertable_relid_lookup(Oid relid)
 {
 	Cache	   *hcache = hypertable_cache_pin();
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-	Oid			result = ht == NULL ? InvalidOid : ht->main_table_relid;
+	Oid			result = (ht == NULL) ? InvalidOid : ht->main_table_relid;
 
 	cache_release(hcache);
 

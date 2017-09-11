@@ -85,12 +85,6 @@ BEGIN
     FROM _timescaledb_catalog.chunk_constraint cc
     WHERE cc.chunk_id = chunk_create.chunk_id AND cc.dimension_slice_id IS NOT NULL;
 
-    PERFORM _timescaledb_internal.create_chunk_index_row(chunk_row.schema_name, chunk_row.table_name,
-                            hi.main_schema_name, hi.main_index_name, hi.definition)
-    FROM _timescaledb_catalog.hypertable_index hi
-    WHERE hi.hypertable_id = chunk_row.hypertable_id
-    ORDER BY main_schema_name, main_index_name;
-
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = chunk_row.hypertable_id;
     main_table_oid := format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass;
 

@@ -19,7 +19,7 @@ UPDATE_VERSIONS_PRE = $(shell ls -1 sql/updates/pre-$(UPDATE_VERSIONS).sql)
 UPDATE_VERSIONS_POST = $(shell ls -1 sql/updates/post-$(UPDATE_VERSIONS).sql)
 
 # Get SQL files that are needed to build update script.
-UPDATE_SQL_FILES = $(shell echo ${UPDATE_VERSIONS_PRE} && cat sql/functions_load_order.txt && echo ${UPDATE_VERSIONS_POST} )
+UPDATE_SQL_FILES = $(shell echo ${UPDATE_VERSIONS_PRE} && cat sql/setup_load_order.txt && cat sql/functions_load_order.txt && echo ${UPDATE_VERSIONS_POST} )
 
 EXT_SQL_FILE = sql/$(EXTENSION)--$(EXT_VERSION).sql
 UPDATE_FILE = sql/$(EXTENSION)--$(UPDATE_VERSIONS).sql
@@ -45,6 +45,8 @@ SRCS = \
 	src/event_trigger.c \
 	src/trigger.c \
 	src/chunk.c \
+	src/chunk_index.c \
+	src/indexing.c \
 	src/scanner.c \
 	src/histogram.c \
 	src/hypertable_cache.c \

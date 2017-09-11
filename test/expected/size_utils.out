@@ -88,7 +88,7 @@ SELECT * FROM indexes_relation_size('"public"."two_Partitions"');
 (7 rows)
 
 SELECT * FROM indexes_relation_size_pretty('"public"."two_Partitions"');
-                   index_name_                    | total_size 
+                    index_name                    | total_size 
 --------------------------------------------------+------------
  public.two_Partitions_device_id_timeCustom_idx   | 64 kB
  public.two_Partitions_timeCustom_device_id_idx   | 64 kB

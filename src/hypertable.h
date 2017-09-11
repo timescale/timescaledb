@@ -5,10 +5,9 @@
 #include <nodes/primnodes.h>
 
 #include "catalog.h"
+#include "dimension.h"
 
-typedef struct Hyperspace Hyperspace;
 typedef struct SubspaceStore SubspaceStore;
-typedef struct Point Point;
 typedef struct Chunk Chunk;
 typedef struct HeapTupleData *HeapTuple;
 
