@@ -1,0 +1,33 @@
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE SCHEMA "testSchema0";
+CREATE EXTENSION IF NOT EXISTS timescaledb SCHEMA "testSchema0";
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
+CREATE TABLE test(time timestamp, temp float8, device text);
+SELECT "testSchema0".create_hypertable('test', 'time', 'device', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+------------+------------------------+-------------------------+----------------
+  1 | public      | test       | _timescaledb_internal  | _hyper_1                |              2
+(1 row)
+
+INSERT INTO test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
+SELECT * FROM test;
+              time               | temp | device 
+---------------------------------+------+--------
+ Mon Mar 20 09:17:00.936242 2017 | 23.4 | dev1
+(1 row)
+
+CREATE SCHEMA "testSchema";
+\set ON_ERROR_STOP 0
+ALTER EXTENSION timescaledb SET SCHEMA "testSchema";
+ERROR:  extension "timescaledb" does not support SET SCHEMA
+\set ON_ERROR_STOP 1
