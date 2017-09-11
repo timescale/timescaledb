@@ -79,12 +79,16 @@ static void
 process_alterobjectschema(Node *parsetree)
 {
 	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) parsetree;
-	Oid			relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
+	Oid			relid;
 	Cache	   *hcache;
 	Hypertable *ht;
 
-	if (!OidIsValid(relid) ||
-		alterstmt->objectType != OBJECT_TABLE)
+	if (alterstmt->objectType != OBJECT_TABLE)
+		return;
+
+	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
+
+	if (!OidIsValid(relid))
 		return;
 
 	hcache = hypertable_cache_pin();
