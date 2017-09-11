@@ -24,10 +24,14 @@ SELECT count(*)
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
+\d+ public."two_Partitions"
 \d+ _timescaledb_internal._hyper_1_1_chunk
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
+
+-- Show all index mappings
+SELECT * FROM _timescaledb_catalog.chunk_index;
 
 \c postgres
 
@@ -46,12 +50,15 @@ SELECT count(*)
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
---chunk schema should be the same
+--main table and chunk schemas should be the same
+\d+ public."two_Partitions"
 \d+ _timescaledb_internal._hyper_1_1_chunk
 --data should be the same
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
+
+SELECT * FROM _timescaledb_catalog.chunk_index;
 
 --check simple ddl still works
 ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;

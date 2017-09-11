@@ -17,13 +17,13 @@ BEGIN
     IF chunk_constraint_row.dimension_slice_id IS NOT NULL THEN
         def := format('CHECK (%s)',  _timescaledb_internal.dimension_slice_get_constraint_sql(chunk_constraint_row.dimension_slice_id));
     ELSIF chunk_constraint_row.hypertable_constraint_name IS NOT NULL THEN
-        SELECT oid INTO STRICT constraint_oid FROM pg_constraint 
-        WHERE conname=chunk_constraint_row.hypertable_constraint_name AND 
+        SELECT oid INTO STRICT constraint_oid FROM pg_constraint
+        WHERE conname=chunk_constraint_row.hypertable_constraint_name AND
               conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
         def := pg_get_constraintdef(constraint_oid);
     ELSE
         RAISE 'Unknown constraint type';
-    END IF; 
+    END IF;
 
     sql_code := format(
         $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
@@ -67,7 +67,7 @@ DECLARE
 BEGIN
     SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
     hypertable_constraint_name := constraint_row.conname;
-    constraint_name := format('%s_%s_%s', chunk_id,  nextval('_timescaledb_catalog.chunk_constraint_name'), hypertable_constraint_name); 
+    constraint_name := format('%s_%s_%s', chunk_id,  nextval('_timescaledb_catalog.chunk_constraint_name'), hypertable_constraint_name);
 
     INSERT INTO _timescaledb_catalog.chunk_constraint (chunk_id, constraint_name, dimension_slice_id, hypertable_constraint_name)
     VALUES (chunk_id, constraint_name, NULL, hypertable_constraint_name) RETURNING * INTO STRICT chunk_constraint_row;
@@ -91,12 +91,12 @@ DECLARE
 BEGIN
     SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_id;
 
-    DELETE FROM _timescaledb_catalog.chunk_constraint cc 
-    WHERE  cc.constraint_name = drop_chunk_constraint.constraint_name 
+    DELETE FROM _timescaledb_catalog.chunk_constraint cc
+    WHERE  cc.constraint_name = drop_chunk_constraint.constraint_name
     AND cc.chunk_id = drop_chunk_constraint.chunk_id
     RETURNING * INTO STRICT chunk_constraint_row;
 
-    IF alter_table THEN 
+    IF alter_table THEN
         EXECUTE format(
             $$  ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
                 chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name
@@ -148,13 +148,6 @@ BEGIN
     IF _timescaledb_internal.need_chunk_constraint(constraint_oid) THEN
         SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
 
-        --check the validity of an index if a constraint uses an index
-        --note: foreign-key constraints are excluded because they point to indexes on the foreign table /not/ the hypertable
-        IF constraint_row.conindid <> 0 AND constraint_row.contype != 'f' THEN
-            SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = hypertable_id;
-            PERFORM _timescaledb_internal.check_index(constraint_row.conindid, hypertable_row);
-        END IF;
-
         PERFORM _timescaledb_internal.create_chunk_constraint(c.id, constraint_oid)
         FROM _timescaledb_catalog.chunk c
         WHERE c.hypertable_id = add_constraint.hypertable_id;
@@ -171,7 +164,7 @@ $BODY$
 DECLARE
     constraint_oid OID;
 BEGIN
-    SELECT oid INTO STRICT constraint_oid FROM pg_constraint WHERE conname = constraint_name 
+    SELECT oid INTO STRICT constraint_oid FROM pg_constraint WHERE conname = constraint_name
     AND conrelid = _timescaledb_internal.main_table_from_hypertable(hypertable_id);
 
     PERFORM _timescaledb_internal.add_constraint(hypertable_id, constraint_oid);
@@ -193,4 +186,3 @@ BEGIN
     WHERE c.hypertable_id = drop_constraint.hypertable_id AND cc.hypertable_constraint_name = drop_constraint.hypertable_constraint_name;
 END
 $BODY$;
-

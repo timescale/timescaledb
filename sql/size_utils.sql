@@ -1,4 +1,3 @@
-
 -- This file contains utility functions to get the relation size
 -- of hypertables, chunks, and indexes on hypertables.
 
@@ -360,6 +359,7 @@ RETURNS TABLE (index_name TEXT,
                LANGUAGE PLPGSQL STABLE
                AS
 $BODY$
+<<main>>
 DECLARE
         table_name       NAME;
         schema_name      NAME;
@@ -370,23 +370,23 @@ BEGIN
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         WHERE c.OID = main_table;
 
-        RETURN QUERY EXECUTE format(
-        $$
-        SELECT hi.main_schema_name || '.' || hi.main_index_name,
-               sum(pg_relation_size('"' || ci.schema_name || '"."' || ci.index_name || '"'))::bigint
+        RETURN QUERY
+        SELECT h.schema_name || '.' || ci.hypertable_index_name,
+               sum(pg_relation_size(c.oid))::bigint
         FROM
+        pg_class c,
+        pg_namespace n,
         _timescaledb_catalog.hypertable h,
-        _timescaledb_catalog.hypertable_index hi,
+        _timescaledb_catalog.chunk ch,
         _timescaledb_catalog.chunk_index ci
-        WHERE h.id = hi.hypertable_id
-              AND h.schema_name = %L
-              AND h.table_name = %L
-              AND ci.main_index_name = hi.main_index_name
-              AND ci.main_schema_name = hi.main_schema_name
-        GROUP BY hi.main_schema_name || '.' || hi.main_index_name;
-        $$,
-        schema_name, table_name);
-
+        WHERE ch.schema_name = n.nspname
+            AND c.relnamespace = n.oid
+            AND c.relname = ci.index_name
+            AND ch.id = ci.chunk_id
+            AND h.id = ci.hypertable_id
+            AND h.schema_name = main.schema_name
+            AND h.table_name = main.table_name
+        GROUP BY h.schema_name, ci.hypertable_index_name;
 END;
 $BODY$;
 
@@ -402,14 +402,14 @@ $BODY$;
 CREATE OR REPLACE FUNCTION indexes_relation_size_pretty(
     main_table              REGCLASS
 )
-RETURNS TABLE (index_name_ TEXT,
-               total_size  TEXT) LANGUAGE PLPGSQL STABLE
+RETURNS TABLE (index_name TEXT,
+               total_size TEXT) LANGUAGE PLPGSQL STABLE
                AS
 $BODY$
 BEGIN
         RETURN QUERY
-        SELECT index_name,
-               pg_size_pretty(total_bytes)
-        FROM indexes_relation_size(main_table);
+        SELECT s.index_name,
+               pg_size_pretty(s.total_bytes)
+        FROM indexes_relation_size(main_table) s;
 END;
 $BODY$;

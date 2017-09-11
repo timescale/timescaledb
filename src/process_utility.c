@@ -1,5 +1,6 @@
 #include <postgres.h>
 #include <nodes/parsenodes.h>
+#include <nodes/nodes.h>
 #include <tcop/utility.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
@@ -17,11 +18,15 @@
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
+#include <parser/parse_utilcmd.h>
+
 #include <miscadmin.h>
 
 #include "process_utility.h"
 #include "utils.h"
+#include "catalog.h"
 #include "hypertable_cache.h"
+#include "chunk_index.h"
 #include "extension.h"
 #include "executor.h"
 #include "metadata_queries.h"
@@ -30,6 +35,9 @@
 #include "guc.h"
 #include "trigger.h"
 #include "event_trigger.h"
+#include "indexing.h"
+#include "errors.h"
+#include "guc.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -67,8 +75,8 @@ static bool expect_chunk_modification = false;
 #define process_rename_hypertable_column(hypertable, old_name, new_name) \
 	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
 						 Int32GetDatum((hypertable)->fd.id),			\
-						 NameGetDatum(old_name),						\
-						 NameGetDatum(new_name))
+						 DirectFunctionCall1(namein, CStringGetDatum(old_name)), \
+						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
 
 #define process_change_hypertable_owner(hypertable, rolename )			\
 	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
@@ -240,7 +248,6 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 	int			n = 0;
 
 	if (!OidIsValid(relid))
-		/* Not a hypertable */
 		return -1;
 
 	chunks = find_inheritance_children(relid, NoLock);
@@ -310,15 +317,13 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 static bool
 process_drop_table(DropStmt *stmt)
 {
-	ListCell   *cell1;
-	Cache	   *hcache = NULL;
+	Cache	   *hcache = hypertable_cache_pin();
+	ListCell   *lc;
 	bool		handled = false;
 
-	hcache = hypertable_cache_pin();
-
-	foreach(cell1, stmt->objects)
+	foreach(lc, stmt->objects)
 	{
-		List	   *object = lfirst(cell1);
+		List	   *object = lfirst(lc);
 		Oid			relid = RangeVarGetRelid(makeRangeVarFromNameList(object), NoLock, true);
 
 		if (OidIsValid(relid))
@@ -326,6 +331,7 @@ process_drop_table(DropStmt *stmt)
 			Hypertable *ht;
 
 			ht = hypertable_cache_get_entry(hcache, relid);
+
 			if (NULL != ht)
 			{
 				if (list_length(stmt->objects) != 1)
@@ -348,6 +354,7 @@ process_drop_table(DropStmt *stmt)
 	}
 
 	cache_release(hcache);
+
 	return handled;
 }
 
@@ -407,7 +414,47 @@ process_drop_trigger(DropStmt *stmt)
 	return handled;
 }
 
-static bool
+static void
+process_drop_index(DropStmt *stmt)
+{
+	ListCell   *lc;
+
+	foreach(lc, stmt->objects)
+	{
+		List	   *object = lfirst(lc);
+		RangeVar   *rv = makeRangeVarFromNameList(object);
+		Oid			idxrelid = RangeVarGetRelid(rv, NoLock, true);
+
+		if (OidIsValid(idxrelid))
+		{
+			Oid			tblrelid = IndexGetRelation(idxrelid, false);
+			Cache	   *hcache = hypertable_cache_pin();
+			Hypertable *ht = hypertable_cache_get_entry(hcache, tblrelid);
+
+			/*
+			 * Drop a hypertable index, i.e., all corresponding indexes on all
+			 * chunks
+			 */
+			if (NULL != ht)
+				chunk_index_delete_children_of(ht, idxrelid);
+			else
+			{
+				/* Drop an index on a chunk */
+				Chunk	   *chunk = chunk_get_by_relid(tblrelid, 0, false);
+
+				if (NULL != chunk)
+
+					/*
+					 * No need DROP the index here since DDL statement drops
+					 * (hence 'false' parameter), just delete the metadata
+					 */
+					chunk_index_delete(chunk, idxrelid, false);
+			}
+		}
+	}
+}
+
+static void
 process_drop(Node *parsetree)
 {
 	DropStmt   *stmt = (DropStmt *) parsetree;
@@ -415,11 +462,16 @@ process_drop(Node *parsetree)
 	switch (stmt->removeType)
 	{
 		case OBJECT_TABLE:
-			return process_drop_table(stmt);
+			process_drop_table(stmt);
+			break;
 		case OBJECT_TRIGGER:
-			return process_drop_trigger(stmt);
+			process_drop_trigger(stmt);
+			break;
+		case OBJECT_INDEX:
+			process_drop_index(stmt);
+			break;
 		default:
-			return false;
+			break;
 	}
 }
 
@@ -511,6 +563,23 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 }
 
 static void
+process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
+{
+	Oid			tablerelid = IndexGetRelation(relid, false);
+	Hypertable *ht = hypertable_cache_get_entry(hcache, tablerelid);
+
+	if (NULL != ht)
+		chunk_index_rename_parent(ht, relid, stmt->newname);
+	else
+	{
+		Chunk	   *chunk = chunk_get_by_relid(tablerelid, 0, false);
+
+		if (NULL != chunk)
+			chunk_index_rename(chunk, relid, stmt->newname);
+	}
+}
+
+static void
 process_rename(Node *parsetree)
 {
 	RenameStmt *stmt = (RenameStmt *) parsetree;
@@ -531,6 +600,9 @@ process_rename(Node *parsetree)
 			break;
 		case OBJECT_COLUMN:
 			process_rename_column(hcache, relid, stmt);
+			break;
+		case OBJECT_INDEX:
+			process_rename_index(hcache, relid, stmt);
 			break;
 		default:
 			break;
@@ -557,11 +629,11 @@ static void
 process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 {
 	Assert(constraint_name != NULL);
+
 	process_utility_set_expect_chunk_modification(true);
 	process_add_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
 }
-
 
 static void
 process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
@@ -575,37 +647,107 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 	process_utility_set_expect_chunk_modification(false);
 }
 
-
-
-/* foreign-key constraints to hypertables are not allowed */
+/* process all regular-table alter commands to make sure they aren't adding
+ * foreign-key constraints to hypertables */
 static void
-verify_constraint(Constraint *constr)
+verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
 {
+	Cache	   *hcache;
+	Hypertable *ht;
+
 	Assert(IsA(constr, Constraint));
 
-	if (constr->contype == CONSTR_FOREIGN)
-	{
-		RangeVar   *primary_table = constr->pktable;
-		Oid			primary_oid = RangeVarGetRelid(primary_table, NoLock, true);
+	hcache = hypertable_cache_pin();
 
-		if (OidIsValid(primary_oid))
-		{
-			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *ht = hypertable_cache_get_entry(hcache, primary_oid);
+	switch (constr->contype)
+	{
+		case CONSTR_FOREIGN:
+			ht = hypertable_cache_get_entry_rv(hcache, constr->pktable);
 
 			if (NULL != ht)
-			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				  errmsg("Foreign keys to hypertables are not supported.")));
-			}
-			cache_release(hcache);
-		}
+			break;
+		default:
+			break;
+	}
+
+	cache_release(hcache);
+}
+
+/*
+ * Verify that a constraint is supported on a hypertable.
+ */
+static void
+verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
+{
+	ConstrType	contype;
+	const char *indexname;
+	List	   *keys;
+
+	if (IsA(constr_node, Constraint))
+	{
+		Constraint *constr = (Constraint *) constr_node;
+
+		contype = constr->contype;
+		keys = (contype == CONSTR_EXCLUSION) ? constr->exclusions : constr->keys;
+		indexname = constr->indexname;
+	}
+	else if (IsA(constr_node, IndexStmt))
+	{
+		IndexStmt  *stmt = (IndexStmt *) constr_node;
+
+		contype = stmt->primary ? CONSTR_PRIMARY : CONSTR_UNIQUE;
+		keys = stmt->indexParams;
+		indexname = stmt->idxname;
+	}
+	else
+	{
+		elog(ERROR, "Unexpected constraint type");
+		return;
+	}
+
+	switch (contype)
+	{
+		case CONSTR_FOREIGN:
+			break;
+		case CONSTR_UNIQUE:
+		case CONSTR_PRIMARY:
+
+			/*
+			 * If this constraints is created using an existing index we need
+			 * not re-verify it's columns
+			 */
+			if (indexname != NULL)
+				return;
+
+			indexing_verify_columns(ht->space, keys);
+			break;
+		case CONSTR_EXCLUSION:
+			indexing_verify_columns(ht->space, keys);
+			break;
+		default:
+			break;
 	}
 }
 
 static void
-verify_constraint_list(List *constraint_list)
+verify_constraint(RangeVar *relation, Constraint *constr)
+{
+	Cache	   *hcache = hypertable_cache_pin();
+	Hypertable *ht = hypertable_cache_get_entry_rv(hcache, relation);
+
+	if (NULL == ht)
+		verify_constraint_plaintable(relation, constr);
+	else
+		verify_constraint_hypertable(ht, (Node *) constr);
+
+	cache_release(hcache);
+}
+
+static void
+verify_constraint_list(RangeVar *relation, List *constraint_list)
 {
 	ListCell   *lc;
 
@@ -613,8 +755,99 @@ verify_constraint_list(List *constraint_list)
 	{
 		Constraint *constraint = lfirst(lc);
 
-		verify_constraint(constraint);
+		verify_constraint(relation, constraint);
 	}
+}
+
+typedef struct CreateIndexInfo
+{
+	IndexStmt  *stmt;
+	Hypertable *ht;
+	ObjectAddress obj;
+} CreateIndexInfo;
+
+/*
+ * Create index on a chunk.
+ *
+ * A chunk index is created based on the original IndexStmt that created the
+ * "parent" index on the hypertable.
+ */
+static void
+process_index_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+{
+	CreateIndexInfo *info = (CreateIndexInfo *) arg;
+	IndexStmt  *stmt = transformIndexStmt(chunk_relid, info->stmt, NULL);
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, info->ht->space->num_dimensions, true);
+
+	chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, info->ht->fd.id, info->obj.objectId);
+}
+
+static void
+process_index_start(Node *parsetree)
+{
+	IndexStmt  *stmt = (IndexStmt *) parsetree;
+	Cache	   *hcache;
+	Hypertable *ht;
+
+	Assert(IsA(stmt, IndexStmt));
+
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
+
+	if (NULL != ht)
+	{
+		/* Make sure this index is allowed */
+		if (stmt->concurrent)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("Hypertables currently do not support concurrent "
+							"index creation.")));
+
+		indexing_verify_index(ht->space, stmt);
+	}
+
+	cache_release(hcache);
+}
+
+static bool
+process_index_end(Node *parsetree, CollectedCommand *cmd)
+{
+	IndexStmt  *stmt = (IndexStmt *) parsetree;
+	CatalogSecurityContext sec_ctx;
+	Cache	   *hcache;
+	Hypertable *ht;
+	bool		handled = false;
+
+	Assert(IsA(stmt, IndexStmt));
+	Assert(cmd->type == SCT_Simple);
+
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
+
+	if (NULL != ht)
+	{
+		CreateIndexInfo info = {
+			.stmt = stmt,
+			.obj = cmd->d.simple.address,
+			.ht = ht,
+		};
+
+		/*
+		 * Change user since chunk's are typically located in an internal
+		 * schema and chunk indexes require metadata changes
+		 */
+		catalog_become_owner(catalog_get(), &sec_ctx);
+
+		/* Recurse to each chunk and create a corresponding index */
+		foreach_chunk(info.stmt->relation, process_index_chunk, &info);
+
+		catalog_restore_user(&sec_ctx);
+		handled = true;
+	}
+
+	cache_release(hcache);
+
+	return handled;
 }
 
 /*
@@ -632,7 +865,7 @@ process_create_table_end(Node *parsetree)
 	CreateStmt *stmt = (CreateStmt *) parsetree;
 	ListCell   *lc;
 
-	verify_constraint_list(stmt->constraints);
+	verify_constraint_list(stmt->relation, stmt->constraints);
 
 	/*
 	 * Only after parse analyis does tableElts contain only ColumnDefs. So, if
@@ -647,7 +880,7 @@ process_create_table_end(Node *parsetree)
 		{
 			case T_ColumnDef:
 				coldef = lfirst(lc);
-				verify_constraint_list(coldef->constraints);
+				verify_constraint_list(stmt->relation, coldef->constraints);
 				break;
 			case T_Constraint:
 
@@ -655,40 +888,11 @@ process_create_table_end(Node *parsetree)
 				 * There should be no Constraints in the list after parse
 				 * analysis, but this case is included anyway for completeness
 				 */
-				verify_constraint(lfirst(lc));
+				verify_constraint(stmt->relation, lfirst(lc));
 				break;
 			case T_TableLikeClause:
 				/* Some as above case */
 				break;
-			default:
-				break;
-		}
-	}
-}
-
-/* process all regular-table alter commands to make sure they aren't adding
- * foreign-key constraints to hypertables */
-static void
-process_altertable_plain_table(Node *parsetree)
-{
-	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
-	ListCell   *lc;
-
-	foreach(lc, stmt->cmds)
-	{
-		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
-
-		switch (cmd->subtype)
-		{
-			case AT_AddConstraint:
-			case AT_AddConstraintRecurse:
-				{
-					Constraint *constraint = (Constraint *) cmd->def;
-
-					Assert(IsA(cmd->def, Constraint));
-
-					verify_constraint(constraint);
-				}
 			default:
 				break;
 		}
@@ -718,16 +922,90 @@ process_alter_column_type(Hypertable *ht, AlterTableCmd *cmd)
 }
 
 static void
+process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+	Oid			indexrelid = AlterTableLookupRelation(stmt, NoLock);
+	Oid			tablerelid = IndexGetRelation(indexrelid, false);
+	Cache	   *hcache;
+	Hypertable *ht;
+
+	if (!OidIsValid(tablerelid))
+		return;
+
+	hcache = hypertable_cache_pin();
+
+	ht = hypertable_cache_get_entry(hcache, tablerelid);
+
+	if (NULL != ht)
+	{
+		ListCell   *lc;
+
+		foreach(lc, stmt->cmds)
+		{
+			AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+			switch (cmd->subtype)
+			{
+				case AT_SetTableSpace:
+					chunk_index_set_tablespace(ht, indexrelid, cmd->name);
+					break;
+				default:
+					break;
+			}
+		}
+	}
+
+	cache_release(hcache);
+}
+
+static void
 process_altertable_start(Node *parsetree)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 	Oid			relid = AlterTableLookupRelation(stmt, NoLock);
+	Cache	   *hcache;
+	Hypertable *ht;
+	ListCell   *lc;
 
-	if (!OidIsValid(relid) || is_hypertable(relid))
+	if (!OidIsValid(relid))
 		return;
 
 	check_chunk_operation_allowed(relid);
-	process_altertable_plain_table(parsetree);
+
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry(hcache, relid);
+
+	foreach(lc, stmt->cmds)
+	{
+		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+		switch (cmd->subtype)
+		{
+			case AT_AddIndex:
+				{
+					IndexStmt  *istmt = (IndexStmt *) cmd->def;
+
+					Assert(IsA(cmd->def, IndexStmt));
+
+					if (NULL != ht && istmt->isconstraint)
+						verify_constraint_hypertable(ht, cmd->def);
+				}
+				break;
+			case AT_AddConstraint:
+			case AT_AddConstraintRecurse:
+				Assert(IsA(cmd->def, Constraint));
+
+				if (NULL == ht)
+					verify_constraint_plaintable(stmt->relation, (Constraint *) cmd->def);
+				else
+					verify_constraint_hypertable(ht, cmd->def);
+			default:
+				break;
+		}
+	}
+
+	cache_release(hcache);
 }
 
 static void
@@ -817,7 +1095,7 @@ process_altertable_end_subcmds(Hypertable *ht, List *cmds)
 }
 
 static void
-process_altertable_end(Node *parsetree, CollectedCommand *cmd)
+process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 	Oid			relid;
@@ -853,6 +1131,24 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 	}
 
 	cache_release(hcache);
+}
+
+static void
+process_altertable_end(Node *parsetree, CollectedCommand *cmd)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+
+	switch (stmt->relkind)
+	{
+		case OBJECT_TABLE:
+			process_altertable_end_table(parsetree, cmd);
+			break;
+		case OBJECT_INDEX:
+			process_altertable_end_index(parsetree, cmd);
+			break;
+		default:
+			break;
+	}
 }
 
 
@@ -903,6 +1199,9 @@ process_ddl_command_start(Node *parsetree,
 		case T_RenameStmt:
 			process_rename(parsetree);
 			break;
+		case T_IndexStmt:
+			process_index_start(parsetree);
+			break;
 		case T_DropStmt:
 
 			/*
@@ -946,6 +1245,9 @@ process_ddl_command_end(CollectedCommand *cmd)
 	{
 		case T_CreateStmt:
 			process_create_table_end(cmd->parsetree);
+			break;
+		case T_IndexStmt:
+			process_index_end(cmd->parsetree, cmd);
 			break;
 		case T_AlterTableStmt:
 			process_altertable_end(cmd->parsetree, cmd);
@@ -1004,17 +1306,23 @@ timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
 
 	Assert(strcmp("ddl_command_end", trigdata->event) == 0);
 
+	/* Inhibit collecting new commands while in the trigger */
+	EventTriggerInhibitCommandCollection();
+
 	switch (nodeTag(trigdata->parsetree))
 	{
 		case T_AlterTableStmt:
 		case T_CreateTrigStmt:
 		case T_CreateStmt:
+		case T_IndexStmt:
 			foreach(lc, event_trigger_ddl_commands())
 				process_ddl_command_end(lfirst(lc));
 			break;
 		default:
 			break;
 	}
+
+	EventTriggerUndoInhibitCommandCollection();
 
 	PG_RETURN_NULL();
 }

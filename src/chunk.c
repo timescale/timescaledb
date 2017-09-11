@@ -12,6 +12,7 @@
 #include <utils/hsearch.h>
 
 #include "chunk.h"
+#include "chunk_index.h"
 #include "catalog.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -317,6 +318,9 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 
 	trigger_create_on_all_chunks(ht, chunk);
 
+	/* Create all indexes on the chunk */
+	chunk_index_create_all(ht->fd.id, ht->main_table_relid, chunk->fd.id, chunk->table_id);
+
 	catalog_restore_user(&sec_ctx);
 
 	return chunk;
@@ -326,14 +330,13 @@ Chunk *
 chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Catalog    *catalog = catalog_get();
-	Hyperspace *hs = ht->space;
 	Chunk	   *chunk;
 	Relation	rel;
 
 	rel = heap_open(catalog->tables[CHUNK].id, ExclusiveLock);
 
 	/* Recheck if someone else created the chunk before we got the table lock */
-	chunk = chunk_find(hs, p);
+	chunk = chunk_find(ht->space, p);
 
 	if (NULL == chunk)
 		chunk = chunk_create_after_lock(ht, p, schema, prefix);
@@ -677,42 +680,33 @@ chunk_copy(Chunk *chunk)
 	return copy;
 }
 
-Chunk *
-chunk_get_by_name(const char *schema_name, const char *table_name,
-				  int16 num_constraints, bool fail_if_not_found)
+static Chunk *
+chunk_scan_internal(int indexid,
+					ScanKeyData scankey[],
+					Size nkeys,
+					int16 num_constraints,
+					bool fail_if_not_found)
 {
-	ScanKeyData scankey[2];
 	Catalog    *catalog = catalog_get();
-	int			num_found;
 	Chunk	   *chunk = chunk_create_stub(0, num_constraints);
 	ScannerCtx	ctx = {
 		.table = catalog->tables[CHUNK].id,
-		.index = catalog->tables[CHUNK].index_ids[CHUNK_SCHEMA_NAME_INDEX],
+		.index = catalog->tables[CHUNK].index_ids[indexid],
 		.scantype = ScannerTypeIndex,
-		.nkeys = 2,
+		.nkeys = nkeys,
 		.data = chunk,
 		.scankey = scankey,
 		.tuple_found = chunk_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 	};
-
-	/*
-	 * Perform an index scan on chunk name.
-	 */
-	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
-				F_NAMEEQ, CStringGetDatum(schema_name));
-
-	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
-				F_NAMEEQ, CStringGetDatum(table_name));
-
-	num_found = scanner_scan(&ctx);
+	int			num_found = scanner_scan(&ctx);
 
 	switch (num_found)
 	{
 		case 0:
 			if (fail_if_not_found)
-				elog(ERROR, "Chunk with name %s.%s not found", schema_name, table_name);
+				elog(ERROR, "Chunk not found");
 			break;
 		case 1:
 			if (num_constraints > 0)
@@ -725,6 +719,24 @@ chunk_get_by_name(const char *schema_name, const char *table_name,
 			elog(ERROR, "Unexpected number of chunks found: %d", num_found);
 	}
 	return NULL;
+}
+
+Chunk *
+chunk_get_by_name(const char *schema_name, const char *table_name,
+				  int16 num_constraints, bool fail_if_not_found)
+{
+	ScanKeyData scankey[2];
+
+	/*
+	 * Perform an index scan on chunk name.
+	 */
+	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
+				F_NAMEEQ, CStringGetDatum(schema_name));
+	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
+				F_NAMEEQ, CStringGetDatum(table_name));
+
+	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
+							   num_constraints, fail_if_not_found);
 }
 
 Chunk *
@@ -741,6 +753,20 @@ chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 	return chunk_get_by_name(schema, table, num_constraints, fail_if_not_found);
 }
 
+Chunk *
+chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
+{
+	ScanKeyData scankey[1];
+
+	/*
+	 * Perform an index scan on chunk id.
+	 */
+	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber,
+				F_INT4EQ, id);
+
+	return chunk_scan_internal(CHUNK_ID_INDEX, scankey, 1,
+							   num_constraints, fail_if_not_found);
+}
 
 bool
 chunk_exists(const char *schema_name, const char *table_name)

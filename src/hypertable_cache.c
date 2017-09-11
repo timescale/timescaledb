@@ -1,4 +1,5 @@
 #include <postgres.h>
+#include <catalog/namespace.h>
 #include <utils/catcache.h>
 #include <utils/lsyscache.h>
 
@@ -146,6 +147,12 @@ hypertable_cache_get_entry(Cache *cache, Oid relid)
 		return NULL;
 
 	return hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL);
+}
+
+Hypertable *
+hypertable_cache_get_entry_rv(Cache *cache, RangeVar *rv)
+{
+	return hypertable_cache_get_entry(cache, RangeVarGetRelid(rv, NoLock, true));
 }
 
 Hypertable *

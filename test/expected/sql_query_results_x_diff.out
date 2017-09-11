@@ -3,8 +3,8 @@
 10a11
 > SET timescaledb.disable_optimizations= 'on';
 104,105c105,106
-<                                    QUERY PLAN                                    
-< ---------------------------------------------------------------------------------
+<                                         QUERY PLAN                                        
+< ------------------------------------------------------------------------------------------
 ---
 >                                 QUERY PLAN                                 
 > ---------------------------------------------------------------------------
@@ -13,7 +13,7 @@
 <                ->  Merge Append
 <                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
 <                      ->  Index Scan using time_plain on hyper_1
-<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_chunk
+<                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -36,19 +36,19 @@
 <                ->  Merge Append
 <                      Sort Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone)) DESC
 <                      ->  Index Scan using time_plain_date on hyper_1_date
-<                      ->  Index Scan using "6-time_plain_date" on _hyper_4_6_chunk
-<                      ->  Index Scan using "7-time_plain_date" on _hyper_4_7_chunk
-<                      ->  Index Scan using "8-time_plain_date" on _hyper_4_8_chunk
-<                      ->  Index Scan using "9-time_plain_date" on _hyper_4_9_chunk
-<                      ->  Index Scan using "10-time_plain_date" on _hyper_4_10_chunk
-<                      ->  Index Scan using "11-time_plain_date" on _hyper_4_11_chunk
-<                      ->  Index Scan using "12-time_plain_date" on _hyper_4_12_chunk
-<                      ->  Index Scan using "13-time_plain_date" on _hyper_4_13_chunk
-<                      ->  Index Scan using "14-time_plain_date" on _hyper_4_14_chunk
-<                      ->  Index Scan using "15-time_plain_date" on _hyper_4_15_chunk
-<                      ->  Index Scan using "16-time_plain_date" on _hyper_4_16_chunk
-<                      ->  Index Scan using "17-time_plain_date" on _hyper_4_17_chunk
-<                      ->  Index Scan using "18-time_plain_date" on _hyper_4_18_chunk
+<                      ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
+<                      ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
+<                      ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk
+<                      ->  Index Scan using _hyper_4_9_chunk_time_plain_date on _hyper_4_9_chunk
+<                      ->  Index Scan using _hyper_4_10_chunk_time_plain_date on _hyper_4_10_chunk
+<                      ->  Index Scan using _hyper_4_11_chunk_time_plain_date on _hyper_4_11_chunk
+<                      ->  Index Scan using _hyper_4_12_chunk_time_plain_date on _hyper_4_12_chunk
+<                      ->  Index Scan using _hyper_4_13_chunk_time_plain_date on _hyper_4_13_chunk
+<                      ->  Index Scan using _hyper_4_14_chunk_time_plain_date on _hyper_4_14_chunk
+<                      ->  Index Scan using _hyper_4_15_chunk_time_plain_date on _hyper_4_15_chunk
+<                      ->  Index Scan using _hyper_4_16_chunk_time_plain_date on _hyper_4_16_chunk
+<                      ->  Index Scan using _hyper_4_17_chunk_time_plain_date on _hyper_4_17_chunk
+<                      ->  Index Scan using _hyper_4_18_chunk_time_plain_date on _hyper_4_18_chunk
 < (20 rows)
 ---
 >    ->  Sort
@@ -85,7 +85,7 @@
 <                Hypertable: hyper_1
 <                ->  Merge Append
 <                      Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
-<                      ->  Index Scan using "1-time_plain" on _hyper_1_1_chunk
+<                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 <                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 < (9 rows)
 ---
@@ -99,12 +99,12 @@
 >                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 >                            ->  Bitmap Heap Scan on _hyper_1_1_chunk
 >                                  Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
->                                  ->  Bitmap Index Scan on "1-time_plain"
+>                                  ->  Bitmap Index Scan on _hyper_1_1_chunk_time_plain
 >                                        Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 > (13 rows)
 239,240c246,247
-<                                       QUERY PLAN                                       
-< ---------------------------------------------------------------------------------------
+<                                         QUERY PLAN                                        
+< ------------------------------------------------------------------------------------------
 ---
 >                                    QUERY PLAN                                    
 > ---------------------------------------------------------------------------------
@@ -113,7 +113,7 @@
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, hyper_1."time")) DESC
 <                      ->  Index Scan using time_plain on hyper_1
-<                      ->  Index Scan using "20-time_plain" on _hyper_1_1_chunk
+<                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -134,7 +134,7 @@
 <                ->  Merge Append
 <                      Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
 <                      ->  Index Scan using time_plain on hyper_1
-<                      ->  Index Scan using "20-time_plain" on _hyper_1_1_chunk
+<                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -155,7 +155,7 @@
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval))) DESC
 <                      ->  Index Scan using time_plain on hyper_1
-<                      ->  Index Scan using "20-time_plain" on _hyper_1_1_chunk
+<                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -176,7 +176,7 @@
 <                ->  Merge Append
 <                      Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
 <                      ->  Index Scan using time_plain on hyper_1
-<                      ->  Index Scan using "20-time_plain" on _hyper_1_1_chunk
+<                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -187,8 +187,8 @@
 >                            ->  Seq Scan on _hyper_1_1_chunk
 > (9 rows)
 327,328c338,339
-<                                         QUERY PLAN                                        
-< ------------------------------------------------------------------------------------------
+<                                          QUERY PLAN                                          
+< ---------------------------------------------------------------------------------------------
 ---
 >                                      QUERY PLAN                                     
 > ------------------------------------------------------------------------------------
@@ -197,7 +197,7 @@
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, hyper_1_tz."time")) DESC
 <                      ->  Index Scan using time_plain_tz on hyper_1_tz
-<                      ->  Index Scan using "2-time_plain_tz" on _hyper_2_2_chunk
+<                      ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -218,7 +218,7 @@
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1_tz."time")::timestamp without time zone)) DESC
 <                      ->  Index Scan using time_plain_tz on hyper_1_tz
-<                      ->  Index Scan using "2-time_plain_tz" on _hyper_2_2_chunk
+<                      ->  Index Scan using _hyper_2_2_chunk_time_plain_tz on _hyper_2_2_chunk
 < (8 rows)
 ---
 >          ->  Sort
@@ -229,8 +229,8 @@
 >                            ->  Seq Scan on _hyper_2_2_chunk
 > (9 rows)
 371,372c384,385
-<                                    QUERY PLAN                                    
-< ---------------------------------------------------------------------------------
+<                                           QUERY PLAN                                          
+< ----------------------------------------------------------------------------------------------
 ---
 >                            QUERY PLAN                            
 > -----------------------------------------------------------------
@@ -239,9 +239,9 @@
 <                ->  Merge Append
 <                      Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
 <                      ->  Index Scan using time_plain_int on hyper_1_int
-<                      ->  Index Scan using "3-time_plain_int" on _hyper_3_3_chunk
-<                      ->  Index Scan using "4-time_plain_int" on _hyper_3_4_chunk
-<                      ->  Index Scan using "5-time_plain_int" on _hyper_3_5_chunk
+<                      ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
+<                      ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
+<                      ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
 < (10 rows)
 ---
 >          ->  Sort
@@ -254,8 +254,8 @@
 >                            ->  Seq Scan on _hyper_3_5_chunk
 > (11 rows)
 395,396c409,410
-<                                     QUERY PLAN                                     
-< -----------------------------------------------------------------------------------
+<                                           QUERY PLAN                                          
+< ----------------------------------------------------------------------------------------------
 ---
 >                                  QUERY PLAN                                  
 > -----------------------------------------------------------------------------
@@ -264,9 +264,9 @@
 <                ->  Merge Append
 <                      Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
 <                      ->  Index Scan using time_plain_int on hyper_1_int
-<                      ->  Index Scan using "3-time_plain_int" on _hyper_3_3_chunk
-<                      ->  Index Scan using "4-time_plain_int" on _hyper_3_4_chunk
-<                      ->  Index Scan using "5-time_plain_int" on _hyper_3_5_chunk
+<                      ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
+<                      ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
+<                      ->  Index Scan using _hyper_3_5_chunk_time_plain_int on _hyper_3_5_chunk
 < (10 rows)
 ---
 >          ->  Sort

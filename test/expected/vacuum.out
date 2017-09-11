@@ -29,17 +29,17 @@ WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
 
 VACUUM (VERBOSE, ANALYZE) vacuum_test;
 INFO:  vacuuming "_timescaledb_internal._hyper_1_1_chunk"
-INFO:  index "1-vacuum_test_time_idx" now contains 2 row versions in 2 pages
+INFO:  index "_hyper_1_1_chunk_vacuum_test_time_idx" now contains 2 row versions in 2 pages
 INFO:  "_hyper_1_1_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
 INFO:  analyzing "_timescaledb_internal._hyper_1_1_chunk"
 INFO:  "_hyper_1_1_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
 INFO:  vacuuming "_timescaledb_internal._hyper_1_2_chunk"
-INFO:  index "2-vacuum_test_time_idx" now contains 2 row versions in 2 pages
+INFO:  index "_hyper_1_2_chunk_vacuum_test_time_idx" now contains 2 row versions in 2 pages
 INFO:  "_hyper_1_2_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
 INFO:  analyzing "_timescaledb_internal._hyper_1_2_chunk"
 INFO:  "_hyper_1_2_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
 INFO:  vacuuming "_timescaledb_internal._hyper_1_3_chunk"
-INFO:  index "3-vacuum_test_time_idx" now contains 2 row versions in 2 pages
+INFO:  index "_hyper_1_3_chunk_vacuum_test_time_idx" now contains 2 row versions in 2 pages
 INFO:  "_hyper_1_3_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
 INFO:  analyzing "_timescaledb_internal._hyper_1_3_chunk"
 INFO:  "_hyper_1_3_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows

@@ -70,6 +70,8 @@ BEGIN
                                                     NULL);
     END IF;
 
+    PERFORM _timescaledb_internal.verify_hypertable_indexes(main_table);
+
     RETURN hypertable_row;
 END
 $BODY$;
@@ -142,7 +144,7 @@ BEGIN
     column_type = _timescaledb_internal.dimension_type(main_table, column_name, num_slices IS NULL);
 
     IF column_type = 'DATE'::regtype AND interval_length IS NOT NULL AND
-        (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0) 
+        (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0)
         THEN
         RAISE EXCEPTION 'The interval for a hypertable with a DATE time column must be at least one day and given in multiples of days'
         USING ERRCODE = 'IO102';
@@ -187,48 +189,6 @@ BEGIN
 END
 $BODY$;
 
--- do I need to add a hypertable index to the chunks?;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.need_chunk_index(
-    hypertable_id INTEGER,
-    index_oid OID
-)
-    RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    associated_constraint BOOLEAN;
-BEGIN
-    --do not add an index with associated constraints
-    SELECT count(*) > 0 INTO STRICT associated_constraint FROM pg_constraint WHERE conindid = index_oid;
-
-    RETURN NOT associated_constraint;
-END
-$BODY$;
-
-
--- Add an index to a hypertable
-CREATE OR REPLACE FUNCTION _timescaledb_internal.add_index(
-    hypertable_id    INTEGER,
-    main_schema_name NAME,
-    main_index_name  NAME,
-    definition       TEXT
-)
-    RETURNS VOID LANGUAGE SQL VOLATILE AS
-$BODY$
-INSERT INTO _timescaledb_catalog.hypertable_index (hypertable_id, main_schema_name, main_index_name, definition)
-VALUES (hypertable_id, main_schema_name, main_index_name, definition);
-$BODY$;
-
--- Drops the index for a hypertable
-CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_index(
-    main_schema_name NAME,
-    main_index_name  NAME
-)
-    RETURNS VOID LANGUAGE SQL VOLATILE AS
-$BODY$
-DELETE FROM _timescaledb_catalog.hypertable_index i
-WHERE i.main_index_name = drop_index.main_index_name AND i.main_schema_name = drop_index.main_schema_name;
-$BODY$;
-
 -- Drops a hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_hypertable(
     hypertable_id INT,
@@ -236,7 +196,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_hypertable(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-BEGIN 
+BEGIN
     PERFORM _timescaledb_internal.drop_chunk(c.id, is_cascade)
     FROM _timescaledb_catalog.hypertable h
     INNER JOIN _timescaledb_catalog.chunk c ON (c.hypertable_id = h.id)
@@ -282,90 +242,6 @@ BEGIN
 END
 $BODY$;
 
---Makes sure the index is valid for a hypertable.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.check_index(index_oid REGCLASS, hypertable_row  _timescaledb_catalog.hypertable)
-RETURNS VOID LANGUAGE plpgsql STABLE AS
-$BODY$
-DECLARE
-    index_row       RECORD;
-    missing_column  TEXT;
-BEGIN
-    SELECT * INTO STRICT index_row FROM pg_index WHERE indexrelid = index_oid;
-    IF index_row.indisunique OR index_row.indisexclusion THEN
-        -- unique/exclusion index must contain time and all partition dimension columns.
-
-        -- get any partitioning columns that are not included in the index.
-        SELECT d.column_name INTO missing_column
-        FROM _timescaledb_catalog.dimension d
-        WHERE d.hypertable_id = hypertable_row.id AND
-              d.column_name NOT IN (
-                SELECT attname
-                FROM pg_attribute
-                WHERE attrelid = index_row.indrelid AND
-                attnum = ANY(index_row.indkey)
-            );
-
-        IF missing_column IS NOT NULL THEN
-            RAISE EXCEPTION 'Cannot create a unique index without the column: % (used in partitioning)', missing_column
-            USING ERRCODE = 'IO103';
-        END IF;
-    END IF;
-END
-$BODY$;
-
--- Create the "general definition" of an index. The general definition
--- is the corresponding create index command with the placeholders /*TABLE_NAME*/
--- and  /*INDEX_NAME*/
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_general_index_definition(
-    index_oid       REGCLASS,
-    table_oid       REGCLASS,
-    hypertable_row  _timescaledb_catalog.hypertable
-)
-RETURNS text
-LANGUAGE plpgsql VOLATILE AS
-$BODY$
-DECLARE
-    def             TEXT;
-    index_name      TEXT;
-    c               INTEGER;
-BEGIN
-    -- Get index definition
-    def := pg_get_indexdef(index_oid);
-
-    IF def IS NULL THEN
-        RAISE EXCEPTION 'Cannot process index with no definition: %', index_oid::TEXT;
-    END IF;
-
-    PERFORM _timescaledb_internal.check_index(index_oid, hypertable_row);
-
-    SELECT count(*) INTO c
-    FROM regexp_matches(def, 'ON '||table_oid::TEXT || ' USING', 'g');
-    IF c <> 1 THEN
-         RAISE EXCEPTION 'Cannot process index with definition(no table name match): %', def
-         USING ERRCODE = 'IO103';
-    END IF;
-
-    def := replace(def, 'ON '|| table_oid::TEXT || ' USING', 'ON /*TABLE_NAME*/ USING');
-
-    -- Replace index name with /*INDEX_NAME*/
-    -- Index name is never schema qualified
-    -- Mixed case identifiers are properly handled.
-    SELECT format('%I', c.relname) INTO STRICT index_name FROM pg_catalog.pg_class AS c WHERE c.oid = index_oid AND c.relkind = 'i'::CHAR;
-
-    SELECT count(*) INTO c
-    FROM regexp_matches(def, 'INDEX '|| index_name || ' ON', 'g');
-    IF c <> 1 THEN
-         RAISE EXCEPTION 'Cannot process index with definition(no index name match): %', def
-         USING ERRCODE = 'IO103';
-    END IF;
-
-    def := replace(def, 'INDEX '|| index_name || ' ON',  'INDEX /*INDEX_NAME*/ ON');
-
-    RETURN def;
-END
-$BODY$;
-
-
 -- Creates the default indexes on a hypertable.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_default_indexes(
     hypertable_row _timescaledb_catalog.hypertable,
@@ -377,10 +253,21 @@ $BODY$
 DECLARE
     index_count INTEGER;
     time_dimension_row _timescaledb_catalog.dimension;
+    tablespace_name NAME;
+    tablespace_sql  TEXT;
 BEGIN
     SELECT * INTO STRICT time_dimension_row
     FROM _timescaledb_catalog.dimension
     WHERE hypertable_id = hypertable_row.id AND partitioning_func IS NULL;
+
+    SELECT t.spcname INTO tablespace_name
+    FROM pg_class c, pg_tablespace t
+    WHERE c.oid = main_table
+    AND t.oid = c.reltablespace;
+
+    IF tablespace_name IS NOT NULL THEN
+        tablespace_sql = format('TABLESPACE %s', tablespace_name);
+    END IF;
 
     SELECT count(*) INTO index_count
     FROM pg_index
@@ -390,8 +277,8 @@ BEGIN
     ) AND indrelid = main_table;
 
     IF index_count = 0 THEN
-        EXECUTE format($$ CREATE INDEX ON %I.%I(%I DESC) $$,
-            hypertable_row.schema_name, hypertable_row.table_name, time_dimension_row.column_name);
+        EXECUTE format($$ CREATE INDEX ON %I.%I(%I DESC) %s $$,
+            hypertable_row.schema_name, hypertable_row.table_name, time_dimension_row.column_name, tablespace_sql);
     END IF;
 
     IF partitioning_column IS NOT NULL THEN
@@ -407,10 +294,9 @@ BEGIN
             ), ' ')::int2vector
         ) AND indrelid = main_table;
 
-
         IF index_count = 0 THEN
-            EXECUTE format($$ CREATE INDEX ON %I.%I(%I, %I DESC) $$,
-            hypertable_row.schema_name, hypertable_row.table_name, partitioning_column, time_dimension_row.column_name);
+            EXECUTE format($$ CREATE INDEX ON %I.%I(%I, %I DESC) %s $$,
+            hypertable_row.schema_name, hypertable_row.table_name, partitioning_column, time_dimension_row.column_name, tablespace_sql);
         END IF;
     END IF;
 END
@@ -452,7 +338,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_column(
     LANGUAGE SQL VOLATILE
     AS
 $BODY$
-    UPDATE _timescaledb_catalog.dimension d 
+    UPDATE _timescaledb_catalog.dimension d
     SET column_name = new_name
     WHERE d.column_name = old_name AND d.hypertable_id = rename_column.hypertable_id;
 
@@ -472,7 +358,7 @@ DECLARE
     chunk_row _timescaledb_catalog.chunk;
     dimension_row  _timescaledb_catalog.dimension;
 BEGIN
-    UPDATE _timescaledb_catalog.dimension d 
+    UPDATE _timescaledb_catalog.dimension d
     SET column_type = new_type
     WHERE d.column_name = change_column_type.column_name AND d.hypertable_id = change_column_type.hypertable_id
     RETURNING * INTO dimension_row;
@@ -518,3 +404,6 @@ BEGIN
     WHERE hypertable_id = hypertable_row.id;
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.verify_hypertable_indexes(hypertable REGCLASS) RETURNS VOID
+AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C IMMUTABLE STRICT;

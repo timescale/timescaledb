@@ -22,9 +22,6 @@ SELECT * FROM _timescaledb_internal.get_git_commit();
 \echo 'List of hypertables'
 SELECT * FROM _timescaledb_catalog.hypertable;
 
-\echo 'List of hypertable indexes'
-SELECT * FROM _timescaledb_catalog.hypertable_index;
-
 \echo 'List of chunk indexes'
 SELECT * FROM _timescaledb_catalog.chunk_index;
 
@@ -102,14 +99,19 @@ SELECT *,
 ) sub2;
 
 \echo 'Hypertable index sizes'
-SELECT h.schema_name || '.' || h.table_name as hypertable, hi.main_schema_name || '.' || hi.main_index_name as index_name,
-       sum(pg_relation_size('"' || ci.schema_name || '"."' || ci.index_name || '"'))::bigint as index_bytes
+SELECT h.schema_name || '.' || h.table_name AS hypertable,
+       h.schema_name || '.' || ci.hypertable_index_name AS index_name,
+       sum(pg_relation_size(c.oid))::bigint AS index_bytes
 FROM
+pg_class c,
+pg_namespace n,
 _timescaledb_catalog.hypertable h,
-_timescaledb_catalog.hypertable_index hi,
+_timescaledb_catalog.chunk ch,
 _timescaledb_catalog.chunk_index ci
-WHERE h.id = hi.hypertable_id
-      AND ci.main_index_name = hi.main_index_name
-      AND ci.main_schema_name = hi.main_schema_name
-GROUP BY h.schema_name || '.' || h.table_name, hi.main_schema_name || '.' || hi.main_index_name;
-
+WHERE ch.schema_name = n.nspname
+      AND c.relnamespace = n.oid
+      AND c.relname = ci.index_name
+      AND ch.id = ci.chunk_id
+      AND h.id = ci.hypertable_id
+GROUP BY h.schema_name, h.table_name, ci.hypertable_index_name
+ORDER BY h.schema_name, h.table_name, ci.hypertable_index_name;

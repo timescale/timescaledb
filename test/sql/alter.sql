@@ -14,7 +14,7 @@ SELECT * FROM alter_before;
 -- now different for the root table and the chunk
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
-AND (c.relname LIKE '_hyper_1%' OR c.relname = 'alter_before')
+AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0;
 
 -- DROP a table's column after making it a hypertable and having data
@@ -41,7 +41,7 @@ SELECT * FROM alter_after;
 -- column
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
-AND (c.relname LIKE '_hyper_2%' OR c.relname = 'alter_after')
+AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0;
 
 -- Add an ID column again
@@ -51,7 +51,7 @@ INSERT INTO alter_after (time, temp, colorid) VALUES ('2017-08-22T09:19:14', 12.
 
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
-AND (c.relname LIKE '_hyper_2%' OR c.relname = 'alter_after')
+AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0;
 
 SELECT * FROM alter_after;

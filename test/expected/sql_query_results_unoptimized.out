@@ -84,13 +84,13 @@ INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::nume
 ANALYZE;
 --non-aggregates use MergeAppend in both optimized and non-optimized
 EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
-                           QUERY PLAN                            
------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Limit
    ->  Merge Append
          Sort Key: hyper_1."time" DESC
          ->  Index Scan using time_plain on hyper_1
-         ->  Index Scan using "1-time_plain" on _hyper_1_1_chunk
+         ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
 (5 rows)
 
 SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
@@ -178,7 +178,7 @@ LIMIT 2;
                                  Filter: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
                            ->  Bitmap Heap Scan on _hyper_1_1_chunk
                                  Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-                                 ->  Bitmap Index Scan on "1-time_plain"
+                                 ->  Bitmap Index Scan on _hyper_1_1_chunk_time_plain
                                        Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (13 rows)
 
@@ -199,8 +199,8 @@ DROP INDEX "time_plain";
 CREATE INDEX "time_trunc" ON PUBLIC.hyper_1 (date_trunc('minute', time));
 ANALYZE;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
@@ -208,7 +208,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                ->  Merge Append
                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
                      ->  Index Scan Backward using time_trunc on hyper_1
-                     ->  Index Scan Backward using "19-time_trunc" on _hyper_1_1_chunk
+                     ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
 (8 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
@@ -222,8 +222,8 @@ SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
 ANALYZE;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
@@ -231,7 +231,7 @@ EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(seri
                ->  Merge Append
                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
                      ->  Index Scan Backward using time_trunc on hyper_1
-                     ->  Index Scan Backward using "19-time_trunc" on _hyper_1_1_chunk
+                     ->  Index Scan Backward using _hyper_1_1_chunk_time_trunc on _hyper_1_1_chunk
 (8 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;

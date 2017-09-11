@@ -54,16 +54,16 @@ psql:include/append.sql:44: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:44: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:44: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:44: NOTICE:  Stable function now_s() called!
-                             QUERY PLAN                              
----------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append
    ->  Seq Scan on append_test
          Filter: ("time" > (now_s() + '@ 1 mon'::interval))
-   ->  Index Scan using "1-append_test_time_idx" on _hyper_1_1_chunk
+   ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
          Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
-   ->  Index Scan using "2-append_test_time_idx" on _hyper_1_2_chunk
+   ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
          Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
-   ->  Index Scan using "3-append_test_time_idx" on _hyper_1_3_chunk
+   ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
          Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
 (9 rows)
 
@@ -89,16 +89,16 @@ psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
-                             QUERY PLAN                              
----------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append
    ->  Seq Scan on append_test
          Filter: ("time" > (now_s() - '@ 2 mons'::interval))
-   ->  Index Scan using "1-append_test_time_idx" on _hyper_1_1_chunk
+   ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-   ->  Index Scan using "2-append_test_time_idx" on _hyper_1_2_chunk
+   ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-   ->  Index Scan using "3-append_test_time_idx" on _hyper_1_3_chunk
+   ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
 (9 rows)
 
@@ -125,18 +125,18 @@ psql:include/append.sql:61: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:61: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:61: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:61: NOTICE:  Stable function now_s() called!
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
  Limit
    ->  Merge Append
          Sort Key: append_test."time"
          ->  Index Scan Backward using append_test_time_idx on append_test
                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-         ->  Index Scan Backward using "1-append_test_time_idx" on _hyper_1_1_chunk
+         ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-         ->  Index Scan Backward using "2-append_test_time_idx" on _hyper_1_2_chunk
+         ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-         ->  Index Scan Backward using "3-append_test_time_idx" on _hyper_1_3_chunk
+         ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
 (11 rows)
 
@@ -173,7 +173,7 @@ psql:include/append.sql:72: NOTICE:  Immutable function now_i() called!
                Filter: ("time" > 'Thu Jun 22 10:00:00 2017'::timestamp without time zone)
          ->  Bitmap Heap Scan on _hyper_1_3_chunk
                Recheck Cond: ("time" > 'Thu Jun 22 10:00:00 2017'::timestamp without time zone)
-               ->  Bitmap Index Scan on "3-append_test_time_idx"
+               ->  Bitmap Index Scan on _hyper_1_3_chunk_append_test_time_idx
                      Index Cond: ("time" > 'Thu Jun 22 10:00:00 2017'::timestamp without time zone)
 (9 rows)
 
@@ -232,17 +232,17 @@ psql:include/append.sql:91: NOTICE:  Stable function now_s() called!
 
 EXPLAIN (costs off)
 EXECUTE query_opt;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: append_test."time"
    ->  Index Scan Backward using append_test_time_idx on append_test
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-   ->  Index Scan Backward using "1-append_test_time_idx" on _hyper_1_1_chunk
+   ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-   ->  Index Scan Backward using "2-append_test_time_idx" on _hyper_1_2_chunk
+   ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-   ->  Index Scan Backward using "3-append_test_time_idx" on _hyper_1_3_chunk
+   ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
 (10 rows)
 
@@ -273,8 +273,8 @@ psql:include/append.sql:107: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:107: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:107: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:107: NOTICE:  Stable function now_s() called!
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
  Sort
    Sort Key: (date_trunc('year'::text, append_test."time")) DESC
    ->  HashAggregate
@@ -283,11 +283,11 @@ psql:include/append.sql:107: NOTICE:  Stable function now_s() called!
                ->  Append
                      ->  Seq Scan on append_test
                            Filter: ("time" > (now_s() - '@ 4 mons'::interval))
-                     ->  Index Scan using "1-append_test_time_idx" on _hyper_1_1_chunk
+                     ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
                            Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-                     ->  Index Scan using "2-append_test_time_idx" on _hyper_1_2_chunk
+                     ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
                            Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-                     ->  Index Scan using "3-append_test_time_idx" on _hyper_1_3_chunk
+                     ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
                            Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
 (14 rows)
 
@@ -308,7 +308,7 @@ psql:include/append.sql:116: NOTICE:  Stable function now_s() called!
                Filter: ("time" > 'Thu Jun 22 10:00:00 2017'::timestamp without time zone)
          ->  Bitmap Heap Scan on _hyper_1_3_chunk
                Recheck Cond: ("time" > 'Thu Jun 22 10:00:00 2017'::timestamp without time zone)
-               ->  Bitmap Index Scan on "3-append_test_time_idx"
+               ->  Bitmap Index Scan on _hyper_1_3_chunk_append_test_time_idx
                      Index Cond: ("time" > 'Thu Jun 22 10:00:00 2017'::timestamp without time zone)
 (9 rows)
 
@@ -340,27 +340,27 @@ psql:include/append.sql:136: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:136: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:136: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:136: NOTICE:  Stable function now_s() called!
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
  Nested Loop
    Join Filter: (a.colorid = j.colorid)
    ->  Append
          ->  Seq Scan on append_test a
                Filter: ("time" > (now_s() - '@ 3 hours'::interval))
-         ->  Index Scan using "1-append_test_time_idx" on _hyper_1_1_chunk a_1
+         ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk a_1
                Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-         ->  Index Scan using "2-append_test_time_idx" on _hyper_1_2_chunk a_2
+         ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk a_2
                Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-         ->  Index Scan using "3-append_test_time_idx" on _hyper_1_3_chunk a_3
+         ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk a_3
                Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
    ->  Append
          ->  Seq Scan on join_test j
                Filter: ("time" > (now_s() - '@ 3 hours'::interval))
-         ->  Index Scan using "4-join_test_time_idx" on _hyper_2_4_chunk j_1
+         ->  Index Scan using _hyper_2_4_chunk_join_test_time_idx on _hyper_2_4_chunk j_1
                Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-         ->  Index Scan using "5-join_test_time_idx" on _hyper_2_5_chunk j_2
+         ->  Index Scan using _hyper_2_5_chunk_join_test_time_idx on _hyper_2_5_chunk j_2
                Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-         ->  Index Scan using "6-join_test_time_idx" on _hyper_2_6_chunk j_3
+         ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_3
                Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
 (20 rows)
 

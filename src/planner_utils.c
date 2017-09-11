@@ -7,8 +7,7 @@
 static void plantree_walker(Plan **plan, void (*walker) (Plan **, void *), void *ctx);
 
 static inline void
-plantree_walk_subplans(List *plans,
-					   void (*walker) (Plan **, void *), void *ctx)
+			plantree_walk_subplans(List *plans, void (*walker) (Plan **, void *), void *ctx)
 {
 	ListCell   *lc;
 
@@ -22,9 +21,8 @@ plantree_walk_subplans(List *plans,
 /* A plan tree walker. Similar to planstate_tree_walker in PostgreSQL's
  * nodeFuncs.c, but this walks a Plan tree as opposed to a PlanState tree. */
 static void
-plantree_walker(Plan **planptr,
-				void (*walker) (Plan **, void *),
-				void *context)
+			plantree_walker(Plan **planptr, void (*walker) (Plan **, void *), void *context)
+
 {
 	Plan	   *plan = *planptr;
 
@@ -67,9 +65,7 @@ plantree_walker(Plan **planptr,
 }
 
 void
-planned_stmt_walker(PlannedStmt *stmt,
-					void (*walker) (Plan **, void *),
-					void *context)
+			planned_stmt_walker(PlannedStmt *stmt, void (*walker) (Plan **, void *), void *context)
 {
 	ListCell   *lc;
 

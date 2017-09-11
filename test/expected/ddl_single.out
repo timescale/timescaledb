@@ -53,16 +53,6 @@ SELECT * FROM _timescaledb_catalog.hypertable;
   2 | customSchema | Hypertable_1 | _timescaledb_internal  | _hyper_2                |              1
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.hypertable_index ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
- hypertable_id | main_schema_name |         main_index_name         |                                      definition                                      
----------------+------------------+---------------------------------+--------------------------------------------------------------------------------------
-             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
-             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
-             1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
-             1 | public           | Hypertable_1_Device_id_time_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("Device_id", "time" DESC)
-             2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
-(5 rows)
-
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
 CREATE INDEX "ind_sensor_1" ON PUBLIC."Hypertable_1" (time, "sensor_1");
@@ -74,32 +64,32 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
-SELECT * FROM _timescaledb_catalog.hypertable_index  ORDER BY format('%I.%I', main_schema_name, main_index_name)::regclass;
- hypertable_id | main_schema_name |         main_index_name         |                                       definition                                       
----------------+------------------+---------------------------------+----------------------------------------------------------------------------------------
-             1 | public           | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
-             2 | customSchema     | Hypertable_1_time_Device_id_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
-             1 | public           | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
-             1 | public           | Hypertable_1_Device_id_time_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("Device_id", "time" DESC)
-             2 | customSchema     | Hypertable_1_time_idx           | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time" DESC)
-             1 | public           | Hypertable_1_time_temp_c_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", temp_c)
-             1 | public           | ind_humidity                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", humidity)
-             1 | public           | ind_sensor_1                    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", sensor_1)
-             1 | public           | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time", "Device_id")
-             2 | customSchema     | Unique1                         | CREATE UNIQUE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("time")
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id;
+ chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
+----------+--------------------------------------------------+---------------+---------------------------------
+        1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_temp_c_idx    |             1 | Hypertable_1_time_temp_c_idx
+        1 | _hyper_1_1_chunk_ind_humidity                    |             1 | ind_humidity
+        1 | _hyper_1_1_chunk_ind_sensor_1                    |             1 | ind_sensor_1
+        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
+        2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
+        2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
+        2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
 (10 rows)
 
 --expect error cases
 \set ON_ERROR_STOP 0
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
-psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "10-Unique1"
+psql:include/ddl_ops_1.sql:56: ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
-psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+psql:include/ddl_ops_1.sql:57: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
-psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the column: Device_id (used in partitioning)
+psql:include/ddl_ops_1.sql:58: ERROR:  Cannot create a unique index without the column: Device_id (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
-psql:include/ddl_ops_1.sql:60: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+psql:include/ddl_ops_1.sql:59: ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
@@ -124,7 +114,7 @@ Indexes:
 -- Should error when adding again
 \set ON_ERROR_STOP 0
 ALTER TABLE my_ht ADD COLUMN val2 integer;
-psql:include/ddl_ops_1.sql:73: ERROR:  column "val2" of relation "my_ht" already exists
+psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already exists
 \set ON_ERROR_STOP 1
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -141,7 +131,7 @@ Indexes:
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
-psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 \d my_ht
      Table "public.my_ht"
  Column |  Type   | Modifiers 
@@ -167,7 +157,7 @@ Indexes:
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
-psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 \d my_ht
      Table "public.my_ht"
  Column |  Type   | Modifiers 
@@ -336,17 +326,27 @@ END
 $BODY$;
 CREATE TRIGGER test_trigger BEFORE UPDATE OR DELETE ON PUBLIC."Hypertable_1"
 FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func();
---expect error cases
-\set ON_ERROR_STOP 0
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
-psql:include/ddl_ops_2.sql:27: ERROR:  ALTER INDEX not supported on hypertable public."Hypertable_1"
-\set ON_ERROR_STOP 1
+-- Change should be reflected here
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
+----------+--------------------------------------------------+---------------+---------------------------------
+        1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
+        1 | _hyper_1_1_chunk_Hypertable_1_time_temp_c_idx    |             1 | Hypertable_1_time_temp_c_idx
+        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
+        2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
+        2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
+        2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
+        1 | _hyper_1_1_chunk_ind_humdity2                    |             1 | ind_humdity2
+(9 rows)
+
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
- 
 \d+ PUBLIC."Hypertable_1"
                                 Table "public.Hypertable_1"
       Column      |  Type   |      Modifiers       | Storage  | Stats target | Description 
@@ -365,7 +365,7 @@ Indexes:
     "Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
     "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
     "Hypertable_1_time_idx" btree ("time" DESC)
-    "ind_humidity" btree ("time", humidity)
+    "ind_humdity2" btree ("time", humidity)
 Triggers:
     test_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func()
 Child tables: _timescaledb_internal._hyper_1_1_chunk
@@ -384,11 +384,11 @@ Child tables: _timescaledb_internal._hyper_1_1_chunk
  sensor_3         | bigint  | not null default 131 | plain    |              | 
  sensor_4         | bigint  | not null default 131 | plain    |              | 
 Indexes:
-    "7-Unique1" UNIQUE, btree ("time", "Device_id")
-    "1-Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
-    "2-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "3-Hypertable_1_time_idx" btree ("time" DESC)
-    "5-ind_humidity" btree ("time", humidity)
+    "_hyper_1_1_chunk_Unique1" UNIQUE, btree ("time", "Device_id")
+    "_hyper_1_1_chunk_Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
+    "_hyper_1_1_chunk_Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
+    "_hyper_1_1_chunk_Hypertable_1_time_idx" btree ("time" DESC)
+    "_hyper_1_1_chunk_ind_humdity2" btree ("time", humidity)
 Check constraints:
     "constraint_1" CHECK ("time" >= '1257892416000000000'::bigint AND "time" < '1257895008000000000'::bigint)
     "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key("Device_id") >= 0 AND _timescaledb_internal.get_partition_for_key("Device_id") < 2147483647)

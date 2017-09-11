@@ -4,7 +4,7 @@
 
 \d+ "_timescaledb_internal".*
 
--- Test that renaming hypertable works 
+-- Test that renaming hypertable works
 
 \d _timescaledb_internal._hyper_1_1_chunk
 ALTER TABLE "two_Partitions" RENAME TO "newname";
@@ -17,10 +17,6 @@ ALTER TABLE "newname" SET SCHEMA "newschema";
 SELECT * FROM "newschema"."newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
 
-SELECT * FROM _timescaledb_catalog.hypertable_index WHERE main_schema_name <> 'newschema';
-SELECT * FROM _timescaledb_catalog.chunk_index WHERE main_schema_name <> 'newschema';
-
-SELECT * FROM _timescaledb_catalog.hypertable;
 DROP TABLE "newschema"."newname";
 
 SELECT * FROM _timescaledb_catalog.hypertable;
@@ -33,4 +29,3 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 CREATE TABLE renametable (foo int);
 ALTER TABLE "renametable" RENAME TO "newname_none_ht";
 SELECT * FROM "newname_none_ht";
-

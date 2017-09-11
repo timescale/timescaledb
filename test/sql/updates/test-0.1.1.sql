@@ -3,7 +3,6 @@
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
 \d+ _timescaledb_catalog.chunk_constraint
-\d+ _timescaledb_catalog.hypertable_index
 \d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
 
@@ -21,11 +20,12 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
 -- The list of tables configured to be dumped.
-SELECT unnest(extconfig)::regclass::text c from pg_extension where extname='timescaledb' ORDER BY c;
+SELECT obj::regclass::text
+FROM (SELECT unnest(extconfig) AS obj FROM pg_extension WHERE extname='timescaledb') AS objects
+ORDER BY obj::regclass::text;
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint ORDER BY chunk_id, dimension_slice_id, constraint_name;
-SELECT * FROM _timescaledb_catalog.hypertable_index ORDER BY hypertable_id, main_index_name;
-SELECT schema_name, table_name, main_schema_name, main_index_name FROM _timescaledb_catalog.chunk_index ORDER BY schema_name, table_name, main_schema_name, main_index_name;
+SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
 \d+ _timescaledb_internal._hyper*
 
@@ -65,8 +65,8 @@ BEGIN
         INTO STRICT chunk_count;
 
         SELECT count(c.*) FROM _timescaledb_catalog.chunk_index c
-        WHERE c.main_schema_name = index_row.schema_name
-        AND c.main_index_name = index_row.index_name
+        WHERE c.hypertable_id = index_row.hypertable_id
+        AND c.hypertable_index_name = index_row.index_name
         INTO STRICT chunk_index_count;
 
         IF chunk_index_count != chunk_count THEN
