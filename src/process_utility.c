@@ -13,18 +13,24 @@
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
 #include <miscadmin.h>
+#include <access/xact.h>
 
+#include "process_utility.h"
 #include "utils.h"
 #include "hypertable_cache.h"
 #include "extension.h"
 #include "executor.h"
 #include "metadata_queries.h"
 #include "copy.h"
+#include "chunk.h"
+#include "guc.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
 
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
+
+static bool expect_chunk_modification = false;
 
 /* Calls the default ProcessUtility */
 static void
@@ -44,6 +50,20 @@ prev_ProcessUtility(Node *parsetree,
 	{
 		/* Call the standard */
 		standard_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+	}
+}
+
+static void
+check_chunk_operation_allowed(Oid relid)
+{
+	if (expect_chunk_modification)
+		return;
+
+	if (chunk_exists_relid(relid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("Operation not supported on chunk tables.")));
 	}
 }
 
@@ -284,6 +304,16 @@ process_drop(Node *parsetree)
 				CatalogInternalCall2(DDL_DROP_HYPERTABLE, Int32GetDatum(ht->fd.id), BoolGetDatum(stmt->behavior == DROP_CASCADE));
 				handled = true;
 			}
+			else
+			{
+				Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+				if (chunk != NULL)
+				{
+					CatalogInternalCall3(DDL_DROP_CHUNK, Int32GetDatum(chunk->fd.id), BoolGetDatum(stmt->behavior == DROP_CASCADE), BoolGetDatum(false));
+					handled = true;
+				}
+			}
 		}
 	}
 
@@ -413,14 +443,18 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
 	Assert(IsA(cmd->newowner, RoleSpec));
 	role = (RoleSpec *) cmd->newowner;
 
+	process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall2(DDL_CHANGE_OWNER, ObjectIdGetDatum(relid), CStringGetDatum(role->rolename));
+	process_utility_set_expect_chunk_modification(false);
 }
 
 static void
 process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 {
 	Assert(constraint_name != NULL);
+	process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall2(DDL_ADD_CONSTRAINT, Int32GetDatum(ht->fd.id), CStringGetDatum(constraint_name));
+	process_utility_set_expect_chunk_modification(false);
 }
 
 
@@ -431,8 +465,12 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd, Oid relid
 
 	constraint_name = cmd->name;
 	Assert(constraint_name != NULL);
+	process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall2(DDL_DROP_CONSTRAINT, Int32GetDatum(ht->fd.id), CStringGetDatum(constraint_name));
+	process_utility_set_expect_chunk_modification(false);
 }
+
+
 
 /* foreign-key constraints to hypertables are not allowed */
 static void
@@ -543,8 +581,10 @@ process_alter_column_type(Cache *hcache, AlterTableCmd *cmd, Oid relid)
 	new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
+	process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE, Int32GetDatum(ht->fd.id),
 					 NameGetDatum(&column_name), ObjectIdGetDatum(new_type));
+	process_utility_set_expect_chunk_modification(false);
 	catalog_restore_user(&sec_ctx);
 }
 
@@ -568,6 +608,7 @@ process_altertable(Node *parsetree)
 	if (NULL == ht)
 	{
 		cache_release(hcache);
+		check_chunk_operation_allowed(relid);
 		process_altertable_plain_table(parsetree);
 		return;
 	}
@@ -691,11 +732,32 @@ timescaledb_ProcessUtility(Node *parsetree,
 	prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
 }
 
+extern void
+process_utility_set_expect_chunk_modification(bool expect)
+{
+	expect_chunk_modification = expect;
+}
+
+static void
+process_utility_AtEOXact_abort(XactEvent event, void *arg)
+{
+	switch (event)
+	{
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			expect_chunk_modification = false;
+		default:
+			break;
+	}
+
+}
+
 void
 _process_utility_init(void)
 {
 	prev_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = timescaledb_ProcessUtility;
+	RegisterXactCallback(process_utility_AtEOXact_abort, NULL);
 }
 
 void

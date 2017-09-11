@@ -41,6 +41,7 @@ SRCS = \
 	src/metadata_queries.c \
 	src/cache.c \
 	src/cache_invalidate.c \
+	src/process_utility.c \
 	src/chunk.c \
 	src/scanner.c \
 	src/hypertable_cache.c \
@@ -54,7 +55,6 @@ SRCS = \
 	src/planner_utils.c \
 	src/planner.c \
 	src/executor.c \
-	src/process_utility.c \
 	src/copy.c \
 	src/sort_transform.c \
 	src/hypertable_insert.c \

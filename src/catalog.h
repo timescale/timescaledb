@@ -51,6 +51,7 @@ typedef enum InternalFunction
 	DDL_RENAME_HYPERTABLE,
 	DDL_RENAME_COLUMN,
 	DDL_CHANGE_COLUMN_TYPE,
+	DDL_DROP_CHUNK,
 	CHUNK_CREATE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
@@ -266,12 +267,21 @@ typedef struct FormData_chunk
 
 typedef FormData_chunk *Form_chunk;
 
+
 enum
 {
 	CHUNK_ID_INDEX = 0,
 	CHUNK_HYPERTABLE_ID_INDEX,
+	CHUNK_SCHEMA_NAME_INDEX,
 	_MAX_CHUNK_INDEX,
 };
+
+enum Anum_chunk_schema_name_idx
+{
+	Anum_chunk_schema_name_idx_schema_name = 1,
+	Anum_chunk_schema_name_idx_table_name,
+};
+
 
 /************************************
  *

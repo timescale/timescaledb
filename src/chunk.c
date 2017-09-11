@@ -14,6 +14,7 @@
 #include "hypercube.h"
 #include "metadata_queries.h"
 #include "scanner.h"
+#include "process_utility.h"
 
 typedef bool (*on_chunk_func) (ChunkScanCtx *ctx, Chunk *chunk);
 
@@ -298,9 +299,10 @@ chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char
 
 	/* Insert the new chunk constraints */
 	chunk_constraint_insert_multi(chunk->constraints, chunk->num_constraints);
-
+	process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall4(CHUNK_CREATE, Int32GetDatum(chunk->fd.id), Int32GetDatum(hs->hypertable_id),
 			   CStringGetDatum(schema), NameGetDatum(&chunk->fd.table_name));
+	process_utility_set_expect_chunk_modification(false);
 
 	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_oid);
 
@@ -661,4 +663,81 @@ chunk_copy(Chunk *chunk)
 		copy->cube = hypercube_copy(chunk->cube);
 
 	return copy;
+}
+
+Chunk *
+chunk_get_by_name(const char *schema_name, const char *table_name,
+				  int16 num_constraints, bool fail_if_not_found)
+{
+	ScanKeyData scankey[2];
+	Catalog    *catalog = catalog_get();
+	int			num_found;
+	Chunk	   *chunk = chunk_create_stub(0, num_constraints);
+	ScannerCtx	ctx = {
+		.table = catalog->tables[CHUNK].id,
+		.index = catalog->tables[CHUNK].index_ids[CHUNK_SCHEMA_NAME_INDEX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 2,
+		.data = chunk,
+		.scankey = scankey,
+		.tuple_found = chunk_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	/*
+	 * Perform an index scan on chunk name.
+	 */
+	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
+				F_NAMEEQ, CStringGetDatum(schema_name));
+
+	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
+				F_NAMEEQ, CStringGetDatum(table_name));
+
+	num_found = scanner_scan(&ctx);
+
+	switch (num_found)
+	{
+		case 0:
+			if (fail_if_not_found)
+				elog(ERROR, "Chunk with name %s.%s not found", schema_name, table_name);
+			break;
+		case 1:
+			if (num_constraints > 0)
+			{
+				chunk = chunk_constraint_scan_by_chunk_id(chunk);
+				chunk->cube = hypercube_from_constraints(chunk->constraints, num_constraints);
+			}
+			return chunk;
+		default:
+			elog(ERROR, "Unexpected number of chunks found: %d", num_found);
+	}
+	return NULL;
+}
+
+Chunk *
+chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
+{
+	char	   *schema;
+	char	   *table;
+
+	if (!OidIsValid(relid))
+		return NULL;
+
+	schema = get_namespace_name(get_rel_namespace(relid));
+	table = get_rel_name(relid);
+	return chunk_get_by_name(schema, table, num_constraints, fail_if_not_found);
+}
+
+
+bool
+chunk_exists(const char *schema_name, const char *table_name)
+{
+	return chunk_get_by_name(schema_name, table_name, 0, false) != NULL;
+}
+
+bool
+chunk_exists_relid(Oid relid)
+{
+	return chunk_get_by_relid(relid, 0, false) != NULL;
 }

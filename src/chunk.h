@@ -70,5 +70,10 @@ extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
 extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);
 extern Chunk *chunk_find(Hyperspace *hs, Point *p);
 extern Chunk *chunk_copy(Chunk *chunk);
+Chunk *chunk_get_by_name(const char *schema_name, const char *table_name,
+				  int16 num_constraints, bool fail_if_not_found);
+Chunk	   *chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found);
+bool		chunk_exists(const char *schema_name, const char *table_name);
+bool		chunk_exists_relid(Oid relid);
 
 #endif   /* TIMESCALEDB_CHUNK_H */

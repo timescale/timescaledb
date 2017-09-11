@@ -28,3 +28,10 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set ON_ERROR_STOP 1
+
+INSERT INTO "Hypertable_1" VALUES (0, 1, 0);
+
+\set ON_ERROR_STOP 0
+ALTER TABLE _timescaledb_internal._hyper_4_1_chunk ALTER COLUMN temp_c DROP NOT NULL;
+\set ON_ERROR_STOP 1
