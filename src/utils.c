@@ -356,13 +356,3 @@ date_bucket(PG_FUNCTION_ARGS)
 	bucketed = DirectFunctionCall2(timestamp_bucket, PG_GETARG_DATUM(0), converted_ts);
 	return DirectFunctionCall1(timestamp_date, bucketed);
 }
-
-PG_FUNCTION_INFO_V1(trigger_is_row_trigger);
-
-Datum
-trigger_is_row_trigger(PG_FUNCTION_ARGS)
-{
-	int16		tgtype = PG_GETARG_INT16(0);
-
-	PG_RETURN_BOOL(TRIGGER_FOR_ROW(tgtype));
-}

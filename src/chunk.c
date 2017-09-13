@@ -1,5 +1,12 @@
 #include <postgres.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_trigger.h>
+#include <catalog/indexing.h>
+#include <commands/trigger.h>
+#include <tcop/tcopprot.h>
+#include <access/htup.h>
+#include <access/htup_details.h>
+#include <access/xact.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/hsearch.h>
@@ -15,6 +22,7 @@
 #include "metadata_queries.h"
 #include "scanner.h"
 #include "process_utility.h"
+#include "trigger.h"
 
 typedef bool (*on_chunk_func) (ChunkScanCtx *ctx, Chunk *chunk);
 
@@ -260,9 +268,10 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 }
 
 static Chunk *
-chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
+chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Oid			schema_oid = get_namespace_oid(schema, false);
+	Hyperspace *hs = ht->space;
 	Catalog    *catalog = catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Hypercube  *cube;
@@ -306,15 +315,18 @@ chunk_create_after_lock(Hyperspace *hs, Point *p, const char *schema, const char
 
 	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_oid);
 
+	trigger_create_on_all_chunks(ht, chunk);
+
 	catalog_restore_user(&sec_ctx);
 
 	return chunk;
 }
 
 Chunk *
-chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
+chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Catalog    *catalog = catalog_get();
+	Hyperspace *hs = ht->space;
 	Chunk	   *chunk;
 	Relation	rel;
 
@@ -324,7 +336,7 @@ chunk_create(Hyperspace *hs, Point *p, const char *schema, const char *prefix)
 	chunk = chunk_find(hs, p);
 
 	if (NULL == chunk)
-		chunk = chunk_create_after_lock(hs, p, schema, prefix);
+		chunk = chunk_create_after_lock(ht, p, schema, prefix);
 
 	heap_close(rel, ExclusiveLock);
 

@@ -100,11 +100,5 @@ BEGIN
     WHERE conrelid = main_table_oid
     AND _timescaledb_internal.need_chunk_constraint(oid);
 
-    PERFORM _timescaledb_internal.create_chunk_trigger(chunk_row.id, tgname,
-        _timescaledb_internal.get_general_trigger_definition(oid))
-    FROM pg_trigger
-    WHERE tgrelid = main_table_oid
-    AND _timescaledb_internal.need_chunk_trigger(chunk_row.hypertable_id, oid);
-
 END
 $BODY$;

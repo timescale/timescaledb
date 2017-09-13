@@ -46,6 +46,12 @@ CREATE TRIGGER _0_test_trigger_insert_after
     AFTER INSERT ON hyper
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 
+CREATE TRIGGER _0_test_trigger_insert_after_when_dev1
+    AFTER INSERT ON hyper
+    FOR EACH ROW
+    WHEN (NEW.device_id = 'dev1')
+    EXECUTE PROCEDURE test_trigger();
+
 CREATE TRIGGER _0_test_trigger_update_after
     AFTER UPDATE ON hyper
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();

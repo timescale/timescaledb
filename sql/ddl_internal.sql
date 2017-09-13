@@ -198,39 +198,6 @@ INSERT INTO _timescaledb_catalog.hypertable_index (hypertable_id, main_schema_na
 VALUES (hypertable_id, main_schema_name, main_index_name, definition);
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.trigger_is_row_trigger(tgtype int2) RETURNS BOOLEAN
-	AS '$libdir/timescaledb', 'trigger_is_row_trigger' LANGUAGE C IMMUTABLE STRICT;
-
--- do I need to add a hypertable trigger to the chunks?
-CREATE OR REPLACE FUNCTION _timescaledb_internal.need_chunk_trigger(
-    hypertable_id INTEGER,
-    trigger_oid OID
-)
-    RETURNS BOOLEAN LANGUAGE SQL STABLE  AS
-$BODY$
--- row trigger and not an internal trigger used for constraints
-SELECT  _timescaledb_internal.trigger_is_row_trigger(t.tgtype) AND NOT t.tgisinternal FROM pg_trigger t WHERE OID = trigger_oid;
-$BODY$;
-
-
--- Add a trigger to a hypertable
-CREATE OR REPLACE FUNCTION _timescaledb_internal.add_trigger(
-    hypertable_id INTEGER,
-    trigger_oid OID
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    trigger_row record;
-BEGIN
-    IF _timescaledb_internal.need_chunk_trigger(hypertable_id, trigger_oid) THEN
-        SELECT * INTO STRICT trigger_row FROM pg_trigger WHERE OID = trigger_oid;
-        PERFORM _timescaledb_internal.create_trigger_on_all_chunks(hypertable_id, trigger_row.tgname,
-                _timescaledb_internal.get_general_trigger_definition(trigger_oid));
-    END IF;
-END
-$BODY$;
-
 -- Drops the index for a hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_index(
     main_schema_name NAME,
@@ -374,42 +341,6 @@ BEGIN
 
     def := replace(def, 'INDEX '|| index_name || ' ON',  'INDEX /*INDEX_NAME*/ ON');
 
-    RETURN def;
-END
-$BODY$;
-
-
-
--- Create the "general definition" of a trigger. The general definition
--- is the corresponding create trigger command with the placeholders /*TABLE_NAME*/
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_general_trigger_definition(
-    trigger_oid       REGCLASS
-)
-RETURNS text
-LANGUAGE plpgsql VOLATILE AS
-$BODY$
-DECLARE
-    def             TEXT;
-    c               INTEGER;
-    trigger_row     RECORD;
-BEGIN
-    -- Get trigger definition
-    def := pg_get_triggerdef(trigger_oid);
-
-    IF def IS NULL THEN
-        RAISE EXCEPTION 'Cannot process trigger with no definition: %', trigger_oid::TEXT;
-    END IF;
-
-    SELECT * INTO STRICT trigger_row FROM pg_trigger WHERE oid = trigger_oid;
-
-    SELECT count(*) INTO c
-    FROM regexp_matches(def, 'ON '|| trigger_row.tgrelid::regclass::TEXT, 'g');
-    IF c <> 1 THEN
-         RAISE EXCEPTION 'Cannot process trigger with definition(no table name match: %): %', trigger_row.tgrelid::regclass::TEXT, def
-         USING ERRCODE = 'IO103';
-    END IF;
-
-    def := replace(def,  'ON '|| trigger_row.tgrelid::regclass::TEXT, 'ON /*TABLE_NAME*/');
     RETURN def;
 END
 $BODY$;

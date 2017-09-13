@@ -153,15 +153,6 @@ BEGIN
     WHERE indrelid = main_table AND _timescaledb_internal.need_chunk_index(hypertable_row.id, pg_index.indexrelid)
     ORDER BY pg_index.indexrelid;
 
-    PERFORM 1
-    FROM pg_trigger,
-    LATERAL _timescaledb_internal.add_trigger(
-        hypertable_row.id,
-        oid
-    )
-    WHERE tgrelid = main_table
-    AND _timescaledb_internal.need_chunk_trigger(hypertable_row.id, oid);
-
     IF create_default_indexes THEN
         PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
     END IF;

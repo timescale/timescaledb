@@ -44,7 +44,7 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 		chunk = chunk_find(h->space, point);
 
 		if (NULL == chunk)
-			chunk = chunk_create(h->space, point,
+			chunk = chunk_create(h, point,
 								 NameStr(h->fd.associated_schema_name),
 								 NameStr(h->fd.associated_table_prefix));
 

@@ -5,10 +5,14 @@
 #include <catalog/pg_inherits_fn.h>
 #include <catalog/index.h>
 #include <catalog/objectaddress.h>
+#include <catalog/pg_trigger.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
+#include <commands/trigger.h>
 #include <commands/tablecmds.h>
+#include <access/htup_details.h>
+#include <access/xact.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
@@ -24,6 +28,7 @@
 #include "copy.h"
 #include "chunk.h"
 #include "guc.h"
+#include "trigger.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -185,9 +190,8 @@ typedef void (*process_chunk_t) (Oid chunk_relid, void *arg);
  * hypertable.
  */
 static int
-foreach_chunk(RangeVar *rv, process_chunk_t process_chunk, void *arg)
+foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 {
-	Oid			relid = hypertable_relid(rv);
 	List	   *chunks;
 	ListCell   *lc;
 	int			n = 0;
@@ -205,6 +209,14 @@ foreach_chunk(RangeVar *rv, process_chunk_t process_chunk, void *arg)
 	}
 
 	return n;
+}
+
+static int
+foreach_chunk(RangeVar *rv, process_chunk_t process_chunk, void *arg)
+{
+	Oid			relid = hypertable_relid(rv);
+
+	return foreach_chunk_relid(relid, process_chunk, arg);
 }
 
 typedef struct VacuumCtx
@@ -271,17 +283,11 @@ reindex_chunk(Oid chunk_relid, void *arg)
 }
 
 static bool
-process_drop(Node *parsetree)
+process_drop_table(DropStmt *stmt)
 {
-	DropStmt   *stmt = (DropStmt *) parsetree;
 	ListCell   *cell1;
 	Cache	   *hcache = NULL;
 	bool		handled = false;
-
-	if (stmt->removeType != OBJECT_TABLE)
-	{
-		return false;
-	}
 
 	hcache = hypertable_cache_pin();
 
@@ -319,6 +325,78 @@ process_drop(Node *parsetree)
 
 	cache_release(hcache);
 	return handled;
+}
+
+
+static void
+drop_trigger_chunk(Oid chunk_relid, void *arg)
+{
+	const char *trigger_name = (const char *) arg;
+	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, false);
+
+	RemoveTriggerById(trigger_oid);
+}
+
+static bool
+process_drop_trigger(DropStmt *stmt)
+{
+	ListCell   *cell1;
+	bool		handled = false;
+
+	foreach(cell1, stmt->objects)
+	{
+		List	   *objname = lfirst(cell1);
+		List	   *objargs = NIL;
+		Relation	relation = NULL;
+		Form_pg_trigger trigger;
+
+		ObjectAddress address;
+
+		address = get_object_address(stmt->removeType,
+									 objname, objargs,
+									 &relation,
+									 AccessExclusiveLock,
+									 stmt->missing_ok);
+
+		if (!OidIsValid(address.objectId))
+		{
+			Assert(stmt->missing_ok);
+			continue;
+		}
+
+		trigger = trigger_by_oid(address.objectId, stmt->missing_ok);
+		if (trigger_is_chunk_trigger(trigger))
+		{
+			if (is_hypertable(relation->rd_id))
+			{
+				foreach_chunk_relid(relation->rd_id, drop_trigger_chunk, trigger_name(trigger));
+				handled = true;
+			}
+		}
+
+		if (relation != NULL)
+			heap_close(relation, AccessShareLock);
+	}
+
+	return handled;
+}
+
+
+
+static bool
+process_drop(Node *parsetree)
+{
+	DropStmt   *stmt = (DropStmt *) parsetree;
+
+	switch (stmt->removeType)
+	{
+		case OBJECT_TABLE:
+			return process_drop_table(stmt);
+		case OBJECT_TRIGGER:
+			return process_drop_trigger(stmt);
+		default:
+			return false;
+	}
 }
 
 /*
@@ -662,6 +740,47 @@ process_altertable(Node *parsetree)
 	cache_release(hcache);
 }
 
+typedef struct CreateIndexCtx
+{
+	CreateTrigStmt *stmt;
+	const char *queryString;
+	Oid			hypertable_relid;
+} CreateIndexCtx;
+
+static void
+create_trigger_chunk(Oid chunk_relid, void *arg)
+{
+	CreateIndexCtx *ctx = (CreateIndexCtx *) arg;
+	CreateTrigStmt *stmt = ctx->stmt;
+
+	Oid			trigger_oid = get_trigger_oid(ctx->hypertable_relid, stmt->trigname, false);
+
+	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
+	char	   *relname = get_rel_name(chunk_relid);
+
+	trigger_create_on_chunk(trigger_oid, relschema, relname);
+}
+
+static void
+process_create_trigger(CreateTrigStmt *stmt, const char *query_string)
+{
+	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	CreateIndexCtx ctx = {
+		.stmt = stmt,
+		.queryString = query_string,
+		.hypertable_relid = relid
+	};
+
+	if (!stmt->row || !OidIsValid(relid))
+		return;
+
+	if (is_hypertable(relid))
+	{
+		CommandCounterIncrement();		/* allow following code to see
+										 * inserted hypertable trigger */
+		foreach_chunk(stmt->relation, create_trigger_chunk, &ctx);
+	}
+}
 
 /* Hook-intercept for ProcessUtility. */
 static void
@@ -714,6 +833,11 @@ timescaledb_ProcessUtility(Node *parsetree,
 			if (process_vacuum(parsetree, context))
 				return;
 			break;
+		case T_CreateTrigStmt:
+			/* Process on main table then add to otherrs */
+			prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+			process_create_trigger((CreateTrigStmt *) parsetree, query_string);
+			return;
 		case T_ReindexStmt:
 			if (process_reindex(parsetree))
 				return;
