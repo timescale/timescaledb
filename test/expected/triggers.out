@@ -45,6 +45,11 @@ CREATE TRIGGER z_test_trigger_all
 CREATE TRIGGER _0_test_trigger_insert_after
     AFTER INSERT ON hyper
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+CREATE TRIGGER _0_test_trigger_insert_after_when_dev1
+    AFTER INSERT ON hyper
+    FOR EACH ROW
+    WHEN (NEW.device_id = 'dev1')
+    EXECUTE PROCEDURE test_trigger();
 CREATE TRIGGER _0_test_trigger_update_after
     AFTER UPDATE ON hyper
     FOR EACH ROW EXECUTE PROCEDURE test_trigger();
@@ -87,6 +92,7 @@ WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: INSERT cnt: 0 trigger
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name _0_test_trigger_insert
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after_when_dev1
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_s_after
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
@@ -139,6 +145,7 @@ DROP TRIGGER _0_test_trigger_insert_s_after ON hyper;
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987600000000000, 'dev1', 1);
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after_when_dev1
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all_after
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 1), (1257987800000000000, 'dev2', 1);
@@ -223,6 +230,7 @@ WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: INSERT cnt: 0 trigger
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name _0_test_trigger_insert
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after_when_dev1
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_s_after
 INSERT INTO hyper(time, device_id,sensor_1) VALUES

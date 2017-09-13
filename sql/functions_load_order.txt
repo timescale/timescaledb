@@ -3,7 +3,6 @@ sql/chunk.sql
 sql/ddl_internal.sql
 sql/util_time.sql
 sql/util_internal_table_ddl.sql
-sql/chunk_trigger.sql
 sql/chunk_constraint.sql
 sql/hypertable_triggers.sql
 sql/hypertable_index_triggers.sql

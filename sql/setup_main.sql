@@ -53,20 +53,10 @@ BEGIN
         WHEN tag IN ('drop index')
         EXECUTE PROCEDURE _timescaledb_internal.ddl_process_drop_index();
 
-    CREATE EVENT TRIGGER ddl_create_trigger ON ddl_command_end
-       WHEN tag IN ('create trigger')
-       EXECUTE PROCEDURE _timescaledb_internal.ddl_process_create_trigger();
-
-    CREATE EVENT TRIGGER ddl_drop_trigger
-       ON sql_drop
-       EXECUTE PROCEDURE _timescaledb_internal.ddl_process_drop_trigger();
-
     IF restore THEN
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_index;
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_alter_index;
         ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_drop_index;
-        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_create_trigger;
-        ALTER EXTENSION timescaledb ADD EVENT TRIGGER ddl_drop_trigger;
     END IF;
 
 END

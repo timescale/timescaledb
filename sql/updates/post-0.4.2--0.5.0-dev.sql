@@ -54,3 +54,17 @@ DROP FUNCTION _timescaledb_internal.chunk_create_table(int);
 DROP FUNCTION _timescaledb_internal.ddl_process_drop_table();
 DROP FUNCTION _timescaledb_internal.on_change_chunk();
 DROP FUNCTION _timescaledb_internal.drop_hypertable(name, name);
+
+DROP EVENT TRIGGER ddl_create_trigger;
+DROP EVENT TRIGGER ddl_drop_trigger;
+
+DROP FUNCTION _timescaledb_internal.add_trigger(int, oid);
+DROP FUNCTION _timescaledb_internal.create_chunk_trigger(int, name, text);
+DROP FUNCTION _timescaledb_internal.create_trigger_on_all_chunks(int, name, text);
+DROP FUNCTION _timescaledb_internal.ddl_process_create_trigger();
+DROP FUNCTION _timescaledb_internal.ddl_process_drop_trigger();
+DROP FUNCTION _timescaledb_internal.drop_chunk_trigger(int, name);
+DROP FUNCTION _timescaledb_internal.drop_trigger_on_all_chunks(INTEGER, NAME);
+DROP FUNCTION _timescaledb_internal.get_general_trigger_definition(regclass);
+DROP FUNCTION _timescaledb_internal.get_trigger_definition_for_table(INTEGER, text);
+DROP FUNCTION _timescaledb_internal.need_chunk_trigger(int, oid);
