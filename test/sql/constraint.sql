@@ -63,13 +63,21 @@ ALTER TABLE hyper_unique DROP CONSTRAINT hyper_unique_time_key;
 INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev3', 11);
 
-
 --shouldn't be able to create constraint
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE (time);
 \set ON_ERROR_STOP 1
 
 DELETE FROM hyper_unique WHERE device_id = 'dev3';
+
+-- Try adding constraint using existing index
+CREATE UNIQUE INDEX ON hyper_unique (time);
+
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE USING INDEX hyper_unique_time_idx;
+\set ON_ERROR_STOP 1
+
+DROP INDEX hyper_unique_time_idx;
 
 --now can create
 ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE (time);
@@ -190,13 +198,13 @@ INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 
 --can't add fk because of dev3 row
 \set ON_ERROR_STOP 0
-ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey 
+ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (device_id) REFERENCES devices(device_id);
 \set ON_ERROR_STOP 1
 
 DELETE FROM hyper_fk WHERE device_id = 'dev3';
 
-ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey 
+ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (device_id) REFERENCES devices(device_id);
 
 \set ON_ERROR_STOP 0
@@ -230,7 +238,7 @@ CREATE TABLE referrer2 (
 );
 
 \set ON_ERROR_STOP 0
-ALTER TABLE referrer2 ADD CONSTRAINT hyper_fk_device_id_fkey 
+ALTER TABLE referrer2 ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (time) REFERENCES  hyper_for_ref(time);
 \set ON_ERROR_STOP 1
 
