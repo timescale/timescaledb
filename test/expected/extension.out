@@ -25,11 +25,12 @@ ORDER BY proname;
  create_hypertable
  drop_chunks
  first
+ histogram
  hypertable_relation_size
  indexes_relation_size
  last
  restore_timescaledb
  set_chunk_time_interval
  time_bucket
-(12 rows)
+(13 rows)
 

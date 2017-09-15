@@ -49,3 +49,52 @@ RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS
 $BODY$
     SELECT (int_sec * 1000000)::bigint from extract(epoch from chunk_interval) as int_sec;
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_interval_specification_to_internal(
+    time_type REGTYPE,
+    specification anyelement,
+    default_value INTERVAL,
+    field_name TEXT
+)
+RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') THEN
+        IF specification IS NULL THEN
+            RETURN _timescaledb_internal.interval_to_usec(default_value);
+        ELSIF pg_typeof(specification) IN ('INT'::regtype, 'SMALLINT'::regtype, 'BIGINT'::regtype) THEN
+            IF specification::BIGINT < _timescaledb_internal.interval_to_usec('1 second') THEN
+                RAISE WARNING 'You specified a % of less than a second, make sure that this is what you intended', field_name
+                USING HINT = 'specification is specified in microseconds';
+            END IF;
+            RETURN specification::BIGINT;
+        ELSIF pg_typeof(specification) = 'INTERVAL'::regtype THEN
+            RETURN _timescaledb_internal.interval_to_usec(specification);
+        ELSE
+            RAISE EXCEPTION '% needs to be an INTERVAL or integer type for TIMESTAMP, TIMESTAMPTZ, or DATE time columns', field_name
+            USING ERRCODE = 'IO102';
+        END IF;
+    ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') THEN
+        IF specification IS NULL THEN
+            RAISE EXCEPTION '% needs to be explicitly set for time columns of type SMALLINT, INTEGER, and BIGINT', field_name
+            USING ERRCODE = 'IO102';
+        ELSIF pg_typeof(specification) IN ('INT'::regtype, 'SMALLINT'::regtype, 'BIGINT'::regtype) THEN
+            --bounds check
+            IF time_type = 'INTEGER'::REGTYPE AND specification > 2147483647 THEN
+                RAISE EXCEPTION '% is too large for type INTEGER (max: 2147483647)', field_name
+                USING ERRCODE = 'IO102';
+            ELSIF time_type = 'SMALLINT'::REGTYPE AND specification > 65535 THEN
+                RAISE EXCEPTION '% is too large for type SMALLINT (max: 65535)', field_name
+                USING ERRCODE = 'IO102';
+            END IF;
+            RETURN specification::BIGINT;
+        ELSE
+            RAISE EXCEPTION '% needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns', field_name
+            USING ERRCODE = 'IO102';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'unknown time column type: %', time_type
+        USING ERRCODE = 'IO102';
+    END IF;
+END
+$BODY$;

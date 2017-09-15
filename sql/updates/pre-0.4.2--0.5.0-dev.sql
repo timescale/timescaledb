@@ -35,3 +35,7 @@ CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
 
 DROP FUNCTION _timescaledb_internal.rename_hypertable(name, name, text, text);
+
+ALTER EXTENSION timescaledb
+DROP FUNCTION create_hypertable(REGCLASS, NAME, NAME,INTEGER,NAME,NAME,BIGINT,BOOLEAN, BOOLEAN);
+DROP FUNCTION create_hypertable(REGCLASS, NAME, NAME,INTEGER,NAME,NAME,BIGINT,BOOLEAN, BOOLEAN);

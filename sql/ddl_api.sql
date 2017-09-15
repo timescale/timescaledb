@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       INTEGER = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    chunk_time_interval     BIGINT = NULL,
+    chunk_time_interval     anyelement = NULL::bigint,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE
 )
@@ -71,7 +71,7 @@ BEGIN
        IF if_not_exists THEN
           RAISE NOTICE 'hypertable % already exists, skipping', main_table;
               RETURN;
-          ELSE
+        ELSE
               RAISE EXCEPTION 'hypertable % already exists', main_table
               USING ERRCODE = 'IO110';
           END IF;
@@ -84,30 +84,10 @@ BEGIN
         USING ERRCODE = 'IO102';
     END IF;
 
-    -- We don't use INTO STRICT here because that error (no column) is surfaced later.
-    SELECT atttypid
-    INTO time_type
-    FROM pg_attribute
-    WHERE attrelid = main_table AND attname = time_column_name;
+    time_type := _timescaledb_internal.dimension_type(main_table, time_column_name, true);
 
-    -- Timestamp types can use default value, integral should be an error if NULL
-    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') AND chunk_time_interval IS NULL THEN
-        chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
-    ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') AND chunk_time_interval IS NULL THEN
-        RAISE EXCEPTION 'chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT'
-        USING ERRCODE = 'IO102';
-    ELSE
-        chunk_time_interval_actual := chunk_time_interval;
-    END IF;
-
-    -- Bounds check for integral timestamp types
-    IF time_type = 'INTEGER'::REGTYPE AND chunk_time_interval_actual > 2147483647 THEN
-        RAISE EXCEPTION 'chunk_time_interval is too large for type INTEGER (max: 2147483647)'
-        USING ERRCODE = 'IO102';
-    ELSIF time_type = 'SMALLINT'::REGTYPE AND chunk_time_interval_actual > 65535 THEN
-        RAISE EXCEPTION 'chunk_time_interval is too large for type SMALLINT (max: 65535)'
-        USING ERRCODE = 'IO102';
-    END IF;
+    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal(
+        time_type, chunk_time_interval, INTERVAL '1 month', 'chunk_time_interval');
 
     BEGIN
         SELECT *

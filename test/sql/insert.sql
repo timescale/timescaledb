@@ -46,7 +46,7 @@ SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;
 SELECT count(*) FROM  many_partitions_test;
 
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
-SELECT create_hypertable('date_col_test', 'time', 'device', 1000);
+SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
 INSERT INTO date_col_test
 VALUES ('2001-02-01', 98, 'dev1'),
 ('2001-03-02', 98, 'dev1');
