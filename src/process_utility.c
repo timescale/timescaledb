@@ -37,6 +37,59 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
 
+/* Macros for DDL upcalls to PL/pgSQL */
+#define process_rename_hypertable_schema(hypertable, new_schema)		\
+	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
+						 NameGetDatum(&(hypertable)->fd.schema_name),	\
+						 NameGetDatum(&(hypertable)->fd.table_name),	\
+						 DirectFunctionCall1(namein, CStringGetDatum(new_schema)), \
+						 NameGetDatum(&(hypertable)->fd.table_name))
+
+#define process_drop_hypertable(hypertable, cascade)					\
+	CatalogInternalCall2(DDL_DROP_HYPERTABLE,							\
+						 Int32GetDatum((hypertable)->fd.id),			\
+						 BoolGetDatum(cascade))
+
+#define process_rename_hypertable(hypertable, new_name)					\
+	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
+						 NameGetDatum(&(hypertable)->fd.schema_name),	\
+						 NameGetDatum(&(hypertable)->fd.table_name),	\
+						 NameGetDatum(&(hypertable)->fd.schema_name),	\
+						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
+
+#define process_drop_chunk(chunk, cascade)				\
+	CatalogInternalCall3(DDL_DROP_CHUNK,				\
+						 Int32GetDatum((chunk)->fd.id), \
+						 BoolGetDatum(cascade),			\
+						 BoolGetDatum(false))
+
+#define process_rename_hypertable_column(hypertable, old_name, new_name) \
+	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
+						 Int32GetDatum((hypertable)->fd.id),			\
+						 NameGetDatum(old_name),						\
+						 NameGetDatum(new_name))
+
+#define process_change_hypertable_owner(hypertable, rolename )			\
+	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
+						 ObjectIdGetDatum((hypertable)->main_table_relid), \
+						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
+
+#define process_add_hypertable_constraint(hypertable, constraint_name) \
+	CatalogInternalCall2(DDL_ADD_CONSTRAINT,						   \
+						 Int32GetDatum((hypertable)->fd.id),		   \
+						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
+
+#define process_drop_hypertable_constraint(hypertable, constraint_name) \
+	CatalogInternalCall2(DDL_DROP_CONSTRAINT,							\
+						 Int32GetDatum((hypertable)->fd.id),			\
+						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
+
+#define process_change_hypertable_column_type(hypertable, column_name, new_type) \
+	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE,						\
+						 Int32GetDatum((hypertable)->fd.id),			\
+						 DirectFunctionCall1(namein, CStringGetDatum(column_name)), \
+						 ObjectIdGetDatum(new_type))
+
 /* Calls the default ProcessUtility */
 static void
 prev_ProcessUtility(Node *parsetree,
@@ -120,18 +173,7 @@ process_alterobjectschema(Node *parsetree)
 	ht = hypertable_cache_get_entry(hcache, relid);
 
 	if (ht != NULL)
-	{
-		NameData	new_schema;
-
-		namestrcpy(&new_schema, alterstmt->newschema);
-
-		CatalogInternalCall4(DDL_RENAME_HYPERTABLE,
-							 NameGetDatum(&ht->fd.schema_name),
-							 NameGetDatum(&ht->fd.table_name),
-							 NameGetDatum(&new_schema),
-							 NameGetDatum(&ht->fd.table_name)
-			);
-	}
+		process_rename_hypertable_schema(ht, alterstmt->newschema);
 
 	cache_release(hcache);
 }
@@ -304,10 +346,9 @@ process_drop_table(DropStmt *stmt)
 			if (NULL != ht)
 			{
 				if (list_length(stmt->objects) != 1)
-				{
 					elog(ERROR, "Cannot drop a hypertable along with other objects");
-				}
-				CatalogInternalCall2(DDL_DROP_HYPERTABLE, Int32GetDatum(ht->fd.id), BoolGetDatum(stmt->behavior == DROP_CASCADE));
+
+				process_drop_hypertable(ht, stmt->behavior == DROP_CASCADE);
 				handled = true;
 			}
 			else
@@ -316,7 +357,7 @@ process_drop_table(DropStmt *stmt)
 
 				if (chunk != NULL)
 				{
-					CatalogInternalCall3(DDL_DROP_CHUNK, Int32GetDatum(chunk->fd.id), BoolGetDatum(stmt->behavior == DROP_CASCADE), BoolGetDatum(false));
+					process_drop_chunk(chunk, stmt->behavior == DROP_CASCADE);
 					handled = true;
 				}
 			}
@@ -327,11 +368,10 @@ process_drop_table(DropStmt *stmt)
 	return handled;
 }
 
-
 static void
-drop_trigger_chunk(Oid chunk_relid, void *arg)
+process_drop_trigger_chunk(Oid chunk_relid, void *arg)
 {
-	const char *trigger_name = (const char *) arg;
+	const char *trigger_name = arg;
 	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, false);
 
 	RemoveTriggerById(trigger_oid);
@@ -348,8 +388,6 @@ process_drop_trigger(DropStmt *stmt)
 		List	   *objname = lfirst(cell1);
 		List	   *objargs = NIL;
 		Relation	relation = NULL;
-		Form_pg_trigger trigger;
-
 		ObjectAddress address;
 
 		address = get_object_address(stmt->removeType,
@@ -364,24 +402,27 @@ process_drop_trigger(DropStmt *stmt)
 			continue;
 		}
 
-		trigger = trigger_by_oid(address.objectId, stmt->missing_ok);
-		if (trigger_is_chunk_trigger(trigger))
+		if (NULL != relation)
 		{
 			if (is_hypertable(relation->rd_id))
 			{
-				foreach_chunk_relid(relation->rd_id, drop_trigger_chunk, trigger_name(trigger));
-				handled = true;
-			}
-		}
+				Form_pg_trigger trigger = trigger_by_oid(address.objectId, stmt->missing_ok);
 
-		if (relation != NULL)
+				if (trigger_is_chunk_trigger(trigger))
+				{
+					foreach_chunk_relid(relation->rd_id,
+										process_drop_trigger_chunk,
+										trigger_name(trigger));
+					handled = true;
+				}
+			}
+
 			heap_close(relation, AccessShareLock);
+		}
 	}
 
 	return handled;
 }
-
-
 
 static bool
 process_drop(Node *parsetree)
@@ -445,41 +486,22 @@ static void
 process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-	NameData	new_name;
 
-	if (NULL == ht)
-		return;
-
-	namestrcpy(&new_name, stmt->newname);
-
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,
-						 NameGetDatum(&ht->fd.schema_name),
-						 NameGetDatum(&ht->fd.table_name),
-						 NameGetDatum(&ht->fd.schema_name),
-						 NameGetDatum(&new_name)
-		);
+	if (NULL != ht)
+		process_rename_hypertable(ht, stmt->newname);
 }
 
 static void
 process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-	NameData	old_name,
-				new_name;
 	CatalogSecurityContext sec_ctx;
 
 	if (NULL == ht)
 		return;
 
-	namestrcpy(&old_name, stmt->subname);
-	namestrcpy(&new_name, stmt->newname);
-
 	catalog_become_owner(catalog_get(), &sec_ctx);
-	CatalogInternalCall3(DDL_RENAME_COLUMN,
-						 Int32GetDatum(ht->fd.id),
-						 NameGetDatum(&old_name),
-						 NameGetDatum(&new_name)
-		);
+	process_rename_hypertable_column(ht, stmt->subname, stmt->newname);
 	catalog_restore_user(&sec_ctx);
 }
 
@@ -514,7 +536,7 @@ process_rename(Node *parsetree)
 
 
 static void
-process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
+process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 {
 	RoleSpec   *role;
 
@@ -522,7 +544,7 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
 	role = (RoleSpec *) cmd->newowner;
 
 	process_utility_set_expect_chunk_modification(true);
-	CatalogInternalCall2(DDL_CHANGE_OWNER, ObjectIdGetDatum(relid), CStringGetDatum(role->rolename));
+	process_change_hypertable_owner(ht, role->rolename);
 	process_utility_set_expect_chunk_modification(false);
 }
 
@@ -531,20 +553,20 @@ process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 {
 	Assert(constraint_name != NULL);
 	process_utility_set_expect_chunk_modification(true);
-	CatalogInternalCall2(DDL_ADD_CONSTRAINT, Int32GetDatum(ht->fd.id), CStringGetDatum(constraint_name));
+	process_add_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
 }
 
 
 static void
-process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd, Oid relid)
+process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 {
 	char	   *constraint_name = NULL;
 
 	constraint_name = cmd->name;
 	Assert(constraint_name != NULL);
 	process_utility_set_expect_chunk_modification(true);
-	CatalogInternalCall2(DDL_DROP_CONSTRAINT, Int32GetDatum(ht->fd.id), CStringGetDatum(constraint_name));
+	process_drop_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
 }
 
@@ -642,26 +664,15 @@ typename_get_unqual_name(TypeName *tn)
 }
 
 static void
-process_alter_column_type(Cache *hcache, AlterTableCmd *cmd, Oid relid)
+process_alter_column_type(Hypertable *ht, AlterTableCmd *cmd)
 {
-	Hypertable *ht;
 	ColumnDef  *coldef = (ColumnDef *) cmd->def;
-	Oid			new_type;
-	NameData	column_name;
+	Oid			new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
 	CatalogSecurityContext sec_ctx;
-
-	ht = hypertable_cache_get_entry(hcache, relid);
-
-	if (NULL == ht)
-		return;
-
-	namestrcpy(&column_name, cmd->name);
-	new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	process_utility_set_expect_chunk_modification(true);
-	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE, Int32GetDatum(ht->fd.id),
-					 NameGetDatum(&column_name), ObjectIdGetDatum(new_type));
+	process_change_hypertable_column_type(ht, cmd->name, new_type);
 	process_utility_set_expect_chunk_modification(false);
 	catalog_restore_user(&sec_ctx);
 }
@@ -683,6 +694,7 @@ process_altertable(Node *parsetree)
 	/* TODO: forbid all alter_table on chunk table */
 
 	ht = hypertable_cache_get_entry(hcache, relid);
+
 	if (NULL == ht)
 	{
 		cache_release(hcache);
@@ -698,7 +710,7 @@ process_altertable(Node *parsetree)
 		switch (cmd->subtype)
 		{
 			case AT_ChangeOwner:
-				process_altertable_change_owner(ht, cmd, relid);
+				process_altertable_change_owner(ht, cmd);
 				break;
 			case AT_AddIndex:
 				{
@@ -733,10 +745,11 @@ process_altertable(Node *parsetree)
 				break;
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:
-				process_altertable_drop_constraint(ht, cmd, relid);
+				process_altertable_drop_constraint(ht, cmd);
 				break;
 			case AT_AlterColumnType:
-				process_alter_column_type(hcache, cmd, relid);
+				Assert(IsA(cmd->def, ColumnDef));
+				process_alter_column_type(ht, cmd);
 				break;
 			default:
 				break;
@@ -746,21 +759,19 @@ process_altertable(Node *parsetree)
 	cache_release(hcache);
 }
 
-typedef struct CreateIndexCtx
+typedef struct CreateTriggerInfo
 {
 	CreateTrigStmt *stmt;
 	const char *queryString;
 	Oid			hypertable_relid;
-} CreateIndexCtx;
+} CreateTriggerInfo;
 
 static void
 create_trigger_chunk(Oid chunk_relid, void *arg)
 {
-	CreateIndexCtx *ctx = (CreateIndexCtx *) arg;
-	CreateTrigStmt *stmt = ctx->stmt;
-
-	Oid			trigger_oid = get_trigger_oid(ctx->hypertable_relid, stmt->trigname, false);
-
+	CreateTriggerInfo *info = (CreateTriggerInfo *) arg;
+	CreateTrigStmt *stmt = info->stmt;
+	Oid			trigger_oid = get_trigger_oid(info->hypertable_relid, stmt->trigname, false);
 	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
 	char	   *relname = get_rel_name(chunk_relid);
 
@@ -771,7 +782,7 @@ static void
 process_create_trigger(CreateTrigStmt *stmt, const char *query_string)
 {
 	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-	CreateIndexCtx ctx = {
+	CreateTriggerInfo info = {
 		.stmt = stmt,
 		.queryString = query_string,
 		.hypertable_relid = relid
@@ -784,7 +795,7 @@ process_create_trigger(CreateTrigStmt *stmt, const char *query_string)
 	{
 		CommandCounterIncrement();		/* allow following code to see
 										 * inserted hypertable trigger */
-		foreach_chunk(stmt->relation, create_trigger_chunk, &ctx);
+		foreach_chunk(stmt->relation, create_trigger_chunk, &info);
 	}
 }
 
