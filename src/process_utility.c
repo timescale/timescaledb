@@ -721,6 +721,12 @@ process_altertable(Node *parsetree)
 
 					Assert(IsA(cmd->def, Constraint));
 
+					if (stmt->indexname != NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("Hypertables currently does not support adding "
+								  "a constraint using an existing index.")));
+
 					process_altertable_add_constraint(ht, stmt->conname);
 				}
 
