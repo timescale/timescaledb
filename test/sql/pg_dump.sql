@@ -2,10 +2,32 @@
 \ir include/insert_two_partitions.sql
 \o
 
+-- Test that we can restore constraints
+ALTER TABLE PUBLIC."two_Partitions"
+ADD CONSTRAINT timeCustom_device_id_series_2_key
+UNIQUE ("timeCustom", device_id, series_2);
+
+-- Test that we can restore triggers
+CREATE OR REPLACE FUNCTION test_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RETURN NEW;
+END
+$BODY$;
+
+CREATE TRIGGER restore_trigger BEFORE INSERT ON PUBLIC."two_Partitions"
+FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+
 SELECT count(*)
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+
+\d+ _timescaledb_internal._hyper_1_1_chunk
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
+SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
 
 \c postgres
 
@@ -24,14 +46,17 @@ SELECT count(*)
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
+--chunk schema should be the same
+\d+ _timescaledb_internal._hyper_1_1_chunk
+--data should be the same
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
+SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
 
-\c single
 --check simple ddl still works
 ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series_3) VALUES
 (1357894000000000000, 'dev5', 1.5, 2, 4);
-
-SELECT * FROM "two_Partitions" order by "timeCustom", device_id;
 
 --query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
 SELECT objid::regclass
