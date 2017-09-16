@@ -89,7 +89,7 @@ BEGIN
                             hi.main_schema_name, hi.main_index_name, hi.definition)
     FROM _timescaledb_catalog.hypertable_index hi
     WHERE hi.hypertable_id = chunk_row.hypertable_id
-    ORDER BY format('%I.%I',main_schema_name, main_index_name)::regclass;
+    ORDER BY main_schema_name, main_index_name;
 
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = chunk_row.hypertable_id;
     main_table_oid := format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass;

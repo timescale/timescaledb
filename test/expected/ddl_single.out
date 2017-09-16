@@ -385,9 +385,9 @@ Child tables: _timescaledb_internal._hyper_1_1_chunk
  sensor_4         | bigint  | not null default 131 | plain    |              | 
 Indexes:
     "7-Unique1" UNIQUE, btree ("time", "Device_id")
-    "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "2-Hypertable_1_time_idx" btree ("time" DESC)
-    "3-Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
+    "1-Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
+    "2-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
+    "3-Hypertable_1_time_idx" btree ("time" DESC)
     "5-ind_humidity" btree ("time", humidity)
 Check constraints:
     "constraint_1" CHECK ("time" >= '1257892416000000000'::bigint AND "time" < '1257895008000000000'::bigint)
