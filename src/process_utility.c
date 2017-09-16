@@ -808,7 +808,11 @@ timescaledb_ProcessUtility(Node *parsetree,
 						   DestReceiver *dest,
 						   char *completion_tag)
 {
-	if (!extension_is_loaded())
+	/*
+	 * If we are restoring, we don't want to recurse to chunks or block
+	 * operations on chunks. If we do, the restore will fail.
+	 */
+	if (!extension_is_loaded() || guc_restoring)
 	{
 		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
 		return;

@@ -5,6 +5,7 @@
 extern bool guc_disable_optimizations;
 extern bool guc_optimize_non_hypertables;
 extern bool guc_constraint_aware_append;
+extern bool guc_restoring;
 
 void		_guc_init(void);
 void		_guc_fini(void);

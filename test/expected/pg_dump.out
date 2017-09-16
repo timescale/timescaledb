@@ -37,6 +37,20 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 \set QUIET on
 \o
+-- Test that we can restore constraints
+ALTER TABLE PUBLIC."two_Partitions"
+ADD CONSTRAINT timeCustom_device_id_series_2_key
+UNIQUE ("timeCustom", device_id, series_2);
+-- Test that we can restore triggers
+CREATE OR REPLACE FUNCTION test_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RETURN NEW;
+END
+$BODY$;
+CREATE TRIGGER restore_trigger BEFORE INSERT ON PUBLIC."two_Partitions"
+FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 SELECT count(*)
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
@@ -44,6 +58,67 @@ SELECT count(*)
  count 
 -------
    132
+(1 row)
+
+\d+ _timescaledb_internal._hyper_1_1_chunk
+                   Table "_timescaledb_internal._hyper_1_1_chunk"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "1_1_timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
+    "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "2-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "3-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "4-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "5-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+Check constraints:
+    "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+Triggers:
+    restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+Inherits: "two_Partitions"
+
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+(12 rows)
+
+SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+(7 rows)
+
+SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
 
 \c postgres
@@ -70,29 +145,73 @@ SELECT count(*)
    132
 (1 row)
 
-\c single
+--chunk schema should be the same
+\d+ _timescaledb_internal._hyper_1_1_chunk
+                   Table "_timescaledb_internal._hyper_1_1_chunk"
+   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
+-------------+------------------+-----------+----------+--------------+-------------
+ timeCustom  | bigint           | not null  | plain    |              | 
+ device_id   | text             | not null  | extended |              | 
+ series_0    | double precision |           | plain    |              | 
+ series_1    | double precision |           | plain    |              | 
+ series_2    | double precision |           | plain    |              | 
+ series_bool | boolean          |           | plain    |              | 
+Indexes:
+    "1_1_timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
+    "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
+    "2-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "3-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "4-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "5-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
+    "6-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+Check constraints:
+    "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+Triggers:
+    restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+Inherits: "two_Partitions"
+
+--data should be the same
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+(12 rows)
+
+SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        6 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        7 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+(7 rows)
+
+SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(1 row)
+
 --check simple ddl still works
 ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series_3) VALUES
 (1357894000000000000, 'dev5', 1.5, 2, 4);
-SELECT * FROM "two_Partitions" order by "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool | series_3 
----------------------+-----------+----------+----------+----------+-------------+----------
- 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t           |         
- 1257894000000000000 | dev1      |      1.5 |        2 |          |             |         
- 1257894000000000000 | dev2      |      1.5 |        2 |          |             |         
- 1257894000000000000 | dev2      |      1.5 |        1 |          |             |         
- 1257894000000001000 | dev1      |      2.5 |        3 |          |             |         
- 1257894001000000000 | dev1      |      3.5 |        4 |          |             |         
- 1257894002000000000 | dev1      |      2.5 |        3 |          |             |         
- 1257894002000000000 | dev1      |      5.5 |        6 |          | t           |         
- 1257894002000000000 | dev1      |      5.5 |        7 |          | f           |         
- 1257897600000000000 | dev1      |      4.5 |        5 |          | f           |         
- 1257987600000000000 | dev1      |      1.5 |        2 |          |             |         
- 1257987600000000000 | dev1      |      1.5 |        1 |          |             |         
- 1357894000000000000 | dev5      |      1.5 |        2 |          |             |        4
-(13 rows)
-
 --query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
 SELECT objid::regclass
 FROM pg_catalog.pg_depend
