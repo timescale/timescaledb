@@ -73,12 +73,12 @@ SELECT count(*)
 Indexes:
     "1_1_timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
     "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "3-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "4-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "5-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "6-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "2-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "3-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "4-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "5-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "6-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "7-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
     "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
@@ -159,12 +159,12 @@ SELECT count(*)
 Indexes:
     "1_1_timecustom_device_id_series_2_key" UNIQUE CONSTRAINT, btree ("timeCustom", device_id, series_2)
     "1-two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "2-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "3-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "4-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "5-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-    "6-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "7-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "2-two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
+    "3-two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
+    "4-two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
+    "5-two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
+    "6-two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
+    "7-two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
     "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)

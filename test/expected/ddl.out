@@ -363,9 +363,9 @@ Child tables: _timescaledb_internal._hyper_1_1_chunk
  sensor_4  | numeric | not null default 1             | main     |              | 
 Indexes:
     "7-Unique1" UNIQUE, btree ("time", "Device_id")
-    "1-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "2-Hypertable_1_time_idx" btree ("time" DESC)
-    "3-Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
+    "1-Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
+    "2-Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
+    "3-Hypertable_1_time_idx" btree ("time" DESC)
     "4-Hypertable_1_time_temp_c_idx" btree ("time", temp_c)
     "5-ind_humidity" btree ("time", humidity)
     "6-ind_sensor_1" btree ("time", sensor_1)
