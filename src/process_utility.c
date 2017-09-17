@@ -38,24 +38,10 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 static bool expect_chunk_modification = false;
 
 /* Macros for DDL upcalls to PL/pgSQL */
-#define process_rename_hypertable_schema(hypertable, new_schema)		\
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 DirectFunctionCall1(namein, CStringGetDatum(new_schema)), \
-						 NameGetDatum(&(hypertable)->fd.table_name))
-
 #define process_drop_hypertable(hypertable, cascade)					\
 	CatalogInternalCall2(DDL_DROP_HYPERTABLE,							\
 						 Int32GetDatum((hypertable)->fd.id),			\
 						 BoolGetDatum(cascade))
-
-#define process_rename_hypertable(hypertable, new_name)					\
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
 
 #define process_drop_chunk(chunk, cascade)				\
 	CatalogInternalCall3(DDL_DROP_CHUNK,				\
@@ -149,32 +135,6 @@ process_truncate(Node *parsetree)
 			}
 		}
 	}
-	cache_release(hcache);
-}
-
-/* Change the schema of a hypertable */
-static void
-process_alterobjectschema(Node *parsetree)
-{
-	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) parsetree;
-	Oid			relid;
-	Cache	   *hcache;
-	Hypertable *ht;
-
-	if (alterstmt->objectType != OBJECT_TABLE)
-		return;
-
-	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
-
-	if (!OidIsValid(relid))
-		return;
-
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
-
-	if (ht != NULL)
-		process_rename_hypertable_schema(ht, alterstmt->newschema);
-
 	cache_release(hcache);
 }
 
@@ -483,15 +443,6 @@ process_reindex(Node *parsetree)
 }
 
 static void
-process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
-{
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-
-	if (NULL != ht)
-		process_rename_hypertable(ht, stmt->newname);
-}
-
-static void
 process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
@@ -522,7 +473,6 @@ process_rename(Node *parsetree)
 	switch (stmt->renameType)
 	{
 		case OBJECT_TABLE:
-			process_rename_table(hcache, relid, stmt);
 			break;
 		case OBJECT_COLUMN:
 			process_rename_column(hcache, relid, stmt);
@@ -825,7 +775,6 @@ timescaledb_ProcessUtility(Node *parsetree,
 			process_altertable(parsetree);
 			return;
 		case T_AlterObjectSchemaStmt:
-			process_alterobjectschema(parsetree);
 			break;
 		case T_RenameStmt:
 			process_rename(parsetree);
