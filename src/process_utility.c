@@ -60,11 +60,6 @@ static bool expect_chunk_modification = false;
 						 ObjectIdGetDatum((hypertable)->main_table_relid), \
 						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
 
-#define process_add_hypertable_constraint(hypertable, constraint_name) \
-	CatalogInternalCall2(DDL_ADD_CONSTRAINT,						   \
-						 Int32GetDatum((hypertable)->fd.id),		   \
-						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
-
 #define process_drop_hypertable_constraint(hypertable, constraint_name) \
 	CatalogInternalCall2(DDL_DROP_CONSTRAINT,							\
 						 Int32GetDatum((hypertable)->fd.id),			\
@@ -499,16 +494,6 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 }
 
 static void
-process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
-{
-	Assert(constraint_name != NULL);
-	process_utility_set_expect_chunk_modification(true);
-	process_add_hypertable_constraint(ht, constraint_name);
-	process_utility_set_expect_chunk_modification(false);
-}
-
-
-static void
 process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 {
 	char	   *constraint_name = NULL;
@@ -518,91 +503,6 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 	process_utility_set_expect_chunk_modification(true);
 	process_drop_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
-}
-
-
-
-/* foreign-key constraints to hypertables are not allowed */
-static void
-verify_constraint(Constraint *stmt)
-{
-	if (stmt->contype == CONSTR_FOREIGN)
-	{
-		RangeVar   *primary_table = stmt->pktable;
-		Oid			primary_oid = RangeVarGetRelid(primary_table, NoLock, true);
-
-		if (OidIsValid(primary_oid))
-		{
-			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *ht = hypertable_cache_get_entry(hcache, primary_oid);
-
-			if (NULL != ht)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				  errmsg("Foreign keys to hypertables are not supported.")));
-			}
-			cache_release(hcache);
-		}
-	}
-}
-
-static void
-verify_constraint_list(List *constraint_list)
-{
-	ListCell   *lc;
-
-	foreach(lc, constraint_list)
-	{
-		Constraint *constraint = (Constraint *) lfirst(lc);
-
-		verify_constraint(constraint);
-	}
-}
-
-/* process all create table commands to make sure their constraints are kosher */
-static void
-process_create_table(Node *parsetree)
-{
-	CreateStmt *stmt = (CreateStmt *) parsetree;
-	ListCell   *lc;
-
-	verify_constraint_list(stmt->constraints);
-	foreach(lc, stmt->tableElts)
-	{
-		ColumnDef  *column_def = (ColumnDef *) lfirst(lc);
-
-		verify_constraint_list(column_def->constraints);
-	}
-}
-
-/* process all regular-table alter commands to make sure they aren't adding
- * foreign-key constraints to hypertables */
-static void
-process_altertable_plain_table(Node *parsetree)
-{
-	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
-	ListCell   *lc;
-
-	foreach(lc, stmt->cmds)
-	{
-		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
-
-		switch (cmd->subtype)
-		{
-			case AT_AddConstraint:
-			case AT_AddConstraintRecurse:
-				{
-					Constraint *constraint = (Constraint *) cmd->def;
-
-					Assert(IsA(cmd->def, Constraint));
-
-					verify_constraint(constraint);
-				}
-			default:
-				break;
-		}
-	}
 }
 
 static inline const char *
@@ -649,7 +549,6 @@ process_altertable(Node *parsetree)
 	{
 		cache_release(hcache);
 		check_chunk_operation_allowed(relid);
-		process_altertable_plain_table(parsetree);
 		return;
 	}
 
@@ -662,20 +561,6 @@ process_altertable(Node *parsetree)
 			case AT_ChangeOwner:
 				process_altertable_change_owner(ht, cmd);
 				break;
-			case AT_AddIndex:
-				{
-					IndexStmt  *stmt = (IndexStmt *) cmd->def;
-
-					Assert(IsA(cmd->def, IndexStmt));
-
-					Assert(stmt->isconstraint);
-					process_altertable_add_constraint(ht, stmt->idxname);
-				}
-
-				/*
-				 * AddConstraint sometimes transformed to AddIndex if Index is
-				 * involved. different path than CREATE INDEX.
-				 */
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				{
@@ -688,8 +573,6 @@ process_altertable(Node *parsetree)
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("Hypertables currently does not support adding "
 								  "a constraint using an existing index.")));
-
-					process_altertable_add_constraint(ht, stmt->conname);
 				}
 
 				break;
@@ -779,8 +662,6 @@ timescaledb_ProcessUtility(Node *parsetree,
 		case T_RenameStmt:
 			process_rename(parsetree);
 			break;
-		case T_CreateStmt:
-			process_create_table(parsetree);
 		case T_DropStmt:
 
 			/*

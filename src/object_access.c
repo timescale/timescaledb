@@ -2,6 +2,7 @@
 #include <catalog/objectaccess.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_class.h>
+#include <catalog/pg_constraint.h>
 #include <access/sysattr.h>
 #include <access/genam.h>
 #include <access/htup_details.h>
@@ -15,6 +16,7 @@
 #include "hypertable_cache.h"
 #include "catalog.h"
 #include "extension.h"
+#include "process_utility.h"
 
 #define rename_hypertable(old_schema_name, old_table_name, new_schema_name, new_table_name)		\
 	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
@@ -22,6 +24,11 @@
 						 NameGetDatum(&old_table_name), \
 						 DirectFunctionCall1(namein, CStringGetDatum(new_schema_name)), \
 						 NameGetDatum(&new_table_name))
+
+#define add_hypertable_constraint(hypertable, constraint_name) \
+	CatalogInternalCall2(DDL_ADD_CONSTRAINT,					\
+						 Int32GetDatum((hypertable)->fd.id),		   \
+						 NameGetDatum(&constraint_name))
 
 
 static object_access_hook_type prev_object_hook;
@@ -86,6 +93,51 @@ alter_table(Oid relid)
 	}
 }
 
+static void
+create_constraint(Oid constraint_oid)
+{
+	Relation	rel;
+
+	if (!OidIsValid(constraint_oid))
+		return;
+
+	rel = heap_open(ConstraintRelationId, AccessShareLock);
+
+	HeapTuple	newtup = get_object_by_oid(rel, constraint_oid, SnapshotSelf);
+	Form_pg_constraint new = (Form_pg_constraint) GETSTRUCT(newtup);
+
+	if (OidIsValid(new->conrelid))
+	{
+		Cache	   *hcache = hypertable_cache_pin();
+		Hypertable *ht = hypertable_cache_get_entry(hcache, new->conrelid);
+
+		if (ht != NULL)
+		{
+			Assert(strlen(new->conname.data) > 0);
+			process_utility_set_expect_chunk_modification(true);
+			add_hypertable_constraint(ht, new->conname);
+			process_utility_set_expect_chunk_modification(false);
+		}
+		else
+		{
+			if (new->contype == CONSTRAINT_FOREIGN)
+			{
+				Hypertable *foreign = hypertable_cache_get_entry(hcache, new->confrelid);
+
+				if (foreign != NULL)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("Foreign keys to hypertables are not supported.")));
+				}
+			}
+		}
+
+		cache_release(hcache);
+	}
+	heap_close(rel, AccessShareLock);
+}
+
 
 static void
 object_access_alter_hook(Oid classId,
@@ -97,6 +149,23 @@ object_access_alter_hook(Oid classId,
 	{
 		case RelationRelationId:
 			alter_table(objectId);
+			break;
+		default:
+			break;
+
+	}
+}
+
+static void
+object_access_create_hook(Oid classId,
+						  Oid objectId,
+						  int subId,
+						  void *arg)
+{
+	switch (classId)
+	{
+		case ConstraintRelationId:
+			create_constraint(objectId);
 			break;
 		default:
 			break;
@@ -125,6 +194,8 @@ timescaledb_object_access(ObjectAccessType access,
 		case OAT_POST_ALTER:
 			object_access_alter_hook(classId, objectId, subId, arg);
 			break;
+		case OAT_POST_CREATE:
+			object_access_create_hook(classId, objectId, subId, arg);
 		default:
 			break;
 	}
