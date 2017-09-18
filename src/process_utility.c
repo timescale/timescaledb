@@ -49,11 +49,6 @@ static bool expect_chunk_modification = false;
 						 BoolGetDatum(cascade),			\
 						 BoolGetDatum(false))
 
-#define process_change_hypertable_owner(hypertable, rolename )			\
-	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
-						 ObjectIdGetDatum((hypertable)->main_table_relid), \
-						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
-
 #define process_drop_hypertable_constraint(hypertable, constraint_name) \
 	CatalogInternalCall2(DDL_DROP_CONSTRAINT,							\
 						 Int32GetDatum((hypertable)->fd.id),			\
@@ -426,19 +421,6 @@ process_reindex(Node *parsetree)
 }
 
 static void
-process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
-{
-	RoleSpec   *role;
-
-	Assert(IsA(cmd->newowner, RoleSpec));
-	role = (RoleSpec *) cmd->newowner;
-
-	process_utility_set_expect_chunk_modification(true);
-	process_change_hypertable_owner(ht, role->rolename);
-	process_utility_set_expect_chunk_modification(false);
-}
-
-static void
 process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 {
 	char	   *constraint_name = NULL;
@@ -481,9 +463,6 @@ process_altertable(Node *parsetree)
 
 		switch (cmd->subtype)
 		{
-			case AT_ChangeOwner:
-				process_altertable_change_owner(ht, cmd);
-				break;
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				{

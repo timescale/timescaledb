@@ -3,6 +3,7 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
+#include <catalog/pg_authid.h>
 #include <catalog/indexing.h>
 #include <access/sysattr.h>
 #include <access/genam.h>
@@ -42,6 +43,12 @@
 						 Int32GetDatum((hypertable)->fd.id), \
 						 NameGetDatum(&column_name), \
 						 ObjectIdGetDatum(new_type))
+
+#define change_hypertable_owner(hypertable, rolename )			\
+	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
+						 ObjectIdGetDatum((hypertable)->main_table_relid), \
+						 NameGetDatum(&rolename))
+
 
 
 static object_access_hook_type prev_object_hook;
@@ -114,10 +121,16 @@ get_object_by_oid(Relation catalog, Oid objectId, Snapshot snapshot)
 static void
 alter_table(Oid relid)
 {
+	Cache	   *hcache;
+	Hypertable *ht;
+
 	if (!OidIsValid(relid))
 		return;
 
-	if (is_hypertable(relid))
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry(hcache, relid);
+
+	if (ht != NULL)
 	{
 		Relation	rel = heap_open(RelationRelationId, AccessShareLock);
 		HeapTuple	oldtup = get_object_by_oid(rel, relid, NULL);
@@ -134,8 +147,22 @@ alter_table(Oid relid)
 			rename_hypertable(old_ns, old->relname, new_ns, new->relname);
 		}
 
+		if (old->relowner != new->relowner)
+		{
+			Relation	authrel = heap_open(AuthIdRelationId, AccessShareLock);
+			HeapTuple	authtup = get_object_by_oid(authrel, new->relowner, NULL);
+			Form_pg_authid auth = (Form_pg_authid) GETSTRUCT(authtup);
+
+			process_utility_set_expect_chunk_modification(true);
+			change_hypertable_owner(ht, auth->rolname);
+			process_utility_set_expect_chunk_modification(false);
+
+			heap_close(authrel, AccessShareLock);
+		}
+
 		heap_close(rel, AccessShareLock);
 	}
+	cache_release(hcache);
 }
 
 static void
