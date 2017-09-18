@@ -3,6 +3,7 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
+#include <catalog/indexing.h>
 #include <access/sysattr.h>
 #include <access/genam.h>
 #include <access/htup_details.h>
@@ -30,8 +31,45 @@
 						 Int32GetDatum((hypertable)->fd.id),		   \
 						 NameGetDatum(&constraint_name))
 
+#define rename_hypertable_column(hypertable, old_name, new_name) \
+	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
+						 Int32GetDatum((hypertable)->fd.id),			\
+						 NameGetDatum(&old_name),						\
+						 NameGetDatum(&new_name))
 
 static object_access_hook_type prev_object_hook;
+
+static HeapTuple
+get_attribute_by_relid_attnum(Relation catalog, Oid relid, int16 attnum, Snapshot snapshot)
+{
+	HeapTuple	tuple;
+	SysScanDesc scan;
+	ScanKeyData skey[2];
+
+	ScanKeyInit(&skey[0],
+				Anum_pg_attribute_attrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(relid));
+	ScanKeyInit(&skey[1],
+				Anum_pg_attribute_attnum,
+				BTEqualStrategyNumber, F_INT2EQ,
+				Int16GetDatum(attnum));
+
+	scan = systable_beginscan(catalog, AttributeRelidNumIndexId, true,
+							  snapshot, 2, skey);
+	tuple = systable_getnext(scan);
+	if (!HeapTupleIsValid(tuple))
+	{
+		systable_endscan(scan);
+		return NULL;
+	}
+	tuple = heap_copytuple(tuple);
+
+	systable_endscan(scan);
+
+	return tuple;
+}
+
 
 static HeapTuple
 get_object_by_oid(Relation catalog, Oid objectId, Snapshot snapshot)
@@ -80,7 +118,7 @@ alter_table(Oid relid)
 		Form_pg_class old = (Form_pg_class) GETSTRUCT(oldtup);
 		Form_pg_class new = (Form_pg_class) GETSTRUCT(newtup);
 
-		if (strncmp(NameStr(old->relname), NameStr(new->relname), NAMEDATALEN) ||
+		if (strncmp(NameStr(old->relname), NameStr(new->relname), NAMEDATALEN) != 0 ||
 			old->relnamespace != new->relnamespace)
 		{
 			const char *old_ns = get_namespace_name(old->relnamespace);
@@ -91,6 +129,39 @@ alter_table(Oid relid)
 
 		heap_close(rel, AccessShareLock);
 	}
+}
+
+static void
+alter_column(Oid relid, int16 attnum)
+{
+	Relation	rel = heap_open(AttributeRelationId, AccessShareLock);
+	HeapTuple	oldtup = get_attribute_by_relid_attnum(rel, relid, attnum, NULL);
+	Form_pg_attribute old = (Form_pg_attribute) GETSTRUCT(oldtup);
+
+	if (!old->attisdropped && old->attnum > 0)
+	{
+		Cache	   *hcache = hypertable_cache_pin();
+		Hypertable *ht = hypertable_cache_get_entry(hcache, old->attrelid);
+
+		if (ht != NULL)
+		{
+			HeapTuple	newtup = get_attribute_by_relid_attnum(rel, relid, attnum, SnapshotSelf);
+			Form_pg_attribute new = (Form_pg_attribute) GETSTRUCT(newtup);
+
+			if (strncmp(NameStr(old->attname), NameStr(new->attname), NAMEDATALEN) != 0)
+			{
+				CatalogSecurityContext sec_ctx;
+
+				catalog_become_owner(catalog_get(), &sec_ctx);
+				rename_hypertable_column(ht, old->attname, new->attname);
+				catalog_restore_user(&sec_ctx);
+			}
+
+		}
+		cache_release(hcache);
+	}
+
+	heap_close(rel, AccessShareLock);
 }
 
 static void
@@ -148,7 +219,10 @@ object_access_alter_hook(Oid classId,
 	switch (classId)
 	{
 		case RelationRelationId:
-			alter_table(objectId);
+			if (subId == 0)
+				alter_table(objectId);
+			else
+				alter_column(objectId, subId);
 			break;
 		default:
 			break;

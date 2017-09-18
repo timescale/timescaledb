@@ -49,12 +49,6 @@ static bool expect_chunk_modification = false;
 						 BoolGetDatum(cascade),			\
 						 BoolGetDatum(false))
 
-#define process_rename_hypertable_column(hypertable, old_name, new_name) \
-	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 NameGetDatum(old_name),						\
-						 NameGetDatum(new_name))
-
 #define process_change_hypertable_owner(hypertable, rolename )			\
 	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
 						 ObjectIdGetDatum((hypertable)->main_table_relid), \
@@ -438,49 +432,6 @@ process_reindex(Node *parsetree)
 }
 
 static void
-process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
-{
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-	CatalogSecurityContext sec_ctx;
-
-	if (NULL == ht)
-		return;
-
-	catalog_become_owner(catalog_get(), &sec_ctx);
-	process_rename_hypertable_column(ht, stmt->subname, stmt->newname);
-	catalog_restore_user(&sec_ctx);
-}
-
-static void
-process_rename(Node *parsetree)
-{
-	RenameStmt *stmt = (RenameStmt *) parsetree;
-	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-	Cache	   *hcache;
-
-	/* TODO: forbid all rename op on chunk table */
-
-	if (!OidIsValid(relid))
-		return;
-
-	hcache = hypertable_cache_pin();
-
-	switch (stmt->renameType)
-	{
-		case OBJECT_TABLE:
-			break;
-		case OBJECT_COLUMN:
-			process_rename_column(hcache, relid, stmt);
-			break;
-		default:
-			break;
-	}
-
-	cache_release(hcache);
-}
-
-
-static void
 process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 {
 	RoleSpec   *role;
@@ -658,9 +609,6 @@ timescaledb_ProcessUtility(Node *parsetree,
 			process_altertable(parsetree);
 			return;
 		case T_AlterObjectSchemaStmt:
-			break;
-		case T_RenameStmt:
-			process_rename(parsetree);
 			break;
 		case T_DropStmt:
 
