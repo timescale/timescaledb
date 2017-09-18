@@ -11,13 +11,13 @@
 #include <commands/defrem.h>
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
+#include <commands/event_trigger.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
 #include <miscadmin.h>
-#include <access/xact.h>
 
 #include "process_utility.h"
 #include "utils.h"
@@ -29,6 +29,7 @@
 #include "chunk.h"
 #include "guc.h"
 #include "trigger.h"
+#include "event_trigger.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -223,7 +224,7 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 	return true;
 }
 
-typedef void (*process_chunk_t) (Oid chunk_relid, void *arg);
+typedef void (*process_chunk_t) (Oid hypertable_relid, Oid chunk_relid, void *arg);
 
 /*
  * Applies a function to each chunk of a hypertable.
@@ -246,7 +247,7 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 
 	foreach(lc, chunks)
 	{
-		process_chunk(lfirst_oid(lc), arg);
+		process_chunk(relid, lfirst_oid(lc), arg);
 		n++;
 	}
 
@@ -257,6 +258,9 @@ static int
 foreach_chunk(RangeVar *rv, process_chunk_t process_chunk, void *arg)
 {
 	Oid			relid = hypertable_relid(rv);
+
+	if (!OidIsValid(relid))
+		return -1;
 
 	return foreach_chunk_relid(relid, process_chunk, arg);
 }
@@ -269,7 +273,7 @@ typedef struct VacuumCtx
 
 /* Vacuums a single chunk */
 static void
-vacuum_chunk(Oid chunk_relid, void *arg)
+vacuum_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
 {
 	VacuumCtx  *ctx = (VacuumCtx *) arg;
 	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
@@ -301,27 +305,6 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 								 "VACUUM" : "ANALYZE");
 
 	return foreach_chunk(stmt->relation, vacuum_chunk, &ctx) >= 0;
-}
-
-static void
-reindex_chunk(Oid chunk_relid, void *arg)
-{
-	ReindexStmt *stmt = (ReindexStmt *) arg;
-	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
-	char	   *relname = get_rel_name(chunk_relid);
-
-	switch (stmt->kind)
-	{
-		case REINDEX_OBJECT_TABLE:
-			stmt->relation->relname = relname;
-			stmt->relation->schemaname = relschema;
-			ReindexTable(stmt->relation, stmt->options);
-			break;
-		case REINDEX_OBJECT_INDEX:
-			/* Not supported, a.t.m. See note in process_reindex(). */
-		default:
-			break;
-	}
 }
 
 static bool
@@ -369,7 +352,7 @@ process_drop_table(DropStmt *stmt)
 }
 
 static void
-process_drop_trigger_chunk(Oid chunk_relid, void *arg)
+process_drop_trigger_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
 {
 	const char *trigger_name = arg;
 	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, false);
@@ -437,6 +420,28 @@ process_drop(Node *parsetree)
 			return process_drop_trigger(stmt);
 		default:
 			return false;
+	}
+}
+
+static void
+reindex_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+{
+	ReindexStmt *stmt = (ReindexStmt *) arg;
+	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
+	char	   *relname = get_rel_name(chunk_relid);
+
+	switch (stmt->kind)
+	{
+		case REINDEX_OBJECT_TABLE:
+			stmt->relation->relname = relname;
+			stmt->relation->schemaname = relschema;
+			ReindexTable(stmt->relation, stmt->options);
+			break;
+		case REINDEX_OBJECT_INDEX:
+			/* Not supported, a.t.m. See note in process_reindex(). */
+			break;
+		default:
+			break;
 	}
 }
 
@@ -678,13 +683,115 @@ process_alter_column_type(Hypertable *ht, AlterTableCmd *cmd)
 }
 
 static void
-process_altertable(Node *parsetree)
+process_altertable_start(Node *parsetree)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 	Oid			relid = AlterTableLookupRelation(stmt, NoLock);
-	Cache	   *hcache = NULL;
+
+	if (!OidIsValid(relid) || is_hypertable(relid))
+		return;
+
+	check_chunk_operation_allowed(relid);
+	process_altertable_plain_table(parsetree);
+}
+
+static void
+process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *obj)
+{
+	AlterTableCmd *cmd = (AlterTableCmd *) parsetree;
+
+	Assert(IsA(parsetree, AlterTableCmd));
+
+	switch (cmd->subtype)
+	{
+		case AT_ChangeOwner:
+			process_altertable_change_owner(ht, cmd);
+			break;
+		case AT_AddIndexConstraint:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("Hypertables currently do not support adding "
+							"a constraint using an existing index.")));
+			break;
+		case AT_AddIndex:
+			{
+				IndexStmt  *stmt = (IndexStmt *) cmd->def;
+				const char *idxname = stmt->idxname;
+
+				Assert(IsA(cmd->def, IndexStmt));
+
+				Assert(stmt->isconstraint);
+
+				if (idxname == NULL)
+					idxname = get_rel_name(obj->objectId);
+
+				process_altertable_add_constraint(ht, idxname);
+			}
+			break;
+		case AT_AddConstraint:
+		case AT_AddConstraintRecurse:
+			{
+				Constraint *stmt = (Constraint *) cmd->def;
+				const char *conname = stmt->conname;
+
+				Assert(IsA(cmd->def, Constraint));
+
+				/* Check constraints are recursed to chunks by default */
+				if (stmt->contype == CONSTR_CHECK)
+					break;
+
+				if (conname == NULL)
+					conname = get_rel_name(obj->objectId);
+
+				process_altertable_add_constraint(ht, conname);
+			}
+			break;
+		case AT_DropConstraint:
+		case AT_DropConstraintRecurse:
+			process_altertable_drop_constraint(ht, cmd);
+			break;
+		case AT_AlterColumnType:
+			Assert(IsA(cmd->def, ColumnDef));
+			process_alter_column_type(ht, cmd);
+			break;
+		default:
+			break;
+	}
+}
+
+static void
+process_altertable_end_simple_cmd(Hypertable *ht, CollectedCommand *cmd)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) cmd->parsetree;
+
+	Assert(IsA(stmt, AlterTableStmt));
+	process_altertable_end_subcmd(ht, linitial(stmt->cmds), &cmd->d.simple.secondaryObject);
+}
+
+static void
+process_altertable_end_subcmds(Hypertable *ht, List *cmds)
+{
 	ListCell   *lc;
+
+	foreach(lc, cmds)
+	{
+		CollectedATSubcmd *cmd = lfirst(lc);
+
+		process_altertable_end_subcmd(ht, cmd->parsetree, &cmd->address);
+	}
+}
+
+static void
+process_altertable_end(Node *parsetree, CollectedCommand *cmd)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+	Oid			relid;
+	Cache	   *hcache;
 	Hypertable *ht;
+
+	Assert(IsA(stmt, AlterTableStmt));
+
+	relid = AlterTableLookupRelation(stmt, NoLock);
 
 	if (!OidIsValid(relid))
 		return;
@@ -695,68 +802,15 @@ process_altertable(Node *parsetree)
 
 	ht = hypertable_cache_get_entry(hcache, relid);
 
-	if (NULL == ht)
+	if (NULL != ht)
 	{
-		cache_release(hcache);
-		check_chunk_operation_allowed(relid);
-		process_altertable_plain_table(parsetree);
-		return;
-	}
-
-	foreach(lc, stmt->cmds)
-	{
-		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
-
-		switch (cmd->subtype)
+		switch (cmd->type)
 		{
-			case AT_ChangeOwner:
-				process_altertable_change_owner(ht, cmd);
+			case SCT_Simple:
+				process_altertable_end_simple_cmd(ht, cmd);
 				break;
-			case AT_AddIndex:
-				{
-					IndexStmt  *stmt = (IndexStmt *) cmd->def;
-
-					Assert(IsA(cmd->def, IndexStmt));
-
-					Assert(stmt->isconstraint);
-					process_altertable_add_constraint(ht, stmt->idxname);
-				}
-
-				/*
-				 * AddConstraint sometimes transformed to AddIndex if Index is
-				 * involved. different path than CREATE INDEX.
-				 */
-				break;
-			case AT_AddConstraint:
-			case AT_AddConstraintRecurse:
-				{
-					Constraint *stmt = (Constraint *) cmd->def;
-
-					Assert(IsA(cmd->def, Constraint));
-
-					if (stmt->indexname != NULL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("Hypertables currently do not support adding "
-								  "a constraint using an existing index.")));
-
-					if (stmt->conname == NULL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("Adding a constraint to a hypertable without a "
-									  "constraint name is not supported.")));
-
-					process_altertable_add_constraint(ht, stmt->conname);
-				}
-
-				break;
-			case AT_DropConstraint:
-			case AT_DropConstraintRecurse:
-				process_altertable_drop_constraint(ht, cmd);
-				break;
-			case AT_AlterColumnType:
-				Assert(IsA(cmd->def, ColumnDef));
-				process_alter_column_type(ht, cmd);
+			case SCT_AlterTable:
+				process_altertable_end_subcmds(ht, cmd->d.alterTable.subcmds);
 				break;
 			default:
 				break;
@@ -766,19 +820,12 @@ process_altertable(Node *parsetree)
 	cache_release(hcache);
 }
 
-typedef struct CreateTriggerInfo
-{
-	CreateTrigStmt *stmt;
-	const char *queryString;
-	Oid			hypertable_relid;
-} CreateTriggerInfo;
 
 static void
-create_trigger_chunk(Oid chunk_relid, void *arg)
+create_trigger_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
 {
-	CreateTriggerInfo *info = (CreateTriggerInfo *) arg;
-	CreateTrigStmt *stmt = info->stmt;
-	Oid			trigger_oid = get_trigger_oid(info->hypertable_relid, stmt->trigname, false);
+	CreateTrigStmt *stmt = arg;
+	Oid			trigger_oid = get_trigger_oid(hypertable_relid, stmt->trigname, false);
 	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
 	char	   *relname = get_rel_name(chunk_relid);
 
@@ -786,57 +833,37 @@ create_trigger_chunk(Oid chunk_relid, void *arg)
 }
 
 static void
-process_create_trigger(CreateTrigStmt *stmt, const char *query_string)
+process_create_trigger(Node *parsetree)
 {
-	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-	CreateTriggerInfo info = {
-		.stmt = stmt,
-		.queryString = query_string,
-		.hypertable_relid = relid
-	};
+	CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
 
-	if (!stmt->row || !OidIsValid(relid))
+	if (!stmt->row)
 		return;
 
-	if (is_hypertable(relid))
-	{
-		CommandCounterIncrement();		/* allow following code to see
-										 * inserted hypertable trigger */
-		foreach_chunk(stmt->relation, create_trigger_chunk, &info);
-	}
+	foreach_chunk(stmt->relation, create_trigger_chunk, stmt);
 }
 
-/* Hook-intercept for ProcessUtility. */
-static void
-timescaledb_ProcessUtility(Node *parsetree,
-						   const char *query_string,
-						   ProcessUtilityContext context,
-						   ParamListInfo params,
-						   DestReceiver *dest,
-						   char *completion_tag)
+/*
+ * Handle DDL commands before they have been processed by PostgreSQL.
+ */
+static bool
+process_ddl_command_start(Node *parsetree,
+						  const char *query_string,
+						  ProcessUtilityContext context,
+						  char *completion_tag)
 {
-	/*
-	 * If we are restoring, we don't want to recurse to chunks or block
-	 * operations on chunks. If we do, the restore will fail.
-	 */
-	if (!extension_is_loaded() || guc_restoring)
-	{
-		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
-		return;
-	}
+	bool		handled = false;
 
 	switch (nodeTag(parsetree))
 	{
 		case T_TruncateStmt:
 			process_truncate(parsetree);
 			break;
-		case T_AlterTableStmt:
-			/* Process main table first to error out if not a valid alter */
-			prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
-			process_altertable(parsetree);
-			return;
 		case T_AlterObjectSchemaStmt:
 			process_alterobjectschema(parsetree);
+			break;
+		case T_AlterTableStmt:
+			process_altertable_start(parsetree);
 			break;
 		case T_RenameStmt:
 			process_rename(parsetree);
@@ -855,21 +882,13 @@ timescaledb_ProcessUtility(Node *parsetree,
 			process_drop(parsetree);
 			break;
 		case T_CopyStmt:
-			if (process_copy(parsetree, query_string, completion_tag))
-				return;
+			handled = process_copy(parsetree, query_string, completion_tag);
 			break;
 		case T_VacuumStmt:
-			if (process_vacuum(parsetree, context))
-				return;
+			handled = process_vacuum(parsetree, context);
 			break;
-		case T_CreateTrigStmt:
-			/* Process on main table then add to otherrs */
-			prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
-			process_create_trigger((CreateTrigStmt *) parsetree, query_string);
-			return;
 		case T_ReindexStmt:
-			if (process_reindex(parsetree))
-				return;
+			handled = process_reindex(parsetree);
 			break;
 		case T_ClusterStmt:
 
@@ -882,7 +901,86 @@ timescaledb_ProcessUtility(Node *parsetree,
 			break;
 	}
 
-	prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+	return handled;
+}
+
+/*
+ * Handle DDL commands after they've been processed by PostgreSQL.
+ */
+static void
+process_ddl_command_end(CollectedCommand *cmd)
+{
+	switch (nodeTag(cmd->parsetree))
+	{
+		case T_AlterTableStmt:
+			process_altertable_end(cmd->parsetree, cmd);
+			break;
+		case T_CreateTrigStmt:
+			process_create_trigger(cmd->parsetree);
+			break;
+		default:
+			break;
+	}
+}
+
+/*
+ * ProcessUtility hook for DDL commands that have not yet been processed by
+ * PostgreSQL.
+ */
+static void
+timescaledb_ddl_command_start(Node *parsetree,
+							  const char *query_string,
+							  ProcessUtilityContext context,
+							  ParamListInfo params,
+							  DestReceiver *dest,
+							  char *completion_tag)
+{
+	/*
+	 * If we are restoring, we don't want to recurse to chunks or block
+	 * operations on chunks. If we do, the restore will fail.
+	 */
+	if (!extension_is_loaded() || guc_restoring)
+	{
+		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+		return;
+	}
+
+	if (!process_ddl_command_start(parsetree, query_string, context, completion_tag))
+		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+}
+
+PG_FUNCTION_INFO_V1(timescaledb_ddl_command_end);
+
+/*
+ * Event trigger hook for DDL commands that have alread been handled by
+ * PostgreSQL (i.e., "ddl_command_end" events).
+ */
+Datum
+timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
+{
+	EventTriggerData *trigdata = (EventTriggerData *) fcinfo->context;
+	ListCell   *lc;
+
+	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
+		elog(ERROR, "not fired by event trigger manager");
+
+	if (!extension_is_loaded() || guc_restoring)
+		PG_RETURN_NULL();
+
+	Assert(strcmp("ddl_command_end", trigdata->event) == 0);
+
+	switch (nodeTag(trigdata->parsetree))
+	{
+		case T_AlterTableStmt:
+		case T_CreateTrigStmt:
+			foreach(lc, event_trigger_ddl_commands())
+				process_ddl_command_end(lfirst(lc));
+			break;
+		default:
+			break;
+	}
+
+	PG_RETURN_NULL();
 }
 
 extern void
@@ -902,14 +1000,13 @@ process_utility_AtEOXact_abort(XactEvent event, void *arg)
 		default:
 			break;
 	}
-
 }
 
 void
 _process_utility_init(void)
 {
 	prev_ProcessUtility_hook = ProcessUtility_hook;
-	ProcessUtility_hook = timescaledb_ProcessUtility;
+	ProcessUtility_hook = timescaledb_ddl_command_start;
 	RegisterXactCallback(process_utility_AtEOXact_abort, NULL);
 }
 

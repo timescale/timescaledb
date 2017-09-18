@@ -89,5 +89,7 @@ hypertable_relid(RangeVar *rv)
 bool
 is_hypertable(Oid relid)
 {
+	if (!OidIsValid(relid))
+		return false;
 	return hypertable_relid_lookup(relid) != InvalidOid;
 }
