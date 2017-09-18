@@ -69,6 +69,7 @@ SELECT gp, first(temp, time) FROM "btest" GROUP BY gp;
   2 |  35.5
 (2 rows)
 
+--check whole row
 SELECT gp, first("btest", time) FROM "btest" GROUP BY gp;
  gp |                                 first                                  
 ----+------------------------------------------------------------------------
@@ -83,4 +84,80 @@ SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp;
   1 | testing
   2 | xyzxyzxyzx
 (2 rows)
+
+SELECT gp, last(temp, strid) FROM "btest" GROUP BY gp;
+ gp | last 
+----+------
+  1 | 22.5
+  2 | 20.1
+(2 rows)
+
+--check null value as last element
+INSERT INTO "btest" VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
+SELECT last(temp, time) FROM "btest";
+ last 
+------
+     
+(1 row)
+
+--check non-null element "overrides" NULL because it comes after.
+INSERT INTO "btest" VALUES('2019-01-20T09:00:43', '2017-01-20T09:00:55', 2, 30.5);
+SELECT last(temp, time) FROM "btest";
+ last 
+------
+ 30.5
+(1 row)
+
+--check null cmp elements
+INSERT INTO "btest" VALUES('2018-01-20T09:00:43', NULL, 2, 32.3);
+SELECT last(temp, time_alt) FROM "btest";
+ last 
+------
+     
+(1 row)
+
+--no overriding a cmp NULL
+INSERT INTO "btest" VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
+SELECT last(temp, time_alt) FROM "btest";
+ last 
+------
+     
+(1 row)
+
+--cmp nulls make the group NULL but don't interfere with other groups
+SELECT gp, last(temp, time_alt) FROM "btest" GROUP BY gp ORDER BY gp;
+ gp | last 
+----+------
+  1 | 22.5
+  2 |     
+(2 rows)
+
+--Previously, some bugs were found with NULLS and numeric types, so test that 
+CREATE TABLE btest_numeric 
+(
+    time timestamp,
+    quantity numeric
+);
+SELECT create_hypertable('btest_numeric', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+-- Insert rows, with rows that contain NULL values
+INSERT INTO btest_numeric VALUES
+    ('2019-01-20T09:00:43', NULL);
+SELECT last(quantity, time) FROM btest_numeric;
+ last 
+------
+     
+(1 row)
+
+--check non-null element "overrides" NULL because it comes after.
+INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
+SELECT last(quantity, time) FROM btest_numeric;
+ last 
+------
+ 30.5
+(1 row)
 
