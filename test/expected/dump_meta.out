@@ -1,0 +1,231 @@
+\ir include/insert_two_partitions.sql
+\ir create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
+\c single
+CREATE TABLE PUBLIC."two_Partitions" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+\set QUIET off
+BEGIN;
+BEGIN
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COPY 7
+COMMIT;
+COMMIT
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+INSERT 0 4
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 2);
+INSERT 0 1
+\set QUIET on
+\ir ../../scripts/dump_meta_data.sql
+-- This script will dump relevant meta data from internal TimescaleDB tables
+-- that can help our engineers trouble shoot.
+--
+-- usage:
+-- psql [your connect flags] -d your_timescale_db < dump_meta_data.sql > dumpfile.txt
+\echo 'TimescaleDB meta data dump'
+TimescaleDB meta data dump
+</exclude_from_test>
+\echo 'List of tables'
+List of tables
+\dt
+             List of relations
+ Schema |      Name      | Type  |  Owner   
+--------+----------------+-------+----------
+ public | two_Partitions | table | postgres
+(1 row)
+
+\echo 'List of hypertables'
+List of hypertables
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+----------------+------------------------+-------------------------+----------------
+  1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2
+(1 row)
+
+\echo 'List of hypertable indexes'
+List of hypertable indexes
+SELECT * FROM _timescaledb_catalog.hypertable_index;
+ hypertable_id | main_schema_name |              main_index_name              |                                                              definition                                                               
+---------------+------------------+-------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------
+             1 | public           | two_Partitions_timeCustom_device_id_idx   | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("timeCustom" DESC NULLS LAST, device_id)
+             1 | public           | two_Partitions_timeCustom_series_bool_idx | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE (series_bool IS NOT NULL)
+             1 | public           | two_Partitions_timeCustom_series_2_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("timeCustom" DESC NULLS LAST, series_2) WHERE (series_2 IS NOT NULL)
+             1 | public           | two_Partitions_timeCustom_series_1_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("timeCustom" DESC NULLS LAST, series_1) WHERE (series_1 IS NOT NULL)
+             1 | public           | two_Partitions_timeCustom_series_0_idx    | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("timeCustom" DESC NULLS LAST, series_0) WHERE (series_0 IS NOT NULL)
+             1 | public           | two_Partitions_device_id_timeCustom_idx   | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree (device_id, "timeCustom" DESC NULLS LAST) WHERE (device_id IS NOT NULL)
+             1 | public           | two_Partitions_timeCustom_idx             | CREATE INDEX /*INDEX_NAME*/ ON /*TABLE_NAME*/ USING btree ("timeCustom" DESC)
+(7 rows)
+
+\echo 'List of chunk indexes'
+List of chunk indexes
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ id |      schema_name      |    table_name    |                  index_name                  | main_schema_name |              main_index_name              |                                                                                          definition                                                                                           
+----+-----------------------+------------------+----------------------------------------------+------------------+-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  1 | _timescaledb_internal | _hyper_1_1_chunk | 1-two_Partitions_device_id_timeCustom_idx    | public           | two_Partitions_device_id_timeCustom_idx   | CREATE INDEX "1-two_Partitions_device_id_timeCustom_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree (device_id, "timeCustom" DESC NULLS LAST) WHERE (device_id IS NOT NULL)
+  2 | _timescaledb_internal | _hyper_1_1_chunk | 2-two_Partitions_timeCustom_series_0_idx     | public           | two_Partitions_timeCustom_series_0_idx    | CREATE INDEX "2-two_Partitions_timeCustom_series_0_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree ("timeCustom" DESC NULLS LAST, series_0) WHERE (series_0 IS NOT NULL)
+  3 | _timescaledb_internal | _hyper_1_1_chunk | 3-two_Partitions_timeCustom_series_1_idx     | public           | two_Partitions_timeCustom_series_1_idx    | CREATE INDEX "3-two_Partitions_timeCustom_series_1_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree ("timeCustom" DESC NULLS LAST, series_1) WHERE (series_1 IS NOT NULL)
+  4 | _timescaledb_internal | _hyper_1_1_chunk | 4-two_Partitions_timeCustom_series_2_idx     | public           | two_Partitions_timeCustom_series_2_idx    | CREATE INDEX "4-two_Partitions_timeCustom_series_2_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree ("timeCustom" DESC NULLS LAST, series_2) WHERE (series_2 IS NOT NULL)
+  5 | _timescaledb_internal | _hyper_1_1_chunk | 5-two_Partitions_timeCustom_series_bool_idx  | public           | two_Partitions_timeCustom_series_bool_idx | CREATE INDEX "5-two_Partitions_timeCustom_series_bool_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE (series_bool IS NOT NULL)
+  6 | _timescaledb_internal | _hyper_1_1_chunk | 6-two_Partitions_timeCustom_device_id_idx    | public           | two_Partitions_timeCustom_device_id_idx   | CREATE INDEX "6-two_Partitions_timeCustom_device_id_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree ("timeCustom" DESC NULLS LAST, device_id)
+  7 | _timescaledb_internal | _hyper_1_1_chunk | 7-two_Partitions_timeCustom_idx              | public           | two_Partitions_timeCustom_idx             | CREATE INDEX "7-two_Partitions_timeCustom_idx" ON _timescaledb_internal._hyper_1_1_chunk USING btree ("timeCustom" DESC)
+  8 | _timescaledb_internal | _hyper_1_2_chunk | 8-two_Partitions_device_id_timeCustom_idx    | public           | two_Partitions_device_id_timeCustom_idx   | CREATE INDEX "8-two_Partitions_device_id_timeCustom_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree (device_id, "timeCustom" DESC NULLS LAST) WHERE (device_id IS NOT NULL)
+  9 | _timescaledb_internal | _hyper_1_2_chunk | 9-two_Partitions_timeCustom_series_0_idx     | public           | two_Partitions_timeCustom_series_0_idx    | CREATE INDEX "9-two_Partitions_timeCustom_series_0_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree ("timeCustom" DESC NULLS LAST, series_0) WHERE (series_0 IS NOT NULL)
+ 10 | _timescaledb_internal | _hyper_1_2_chunk | 10-two_Partitions_timeCustom_series_1_idx    | public           | two_Partitions_timeCustom_series_1_idx    | CREATE INDEX "10-two_Partitions_timeCustom_series_1_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree ("timeCustom" DESC NULLS LAST, series_1) WHERE (series_1 IS NOT NULL)
+ 11 | _timescaledb_internal | _hyper_1_2_chunk | 11-two_Partitions_timeCustom_series_2_idx    | public           | two_Partitions_timeCustom_series_2_idx    | CREATE INDEX "11-two_Partitions_timeCustom_series_2_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree ("timeCustom" DESC NULLS LAST, series_2) WHERE (series_2 IS NOT NULL)
+ 12 | _timescaledb_internal | _hyper_1_2_chunk | 12-two_Partitions_timeCustom_series_bool_idx | public           | two_Partitions_timeCustom_series_bool_idx | CREATE INDEX "12-two_Partitions_timeCustom_series_bool_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE (series_bool IS NOT NULL)
+ 13 | _timescaledb_internal | _hyper_1_2_chunk | 13-two_Partitions_timeCustom_device_id_idx   | public           | two_Partitions_timeCustom_device_id_idx   | CREATE INDEX "13-two_Partitions_timeCustom_device_id_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree ("timeCustom" DESC NULLS LAST, device_id)
+ 14 | _timescaledb_internal | _hyper_1_2_chunk | 14-two_Partitions_timeCustom_idx             | public           | two_Partitions_timeCustom_idx             | CREATE INDEX "14-two_Partitions_timeCustom_idx" ON _timescaledb_internal._hyper_1_2_chunk USING btree ("timeCustom" DESC)
+ 15 | _timescaledb_internal | _hyper_1_3_chunk | 15-two_Partitions_device_id_timeCustom_idx   | public           | two_Partitions_device_id_timeCustom_idx   | CREATE INDEX "15-two_Partitions_device_id_timeCustom_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree (device_id, "timeCustom" DESC NULLS LAST) WHERE (device_id IS NOT NULL)
+ 16 | _timescaledb_internal | _hyper_1_3_chunk | 16-two_Partitions_timeCustom_series_0_idx    | public           | two_Partitions_timeCustom_series_0_idx    | CREATE INDEX "16-two_Partitions_timeCustom_series_0_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree ("timeCustom" DESC NULLS LAST, series_0) WHERE (series_0 IS NOT NULL)
+ 17 | _timescaledb_internal | _hyper_1_3_chunk | 17-two_Partitions_timeCustom_series_1_idx    | public           | two_Partitions_timeCustom_series_1_idx    | CREATE INDEX "17-two_Partitions_timeCustom_series_1_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree ("timeCustom" DESC NULLS LAST, series_1) WHERE (series_1 IS NOT NULL)
+ 18 | _timescaledb_internal | _hyper_1_3_chunk | 18-two_Partitions_timeCustom_series_2_idx    | public           | two_Partitions_timeCustom_series_2_idx    | CREATE INDEX "18-two_Partitions_timeCustom_series_2_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree ("timeCustom" DESC NULLS LAST, series_2) WHERE (series_2 IS NOT NULL)
+ 19 | _timescaledb_internal | _hyper_1_3_chunk | 19-two_Partitions_timeCustom_series_bool_idx | public           | two_Partitions_timeCustom_series_bool_idx | CREATE INDEX "19-two_Partitions_timeCustom_series_bool_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE (series_bool IS NOT NULL)
+ 20 | _timescaledb_internal | _hyper_1_3_chunk | 20-two_Partitions_timeCustom_device_id_idx   | public           | two_Partitions_timeCustom_device_id_idx   | CREATE INDEX "20-two_Partitions_timeCustom_device_id_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree ("timeCustom" DESC NULLS LAST, device_id)
+ 21 | _timescaledb_internal | _hyper_1_3_chunk | 21-two_Partitions_timeCustom_idx             | public           | two_Partitions_timeCustom_idx             | CREATE INDEX "21-two_Partitions_timeCustom_idx" ON _timescaledb_internal._hyper_1_3_chunk USING btree ("timeCustom" DESC)
+ 22 | _timescaledb_internal | _hyper_1_4_chunk | 22-two_Partitions_device_id_timeCustom_idx   | public           | two_Partitions_device_id_timeCustom_idx   | CREATE INDEX "22-two_Partitions_device_id_timeCustom_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree (device_id, "timeCustom" DESC NULLS LAST) WHERE (device_id IS NOT NULL)
+ 23 | _timescaledb_internal | _hyper_1_4_chunk | 23-two_Partitions_timeCustom_series_0_idx    | public           | two_Partitions_timeCustom_series_0_idx    | CREATE INDEX "23-two_Partitions_timeCustom_series_0_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree ("timeCustom" DESC NULLS LAST, series_0) WHERE (series_0 IS NOT NULL)
+ 24 | _timescaledb_internal | _hyper_1_4_chunk | 24-two_Partitions_timeCustom_series_1_idx    | public           | two_Partitions_timeCustom_series_1_idx    | CREATE INDEX "24-two_Partitions_timeCustom_series_1_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree ("timeCustom" DESC NULLS LAST, series_1) WHERE (series_1 IS NOT NULL)
+ 25 | _timescaledb_internal | _hyper_1_4_chunk | 25-two_Partitions_timeCustom_series_2_idx    | public           | two_Partitions_timeCustom_series_2_idx    | CREATE INDEX "25-two_Partitions_timeCustom_series_2_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree ("timeCustom" DESC NULLS LAST, series_2) WHERE (series_2 IS NOT NULL)
+ 26 | _timescaledb_internal | _hyper_1_4_chunk | 26-two_Partitions_timeCustom_series_bool_idx | public           | two_Partitions_timeCustom_series_bool_idx | CREATE INDEX "26-two_Partitions_timeCustom_series_bool_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE (series_bool IS NOT NULL)
+ 27 | _timescaledb_internal | _hyper_1_4_chunk | 27-two_Partitions_timeCustom_device_id_idx   | public           | two_Partitions_timeCustom_device_id_idx   | CREATE INDEX "27-two_Partitions_timeCustom_device_id_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree ("timeCustom" DESC NULLS LAST, device_id)
+ 28 | _timescaledb_internal | _hyper_1_4_chunk | 28-two_Partitions_timeCustom_idx             | public           | two_Partitions_timeCustom_idx             | CREATE INDEX "28-two_Partitions_timeCustom_idx" ON _timescaledb_internal._hyper_1_4_chunk USING btree ("timeCustom" DESC)
+(28 rows)
+
+\echo 'Size of hypertables'
+Size of hypertables
+SELECT hypertable,
+       table_bytes,
+       index_bytes,
+       toast_bytes,
+       total_bytes
+       FROM (
+       SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes FROM (
+              SELECT
+              pgc.oid::regclass::text as hypertable,
+              sum(pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"'))::bigint as total_bytes,
+              sum(pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"'))::bigint AS index_bytes,
+              sum(pg_total_relation_size(reltoastrelid))::bigint AS toast_bytes
+              FROM
+              _timescaledb_catalog.hypertable h,
+              _timescaledb_catalog.chunk c,
+              pg_class pgc,
+              pg_namespace pns
+              WHERE c.hypertable_id = h.id
+              AND pgc.relname = h.table_name
+              AND pns.oid = pgc.relnamespace
+              AND pns.nspname = h.schema_name
+              AND relkind = 'r'
+              GROUP BY pgc.oid
+              ) sub1
+       ) sub2;
+    hypertable    | table_bytes | index_bytes | toast_bytes | total_bytes 
+------------------+-------------+-------------+-------------+-------------
+ "two_Partitions" |       32768 |      417792 |       32768 |      483328
+(1 row)
+
+\echo 'Chunk sizes:'
+Chunk sizes:
+SELECT chunk_id,
+chunk_table,
+partitioning_columns,
+partitioning_column_types,
+partitioning_hash_functions,
+ranges,
+table_bytes,
+index_bytes,
+toast_bytes,
+total_bytes
+FROM (
+SELECT *,
+      total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes
+      FROM (
+       SELECT c.id as chunk_id,
+       '"' || c.schema_name || '"."' || c.table_name || '"' as chunk_table,
+       pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"') AS total_bytes,
+       pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"') AS index_bytes,
+       pg_total_relation_size(reltoastrelid) AS toast_bytes,
+       array_agg(d.column_name ORDER BY d.interval_length, d.column_name ASC) as partitioning_columns,
+       array_agg(d.column_type ORDER BY d.interval_length, d.column_name ASC) as partitioning_column_types,
+       array_agg(d.partitioning_func_schema || '.' || d.partitioning_func ORDER BY d.interval_length, d.column_name ASC) as partitioning_hash_functions,
+       array_agg('[' || _timescaledb_internal.range_value_to_pretty(range_start, column_type) ||
+                 ',' ||
+                 _timescaledb_internal.range_value_to_pretty(range_end, column_type) || ')' ORDER BY d.interval_length, d.column_name ASC) as ranges
+       FROM
+       _timescaledb_catalog.hypertable h,
+       _timescaledb_catalog.chunk c,
+       _timescaledb_catalog.chunk_constraint cc,
+       _timescaledb_catalog.dimension d,
+       _timescaledb_catalog.dimension_slice ds,
+       pg_class pgc,
+       pg_namespace pns
+       WHERE pgc.relname = h.table_name
+             AND pns.oid = pgc.relnamespace
+             AND pns.nspname = h.schema_name
+             AND relkind = 'r'
+             AND c.hypertable_id = h.id
+             AND c.id = cc.chunk_id
+             AND cc.dimension_slice_id = ds.id
+             AND ds.dimension_id = d.id
+       GROUP BY c.id, pgc.reltoastrelid, pgc.oid ORDER BY c.id
+       ) sub1
+) sub2;
+ chunk_id |                chunk_table                 |  partitioning_columns  | partitioning_column_types |            partitioning_hash_functions             |                                   ranges                                    | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+--------------------------------------------+------------------------+---------------------------+----------------------------------------------------+-----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
+        1 | "_timescaledb_internal"."_hyper_1_1_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_for_key} | {"['1257892416000000000','1257895008000000000')","[1073741823,2147483647)"} |        8192 |      114688 |        8192 |      131072
+        2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_for_key} | {"['1257897600000000000','1257900192000000000')","[1073741823,2147483647)"} |        8192 |      106496 |        8192 |      122880
+        3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_for_key} | {"['1257985728000000000','1257988320000000000')","[1073741823,2147483647)"} |        8192 |       98304 |        8192 |      114688
+        4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_for_key} | {"['1257892416000000000','1257895008000000000')","[0,1073741823)"}          |        8192 |       98304 |        8192 |      114688
+(4 rows)
+
+\echo 'Hypertable index sizes'
+Hypertable index sizes
+SELECT h.schema_name || '.' || h.table_name as hypertable, hi.main_schema_name || '.' || hi.main_index_name as index_name,
+       sum(pg_relation_size('"' || ci.schema_name || '"."' || ci.index_name || '"'))::bigint as index_bytes
+FROM
+_timescaledb_catalog.hypertable h,
+_timescaledb_catalog.hypertable_index hi,
+_timescaledb_catalog.chunk_index ci
+WHERE h.id = hi.hypertable_id
+      AND ci.main_index_name = hi.main_index_name
+      AND ci.main_schema_name = hi.main_schema_name
+GROUP BY h.schema_name || '.' || h.table_name, hi.main_schema_name || '.' || hi.main_index_name;
+      hypertable       |                    index_name                    | index_bytes 
+-----------------------+--------------------------------------------------+-------------
+ public.two_Partitions | public.two_Partitions_device_id_timeCustom_idx   |       65536
+ public.two_Partitions | public.two_Partitions_timeCustom_series_0_idx    |       65536
+ public.two_Partitions | public.two_Partitions_timeCustom_device_id_idx   |       65536
+ public.two_Partitions | public.two_Partitions_timeCustom_series_2_idx    |       40960
+ public.two_Partitions | public.two_Partitions_timeCustom_idx             |       65536
+ public.two_Partitions | public.two_Partitions_timeCustom_series_1_idx    |       65536
+ public.two_Partitions | public.two_Partitions_timeCustom_series_bool_idx |       49152
+(7 rows)
+
