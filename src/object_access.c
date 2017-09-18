@@ -37,6 +37,13 @@
 						 NameGetDatum(&old_name),						\
 						 NameGetDatum(&new_name))
 
+#define change_hypertable_column_type(hypertable, column_name, new_type) \
+	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE,						\
+						 Int32GetDatum((hypertable)->fd.id), \
+						 NameGetDatum(&column_name), \
+						 ObjectIdGetDatum(new_type))
+
+
 static object_access_hook_type prev_object_hook;
 
 static HeapTuple
@@ -156,7 +163,16 @@ alter_column(Oid relid, int16 attnum)
 				rename_hypertable_column(ht, old->attname, new->attname);
 				catalog_restore_user(&sec_ctx);
 			}
+			if (old->atttypid != new->atttypid)
+			{
+				CatalogSecurityContext sec_ctx;
 
+				catalog_become_owner(catalog_get(), &sec_ctx);
+				process_utility_set_expect_chunk_modification(true);
+				change_hypertable_column_type(ht, new->attname, new->atttypid);
+				process_utility_set_expect_chunk_modification(false);
+				catalog_restore_user(&sec_ctx);
+			}
 		}
 		cache_release(hcache);
 	}

@@ -59,12 +59,6 @@ static bool expect_chunk_modification = false;
 						 Int32GetDatum((hypertable)->fd.id),			\
 						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
 
-#define process_change_hypertable_column_type(hypertable, column_name, new_type) \
-	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE,						\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 DirectFunctionCall1(namein, CStringGetDatum(column_name)), \
-						 ObjectIdGetDatum(new_type))
-
 /* Calls the default ProcessUtility */
 static void
 prev_ProcessUtility(Node *parsetree,
@@ -456,28 +450,6 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 	process_utility_set_expect_chunk_modification(false);
 }
 
-static inline const char *
-typename_get_unqual_name(TypeName *tn)
-{
-	Value	   *name = llast(tn->names);
-
-	return name->val.str;
-}
-
-static void
-process_alter_column_type(Hypertable *ht, AlterTableCmd *cmd)
-{
-	ColumnDef  *coldef = (ColumnDef *) cmd->def;
-	Oid			new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
-	CatalogSecurityContext sec_ctx;
-
-	catalog_become_owner(catalog_get(), &sec_ctx);
-	process_utility_set_expect_chunk_modification(true);
-	process_change_hypertable_column_type(ht, cmd->name, new_type);
-	process_utility_set_expect_chunk_modification(false);
-	catalog_restore_user(&sec_ctx);
-}
-
 static void
 process_altertable(Node *parsetree)
 {
@@ -530,10 +502,6 @@ process_altertable(Node *parsetree)
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:
 				process_altertable_drop_constraint(ht, cmd);
-				break;
-			case AT_AlterColumnType:
-				Assert(IsA(cmd->def, ColumnDef));
-				process_alter_column_type(ht, cmd);
 				break;
 			default:
 				break;
