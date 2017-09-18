@@ -739,6 +739,12 @@ process_altertable(Node *parsetree)
 								 errmsg("Hypertables currently does not support adding "
 								  "a constraint using an existing index.")));
 
+					if (stmt->conname == NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("Adding a constraint to a hypertable without a "
+									  "constraint name is not supported.")));
+
 					process_altertable_add_constraint(ht, stmt->conname);
 				}
 
