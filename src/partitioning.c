@@ -34,6 +34,8 @@ partitioning_info_set_textfunc_fmgr(PartitioningInfo *pi, Oid relid)
 
 	pi->column_attnum = get_attnum(relid, pi->column);
 	type_id = get_atttype(relid, pi->column_attnum);
+	if (!OidIsValid(type_id))
+		return;
 
 	/*
 	 * First look for an explicit cast type. Needed since the output of for

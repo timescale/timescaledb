@@ -307,3 +307,28 @@ CREATE TABLE hyper_ex_invalid (
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 \set ON_ERROR_STOP 1
+
+---alter without constraint names ---
+
+CREATE TABLE hyper_unique_default_name (
+  time BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+
+
+SELECT * FROM create_hypertable('hyper_unique_default_name', 'time', chunk_time_interval => 10);
+
+INSERT INTO hyper_unique_default_name(time, device_id,sensor_1) VALUES
+(1257987700000000000, 'dev2', 11);
+
+ALTER TABLE hyper_unique_default_name ADD UNIQUE (time);
+
+\d+ hyper_unique_default_name
+--uniquness violation fails
+\set ON_ERROR_STOP 0
+INSERT INTO hyper_unique_default_name(time, device_id,sensor_1) VALUES
+(1257987700000000000, 'dev2', 11);
+\set ON_ERROR_STOP 1
+
+

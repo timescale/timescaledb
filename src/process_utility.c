@@ -38,24 +38,10 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 static bool expect_chunk_modification = false;
 
 /* Macros for DDL upcalls to PL/pgSQL */
-#define process_rename_hypertable_schema(hypertable, new_schema)		\
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 DirectFunctionCall1(namein, CStringGetDatum(new_schema)), \
-						 NameGetDatum(&(hypertable)->fd.table_name))
-
 #define process_drop_hypertable(hypertable, cascade)					\
 	CatalogInternalCall2(DDL_DROP_HYPERTABLE,							\
 						 Int32GetDatum((hypertable)->fd.id),			\
 						 BoolGetDatum(cascade))
-
-#define process_rename_hypertable(hypertable, new_name)					\
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
 
 #define process_drop_chunk(chunk, cascade)				\
 	CatalogInternalCall3(DDL_DROP_CHUNK,				\
@@ -63,32 +49,10 @@ static bool expect_chunk_modification = false;
 						 BoolGetDatum(cascade),			\
 						 BoolGetDatum(false))
 
-#define process_rename_hypertable_column(hypertable, old_name, new_name) \
-	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 NameGetDatum(old_name),						\
-						 NameGetDatum(new_name))
-
-#define process_change_hypertable_owner(hypertable, rolename )			\
-	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
-						 ObjectIdGetDatum((hypertable)->main_table_relid), \
-						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
-
-#define process_add_hypertable_constraint(hypertable, constraint_name) \
-	CatalogInternalCall2(DDL_ADD_CONSTRAINT,						   \
-						 Int32GetDatum((hypertable)->fd.id),		   \
-						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
-
 #define process_drop_hypertable_constraint(hypertable, constraint_name) \
 	CatalogInternalCall2(DDL_DROP_CONSTRAINT,							\
 						 Int32GetDatum((hypertable)->fd.id),			\
 						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
-
-#define process_change_hypertable_column_type(hypertable, column_name, new_type) \
-	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE,						\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 DirectFunctionCall1(namein, CStringGetDatum(column_name)), \
-						 ObjectIdGetDatum(new_type))
 
 /* Calls the default ProcessUtility */
 static void
@@ -149,32 +113,6 @@ process_truncate(Node *parsetree)
 			}
 		}
 	}
-	cache_release(hcache);
-}
-
-/* Change the schema of a hypertable */
-static void
-process_alterobjectschema(Node *parsetree)
-{
-	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) parsetree;
-	Oid			relid;
-	Cache	   *hcache;
-	Hypertable *ht;
-
-	if (alterstmt->objectType != OBJECT_TABLE)
-		return;
-
-	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
-
-	if (!OidIsValid(relid))
-		return;
-
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
-
-	if (ht != NULL)
-		process_rename_hypertable_schema(ht, alterstmt->newschema);
-
 	cache_release(hcache);
 }
 
@@ -483,82 +421,6 @@ process_reindex(Node *parsetree)
 }
 
 static void
-process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
-{
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-
-	if (NULL != ht)
-		process_rename_hypertable(ht, stmt->newname);
-}
-
-static void
-process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
-{
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-	CatalogSecurityContext sec_ctx;
-
-	if (NULL == ht)
-		return;
-
-	catalog_become_owner(catalog_get(), &sec_ctx);
-	process_rename_hypertable_column(ht, stmt->subname, stmt->newname);
-	catalog_restore_user(&sec_ctx);
-}
-
-static void
-process_rename(Node *parsetree)
-{
-	RenameStmt *stmt = (RenameStmt *) parsetree;
-	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-	Cache	   *hcache;
-
-	/* TODO: forbid all rename op on chunk table */
-
-	if (!OidIsValid(relid))
-		return;
-
-	hcache = hypertable_cache_pin();
-
-	switch (stmt->renameType)
-	{
-		case OBJECT_TABLE:
-			process_rename_table(hcache, relid, stmt);
-			break;
-		case OBJECT_COLUMN:
-			process_rename_column(hcache, relid, stmt);
-			break;
-		default:
-			break;
-	}
-
-	cache_release(hcache);
-}
-
-
-static void
-process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
-{
-	RoleSpec   *role;
-
-	Assert(IsA(cmd->newowner, RoleSpec));
-	role = (RoleSpec *) cmd->newowner;
-
-	process_utility_set_expect_chunk_modification(true);
-	process_change_hypertable_owner(ht, role->rolename);
-	process_utility_set_expect_chunk_modification(false);
-}
-
-static void
-process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
-{
-	Assert(constraint_name != NULL);
-	process_utility_set_expect_chunk_modification(true);
-	process_add_hypertable_constraint(ht, constraint_name);
-	process_utility_set_expect_chunk_modification(false);
-}
-
-
-static void
 process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 {
 	char	   *constraint_name = NULL;
@@ -568,113 +430,6 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 	process_utility_set_expect_chunk_modification(true);
 	process_drop_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
-}
-
-
-
-/* foreign-key constraints to hypertables are not allowed */
-static void
-verify_constraint(Constraint *stmt)
-{
-	if (stmt->contype == CONSTR_FOREIGN)
-	{
-		RangeVar   *primary_table = stmt->pktable;
-		Oid			primary_oid = RangeVarGetRelid(primary_table, NoLock, true);
-
-		if (OidIsValid(primary_oid))
-		{
-			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *ht = hypertable_cache_get_entry(hcache, primary_oid);
-
-			if (NULL != ht)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				  errmsg("Foreign keys to hypertables are not supported.")));
-			}
-			cache_release(hcache);
-		}
-	}
-}
-
-static void
-verify_constraint_list(List *constraint_list)
-{
-	ListCell   *lc;
-
-	foreach(lc, constraint_list)
-	{
-		Constraint *constraint = (Constraint *) lfirst(lc);
-
-		verify_constraint(constraint);
-	}
-}
-
-/* process all create table commands to make sure their constraints are kosher */
-static void
-process_create_table(Node *parsetree)
-{
-	CreateStmt *stmt = (CreateStmt *) parsetree;
-	ListCell   *lc;
-
-	verify_constraint_list(stmt->constraints);
-	foreach(lc, stmt->tableElts)
-	{
-		ColumnDef  *column_def = (ColumnDef *) lfirst(lc);
-
-		verify_constraint_list(column_def->constraints);
-	}
-}
-
-/* process all regular-table alter commands to make sure they aren't adding
- * foreign-key constraints to hypertables */
-static void
-process_altertable_plain_table(Node *parsetree)
-{
-	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
-	ListCell   *lc;
-
-	foreach(lc, stmt->cmds)
-	{
-		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
-
-		switch (cmd->subtype)
-		{
-			case AT_AddConstraint:
-			case AT_AddConstraintRecurse:
-				{
-					Constraint *constraint = (Constraint *) cmd->def;
-
-					Assert(IsA(cmd->def, Constraint));
-
-					verify_constraint(constraint);
-				}
-			default:
-				break;
-		}
-	}
-}
-
-static inline const char *
-typename_get_unqual_name(TypeName *tn)
-{
-	Value	   *name = llast(tn->names);
-
-	return name->val.str;
-}
-
-static void
-process_alter_column_type(Hypertable *ht, AlterTableCmd *cmd)
-{
-	ColumnDef  *coldef = (ColumnDef *) cmd->def;
-	Oid			new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
-	CatalogSecurityContext sec_ctx;
-
-	catalog_become_owner(catalog_get(), &sec_ctx);
-	process_utility_set_expect_chunk_modification(true);
-	process_change_hypertable_column_type(ht, cmd->name, new_type);
-	process_utility_set_expect_chunk_modification(false);
-	catalog_restore_user(&sec_ctx);
 }
 
 static void
@@ -699,7 +454,6 @@ process_altertable(Node *parsetree)
 	{
 		cache_release(hcache);
 		check_chunk_operation_allowed(relid);
-		process_altertable_plain_table(parsetree);
 		return;
 	}
 
@@ -709,23 +463,6 @@ process_altertable(Node *parsetree)
 
 		switch (cmd->subtype)
 		{
-			case AT_ChangeOwner:
-				process_altertable_change_owner(ht, cmd);
-				break;
-			case AT_AddIndex:
-				{
-					IndexStmt  *stmt = (IndexStmt *) cmd->def;
-
-					Assert(IsA(cmd->def, IndexStmt));
-
-					Assert(stmt->isconstraint);
-					process_altertable_add_constraint(ht, stmt->idxname);
-				}
-
-				/*
-				 * AddConstraint sometimes transformed to AddIndex if Index is
-				 * involved. different path than CREATE INDEX.
-				 */
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				{
@@ -738,18 +475,12 @@ process_altertable(Node *parsetree)
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("Hypertables currently does not support adding "
 								  "a constraint using an existing index.")));
-
-					process_altertable_add_constraint(ht, stmt->conname);
 				}
 
 				break;
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:
 				process_altertable_drop_constraint(ht, cmd);
-				break;
-			case AT_AlterColumnType:
-				Assert(IsA(cmd->def, ColumnDef));
-				process_alter_column_type(ht, cmd);
 				break;
 			default:
 				break;
@@ -829,13 +560,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 			process_altertable(parsetree);
 			return;
 		case T_AlterObjectSchemaStmt:
-			process_alterobjectschema(parsetree);
 			break;
-		case T_RenameStmt:
-			process_rename(parsetree);
-			break;
-		case T_CreateStmt:
-			process_create_table(parsetree);
 		case T_DropStmt:
 
 			/*
