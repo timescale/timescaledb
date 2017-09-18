@@ -70,11 +70,15 @@ ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE (time);
 
 DELETE FROM hyper_unique WHERE device_id = 'dev3';
 
--- Try adding constraint using existing index
+
 CREATE UNIQUE INDEX ON hyper_unique (time);
 
 \set ON_ERROR_STOP 0
+-- Try adding constraint using existing index
 ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE USING INDEX hyper_unique_time_idx;
+
+-- Try to add constraint without a name
+ALTER TABLE hyper_unique ADD UNIQUE (time);
 \set ON_ERROR_STOP 1
 
 DROP INDEX hyper_unique_time_idx;
