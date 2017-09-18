@@ -57,7 +57,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   132
+   134
 (1 row)
 
 \d+ _timescaledb_internal._hyper_1_1_chunk
@@ -142,7 +142,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   132
+   134
 (1 row)
 
 --chunk schema should be the same

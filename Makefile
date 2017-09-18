@@ -42,6 +42,7 @@ SRCS = \
 	src/cache.c \
 	src/cache_invalidate.c \
 	src/process_utility.c \
+	src/event_trigger.c \
 	src/trigger.c \
 	src/chunk.c \
 	src/scanner.c \
