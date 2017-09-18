@@ -836,6 +836,7 @@ timescaledb_ProcessUtility(Node *parsetree,
 			break;
 		case T_CreateStmt:
 			process_create_table(parsetree);
+			break;
 		case T_DropStmt:
 
 			/*
