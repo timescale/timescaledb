@@ -216,7 +216,10 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 		get_typlenbyval(tic->type, &tic->typelen, &tic->typebyval);
 	}
 	*output = input;
-	output->datum = datumCopy(input.datum, tic->typebyval, tic->typelen);
+	if (!input.is_null)
+		output->datum = datumCopy(input.datum, tic->typebyval, tic->typelen);
+	else
+		output->datum = PointerGetDatum(NULL);
 }
 
 typedef struct CmpFuncCache
@@ -254,7 +257,7 @@ cmpfunccache_cmp(CmpFuncCache *cache, FunctionCallInfo fcinfo, char *opname, Pol
 		fmgr_info_cxt(cmp_regproc, &cache->proc,
 					  fcinfo->flinfo->fn_mcxt);
 	}
-	return DatumGetBool(FunctionCall2(&cache->proc, left.datum, right.datum));
+	return DatumGetBool(FunctionCall2Coll(&cache->proc, fcinfo->fncollation, left.datum, right.datum));
 }
 
 typedef struct TransCache
@@ -300,9 +303,12 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum va
 	}
 	else
 	{
-		if (cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, cmp, state->cmp))
+		if (state->cmp.is_null || cmp.is_null)
 		{
-			state->value = value;
+			state->cmp.is_null = true;
+		}
+		else if (cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, cmp, state->cmp))
+		{
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 			typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
 		}

@@ -21,11 +21,47 @@ SELECT first(temp, time_alt) FROM "btest";
 
 SELECT gp, last(temp, time) FROM "btest" GROUP BY gp;
 SELECT gp, first(temp, time) FROM "btest" GROUP BY gp;
+
+--check whole row
 SELECT gp, first("btest", time) FROM "btest" GROUP BY gp;
 
 --check toasted col
 SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp;
+SELECT gp, last(temp, strid) FROM "btest" GROUP BY gp;
+
+--check null value as last element
+INSERT INTO "btest" VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
+SELECT last(temp, time) FROM "btest";
+--check non-null element "overrides" NULL because it comes after.
+INSERT INTO "btest" VALUES('2019-01-20T09:00:43', '2017-01-20T09:00:55', 2, 30.5);
+SELECT last(temp, time) FROM "btest";
+
+--check null cmp elements
+INSERT INTO "btest" VALUES('2018-01-20T09:00:43', NULL, 2, 32.3);
+SELECT last(temp, time_alt) FROM "btest";
+--no overriding a cmp NULL
+INSERT INTO "btest" VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
+SELECT last(temp, time_alt) FROM "btest";
+--cmp nulls make the group NULL but don't interfere with other groups
+SELECT gp, last(temp, time_alt) FROM "btest" GROUP BY gp ORDER BY gp;
 
 
+--Previously, some bugs were found with NULLS and numeric types, so test that 
+CREATE TABLE btest_numeric 
+(
+    time timestamp,
+    quantity numeric
+);
+
+SELECT create_hypertable('btest_numeric', 'time');
+
+-- Insert rows, with rows that contain NULL values
+INSERT INTO btest_numeric VALUES
+    ('2019-01-20T09:00:43', NULL);
+SELECT last(quantity, time) FROM btest_numeric;
+
+--check non-null element "overrides" NULL because it comes after.
+INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
+SELECT last(quantity, time) FROM btest_numeric;
 
 
