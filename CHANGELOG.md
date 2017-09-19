@@ -1,5 +1,38 @@
 # TimescaleDB Changelog
 
+## 0.5.0 (2017-09-20)
+
+**High-level changes**
+* Improved support for primary-key, foreign-key, unique, and exclusion constraints.
+* New histogram function added for getting the frequency of a column's values.
+* Add support for using `DATE` as partition column.
+* `chunk_time_interval` now supports `INTERVAL` data types
+* Block several unsupported and/or dangerous operations on hypertables and chunks, including dropping or otherwise altering a chunk directly.
+* Several bug fixes throughout the code.
+
+**Notable commits**
+* [afcb0b1] Fix NULL handling in first/last functions.
+* [d53c705] Add script to dump meta data that can be useful for debugging.
+* [aa904fa] Block adding constraints without a constraint name
+* [a13039f] Fix dump and restore for tables with triggers and constraints
+* [8cf8d3c] Improve the size utils functions.
+* [2767548] Block adding constraints using an existing index
+* [5cee104] Allow chunk_time_interval to be specified as an INTERVAL type
+* [6232f98] Add histogram function.
+* [2380033] Block ALTER TABLE and handle DROP TABLE on chunks
+* [72d6681] Move security checks for ALTER TABLE ALTER COLUMN to C
+* [19d3d89] Handle changing the type of dimension columns correctly.
+* [17c4ba9] Handle ALTER TABLE rename column
+* [66932cf] Forbid relocating extension after install.
+* [d2561cc] Add ability to partition by a date type
+* [48e0a61] Remove triggers from chunk and chunk_constraint
+* [4dcbe61] Add support for hypertable constraints
+
+**Thanks**
+* @raycheung for reporting a segfault in `first`/`last`
+* @meotimdihia, @noyez, and @andrew-blake for reporting issues with `UNQIUE` and other types of constraints
+
+
 ## 0.4.2 (2017-09-06)
 
 **High-level changes**
