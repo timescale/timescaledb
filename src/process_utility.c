@@ -726,6 +726,7 @@ process_altertable(Node *parsetree)
 				 * AddConstraint sometimes transformed to AddIndex if Index is
 				 * involved. different path than CREATE INDEX.
 				 */
+				break;
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				{
