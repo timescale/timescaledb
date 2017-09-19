@@ -37,5 +37,5 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v DISABLE_OPTIMIZATIONS=off \
      -v TEST_TABLESPACE1_PATH=\'${TEST_TABLESPACE1_PATH}\' \
      -v TEST_TABLESPACE2_PATH=\'${TEST_TABLESPACE2_PATH}\' \
-     $@
+     $@ 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d' 
 
