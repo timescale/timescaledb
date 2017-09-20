@@ -122,7 +122,7 @@ CREATE UNIQUE INDEX ON hyper_unique (time);
 -- Try adding constraint using existing index
 ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE USING INDEX hyper_unique_time_idx;
 NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "hyper_unique_time_idx" to "hyper_unique_time_key"
-ERROR:  Hypertables currently does not support adding a constraint using an existing index.
+ERROR:  Hypertables currently do not support adding a constraint using an existing index.
 -- Try to add constraint without a name
 ALTER TABLE hyper_unique ADD UNIQUE (time);
 ERROR:  Adding a constraint to a hypertable without a constraint name is not supported.
