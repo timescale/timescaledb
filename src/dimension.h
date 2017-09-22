@@ -42,7 +42,7 @@ typedef struct Hyperspace
 	uint16		capacity;
 	uint16		num_dimensions;
 	/* Open dimensions should be stored before closed dimensions */
-	Dimension	dimensions[0];
+	Dimension	dimensions[FLEXIBLE_ARRAY_MEMBER];
 } Hyperspace;
 
 #define HYPERSPACE_SIZE(num_dimensions)							\
@@ -56,7 +56,7 @@ typedef struct Point
 	int16		cardinality;
 	uint8		num_coords;
 	/* Open dimension coordinates are stored before the closed coordinates */
-	int64		coordinates[0];
+	int64		coordinates[FLEXIBLE_ARRAY_MEMBER];
 } Point;
 
 #define POINT_SIZE(cardinality)							\

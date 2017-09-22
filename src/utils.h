@@ -4,12 +4,14 @@
 #include "fmgr.h"
 #include "nodes/primnodes.h"
 
-extern Datum pg_timestamp_to_microseconds(PG_FUNCTION_ARGS);
-extern Datum pg_microseconds_to_timestamp(PG_FUNCTION_ARGS);
-extern Datum pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS);
-extern Datum pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum pg_timestamp_to_microseconds(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum pg_microseconds_to_timestamp(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS);
 
-extern Datum timestamp_bucket(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum timestamp_bucket(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum timestamptz_bucket(PG_FUNCTION_ARGS);
+extern PGDLLEXPORT Datum date_bucket(PG_FUNCTION_ARGS);
 
 /*
  * Convert a column value into the internal time representation.

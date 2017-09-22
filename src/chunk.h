@@ -36,7 +36,7 @@ typedef struct Chunk
 	Hypercube  *cube;
 	int16		capacity;
 	int16		num_constraints;
-	ChunkConstraint constraints[0];
+	ChunkConstraint constraints[FLEXIBLE_ARRAY_MEMBER];
 } Chunk;
 
 #define CHUNK_SIZE(num_constraints)								\

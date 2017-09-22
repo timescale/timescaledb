@@ -16,7 +16,7 @@ typedef struct ChunkConstraint
 typedef struct ChunkConstraintVec
 {
 	int16		num_constraints;
-	ChunkConstraint constraints[0];
+	ChunkConstraint constraints[FLEXIBLE_ARRAY_MEMBER];
 }	ChunkConstraintVec;
 
 typedef struct Chunk Chunk;

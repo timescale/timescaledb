@@ -95,6 +95,7 @@ partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDes
 }
 
 /* _timescaledb_catalog.get_partition_for_key(key TEXT) RETURNS INT */
+PGDLLEXPORT Datum get_partition_for_key(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(get_partition_for_key);
 
 Datum

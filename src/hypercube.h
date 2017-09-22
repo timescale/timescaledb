@@ -15,7 +15,7 @@ typedef struct Hypercube
 	int16		num_slices;		/* actual number of slices (should equal
 								 * capacity after create) */
 	/* Slices are stored in dimension order */
-	DimensionSlice *slices[0];
+	DimensionSlice *slices[FLEXIBLE_ARRAY_MEMBER];
 } Hypercube;
 
 #define HYPERCUBE_SIZE(num_dimensions)									\
