@@ -4,6 +4,8 @@
 
 const char *git_commit = EXT_GIT_COMMIT;
 
+PGDLLEXPORT Datum get_git_commit(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(get_git_commit);
 
 Datum

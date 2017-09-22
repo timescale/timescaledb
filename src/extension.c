@@ -167,6 +167,7 @@ extension_invalidate(Oid relid)
 			return false;
 		default:
 			elog(ERROR, "unknown state: %d", extstate);
+			return false;
 	}
 }
 
@@ -201,5 +202,6 @@ extension_is_loaded(void)
 			return false;
 		default:
 			elog(ERROR, "unknown state: %d", extstate);
+			return false;
 	}
 }

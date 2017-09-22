@@ -8,7 +8,7 @@
 typedef struct CacheQuery
 {
 	void	   *result;
-	void	   *data[0];
+	void	   *data;
 } CacheQuery;
 
 typedef struct CacheStats

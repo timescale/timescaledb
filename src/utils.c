@@ -176,6 +176,7 @@ time_value_to_internal(Datum time_val, Oid type)
 	}
 
 	elog(ERROR, "unkown time type oid '%d'", type);
+	return -1;
 }
 
 /* Make a RangeVar from a regclass Oid */

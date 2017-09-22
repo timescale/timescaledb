@@ -15,6 +15,15 @@
  *	 SELECT first(metric, time), last(metric, time) FROM metric GROUP BY hostname.
  */
 
+PGDLLEXPORT Datum first_sfunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum first_combinefunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum last_sfunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum last_combinefunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum bookend_finalfunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum bookend_serializefunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum bookend_deserializefunc(PG_FUNCTION_ARGS);
+
+
 PG_FUNCTION_INFO_V1(first_sfunc);
 PG_FUNCTION_INFO_V1(first_combinefunc);
 PG_FUNCTION_INFO_V1(last_sfunc);
@@ -368,7 +377,6 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1, Inter
 
 	PG_RETURN_POINTER(state1);
 }
-
 
 /* first(internal internal_state, anyelement value, "any" comparison_element) */
 Datum

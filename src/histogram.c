@@ -21,6 +21,12 @@
  * nbucket+2 buckets accounting for buckets outside the range.
  */
 
+PGDLLEXPORT Datum hist_sfunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum hist_combinefunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum hist_serializefunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum hist_deserializefunc(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum hist_finalfunc(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(hist_sfunc);
 PG_FUNCTION_INFO_V1(hist_combinefunc);
 PG_FUNCTION_INFO_V1(hist_serializefunc);

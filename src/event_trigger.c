@@ -5,6 +5,8 @@
 
 #include "event_trigger.h"
 
+#define DDL_INFO_NATTS 9
+
 /* Function manager info for the event "pg_event_trigger_ddl_commands", which is
  * used to retrieve information on executed DDL commands in an event
  * trigger. The function manager info is initialized on extension load. */
@@ -42,8 +44,8 @@ event_trigger_ddl_commands(void)
 	{
 		HeapTuple	tuple = ExecFetchSlotTuple(slot);
 		CollectedCommand *cmd;
-		Datum		values[rsinfo.setDesc->natts];
-		bool		nulls[rsinfo.setDesc->natts];
+		Datum		values[DDL_INFO_NATTS];
+		bool		nulls[DDL_INFO_NATTS];
 
 		heap_deform_tuple(tuple, rsinfo.setDesc, values, nulls);
 

@@ -33,11 +33,11 @@ typedef struct InternalScannerCtx
  */
 typedef struct Scanner
 {
-	Relation	(*open) (InternalScannerCtx *ctx);
+	Relation	(*openheap) (InternalScannerCtx *ctx);
 	ScanDesc	(*beginscan) (InternalScannerCtx *ctx);
 	bool		(*getnext) (InternalScannerCtx *ctx);
 	void		(*endscan) (InternalScannerCtx *ctx);
-	void		(*close) (InternalScannerCtx *ctx);
+	void		(*closeheap) (InternalScannerCtx *ctx);
 } Scanner;
 
 /* Functions implementing heap scans */
@@ -127,18 +127,18 @@ index_scanner_close(InternalScannerCtx *ctx)
  */
 static Scanner scanners[] = {
 	[ScannerTypeHeap] = {
-		.open = heap_scanner_open,
+		.openheap = heap_scanner_open,
 		.beginscan = heap_scanner_beginscan,
 		.getnext = heap_scanner_getnext,
 		.endscan = heap_scanner_endscan,
-		.close = heap_scanner_close,
+		.closeheap = heap_scanner_close,
 	},
 	[ScannerTypeIndex] = {
-		.open = index_scanner_open,
+		.openheap = index_scanner_open,
 		.beginscan = index_scanner_beginscan,
 		.getnext = index_scanner_getnext,
 		.endscan = index_scanner_endscan,
-		.close = index_scanner_close,
+		.closeheap = index_scanner_close,
 	}
 };
 
@@ -159,7 +159,7 @@ scanner_scan(ScannerCtx *ctx)
 		.sctx = ctx,
 	};
 
-	scanner->open(&ictx);
+	scanner->openheap(&ictx);
 	scanner->beginscan(&ictx);
 
 	tuple_desc = RelationGetDescr(ictx.tablerel);
@@ -214,7 +214,7 @@ scanner_scan(ScannerCtx *ctx)
 		ctx->postscan(ictx.tinfo.count, ctx->data);
 
 	scanner->endscan(&ictx);
-	scanner->close(&ictx);
+	scanner->closeheap(&ictx);
 
 	return ictx.tinfo.count;
 }
