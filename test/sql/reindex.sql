@@ -11,7 +11,8 @@ INSERT INTO reindex_test VALUES ('2017-01-20T09:00:01', 17.5),
                                 ('2017-06-20T09:00:01', 18.5),
                                 ('2017-06-21T09:00:01', 11.0);
 
-\d+ reindex_test
+SELECT * FROM test.show_columns('reindex_test');
+SELECT * FROM test.show_subtables('reindex_test');
 
 -- show reindexing
 REINDEX (VERBOSE) TABLE reindex_test;

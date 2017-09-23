@@ -8,13 +8,6 @@
 #include "executor.h"
 #include "guc.h"
 
-#define MIN_SUPPORTED_VERSION_STR "9.6"
-#define MIN_SUPPORTED_VERSION_NUM 90600
-
-#if PG_VERSION_NUM < MIN_SUPPORTED_VERSION_NUM
-#error "Unsupported version of PostgreSQL. Check src/init.c for supported versions."
-#endif
-
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
@@ -40,6 +33,9 @@ extern void _process_utility_fini(void);
 
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
+
+extern void _parse_analyze_init(void);
+extern void _parse_analyze_fini(void);
 
 extern void _PG_init(void);
 extern void _PG_fini(void);
@@ -81,6 +77,7 @@ _PG_init(void)
 	_executor_init();
 	_event_trigger_init();
 	_process_utility_init();
+	_parse_analyze_init();
 	_guc_init();
 }
 
@@ -92,6 +89,7 @@ _PG_fini(void)
 	 * document any exceptions.
 	 */
 	_guc_fini();
+	_parse_analyze_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
 	_executor_fini();

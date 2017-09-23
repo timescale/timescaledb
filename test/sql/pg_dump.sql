@@ -24,8 +24,15 @@ SELECT count(*)
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
-\d+ public."two_Partitions"
-\d+ _timescaledb_internal._hyper_1_1_chunk
+SELECT * FROM test.show_columns('public."two_Partitions"');
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
+SELECT * FROM test.show_indexes('public."two_Partitions"');
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
+SELECT * FROM test.show_constraints('public."two_Partitions"');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
+SELECT * FROM test.show_triggers('public."two_Partitions"');
+SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
+
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
@@ -51,8 +58,15 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
 --main table and chunk schemas should be the same
-\d+ public."two_Partitions"
-\d+ _timescaledb_internal._hyper_1_1_chunk
+SELECT * FROM test.show_columns('public."two_Partitions"');
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
+SELECT * FROM test.show_indexes('public."two_Partitions"');
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
+SELECT * FROM test.show_constraints('public."two_Partitions"');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
+SELECT * FROM test.show_triggers('public."two_Partitions"');
+SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
+
 --data should be the same
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;

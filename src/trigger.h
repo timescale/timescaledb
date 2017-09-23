@@ -6,11 +6,12 @@
 #include "hypertable.h"
 #include "chunk.h"
 
-extern Form_pg_trigger trigger_by_oid(Oid trigger_oid, bool missing_ok);
-extern bool trigger_is_chunk_trigger(const Form_pg_trigger trigger);
-extern char *trigger_name(const Form_pg_trigger trigger);
+#define trigger_is_chunk_trigger(trigger) \
+	((trigger) != NULL && TRIGGER_FOR_ROW((trigger)->tgtype) && !(trigger)->tgisinternal)
 
-void		trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name);
-void		trigger_create_on_all_chunks(Hypertable *ht, Chunk *chunk);
+extern Trigger *trigger_by_name(Oid relid, const char *name, bool missing_ok);
+extern void trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name);
+extern void trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk);
+extern bool relation_has_transition_table_trigger(Oid relid);
 
 #endif   /* TIMESCALEDB_TRIGGER_H */

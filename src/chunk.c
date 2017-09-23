@@ -315,7 +315,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 
 	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_oid);
 
-	trigger_create_on_all_chunks(ht, chunk);
+	trigger_create_all_on_chunk(ht, chunk);
 
 	/* Create all indexes on the chunk */
 	chunk_index_create_all(ht->fd.id, ht->main_table_relid, chunk->fd.id, chunk->table_id);

@@ -12,8 +12,13 @@
 #include <commands/sequence.h>
 #include <access/xact.h>
 
+#include "compat.h"
 #include "catalog.h"
 #include "extension.h"
+
+#if PG10
+#include <utils/regproc.h>
+#endif
 
 static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
@@ -360,14 +365,32 @@ catalog_table_next_seq_id(Catalog *catalog, enum CatalogTable table)
 	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }
 
+#if PG96
+#define CatalogTupleInsert(relation, tuple)		\
+	do {										\
+		simple_heap_insert(relation, tuple);	\
+		CatalogUpdateIndexes(relation, tuple);	\
+	} while (0);
+
+#define CatalogTupleUpdate(relation, tid, tuple)	\
+	do {											\
+		simple_heap_update(relation, tid, tuple);	\
+		CatalogUpdateIndexes(relation, tuple);		\
+	} while (0);
+
+#define CatalogTupleDelete(relation, tid)		\
+	simple_heap_delete(relation, tid);
+
+#endif   /* PG96 */
+
 /*
  * Insert a new row into a catalog table.
  */
 void
 catalog_insert(Relation rel, HeapTuple tuple)
 {
-	simple_heap_insert(rel, tuple);
-	CatalogUpdateIndexes(rel, tuple);
+	CatalogTupleInsert(rel, tuple);
+
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -387,8 +410,7 @@ catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *null
 void
 catalog_update(Relation rel, HeapTuple tuple)
 {
-	simple_heap_update(rel, &tuple->t_self, tuple);
-	CatalogUpdateIndexes(rel, tuple);
+	CatalogTupleUpdate(rel, &tuple->t_self, tuple);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -396,7 +418,7 @@ catalog_update(Relation rel, HeapTuple tuple)
 void
 catalog_delete_tid(Relation rel, ItemPointer tid)
 {
-	simple_heap_delete(rel, tid);
+	CatalogTupleDelete(rel, tid);
 	CommandCounterIncrement();
 }
 

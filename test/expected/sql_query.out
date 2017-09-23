@@ -121,34 +121,12 @@ NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not al
 INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
 INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 2, 22.5);
 --check that there are two chunks
-\d _timescaledb_internal._hyper_2_*_chunk
-   Table "_timescaledb_internal._hyper_2_5_chunk"
-  Column   |            Type             | Modifiers 
------------+-----------------------------+-----------
- time      | timestamp without time zone | not null
- object_id | integer                     | 
- temp      | double precision            | 
-Indexes:
-    "_hyper_2_5_chunk_int_part_object_id_time_idx" btree (object_id, "time" DESC)
-    "_hyper_2_5_chunk_int_part_time_idx" btree ("time" DESC)
-Check constraints:
-    "constraint_6" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone)
-    "constraint_7" CHECK (_timescaledb_internal.get_partition_hash(object_id) >= 0 AND _timescaledb_internal.get_partition_hash(object_id) < 1073741823)
-Inherits: int_part
-
-   Table "_timescaledb_internal._hyper_2_6_chunk"
-  Column   |            Type             | Modifiers 
------------+-----------------------------+-----------
- time      | timestamp without time zone | not null
- object_id | integer                     | 
- temp      | double precision            | 
-Indexes:
-    "_hyper_2_6_chunk_int_part_object_id_time_idx" btree (object_id, "time" DESC)
-    "_hyper_2_6_chunk_int_part_time_idx" btree ("time" DESC)
-Check constraints:
-    "constraint_6" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone)
-    "constraint_8" CHECK (_timescaledb_internal.get_partition_hash(object_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(object_id) < 2147483647)
-Inherits: int_part
+SELECT * FROM test.show_subtables('int_part');
+                 Child                  
+----------------------------------------
+ _timescaledb_internal._hyper_2_5_chunk
+ _timescaledb_internal._hyper_2_6_chunk
+(2 rows)
 
 SELECT * FROM "int_part" WHERE object_id = 1;
            time           | object_id | temp 

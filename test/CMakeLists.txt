@@ -2,7 +2,6 @@
 find_program(PG_REGRESS pg_regress
   PATHS
   "${PG_PKGLIBDIR}/pgxs/src/test/regress/"
-  ${POSTGRES_PATHS}
   REQUIRED)
 
 message(STATUS "Using pg_regress ${PG_REGRESS}")
@@ -20,6 +19,10 @@ set(TEST_DBNAME single)
 set(TEST_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(TEST_CLUSTER ${TEST_OUTPUT_DIR}/testcluster)
+set(TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/test_schedule)
+
+add_subdirectory(sql)
+
 set(PG_REGRESS_OPTS_COMMON
   --create-role=${TEST_ROLE_SUPERUSER},${TEST_ROLE_DEFAULT_PERM_USER},${TEST_ROLE_DEFAULT_PERM_USER_2}
   --dbname=${TEST_DBNAME}
@@ -37,33 +40,31 @@ SET(PG_REGRESS_ENV
   TEST_DBNAME=${TEST_DBNAME}
   TEST_INPUT_DIR=${TEST_INPUT_DIR}
   TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR}
-  PG_REGRESS=${PG_REGRESS}
-  )
+  TEST_SCHEDULE=${TEST_SCHEDULE}
+  PG_REGRESS=${PG_REGRESS})
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE
   --user=${TEST_PGUSER}
   --port=${TEST_PGPORT_TEMP_INSTANCE}
   --temp-instance=${TEST_CLUSTER}
   --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
-  ${PG_REGRESS_OPTS_COMMON}
-)
+  ${PG_REGRESS_OPTS_COMMON})
 
 set(PG_REGRESS_OPTS_LOCAL
   --user=postgres
   --port=${TEST_PGPORT_LOCAL}
-  ${PG_REGRESS_OPTS_COMMON}
-)
+  ${PG_REGRESS_OPTS_COMMON})
 
 file(MAKE_DIRECTORY ${TEST_OUTPUT_DIR})
 file(WRITE ${TEST_OUTPUT_DIR}/postgresql.conf "shared_preload_libraries=timescaledb")
 
-#installcheck starts up new temporary instances for testing code
+# installcheck starts up new temporary instances for testing code
 add_custom_target(installcheck
   COMMAND ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
   ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_TEMP_INSTANCE}
   USES_TERMINAL)
 
-#installchecklocal tests against an existing postgres instance
+# installchecklocal tests against an existing postgres instance
 add_custom_target(installchecklocal
   COMMAND ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
   ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_LOCAL}

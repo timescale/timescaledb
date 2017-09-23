@@ -10,7 +10,7 @@ INSERT INTO part_legacy VALUES ('2017-03-22T09:18:23', 23.4, 76);
 VACUUM part_legacy;
 
 -- Show two chunks and CHECK constraint with cast
-\d+ _timescaledb_internal._hyper_1_*_chunk
+SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
 
 -- Make sure constraint exclusion works on device column
 EXPLAIN (verbose, costs off)
@@ -27,7 +27,7 @@ INSERT INTO part_new VALUES ('2017-03-22T09:18:23', 23.4, 2);
 VACUUM part_new;
 
 -- Show two chunks and CHECK constraint without cast
-\d+ _timescaledb_internal._hyper_2_*_chunk
+SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
 
 -- Make sure constraint exclusion works on device column
 EXPLAIN (verbose, costs off)
@@ -45,7 +45,7 @@ ALTER TABLE part_new_convert1 ALTER COLUMN temp TYPE numeric;
 -- Should be able to change if not hash partitioned though
 ALTER TABLE part_new_convert1 ALTER COLUMN time TYPE timestamp;
 
-\d+  _timescaledb_internal._hyper_3_*_chunk
+SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_3_%_chunk');
 
 CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
 SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);

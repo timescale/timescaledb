@@ -1,30 +1,16 @@
 #include <postgres.h>
-#include <nodes/parsenodes.h>
-#include <nodes/nodeFuncs.h>
-#include <nodes/makefuncs.h>
 #include <nodes/plannodes.h>
-#include <nodes/params.h>
-#include <nodes/print.h>
-#include <nodes/extensible.h>
 #include <parser/parsetree.h>
-#include <parser/parse_func.h>
-#include <parser/parse_oper.h>
-#include <parser/parse_coerce.h>
-#include <parser/parse_collate.h>
 #include <optimizer/clauses.h>
 #include <optimizer/planner.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/cost.h>
 #include <catalog/namespace.h>
-#include <catalog/pg_type.h>
-#include <catalog/pg_class.h>
-#include <utils/lsyscache.h>
 #include <utils/guc.h>
 #include <miscadmin.h>
 
 #include "hypertable_cache.h"
-#include "partitioning.h"
 #include "extension.h"
 #include "utils.h"
 #include "guc.h"
@@ -39,262 +25,6 @@ void		_planner_fini(void);
 
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
-
-typedef struct HypertableQueryCtx
-{
-	Query	   *parse;
-	Query	   *parent;
-	CmdType		cmdtype;
-	Cache	   *hcache;
-	Hypertable *hentry;
-} HypertableQueryCtx;
-
-typedef struct AddPartFuncQualCtx
-{
-	Query	   *parse;
-	Hypertable *hentry;
-} AddPartFuncQualCtx;
-
-
-/*
- * Identify queries on a hypertable by walking the query tree. If the query is
- * indeed on a hypertable, setup the necessary state and/or make modifications
- * to the query tree.
- */
-static bool
-hypertable_query_walker(Node *node, void *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, RangeTblEntry))
-	{
-		RangeTblEntry *rte = (RangeTblEntry *) node;
-		HypertableQueryCtx *ctx = (HypertableQueryCtx *) context;
-
-		if (rte->rtekind == RTE_RELATION)
-		{
-			Hypertable *hentry = hypertable_cache_get_entry(ctx->hcache, rte->relid);
-
-			if (hentry != NULL)
-				ctx->hentry = hentry;
-		}
-
-		return false;
-	}
-
-	if (IsA(node, Query))
-	{
-		bool		result;
-		HypertableQueryCtx *ctx = (HypertableQueryCtx *) context;
-		CmdType		old = ctx->cmdtype;
-		Query	   *query = (Query *) node;
-		Query	   *oldparent = ctx->parent;
-
-		/* adjust context */
-		ctx->cmdtype = query->commandType;
-		ctx->parent = query;
-
-		result = query_tree_walker(ctx->parent, hypertable_query_walker,
-								   context, QTW_EXAMINE_RTES);
-
-		/* restore context */
-		ctx->cmdtype = old;
-		ctx->parent = oldparent;
-
-		return result;
-	}
-
-	return expression_tree_walker(node, hypertable_query_walker, context);
-}
-
-/* Returns the partitioning info for a var if the var is a partitioning
- * column. If the var is not a partitioning column return NULL */
-static inline PartitioningInfo *
-get_partitioning_info_for_partition_column_var(Var *var_expr, AddPartFuncQualCtx *context)
-{
-	Hypertable *ht = context->hentry;
-	RangeTblEntry *rte = rt_fetch(var_expr->varno, context->parse->rtable);
-	char	   *varname;
-	Dimension  *dim;
-
-	if (rte->relid != ht->main_table_relid)
-		return NULL;
-
-	varname = get_rte_attribute_name(rte, var_expr->varattno);
-
-	dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_CLOSED, varname);
-
-	if (dim != NULL)
-		return dim->partitioning;
-
-	return NULL;
-}
-
-/* Creates an expression for partioning_func(var_expr, partitioning_mod) =
- * partitioning_func(const_expr, partitioning_mod).  This function makes a copy of
- * all nodes given in input. */
-static Expr *
-create_partition_func_equals_const(PartitioningInfo *pi, Var *var_expr, Const *const_expr)
-{
-	Expr	   *op_expr;
-	List	   *func_name = partitioning_func_qualified_name(&pi->partfunc);
-	Node	   *var_node;
-	Node	   *const_node;
-	List	   *args_func_var;
-	List	   *args_func_const;
-	FuncCall   *fc_var;
-	FuncCall   *fc_const;
-	Node	   *f_var;
-	Node	   *f_const;
-
-	if (pi->partfunc.paramtype == TEXTOID)
-	{
-		/* Path for deprecated partitioning function taking text input */
-		if (var_expr->vartype == TEXTOID)
-		{
-			var_node = copyObject(var_expr);
-			const_node = copyObject(const_expr);
-		}
-		else
-		{
-			var_node = coerce_to_target_type(NULL, (Node *) var_expr,
-											 var_expr->vartype,
-											 TEXTOID, -1, COERCION_EXPLICIT,
-											 COERCE_EXPLICIT_CAST, -1);
-			const_node = coerce_to_target_type(NULL, (Node *) const_expr,
-											   const_expr->consttype,
-											   TEXTOID, -1, COERCION_EXPLICIT,
-											   COERCE_EXPLICIT_CAST, -1);
-		}
-	}
-	else
-	{
-		/* Path for partitioning func taking anyelement */
-		var_node = copyObject(var_expr);
-		const_node = copyObject(const_expr);
-	}
-
-	args_func_var = list_make1(var_node);
-	args_func_const = list_make1(const_node);
-
-	fc_var = makeFuncCall(func_name, args_func_var, -1);
-	fc_const = makeFuncCall(func_name, args_func_const, -1);
-
-	f_var = ParseFuncOrColumn(NULL, func_name, args_func_var, fc_var, -1);
-	assign_expr_collations(NULL, f_var);
-
-	f_const = ParseFuncOrColumn(NULL, func_name, args_func_const, fc_const, -1);
-
-	op_expr = make_op(NULL, list_make2(makeString("pg_catalog"), makeString("=")), f_var, f_const, -1);
-
-	return op_expr;
-}
-
-static Node *
-add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
-{
-	if (node == NULL)
-		return NULL;
-
-	/*
-	 * Detect partitioning_column = const. If not fall-thru. If detected,
-	 * replace with partitioning_column = const AND
-	 * partitioning_func(partition_column) = partitioning_func(const)
-	 */
-	if (IsA(node, OpExpr))
-	{
-		OpExpr	   *exp = (OpExpr *) node;
-
-		if (list_length(exp->args) == 2)
-		{
-			/* only look at var op const or const op var; */
-			Node	   *left = (Node *) linitial(exp->args);
-			Node	   *right = (Node *) lsecond(exp->args);
-			Var		   *var_expr = NULL;
-			Node	   *other_expr = NULL;
-
-			if (IsA(left, Var))
-			{
-				var_expr = (Var *) left;
-				other_expr = right;
-			}
-			else if (IsA(right, Var))
-			{
-				var_expr = (Var *) right;
-				other_expr = left;
-			}
-
-			if (var_expr != NULL)
-			{
-				if (!IsA(other_expr, Const))
-				{
-					/* try to simplify the non-var expression */
-					other_expr = eval_const_expressions(NULL, other_expr);
-				}
-				if (IsA(other_expr, Const))
-				{
-					/* have a var and const, make sure the op is = */
-					Const	   *const_expr = (Const *) other_expr;
-					Oid			eq_oid = OpernameGetOprid(list_make2(makeString("pg_catalog"), makeString("=")), exprType(left), exprType(right));
-
-					if (eq_oid == exp->opno)
-					{
-						/*
-						 * I now have a var = const. Make sure var is a
-						 * partitioning column
-						 */
-						PartitioningInfo *pi =
-						get_partitioning_info_for_partition_column_var(var_expr,
-																	context);
-
-						if (pi != NULL)
-						{
-							/* The var is a partitioning column */
-							Expr	   *partitioning_clause =
-							create_partition_func_equals_const(pi, var_expr, const_expr);
-
-							return (Node *) make_andclause(list_make2(node, partitioning_clause));
-
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return expression_tree_mutator(node, add_partitioning_func_qual_mutator,
-								   (void *) context);
-}
-
-
-/*
- * This function does a transformation that allows postgres's native constraint
- * exclusion to exclude space partititions when the query contains equivalence
- * qualifiers on the space partition key.
- *
- * This function goes through the upper-level qual of a parse tree and finds
- * quals of the form:
- *				partitioning_column = const
- * It transforms them into the qual:
- *				partitioning_column = const AND
- *				partitioning_func(partition_column, partitioning_mod) =
- *				partitioning_func(const, partitioning_mod)
- *
- * This tranformation helps because the check constraint on a table is of the
- * form CHECK(partitioning_func(partition_column, partitioning_mod) BETWEEN X
- * AND Y).
- */
-static void
-add_partitioning_func_qual(Query *parse, Hypertable *hentry)
-{
-	AddPartFuncQualCtx context = {
-		.parse = parse,
-		.hentry = hentry,
-	};
-
-	parse->jointree->quals = add_partitioning_func_qual_mutator(parse->jointree->quals, &context);
-}
 
 typedef struct ModifyTableWalkerCtx
 {
@@ -410,33 +140,10 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 }
 
 
-
 static PlannedStmt *
 timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *plan_stmt = NULL;
-
-	if (extension_is_loaded())
-	{
-		HypertableQueryCtx context = {
-			.parse = parse,
-			.parent = parse,
-			.cmdtype = parse->commandType,
-			.hcache = hypertable_cache_pin(),
-			.hentry = NULL,
-		};
-
-		/* replace call to main table with call to the replica table */
-		hypertable_query_walker((Node *) parse, &context);
-
-		/* note assumes 1 hypertable per query */
-		if (context.hentry != NULL)
-		{
-			add_partitioning_func_qual(parse, context.hentry);
-		}
-
-		cache_release(context.hcache);
-	}
 
 	if (prev_planner_hook != NULL)
 	{

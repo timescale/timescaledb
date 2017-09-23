@@ -13,6 +13,7 @@
 
 #include "constraint_aware_append.h"
 #include "hypertable.h"
+#include "compat.h"
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
@@ -186,7 +187,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	state->num_append_subplans = list_length(*appendplans);
-	if(state->num_append_subplans > 0)
+	if (state->num_append_subplans > 0)
 		node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
 }
 
@@ -195,9 +196,11 @@ ca_append_exec(CustomScanState *node)
 {
 	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
 	TupleTableSlot *subslot;
-	TupleTableSlot *resultslot;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+#if PG96
+	TupleTableSlot *resultslot;
 	ExprDoneCond isDone;
+#endif
 
 	/*
 	 * Check if all append subplans were pruned. In that case there is nothing
@@ -206,6 +209,7 @@ ca_append_exec(CustomScanState *node)
 	if (state->num_append_subplans == 0)
 		return NULL;
 
+#if PG96
 	if (node->ss.ps.ps_TupFromTlist)
 	{
 		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
@@ -215,6 +219,7 @@ ca_append_exec(CustomScanState *node)
 
 		node->ss.ps.ps_TupFromTlist = false;
 	}
+#endif
 
 	ResetExprContext(econtext);
 
@@ -230,6 +235,9 @@ ca_append_exec(CustomScanState *node)
 
 		econtext->ecxt_scantuple = subslot;
 
+#if PG10
+		return ExecProject(node->ss.ps.ps_ProjInfo);
+#elif PG96
 		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
 
 		if (isDone != ExprEndResult)
@@ -237,6 +245,7 @@ ca_append_exec(CustomScanState *node)
 			node->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
 			return resultslot;
 		}
+#endif
 	}
 }
 
@@ -252,7 +261,9 @@ ca_append_end(CustomScanState *node)
 static void
 ca_append_rescan(CustomScanState *node)
 {
+#if PG96
 	node->ss.ps.ps_TupFromTlist = false;
+#endif
 	ExecReScan(linitial(node->custom_ps));
 }
 

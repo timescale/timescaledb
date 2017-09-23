@@ -22,6 +22,7 @@
 #include "catalog.h"
 #include "scanner.h"
 #include "chunk.h"
+#include "compat.h"
 
 static List *
 create_index_colnames(Relation indexrel)
@@ -380,7 +381,16 @@ chunk_index_create_from_stmt(IndexStmt *stmt,
 												hypertable_indexname,
 											  get_rel_namespace(chunkrelid));
 
-	idxobj = DefineIndex(chunkrelid, stmt, InvalidOid, false, true, false, true);
+	idxobj = DefineIndex(chunkrelid,
+						 stmt,
+						 InvalidOid,
+						 false, /* is alter table */
+						 true,	/* check rights */
+#if PG10
+						 false, /* check not in use */
+#endif
+						 false, /* skip build */
+						 true); /* quiet */
 
 	chunk_index_insert(chunk_id,
 					   get_rel_name(idxobj.objectId),

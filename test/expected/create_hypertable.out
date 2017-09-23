@@ -27,28 +27,20 @@ insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
 ERROR:  null value in column "time" violates not-null constraint
 \set ON_ERROR_STOP 1
 insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
-\d test_schema.test_table_no_not_null
-Table "test_schema.test_table_no_not_null"
-  Column   |  Type  | Modifiers 
------------+--------+-----------
- time      | bigint | not null
- device_id | text   | 
-Indexes:
-    "test_table_no_not_null_device_id_time_idx" btree (device_id, "time" DESC)
-    "test_table_no_not_null_time_idx" btree ("time" DESC)
-Number of child tables: 1 (Use \d+ to list them.)
+SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
+  Column   |  Type  | Nullable 
+-----------+--------+----------
+ time      | bigint | t
+ device_id | text   | f
+(2 rows)
 
 ALTER TABLE test_schema.test_table_no_not_null ALTER time DROP NOT NULL;
-\d test_schema.test_table_no_not_null
-Table "test_schema.test_table_no_not_null"
-  Column   |  Type  | Modifiers 
------------+--------+-----------
- time      | bigint | 
- device_id | text   | 
-Indexes:
-    "test_table_no_not_null_device_id_time_idx" btree (device_id, "time" DESC)
-    "test_table_no_not_null_time_idx" btree ("time" DESC)
-Number of child tables: 1 (Use \d+ to list them.)
+SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
+  Column   |  Type  | Nullable 
+-----------+--------+----------
+ time      | bigint | f
+ device_id | text   | f
+(2 rows)
 
 SELECT _timescaledb_internal.set_time_columns_not_null();
  set_time_columns_not_null 
@@ -56,16 +48,12 @@ SELECT _timescaledb_internal.set_time_columns_not_null();
  
 (1 row)
 
-\d test_schema.test_table_no_not_null
-Table "test_schema.test_table_no_not_null"
-  Column   |  Type  | Modifiers 
------------+--------+-----------
- time      | bigint | not null
- device_id | text   | 
-Indexes:
-    "test_table_no_not_null_device_id_time_idx" btree (device_id, "time" DESC)
-    "test_table_no_not_null_time_idx" btree ("time" DESC)
-Number of child tables: 1 (Use \d+ to list them.)
+SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
+  Column   |  Type  | Nullable 
+-----------+--------+----------
+ time      | bigint | t
+ device_id | text   | f
+(2 rows)
 
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)

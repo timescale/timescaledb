@@ -58,21 +58,26 @@ execute_process(
   OUTPUT_VARIABLE PG_VERSION_STRING
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-if (NOT ${PG_VERSION_STRING} MATCHES "^PostgreSQL[ ]+([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+if (NOT ${PG_VERSION_STRING} MATCHES "^PostgreSQL[ ]+([0-9]+)\\.([0-9]+)(\\.([0-9]+))*$")
   message(FATAL_ERROR "Could not parse PostgreSQL version ${PG_VERSION}")
 endif ()
 
 set(PG_VERSION_MAJOR ${CMAKE_MATCH_1})
 set(PG_VERSION_MINOR ${CMAKE_MATCH_2})
-set(PG_VERSION_PATCH ${CMAKE_MATCH_3})
-set(PG_VERSION "${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}.${PG_VERSION_PATCH}")
+set(PG_VERSION_PATCH ${CMAKE_MATCH_4})
+
+if (NOT ${PG_VERSION_PATCH} OR ${PG_VERSION_PATCH} EQUAL "")
+  set(PG_VERSION "${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}")
+else ()
+  set(PG_VERSION "${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}.${PG_VERSION_PATCH}")
+endif ()
 
 message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
 if ((${PG_VERSION} VERSION_LESS "9.6")
-    OR (${PG_VERSION} VERSION_EQUAL "10")
-    OR (${PG_VERSION} VERSION_GREATER "10"))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6")
+    OR (${PG_VERSION} VERSION_EQUAL "11")
+    OR (${PG_VERSION} VERSION_GREATER "11"))
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6 or 10")
 endif ()
 
 # Get PostgreSQL configuration from pg_config

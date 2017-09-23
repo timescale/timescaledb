@@ -8,12 +8,16 @@ BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 PGTEST_TMPDIR=${PGTEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test')}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
-
+PG_VERSION=${PG_VERSION:-9.6.5} # Need 9.6.x version since we are
+                                # upgrading the extension from
+                                # versions that didn't support PG10.
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-latest}
 DO_CLEANUP=true
+
+export PG_VERSION
 
 while getopts "d" opt;
 do
@@ -142,4 +146,3 @@ docker_pgcmd timescaledb-clean-restore "ALTER DATABASE single SET timescaledb.re
 
 echo "Testing restored"
 docker_pgdiff timescaledb-updated timescaledb-clean-restore /src/test/sql/updates/test-0.1.1.sql
-

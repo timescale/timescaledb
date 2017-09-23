@@ -1,6 +1,6 @@
 \ir include/insert_single.sql
 
-\d+ "one_Partition".*
+SELECT * FROM test.show_columnsp('"one_Partition".%');
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
 
 --test that we can insert data into a 1-dimensional table (only time partitioning)
@@ -64,7 +64,7 @@ INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
 
 --show the constraints on the three-dimensional chunk
-\d+ _timescaledb_internal._hyper_7_15_chunk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_15_chunk');
 
 --queries should work in three dimensions
 SELECT * FROM "3dim";

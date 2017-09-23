@@ -64,8 +64,9 @@ SELECT * FROM drop_test;
 drop schema public cascade;
 NOTICE:  drop cascades to 3 other objects
 \dn
-List of schemas
- Name | Owner 
-------+-------
-(0 rows)
+  List of schemas
+ Name |   Owner    
+------+------------
+ test | super_user
+(1 row)
 

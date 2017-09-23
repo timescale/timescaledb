@@ -57,6 +57,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		HeapTuple	tuple;
 		TupleDesc	tupdesc = slot->tts_tupleDescriptor;
 		EState	   *estate = node->ss.ps.state;
+		CmdType		operation = state->parent->operation;
 		MemoryContext old;
 
 		/* Switch to the executor's per-tuple memory context */
@@ -72,7 +73,7 @@ chunk_dispatch_exec(CustomScanState *node)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
+		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point, operation);
 
 		/*
 		 * Update the arbiter indexes for ON CONFLICT statements so that they

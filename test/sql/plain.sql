@@ -10,7 +10,8 @@ CREATE INDEX time_color_idx ON regular_table(time, color);
 ALTER INDEX time_color_idx RENAME TO time_color_idx2;
 ALTER TABLE regular_table ALTER COLUMN color TYPE bigint;
 
-\d+ regular_table
+SELECT * FROM test.show_columns('regular_table');
+SELECT * FROM test.show_indexes('regular_table');
 
 -- Renaming types should work
 CREATE TYPE rainbow AS ENUM ('red', 'orange', 'yellow', 'green', 'blue', 'purple');

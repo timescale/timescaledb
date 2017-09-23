@@ -36,189 +36,61 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 INSERT 0 1
 \set QUIET on
-\d+ "one_Partition".*
-                       Table "one_Partition._hyper_1_1_chunk"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "_hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "_hyper_1_1_chunk_one_Partition_timeCustom_idx" btree ("timeCustom" DESC)
-    "_hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "_hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "_hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-Check constraints:
-    "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-Inherits: "one_Partition"
-
-Index "one_Partition._hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage  
-------------+--------+--------------+----------
- device_id  | text   | device_id    | extended
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "one_Partition._hyper_1_1_chunk", predicate (device_id IS NOT NULL)
-
-Index "one_Partition._hyper_1_1_chunk_one_Partition_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage 
-------------+--------+--------------+---------
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "one_Partition._hyper_1_1_chunk"
-
-Index "one_Partition._hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_0   | double precision | series_0     | plain
-btree, for table "one_Partition._hyper_1_1_chunk", predicate (series_0 IS NOT NULL)
-
-Index "one_Partition._hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_1   | double precision | series_1     | plain
-btree, for table "one_Partition._hyper_1_1_chunk", predicate (series_1 IS NOT NULL)
-
-Index "one_Partition._hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_2   | double precision | series_2     | plain
-btree, for table "one_Partition._hyper_1_1_chunk", predicate (series_2 IS NOT NULL)
-
-Index "one_Partition._hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx"
-   Column    |  Type   |  Definition  | Storage 
--------------+---------+--------------+---------
- timeCustom  | bigint  | "timeCustom" | plain
- series_bool | boolean | series_bool  | plain
-btree, for table "one_Partition._hyper_1_1_chunk", predicate (series_bool IS NOT NULL)
-
-                       Table "one_Partition._hyper_1_2_chunk"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "_hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "_hyper_1_2_chunk_one_Partition_timeCustom_idx" btree ("timeCustom" DESC)
-    "_hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "_hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "_hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-Check constraints:
-    "constraint_2" CHECK ("timeCustom" >= '1257897600000000000'::bigint AND "timeCustom" < '1257900192000000000'::bigint)
-Inherits: "one_Partition"
-
-Index "one_Partition._hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage  
-------------+--------+--------------+----------
- device_id  | text   | device_id    | extended
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "one_Partition._hyper_1_2_chunk", predicate (device_id IS NOT NULL)
-
-Index "one_Partition._hyper_1_2_chunk_one_Partition_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage 
-------------+--------+--------------+---------
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "one_Partition._hyper_1_2_chunk"
-
-Index "one_Partition._hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_0   | double precision | series_0     | plain
-btree, for table "one_Partition._hyper_1_2_chunk", predicate (series_0 IS NOT NULL)
-
-Index "one_Partition._hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_1   | double precision | series_1     | plain
-btree, for table "one_Partition._hyper_1_2_chunk", predicate (series_1 IS NOT NULL)
-
-Index "one_Partition._hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_2   | double precision | series_2     | plain
-btree, for table "one_Partition._hyper_1_2_chunk", predicate (series_2 IS NOT NULL)
-
-Index "one_Partition._hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx"
-   Column    |  Type   |  Definition  | Storage 
--------------+---------+--------------+---------
- timeCustom  | bigint  | "timeCustom" | plain
- series_bool | boolean | series_bool  | plain
-btree, for table "one_Partition._hyper_1_2_chunk", predicate (series_bool IS NOT NULL)
-
-                       Table "one_Partition._hyper_1_3_chunk"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "_hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "_hyper_1_3_chunk_one_Partition_timeCustom_idx" btree ("timeCustom" DESC)
-    "_hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "_hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "_hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
-Check constraints:
-    "constraint_3" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" < '1257988320000000000'::bigint)
-Inherits: "one_Partition"
-
-Index "one_Partition._hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage  
-------------+--------+--------------+----------
- device_id  | text   | device_id    | extended
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "one_Partition._hyper_1_3_chunk", predicate (device_id IS NOT NULL)
-
-Index "one_Partition._hyper_1_3_chunk_one_Partition_timeCustom_idx"
-   Column   |  Type  |  Definition  | Storage 
-------------+--------+--------------+---------
- timeCustom | bigint | "timeCustom" | plain
-btree, for table "one_Partition._hyper_1_3_chunk"
-
-Index "one_Partition._hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_0   | double precision | series_0     | plain
-btree, for table "one_Partition._hyper_1_3_chunk", predicate (series_0 IS NOT NULL)
-
-Index "one_Partition._hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_1   | double precision | series_1     | plain
-btree, for table "one_Partition._hyper_1_3_chunk", predicate (series_1 IS NOT NULL)
-
-Index "one_Partition._hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx"
-   Column   |       Type       |  Definition  | Storage 
-------------+------------------+--------------+---------
- timeCustom | bigint           | "timeCustom" | plain
- series_2   | double precision | series_2     | plain
-btree, for table "one_Partition._hyper_1_3_chunk", predicate (series_2 IS NOT NULL)
-
-Index "one_Partition._hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx"
-   Column    |  Type   |  Definition  | Storage 
--------------+---------+--------------+---------
- timeCustom  | bigint  | "timeCustom" | plain
- series_bool | boolean | series_bool  | plain
-btree, for table "one_Partition._hyper_1_3_chunk", predicate (series_bool IS NOT NULL)
+SELECT * FROM test.show_columnsp('"one_Partition".%');
+                                  Relation                                   | Kind |   Column    |   Column type    | Nullable 
+-----------------------------------------------------------------------------+------+-------------+------------------+----------
+ "one_Partition"._hyper_1_1_chunk                                            | r    | timeCustom  | bigint           | t
+ "one_Partition"._hyper_1_1_chunk                                            | r    | device_id   | text             | t
+ "one_Partition"._hyper_1_1_chunk                                            | r    | series_0    | double precision | f
+ "one_Partition"._hyper_1_1_chunk                                            | r    | series_1    | double precision | f
+ "one_Partition"._hyper_1_1_chunk                                            | r    | series_2    | double precision | f
+ "one_Partition"._hyper_1_1_chunk                                            | r    | series_bool | boolean          | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx"   | i    | device_id   | text             | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_idx"             | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx"    | i    | series_0    | double precision | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx"    | i    | series_1    | double precision | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx"    | i    | series_2    | double precision | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx" | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx" | i    | series_bool | boolean          | f
+ "one_Partition"._hyper_1_2_chunk                                            | r    | timeCustom  | bigint           | t
+ "one_Partition"._hyper_1_2_chunk                                            | r    | device_id   | text             | t
+ "one_Partition"._hyper_1_2_chunk                                            | r    | series_0    | double precision | f
+ "one_Partition"._hyper_1_2_chunk                                            | r    | series_1    | double precision | f
+ "one_Partition"._hyper_1_2_chunk                                            | r    | series_2    | double precision | f
+ "one_Partition"._hyper_1_2_chunk                                            | r    | series_bool | boolean          | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx"   | i    | device_id   | text             | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_idx"             | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx"    | i    | series_0    | double precision | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx"    | i    | series_1    | double precision | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx"    | i    | series_2    | double precision | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx" | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx" | i    | series_bool | boolean          | f
+ "one_Partition"._hyper_1_3_chunk                                            | r    | timeCustom  | bigint           | t
+ "one_Partition"._hyper_1_3_chunk                                            | r    | device_id   | text             | t
+ "one_Partition"._hyper_1_3_chunk                                            | r    | series_0    | double precision | f
+ "one_Partition"._hyper_1_3_chunk                                            | r    | series_1    | double precision | f
+ "one_Partition"._hyper_1_3_chunk                                            | r    | series_2    | double precision | f
+ "one_Partition"._hyper_1_3_chunk                                            | r    | series_bool | boolean          | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx"   | i    | device_id   | text             | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx"   | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_idx"             | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx"    | i    | series_0    | double precision | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx"    | i    | series_1    | double precision | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx"    | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx"    | i    | series_2    | double precision | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx" | i    | timeCustom  | bigint           | f
+ "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx" | i    | series_bool | boolean          | f
+(51 rows)
 
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
@@ -415,22 +287,13 @@ INSERT INTO "3dim" VALUES('2017-01-20T09:00:01', 22.5, 'blue', 'nyc');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
 --show the constraints on the three-dimensional chunk
-\d+ _timescaledb_internal._hyper_7_15_chunk
-                      Table "_timescaledb_internal._hyper_7_15_chunk"
-  Column  |            Type             | Modifiers | Storage  | Stats target | Description 
-----------+-----------------------------+-----------+----------+--------------+-------------
- time     | timestamp without time zone | not null  | plain    |              | 
- temp     | double precision            |           | plain    |              | 
- device   | text                        |           | extended |              | 
- location | text                        |           | extended |              | 
-Indexes:
-    "_hyper_7_15_chunk_3dim_device_time_idx" btree (device, "time" DESC)
-    "_hyper_7_15_chunk_3dim_time_idx" btree ("time" DESC)
-Check constraints:
-    "constraint_15" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone)
-    "constraint_16" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
-    "constraint_17" CHECK (_timescaledb_internal.get_partition_hash(location) >= 1073741823 AND _timescaledb_internal.get_partition_hash(location) < 2147483647)
-Inherits: "3dim"
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_15_chunk');
+  Constraint   | Type |  Columns   | Index |                                                                     Expr                                                                     
+---------------+------+------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------
+ constraint_15 | c    | {time}     | -     | (("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone) AND ("time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone))
+ constraint_16 | c    | {device}   | -     | ((_timescaledb_internal.get_partition_hash(device) >= 0) AND (_timescaledb_internal.get_partition_hash(device) < 1073741823))
+ constraint_17 | c    | {location} | -     | ((_timescaledb_internal.get_partition_hash(location) >= 1073741823) AND (_timescaledb_internal.get_partition_hash(location) < 2147483647))
+(3 rows)
 
 --queries should work in three dimensions
 SELECT * FROM "3dim";

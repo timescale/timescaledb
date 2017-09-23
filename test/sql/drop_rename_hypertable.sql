@@ -2,11 +2,10 @@
 \ir include/insert_two_partitions.sql
 \o
 
-\d+ "_timescaledb_internal".*
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
 
 -- Test that renaming hypertable works
-
-\d _timescaledb_internal._hyper_1_1_chunk
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 ALTER TABLE "two_Partitions" RENAME TO "newname";
 SELECT * FROM "newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
