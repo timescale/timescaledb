@@ -44,14 +44,13 @@ SELECT * FROM _timescaledb_catalog.chunk;
   4 |             1 | _timescaledb_internal | _hyper_1_4_chunk
 (4 rows)
 
-\dt "_timescaledb_internal".*
-                          List of relations
-        Schema         |       Name       | Type  |       Owner       
------------------------+------------------+-------+-------------------
- _timescaledb_internal | _hyper_1_1_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_1_2_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_1_3_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_1_4_chunk | table | default_perm_user
+SELECT * FROM test.show_subtables('"two_Partitions"');
+                 Child                  
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
 (4 rows)
 
 SELECT * FROM "two_Partitions";
@@ -85,32 +84,10 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (0 rows)
 
 -- should be empty
-\set ON_ERROR_STOP 0
-\dt "_timescaledb_internal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
+SELECT * FROM test.show_subtables('"two_Partitions"');
+ Child 
+-------
 (0 rows)
-
-\set ON_ERROR_STOP 1
-\d+ "two_Partitions"
-                           Table "public.two_Partitions"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
-    "two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 
 SELECT * FROM "two_Partitions";
  timeCustom | device_id | series_0 | series_1 | series_2 | series_bool 
@@ -162,32 +139,10 @@ TRUNCATE "two_Partitions" CASCADE;
 WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: TRUNCATE cnt: <NULL> trigger_name _test_truncate_before
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: TRUNCATE cnt: <NULL> trigger_name _test_truncate_after
 -- should be empty
-\set ON_ERROR_STOP 0
-\dt "_timescaledb_internal".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
+SELECT * FROM test.show_subtables('"two_Partitions"');
+ Child 
+-------
 (0 rows)
-
-\set ON_ERROR_STOP 1
-\d+ "two_Partitions"
-                           Table "public.two_Partitions"
-   Column    |       Type       | Modifiers | Storage  | Stats target | Description 
--------------+------------------+-----------+----------+--------------+-------------
- timeCustom  | bigint           | not null  | plain    |              | 
- device_id   | text             | not null  | extended |              | 
- series_0    | double precision |           | plain    |              | 
- series_1    | double precision |           | plain    |              | 
- series_2    | double precision |           | plain    |              | 
- series_bool | boolean          |           | plain    |              | 
-Indexes:
-    "two_Partitions_device_id_timeCustom_idx" btree (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL
-    "two_Partitions_timeCustom_device_id_idx" btree ("timeCustom" DESC NULLS LAST, device_id)
-    "two_Partitions_timeCustom_idx" btree ("timeCustom" DESC)
-    "two_Partitions_timeCustom_series_0_idx" btree ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL
-    "two_Partitions_timeCustom_series_1_idx" btree ("timeCustom" DESC NULLS LAST, series_1) WHERE series_1 IS NOT NULL
-    "two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
-    "two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 
 SELECT * FROM "two_Partitions";
  timeCustom | device_id | series_0 | series_1 | series_2 | series_bool 

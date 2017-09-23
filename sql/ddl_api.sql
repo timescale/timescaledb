@@ -89,6 +89,9 @@ BEGIN
         USING ERRCODE = 'IO102';
     END IF;
 
+    -- Validate that the hypertable supports the triggers in the main table
+    PERFORM _timescaledb_internal.validate_triggers(main_table);
+
     time_type := _timescaledb_internal.dimension_type(main_table, time_column_name, true);
 
     chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal(

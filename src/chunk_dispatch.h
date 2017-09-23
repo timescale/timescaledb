@@ -26,13 +26,14 @@ typedef struct ChunkDispatch
 	 */
 	ResultRelInfo *hypertable_result_rel_info;
 	Query	   *parse;
+
 } ChunkDispatch;
 
 typedef struct Point Point;
 typedef struct ChunkInsertState ChunkInsertState;
 
-ChunkDispatch *chunk_dispatch_create(Hypertable *, EState *, Query *);
-void		chunk_dispatch_destroy(ChunkDispatch *);
-ChunkInsertState *chunk_dispatch_get_chunk_insert_state(ChunkDispatch *, Point *);
+ChunkDispatch *chunk_dispatch_create(Hypertable *ht, EState *estate, Query *query);
+void		chunk_dispatch_destroy(ChunkDispatch *dispatch);
+ChunkInsertState *chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, CmdType operation);
 
 #endif   /* TIMESCALEDB_CHUNK_DISPATCH_H */

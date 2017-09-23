@@ -92,15 +92,13 @@ psql:include/ddl_ops_1.sql:62: NOTICE:  Adding NOT NULL constraint to time colum
 (1 row)
 
 ALTER TABLE my_ht ADD COLUMN val2 integer;
-\d my_ht
-     Table "public.my_ht"
- Column |  Type   | Modifiers 
---------+---------+-----------
- time   | bigint  | not null
- val    | integer | 
- val2   | integer | 
-Indexes:
-    "my_ht_time_idx" btree ("time" DESC)
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | Nullable 
+--------+---------+----------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+(3 rows)
 
 -- Should error when adding again
 \set ON_ERROR_STOP 0
@@ -109,58 +107,52 @@ psql:include/ddl_ops_1.sql:68: ERROR:  column "val2" of relation "my_ht" already
 \set ON_ERROR_STOP 1
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
-\d my_ht
-     Table "public.my_ht"
- Column |  Type   | Modifiers 
---------+---------+-----------
- time   | bigint  | not null
- val    | integer | 
- val2   | integer | 
- val3   | integer | 
-Indexes:
-    "my_ht_time_idx" btree ("time" DESC)
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | Nullable 
+--------+---------+----------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+ val3   | integer | f
+(4 rows)
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
 psql:include/ddl_ops_1.sql:76: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
-\d my_ht
-     Table "public.my_ht"
- Column |  Type   | Modifiers 
---------+---------+-----------
- time   | bigint  | not null
- val    | integer | 
- val2   | integer | 
- val3   | integer | 
-Indexes:
-    "my_ht_time_idx" btree ("time" DESC)
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | Nullable 
+--------+---------+----------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+ val3   | integer | f
+(4 rows)
 
 -- Should drop
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
-\d my_ht
-     Table "public.my_ht"
- Column |  Type   | Modifiers 
---------+---------+-----------
- time   | bigint  | not null
- val    | integer | 
- val2   | integer | 
-Indexes:
-    "my_ht_time_idx" btree ("time" DESC)
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | Nullable 
+--------+---------+----------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+(3 rows)
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
 psql:include/ddl_ops_1.sql:84: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
-\d my_ht
-     Table "public.my_ht"
- Column |  Type   | Modifiers 
---------+---------+-----------
- time   | bigint  | not null
- val    | integer | 
- val2   | integer | 
-Indexes:
-    "my_ht_time_idx" btree ("time" DESC)
+SELECT * FROM test.show_columns('my_ht');
+ Column |  Type   | Nullable 
+--------+---------+----------
+ time   | bigint  | t
+ val    | integer | f
+ val2   | integer | f
+(3 rows)
 
---default indexes--
---both created
+--Test default index creation on create_hypertable().
+--Make sure that we do not duplicate indexes that already exists
+--
+--No existing indexes: both time and space-time indexes created
 BEGIN;
 CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Time" BIGINT NOT NULL,
@@ -173,19 +165,15 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  
 (1 row)
 
-\d+ "Hypertable_1_with_default_index_enabled"
-         Table "public.Hypertable_1_with_default_index_enabled"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- Time      | bigint  | not null  | plain    |              | 
- Device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
-    "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                            Index                             |     Columns      | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} | f      | f       | f         | 
+(2 rows)
 
 ROLLBACK;
---only time
+--Space index exists: only time index created
 BEGIN;
 CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Time" BIGINT NOT NULL,
@@ -199,19 +187,15 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  
 (1 row)
 
-\d+ "Hypertable_1_with_default_index_enabled"
-         Table "public.Hypertable_1_with_default_index_enabled"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- Time      | bigint  | not null  | plain    |              | 
- Device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
-    "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                            Index                             |     Columns      | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           | f      | f       | f         | 
+(2 rows)
 
 ROLLBACK;
---only partition
+--Time index exists, only partition index created
 BEGIN;
 CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Time" BIGINT NOT NULL,
@@ -225,19 +209,15 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  
 (1 row)
 
-\d+ "Hypertable_1_with_default_index_enabled"
-         Table "public.Hypertable_1_with_default_index_enabled"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- Time      | bigint  | not null  | plain    |              | 
- Device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" btree ("Device_id", "Time" DESC)
-    "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                            Index                             |     Columns      | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} | f      | f       | f         | 
+(2 rows)
 
 ROLLBACK;
---null space
+--No space partitioning, only time index created
 BEGIN;
 CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Time" BIGINT NOT NULL,
@@ -250,18 +230,14 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  
 (1 row)
 
-\d+ "Hypertable_1_with_default_index_enabled"
-         Table "public.Hypertable_1_with_default_index_enabled"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- Time      | bigint  | not null  | plain    |              | 
- Device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "Hypertable_1_with_default_index_enabled_Time_idx" btree ("Time" DESC)
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+                       Index                        | Columns | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------------------+---------+--------+---------+-----------+------------
+ "Hypertable_1_with_default_index_enabled_Time_idx" | {Time}  | f      | f       | f         | 
+(1 row)
 
 ROLLBACK;
---disable index creation
+--Disable index creation: no default indexes created
 BEGIN;
 CREATE TABLE PUBLIC."Hypertable_1_with_default_index_enabled" (
   "Time" BIGINT NOT NULL,
@@ -274,13 +250,10 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  
 (1 row)
 
-\d+ "Hypertable_1_with_default_index_enabled"
-         Table "public.Hypertable_1_with_default_index_enabled"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- Time      | bigint  | not null  | plain    |              | 
- Device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
+SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
+ Index | Columns | Unique | Primary | Exclusion | Tablespace 
+-------+---------+--------+---------+-----------+------------
+(0 rows)
 
 ROLLBACK;
 SELECT * FROM PUBLIC."Hypertable_1";
@@ -338,52 +311,33 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
-\d+ PUBLIC."Hypertable_1"
-                                Table "public.Hypertable_1"
-      Column      |  Type   |      Modifiers       | Storage  | Stats target | Description 
-------------------+---------+----------------------+----------+--------------+-------------
- time             | bigint  | not null             | plain    |              | 
- Device_id        | text    | not null             | extended |              | 
- humidity         | numeric | default 100          | main     |              | 
- sensor_1         | numeric | not null             | main     |              | 
- sensor_2_renamed | integer |                      | plain    |              | 
- sensor_3_renamed | numeric | not null default 1   | main     |              | 
- temp_f           | integer | not null default 31  | plain    |              | 
- sensor_3         | bigint  | not null default 131 | plain    |              | 
- sensor_4         | bigint  | not null default 131 | plain    |              | 
-Indexes:
-    "Unique1" UNIQUE, btree ("time", "Device_id")
-    "Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
-    "Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "Hypertable_1_time_idx" btree ("time" DESC)
-    "ind_humdity2" btree ("time", humidity)
-Triggers:
-    test_trigger BEFORE DELETE OR UPDATE ON "Hypertable_1" FOR EACH STATEMENT EXECUTE PROCEDURE empty_trigger_func()
-Child tables: _timescaledb_internal._hyper_1_1_chunk
+SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
+      Column      |  Type   | Nullable 
+------------------+---------+----------
+ time             | bigint  | t
+ Device_id        | text    | t
+ humidity         | numeric | f
+ sensor_1         | numeric | t
+ sensor_2_renamed | integer | f
+ sensor_3_renamed | numeric | t
+ temp_f           | integer | t
+ sensor_3         | bigint  | t
+ sensor_4         | bigint  | t
+(9 rows)
 
-\d+ _timescaledb_internal._hyper_1_1_chunk
-                      Table "_timescaledb_internal._hyper_1_1_chunk"
-      Column      |  Type   |      Modifiers       | Storage  | Stats target | Description 
-------------------+---------+----------------------+----------+--------------+-------------
- time             | bigint  | not null             | plain    |              | 
- Device_id        | text    | not null             | extended |              | 
- humidity         | numeric | default 100          | main     |              | 
- sensor_1         | numeric | not null             | main     |              | 
- sensor_2_renamed | integer |                      | plain    |              | 
- sensor_3_renamed | numeric | not null default 1   | main     |              | 
- temp_f           | integer | not null default 31  | plain    |              | 
- sensor_3         | bigint  | not null default 131 | plain    |              | 
- sensor_4         | bigint  | not null default 131 | plain    |              | 
-Indexes:
-    "_hyper_1_1_chunk_Unique1" UNIQUE, btree ("time", "Device_id")
-    "_hyper_1_1_chunk_Hypertable_1_Device_id_time_idx" btree ("Device_id", "time" DESC)
-    "_hyper_1_1_chunk_Hypertable_1_time_Device_id_idx" btree ("time", "Device_id")
-    "_hyper_1_1_chunk_Hypertable_1_time_idx" btree ("time" DESC)
-    "_hyper_1_1_chunk_ind_humdity2" btree ("time", humidity)
-Check constraints:
-    "constraint_1" CHECK ("time" >= '1257892416000000000'::bigint AND "time" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash("Device_id") >= 0 AND _timescaledb_internal.get_partition_hash("Device_id") < 2147483647)
-Inherits: "Hypertable_1"
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
+      Column      |  Type   | Nullable 
+------------------+---------+----------
+ time             | bigint  | t
+ Device_id        | text    | t
+ humidity         | numeric | f
+ sensor_1         | numeric | t
+ sensor_2_renamed | integer | f
+ sensor_3_renamed | numeric | t
+ temp_f           | integer | t
+ sensor_3         | bigint  | t
+ sensor_4         | bigint  | t
+(9 rows)
 
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 

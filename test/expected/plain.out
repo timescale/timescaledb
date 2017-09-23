@@ -7,16 +7,20 @@ CREATE TABLE regular_table(time timestamp, temp float8, tag text, color integer)
 CREATE INDEX time_color_idx ON regular_table(time, color);
 ALTER INDEX time_color_idx RENAME TO time_color_idx2;
 ALTER TABLE regular_table ALTER COLUMN color TYPE bigint;
-\d+ regular_table
-                               Table "public.regular_table"
- Column |            Type             | Modifiers | Storage  | Stats target | Description 
---------+-----------------------------+-----------+----------+--------------+-------------
- time   | timestamp without time zone |           | plain    |              | 
- temp   | double precision            |           | plain    |              | 
- tag    | text                        |           | extended |              | 
- color  | bigint                      |           | plain    |              | 
-Indexes:
-    "time_color_idx2" btree ("time", color)
+SELECT * FROM test.show_columns('regular_table');
+ Column |            Type             | Nullable 
+--------+-----------------------------+----------
+ time   | timestamp without time zone | f
+ temp   | double precision            | f
+ tag    | text                        | f
+ color  | bigint                      | f
+(4 rows)
+
+SELECT * FROM test.show_indexes('regular_table');
+      Index      |   Columns    | Unique | Primary | Exclusion | Tablespace 
+-----------------+--------------+--------+---------+-----------+------------
+ time_color_idx2 | {time,color} | f      | f       | f         | 
+(1 row)
 
 -- Renaming types should work
 CREATE TYPE rainbow AS ENUM ('red', 'orange', 'yellow', 'green', 'blue', 'purple');

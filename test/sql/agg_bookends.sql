@@ -16,15 +16,15 @@ SELECT last(temp, time_alt) FROM "btest";
 SELECT first(temp, time_alt) FROM "btest";
 
 
-SELECT gp, last(temp, time) FROM "btest" GROUP BY gp;
-SELECT gp, first(temp, time) FROM "btest" GROUP BY gp;
+SELECT gp, last(temp, time) FROM "btest" GROUP BY gp ORDER BY gp;
+SELECT gp, first(temp, time) FROM "btest" GROUP BY gp ORDER BY gp;
 
 --check whole row
-SELECT gp, first("btest", time) FROM "btest" GROUP BY gp;
+SELECT gp, first("btest", time) FROM "btest" GROUP BY gp ORDER BY gp;
 
 --check toasted col
-SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp;
-SELECT gp, last(temp, strid) FROM "btest" GROUP BY gp;
+SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp ORDER BY gp;
+SELECT gp, last(temp, strid) FROM "btest" GROUP BY gp ORDER BY gp;
 
 --check null value as last element
 INSERT INTO "btest" VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
@@ -43,8 +43,8 @@ SELECT last(temp, time_alt) FROM "btest";
 SELECT gp, last(temp, time_alt) FROM "btest" GROUP BY gp ORDER BY gp;
 
 
---Previously, some bugs were found with NULLS and numeric types, so test that 
-CREATE TABLE btest_numeric 
+--Previously, some bugs were found with NULLS and numeric types, so test that
+CREATE TABLE btest_numeric
 (
     time timestamp,
     quantity numeric
@@ -60,5 +60,3 @@ SELECT last(quantity, time) FROM btest_numeric;
 --check non-null element "overrides" NULL because it comes after.
 INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 SELECT last(quantity, time) FROM btest_numeric;
-
-

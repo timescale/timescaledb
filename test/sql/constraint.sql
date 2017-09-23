@@ -47,13 +47,15 @@ INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 1
 
-\d+ hyper
-\d+ hyper_unique
+-- Show constraints on main tables
+SELECT * FROM test.show_constraints('hyper');
+SELECT * FROM test.show_constraints('hyper_unique');
 --should have unique constraint not just unique index
-\d+ _timescaledb_internal._hyper_2_4_chunk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 ALTER TABLE hyper_unique DROP CONSTRAINT hyper_unique_time_key;
-\d+ _timescaledb_internal._hyper_2_4_chunk
+-- The constraint should have been removed from the chunk as well
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --uniqueness not enforced
 INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES
@@ -70,15 +72,16 @@ DELETE FROM hyper_unique WHERE device_id = 'dev3';
 ALTER TABLE hyper_unique
       ADD CHECK (time > 0),
       ADD UNIQUE (time);
-\d+ hyper_unique
-\d+ _timescaledb_internal._hyper_2_4_chunk
+
+SELECT * FROM test.show_constraints('hyper_unique');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 ALTER TABLE hyper_unique
 DROP CONSTRAINT hyper_unique_time_key,
 DROP CONSTRAINT hyper_unique_time_check;
 
-\d+ hyper_unique
-\d+ _timescaledb_internal._hyper_2_4_chunk
+SELECT * FROM test.show_constraints('hyper_unique');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 CREATE UNIQUE INDEX hyper_unique_time_idx ON hyper_unique (time);
 
@@ -90,7 +93,7 @@ DROP INDEX hyper_unique_time_idx;
 
 --now can create
 ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE (time);
-\d+ _timescaledb_internal._hyper_2_4_chunk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --test adding constraint with same name to different table -- should fail
 \set ON_ERROR_STOP 0
@@ -129,10 +132,10 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 1
 
 --should have unique constraint not just unique index
-\d+ _timescaledb_internal._hyper_3_6_chunk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
 
 ALTER TABLE hyper_pk DROP CONSTRAINT hyper_pk_pkey;
-\d+ _timescaledb_internal._hyper_3_6_chunk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
 
 --uniqueness not enforced
 INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
@@ -153,7 +156,7 @@ ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_invalid PRIMARY KEY (device_id);
 
 --now can create
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
-\d+ _timescaledb_internal._hyper_3_6_chunk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
 
 --test adding constraint with same name to different table -- should fail
 \set ON_ERROR_STOP 0

@@ -18,7 +18,7 @@ INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
 INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 2, 22.5);
 
 --check that there are two chunks
-\d _timescaledb_internal._hyper_2_*_chunk
+SELECT * FROM test.show_subtables('int_part');
 
 SELECT * FROM "int_part" WHERE object_id = 1;
 --make sure this touches only one partititon

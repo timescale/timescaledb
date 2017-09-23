@@ -27,6 +27,7 @@
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
 #include "subspace_store.h"
+#include "compat.h"
 
 /*
  * Copy from a file to a hypertable.
@@ -46,7 +47,7 @@ typedef struct CopyChunkState
 } CopyChunkState;
 
 static CopyChunkState *
-copy_chunk_state_create(Hypertable *ht, CopyState cstate)
+copy_chunk_state_create(Hypertable *ht, Relation rel, CopyState cstate)
 {
 	CopyChunkState *ccstate;
 	EState	   *estate = CreateExecutorState();
@@ -55,6 +56,7 @@ copy_chunk_state_create(Hypertable *ht, CopyState cstate)
 	ccstate->estate = estate;
 	ccstate->dispatch = chunk_dispatch_create(ht, estate, NULL);
 	ccstate->cstate = cstate;
+
 	return ccstate;
 }
 
@@ -77,7 +79,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	bool	   *nulls;
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
-	CopyChunkState *ccstate = copy_chunk_state_create(ht, cstate);
+	CopyChunkState *ccstate = copy_chunk_state_create(ht, main_rel, cstate);
 	EState	   *estate = ccstate->estate;		/* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
@@ -171,10 +173,10 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	 * here that basically duplicated execUtils.c ...)
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
-	InitResultRelInfo(resultRelInfo,
-					  main_rel,
-					  1,		/* dummy rangetable index */
-					  0);
+	InitResultRelInfoCompat(resultRelInfo,
+							main_rel,
+							1,	/* dummy rangetable index */
+							0);
 
 	ExecOpenIndices(resultRelInfo, false);
 
@@ -246,7 +248,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
+		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point, CMD_INSERT);
 
 		Assert(cis != NULL);
 
@@ -317,8 +319,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 														   NIL);
 
 				/* AFTER ROW INSERT Triggers */
-				ExecARInsertTriggers(estate, resultRelInfo, tuple,
-									 recheckIndexes);
+				ExecARInsertTriggersCompat(estate, resultRelInfo, tuple, recheckIndexes);
 
 				list_free(recheckIndexes);
 			}
@@ -348,7 +349,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	 * if (cstate->copy_dest == COPY_OLD_FE) pq_endmsgread();
 	 */
 	/* Execute AFTER STATEMENT insertion triggers */
-	ExecASInsertTriggers(estate, resultRelInfo);
+	ExecASInsertTriggersCompat(estate, resultRelInfo);
 
 	/* Handle queued AFTER triggers */
 	AfterTriggerEndQuery(estate);
@@ -632,8 +633,20 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 		PreventCommandIfReadOnly("COPY FROM");
 	PreventCommandIfParallelMode("COPY FROM");
 
+#if PG10
+	{
+		ParseState *pstate = make_parsestate(NULL);
+
+		pstate->p_sourcetext = queryString;
+
+		cstate = BeginCopyFrom(pstate, rel, stmt->filename, stmt->is_program,
+							   NULL, stmt->attlist, stmt->options);
+		free_parsestate(pstate);
+	}
+#elif PG96
 	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program,
 						   stmt->attlist, stmt->options);
+#endif
 	*processed = timescaledb_CopyFrom(cstate, rel, range_table, ht);	/* copy from file to
 																		 * database */
 	EndCopyFrom(cstate);

@@ -3,6 +3,7 @@
 #include <access/xact.h>
 
 #include "executor.h"
+#include "compat.h"
 
 static ExecutorRun_hook_type prev_ExecutorRun_hook;
 static uint64 additional_tuples;
@@ -36,6 +37,29 @@ executor_level_exit(void)
 	level--;
 }
 
+#if PG10
+static void
+timescaledb_ExecutorRun(QueryDesc *queryDesc,
+						ScanDirection direction,
+						uint64 count,
+						bool execute_once)
+{
+	executor_level_enter();
+
+	if (prev_ExecutorRun_hook)
+		(*prev_ExecutorRun_hook) (queryDesc, direction, count, execute_once);
+	else
+		standard_ExecutorRun(queryDesc, direction, count, execute_once);
+
+	executor_level_exit();
+	if (0 == level)
+	{
+		queryDesc->estate->es_processed += additional_tuples;
+	}
+}
+
+#elif PG96
+
 static void
 timescaledb_ExecutorRun(QueryDesc *queryDesc,
 						ScanDirection direction,
@@ -54,6 +78,7 @@ timescaledb_ExecutorRun(QueryDesc *queryDesc,
 		queryDesc->estate->es_processed += additional_tuples;
 	}
 }
+#endif
 
 static void
 executor_AtEOXact_abort(XactEvent event, void *arg)

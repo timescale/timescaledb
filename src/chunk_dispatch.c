@@ -13,20 +13,21 @@
 ChunkDispatch *
 chunk_dispatch_create(Hypertable *ht, EState *estate, Query *parse)
 {
-	ChunkDispatch *cp = palloc(sizeof(ChunkDispatch));
+	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
-	cp->hypertable = ht;
-	cp->estate = estate;
-	cp->hypertable_result_rel_info = NULL;
-	cp->parse = parse;
-	cp->cache = subspace_store_init(ht->space->num_dimensions, estate->es_query_cxt);
-	return cp;
+	cd->hypertable = ht;
+	cd->estate = estate;
+	cd->hypertable_result_rel_info = NULL;
+	cd->parse = parse;
+	cd->cache = subspace_store_init(ht->space->num_dimensions, estate->es_query_cxt);
+
+	return cd;
 }
 
 void
-chunk_dispatch_destroy(ChunkDispatch *cp)
+chunk_dispatch_destroy(ChunkDispatch *cd)
 {
-	subspace_store_free(cp->cache);
+	subspace_store_free(cd->cache);
 }
 
 static void
@@ -40,7 +41,7 @@ destroy_chunk_insert_state(void *cis)
  * partitioned hyperspace.
  */
 extern ChunkInsertState *
-chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
+chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point, CmdType operation)
 {
 	ChunkInsertState *cis;
 
@@ -55,7 +56,7 @@ chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 		if (NULL == new_chunk)
 			elog(ERROR, "No chunk found or created");
 
-		cis = chunk_insert_state_create(new_chunk, dispatch);
+		cis = chunk_insert_state_create(new_chunk, dispatch, operation);
 		subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
 	}
 

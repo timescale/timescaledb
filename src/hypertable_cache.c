@@ -2,6 +2,7 @@
 #include <catalog/namespace.h>
 #include <utils/catcache.h>
 #include <utils/lsyscache.h>
+#include <utils/builtins.h>
 
 #include "hypertable_cache.h"
 #include "hypertable.h"
@@ -105,9 +106,11 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 
 	/* Perform an index scan on schema and table. */
 	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(hq->schema));
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(hq->schema)));
 	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
-				BTEqualStrategyNumber, F_NAMEEQ, NameGetDatum(hq->table));
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(hq->table)));
 
 	number_found = scanner_scan(&scanCtx);
 

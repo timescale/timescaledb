@@ -10,6 +10,7 @@
 #include "chunk.h"
 #include "subspace_store.h"
 #include "hypertable_cache.h"
+#include "trigger.h"
 
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple)
@@ -31,7 +32,7 @@ typedef struct ChunkCacheEntry
 {
 	MemoryContext mcxt;
 	Chunk	   *chunk;
-}	ChunkCacheEntry;
+} ChunkCacheEntry;
 
 static void
 chunk_cache_entry_free(void *cce)
@@ -116,4 +117,17 @@ is_hypertable(Oid relid)
 	if (!OidIsValid(relid))
 		return false;
 	return hypertable_relid_lookup(relid) != InvalidOid;
+}
+
+PG_FUNCTION_INFO_V1(hypertable_validate_triggers);
+
+Datum
+hypertable_validate_triggers(PG_FUNCTION_ARGS)
+{
+	if (relation_has_transition_table_trigger(PG_GETARG_OID(0)))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+		errmsg("Hypertables do not support transition tables in triggers.")));
+
+	PG_RETURN_VOID();
 }

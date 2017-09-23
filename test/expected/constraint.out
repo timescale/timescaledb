@@ -43,60 +43,37 @@ INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
 ERROR:  duplicate key value violates unique constraint "4_1_hyper_unique_time_key"
 \set ON_ERROR_STOP 1
-\d+ hyper
-                          Table "public.hyper"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "hyper_time_idx" btree ("time" DESC)
-Check constraints:
-    "hyper_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Child tables: _timescaledb_internal._hyper_1_3_chunk
+-- Show constraints on main tables
+SELECT * FROM test.show_constraints('hyper');
+      Constraint      | Type |  Columns   | Index |            Expr            
+----------------------+------+------------+-------+----------------------------
+ hyper_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+(1 row)
 
-\d+ hyper_unique
-                       Table "public.hyper_unique"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "hyper_unique_time_key" UNIQUE CONSTRAINT, btree ("time")
-Check constraints:
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Child tables: _timescaledb_internal._hyper_2_4_chunk,
-              _timescaledb_internal._hyper_2_5_chunk
+SELECT * FROM test.show_constraints('hyper_unique');
+         Constraint          | Type |  Columns   |         Index         |            Expr            
+-----------------------------+------+------------+-----------------------+----------------------------
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -                     | (sensor_1 > (10)::numeric)
+ hyper_unique_time_key       | u    | {time}     | hyper_unique_time_key | 
+(2 rows)
 
 --should have unique constraint not just unique index
-\d+ _timescaledb_internal._hyper_2_4_chunk
-             Table "_timescaledb_internal._hyper_2_4_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "4_1_hyper_unique_time_key" UNIQUE CONSTRAINT, btree ("time")
-Check constraints:
-    "constraint_4" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_unique
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+         Constraint          | Type |  Columns   |                       Index                       |                                           Expr                                           
+-----------------------------+------+------------+---------------------------------------------------+------------------------------------------------------------------------------------------
+ 4_1_hyper_unique_time_key   | u    | {time}     | _timescaledb_internal."4_1_hyper_unique_time_key" | 
+ constraint_4                | c    | {time}     | -                                                 | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -                                                 | (sensor_1 > (10)::numeric)
+(3 rows)
 
 ALTER TABLE hyper_unique DROP CONSTRAINT hyper_unique_time_key;
-\d+ _timescaledb_internal._hyper_2_4_chunk
-             Table "_timescaledb_internal._hyper_2_4_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Check constraints:
-    "constraint_4" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_unique
+-- The constraint should have been removed from the chunk as well
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+         Constraint          | Type |  Columns   | Index |                                           Expr                                           
+-----------------------------+------+------------+-------+------------------------------------------------------------------------------------------
+ constraint_4                | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+(2 rows)
 
 --uniqueness not enforced
 INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES
@@ -111,62 +88,38 @@ DELETE FROM hyper_unique WHERE device_id = 'dev3';
 ALTER TABLE hyper_unique
       ADD CHECK (time > 0),
       ADD UNIQUE (time);
-\d+ hyper_unique
-                       Table "public.hyper_unique"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "hyper_unique_time_key" UNIQUE CONSTRAINT, btree ("time")
-Check constraints:
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-    "hyper_unique_time_check" CHECK ("time" > 0)
-Child tables: _timescaledb_internal._hyper_2_4_chunk,
-              _timescaledb_internal._hyper_2_5_chunk
+SELECT * FROM test.show_constraints('hyper_unique');
+         Constraint          | Type |  Columns   |         Index         |            Expr            
+-----------------------------+------+------------+-----------------------+----------------------------
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -                     | (sensor_1 > (10)::numeric)
+ hyper_unique_time_check     | c    | {time}     | -                     | ("time" > 0)
+ hyper_unique_time_key       | u    | {time}     | hyper_unique_time_key | 
+(3 rows)
 
-\d+ _timescaledb_internal._hyper_2_4_chunk
-             Table "_timescaledb_internal._hyper_2_4_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "4_4_hyper_unique_time_key" UNIQUE CONSTRAINT, btree ("time")
-Check constraints:
-    "constraint_4" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-    "hyper_unique_time_check" CHECK ("time" > 0)
-Inherits: hyper_unique
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+         Constraint          | Type |  Columns   |                       Index                       |                                           Expr                                           
+-----------------------------+------+------------+---------------------------------------------------+------------------------------------------------------------------------------------------
+ 4_4_hyper_unique_time_key   | u    | {time}     | _timescaledb_internal."4_4_hyper_unique_time_key" | 
+ constraint_4                | c    | {time}     | -                                                 | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -                                                 | (sensor_1 > (10)::numeric)
+ hyper_unique_time_check     | c    | {time}     | -                                                 | ("time" > 0)
+(4 rows)
 
 ALTER TABLE hyper_unique
 DROP CONSTRAINT hyper_unique_time_key,
 DROP CONSTRAINT hyper_unique_time_check;
-\d+ hyper_unique
-                       Table "public.hyper_unique"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Check constraints:
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Child tables: _timescaledb_internal._hyper_2_4_chunk,
-              _timescaledb_internal._hyper_2_5_chunk
+SELECT * FROM test.show_constraints('hyper_unique');
+         Constraint          | Type |  Columns   | Index |            Expr            
+-----------------------------+------+------------+-------+----------------------------
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+(1 row)
 
-\d+ _timescaledb_internal._hyper_2_4_chunk
-             Table "_timescaledb_internal._hyper_2_4_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Check constraints:
-    "constraint_4" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_unique
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+         Constraint          | Type |  Columns   | Index |                                           Expr                                           
+-----------------------------+------+------------+-------+------------------------------------------------------------------------------------------
+ constraint_4                | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+(2 rows)
 
 CREATE UNIQUE INDEX hyper_unique_time_idx ON hyper_unique (time);
 \set ON_ERROR_STOP 0
@@ -178,19 +131,13 @@ ERROR:  Hypertables currently do not support adding a constraint using an existi
 DROP INDEX hyper_unique_time_idx;
 --now can create
 ALTER TABLE hyper_unique ADD CONSTRAINT hyper_unique_time_key UNIQUE (time);
-\d+ _timescaledb_internal._hyper_2_4_chunk
-             Table "_timescaledb_internal._hyper_2_4_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "4_6_hyper_unique_time_key" UNIQUE CONSTRAINT, btree ("time")
-Check constraints:
-    "constraint_4" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_unique_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_unique
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+         Constraint          | Type |  Columns   |                       Index                       |                                           Expr                                           
+-----------------------------+------+------------+---------------------------------------------------+------------------------------------------------------------------------------------------
+ 4_6_hyper_unique_time_key   | u    | {time}     | _timescaledb_internal."4_6_hyper_unique_time_key" | 
+ constraint_4                | c    | {time}     | -                                                 | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_unique_sensor_1_check | c    | {sensor_1} | -                                                 | (sensor_1 > (10)::numeric)
+(3 rows)
 
 --test adding constraint with same name to different table -- should fail
 \set ON_ERROR_STOP 0
@@ -228,32 +175,21 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 ERROR:  duplicate key value violates unique constraint "6_8_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 --should have unique constraint not just unique index
-\d+ _timescaledb_internal._hyper_3_6_chunk
-             Table "_timescaledb_internal._hyper_3_6_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "6_8_hyper_pk_pkey" PRIMARY KEY, btree ("time")
-Check constraints:
-    "constraint_6" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_pk_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_pk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
+       Constraint        | Type |  Columns   |                   Index                   |                                           Expr                                           
+-------------------------+------+------------+-------------------------------------------+------------------------------------------------------------------------------------------
+ 6_8_hyper_pk_pkey       | p    | {time}     | _timescaledb_internal."6_8_hyper_pk_pkey" | 
+ constraint_6            | c    | {time}     | -                                         | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -                                         | (sensor_1 > (10)::numeric)
+(3 rows)
 
 ALTER TABLE hyper_pk DROP CONSTRAINT hyper_pk_pkey;
-\d+ _timescaledb_internal._hyper_3_6_chunk
-             Table "_timescaledb_internal._hyper_3_6_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Check constraints:
-    "constraint_6" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_pk_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_pk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
+       Constraint        | Type |  Columns   | Index |                                           Expr                                           
+-------------------------+------+------------+-------+------------------------------------------------------------------------------------------
+ constraint_6            | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+(2 rows)
 
 --uniqueness not enforced
 INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
@@ -271,19 +207,13 @@ ERROR:  Cannot create a unique index without the column: time (used in partition
 \set ON_ERROR_STOP 1
 --now can create
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
-\d+ _timescaledb_internal._hyper_3_6_chunk
-             Table "_timescaledb_internal._hyper_3_6_chunk"
-  Column   |  Type   | Modifiers | Storage  | Stats target | Description 
------------+---------+-----------+----------+--------------+-------------
- time      | bigint  | not null  | plain    |              | 
- device_id | text    | not null  | extended |              | 
- sensor_1  | numeric | default 1 | main     |              | 
-Indexes:
-    "6_10_hyper_pk_pkey" PRIMARY KEY, btree ("time")
-Check constraints:
-    "constraint_6" CHECK ("time" >= '1257987700000000000'::bigint AND "time" < '1257987700000000010'::bigint)
-    "hyper_pk_sensor_1_check" CHECK (sensor_1 > 10::numeric)
-Inherits: hyper_pk
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
+       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           
+-------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------
+ 6_10_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_10_hyper_pk_pkey" | 
+ constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)
+(3 rows)
 
 --test adding constraint with same name to different table -- should fail
 \set ON_ERROR_STOP 0

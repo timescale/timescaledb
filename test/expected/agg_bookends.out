@@ -48,14 +48,14 @@ SELECT first(temp, time_alt) FROM "btest";
   20.1
 (1 row)
 
-SELECT gp, last(temp, time) FROM "btest" GROUP BY gp;
+SELECT gp, last(temp, time) FROM "btest" GROUP BY gp ORDER BY gp;
  gp | last 
 ----+------
   1 | 25.1
   2 | 20.1
 (2 rows)
 
-SELECT gp, first(temp, time) FROM "btest" GROUP BY gp;
+SELECT gp, first(temp, time) FROM "btest" GROUP BY gp ORDER BY gp;
  gp | first 
 ----+-------
   1 |  22.5
@@ -63,7 +63,7 @@ SELECT gp, first(temp, time) FROM "btest" GROUP BY gp;
 (2 rows)
 
 --check whole row
-SELECT gp, first("btest", time) FROM "btest" GROUP BY gp;
+SELECT gp, first("btest", time) FROM "btest" GROUP BY gp ORDER BY gp;
  gp |                                 first                                  
 ----+------------------------------------------------------------------------
   1 | ("Fri Jan 20 09:00:01 2017","Fri Jan 20 10:00:00 2017",1,22.5,testing)
@@ -71,14 +71,14 @@ SELECT gp, first("btest", time) FROM "btest" GROUP BY gp;
 (2 rows)
 
 --check toasted col
-SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp;
+SELECT gp, left(last(strid, time), 10) FROM "btest" GROUP BY gp ORDER BY gp;
  gp |    left    
 ----+------------
   1 | testing
   2 | xyzxyzxyzx
 (2 rows)
 
-SELECT gp, last(temp, strid) FROM "btest" GROUP BY gp;
+SELECT gp, last(temp, strid) FROM "btest" GROUP BY gp ORDER BY gp;
  gp | last 
 ----+------
   1 | 22.5
@@ -125,8 +125,8 @@ SELECT gp, last(temp, time_alt) FROM "btest" GROUP BY gp ORDER BY gp;
   2 |     
 (2 rows)
 
---Previously, some bugs were found with NULLS and numeric types, so test that 
-CREATE TABLE btest_numeric 
+--Previously, some bugs were found with NULLS and numeric types, so test that
+CREATE TABLE btest_numeric
 (
     time timestamp,
     quantity numeric

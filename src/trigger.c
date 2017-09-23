@@ -1,55 +1,59 @@
-#include "trigger.h"
-
-#include <access/htup_details.h>
-#include <access/heapam.h>
-#include <utils/relcache.h>
+#include <postgres.h>
+#include <utils/rel.h>
+#include <utils/lsyscache.h>
 #include <utils/builtins.h>
-#include <utils/fmgroids.h>
 #include <tcop/tcopprot.h>
-#include <catalog/objectaddress.h>
-#include <catalog/indexing.h>
 #include <commands/trigger.h>
 #include <access/xact.h>
-#include <fmgr.h>
 
+#include "trigger.h"
+#include "compat.h"
 
-Form_pg_trigger
-trigger_by_oid(Oid trigger_oid, bool missing_ok)
+#if PG10
+#include <parser/analyze.h>
+#endif
+
+static Trigger *
+trigger_by_name_relation(Relation rel, const char *trigname, bool missing_ok)
 {
-	Relation	trigRel;
-	HeapTuple	tup;
-	Form_pg_trigger trig = NULL;
+	TriggerDesc *trigdesc = rel->trigdesc;
+	Trigger    *trigger = NULL;
 
-	trigRel = heap_open(TriggerRelationId, AccessShareLock);
-
-	tup = get_catalog_object_by_oid(trigRel, trigger_oid);
-
-	if (!HeapTupleIsValid(tup))
+	if (trigdesc != NULL)
 	{
-		if (!missing_ok)
-			elog(ERROR, "could not find tuple for trigger %u",
-				 trigger_oid);
-	}
-	else
-	{
-		trig = (Form_pg_trigger) GETSTRUCT(tup);
+		int			i;
+
+		for (i = 0; i < trigdesc->numtriggers; i++)
+		{
+			trigger = &trigdesc->triggers[i];
+
+			if (strncmp(trigger->tgname, trigname, NAMEDATALEN) == 0)
+				break;
+
+			trigger = NULL;
+		}
 	}
 
-	heap_close(trigRel, AccessShareLock);
-	return trig;
+	if (!missing_ok && NULL == trigger)
+		elog(ERROR, "No trigger %s for relation %s",
+			 trigname, get_rel_name(rel->rd_id));
+
+	return trigger;
 }
 
-
-bool
-trigger_is_chunk_trigger(const Form_pg_trigger trigger)
+Trigger *
+trigger_by_name(Oid relid, const char *trigname, bool missing_ok)
 {
-	return trigger != NULL && TRIGGER_FOR_ROW(trigger->tgtype) && !trigger->tgisinternal;
-}
+	Relation	rel;
+	Trigger    *trigger;
 
-char *
-trigger_name(const Form_pg_trigger trigger)
-{
-	return NameStr(trigger->tgname);
+	rel = relation_open(relid, AccessShareLock);
+
+	trigger = trigger_by_name_relation(rel, trigname, missing_ok);
+
+	relation_close(rel, AccessShareLock);
+
+	return trigger;
 }
 
 /* all creation of triggers on chunks should go through this. Strictly speaking,
@@ -66,9 +70,25 @@ trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_ta
 	deparsed_list = pg_parse_query(def);
 	Assert(list_length(deparsed_list) == 1);
 	deparsed_node = linitial(deparsed_list);
-	Assert(IsA(deparsed_node, CreateTrigStmt));
-	stmt = (CreateTrigStmt *) deparsed_node;
 
+#if PG10
+	do
+	{
+		RawStmt    *rawstmt = (RawStmt *) deparsed_node;
+		ParseState *pstate = make_parsestate(NULL);
+		Query	   *query;
+
+		Assert(IsA(deparsed_node, RawStmt));
+		pstate->p_sourcetext = def;
+		query = transformTopLevelStmt(pstate, rawstmt);
+		free_parsestate(pstate);
+		stmt = (CreateTrigStmt *) query->utilityStmt;
+	} while (0);
+#elif PG96
+	stmt = (CreateTrigStmt *) deparsed_node;
+#endif
+
+	Assert(IsA(stmt, CreateTrigStmt));
 	stmt->relation->relname = chunk_table_name;
 	stmt->relation->schemaname = chunk_schema_name;
 
@@ -79,34 +99,83 @@ trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_ta
 								 * twice */
 }
 
+typedef bool (*trigger_handler) (Trigger *trigger, void *arg);
 
-
-void
-trigger_create_on_all_chunks(Hypertable *ht, Chunk *chunk)
+static inline void
+for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 {
-	ScanKeyData skey;
-	Relation	tgrel;
-	SysScanDesc tgscan;
-	HeapTuple	htup;
+	Relation	rel;
 
-	ScanKeyInit(&skey,
-				Anum_pg_trigger_tgrelid,
-				BTEqualStrategyNumber, F_OIDEQ, ht->main_table_relid);
+	rel = relation_open(relid, AccessShareLock);
 
-	tgrel = heap_open(TriggerRelationId, AccessShareLock);
-	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true,
-								NULL, 1, &skey);
-
-	while (HeapTupleIsValid(htup = systable_getnext(tgscan)))
+	if (rel->trigdesc != NULL)
 	{
-		Form_pg_trigger pg_trigger = (Form_pg_trigger) GETSTRUCT(htup);
-		Oid			trigger_oid = HeapTupleGetOid(htup);
+		TriggerDesc *trigdesc = rel->trigdesc;
+		int			i;
 
-		if (trigger_is_chunk_trigger(pg_trigger))
+		for (i = 0; i < trigdesc->numtriggers; i++)
 		{
-			trigger_create_on_chunk(trigger_oid, NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name));
+			Trigger    *trigger = &trigdesc->triggers[i];
+
+			if (!on_trigger(trigger, arg))
+				return;
 		}
 	}
-	systable_endscan(tgscan);
-	heap_close(tgrel, AccessShareLock);
+
+	relation_close(rel, AccessShareLock);
+}
+
+static bool
+create_trigger_handler(Trigger *trigger, void *arg)
+{
+	Chunk	   *chunk = arg;
+
+#if PG10
+	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
+		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+		errmsg("Hypertables do not support transition tables in triggers.")));
+#endif
+	if (trigger_is_chunk_trigger(trigger))
+		trigger_create_on_chunk(trigger->tgoid,
+								NameStr(chunk->fd.schema_name),
+								NameStr(chunk->fd.table_name));
+
+	return true;
+}
+
+void
+trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
+{
+	for_each_trigger(ht->main_table_relid, create_trigger_handler, chunk);
+}
+
+#if PG10
+static bool
+check_for_transition_table(Trigger *trigger, void *arg)
+{
+	bool	   *found = arg;
+
+	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
+		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
+	{
+		*found = true;
+		return false;
+	}
+
+	return true;
+}
+#endif
+
+bool
+relation_has_transition_table_trigger(Oid relid)
+{
+	bool		found = false;
+
+#if PG10
+	for_each_trigger(relid, check_for_transition_table, &found);
+#endif
+
+	return found;
 }

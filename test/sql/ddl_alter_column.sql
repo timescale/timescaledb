@@ -7,8 +7,9 @@ INSERT INTO alter_test VALUES ('2017-01-20T09:00:01', 17.5, 'blue'),
                               ('2017-01-21T09:00:01', 19.1, 'yellow'),
                               ('2017-04-20T09:00:01', 89.5, 'green'),
                               ('2017-04-21T09:00:01', 17.1, 'black');
-\d+ alter_test
-\d+ _timescaledb_internal.*
+SELECT * FROM test.show_columns('alter_test');
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%chunk');
+
 -- show the column name and type of the partitioning dimension in the
 -- metadata table
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -26,8 +27,9 @@ ALTER TABLE alter_test RENAME COLUMN color TO colorname;
 ALTER TABLE alter_test ALTER COLUMN colorname TYPE text;
 \set ON_ERROR_STOP 1
 
-\d+ alter_test
-\d+ _timescaledb_internal.*
+SELECT * FROM test.show_columns('alter_test');
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%chunk');
+
 -- show that the metadata has been updated
 SELECT * FROM _timescaledb_catalog.dimension;
 

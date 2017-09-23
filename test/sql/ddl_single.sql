@@ -9,7 +9,7 @@ EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
 
 \ir include/ddl_ops_2.sql
 
-\d+ PUBLIC."Hypertable_1"
-\d+ _timescaledb_internal._hyper_1_1_chunk
+SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 
 SELECT * FROM PUBLIC."Hypertable_1";

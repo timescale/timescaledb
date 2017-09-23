@@ -39,6 +39,7 @@
 #include "indexing.h"
 #include "errors.h"
 #include "guc.h"
+#include "compat.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -100,24 +101,64 @@ static bool expect_chunk_modification = false;
 						 DirectFunctionCall1(namein, CStringGetDatum(column_name)), \
 						 ObjectIdGetDatum(new_type))
 
-/* Calls the default ProcessUtility */
+typedef struct ProcessUtilityArgs
+{
+#if PG10
+	PlannedStmt *pstmt;
+	QueryEnvironment *queryEnv;
+#endif
+	Node	   *parsetree;
+	const char *query_string;
+	ProcessUtilityContext context;
+	ParamListInfo params;
+	DestReceiver *dest;
+	char	   *completion_tag;
+}	ProcessUtilityArgs;
+
+/* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
-prev_ProcessUtility(Node *parsetree,
-					const char *query_string,
-					ProcessUtilityContext context,
-					ParamListInfo params,
-					DestReceiver *dest,
-					char *completion_tag)
+prev_ProcessUtility(ProcessUtilityArgs * args)
 {
 	if (prev_ProcessUtility_hook != NULL)
 	{
+#if PG10
 		/* Call any earlier hooks */
-		(prev_ProcessUtility_hook) (parsetree, query_string, context, params, dest, completion_tag);
+		(prev_ProcessUtility_hook) (args->pstmt,
+									args->query_string,
+									args->context,
+									args->params,
+									args->queryEnv,
+									args->dest,
+									args->completion_tag);
+#elif PG96
+		(prev_ProcessUtility_hook) (args->parsetree,
+									args->query_string,
+									args->context,
+									args->params,
+									args->dest,
+									args->completion_tag);
+#endif
+
 	}
 	else
 	{
 		/* Call the standard */
-		standard_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+#if PG10
+		standard_ProcessUtility(args->pstmt,
+								args->query_string,
+								args->context,
+								args->params,
+								args->queryEnv,
+								args->dest,
+								args->completion_tag);
+#elif PG96
+		standard_ProcessUtility(args->parsetree,
+								args->query_string,
+								args->context,
+								args->params,
+								args->dest,
+								args->completion_tag);
+#endif
 	}
 }
 
@@ -387,60 +428,42 @@ process_drop_table(DropStmt *stmt)
 static void
 process_drop_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
-	const char *trigger_name = arg;
-	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, false);
+	Trigger    *trigger = arg;
+	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger->tgname, false);
 
 	RemoveTriggerById(trigger_oid);
 }
 
-static bool
+static void
 process_drop_trigger(DropStmt *stmt)
 {
-	ListCell   *cell1;
-	bool		handled = false;
 	Cache	   *hcache = hypertable_cache_pin();
+	ListCell   *lc;
 
-	foreach(cell1, stmt->objects)
+	foreach(lc, stmt->objects)
 	{
-		List	   *objname = lfirst(cell1);
-		List	   *objargs = NIL;
-		Relation	relation = NULL;
-		ObjectAddress address;
+		List	   *object = list_copy(lfirst(lc));
+		const char *trigname = strVal(llast(object));
+		List	   *relname = list_truncate(object, list_length(object) - 1);
 
-		address = get_object_address(stmt->removeType,
-									 objname, objargs,
-									 &relation,
-									 AccessExclusiveLock,
-									 stmt->missing_ok);
-
-		if (!OidIsValid(address.objectId))
+		if (relname != NIL)
 		{
-			Assert(stmt->missing_ok);
-			continue;
-		}
-
-		if (NULL != relation)
-		{
-			Hypertable *ht = hypertable_cache_get_entry(hcache, RelationGetRelid(relation));
+			RangeVar   *relation = makeRangeVarFromNameList(relname);
+			Hypertable *ht = hypertable_cache_get_entry_rv(hcache, relation);
 
 			if (NULL != ht)
 			{
-				Form_pg_trigger trigger = trigger_by_oid(address.objectId, stmt->missing_ok);
+				Trigger    *trigger = trigger_by_name(ht->main_table_relid,
+													  trigname,
+													  stmt->missing_ok);
 
 				if (trigger_is_chunk_trigger(trigger))
-				{
-					foreach_chunk(ht, process_drop_trigger_chunk, trigger_name(trigger));
-					handled = true;
-				}
+					foreach_chunk(ht, process_drop_trigger_chunk, trigger);
 			}
-
-			heap_close(relation, AccessShareLock);
 		}
 	}
 
 	cache_release(hcache);
-
-	return handled;
 }
 
 static void
@@ -1300,6 +1323,25 @@ create_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 }
 
 static void
+process_create_trigger_start(Node *parsetree)
+{
+	CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
+
+	if (!stmt->row)
+		return;
+
+	if (hypertable_relid(stmt->relation) == InvalidOid)
+		return;
+
+#if PG10
+	if (stmt->transitionRels != NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+		errmsg("Hypertables do not support transition tables in triggers.")));
+#endif
+}
+
+static void
 process_create_trigger_end(Node *parsetree)
 {
 	CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
@@ -1337,6 +1379,9 @@ process_ddl_command_start(Node *parsetree,
 			break;
 		case T_IndexStmt:
 			process_index_start(parsetree);
+			break;
+		case T_CreateTrigStmt:
+			process_create_trigger_start(parsetree);
 			break;
 		case T_DropStmt:
 
@@ -1401,25 +1446,51 @@ process_ddl_command_end(CollectedCommand *cmd)
  * PostgreSQL.
  */
 static void
-timescaledb_ddl_command_start(Node *parsetree,
+timescaledb_ddl_command_start(
+#if PG10
+							  PlannedStmt *pstmt,
+#elif PG96
+							  Node *parsetree,
+#endif
 							  const char *query_string,
 							  ProcessUtilityContext context,
 							  ParamListInfo params,
+#if PG10
+							  QueryEnvironment *queryEnv,
+#endif
 							  DestReceiver *dest,
 							  char *completion_tag)
 {
+	ProcessUtilityArgs args = {
+		.query_string = query_string,
+		.context = context,
+		.params = params,
+		.dest = dest,
+		.completion_tag = completion_tag,
+#if PG10
+		.pstmt = pstmt,
+		.parsetree = pstmt->utilityStmt,
+		.queryEnv = queryEnv,
+#elif PG96
+		.parsetree = parsetree,
+#endif
+	};
+
 	/*
 	 * If we are restoring, we don't want to recurse to chunks or block
 	 * operations on chunks. If we do, the restore will fail.
 	 */
 	if (!extension_is_loaded() || guc_restoring)
 	{
-		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+		prev_ProcessUtility(&args);
 		return;
 	}
 
-	if (!process_ddl_command_start(parsetree, query_string, context, completion_tag))
-		prev_ProcessUtility(parsetree, query_string, context, params, dest, completion_tag);
+	if (!process_ddl_command_start(args.parsetree,
+								   args.query_string,
+								   args.context,
+								   args.completion_tag))
+		prev_ProcessUtility(&args);
 }
 
 PG_FUNCTION_INFO_V1(timescaledb_ddl_command_end);

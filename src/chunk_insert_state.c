@@ -15,6 +15,7 @@
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
+#include "compat.h"
 
 /*
  * Create a new RangeTblEntry for the chunk in the executor's range table and
@@ -114,23 +115,37 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	int			ncheck,
 				i;
 	ConstrCheck *check;
-	List	   *qual;
 
-	Assert(rel->rd_att->constr != NULL);
+	Assert(rel->rd_att->constr != NULL &&
+		   rri->ri_ConstraintExprs == NULL);
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
 
-	Assert(rri->ri_ConstraintExprs == NULL);
+#if PG10
+	rri->ri_ConstraintExprs =
+		(ExprState **) palloc(ncheck * sizeof(ExprState *));
+
+	for (i = 0; i < ncheck; i++)
+	{
+		Expr	   *checkconstr = stringToNode(check[i].ccbin);
+
+		rri->ri_ConstraintExprs[i] =
+			prepare_constr_expr(checkconstr);
+	}
+#elif PG96
 	rri->ri_ConstraintExprs =
 		(List **) palloc(ncheck * sizeof(List *));
+
 	for (i = 0; i < ncheck; i++)
 	{
 		/* ExecQual wants implicit-AND form */
-		qual = make_ands_implicit(stringToNode(check[i].ccbin));
+		List	   *qual = make_ands_implicit(stringToNode(check[i].ccbin));
+
 		rri->ri_ConstraintExprs[i] = (List *)
 			prepare_constr_expr((Expr *) qual);
 	}
+#endif
 }
 
 /*
@@ -152,7 +167,10 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	rri = palloc0(sizeof(ResultRelInfo));
 	NodeSetTag(rri, T_ResultRelInfo);
 
-	InitResultRelInfo(rri, rel, rti, dispatch->estate->es_instrument);
+	InitResultRelInfoCompat(rri,
+							rel,
+							rti,
+							dispatch->estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
 	rri_orig = dispatch->hypertable_result_rel_info;
@@ -210,7 +228,7 @@ tuple_conversion_needed(TupleDesc indesc,
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
+chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operation)
 {
 	ChunkInsertState *state;
 	Relation	rel,
@@ -222,6 +240,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 													  ALLOCSET_DEFAULT_SIZES);
 	Query	   *parse = dispatch->parse;
 	OnConflictAction onconflict = ONCONFLICT_NONE;
+	ResultRelInfo *resrelinfo;
 
 	if (parse && parse->onConflict)
 		onconflict = parse->onConflict->action;
@@ -239,28 +258,30 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
 	rel = heap_open(chunk->table_id, RowExclusiveLock);
-	CheckValidResultRel(rel, CMD_INSERT);
 
 	if (rel->rd_rel->relkind != RELKIND_RELATION)
 		elog(ERROR, "insert is not on a table");
 
 	rti = create_chunk_range_table_entry(dispatch->estate, rel);
+	resrelinfo = create_chunk_result_relation_info(dispatch, rel, rti);
+
+	CheckValidResultRelCompat(resrelinfo, operation);
 
 	MemoryContextSwitchTo(cis_context);
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;
 	state->rel = rel;
-	state->result_relation_info = create_chunk_result_relation_info(dispatch, rel, rti);
+	state->result_relation_info = resrelinfo;
 
-	if (state->result_relation_info->ri_RelationDesc->rd_rel->relhasindex &&
-		state->result_relation_info->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(state->result_relation_info, onconflict != ONCONFLICT_NONE);
+	if (resrelinfo->ri_RelationDesc->rd_rel->relhasindex &&
+		resrelinfo->ri_IndexRelationDescs == NULL)
+		ExecOpenIndices(resrelinfo, onconflict != ONCONFLICT_NONE);
 
-	if (state->result_relation_info->ri_TrigDesc != NULL)
+	if (resrelinfo->ri_TrigDesc != NULL)
 	{
-		if (state->result_relation_info->ri_TrigDesc->trig_insert_instead_row ||
-			state->result_relation_info->ri_TrigDesc->trig_insert_after_statement ||
-			state->result_relation_info->ri_TrigDesc->trig_insert_before_statement)
+		if (resrelinfo->ri_TrigDesc->trig_insert_instead_row ||
+			resrelinfo->ri_TrigDesc->trig_insert_after_statement ||
+			resrelinfo->ri_TrigDesc->trig_insert_before_statement)
 			elog(ERROR, "Insert trigger on chunk table not supported");
 	}
 

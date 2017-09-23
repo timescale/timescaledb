@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 #include <postgres.h>
 #include <fmgr.h>
 #include <utils/datetime.h>
@@ -8,11 +6,16 @@
 #include <catalog/namespace.h>
 #include <utils/guc.h>
 #include <utils/date.h>
+#include <nodes/nodes.h>
+#include <nodes/makefuncs.h>
+#include <utils/lsyscache.h>
 
 #include "utils.h"
-#include "nodes/nodes.h"
-#include "nodes/makefuncs.h"
-#include "utils/lsyscache.h"
+#include "compat.h"
+
+#if PG10
+#include <utils/fmgrprotos.h>
+#endif
 
 PG_FUNCTION_INFO_V1(pg_timestamp_to_microseconds);
 
