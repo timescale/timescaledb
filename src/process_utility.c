@@ -1638,8 +1638,20 @@ timescaledb_ddl_command_start(
 		.parsetree = parsetree,
 #endif
 	};
+	bool		altering_timescaledb = false;
 
-	if (!extension_is_loaded())
+	if (IsA(args.parsetree, AlterExtensionStmt))
+	{
+		AlterExtensionStmt *stmt = (AlterExtensionStmt *) args.parsetree;
+
+		altering_timescaledb = (strcmp(stmt->extname, EXTENSION_NAME) == 0);
+	}
+
+	/*
+	 * We don't want to load the extension if we just got the command to alter
+	 * it.
+	 */
+	if (altering_timescaledb || !extension_is_loaded())
 	{
 		prev_ProcessUtility(&args);
 		return;

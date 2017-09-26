@@ -1,36 +1,36 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb', 'first_sfunc'
+AS '@MODULE_PATHNAME@', 'first_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'first_combinefunc'
+AS '@MODULE_PATHNAME@', 'first_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb', 'last_sfunc'
+AS '@MODULE_PATHNAME@', 'last_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'last_combinefunc'
+AS '@MODULE_PATHNAME@', 'last_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any")
 RETURNS anyelement
-AS '$libdir/timescaledb', 'bookend_finalfunc'
+AS '@MODULE_PATHNAME@', 'bookend_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
-AS '$libdir/timescaledb', 'bookend_serializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'bookend_deserializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.

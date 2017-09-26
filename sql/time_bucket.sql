@@ -1,15 +1,15 @@
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
-	AS '$libdir/timescaledb', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of timestamptz happens at UTC time
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
-	AS '$libdir/timescaledb', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 --bucketing on date should not do any timezone conversion
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '$libdir/timescaledb', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)

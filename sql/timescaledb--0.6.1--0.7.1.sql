@@ -210,14 +210,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
         interval_length   BIGINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '$libdir/timescaledb', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_closed(
         dimension_value   BIGINT,
         num_slices        SMALLINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '$libdir/timescaledb', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk_metadata(
     chunk_id int
@@ -821,7 +821,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.verify_hypertable_indexes(hypertable REGCLASS) RETURNS VOID
-AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT;
+AS '@MODULE_PATHNAME@', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
     RETURNS void LANGUAGE plpgsql
@@ -850,16 +850,16 @@ END
 $BODY$;
 -- This file contains utilities for time conversion.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '$libdir/timescaledb', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '$libdir/timescaledb', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '$libdir/timescaledb', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '$libdir/timescaledb', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
@@ -1202,7 +1202,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_triggers(main_table REGCLASS) RETURNS VOID
-    AS '$libdir/timescaledb', 'hypertable_validate_triggers' LANGUAGE C STRICT;
+    AS '@MODULE_PATHNAME@', 'hypertable_validate_triggers' LANGUAGE C STRICT;
 -- Creates a constraint on a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_constraint_add_table_constraint(
     chunk_constraint_row  _timescaledb_catalog.chunk_constraint
@@ -1349,11 +1349,11 @@ $BODY$;
 -- Deprecated partition hash function
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement)
     RETURNS int
-    AS '$libdir/timescaledb', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_hash(val anyelement)
     RETURNS int
-    AS '$libdir/timescaledb', 'get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 -- This file contains functions related to getting information about the
 -- schema of a hypertable, including columns, their types, etc.
 
@@ -1761,7 +1761,7 @@ BEGIN
 END
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
-AS '$libdir/timescaledb', 'timescaledb_ddl_command_end' LANGUAGE C;
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
 
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 CREATE EVENT TRIGGER timescaledb_ddl_command_end ON ddl_command_end
@@ -1889,37 +1889,37 @@ END
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb', 'first_sfunc'
+AS '@MODULE_PATHNAME@', 'first_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'first_combinefunc'
+AS '@MODULE_PATHNAME@', 'first_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb', 'last_sfunc'
+AS '@MODULE_PATHNAME@', 'last_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'last_combinefunc'
+AS '@MODULE_PATHNAME@', 'last_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any")
 RETURNS anyelement
-AS '$libdir/timescaledb', 'bookend_finalfunc'
+AS '@MODULE_PATHNAME@', 'bookend_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
-AS '$libdir/timescaledb', 'bookend_serializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'bookend_deserializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.
@@ -1952,15 +1952,15 @@ CREATE AGGREGATE last(anyelement, "any") (
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
-	AS '$libdir/timescaledb', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of timestamptz happens at UTC time
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
-	AS '$libdir/timescaledb', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 --bucketing on date should not do any timezone conversion
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '$libdir/timescaledb', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
@@ -2018,15 +2018,15 @@ $BODY$
     SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
-    AS '$libdir/timescaledb', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 -- this trigger function causes an invalidation event on the table whose name is
 -- passed in as the first element.
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
- RETURNS TRIGGER AS '$libdir/timescaledb', 'invalidate_relcache_trigger' LANGUAGE C;
+ RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C;
 
 -- This function is only used for debugging
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(proxy_oid OID)
- RETURNS BOOLEAN AS '$libdir/timescaledb', 'invalidate_relcache' LANGUAGE C;
+ RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'invalidate_relcache' LANGUAGE C;
 
 
 -- This file contains utility functions to get the relation size
@@ -2449,27 +2449,27 @@ END;
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_sfunc'
+AS '@MODULE_PATHNAME@', 'hist_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_combinefunc(state1 INTERNAL, state2 INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_combinefunc'
+AS '@MODULE_PATHNAME@', 'hist_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_serializefunc(INTERNAL)
 RETURNS bytea
-AS '$libdir/timescaledb', 'hist_serializefunc'
+AS '@MODULE_PATHNAME@', 'hist_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_deserializefunc(bytea, INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_deserializefunc'
+AS '@MODULE_PATHNAME@', 'hist_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTEGER[]
-AS '$libdir/timescaledb', 'hist_finalfunc'
+AS '@MODULE_PATHNAME@', 'hist_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- Tell Postgres how to use the new function
@@ -2752,14 +2752,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
         interval_length   BIGINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '$libdir/timescaledb', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_closed(
         dimension_value   BIGINT,
         num_slices        SMALLINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '$libdir/timescaledb', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk_metadata(
     chunk_id int
@@ -3406,7 +3406,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.verify_hypertable_indexes(hypertable REGCLASS) RETURNS VOID
-AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT;
+AS '@MODULE_PATHNAME@', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
     RETURNS void LANGUAGE plpgsql
@@ -3437,22 +3437,22 @@ $BODY$;
 
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
-AS '$libdir/timescaledb', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_replace(chunk_index_oid_old OID, chunk_index_oid_new OID) RETURNS VOID
-AS '$libdir/timescaledb', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;
 -- This file contains utilities for time conversion.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '$libdir/timescaledb', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '$libdir/timescaledb', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '$libdir/timescaledb', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '$libdir/timescaledb', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
@@ -3546,7 +3546,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_element anyelement, time_type REGTYPE) RETURNS BIGINT
-	AS '$libdir/timescaledb', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+	AS '@MODULE_PATHNAME@', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 -- This file contains functions associated with creating new
 -- hypertables.
 
@@ -3798,7 +3798,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_triggers(main_table REGCLASS) RETURNS VOID
-    AS '$libdir/timescaledb', 'hypertable_validate_triggers' LANGUAGE C STRICT;
+    AS '@MODULE_PATHNAME@', 'hypertable_validate_triggers' LANGUAGE C STRICT;
 -- Creates a constraint on a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_constraint_add_table_constraint(
     chunk_constraint_row  _timescaledb_catalog.chunk_constraint
@@ -3945,11 +3945,11 @@ $BODY$;
 -- Deprecated partition hash function
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement)
     RETURNS int
-    AS '$libdir/timescaledb', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_hash(val anyelement)
     RETURNS int
-    AS '$libdir/timescaledb', 'get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 -- This file contains functions related to getting information about the
 -- schema of a hypertable, including columns, their types, etc.
 
@@ -4345,7 +4345,7 @@ BEGIN
 END
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
-AS '$libdir/timescaledb', 'timescaledb_ddl_command_end' LANGUAGE C;
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
 
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 CREATE EVENT TRIGGER timescaledb_ddl_command_end ON ddl_command_end
@@ -4473,37 +4473,37 @@ END
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb', 'first_sfunc'
+AS '@MODULE_PATHNAME@', 'first_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'first_combinefunc'
+AS '@MODULE_PATHNAME@', 'first_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb', 'last_sfunc'
+AS '@MODULE_PATHNAME@', 'last_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'last_combinefunc'
+AS '@MODULE_PATHNAME@', 'last_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any")
 RETURNS anyelement
-AS '$libdir/timescaledb', 'bookend_finalfunc'
+AS '@MODULE_PATHNAME@', 'bookend_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
-AS '$libdir/timescaledb', 'bookend_serializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
-AS '$libdir/timescaledb', 'bookend_deserializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.
@@ -4536,15 +4536,15 @@ CREATE AGGREGATE last(anyelement, "any") (
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
-	AS '$libdir/timescaledb', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of timestamptz happens at UTC time
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
-	AS '$libdir/timescaledb', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 --bucketing on date should not do any timezone conversion
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '$libdir/timescaledb', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
@@ -4602,15 +4602,15 @@ $BODY$
     SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
-    AS '$libdir/timescaledb', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 -- this trigger function causes an invalidation event on the table whose name is
 -- passed in as the first element.
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
- RETURNS TRIGGER AS '$libdir/timescaledb', 'invalidate_relcache_trigger' LANGUAGE C;
+ RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C;
 
 -- This function is only used for debugging
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(proxy_oid OID)
- RETURNS BOOLEAN AS '$libdir/timescaledb', 'invalidate_relcache' LANGUAGE C;
+ RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'invalidate_relcache' LANGUAGE C;
 
 
 -- This file contains utility functions to get the relation size
@@ -5033,27 +5033,27 @@ END;
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_sfunc'
+AS '@MODULE_PATHNAME@', 'hist_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_combinefunc(state1 INTERNAL, state2 INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_combinefunc'
+AS '@MODULE_PATHNAME@', 'hist_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_serializefunc(INTERNAL)
 RETURNS bytea
-AS '$libdir/timescaledb', 'hist_serializefunc'
+AS '@MODULE_PATHNAME@', 'hist_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_deserializefunc(bytea, INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_deserializefunc'
+AS '@MODULE_PATHNAME@', 'hist_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTEGER[]
-AS '$libdir/timescaledb', 'hist_finalfunc'
+AS '@MODULE_PATHNAME@', 'hist_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- Tell Postgres how to use the new function

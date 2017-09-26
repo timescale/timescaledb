@@ -1,0 +1,6 @@
+--create function before proxy table
+CREATE OR REPLACE FUNCTION mock_function() RETURNS VOID
+    AS '$libdir/timescaledb-mock-2', 'mock_function' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE SCHEMA IF NOT EXISTS _timescaledb_cache;
+CREATE TABLE IF NOT EXISTS  _timescaledb_cache.cache_inval_extension();
+

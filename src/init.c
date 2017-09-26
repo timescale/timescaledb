@@ -6,7 +6,10 @@
 #include <utils/guc.h>
 
 #include "executor.h"
+#include "extension.h"
 #include "guc.h"
+#include "catalog.h"
+#include "version.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -43,32 +46,12 @@ extern void PGDLLEXPORT _PG_fini(void);
 void
 _PG_init(void)
 {
-	if (!process_shared_preload_libraries_in_progress)
-	{
-		/* cannot use GUC variable here since extension not yet loaded */
-		char	   *allow_install_without_preload = GetConfigOptionByName("timescaledb.allow_install_without_preload", NULL, true);
+	/*
+	 * Check extension_is loaded to catch certain errors such as calls to
+	 * functions defined on the wrong extension version
+	 */
+	extension_check_version(TIMESCALEDB_VERSION_MOD);
 
-		if (allow_install_without_preload == NULL ||
-			strlen(allow_install_without_preload) != 2 ||
-			strncmp(allow_install_without_preload, "on", 2) != 0)
-		{
-			char	   *config_file = GetConfigOptionByName("config_file", NULL, false);
-
-			ereport(ERROR,
-					(errmsg("The timescaledb library is not preloaded"),
-					 errhint("Please preload the timescaledb library via shared_preload_libraries.\n\n"
-					 "This can be done by editing the config file at: %1$s\n"
-							 "and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
-							 "	# Modify postgresql.conf:\n	shared_preload_libraries = 'timescaledb'\n\n"
-							 "Another way to do this, if not preloading other libraries, is with the command:\n"
-							 "	echo \"shared_preload_libraries = 'timescaledb'\" >> %1$s \n\n"
-							 "(Will require a database restart.)\n\n"
-							 "If you REALLY know what you are doing and would like to load the library without preloading, you can disable this check with: \n"
-							 "	SET timescaledb.allow_install_without_preload = 'on';", config_file)));
-			return;
-		}
-	}
-	elog(INFO, "timescaledb loaded");
 	_chunk_dispatch_info_init();
 	_cache_init();
 	_hypertable_cache_init();

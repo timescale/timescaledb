@@ -1,26 +1,26 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_sfunc'
+AS '@MODULE_PATHNAME@', 'hist_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_combinefunc(state1 INTERNAL, state2 INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_combinefunc'
+AS '@MODULE_PATHNAME@', 'hist_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_serializefunc(INTERNAL)
 RETURNS bytea
-AS '$libdir/timescaledb', 'hist_serializefunc'
+AS '@MODULE_PATHNAME@', 'hist_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_deserializefunc(bytea, INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb', 'hist_deserializefunc'
+AS '@MODULE_PATHNAME@', 'hist_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTEGER[]
-AS '$libdir/timescaledb', 'hist_finalfunc'
+AS '@MODULE_PATHNAME@', 'hist_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- Tell Postgres how to use the new function
