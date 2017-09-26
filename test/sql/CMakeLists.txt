@@ -49,6 +49,11 @@ set(TEST_FILES
   vacuum.sql
   version.sql)
 
+IF(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES
+    loader.sql)
+ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
+
 set(TEST_TEMPLATES
   parallel.sql.in
   partitioning.sql.in)

@@ -6,14 +6,23 @@
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
 
-#include "compat-msvc-enter.h" /* To label externs in extension.h and miscadmin.h correctly */
+#include "compat-msvc-enter.h"	/* To label externs in extension.h and
+								 * miscadmin.h correctly */
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include "compat-msvc-exit.h"
 
+#include <access/relscan.h>
+#include <catalog/indexing.h>
+#include <catalog/pg_extension.h>
+#include <utils/builtins.h>
+#include <utils/fmgroids.h>
+
 #include "catalog.h"
 #include "extension.h"
 #include "guc.h"
+#include "version.h"
+#include "extension_utils.c"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
@@ -33,76 +42,25 @@ static Oid	extension_proxy_oid = InvalidOid;
  *	* The proxy table will be created before the extension itself.
  *	* The proxy table will be dropped before the extension itself.
  */
-enum ExtensionState
-{
-	/*
-	 * NOT_INSTALLED means that this backend knows that the extension is not
-	 * present.  In this state we know that the proxy table is not present.
-	 * Thus, the only way to get out of this state is a RelCacheInvalidation
-	 * indicating that the proxy table was added.
-	 */
-	EXTENSION_STATE_NOT_INSTALLED,
-
-	/*
-	 * UNKNOWN state is used only if we cannot be sure what the state is. This
-	 * can happen in two cases: 1) at the start of a backend or 2) We got a
-	 * relcache event outside of a transaction and thus could not check the
-	 * cache for the presence/absence of the proxy table or extension.
-	 */
-	EXTENSION_STATE_UNKNOWN,
-
-	/*
-	 * TRANSITIONING only occurs when the proxy table exists but the extension
-	 * does not. This can only happen in the middle of a create or drop
-	 * extension.
-	 */
-	EXTENSION_STATE_TRANSITIONING,
-
-	/*
-	 * CREATED means we know the extension is loaded, metadata is up-to-date,
-	 * and we therefore do not need a full check until a RelCacheInvalidation
-	 * on the proxy table.
-	 */
-	EXTENSION_STATE_CREATED,
-};
 
 static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
 
-static bool
-proxy_table_exists()
+void
+extension_check_version(const char *so_version)
 {
-	Oid			nsid = get_namespace_oid(CACHE_SCHEMA_NAME, true);
-	Oid			proxy_table = get_relname_relid(EXTENSION_PROXY_TABLE, nsid);
+	char	   *sql_version;
 
-	return OidIsValid(proxy_table);
-}
-
-static bool
-extension_exists()
-{
-	return OidIsValid(get_extension_oid(EXTENSION_NAME, true));
-}
-
-/* Returns the recomputed current state */
-static enum ExtensionState
-extension_new_state()
-{
-	/*
-	 * NormalProcessingMode necessary to avoid accessing cache before its
-	 * ready (which may result in an infinite loop). More concretely we need
-	 * RelationCacheInitializePhase3 to have been already called.
-	 */
 	if (!IsNormalProcessingMode() || !IsTransactionState())
-		return EXTENSION_STATE_UNKNOWN;
+		return;
 
-	if (proxy_table_exists())
+	sql_version = extension_version();
+
+	if (strcmp(sql_version, so_version) != 0)
 	{
-		if (!extension_exists())
-			return EXTENSION_STATE_TRANSITIONING;
-		else
-			return EXTENSION_STATE_CREATED;
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("Mismatched timescaledb version. Shared object file %s, SQL %s", so_version, sql_version)));
 	}
-	return EXTENSION_STATE_NOT_INSTALLED;
 }
 
 /* Sets a new state, returning whether the state has changed */
@@ -119,6 +77,7 @@ extension_set_state(enum ExtensionState newstate)
 		case EXTENSION_STATE_UNKNOWN:
 			break;
 		case EXTENSION_STATE_CREATED:
+			extension_check_version(TIMESCALEDB_VERSION_MOD);
 			extension_proxy_oid = get_relname_relid(EXTENSION_PROXY_TABLE, get_namespace_oid(CACHE_SCHEMA_NAME, false));
 			catalog_reset();
 			break;
@@ -135,7 +94,7 @@ extension_set_state(enum ExtensionState newstate)
 static bool
 extension_update_state()
 {
-	return extension_set_state(extension_new_state());
+	return extension_set_state(extension_current_state());
 }
 
 /*
@@ -181,7 +140,6 @@ extension_invalidate(Oid relid)
 	}
 }
 
-
 bool
 extension_is_loaded(void)
 {
@@ -195,18 +153,6 @@ extension_is_loaded(void)
 		extension_update_state();
 	}
 
-	/*
-	 * Turn off extension during upgrade scripts. This is necessary so that,
-	 * for example, the catalog does not go looking for things that aren't yet
-	 * there.
-	 */
-	if (creating_extension)
-	{
-		Oid			extension_oid = get_extension_oid(EXTENSION_NAME, true);
-		if (OidIsValid(extension_oid) && extension_oid == CurrentExtensionObject)
-			return false;
-	}
-
 	switch (extstate)
 	{
 		case EXTENSION_STATE_CREATED:
@@ -214,6 +160,12 @@ extension_is_loaded(void)
 		case EXTENSION_STATE_NOT_INSTALLED:
 		case EXTENSION_STATE_UNKNOWN:
 		case EXTENSION_STATE_TRANSITIONING:
+
+			/*
+			 * Turn off extension during upgrade scripts. This is necessary so
+			 * that, for example, the catalog does not go looking for things
+			 * that aren't yet there.
+			 */
 			return false;
 		default:
 			elog(ERROR, "unknown state: %d", extstate);

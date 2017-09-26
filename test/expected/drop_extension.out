@@ -36,7 +36,7 @@ CREATE EXTENSION timescaledb;
 -- Test that calling twice generates proper error
 \set ON_ERROR_STOP 0
 CREATE EXTENSION timescaledb;
-ERROR:  extension "timescaledb" already exists
+ERROR:  Cannot create the extension after the another version has already been loaded
 \set ON_ERROR_STOP 1
 \c single :ROLE_DEFAULT_PERM_USER
 -- Make the table a hypertable again

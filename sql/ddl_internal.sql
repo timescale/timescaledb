@@ -23,7 +23,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.check_associated_schema_permissions(schema_name NAME, userid OID)
-    RETURNS VOID AS '$libdir/timescaledb', 'hypertable_check_associated_schema_permissions' LANGUAGE C;
+    RETURNS VOID AS '@MODULE_PATHNAME@', 'hypertable_check_associated_schema_permissions' LANGUAGE C;
 
 -- Creates a hypertable row.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable(
@@ -543,7 +543,7 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.verify_hypertable_indexes(hypertable REGCLASS) RETURNS VOID
-AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT;
+AS '@MODULE_PATHNAME@', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
     RETURNS void LANGUAGE plpgsql
@@ -572,20 +572,20 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.attach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS VOID
-AS '$libdir/timescaledb', 'tablespace_attach' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'tablespace_attach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.detach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS INTEGER
-AS '$libdir/timescaledb', 'tablespace_detach' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'tablespace_detach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
-AS '$libdir/timescaledb', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
-AS '$libdir/timescaledb', 'tablespace_show' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'tablespace_show' LANGUAGE C VOLATILE STRICT;
 
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
-AS '$libdir/timescaledb', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_replace(chunk_index_oid_old OID, chunk_index_oid_new OID) RETURNS VOID
-AS '$libdir/timescaledb', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.4)
 
+configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
 set(VERSION_REGEX "version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+))*\r?\nupdate_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)(\r?\n)*$")
 

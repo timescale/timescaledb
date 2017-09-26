@@ -56,7 +56,6 @@ typedef enum InternalFunction
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
 #define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
-#define EXTENSION_NAME "timescaledb"
 
 /******************************
  *

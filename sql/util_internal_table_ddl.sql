@@ -252,4 +252,4 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_triggers(main_table REGCLASS) RETURNS VOID
-    AS '$libdir/timescaledb', 'hypertable_validate_triggers' LANGUAGE C STRICT;
+    AS '@MODULE_PATHNAME@', 'hypertable_validate_triggers' LANGUAGE C STRICT;
