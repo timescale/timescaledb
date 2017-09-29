@@ -579,11 +579,13 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 
 /* foreign-key constraints to hypertables are not allowed */
 static void
-verify_constraint(Constraint *stmt)
+verify_constraint(Constraint *constr)
 {
-	if (stmt->contype == CONSTR_FOREIGN)
+	Assert(IsA(constr, Constraint));
+
+	if (constr->contype == CONSTR_FOREIGN)
 	{
-		RangeVar   *primary_table = stmt->pktable;
+		RangeVar   *primary_table = constr->pktable;
 		Oid			primary_oid = RangeVarGetRelid(primary_table, NoLock, true);
 
 		if (OidIsValid(primary_oid))
@@ -609,25 +611,58 @@ verify_constraint_list(List *constraint_list)
 
 	foreach(lc, constraint_list)
 	{
-		Constraint *constraint = (Constraint *) lfirst(lc);
+		Constraint *constraint = lfirst(lc);
 
 		verify_constraint(constraint);
 	}
 }
 
-/* process all create table commands to make sure their constraints are kosher */
+/*
+ * Process create table statements.
+ *
+ * For regular tables, we need to ensure that they don't have any foreign key
+ * constraints that point to hypertables.
+ *
+ * NOTE that this function should be called after parse analysis (in an end DDL
+ * trigger or by running parse analysis manually).
+ */
 static void
-process_create_table(Node *parsetree)
+process_create_table_end(Node *parsetree)
 {
 	CreateStmt *stmt = (CreateStmt *) parsetree;
 	ListCell   *lc;
 
 	verify_constraint_list(stmt->constraints);
+
+	/*
+	 * Only after parse analyis does tableElts contain only ColumnDefs. So, if
+	 * we capture this in processUtility, we should be prepared to have
+	 * constraint nodes and TableLikeClauses intermixed
+	 */
 	foreach(lc, stmt->tableElts)
 	{
-		ColumnDef  *column_def = (ColumnDef *) lfirst(lc);
+		ColumnDef  *coldef;
 
-		verify_constraint_list(column_def->constraints);
+		switch (nodeTag(lfirst(lc)))
+		{
+			case T_ColumnDef:
+				coldef = lfirst(lc);
+				verify_constraint_list(coldef->constraints);
+				break;
+			case T_Constraint:
+
+				/*
+				 * There should be no Constraints in the list after parse
+				 * analysis, but this case is included anyway for completeness
+				 */
+				verify_constraint(lfirst(lc));
+				break;
+			case T_TableLikeClause:
+				/* Some as above case */
+				break;
+			default:
+				break;
+		}
 	}
 }
 
@@ -833,7 +868,7 @@ create_trigger_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
 }
 
 static void
-process_create_trigger(Node *parsetree)
+process_create_trigger_end(Node *parsetree)
 {
 	CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
 
@@ -867,9 +902,6 @@ process_ddl_command_start(Node *parsetree,
 			break;
 		case T_RenameStmt:
 			process_rename(parsetree);
-			break;
-		case T_CreateStmt:
-			process_create_table(parsetree);
 			break;
 		case T_DropStmt:
 
@@ -912,11 +944,14 @@ process_ddl_command_end(CollectedCommand *cmd)
 {
 	switch (nodeTag(cmd->parsetree))
 	{
+		case T_CreateStmt:
+			process_create_table_end(cmd->parsetree);
+			break;
 		case T_AlterTableStmt:
 			process_altertable_end(cmd->parsetree, cmd);
 			break;
 		case T_CreateTrigStmt:
-			process_create_trigger(cmd->parsetree);
+			process_create_trigger_end(cmd->parsetree);
 			break;
 		default:
 			break;
@@ -973,6 +1008,7 @@ timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
 	{
 		case T_AlterTableStmt:
 		case T_CreateTrigStmt:
+		case T_CreateStmt:
 			foreach(lc, event_trigger_ddl_commands())
 				process_ddl_command_end(lfirst(lc));
 			break;
