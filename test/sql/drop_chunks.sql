@@ -1,5 +1,6 @@
 \o /dev/null
 \ir include/create_single_db.sql
+\ir include/switch_regular_user.sql
 \o
 
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
@@ -44,7 +45,13 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
 \dt "_timescaledb_internal".*
 
-SELECT _timescaledb_internal.drop_chunks_older_than(2);
+CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chunk;
+
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(2);
+\set ON_ERROR_STOP 1
+
+SELECT drop_chunks(2, CASCADE=>true);
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -56,7 +63,7 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 
 \dt "_timescaledb_internal".*
 
-SELECT _timescaledb_internal.drop_chunks_older_than(3, 'drop_chunk_test1');
+SELECT drop_chunks(3, 'drop_chunk_test1');
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c

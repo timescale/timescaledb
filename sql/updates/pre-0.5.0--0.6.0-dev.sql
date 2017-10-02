@@ -50,3 +50,9 @@ DROP FUNCTION _timescaledb_internal.on_trigger_error(TEXT, NAME, NAME);
 DROP FUNCTION _timescaledb_internal.on_change_hypertable();
 DROP FUNCTION _timescaledb_internal.setup_main(BOOLEAN);
 DROP FUNCTION restore_timescaledb();
+
+DROP FUNCTION _timescaledb_internal.drop_chunk(INTEGER, BOOLEAN, BOOLEAN);
+DROP FUNCTION drop_chunks(TIMESTAMPTZ, NAME, NAME);
+DROP FUNCTION drop_chunks(INTERVAL, NAME, NAME);
+DROP FUNCTION _timescaledb_internal.drop_chunks_older_than(BIGINT, NAME, NAME);
+DROP FUNCTION _timescaledb_internal.truncate_hypertable(NAME, NAME);

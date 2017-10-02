@@ -29,7 +29,6 @@
 #include "chunk_index.h"
 #include "extension.h"
 #include "executor.h"
-#include "metadata_queries.h"
 #include "copy.h"
 #include "chunk.h"
 #include "guc.h"
@@ -59,6 +58,13 @@ static bool expect_chunk_modification = false;
 						 Int32GetDatum((hypertable)->fd.id),			\
 						 BoolGetDatum(cascade))
 
+#define process_truncate_hypertable(hypertable, cascade)				\
+	CatalogInternalCall3(TRUNCATE_HYPERTABLE,							\
+						 NameGetDatum(&(hypertable)->fd.schema_name),	\
+						 NameGetDatum(&(hypertable)->fd.table_name),	\
+						 BoolGetDatum(cascade))
+
+
 #define process_rename_hypertable(hypertable, new_name)					\
 	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
 						 NameGetDatum(&(hypertable)->fd.schema_name),	\
@@ -66,11 +72,9 @@ static bool expect_chunk_modification = false;
 						 NameGetDatum(&(hypertable)->fd.schema_name),	\
 						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
 
-#define process_drop_chunk(chunk, cascade)				\
-	CatalogInternalCall3(DDL_DROP_CHUNK,				\
-						 Int32GetDatum((chunk)->fd.id), \
-						 BoolGetDatum(cascade),			\
-						 BoolGetDatum(false))
+#define drop_chunk_metadata(chunk)				\
+	CatalogInternalCall1(DDL_DROP_CHUNK_METADATA,				\
+						 Int32GetDatum((chunk)->fd.id)) \
 
 #define process_rename_hypertable_column(hypertable, old_name, new_name) \
 	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
@@ -152,9 +156,7 @@ process_truncate(Node *parsetree)
 
 			if (ht != NULL)
 			{
-				executor_level_enter();
-				spi_hypertable_truncate(ht);
-				executor_level_exit();
+				process_truncate_hypertable(ht, truncatestmt->behavior == DROP_CASCADE)
 			}
 		}
 	}
@@ -329,11 +331,14 @@ process_drop_table(DropStmt *stmt)
 		if (OidIsValid(relid))
 		{
 			Hypertable *ht;
+			CatalogSecurityContext sec_ctx;
 
+			catalog_become_owner(catalog_get(), &sec_ctx);
 			ht = hypertable_cache_get_entry(hcache, relid);
 
 			if (NULL != ht)
 			{
+
 				if (list_length(stmt->objects) != 1)
 					elog(ERROR, "Cannot drop a hypertable along with other objects");
 
@@ -346,10 +351,11 @@ process_drop_table(DropStmt *stmt)
 
 				if (chunk != NULL)
 				{
-					process_drop_chunk(chunk, stmt->behavior == DROP_CASCADE);
+					drop_chunk_metadata(chunk);
 					handled = true;
 				}
 			}
+			catalog_restore_user(&sec_ctx);
 		}
 	}
 

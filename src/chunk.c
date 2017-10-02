@@ -20,7 +20,6 @@
 #include "partitioning.h"
 #include "hypertable.h"
 #include "hypercube.h"
-#include "metadata_queries.h"
 #include "scanner.h"
 #include "process_utility.h"
 #include "trigger.h"

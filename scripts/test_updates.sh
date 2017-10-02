@@ -38,7 +38,9 @@ cleanup() {
     # function
     status="$?"
     set +e # do not exit immediately on failure in cleanup handler
-    rm -rf ${PGTEST_TMPDIR}
+    if [ $status -eq 0 ]; then 
+        rm -rf ${PGTEST_TMPDIR}
+    fi
     docker rm -vf timescaledb-orig timescaledb-clean timescaledb-updated 2>/dev/null
     echo "Exit status is $status"
     exit $status
@@ -67,6 +69,7 @@ docker_pgdiff() {
     >&2 echo -e "\033[1m$1 vs $2\033[0m: $2"
     docker_pgtest $1 $3
     docker_pgtest $2 $3
+    echo "RUNNING:  diff ${PGTEST_TMPDIR}/$1.out ${PGTEST_TMPDIR}/$2.out "
     diff ${PGTEST_TMPDIR}/$1.out ${PGTEST_TMPDIR}/$2.out | tee ${PGTEST_TMPDIR}/update_test.output
 }
 
