@@ -193,20 +193,41 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION drop_chunks(
+    older_than INTEGER,
+    table_name  NAME = NULL,
+    schema_name NAME = NULL,
+    cascade  BOOLEAN = FALSE
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+BEGIN
+    IF older_than IS NULL THEN
+        RAISE 'The time provided to drop_chunks cannot be null';
+    END IF;
+    PERFORM _timescaledb_internal.drop_chunks_impl(older_than, table_name, schema_name, cascade);
+END
+$BODY$;
+
 -- Drop chunks that are older than a timestamp.
--- TODO how does drop_chunks work with integer time tables?
 CREATE OR REPLACE FUNCTION drop_chunks(
     older_than TIMESTAMPTZ,
     table_name  NAME = NULL,
-    schema_name NAME = NULL
+    schema_name NAME = NULL,
+    cascade  BOOLEAN = FALSE
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     older_than_internal BIGINT;
 BEGIN
+    IF older_than IS NULL THEN
+        RAISE 'The timestamp provided to drop_chunks cannot be null';
+    END IF;
+
     SELECT (EXTRACT(epoch FROM older_than)*1e6)::BIGINT INTO older_than_internal;
-    PERFORM _timescaledb_internal.drop_chunks_older_than(older_than_internal, table_name, schema_name);
+    PERFORM _timescaledb_internal.drop_chunks_impl(older_than_internal, table_name, schema_name, cascade);
 END
 $BODY$;
 
@@ -214,7 +235,8 @@ $BODY$;
 CREATE OR REPLACE FUNCTION drop_chunks(
     older_than  INTERVAL,
     table_name  NAME = NULL,
-    schema_name NAME = NULL
+    schema_name NAME = NULL,
+    cascade BOOLEAN = false
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -222,7 +244,7 @@ DECLARE
     older_than_ts TIMESTAMPTZ;
 BEGIN
     older_than_ts := now() - older_than;
-    PERFORM drop_chunks(older_than_ts, table_name, schema_name);
+    PERFORM drop_chunks(older_than_ts, table_name, schema_name, cascade);
 END
 $BODY$;
 

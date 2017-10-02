@@ -12,16 +12,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
     OUT range_end         BIGINT)
     AS '$libdir/timescaledb', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk(
-    chunk_id int,
-    is_cascade BOOLEAN,
-    drop_table BOOLEAN = TRUE
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunk_metadata(
+    chunk_id int
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     chunk_row _timescaledb_catalog.chunk;
-    cascade_mod TEXT := '';
 BEGIN
     -- when deleting the chunk row from the metadata table,
     -- also DROP the actual chunk table that holds data.
@@ -31,7 +28,7 @@ BEGIN
 
     PERFORM _timescaledb_internal.drop_chunk_constraint(cc.chunk_id, cc.constraint_name, false)
     FROM _timescaledb_catalog.chunk_constraint cc
-    WHERE cc.chunk_id = drop_chunk.chunk_id;
+    WHERE cc.chunk_id = drop_chunk_metadata.chunk_id;
 
     DELETE FROM _timescaledb_catalog.chunk WHERE id = chunk_id
     RETURNING * INTO STRICT chunk_row;
@@ -39,18 +36,6 @@ BEGIN
     PERFORM 1
     FROM pg_class c
     WHERE relname = quote_ident(chunk_row.table_name) AND relnamespace = quote_ident(chunk_row.schema_name)::regnamespace;
-
-    IF FOUND AND drop_table THEN
-        IF is_cascade THEN
-            cascade_mod = 'CASCADE';
-        END IF;
-
-        EXECUTE format(
-                $$
-                DROP TABLE %I.%I %s
-                $$, chunk_row.schema_name, chunk_row.table_name, cascade_mod
-        );
-    END IF;
 END
 $BODY$;
 

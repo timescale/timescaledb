@@ -1,4 +1,5 @@
 \ir include/create_single_db.sql
+\ir include/switch_regular_user.sql
 
 SELECT * from _timescaledb_catalog.hypertable;
 SELECT * from _timescaledb_catalog.dimension;

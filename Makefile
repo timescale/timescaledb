@@ -36,7 +36,6 @@ SRCS = \
 	src/extension.c \
 	src/utils.c \
 	src/catalog.c \
-	src/metadata_queries.c \
 	src/cache.c \
 	src/cache_invalidate.c \
 	src/process_utility.c \
