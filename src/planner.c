@@ -382,7 +382,8 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 			 */
 			forboth(lc_plan, mt->plans, lc_rel, mt->resultRelations)
 			{
-				RangeTblEntry *rte = rt_fetch(lfirst_int(lc_rel), ctx->rtable);
+				Index		rti = lfirst_int(lc_rel);
+				RangeTblEntry *rte = rt_fetch(rti, ctx->rtable);
 				Hypertable *ht = hypertable_cache_get_entry(ctx->hcache, rte->relid);
 
 				if (ht != NULL)
@@ -394,7 +395,7 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 					 * We replace the plan with our custom chunk dispatch
 					 * plan.
 					 */
-					*subplan_ptr = chunk_dispatch_plan_create(subplan, rte->relid, ctx->parse);
+					*subplan_ptr = chunk_dispatch_plan_create(subplan, rti, rte->relid, ctx->parse);
 					hypertable_found = true;
 				}
 			}
