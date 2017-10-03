@@ -12,7 +12,7 @@ SELECT create_hypertable('error_test', 'time', 'device', 2);
 \set QUIET off
 INSERT INTO error_test VALUES ('Mon Mar 20 09:18:20.1 2017', 21.3, 'dev1');
 \set ON_ERROR_STOP 0
--- generate insert error 
+-- generate insert error
 INSERT INTO error_test VALUES ('Mon Mar 20 09:18:22.3 2017', 21.1, NULL);
 \set ON_ERROR_STOP 1
 INSERT INTO error_test VALUES ('Mon Mar 20 09:18:25.7 2017', 22.4, 'dev2');
@@ -52,3 +52,19 @@ VALUES ('2001-02-01', 98, 'dev1'),
 ('2001-03-02', 98, 'dev1');
 
 SELECT * FROM date_col_test WHERE time > '2001-01-01';
+
+CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
+SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
+
+EXPLAIN (verbose on, costs off)
+INSERT INTO many_partitions_test_1m(time, temp, device)
+SELECT time_bucket('1 minute', time) AS period, avg(temp), device
+FROM many_partitions_test
+GROUP BY period, device;
+
+INSERT INTO many_partitions_test_1m(time, temp, device)
+SELECT time_bucket('1 minute', time) AS period, avg(temp), device
+FROM many_partitions_test
+GROUP BY period, device;
+
+SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
