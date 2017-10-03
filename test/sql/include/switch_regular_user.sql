@@ -6,8 +6,5 @@ EXCEPTION
         --mute error
 END$$;
 
---needed for ddl ops:
-CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION alt_usr;
-
 --test creating and using schema as non-superuser
 \c single alt_usr

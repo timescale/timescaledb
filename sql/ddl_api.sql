@@ -134,19 +134,26 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     number_partitions       INTEGER = NULL,
     interval_length         BIGINT = NULL
 )
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
 $BODY$
 <<main_block>>
 DECLARE
     table_name       NAME;
     schema_name      NAME;
+    owner_oid        OID;
     hypertable_row   _timescaledb_catalog.hypertable;
 BEGIN
-    SELECT relname, nspname
-    INTO STRICT table_name, schema_name
+    SELECT relname, nspname, relowner
+    INTO STRICT table_name, schema_name, owner_oid
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
+
+    IF NOT pg_has_role(session_user, owner_oid, 'USAGE') THEN
+        raise 'permission denied for hypertable "%"', main_table;
+    END IF;
 
     SELECT *
     INTO STRICT hypertable_row
@@ -168,17 +175,24 @@ CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
     main_table              REGCLASS,
     chunk_time_interval     BIGINT
 )
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path=''
+    AS
 $BODY$
 DECLARE
     main_table_name       NAME;
     main_schema_name      NAME;
+    owner_oid             OID;
 BEGIN
-    SELECT relname, nspname
-    INTO STRICT main_table_name, main_schema_name
+    SELECT relname, nspname, relowner
+    INTO STRICT main_table_name, main_schema_name, owner_oid
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
+
+    IF NOT pg_has_role(session_user, owner_oid, 'USAGE') THEN
+        raise 'permission denied for hypertable "%"', main_table;
+    END IF;
 
     UPDATE _timescaledb_catalog.dimension d
     SET interval_length = set_chunk_time_interval.chunk_time_interval
@@ -252,19 +266,26 @@ CREATE OR REPLACE FUNCTION attach_tablespace(
        hypertable REGCLASS,
        tablespace NAME
 )
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER SET search_path = ''
+    AS
 $BODY$
 DECLARE
     main_schema_name  NAME;
     main_table_name   NAME;
+    owner_oid         OID;
     hypertable_id     INTEGER;
     tablespace_oid    OID;
 BEGIN
-    SELECT nspname, relname
+    SELECT nspname, relname, relowner
     FROM pg_class c INNER JOIN pg_namespace n
     ON (c.relnamespace = n.oid)
     WHERE c.oid = hypertable
-    INTO STRICT main_schema_name, main_table_name;
+    INTO STRICT main_schema_name, main_table_name, owner_oid;
+
+    IF NOT pg_has_role(session_user, owner_oid, 'USAGE') THEN
+        raise 'permission denied for hypertable "%"', hypertable;
+    END IF;
 
     SELECT id
     FROM _timescaledb_catalog.hypertable h

@@ -1,6 +1,5 @@
 \o /dev/null
 \ir include/create_single_db.sql
-\ir include/switch_regular_user.sql
 \o
 
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);

@@ -5,6 +5,16 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+\ir switch_regular_user.sql
+DO $$
+BEGIN
+    CREATE ROLE alt_usr LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN
+        --mute error
+END$$;
+--test creating and using schema as non-superuser
+\c single alt_usr
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 CREATE TABLE index_test(time timestamptz, temp float);
 SELECT create_hypertable('index_test', 'time');
@@ -319,11 +329,13 @@ ERROR:  Hypertables currently do not support concurrent index creation.
 \set ON_ERROR_STOP 1
 -- Test tablespaces. Chunk indexes should end up in same tablespace as
 -- main index.
+\c single postgres
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
-CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace1 OWNER alt_usr LOCATION :TEST_TABLESPACE1_PATH;
+\c single alt_usr
 CREATE INDEX index_test_time_idx ON index_test (time) TABLESPACE tablespace1;
 \d+ index_test
                               Table "public.index_test"
@@ -375,7 +387,9 @@ Index "_timescaledb_internal._hyper_4_3_chunk_time_temp_idx"
  temp   | double precision         | temp       | plain
 btree, for table "_timescaledb_internal._hyper_4_3_chunk"
 
-CREATE TABLESPACE tablespace2 LOCATION :TEST_TABLESPACE2_PATH;
+\c single postgres
+CREATE TABLESPACE tablespace2 OWNER alt_usr LOCATION :TEST_TABLESPACE2_PATH;
+\c single alt_usr
 ALTER INDEX index_test_time_idx SET TABLESPACE tablespace2;
 \d+ index_test
                               Table "public.index_test"
@@ -542,5 +556,6 @@ Tablespace: "tablespace1"
 
 -- Cleanup
 DROP TABLE index_test CASCADE;
+\c single postgres
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

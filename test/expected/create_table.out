@@ -5,6 +5,16 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+\ir switch_regular_user.sql
+DO $$
+BEGIN
+    CREATE ROLE alt_usr LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN
+        --mute error
+END$$;
+--test creating and using schema as non-superuser
+\c single alt_usr
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 -- Test that we can verify constraints on regular tables
 CREATE TABLE test_hyper_pk(time TIMESTAMPTZ PRIMARY KEY, temp FLOAT, device INT);

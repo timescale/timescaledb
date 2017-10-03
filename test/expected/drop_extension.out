@@ -6,6 +6,16 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+\ir switch_regular_user.sql
+DO $$
+BEGIN
+    CREATE ROLE alt_usr LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN
+        --mute error
+END$$;
+--test creating and using schema as non-superuser
+\c single alt_usr
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \o
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
@@ -28,8 +38,10 @@ SELECT * FROM drop_test;
  Mon Mar 20 09:17:00.936242 2017 | 23.4 | dev1
 (1 row)
 
+\c single postgres
 DROP EXTENSION timescaledb CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_1_1_chunk
+\c single alt_usr
 -- Querying the original table should not return any rows since all of
 -- them actually existed in chunks that are now gone
 SELECT * FROM drop_test;
@@ -37,6 +49,7 @@ SELECT * FROM drop_test;
 ------+------+--------
 (0 rows)
 
+\c single postgres
 -- Recreate the extension
 CREATE EXTENSION timescaledb;
 -- Test that calling twice generates proper error
@@ -44,6 +57,7 @@ CREATE EXTENSION timescaledb;
 CREATE EXTENSION timescaledb;
 ERROR:  extension "timescaledb" already exists
 \set ON_ERROR_STOP 1
+\c single alt_usr
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
  create_hypertable 
@@ -65,8 +79,8 @@ SELECT * FROM drop_test;
 (1 row)
 
 --test drops thru cascades of other objects
-\c postgres
 \o /dev/null
+\c postgres postgres
 \ir include/create_single_db.sql
 SET client_min_messages = WARNING;
 DROP DATABASE IF EXISTS single;
@@ -74,7 +88,18 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+\ir switch_regular_user.sql
+DO $$
+BEGIN
+    CREATE ROLE alt_usr LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN
+        --mute error
+END$$;
+--test creating and using schema as non-superuser
+\c single alt_usr
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
+\c single postgres
 \o
 drop schema public cascade;
 NOTICE:  drop cascades to extension timescaledb

@@ -1,22 +1,26 @@
 \ir include/insert_single.sql
 
+\c single postgres
 DO $$
 BEGIN
-    CREATE ROLE alt_usr LOGIN;
+    CREATE ROLE alt_usr2 LOGIN;
 EXCEPTION
     WHEN duplicate_object THEN
         --mute error
 END$$;
 
 --needed for ddl ops:
-CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION alt_usr;
+CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION alt_usr2;
 
 --test creating and using schema as non-superuser
-\c single alt_usr
+\c single alt_usr2
 \dt
 
 \set ON_ERROR_STOP 0
 SELECT * FROM "one_Partition";
+SELECT set_chunk_time_interval('"one_Partition"', 1::bigint);
+select add_dimension('"one_Partition"', 'device_id', 2);
+select attach_tablespace('"one_Partition"', 'tablespace1');
 \set ON_ERROR_STOP 1
 
 CREATE TABLE "1dim"(time timestamp, temp float);

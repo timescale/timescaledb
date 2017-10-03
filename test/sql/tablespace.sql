@@ -1,13 +1,15 @@
 \ir include/create_single_db.sql
 \set ON_ERROR_STOP 0
 
+\c single postgres
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 
 --test hypertable with tables space
-CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace1 OWNER alt_usr LOCATION :TEST_TABLESPACE1_PATH;
+\c single alt_usr
 
 --assigning a tablespace via the main table should work
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
@@ -25,7 +27,9 @@ SELECT attach_tablespace('tspace_2dim', 'tablespace2');
 --attach the same tablespace twice to same table should also generate error
 SELECT attach_tablespace('tspace_2dim', 'tablespace1');
 
-CREATE TABLESPACE tablespace2 LOCATION :TEST_TABLESPACE2_PATH;
+\c single postgres
+CREATE TABLESPACE tablespace2 OWNER alt_usr LOCATION :TEST_TABLESPACE2_PATH;
+\c single alt_usr
 
 --attach after creating --> should work
 SELECT attach_tablespace('tspace_2dim', 'tablespace2');
@@ -54,5 +58,7 @@ INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 --cleanup
 DROP TABLE tspace_1dim CASCADE;
 DROP TABLE tspace_2dim CASCADE;
+
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
+

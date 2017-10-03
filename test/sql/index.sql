@@ -96,18 +96,22 @@ CREATE UNIQUE INDEX CONCURRENTLY index_test_time_device_idx ON index_test (time,
 
 -- Test tablespaces. Chunk indexes should end up in same tablespace as
 -- main index.
+\c single postgres
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 
-CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace1 OWNER alt_usr LOCATION :TEST_TABLESPACE1_PATH;
+\c single alt_usr
 CREATE INDEX index_test_time_idx ON index_test (time) TABLESPACE tablespace1;
 
 \d+ index_test
 \d+ _timescaledb_internal._hyper*
 
-CREATE TABLESPACE tablespace2 LOCATION :TEST_TABLESPACE2_PATH;
+\c single postgres
+CREATE TABLESPACE tablespace2 OWNER alt_usr LOCATION :TEST_TABLESPACE2_PATH;
+\c single alt_usr
 ALTER INDEX index_test_time_idx SET TABLESPACE tablespace2;
 
 \d+ index_test
@@ -158,5 +162,6 @@ CREATE INDEX ON index_test (time, temp) TABLESPACE tablespace2;
 
 -- Cleanup
 DROP TABLE index_test CASCADE;
+\c single postgres
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
