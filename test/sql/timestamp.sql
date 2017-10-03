@@ -51,17 +51,14 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 
 \echo 'The rest of the queries will be the same in output between UTC and EST'
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 
 SET timezone = 'EST';
-ALTER DATABASE single SET timezone ='EST';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 
 SELECT *
 FROM PUBLIC."testNs"
@@ -69,19 +66,16 @@ WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
 AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
 
 SET timezone = 'EST';
-ALTER DATABASE single SET timezone ='EST';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
 AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
 
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 
 SET timezone = 'EST';
-ALTER DATABASE single SET timezone ='EST';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 
@@ -91,7 +85,6 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 \set ON_ERROR_STOP 0
 
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 
 -- Conversion to timestamp using Postgres built-in function taking
 -- double. Gives inaccurate result on Postgres <= 9.6.2. Accurate on

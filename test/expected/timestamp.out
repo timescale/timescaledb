@@ -6,6 +6,16 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+\ir switch_regular_user.sql
+DO $$
+BEGIN
+    CREATE ROLE alt_usr LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN
+        --mute error
+END$$;
+--test creating and using schema as non-superuser
+\c single alt_usr
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \o
 -- Utility function for grouping/slotting time with a given interval.
@@ -74,7 +84,6 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 \echo 'The rest of the queries will be the same in output between UTC and EST'
 The rest of the queries will be the same in output between UTC and EST
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
            time           | sum 
@@ -84,7 +93,6 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 (2 rows)
 
 SET timezone = 'EST';
-ALTER DATABASE single SET timezone ='EST';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
            time           | sum 
@@ -94,7 +102,6 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC;
 (2 rows)
 
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
@@ -107,7 +114,6 @@ AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
 (3 rows)
 
 SET timezone = 'EST';
-ALTER DATABASE single SET timezone ='EST';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
@@ -120,7 +126,6 @@ AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
 (3 rows)
 
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
            time           | sum 
@@ -130,7 +135,6 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 (2 rows)
 
 SET timezone = 'EST';
-ALTER DATABASE single SET timezone ='EST';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
 FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
            time           | sum 
@@ -144,7 +148,6 @@ FROM PUBLIC."testNs" GROUP BY time ORDER BY time ASC LIMIT 2;
 ------------------------------------
 \set ON_ERROR_STOP 0
 SET timezone = 'UTC';
-ALTER DATABASE single SET timezone ='UTC';
 -- Conversion to timestamp using Postgres built-in function taking
 -- double. Gives inaccurate result on Postgres <= 9.6.2. Accurate on
 -- Postgres >= 9.6.3.

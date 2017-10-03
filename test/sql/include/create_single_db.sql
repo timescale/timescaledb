@@ -5,4 +5,6 @@ CREATE DATABASE single;
 
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+\ir switch_regular_user.sql
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;

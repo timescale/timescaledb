@@ -10,10 +10,6 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 );
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 
-\set ON_ERROR_STOP 0
-CREATE SCHEMA IF NOT EXISTS "customSchema";
-\set ON_ERROR_STOP 1
-
 CREATE TABLE "customSchema"."Hypertable_1" (
   time BIGINT NOT NULL,
   "Device_id" TEXT NOT NULL,

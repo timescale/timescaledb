@@ -33,7 +33,7 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 -- Show all index mappings
 SELECT * FROM _timescaledb_catalog.chunk_index;
 
-\c postgres
+\c postgres postgres
 
 \! pg_dump -h localhost -U postgres -Fc single > dump/single.sql
 \! dropdb -h localhost -U postgres single

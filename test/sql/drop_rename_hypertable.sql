@@ -11,7 +11,9 @@ ALTER TABLE "two_Partitions" RENAME TO "newname";
 SELECT * FROM "newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
 
-CREATE SCHEMA "newschema";
+\c single postgres
+CREATE SCHEMA "newschema" AUTHORIZATION alt_usr;
+\c single alt_usr
 
 ALTER TABLE "newname" SET SCHEMA "newschema";
 SELECT * FROM "newschema"."newname";

@@ -5,14 +5,26 @@ SET client_min_messages = NOTICE;
 CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+\ir switch_regular_user.sql
+DO $$
+BEGIN
+    CREATE ROLE alt_usr LOGIN;
+EXCEPTION
+    WHEN duplicate_object THEN
+        --mute error
+END$$;
+--test creating and using schema as non-superuser
+\c single alt_usr
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \set ON_ERROR_STOP 0
+\c single postgres
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 --test hypertable with tables space
-CREATE TABLESPACE tablespace1 LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace1 OWNER alt_usr LOCATION :TEST_TABLESPACE1_PATH;
+\c single alt_usr
 --assigning a tablespace via the main table should work
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
 SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
@@ -37,7 +49,9 @@ ERROR:  No tablespace "tablespace2" exists. A tablespace needs to be created bef
 --attach the same tablespace twice to same table should also generate error
 SELECT attach_tablespace('tspace_2dim', 'tablespace1');
 ERROR:  Tablespace "tablespace1" already assigned to hypertable "tspace_2dim"
-CREATE TABLESPACE tablespace2 LOCATION :TEST_TABLESPACE2_PATH;
+\c single postgres
+CREATE TABLESPACE tablespace2 OWNER alt_usr LOCATION :TEST_TABLESPACE2_PATH;
+\c single alt_usr
 --attach after creating --> should work
 SELECT attach_tablespace('tspace_2dim', 'tablespace2');
  attach_tablespace 

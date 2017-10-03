@@ -671,23 +671,31 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 static void
 process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 {
+	CatalogSecurityContext sec_ctx;
+
 	Assert(constraint_name != NULL);
 
+	catalog_become_owner(catalog_get(), &sec_ctx);
 	process_utility_set_expect_chunk_modification(true);
 	process_add_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
+	catalog_restore_user(&sec_ctx);
 }
 
 static void
 process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 {
 	char	   *constraint_name = NULL;
+	CatalogSecurityContext sec_ctx;
 
 	constraint_name = cmd->name;
 	Assert(constraint_name != NULL);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
 	process_utility_set_expect_chunk_modification(true);
 	process_drop_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
+	catalog_restore_user(&sec_ctx);
 }
 
 /* process all regular-table alter commands to make sure they aren't adding
