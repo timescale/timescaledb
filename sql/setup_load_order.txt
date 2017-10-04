@@ -1,3 +1,0 @@
-sql/schemas.sql
-sql/tables.sql
-sql/permissions.sql

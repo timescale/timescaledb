@@ -57,7 +57,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   116
+   112
 (1 row)
 
 \d+ public."two_Partitions"
@@ -188,12 +188,6 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 ALTER DATABASE single SET timescaledb.restoring='on';
 \! pg_restore -h localhost -U postgres -d single dump/single.sql
 \c single
-SELECT restore_timescaledb();
- restore_timescaledb 
----------------------
- 
-(1 row)
-
 ALTER DATABASE single SET timescaledb.restoring='off';
 --should be same as count above
 SELECT count(*)
@@ -202,7 +196,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   116
+   112
 (1 row)
 
 --main table and chunk schemas should be the same

@@ -37,3 +37,16 @@ DROP FUNCTION indexes_relation_size_pretty(REGCLASS);
 
 ALTER TABLE _timescaledb_catalog.chunk_index RENAME TO chunk_index_old;
 ALTER SEQUENCE _timescaledb_catalog.chunk_index_id_seq RENAME TO chunk_index_old_id_seq;
+
+-- Remove metadata table triggers
+DROP TRIGGER trigger_block_truncate ON _timescaledb_catalog.hypertable;
+DROP TRIGGER trigger_block_truncate ON _timescaledb_catalog.dimension;
+DROP TRIGGER trigger_block_truncate ON _timescaledb_catalog.dimension_slice;
+DROP TRIGGER trigger_block_truncate ON _timescaledb_catalog.chunk_constraint;
+DROP TRIGGER trigger_block_truncate ON _timescaledb_catalog.hypertable_index;
+DROP TRIGGER trigger_1_main_on_change_hypertable ON _timescaledb_catalog.hypertable;
+DROP FUNCTION _timescaledb_internal.on_truncate_block();
+DROP FUNCTION _timescaledb_internal.on_trigger_error(TEXT, NAME, NAME);
+DROP FUNCTION _timescaledb_internal.on_change_hypertable();
+DROP FUNCTION _timescaledb_internal.setup_main(BOOLEAN);
+DROP FUNCTION restore_timescaledb();

@@ -22,7 +22,8 @@ INSERT INTO vacuum_test VALUES ('2017-01-20T09:00:01', 17.5),
                                ('2017-06-21T09:00:01', 11.0);
 -- no stats
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
-WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
+WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
+ORDER BY schemaname, tablename;
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
 (0 rows)
@@ -45,7 +46,8 @@ INFO:  analyzing "_timescaledb_internal._hyper_1_3_chunk"
 INFO:  "_hyper_1_3_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
-WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
+WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
+ORDER BY schemaname, tablename;
     tablename     | attname |                    histogram_bounds                     | n_distinct 
 ------------------+---------+---------------------------------------------------------+------------
  _hyper_1_1_chunk | time    | {"Fri Jan 20 09:00:01 2017","Sat Jan 21 09:00:01 2017"} |         -1

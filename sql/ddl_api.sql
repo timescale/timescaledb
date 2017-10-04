@@ -193,13 +193,6 @@ BEGIN
 END
 $BODY$;
 
--- Restore the database after a pg_restore.
-CREATE OR REPLACE FUNCTION restore_timescaledb()
-    RETURNS VOID LANGUAGE SQL VOLATILE AS
-$BODY$
-    SELECT _timescaledb_internal.setup_main(true);
-$BODY$;
-
 -- Drop chunks that are older than a timestamp.
 -- TODO how does drop_chunks work with integer time tables?
 CREATE OR REPLACE FUNCTION drop_chunks(

@@ -14,13 +14,15 @@ INSERT INTO vacuum_test VALUES ('2017-01-20T09:00:01', 17.5),
 
 -- no stats
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
-WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
+WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
+ORDER BY schemaname, tablename;
 
 VACUUM (VERBOSE, ANALYZE) vacuum_test;
 
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
-WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk';
+WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
+ORDER BY schemaname, tablename;
 
 -- Run vacuum on a normal (non-hypertable) table
 CREATE TABLE vacuum_norm(time timestamp, temp float);
