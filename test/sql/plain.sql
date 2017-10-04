@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 -- Tests for plain PostgreSQL commands to ensure that they work while
 -- the TimescaleDB extension is loaded. This is a mix of statements
 -- added mostly as regression checks when bugs are discovered and
@@ -20,4 +18,5 @@ ALTER TYPE rainbow RENAME TO colors;
 \dT+
 
 REINDEX TABLE regular_table;
+\c single :ROLE_SUPERUSER
 REINDEX SCHEMA public;

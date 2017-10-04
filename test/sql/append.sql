@@ -1,2 +1,2 @@
-\set DISABLE_OPTIMIZATIONS off
+SET timescaledb.disable_optimizations = OFF;
 \ir include/append.sql

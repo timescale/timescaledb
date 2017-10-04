@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 CREATE TABLE index_test(time timestamptz, temp float);
 
 SELECT create_hypertable('index_test', 'time');
@@ -96,22 +94,22 @@ CREATE UNIQUE INDEX CONCURRENTLY index_test_time_device_idx ON index_test (time,
 
 -- Test tablespaces. Chunk indexes should end up in same tablespace as
 -- main index.
-\c single postgres
+\c single :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 
-CREATE TABLESPACE tablespace1 OWNER alt_usr LOCATION :TEST_TABLESPACE1_PATH;
-\c single alt_usr
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+\c single :ROLE_DEFAULT_PERM_USER
 CREATE INDEX index_test_time_idx ON index_test (time) TABLESPACE tablespace1;
 
 \d+ index_test
 \d+ _timescaledb_internal._hyper*
 
-\c single postgres
-CREATE TABLESPACE tablespace2 OWNER alt_usr LOCATION :TEST_TABLESPACE2_PATH;
-\c single alt_usr
+\c single :ROLE_SUPERUSER
+CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
+\c single :ROLE_DEFAULT_PERM_USER
 ALTER INDEX index_test_time_idx SET TABLESPACE tablespace2;
 
 \d+ index_test
@@ -162,6 +160,6 @@ CREATE INDEX ON index_test (time, temp) TABLESPACE tablespace2;
 
 -- Cleanup
 DROP TABLE index_test CASCADE;
-\c single postgres
+\c single :ROLE_SUPERUSER
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

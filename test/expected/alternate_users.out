@@ -1,23 +1,4 @@
 \ir include/insert_single.sql
-\ir create_single_db.sql
-SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS single;
-SET client_min_messages = NOTICE;
-CREATE DATABASE single;
-\c single
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-\ir switch_regular_user.sql
-DO $$
-BEGIN
-    CREATE ROLE alt_usr LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN
-        --mute error
-END$$;
---test creating and using schema as non-superuser
-\c single alt_usr
-SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
-\c single
 CREATE TABLE PUBLIC."one_Partition" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
@@ -55,23 +36,16 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 INSERT 0 1
 \set QUIET on
-\c single postgres
-DO $$
-BEGIN
-    CREATE ROLE alt_usr2 LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN
-        --mute error
-END$$;
+\c single :ROLE_SUPERUSER
 --needed for ddl ops:
-CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION alt_usr2;
+CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 --test creating and using schema as non-superuser
-\c single alt_usr2
+\c single :ROLE_DEFAULT_PERM_USER_2
 \dt
-            List of relations
- Schema |     Name      | Type  |  Owner  
---------+---------------+-------+---------
- public | one_Partition | table | alt_usr
+                 List of relations
+ Schema |     Name      | Type  |       Owner       
+--------+---------------+-------+-------------------
+ public | one_Partition | table | default_perm_user
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -465,7 +439,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 13
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
 --test proper denials for all security definer functions:
-\c single postgres 
+\c single :ROLE_SUPERUSER 
 CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
@@ -476,7 +450,7 @@ SELECT create_hypertable('hypertable_su', 'time');
 
 CREATE INDEX "ind_1" ON hypertable_su (time);
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
-\c single alt_usr
+\c single :ROLE_DEFAULT_PERM_USER_2
 --all of the following should produce errors
 \set ON_ERROR_STOP 0
 SELECT create_hypertable('plain_table_su', 'time');
@@ -502,9 +476,9 @@ ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
 --grant read permissions
-\c single postgres
-GRANT SELECT ON hypertable_su TO alt_usr;
-\c single alt_usr
+\c single :ROLE_SUPERUSER
+GRANT SELECT ON hypertable_su TO :ROLE_DEFAULT_PERM_USER_2;
+\c single :ROLE_DEFAULT_PERM_USER_2
 SELECT * FROM hypertable_su;
            time           | temp 
 --------------------------+------
@@ -520,9 +494,9 @@ ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
 --grant read, insert permissions
-\c single postgres
-GRANT SELECT, INSERT ON hypertable_su TO alt_usr;
-\c single alt_usr
+\c single :ROLE_SUPERUSER
+GRANT SELECT, INSERT ON hypertable_su TO :ROLE_DEFAULT_PERM_USER_2;
+\c single :ROLE_DEFAULT_PERM_USER_2
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 SELECT * FROM hypertable_su;
            time           | temp 
@@ -538,9 +512,9 @@ ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
 --change owner 
-\c single postgres
-ALTER TABLE hypertable_su OWNER TO alt_usr;
-\c single alt_usr
+\c single :ROLE_SUPERUSER
+ALTER TABLE hypertable_su OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\c single :ROLE_DEFAULT_PERM_USER_2
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 SELECT * FROM hypertable_su;
            time           | temp 

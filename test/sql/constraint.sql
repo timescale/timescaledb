@@ -1,7 +1,3 @@
-\o /dev/null
-\ir include/create_single_db.sql
-\o
-
 CREATE TABLE hyper (
   time BIGINT NOT NULL,
   device_id TEXT NOT NULL,

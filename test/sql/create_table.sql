@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 -- Test that we can verify constraints on regular tables
 CREATE TABLE test_hyper_pk(time TIMESTAMPTZ PRIMARY KEY, temp FLOAT, device INT);
 CREATE TABLE test_pk(device INT PRIMARY KEY);

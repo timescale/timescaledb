@@ -1,7 +1,3 @@
-\o /dev/null
-\ir include/create_single_db.sql
-\o
-
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 CREATE INDEX ON drop_chunk_test1(time DESC);

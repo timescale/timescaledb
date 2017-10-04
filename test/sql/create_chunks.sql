@@ -1,4 +1,3 @@
-\ir include/create_single_db.sql
 --
 --  This test will create chunks in two dimenisions, time (x) and
 --  space (y), where the time dimension is aligned. The figure below
@@ -43,9 +42,9 @@ LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
 WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
 ORDER BY c.id, d.id;
 
-\c single postgres
+\c single :ROLE_SUPERUSER
 UPDATE _timescaledb_catalog.dimension SET num_slices = 3 WHERE id = 2;
-\c single alt_usr
+\c single :ROLE_DEFAULT_PERM_USER
 SELECT set_chunk_time_interval('chunk_test', 1::bigint);
 
 INSERT INTO chunk_test VALUES (8, 24.3, 79669, 1);

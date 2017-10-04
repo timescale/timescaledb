@@ -1,6 +1,5 @@
-SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS single;
-SET client_min_messages = NOTICE;
+\c postgres :ROLE_SUPERUSER
+DROP DATABASE single;
 CREATE DATABASE single;
 \c single
 CREATE SCHEMA "testSchema0";

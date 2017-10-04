@@ -1,4 +1,4 @@
-\ir create_single_db.sql
+
 
 -- create a now() function for repeatable testing that always returns
 -- the same timestamp. It needs to be marked STABLE

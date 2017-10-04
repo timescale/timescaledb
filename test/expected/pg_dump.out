@@ -1,23 +1,5 @@
 \o /dev/null
 \ir include/insert_two_partitions.sql
-\ir create_single_db.sql
-SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS single;
-SET client_min_messages = NOTICE;
-CREATE DATABASE single;
-\c single
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-\ir switch_regular_user.sql
-DO $$
-BEGIN
-    CREATE ROLE alt_usr LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN
-        --mute error
-END$$;
---test creating and using schema as non-superuser
-\c single alt_usr
-SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \c single
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
@@ -191,12 +173,16 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
 (28 rows)
 
-\c postgres postgres
-\! pg_dump -h localhost -U postgres -Fc single > dump/single.sql
-\! dropdb -h localhost -U postgres single
-\! createdb -h localhost -U postgres single
+\c postgres :ROLE_SUPERUSER
+\! pg_dump -h localhost -U :ROLE_SUPERUSER -Fc single > dump/single.sql
+pg_dump: [archiver (db)] connection to database "single" failed: FATAL:  role ":ROLE_SUPERUSER" does not exist
+\! dropdb -h localhost -U :ROLE_SUPERUSER single
+dropdb: could not connect to database template1: FATAL:  role ":ROLE_SUPERUSER" does not exist
+\! createdb -h localhost -U :ROLE_SUPERUSER single
+createdb: could not connect to database template1: FATAL:  role ":ROLE_SUPERUSER" does not exist
 ALTER DATABASE single SET timescaledb.restoring='on';
-\! pg_restore -h localhost -U postgres -d single dump/single.sql
+\! pg_restore -h localhost -U :ROLE_SUPERUSER -d single dump/single.sql
+pg_restore: [archiver] input file is too short (read 0, expected 5)
 \c single
 ALTER DATABASE single SET timescaledb.restoring='off';
 --should be same as count above

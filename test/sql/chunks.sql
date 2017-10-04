@@ -1,6 +1,5 @@
 \unset ECHO
 \o /dev/null
-\ir include/create_single_db.sql
 \ir include/test_utils.sql
 \o
 \set ECHO errors

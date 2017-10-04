@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 \c single
 
 --list all extension functions in public schema

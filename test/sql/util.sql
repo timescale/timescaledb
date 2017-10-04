@@ -1,7 +1,3 @@
-\unset ECHO
-\o /dev/null
-\ir include/create_single_db.sql
-\o
 \set ECHO errors
 \set VERBOSITY default
 

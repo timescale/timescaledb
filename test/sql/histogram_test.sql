@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 -- table 1
 CREATE TABLE "hitest1"(key real, val varchar(40));
 

@@ -1,23 +1,3 @@
-\o /dev/null
-\ir include/create_single_db.sql
-SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS single;
-SET client_min_messages = NOTICE;
-CREATE DATABASE single;
-\c single
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-\ir switch_regular_user.sql
-DO $$
-BEGIN
-    CREATE ROLE alt_usr LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN
-        --mute error
-END$$;
---test creating and using schema as non-superuser
-\c single alt_usr
-SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
-\o
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 CREATE INDEX ON drop_chunk_test1(time DESC);
@@ -98,21 +78,21 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (12 rows)
 
 \dt "_timescaledb_internal".*
-                      List of relations
-        Schema         |       Name        | Type  |  Owner  
------------------------+-------------------+-------+---------
- _timescaledb_internal | _hyper_1_1_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_2_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_3_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_4_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_5_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_6_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_10_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_11_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_12_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_7_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_8_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_9_chunk  | table | alt_usr
+                           List of relations
+        Schema         |       Name        | Type  |       Owner       
+-----------------------+-------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_1_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_2_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_6_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_7_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
 (12 rows)
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chunk;
@@ -149,19 +129,19 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (10 rows)
 
 \dt "_timescaledb_internal".*
-                      List of relations
-        Schema         |       Name        | Type  |  Owner  
------------------------+-------------------+-------+---------
- _timescaledb_internal | _hyper_1_2_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_3_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_4_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_5_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_6_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_10_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_11_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_12_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_8_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_9_chunk  | table | alt_usr
+                           List of relations
+        Schema         |       Name        | Type  |       Owner       
+-----------------------+-------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_2_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_6_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
 (10 rows)
 
 SELECT drop_chunks(3, 'drop_chunk_test1');
@@ -191,18 +171,18 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (9 rows)
 
 \dt "_timescaledb_internal".*
-                      List of relations
-        Schema         |       Name        | Type  |  Owner  
------------------------+-------------------+-------+---------
- _timescaledb_internal | _hyper_1_3_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_4_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_5_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_6_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_10_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_11_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_12_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_8_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_9_chunk  | table | alt_usr
+                           List of relations
+        Schema         |       Name        | Type  |       Owner       
+-----------------------+-------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_6_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
 (9 rows)
 
 DROP TABLE _timescaledb_internal._hyper_1_6_chunk;
@@ -226,16 +206,16 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (8 rows)
 
 \dt "_timescaledb_internal".*
-                      List of relations
-        Schema         |       Name        | Type  |  Owner  
------------------------+-------------------+-------+---------
- _timescaledb_internal | _hyper_1_3_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_4_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_1_5_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_10_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_11_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_12_chunk | table | alt_usr
- _timescaledb_internal | _hyper_2_8_chunk  | table | alt_usr
- _timescaledb_internal | _hyper_2_9_chunk  | table | alt_usr
+                           List of relations
+        Schema         |       Name        | Type  |       Owner       
+-----------------------+-------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
 (8 rows)
 

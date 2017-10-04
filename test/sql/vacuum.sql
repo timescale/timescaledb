@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 CREATE TABLE vacuum_test(time timestamp, temp float);
 
 -- create hypertable with three chunks

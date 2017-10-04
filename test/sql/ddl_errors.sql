@@ -1,9 +1,3 @@
-\o /dev/null
-\ir include/create_single_db.sql
-\o
-
--- Expect error when adding node again
-
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
   "Device_id" TEXT NOT NULL,

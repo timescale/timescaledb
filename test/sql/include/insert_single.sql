@@ -1,7 +1,3 @@
-\ir create_single_db.sql
-
-\c single
-
 CREATE TABLE PUBLIC."one_Partition" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,

@@ -1,21 +1,3 @@
-\ir include/create_single_db.sql
-SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS single;
-SET client_min_messages = NOTICE;
-CREATE DATABASE single;
-\c single
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-\ir switch_regular_user.sql
-DO $$
-BEGIN
-    CREATE ROLE alt_usr LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN
-        --mute error
-END$$;
---test creating and using schema as non-superuser
-\c single alt_usr
-SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 --
 --  This test will create chunks in two dimenisions, time (x) and
 --  space (y), where the time dimension is aligned. The figure below
@@ -74,9 +56,9 @@ ORDER BY c.id, d.id;
  _hyper_1_3_chunk |            2 |        3 |  1073741823 | 2147483647
 (6 rows)
 
-\c single postgres
+\c single :ROLE_SUPERUSER
 UPDATE _timescaledb_catalog.dimension SET num_slices = 3 WHERE id = 2;
-\c single alt_usr
+\c single :ROLE_DEFAULT_PERM_USER
 SELECT set_chunk_time_interval('chunk_test', 1::bigint);
  set_chunk_time_interval 
 -------------------------

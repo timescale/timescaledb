@@ -1,6 +1,3 @@
-\ir include/create_single_db.sql
-
-
 CREATE TABLE "btest"(time timestamp, time_alt timestamp, gp INTEGER, temp float, strid TEXT DEFAULT 'testing');
 SELECT create_hypertable('"btest"', 'time');
 INSERT INTO "btest" VALUES('2017-01-20T09:00:01', '2017-01-20T10:00:00', 1, 22.5);
