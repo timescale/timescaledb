@@ -17,14 +17,9 @@ DECLARE
     id                       INTEGER;
     hypertable_row           _timescaledb_catalog.hypertable;
 BEGIN
-    id :=  nextval(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'));
 
     IF associated_schema_name IS NULL THEN
         associated_schema_name = '_timescaledb_internal';
-    END IF;
-
-    IF associated_table_prefix IS NULL THEN
-        associated_table_prefix = format('_hyper_%s', id);
     END IF;
 
     IF partitioning_column IS NULL THEN
@@ -37,6 +32,15 @@ BEGIN
     ELSIF number_partitions IS NULL THEN
         RAISE EXCEPTION 'The number of partitions must be specified when there is a partitioning column'
         USING ERRCODE ='IO101';
+    END IF;
+
+    -- Create the schema for the hypertable data if needed
+    PERFORM _timescaledb_internal.create_hypertable_schema(associated_schema_name);
+
+    id :=  nextval(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'));
+
+    IF associated_table_prefix IS NULL THEN
+        associated_table_prefix = format('_hyper_%s', id);
     END IF;
 
     INSERT INTO _timescaledb_catalog.hypertable (
@@ -70,9 +74,36 @@ BEGIN
                                                     NULL);
     END IF;
 
+    -- Verify indexes
     PERFORM _timescaledb_internal.verify_hypertable_indexes(main_table);
 
     RETURN hypertable_row;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_schema(schema_name NAME)
+RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    schema_cnt INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO schema_cnt
+    FROM pg_namespace
+    WHERE nspname = schema_name;
+
+    IF schema_cnt = 0 THEN
+        BEGIN
+            EXECUTE format('CREATE SCHEMA %I', schema_name);
+        EXCEPTION
+            WHEN insufficient_privilege THEN
+                SELECT COUNT(*) INTO schema_cnt
+                FROM pg_namespace
+                WHERE nspname = schema_name;
+                IF schema_cnt = 0 THEN
+                   RAISE;
+                END IF;
+        END;
+    END IF;
 END
 $BODY$;
 
@@ -407,3 +438,29 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.verify_hypertable_indexes(hypertable REGCLASS) RETURNS VOID
 AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
+    RETURNS void LANGUAGE plpgsql
+    SECURITY DEFINER SET search_path = ''
+    AS
+$BODY$
+DECLARE
+    hypertable_row _timescaledb_catalog.hypertable;
+    chunk_row      _timescaledb_catalog.chunk;
+BEGIN
+    hypertable_row := _timescaledb_internal.hypertable_from_main_table(main_table);
+    FOR chunk_row IN
+        SELECT *
+        FROM _timescaledb_catalog.chunk
+        WHERE hypertable_id = hypertable_row.id
+        LOOP
+            EXECUTE format(
+                $$
+                ALTER TABLE %1$I.%2$I OWNER TO %3$I
+                $$,
+                chunk_row.schema_name, chunk_row.table_name,
+                new_table_owner
+            );
+    END LOOP;
+END
+$BODY$;

@@ -1,13 +1,13 @@
-sql/errors.sql
+sql/schemas.sql
+sql/tables.sql
+sql/permissions.sql
 sql/chunk.sql
 sql/ddl_internal.sql
 sql/util_time.sql
 sql/util_internal_table_ddl.sql
 sql/chunk_constraint.sql
-sql/hypertable_triggers.sql
 sql/partitioning.sql
 sql/schema_info.sql
-sql/setup_main.sql
 sql/ddl_api.sql
 sql/ddl_triggers.sql
 sql/tablespace.sql
@@ -17,3 +17,4 @@ sql/version.sql
 sql/cache_functions.sql
 sql/size_utils.sql
 sql/histogram.sql
+sql/cache.sql

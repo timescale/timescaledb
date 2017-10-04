@@ -41,7 +41,6 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 ALTER DATABASE single SET timescaledb.restoring='on';
 \! pg_restore -h localhost -U postgres -d single dump/single.sql
 \c single
-SELECT restore_timescaledb();
 ALTER DATABASE single SET timescaledb.restoring='off';
 
 --should be same as count above

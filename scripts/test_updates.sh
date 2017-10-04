@@ -128,7 +128,7 @@ docker cp ${PGTEST_TMPDIR}/single.sql timescaledb-clean:/tmp/single.sql
 docker_exec timescaledb-clean "createdb -h localhost -U postgres single"
 docker_pgcmd timescaledb-clean "ALTER DATABASE single SET timescaledb.restoring='on'"
 docker_exec timescaledb-clean "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
-docker_pgcmd timescaledb-clean "SELECT restore_timescaledb(); ALTER DATABASE single SET timescaledb.restoring='off'"
+docker_pgcmd timescaledb-clean "ALTER DATABASE single SET timescaledb.restoring='off'"
 
 echo "Testing"
 docker_pgdiff timescaledb-updated timescaledb-clean /src/test/sql/updates/test-0.1.1.sql

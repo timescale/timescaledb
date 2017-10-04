@@ -32,8 +32,7 @@ ORDER BY proname;
  indexes_relation_size
  indexes_relation_size_pretty
  last
- restore_timescaledb
  set_chunk_time_interval
  time_bucket
-(16 rows)
+(15 rows)
 
