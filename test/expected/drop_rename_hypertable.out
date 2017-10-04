@@ -1,23 +1,5 @@
 \o /dev/null
 \ir include/insert_two_partitions.sql
-\ir create_single_db.sql
-SET client_min_messages = WARNING;
-DROP DATABASE IF EXISTS single;
-SET client_min_messages = NOTICE;
-CREATE DATABASE single;
-\c single
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-\ir switch_regular_user.sql
-DO $$
-BEGIN
-    CREATE ROLE alt_usr LOGIN;
-EXCEPTION
-    WHEN duplicate_object THEN
-        --mute error
-END$$;
---test creating and using schema as non-superuser
-\c single alt_usr
-SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 \c single
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
@@ -376,9 +358,9 @@ SELECT * FROM _timescaledb_catalog.hypertable;
   1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2
 (1 row)
 
-\c single postgres
-CREATE SCHEMA "newschema" AUTHORIZATION alt_usr;
-\c single alt_usr
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA "newschema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c single :ROLE_DEFAULT_PERM_USER
 ALTER TABLE "newname" SET SCHEMA "newschema";
 SELECT * FROM "newschema"."newname";
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
@@ -416,16 +398,16 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (0 rows)
 
 \dt  "_timescaledb_catalog".*
-                     List of relations
-        Schema        |       Name       | Type  |  Owner   
-----------------------+------------------+-------+----------
- _timescaledb_catalog | chunk            | table | postgres
- _timescaledb_catalog | chunk_constraint | table | postgres
- _timescaledb_catalog | chunk_index      | table | postgres
- _timescaledb_catalog | dimension        | table | postgres
- _timescaledb_catalog | dimension_slice  | table | postgres
- _timescaledb_catalog | hypertable       | table | postgres
- _timescaledb_catalog | tablespace       | table | postgres
+                      List of relations
+        Schema        |       Name       | Type  |   Owner    
+----------------------+------------------+-------+------------
+ _timescaledb_catalog | chunk            | table | super_user
+ _timescaledb_catalog | chunk_constraint | table | super_user
+ _timescaledb_catalog | chunk_index      | table | super_user
+ _timescaledb_catalog | dimension        | table | super_user
+ _timescaledb_catalog | dimension_slice  | table | super_user
+ _timescaledb_catalog | hypertable       | table | super_user
+ _timescaledb_catalog | tablespace       | table | super_user
 (7 rows)
 
 \dt+ "_timescaledb_internal".*

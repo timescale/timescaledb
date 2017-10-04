@@ -1,7 +1,3 @@
-\o /dev/null
-\ir include/create_single_db.sql
-\o
-
 -- Utility function for grouping/slotting time with a given interval.
 CREATE OR REPLACE FUNCTION date_group(
     field           timestamp,

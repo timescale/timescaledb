@@ -1,8 +1,7 @@
-\ir include/create_single_db.sql
-\c single postgres 
-create schema test_schema AUTHORIZATION alt_usr;
+\c single :ROLE_SUPERUSER
+create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 
-\c single alt_usr
+\c single :ROLE_DEFAULT_PERM_USER
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 
 \set ON_ERROR_STOP 0

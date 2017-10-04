@@ -6,9 +6,16 @@ set -e
 PG_REGRESS_PSQL=$1
 PSQL=${PSQL:-$PG_REGRESS_PSQL}
 TEST_PGUSER=${TEST_PGUSER:-postgres}
+TEST_DBNAME=${TEST_DBNAME:-single}
+#docker doesn't set user
+USER=${USER:-`whoami`}
 # This mktemp line will work on both OSX and GNU systems
 TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
 TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
+
+TEST_ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER:-super_user}
+TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER:-default_perm_user}
+TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2:-default_perm_user_2}
 
 shift
 
@@ -25,10 +32,11 @@ mkdir -p ${TEST_TABLESPACE1_PATH}
 mkdir -p ${TEST_TABLESPACE2_PATH}
 mkdir -p dump
 
-# Hack to grant TEST_PGUSER superuser status so that we can
-# consistently run tests using the same user rather than the
-# current/local user
-${PSQL} $@ -v ECHO=none -c "ALTER USER ${TEST_PGUSER} WITH SUPERUSER;"
+# set role permissions and reset database
+${PSQL} $@ -U $USER -v ECHO=none -c "ALTER USER $TEST_ROLE_SUPERUSER WITH SUPERUSER;"
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "DROP DATABASE $TEST_DBNAME;" >/dev/null 2>&1 || :
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE $TEST_DBNAME;"
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d single -v ECHO=none -c "CREATE EXTENSION timescaledb;"
 
 ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
@@ -37,5 +45,8 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v DISABLE_OPTIMIZATIONS=off \
      -v TEST_TABLESPACE1_PATH=\'${TEST_TABLESPACE1_PATH}\' \
      -v TEST_TABLESPACE2_PATH=\'${TEST_TABLESPACE2_PATH}\' \
-     $@ 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d' 
+     -v ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER} \
+     -v ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER} \
+     -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
+     $@ -d single 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d' 
 

@@ -1,6 +1,3 @@
-\ir include/create_single_db.sql
-
-CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
 
 -- create hypertable with two chunks

@@ -1,5 +1,3 @@
-\ir create_single_db.sql
-
 \c single
 
 CREATE TABLE PUBLIC."two_Partitions" (

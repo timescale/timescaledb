@@ -33,13 +33,13 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 -- Show all index mappings
 SELECT * FROM _timescaledb_catalog.chunk_index;
 
-\c postgres postgres
+\c postgres :ROLE_SUPERUSER
 
-\! pg_dump -h localhost -U postgres -Fc single > dump/single.sql
-\! dropdb -h localhost -U postgres single
-\! createdb -h localhost -U postgres single
+\! pg_dump -h localhost -U :ROLE_SUPERUSER -Fc single > dump/single.sql
+\! dropdb -h localhost -U :ROLE_SUPERUSER single
+\! createdb -h localhost -U :ROLE_SUPERUSER single
 ALTER DATABASE single SET timescaledb.restoring='on';
-\! pg_restore -h localhost -U postgres -d single dump/single.sql
+\! pg_restore -h localhost -U :ROLE_SUPERUSER -d single dump/single.sql
 \c single
 ALTER DATABASE single SET timescaledb.restoring='off';
 

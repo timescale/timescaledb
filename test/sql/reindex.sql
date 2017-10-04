@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 CREATE TABLE reindex_test(time timestamp, temp float);
 CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
 

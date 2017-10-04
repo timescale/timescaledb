@@ -1,9 +1,6 @@
-\o /dev/null
-\ir include/create_single_db.sql
-\o
-\c single postgres
-CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION alt_usr;
-\c single alt_usr
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c single :ROLE_DEFAULT_PERM_USER
 
 \ir include/ddl_ops_1.sql
 

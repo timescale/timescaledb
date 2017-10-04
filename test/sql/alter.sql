@@ -1,5 +1,3 @@
-\ir include/create_single_db.sql
-
 -- DROP a table's column before making it a hypertable
 CREATE TABLE alter_before(id serial, time timestamp, temp float, colorid integer);
 ALTER TABLE alter_before DROP COLUMN id;
