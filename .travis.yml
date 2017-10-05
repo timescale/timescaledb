@@ -13,11 +13,11 @@ jobs:
       before_install:
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:9.6.3-alpine
       install:
-        - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && make -C /build install && chown -R postgres:postgres /build/"
+        - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake && mkdir -p /build/debug && cd /build/debug && cmake .. -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/"
       script:
-        - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build installcheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
+        - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
       after_failure:
-        - docker exec -it pgbuild cat /build/test/regression.diffs
+        - docker exec -it pgbuild cat /build/debug/test/regression.diffs
       after_script:
         - docker rm -f pgbuild
     - stage: test

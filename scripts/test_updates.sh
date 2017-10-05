@@ -106,7 +106,7 @@ wait_for_pg() {
 echo "Using temporary directory $PGTEST_TMPDIR"
 
 docker rm -f timescaledb-orig timescaledb-updated timescaledb-clean 2>/dev/null || true
-IMAGE_NAME=update_test TAG_NAME=latest bash scripts/docker-build.sh
+IMAGE_NAME=update_test TAG_NAME=latest bash ${SCRIPT_DIR}/docker-build.sh
 
 docker_run timescaledb-orig ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
 docker_run timescaledb-clean ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}

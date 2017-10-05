@@ -1,4 +1,6 @@
 *~
+**/CMakeFiles/
+**/CMakeCache.txt
 /sql/tests/unit/testoutputs.tmp
 /sql/timescaledb--*.sql
 /data/
@@ -11,3 +13,9 @@
 typedef.list
 /test/testcluster
 /test/log
+/build
+**/GPATH
+**/GTAGS
+**/GRTAGS
+**/GSYMS
+/.vs

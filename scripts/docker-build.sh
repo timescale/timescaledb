@@ -24,13 +24,13 @@ else
     docker run -d --name ${BUILD_CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
 
     # Install build dependencies
-    docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps gdb git coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && mkdir -p /build"
+    docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps gdb git coreutils dpkg-dev gcc libc-dev make cmake util-linux-dev diffutils && mkdir -p /build/debug"
 
     docker commit -a $USER -m "TimescaleDB build base image version $PG_IMAGE_TAG" ${BUILD_CONTAINER_NAME} ${BUILD_IMAGE_NAME}:${PG_IMAGE_TAG}
 fi
 
 # Build and install the extension with debug symbols and assertions
-docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "cp -a /src/{src,sql,test,Makefile,timescaledb.control,extra_extension_files.txt} /build/ &&  make -C /build clean && make -C /build install USE_ASSERT_CHECKING=1 CFLAGS=-g && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample"
+docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "cp -a /src/{src,sql,test,version.config,CMakeLists.txt,timescaledb.control.in} /build/ && cd build/debug && cmake -DCMAKE_BUILD_TYPE=Debug .. && make && make install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample && cd / && rm -rf /build"
 
 docker commit -a $USER -m "TimescaleDB development image" ${BUILD_CONTAINER_NAME} ${IMAGE_NAME}:${TAG_NAME}
 

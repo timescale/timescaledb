@@ -109,7 +109,7 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 	data = PG_GETARG_VARLENA_PP(0);
 
 	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data),
-									 VARSIZE_ANY_EXHDR(data)));
+						VARSIZE_ANY_EXHDR(data)));
 
 	res = (int32) (hash_u & 0x7fffffff);		/* Only positive numbers */
 

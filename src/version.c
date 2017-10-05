@@ -1,8 +1,13 @@
 #include "postgres.h"
 #include <string.h>
-#include "fmgr.h"
 
-const char *git_commit = EXT_GIT_COMMIT;
+#include "fmgr.h"
+#include "gitcommit.h"
+
+#define STR_EXPAND(x) #x
+#define STR(x) STR_EXPAND(x)
+
+const char *git_commit = STR(EXT_GIT_COMMIT);
 
 PGDLLEXPORT Datum get_git_commit(PG_FUNCTION_ARGS);
 
