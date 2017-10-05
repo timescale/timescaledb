@@ -98,13 +98,21 @@ We recommend following our detailed [installation instructions](http://docs.time
 
 #### Building from source
 
-**Prerequisites**:  A standard PostgreSQL 9.6 installation with development environment (header files) (e.g., postgresql-server-dev-9.6 package for Linux, Postgres.app for MacOS)
+**Prerequisites**:
+
+- A standard PostgreSQL 9.6 installation with development environment (header files) (e.g., postgresql-server-dev-9.6 package for Linux, Postgres.app for MacOS)
+- C compiler (e.g., gcc or clang)
+- [CMake](https://cmake.org/) version 3.4 or greater
 
 ```bash
 git clone git@github.com:timescale/timescaledb.git
+cd timescaledb
+
+# Bootstrap the build system
+./bootstrap
 
 # To build the extension
-make
+cd build && make
 
 # To install
 make install

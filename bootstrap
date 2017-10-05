@@ -1,0 +1,16 @@
+#!/bin/bash
+
+BUILD_TYPE=${1:-Release}
+BUILD_DIR=${BUILD_DIR:-./build}
+
+if [ -d ${BUILD_DIR} ]; then
+    echo "Build system already initialized in ${BUILD_DIR}"
+    exit
+fi
+
+mkdir -p ${BUILD_DIR} && \
+    cd ${BUILD_DIR} && \
+    cmake .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+
+echo "TimescaleDB build system initialized in ${BUILD_DIR}. To compile, do:"
+echo -e "\033[1mcd ${BUILD_DIR} && make\033[0m"

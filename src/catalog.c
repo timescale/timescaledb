@@ -201,7 +201,7 @@ catalog_get(void)
 	{
 		Oid			id;
 		const char *sequence_name;
-		int			number_indexes,
+		Size		number_indexes,
 					j;
 
 		id = get_relname_relid(catalog_table_names[i], catalog.schema_id);

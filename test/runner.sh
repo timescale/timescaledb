@@ -2,11 +2,14 @@
 
 set -u
 set -e
-
+EXE_DIR=$(dirname $0)
 PG_REGRESS_PSQL=$1
 PSQL=${PSQL:-$PG_REGRESS_PSQL}
 TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_DBNAME=${TEST_DBNAME:-single}
+TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
+TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
+
 #docker doesn't set user
 USER=${USER:-`whoami`}
 # This mktemp line will work on both OSX and GNU systems
@@ -27,7 +30,7 @@ function cleanup {
 trap cleanup EXIT
 
 # Setup directories required by tests
-cd test/sql
+cd ${EXE_DIR}/sql
 mkdir -p ${TEST_TABLESPACE1_PATH}
 mkdir -p ${TEST_TABLESPACE2_PATH}
 mkdir -p dump
@@ -45,8 +48,9 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v DISABLE_OPTIMIZATIONS=off \
      -v TEST_TABLESPACE1_PATH=\'${TEST_TABLESPACE1_PATH}\' \
      -v TEST_TABLESPACE2_PATH=\'${TEST_TABLESPACE2_PATH}\' \
+     -v TEST_INPUT_DIR=${TEST_INPUT_DIR} \
+     -v TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR} \
      -v ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER} \
      -v ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
-     $@ -d single 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d' 
-
+     $@ -d single 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d'
