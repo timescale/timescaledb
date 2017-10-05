@@ -148,11 +148,17 @@ process_truncate(Node *parsetree)
 
 	foreach(cell, truncatestmt->relations)
 	{
-		Oid			relId = RangeVarGetRelid(lfirst(cell), NoLock, true);
+		RangeVar   *relation = lfirst(cell);
+		Oid			relid;
 
-		if (OidIsValid(relId))
+		if (NULL == relation)
+			continue;
+
+		relid = RangeVarGetRelid(relation, NoLock, true);
+
+		if (OidIsValid(relid))
 		{
-			Hypertable *ht = hypertable_cache_get_entry(hcache, relId);
+			Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
 
 			if (ht != NULL)
 			{
@@ -172,7 +178,7 @@ process_alterobjectschema(Node *parsetree)
 	Cache	   *hcache;
 	Hypertable *ht;
 
-	if (alterstmt->objectType != OBJECT_TABLE)
+	if (alterstmt->objectType != OBJECT_TABLE || NULL == alterstmt->relation)
 		return;
 
 	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
@@ -202,7 +208,7 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 	Cache	   *hcache;
 	Oid			relid;
 
-	if (!stmt->is_from)
+	if (!stmt->is_from || NULL == stmt->relation)
 		return false;
 
 	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
@@ -326,7 +332,13 @@ process_drop_table(DropStmt *stmt)
 	foreach(lc, stmt->objects)
 	{
 		List	   *object = lfirst(lc);
-		Oid			relid = RangeVarGetRelid(makeRangeVarFromNameList(object), NoLock, true);
+		RangeVar   *relation = makeRangeVarFromNameList(object);
+		Oid			relid;
+
+		if (NULL == relation)
+			continue;
+
+		relid = RangeVarGetRelid(relation, NoLock, true);
 
 		if (OidIsValid(relid))
 		{
@@ -428,8 +440,13 @@ process_drop_index(DropStmt *stmt)
 	foreach(lc, stmt->objects)
 	{
 		List	   *object = lfirst(lc);
-		RangeVar   *rv = makeRangeVarFromNameList(object);
-		Oid			idxrelid = RangeVarGetRelid(rv, NoLock, true);
+		RangeVar   *relation = makeRangeVarFromNameList(object);
+		Oid			idxrelid;
+
+		if (NULL == relation)
+			continue;
+
+		idxrelid = RangeVarGetRelid(relation, NoLock, true);
 
 		if (OidIsValid(idxrelid))
 		{
@@ -511,7 +528,16 @@ static bool
 process_reindex(Node *parsetree)
 {
 	ReindexStmt *stmt = (ReindexStmt *) parsetree;
-	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	Oid			relid;
+
+	if (NULL == stmt->relation)
+		/* Not a case we are interested in */
+		return false;
+
+	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+	if (!OidIsValid(relid))
+		return false;
 
 	switch (stmt->kind)
 	{
@@ -571,8 +597,13 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 static void
 process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
-	Oid			tablerelid = IndexGetRelation(relid, false);
-	Hypertable *ht = hypertable_cache_get_entry(hcache, tablerelid);
+	Oid			tablerelid = IndexGetRelation(relid, true);
+	Hypertable *ht;
+
+	if (!OidIsValid(tablerelid))
+		return;
+
+	ht = hypertable_cache_get_entry(hcache, tablerelid);
 
 	if (NULL != ht)
 		chunk_index_rename_parent(ht, relid, stmt->newname);
@@ -589,13 +620,19 @@ static void
 process_rename(Node *parsetree)
 {
 	RenameStmt *stmt = (RenameStmt *) parsetree;
-	Oid			relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	Oid			relid;
 	Cache	   *hcache;
 
-	/* TODO: forbid all rename op on chunk table */
+	if (NULL == stmt->relation)
+		/* Not an object we are interested in */
+		return;
+
+	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
 		return;
+
+	/* TODO: forbid all rename op on chunk table */
 
 	hcache = hypertable_cache_pin();
 

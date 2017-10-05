@@ -1,0 +1,44 @@
+\ir include/create_single_db.sql
+SET client_min_messages = WARNING;
+DROP DATABASE IF EXISTS single;
+SET client_min_messages = NOTICE;
+CREATE DATABASE single;
+\c single
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
+-- Tests for plain PostgreSQL commands to ensure that they work while
+-- the TimescaleDB extension is loaded. This is a mix of statements
+-- added mostly as regression checks when bugs are discovered and
+-- fixed.
+CREATE TABLE regular_table(time timestamp, temp float8, tag text, color integer);
+-- Renaming indexes should work
+CREATE INDEX time_color_idx ON regular_table(time, color);
+ALTER INDEX time_color_idx RENAME TO time_color_idx2;
+\d+ regular_table
+                               Table "public.regular_table"
+ Column |            Type             | Modifiers | Storage  | Stats target | Description 
+--------+-----------------------------+-----------+----------+--------------+-------------
+ time   | timestamp without time zone |           | plain    |              | 
+ temp   | double precision            |           | plain    |              | 
+ tag    | text                        |           | extended |              | 
+ color  | integer                     |           | plain    |              | 
+Indexes:
+    "time_color_idx2" btree ("time", color)
+
+-- Renaming types should work
+CREATE TYPE rainbow AS ENUM ('red', 'orange', 'yellow', 'green', 'blue', 'purple');
+ALTER TYPE rainbow RENAME TO colors;
+\dT+
+                                       List of data types
+ Schema |  Name  | Internal name | Size | Elements |  Owner   | Access privileges | Description 
+--------+--------+---------------+------+----------+----------+-------------------+-------------
+ public | colors | colors        | 4    | red     +| postgres |                   | 
+        |        |               |      | orange  +|          |                   | 
+        |        |               |      | yellow  +|          |                   | 
+        |        |               |      | green   +|          |                   | 
+        |        |               |      | blue    +|          |                   | 
+        |        |               |      | purple   |          |                   | 
+(1 row)
+
+REINDEX TABLE regular_table;
+REINDEX SCHEMA public;
