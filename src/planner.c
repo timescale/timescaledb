@@ -368,13 +368,6 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 			ListCell   *lc_plan,
 					   *lc_rel;
 
-			if (ctx->parse->onConflict != NULL &&
-				ctx->parse->onConflict->constraint != InvalidOid)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("Hypertables do not support ON CONFLICT statements that reference constraints"),
-					 errhint("Use column names to infer indexes instead.")));
-
 			/*
 			 * To match up tuple-producing subplans with result relations, we
 			 * simultaneously loop over subplans and resultRelations, although
@@ -390,6 +383,13 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 				{
 					void	  **subplan_ptr = &lfirst(lc_plan);
 					Plan	   *subplan = *subplan_ptr;
+
+					if (ctx->parse->onConflict != NULL &&
+						ctx->parse->onConflict->constraint != InvalidOid)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("Hypertables do not support ON CONFLICT statements that reference constraints"),
+								 errhint("Use column names to infer indexes instead.")));
 
 					/*
 					 * We replace the plan with our custom chunk dispatch
