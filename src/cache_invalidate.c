@@ -61,6 +61,7 @@ inval_cache_callback(Datum arg, Oid relid)
 }
 
 PGDLLEXPORT Datum invalidate_relcache_trigger(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
 
 /*
@@ -103,6 +104,7 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 }
 
 PGDLLEXPORT Datum invalidate_relcache(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(invalidate_relcache);
 
 /*

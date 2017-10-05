@@ -150,6 +150,7 @@ calculate_open_range_default(Dimension *dim, int64 value)
 }
 
 PGDLLEXPORT Datum dimension_calculate_open_range_default(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(dimension_calculate_open_range_default);
 
 /*
@@ -196,6 +197,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 }
 
 PGDLLEXPORT Datum dimension_calculate_closed_range_default(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(dimension_calculate_closed_range_default);
 
 /*
