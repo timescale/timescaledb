@@ -20,3 +20,7 @@ ALTER TYPE rainbow RENAME TO colors;
 REINDEX TABLE regular_table;
 \c single :ROLE_SUPERUSER
 REINDEX SCHEMA public;
+
+-- Not only simple statements should work
+CREATE TABLE a (aa TEXT);
+CREATE TABLE z (b TEXT, PRIMARY KEY(aa, b)) inherits (a);

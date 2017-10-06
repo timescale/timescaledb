@@ -870,16 +870,29 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 	bool		handled = false;
 
 	Assert(IsA(stmt, IndexStmt));
-	Assert(cmd->type == SCT_Simple);
 
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
 	if (NULL != ht)
 	{
+		ObjectAddress obj;
+
+		switch (cmd->type)
+		{
+		    case SCT_Simple:
+				obj =  cmd->d.simple.address;
+				break;
+		    default:
+				elog(ERROR,
+					 "%s:%d Operation not yet supported on hypertables: parsetree %s, type %d",
+					 __FILE__, __LINE__, nodeToString(parsetree), cmd->type);
+				break;
+		}
+
 		CreateIndexInfo info = {
 			.stmt = stmt,
-			.obj = cmd->d.simple.address,
+			.obj = obj,
 			.ht = ht,
 		};
 
