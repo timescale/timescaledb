@@ -682,7 +682,7 @@ chunk_copy(Chunk *chunk)
 static Chunk *
 chunk_scan_internal(int indexid,
 					ScanKeyData scankey[],
-					Size nkeys,
+					int nkeys,
 					int16 num_constraints,
 					bool fail_if_not_found)
 {

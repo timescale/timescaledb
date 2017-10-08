@@ -40,13 +40,14 @@ hist_sfunc(PG_FUNCTION_ARGS)
 	MemoryContext aggcontext;
 	bytea	   *state = (PG_ARGISNULL(0) ? NULL : PG_GETARG_BYTEA_P(0));
 	Datum	   *hist;
-
-	double		val = PG_GETARG_FLOAT8(1);
-	double		min = PG_GETARG_FLOAT8(2);
-	double		max = PG_GETARG_FLOAT8(3);
-	int			nbuckets = PG_GETARG_INT32(4);
-
-	int			bucket = DirectFunctionCall4(width_bucket_float8, val, min, max, nbuckets);
+	Datum		val_datum = PG_GETARG_DATUM(1);
+	Datum		min_datum = PG_GETARG_DATUM(2);
+	Datum		max_datum = PG_GETARG_DATUM(3);
+	Datum		nbuckets_datum = PG_GETARG_DATUM(4);
+	double		min = DatumGetFloat8(min_datum);
+	double		max = DatumGetFloat8(max_datum);
+	int			nbuckets = DatumGetInt32(nbuckets_datum);
+	int32		bucket = DatumGetInt32(DirectFunctionCall4(width_bucket_float8, val_datum, min_datum, max_datum, nbuckets_datum));
 
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{

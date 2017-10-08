@@ -68,7 +68,7 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 
 static int
 dimension_slice_scan_limit_internal(ScanKeyData *scankey,
-									Size num_scankeys,
+									int num_scankeys,
 									tuple_found_func on_tuple_found,
 									void *scandata,
 									int limit)
