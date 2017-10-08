@@ -11,7 +11,7 @@ PG_FUNCTION_INFO_V1(get_git_commit);
 Datum
 get_git_commit(PG_FUNCTION_ARGS)
 {
-	int32		var_size = VARHDRSZ + strlen(git_commit);
+	size_t		var_size = VARHDRSZ + strlen(git_commit);
 	text	   *version_text = (text *) palloc(var_size);
 
 	SET_VARSIZE(version_text, var_size);

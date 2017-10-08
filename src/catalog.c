@@ -26,7 +26,7 @@ static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
 
 typedef struct TableIndexDef
 {
-	size_t		length;
+	int			length;
 	char	  **names;
 } TableIndexDef;
 
@@ -86,7 +86,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 typedef struct InternalFunctionDef
 {
 	char	   *name;
-	size_t		args;
+	int			args;
 } InternalFunctionDef;
 
 const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
@@ -247,15 +247,17 @@ catalog_get(void)
 													catalog.cache_schema_id);
 
 	catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
+
 	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
 	{
 		InternalFunctionDef def = internal_function_definitions[i];
 		FuncCandidateList funclist =
-		FuncnameGetCandidates(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(def.name)),
+		FuncnameGetCandidates(list_make2(makeString(INTERNAL_SCHEMA_NAME),
+										 makeString(def.name)),
 							  def.args, NULL, false, false, false);
 
 		if (funclist == NULL || funclist->next)
-			elog(ERROR, "Oid lookup failed for the function %s with %lu args", def.name, def.args);
+			elog(ERROR, "Oid lookup failed for the function %s with %d args", def.name, def.args);
 
 		catalog.functions[i].function_id = funclist->oid;
 	}
