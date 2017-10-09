@@ -1,6 +1,6 @@
 # timescaledb extension
 comment = 'Enables scalable inserts and complex queries for time-series data'
-default_version = '0.6.0-dev'
+default_version = '0.6.0'
 module_pathname = '$libdir/timescaledb'
 #extension cannot be relocatable once installed because it uses multiple schemas and that is forbidden by PG.
 #(though this extension is relocatable during installation).
