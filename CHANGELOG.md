@@ -1,5 +1,36 @@
 # TimescaleDB Changelog
 
+## 0.6.0 (2017-10-12)
+
+**High-level changes**
+
+* Fix bugs where hypertable-specific handlers were affecting normal Postgres tables.
+* Make it so that all TimescaleDB commands can run as a normal user rather than a superuser.
+* Updates to the code to make the extension compileable on Windows; future changes will add steps to properly build.
+* Move `time_bucket` functions out of `public` schema (put in schema where extension is).
+* Several other bugs fixes.
+
+**Notable commits**
+* [1d73fb8] Fix bug with extension starting too early.
+* [fd390ec] Fix chunk index attribute mismatch and locking issue
+* [430ed8a] Fix bug with collected commands in index statement.
+* [614c2b7] Fix permissions bugs and run tests as normal user
+* [ce12104] Fix "ON CONFLICT ON CONSTRAINT" on plain PostgreSQL tables
+* [4c451e0] Fix rename and reindex bugs when objects are not relations
+* [c3ebc67] Fix permission problems with dropping hypertables and chunks
+* [040e815] Remove truncate and hypertable metadata triggers
+* [5c26328] Fix INSERT on hypertables using sub-selects with aggregates
+* [b57e2bf] Prepare C code for compiling on Windows
+* [a2bad2b] Fix constraint validation on regular tables
+* [fb5717f] Remove explicit schema for time_bucket
+* [04d01ce] Split DDL processing into start and end hooks
+
+**Thanks**
+* @oldgreen for reporting `time_bucket` being incorrectly put in the `public` schema and pointing out permission problems
+* @qlandman for reporting a bug with INSERT using sub-selects with aggregates
+* @min-mwei for reporting a deadlock issue during INSERTs
+* @ryan-shaw for reporting a bug where the extension sometimes used `pg_cache` too soon
+
 ## 0.5.0 (2017-09-20)
 
 **High-level changes**
