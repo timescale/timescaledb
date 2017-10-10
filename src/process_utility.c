@@ -884,7 +884,7 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 		switch (cmd->type)
 		{
 			case SCT_Simple:
-				info.obj =  cmd->d.simple.address;
+				info.obj = cmd->d.simple.address;
 				break;
 			default:
 				elog(ERROR,
