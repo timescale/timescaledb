@@ -1,8 +1,7 @@
-CREATE TABLE reindex_test(time timestamp, temp float);
+CREATE TABLE reindex_test(time timestamp, temp float, PRIMARY KEY(time, temp));
 CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
 -- create hypertable with three chunks
 SELECT create_hypertable('reindex_test', 'time', chunk_time_interval => 2628000000000);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -18,7 +17,7 @@ SELECT * FROM test.show_columns('reindex_test');
  Column |            Type             | Nullable 
 --------+-----------------------------+----------
  time   | timestamp without time zone | t
- temp   | double precision            | f
+ temp   | double precision            | t
 (2 rows)
 
 SELECT * FROM test.show_subtables('reindex_test');
@@ -34,10 +33,15 @@ SELECT * FROM test.show_subtables('reindex_test');
 -- show reindexing
 REINDEX (VERBOSE) TABLE reindex_test;
 INFO:  index "_hyper_1_1_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "1_1_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_2_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "2_2_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_3_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "3_3_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_4_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "4_4_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_1_5_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "5_5_reindex_test_pkey" was reindexed
 \set ON_ERROR_STOP 0
 -- this one currently doesn't recurse to chunks and instead gives an
 -- error
@@ -57,3 +61,63 @@ REINDEX (VERBOSE) TABLE reindex_norm;
 INFO:  index "reindex_norm_time_unique_idx" was reindexed
 REINDEX (VERBOSE) INDEX reindex_norm_time_unique_idx;
 INFO:  index "reindex_norm_time_unique_idx" was reindexed
+SELECT * FROM test.show_constraintsp('_timescaledb_internal.%');
+                 Table                  |      Constraint       | Type |   Columns   |                     Index                     |                                                                     Expr                                                                     
+----------------------------------------+-----------------------+------+-------------+-----------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk | 1_1_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."1_1_reindex_test_pkey" | 
+ _timescaledb_internal._hyper_1_1_chunk | constraint_1          | c    | {time}      | -                                             | (("time" >= 'Thu Jan 19 10:00:00 2017'::timestamp without time zone) AND ("time" < 'Sat Feb 18 20:00:00 2017'::timestamp without time zone))
+ _timescaledb_internal._hyper_1_2_chunk | 2_2_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."2_2_reindex_test_pkey" | 
+ _timescaledb_internal._hyper_1_2_chunk | constraint_2          | c    | {time}      | -                                             | (("time" >= 'Tue Mar 21 06:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Apr 20 16:00:00 2017'::timestamp without time zone))
+ _timescaledb_internal._hyper_1_3_chunk | 3_3_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."3_3_reindex_test_pkey" | 
+ _timescaledb_internal._hyper_1_3_chunk | constraint_3          | c    | {time}      | -                                             | (("time" >= 'Thu Apr 20 16:00:00 2017'::timestamp without time zone) AND ("time" < 'Sun May 21 02:00:00 2017'::timestamp without time zone))
+ _timescaledb_internal._hyper_1_4_chunk | 4_4_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."4_4_reindex_test_pkey" | 
+ _timescaledb_internal._hyper_1_4_chunk | constraint_4          | c    | {time}      | -                                             | (("time" >= 'Sun May 21 02:00:00 2017'::timestamp without time zone) AND ("time" < 'Tue Jun 20 12:00:00 2017'::timestamp without time zone))
+ _timescaledb_internal._hyper_1_5_chunk | 5_5_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."5_5_reindex_test_pkey" | 
+ _timescaledb_internal._hyper_1_5_chunk | constraint_5          | c    | {time}      | -                                             | (("time" >= 'Tue Jun 20 12:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Jul 20 22:00:00 2017'::timestamp without time zone))
+(10 rows)
+
+SELECT * FROM reindex_norm;
+           time           | temp 
+--------------------------+------
+ Fri Jan 20 09:00:01 2017 | 17.5
+ Sat Jan 21 09:00:01 2017 | 19.1
+ Thu Apr 20 09:00:01 2017 | 89.5
+ Fri Apr 21 09:00:01 2017 | 17.1
+ Tue Jun 20 09:00:01 2017 | 18.5
+ Wed Jun 21 09:00:01 2017 |   11
+(6 rows)
+
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
+                                Index                                |   Columns   | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------------------+-------------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      | t      | f       | f         | 
+ _timescaledb_internal."1_1_reindex_test_pkey"                       | {time,temp} | t      | t       | f         | 
+(2 rows)
+
+SELECT * FROM _timescaledb_internal.chunk_index_clone('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass);
+ chunk_index_clone 
+-------------------
+             31375
+(1 row)
+
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
+                                Index                                |   Columns   | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------------------+-------------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      | t      | f       | f         | 
+ _timescaledb_internal."1_1_reindex_test_pkey"                       | {time,temp} | t      | t       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk_1_1_reindex_test_pkey        | {time,temp} | t      | t       | f         | 
+(3 rows)
+
+SELECT * FROM _timescaledb_internal.chunk_index_replace('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass, '_timescaledb_internal."_hyper_1_1_chunk_1_1_reindex_test_pkey"'::regclass);
+ chunk_index_replace 
+---------------------
+ 
+(1 row)
+
+SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
+                                Index                                |   Columns   | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------------------+-------------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      | t      | f       | f         | 
+ _timescaledb_internal."1_1_reindex_test_pkey"                       | {time,temp} | t      | t       | f         | 
+(2 rows)
+

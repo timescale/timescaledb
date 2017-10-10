@@ -218,3 +218,25 @@ scanner_scan(ScannerCtx *ctx)
 
 	return ictx.tinfo.count;
 }
+
+bool
+scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
+{
+	int			num_found = scanner_scan(ctx);
+
+	ctx->limit = 2;
+
+	switch (num_found)
+	{
+		case 0:
+			if (fail_if_not_found)
+			{
+				elog(ERROR, "%s not found", item_type);
+			}
+			return false;
+		case 1:
+			return true;
+		default:
+			elog(ERROR, "More than one %s found.", item_type);
+	}
+}

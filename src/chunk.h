@@ -27,6 +27,7 @@ typedef struct Chunk
 {
 	FormData_chunk fd;
 	Oid			table_id;
+	Oid			hypertable_relid;
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.
