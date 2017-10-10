@@ -876,25 +876,22 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 
 	if (NULL != ht)
 	{
-		ObjectAddress obj;
+		CreateIndexInfo info = {
+			.stmt = stmt,
+			.ht = ht,
+		};
 
 		switch (cmd->type)
 		{
-		    case SCT_Simple:
-				obj =  cmd->d.simple.address;
+			case SCT_Simple:
+				info.obj =  cmd->d.simple.address;
 				break;
-		    default:
+			default:
 				elog(ERROR,
 					 "%s:%d Operation not yet supported on hypertables: parsetree %s, type %d",
 					 __FILE__, __LINE__, nodeToString(parsetree), cmd->type);
 				break;
 		}
-
-		CreateIndexInfo info = {
-			.stmt = stmt,
-			.obj = obj,
-			.ht = ht,
-		};
 
 		/*
 		 * Change user since chunk's are typically located in an internal
