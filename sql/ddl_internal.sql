@@ -565,3 +565,11 @@ BEGIN
     END LOOP;
 END
 $BODY$;
+
+
+--documentation of these function located in chunk_index.h
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
+AS '$libdir/timescaledb', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_replace(chunk_index_oid_old OID, chunk_index_oid_new OID) RETURNS VOID
+AS '$libdir/timescaledb', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;

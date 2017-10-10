@@ -200,43 +200,43 @@ chunk_adjust_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chu
  */
 static Oid
 chunk_relation_index_create(Relation htrel,
-							Relation hypertable_indexrel,
+							Relation template_indexrel,
 							Relation chunkrel,
 							bool isconstraint)
 {
 	Oid			chunk_indexrelid = InvalidOid;
 	const char *indexname;
-	IndexInfo  *indexinfo = BuildIndexInfo(hypertable_indexrel);
+	IndexInfo  *indexinfo = BuildIndexInfo(template_indexrel);
 	HeapTuple	tuple;
 	bool		isnull;
 	Datum		reloptions;
 	Datum		indclass;
 	oidvector  *indclassoid;
-	List	   *colnames = create_index_colnames(hypertable_indexrel);
+	List	   *colnames = create_index_colnames(template_indexrel);
 
 	/*
 	 * Convert the IndexInfo's attnos to match the chunk instead of the
 	 * hypertable
 	 */
 	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
-		chunk_adjust_attnos(indexinfo, htrel, hypertable_indexrel, chunkrel);
+		chunk_adjust_attnos(indexinfo, htrel, template_indexrel, chunkrel);
 
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(hypertable_indexrel)));
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(template_indexrel)));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for index relation %u",
-			 RelationGetRelid(hypertable_indexrel));
+			 RelationGetRelid(template_indexrel));
 
 	reloptions = SysCacheGetAttr(RELOID, tuple,
 								 Anum_pg_class_reloptions, &isnull);
 
-	indclass = SysCacheGetAttr(INDEXRELID, hypertable_indexrel->rd_indextuple,
+	indclass = SysCacheGetAttr(INDEXRELID, template_indexrel->rd_indextuple,
 							   Anum_pg_index_indclass, &isnull);
 	Assert(!isnull);
 	indclassoid = (oidvector *) DatumGetPointer(indclass);
 
 	indexname = chunk_index_choose_name(get_rel_name(RelationGetRelid(chunkrel)),
-						 get_rel_name(RelationGetRelid(hypertable_indexrel)),
+						   get_rel_name(RelationGetRelid(template_indexrel)),
 							  get_rel_namespace(RelationGetRelid(chunkrel)));
 
 	chunk_indexrelid = index_create(chunkrel,
@@ -245,13 +245,13 @@ chunk_relation_index_create(Relation htrel,
 									InvalidOid,
 									indexinfo,
 									colnames,
-									hypertable_indexrel->rd_rel->relam,
-								  hypertable_indexrel->rd_rel->reltablespace,
-									hypertable_indexrel->rd_indcollation,
+									template_indexrel->rd_rel->relam,
+									template_indexrel->rd_rel->reltablespace,
+									template_indexrel->rd_indcollation,
 									indclassoid->values,
-									hypertable_indexrel->rd_indoption,
+									template_indexrel->rd_indoption,
 									reloptions,
-								 hypertable_indexrel->rd_index->indisprimary,
+									template_indexrel->rd_index->indisprimary,
 									isconstraint,
 									false,		/* deferrable */
 									false,		/* init deferred */
@@ -485,18 +485,32 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys,
 #define chunk_index_scan_update(idxid, scankey, nkeys, tuple_found, data)	\
 	chunk_index_scan(idxid, scankey, nkeys, tuple_found, data, RowExclusiveLock)
 
+static ChunkIndexMapping *
+chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
+{
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	Chunk	   *chunk = chunk_get_by_id(chunk_index->chunk_id, 0, true);
+	Oid			nspoid_chunk = get_rel_namespace(chunk->table_id);
+	Oid			nspoid_hyper = get_rel_namespace(chunk->hypertable_relid);
+
+	if (cim == NULL)
+	{
+		cim = palloc(sizeof(ChunkIndexMapping));
+	}
+	cim->chunkoid = chunk->table_id;
+	cim->indexoid = get_relname_relid(NameStr(chunk_index->index_name), nspoid_chunk);
+	cim->parent_indexoid = get_relname_relid(NameStr(chunk_index->hypertable_index_name), nspoid_hyper);
+	cim->hypertableoid = chunk->hypertable_relid;
+
+	return cim;
+}
+
 static bool
 chunk_index_collect(TupleInfo *ti, void *data)
 {
 	List	  **mappings = data;
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
-	Chunk	   *chunk = chunk_get_by_id(chunk_index->chunk_id, 0, true);
-	Oid			nspoid = get_rel_namespace(chunk->table_id);
-	ChunkIndexMapping *cim = palloc(sizeof(ChunkIndexMapping));
+	ChunkIndexMapping *cim = chunk_index_mapping_from_tuple(ti, NULL);
 
-	cim->chunkoid = chunk->table_id;
-	cim->indexoid = get_relname_relid(NameStr(chunk_index->index_name), nspoid);
-	cim->parent_indexoid = get_relname_relid(NameStr(chunk_index->hypertable_index_name), nspoid);
 	*mappings = lappend(*mappings, cim);
 
 	return true;
@@ -577,6 +591,37 @@ chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
 						  scankey, 2, chunk_index_tuple_delete, &drop_index);
 }
+
+static bool
+chunk_index_tuple_found(TupleInfo *ti, void *const data)
+{
+	ChunkIndexMapping *const cim = data;
+
+	chunk_index_mapping_from_tuple(ti, cim);
+	return false;
+}
+
+
+static ChunkIndexMapping *
+chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
+{
+	ScanKeyData scankey[2];
+	const char *indexname = get_rel_name(chunk_indexrelid);
+	ChunkIndexMapping *cim = palloc(sizeof(ChunkIndexMapping));
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_index_chunk_id_index_name_idx_index_name,
+				BTEqualStrategyNumber, F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(indexname)));
+
+	chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
+				  scankey, 2, chunk_index_tuple_found, cim, AccessShareLock);
+
+	return cim;
+}
+
 
 typedef struct ChunkIndexRenameInfo
 {
@@ -711,4 +756,83 @@ chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 	mark_index_clustered(rel, indexrelid, true);
 	CommandCounterIncrement();
 	heap_close(rel, AccessShareLock);
+}
+
+PG_FUNCTION_INFO_V1(chunk_index_clone);
+Datum
+chunk_index_clone(PG_FUNCTION_ARGS)
+{
+	Oid			chunk_index_oid = PG_GETARG_OID(0);
+	Relation	chunk_index_rel;
+	Relation	hypertable_rel;
+	Relation	chunk_rel;
+	Oid			constraint_oid;
+	Oid			new_chunk_indexrelid;
+	Chunk	   *chunk;
+	ChunkIndexMapping *cim;
+
+	chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
+
+	chunk = chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, 0, true);
+	cim = chunk_index_get_by_indexrelid(chunk, chunk_index_oid);
+
+	hypertable_rel = heap_open(cim->hypertableoid, AccessShareLock);
+
+	/* Need ShareLock on the heap relation we are creating indexes on */
+	chunk_rel = heap_open(chunk_index_rel->rd_index->indrelid, ShareLock);
+
+	constraint_oid = get_index_constraint(cim->parent_indexoid);
+
+	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel, chunk_index_rel,
+									  chunk_rel, OidIsValid(constraint_oid));
+
+	heap_close(chunk_rel, NoLock);
+
+	heap_close(hypertable_rel, AccessShareLock);
+
+	relation_close(chunk_index_rel, AccessShareLock);
+
+	PG_RETURN_OID(new_chunk_indexrelid);
+}
+
+PG_FUNCTION_INFO_V1(chunk_index_replace);
+Datum
+chunk_index_replace(PG_FUNCTION_ARGS)
+{
+	Oid			chunk_index_oid_old = PG_GETARG_OID(0);
+	Oid			chunk_index_oid_new = PG_GETARG_OID(1);
+	Relation	index_rel;
+
+	Oid			constraint_oid;
+	char	   *name;
+
+	index_rel = relation_open(chunk_index_oid_old, ShareLock);
+
+	name = pstrdup(RelationGetRelationName(index_rel));
+	constraint_oid = get_index_constraint(chunk_index_oid_old);
+
+	relation_close(index_rel, NoLock);
+
+	if (OidIsValid(constraint_oid))
+	{
+		ObjectAddress constraintobj = {
+			.classId = ConstraintRelationId,
+			.objectId = constraint_oid,
+		};
+
+		performDeletion(&constraintobj, DROP_RESTRICT, 0);
+	}
+	else
+	{
+		ObjectAddress idxobj = {
+			.classId = RelationRelationId,
+			.objectId = chunk_index_oid_old,
+		};
+
+		performDeletion(&idxobj, DROP_RESTRICT, 0);
+	}
+
+	RenameRelationInternal(chunk_index_oid_new, name, false);
+
+	PG_RETURN_VOID();
 }

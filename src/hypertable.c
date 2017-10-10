@@ -11,6 +11,7 @@
 #include "subspace_store.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
+#include "scanner.h"
 
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple)

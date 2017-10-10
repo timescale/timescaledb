@@ -101,3 +101,6 @@ BEGIN
     END IF;
 END
 $BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_element anyelement, time_type REGTYPE) RETURNS BIGINT
+	AS '$libdir/timescaledb', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
