@@ -103,16 +103,54 @@ chunk_index_choose_name(const char *tabname, const char *main_index_name, Oid na
 }
 
 /*
+ * Translate a hypertable's index attribute numbers to match a chunk.
+ *
+ * A hypertable's IndexInfo for one of its indexes references the attributes
+ * (columns) in the hypertable by number. These numbers might not be the same
+ * for the corresponding attribute in one of its chunks. To be able to use an
+ * IndexInfo from a hypertable's index to create a corresponding index on a
+ * chunk, we need to translate the attribute numbers to match the chunk.
+ */
+static void
+chunk_translate_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
+{
+	int			i,
+				natts = 0;
+
+	Assert(ii->ii_NumIndexAttrs == idxrel->rd_att->natts);
+
+	for (i = 0; i < idxrel->rd_att->natts; i++)
+	{
+		bool		found = false;
+		int			j;
+
+		for (j = 0; j < chunkrel->rd_att->natts; j++)
+		{
+			if (strncmp(NameStr(idxrel->rd_att->attrs[i]->attname),
+						NameStr(chunkrel->rd_att->attrs[j]->attname),
+						NAMEDATALEN) == 0)
+			{
+				ii->ii_KeyAttrNumbers[natts++] = chunkrel->rd_att->attrs[j]->attnum;
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			elog(ERROR, "Index attribute %s not found in chunk",
+				 NameStr(idxrel->rd_att->attrs[i]->attname));
+	}
+}
+
+/*
  * Create a chunk index based on the configuration of the "parent" index.
  */
 static Oid
 chunk_relation_index_create(Relation hypertable_indexrel,
-							Oid chunkrelid,
-							bool isconstraint,
-							LOCKMODE lockmode)
+							Relation chunkrel,
+							bool isconstraint)
 {
-	Relation	chunkrel;
-	Oid			chunk_indexrelid;
+	Oid			chunk_indexrelid = InvalidOid;
 	const char *indexname;
 	IndexInfo  *indexinfo = BuildIndexInfo(hypertable_indexrel);
 	HeapTuple	tuple;
@@ -121,6 +159,12 @@ chunk_relation_index_create(Relation hypertable_indexrel,
 	Datum		indclass;
 	oidvector  *indclassoid;
 	List	   *colnames = create_index_colnames(hypertable_indexrel);
+
+	/*
+	 * Convert the IndexInfo's attnos to match the chunk instead of the
+	 * hypertable
+	 */
+	chunk_translate_attnos(indexinfo, hypertable_indexrel, chunkrel);
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(hypertable_indexrel)));
 
@@ -135,8 +179,6 @@ chunk_relation_index_create(Relation hypertable_indexrel,
 							   Anum_pg_index_indclass, &isnull);
 	Assert(!isnull);
 	indclassoid = (oidvector *) DatumGetPointer(indclass);
-
-	chunkrel = relation_open(chunkrelid, lockmode);
 
 	indexname = chunk_index_choose_name(get_rel_name(RelationGetRelid(chunkrel)),
 						 get_rel_name(RelationGetRelid(hypertable_indexrel)),
@@ -165,7 +207,6 @@ chunk_relation_index_create(Relation hypertable_indexrel,
 									false);		/* if not exists */
 
 	ReleaseSysCache(tuple);
-	relation_close(chunkrel, lockmode);
 
 	return chunk_indexrelid;
 }
@@ -222,24 +263,18 @@ chunk_index_insert(int32 chunk_id,
  */
 static Oid
 chunk_index_create(int32 hypertable_id,
-				   Oid hypertable_indexrelid,
+				   Relation hypertable_idxrel,
 				   int32 chunk_id,
-				   Oid chunkrelid,
-				   bool isconstraint,
-				   LOCKMODE lockmode)
+				   Relation chunkrel,
+				   bool isconstraint)
 {
-	Relation	hypertable_indexrel;
 	Oid			chunk_indexrelid;
 
-	hypertable_indexrel = relation_open(hypertable_indexrelid, ShareLock);
-	chunk_indexrelid = chunk_relation_index_create(hypertable_indexrel, chunkrelid, isconstraint, lockmode);
-
+	chunk_indexrelid = chunk_relation_index_create(hypertable_idxrel, chunkrel, isconstraint);
 	chunk_index_insert(chunk_id,
 					   get_rel_name(chunk_indexrelid),
 					   hypertable_id,
-					   get_rel_name(hypertable_indexrelid));
-
-	relation_close(hypertable_indexrel, ShareLock);
+					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
 
 	return chunk_indexrelid;
 }
@@ -294,11 +329,15 @@ chunk_index_get_schemaid(Form_chunk_index chunk_index)
 void
 chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid)
 {
-	Relation	mainrel;
+	Relation	htrel;
+	Relation	chunkrel;
 	List	   *indexlist;
 	ListCell   *lc;
 
-	mainrel = relation_open(hypertable_relid, AccessShareLock);
+	htrel = relation_open(hypertable_relid, AccessShareLock);
+
+	/* Need ShareLock on the heap relation we are creating indexes on */
+	chunkrel = relation_open(chunkrelid, ShareLock);
 
 	/*
 	 * We should only add those indexes that aren't created from constraints,
@@ -311,12 +350,18 @@ chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id
 	 * from constraints. Instead, we prune the main table's index list,
 	 * removing those indexes that are supporting a constraint.
 	 */
-	indexlist = relation_get_non_constraint_indexes(mainrel);
+	indexlist = relation_get_non_constraint_indexes(htrel);
 
 	foreach(lc, indexlist)
-		chunk_index_create(hypertable_id, lfirst_oid(lc), chunk_id, chunkrelid, false, ShareLock);
+	{
+		Relation	hypertable_idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
 
-	relation_close(mainrel, AccessShareLock);
+		chunk_index_create(hypertable_id, hypertable_idxrel, chunk_id, chunkrel, false);
+		relation_close(hypertable_idxrel, AccessShareLock);
+	}
+
+	relation_close(chunkrel, NoLock);
+	relation_close(htrel, AccessShareLock);
 }
 
 static int

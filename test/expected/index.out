@@ -131,7 +131,27 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 
 -- Recreate table with new partitioning
 DROP TABLE index_test;
-CREATE TABLE index_test(time timestamptz, device integer, temp float);
+CREATE TABLE index_test(id serial, time timestamptz, device integer, temp float);
+\d+ index_test
+                                                     Table "public.index_test"
+ Column |           Type           |                        Modifiers                        | Storage | Stats target | Description 
+--------+--------------------------+---------------------------------------------------------+---------+--------------+-------------
+ id     | integer                  | not null default nextval('index_test_id_seq'::regclass) | plain   |              | 
+ time   | timestamp with time zone |                                                         | plain   |              | 
+ device | integer                  |                                                         | plain   |              | 
+ temp   | double precision         |                                                         | plain   |              | 
+
+-- Test that we can handle difference in attnos across hypertable and
+-- chunks by dropping the ID column
+ALTER TABLE index_test DROP COLUMN id;
+\d+ index_test
+                              Table "public.index_test"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
  create_hypertable 
@@ -148,7 +168,9 @@ ERROR:  Cannot create a unique index without the column: device (used in partiti
 CREATE UNIQUE INDEX index_test_time_device_idx ON index_test (time, device);
 -- Regular index need not cover all partitioning columns
 CREATE INDEX ON index_test (time, temp);
--- New index should have been recursed to chunk
+-- Create another chunk
+INSERT INTO index_test VALUES ('2017-04-20T09:00:01', 1, 17.5);
+-- New index should have been recursed to chunks
 \d+ index_test
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
@@ -161,7 +183,8 @@ Indexes:
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_idx" btree ("time" DESC)
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*_chunk
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -180,6 +203,22 @@ Check constraints:
     "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
 Inherits: index_test
 
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "_hyper_4_4_chunk_index_test_time_device_idx" UNIQUE, btree ("time", device)
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_idx" btree ("time" DESC)
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
+Inherits: index_test
+
 SELECT * FROM _timescaledb_catalog.chunk_index;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
@@ -187,7 +226,11 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
         3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
-(4 rows)
+        4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
+        4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
+        4 | _hyper_4_4_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
+        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
+(8 rows)
 
 ALTER INDEX index_test_time_idx RENAME TO index_test_time_idx2;
 -- Metadata and index should have changed name
@@ -203,7 +246,8 @@ Indexes:
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_idx2" btree ("time" DESC)
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*_chunk
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -222,14 +266,34 @@ Check constraints:
     "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
 Inherits: index_test
 
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "_hyper_4_4_chunk_index_test_time_device_idx" UNIQUE, btree ("time", device)
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_idx2" btree ("time" DESC)
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
+Inherits: index_test
+
 SELECT * FROM _timescaledb_catalog.chunk_index;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
         3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
+        4 | _hyper_4_4_chunk_index_test_time_device_idx |             4 | index_test_time_device_idx
+        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
+        4 | _hyper_4_4_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
         3 | _hyper_4_3_chunk_index_test_time_idx2       |             4 | index_test_time_idx2
-(4 rows)
+(8 rows)
 
 DROP INDEX index_test_time_idx2;
 DROP INDEX index_test_time_device_idx;
@@ -244,7 +308,8 @@ DROP INDEX index_test_time_device_idx;
 Indexes:
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*_chunk
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -261,12 +326,28 @@ Check constraints:
     "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
 Inherits: index_test
 
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
+Inherits: index_test
+
 SELECT * FROM _timescaledb_catalog.chunk_index;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
-(2 rows)
+        4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
+        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
+(4 rows)
 
 -- Create index with long name to see how this is handled on chunks
 CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates ON index_test (time, temp);
@@ -283,7 +364,8 @@ Indexes:
     "a_hypertable_index_with_a_very_very_long_name_that_truncates_2" btree ("time", temp)
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*_chunk
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -300,6 +382,22 @@ Indexes:
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
     "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+Inherits: index_test
+
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "_hyper_4_4_chunk_a_hypertable_index_with_a_very_very_long_nam_1" btree ("time", temp)
+    "_hyper_4_4_chunk_a_hypertable_index_with_a_very_very_long_name_" btree ("time", temp)
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
 DROP INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates;
@@ -330,7 +428,8 @@ Indexes:
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_idx" btree ("time"), tablespace "tablespace1"
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -369,6 +468,42 @@ Index "_timescaledb_internal._hyper_4_3_chunk_time_temp_idx"
  temp   | double precision         | temp       | plain
 btree, for table "_timescaledb_internal._hyper_4_3_chunk"
 
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_idx" btree ("time"), tablespace "tablespace1"
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
+Inherits: index_test
+
+Index "_timescaledb_internal._hyper_4_4_chunk_index_test_device_time_idx"
+ Column |           Type           | Definition | Storage 
+--------+--------------------------+------------+---------
+ device | integer                  | device     | plain
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_4_4_chunk"
+
+Index "_timescaledb_internal._hyper_4_4_chunk_index_test_time_idx"
+ Column |           Type           | Definition | Storage 
+--------+--------------------------+------------+---------
+ time   | timestamp with time zone | "time"     | plain
+btree, for table "_timescaledb_internal._hyper_4_4_chunk"
+Tablespace: "tablespace1"
+
+Index "_timescaledb_internal._hyper_4_4_chunk_index_test_time_temp_idx"
+ Column |           Type           | Definition | Storage 
+--------+--------------------------+------------+---------
+ time   | timestamp with time zone | "time"     | plain
+ temp   | double precision         | temp       | plain
+btree, for table "_timescaledb_internal._hyper_4_4_chunk"
+
 \c single :ROLE_SUPERUSER
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 \c single :ROLE_DEFAULT_PERM_USER
@@ -384,7 +519,8 @@ Indexes:
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_idx" btree ("time"), tablespace "tablespace2"
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*_chunk
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -402,6 +538,21 @@ Check constraints:
     "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
 Inherits: index_test
 
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_idx" btree ("time"), tablespace "tablespace2"
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
+Inherits: index_test
+
 -- Add constraint index
 ALTER TABLE index_test ADD UNIQUE (time, device);
 \d+ index_test
@@ -416,7 +567,8 @@ Indexes:
     "index_test_device_time_idx" btree (device, "time" DESC)
     "index_test_time_idx" btree ("time"), tablespace "tablespace2"
     "index_test_time_temp_idx" btree ("time", temp)
-Child tables: _timescaledb_internal._hyper_4_3_chunk
+Child tables: _timescaledb_internal._hyper_4_3_chunk,
+              _timescaledb_internal._hyper_4_4_chunk
 
 \d+ _timescaledb_internal._hyper*_chunk
                     Table "_timescaledb_internal._hyper_4_3_chunk"
@@ -435,6 +587,22 @@ Check constraints:
     "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
 Inherits: index_test
 
+                    Table "_timescaledb_internal._hyper_4_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+Indexes:
+    "4_2_index_test_time_device_key" UNIQUE CONSTRAINT, btree ("time", device)
+    "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
+    "_hyper_4_4_chunk_index_test_time_idx" btree ("time"), tablespace "tablespace2"
+    "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
+Check constraints:
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
+Inherits: index_test
+
 -- Constraint indexes NOT added to chunk_index table (maybe they
 -- should be for consistency?)
 SELECT * FROM _timescaledb_catalog.chunk_index;
@@ -442,8 +610,11 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 ----------+---------------------------------------------+---------------+----------------------------
         3 | _hyper_4_3_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
         3 | _hyper_4_3_chunk_time_temp_idx              |             4 | index_test_time_temp_idx
+        4 | _hyper_4_4_chunk_index_test_device_time_idx |             4 | index_test_device_time_idx
+        4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
-(3 rows)
+        4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
+(6 rows)
 
 DROP TABLE index_test;
 -- Metadata removed
@@ -482,22 +653,22 @@ Indexes:
     "index_test_device_idx" btree (device)
     "index_test_time_device_idx" btree ("time", device), tablespace "tablespace2"
     "index_test_time_idx" btree ("time" DESC), tablespace "tablespace1"
-Child tables: _timescaledb_internal._hyper_5_4_chunk
+Child tables: _timescaledb_internal._hyper_5_5_chunk
 Tablespace: "tablespace1"
 
 \d+ _timescaledb_internal._hyper*_chunk
-                    Table "_timescaledb_internal._hyper_5_4_chunk"
+                    Table "_timescaledb_internal._hyper_5_5_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
  time   | timestamp with time zone |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
-    "_hyper_5_4_chunk_index_test_device_idx" btree (device)
-    "_hyper_5_4_chunk_index_test_time_device_idx" btree ("time", device), tablespace "tablespace2"
-    "_hyper_5_4_chunk_index_test_time_idx" btree ("time" DESC), tablespace "tablespace1"
+    "_hyper_5_5_chunk_index_test_device_idx" btree (device)
+    "_hyper_5_5_chunk_index_test_time_device_idx" btree ("time", device), tablespace "tablespace2"
+    "_hyper_5_5_chunk_index_test_time_idx" btree ("time" DESC), tablespace "tablespace1"
 Check constraints:
-    "constraint_5" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
+    "constraint_6" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
 Inherits: index_test
 Tablespace: "tablespace1"
 
@@ -516,23 +687,23 @@ Indexes:
     "index_test_time_device_idx" btree ("time", device), tablespace "tablespace2"
     "index_test_time_idx" btree ("time" DESC), tablespace "tablespace1"
     "index_test_time_temp_idx" btree ("time", temp), tablespace "tablespace2"
-Child tables: _timescaledb_internal._hyper_5_4_chunk
+Child tables: _timescaledb_internal._hyper_5_5_chunk
 Tablespace: "tablespace1"
 
 \d+ _timescaledb_internal._hyper*_chunk
-                    Table "_timescaledb_internal._hyper_5_4_chunk"
+                    Table "_timescaledb_internal._hyper_5_5_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
  time   | timestamp with time zone |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
-    "_hyper_5_4_chunk_index_test_device_idx" btree (device)
-    "_hyper_5_4_chunk_index_test_time_device_idx" btree ("time", device), tablespace "tablespace2"
-    "_hyper_5_4_chunk_index_test_time_idx" btree ("time" DESC), tablespace "tablespace1"
-    "_hyper_5_4_chunk_time_temp_idx" btree ("time", temp), tablespace "tablespace2"
+    "_hyper_5_5_chunk_index_test_device_idx" btree (device)
+    "_hyper_5_5_chunk_index_test_time_device_idx" btree ("time", device), tablespace "tablespace2"
+    "_hyper_5_5_chunk_index_test_time_idx" btree ("time" DESC), tablespace "tablespace1"
+    "_hyper_5_5_chunk_time_temp_idx" btree ("time", temp), tablespace "tablespace2"
 Check constraints:
-    "constraint_5" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
+    "constraint_6" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
 Inherits: index_test
 Tablespace: "tablespace1"
 
