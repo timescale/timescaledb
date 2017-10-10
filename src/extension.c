@@ -6,6 +6,7 @@
 #include <catalog/namespace.h>
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
+#include <miscadmin.h>
 
 #include "catalog.h"
 #include "extension.h"
@@ -82,7 +83,12 @@ extension_exists()
 static enum ExtensionState
 extension_new_state()
 {
-	if (!IsTransactionState())
+	/*
+	 * NormalProcessingMode necessary to avoid accessing cache before its
+	 * ready (which may result in an infinite loop). More concretely we need
+	 * RelationCacheInitializePhase3 to have been already called.
+	 */
+	if (!IsNormalProcessingMode() || !IsTransactionState())
 		return EXTENSION_STATE_UNKNOWN;
 
 	if (proxy_table_exists())
