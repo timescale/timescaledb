@@ -40,7 +40,13 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 
 -- Recreate table with new partitioning
 DROP TABLE index_test;
-CREATE TABLE index_test(time timestamptz, device integer, temp float);
+CREATE TABLE index_test(id serial, time timestamptz, device integer, temp float);
+\d+ index_test
+
+-- Test that we can handle difference in attnos across hypertable and
+-- chunks by dropping the ID column
+ALTER TABLE index_test DROP COLUMN id;
+\d+ index_test
 
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
@@ -57,7 +63,10 @@ CREATE UNIQUE INDEX index_test_time_device_idx ON index_test (time, device);
 -- Regular index need not cover all partitioning columns
 CREATE INDEX ON index_test (time, temp);
 
--- New index should have been recursed to chunk
+-- Create another chunk
+INSERT INTO index_test VALUES ('2017-04-20T09:00:01', 1, 17.5);
+
+-- New index should have been recursed to chunks
 \d+ index_test
 \d+ _timescaledb_internal._hyper*_chunk
 SELECT * FROM _timescaledb_catalog.chunk_index;
