@@ -5,17 +5,23 @@ os:
 services:
   - docker
 env:
-  - PG_VERSION=9.6.5
-  - PG_VERSION=10.0
-
+  # PG_VERSION (docker) and PG_GIT_TAG (Git) should be the same
+  - PG_VERSION=9.6.5 PG_GIT_TAG=REL9_6_5
+  - PG_VERSION=10.0 PG_GIT_TAG=REL_10_0
 before_install:
-  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
+  # We need the PostgreSQL source for running the standard PostgreSQL
+  # regression tests
+  - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
+  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine
 install:
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake && mkdir -p /build/debug && cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/"
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex && mkdir -p /build/debug"
+  # We only need to build the regress stuff
+  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --enable-debug --enable-cassert --without-readline --without-zlib && make -C /postgres/src/test/regress"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=/postgres && make install && chown -R postgres:postgres /build/"
 script:
-  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 after_failure:
-  - docker exec -it pgbuild cat /build/debug/test/regression.diffs
+  - docker exec -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regressions.diffs
 after_script:
   - docker rm -f pgbuild
 
