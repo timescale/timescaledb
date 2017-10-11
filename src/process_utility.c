@@ -26,6 +26,7 @@
 #include "utils.h"
 #include "catalog.h"
 #include "hypertable_cache.h"
+#include "hypercube.h"
 #include "chunk_index.h"
 #include "extension.h"
 #include "executor.h"
@@ -240,7 +241,7 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 	return true;
 }
 
-typedef void (*process_chunk_t) (Oid hypertable_relid, Oid chunk_relid, void *arg);
+typedef void (*process_chunk_t) (Hypertable *ht, Oid chunk_relid, void *arg);
 
 /*
  * Applies a function to each chunk of a hypertable.
@@ -249,20 +250,20 @@ typedef void (*process_chunk_t) (Oid hypertable_relid, Oid chunk_relid, void *ar
  * hypertable.
  */
 static int
-foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
+foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 {
 	List	   *chunks;
 	ListCell   *lc;
 	int			n = 0;
 
-	if (!OidIsValid(relid))
+	if (NULL == ht)
 		return -1;
 
-	chunks = find_inheritance_children(relid, NoLock);
+	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
 	foreach(lc, chunks)
 	{
-		process_chunk(relid, lfirst_oid(lc), arg);
+		process_chunk(ht, lfirst_oid(lc), arg);
 		n++;
 	}
 
@@ -270,14 +271,26 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 }
 
 static int
-foreach_chunk(RangeVar *rv, process_chunk_t process_chunk, void *arg)
+foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 {
-	Oid			relid = hypertable_relid(rv);
+	Cache	   *hcache = hypertable_cache_pin();
+	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	int			ret;
 
-	if (!OidIsValid(relid))
+	if (NULL == ht)
 		return -1;
 
-	return foreach_chunk_relid(relid, process_chunk, arg);
+	ret = foreach_chunk(ht, process_chunk, arg);
+
+	cache_release(hcache);
+
+	return ret;
+}
+
+static int
+foreach_chunk_relation(RangeVar *rv, process_chunk_t process_chunk, void *arg)
+{
+	return foreach_chunk_relid(RangeVarGetRelid(rv, NoLock, true), process_chunk, arg);
 }
 
 typedef struct VacuumCtx
@@ -288,14 +301,13 @@ typedef struct VacuumCtx
 
 /* Vacuums a single chunk */
 static void
-vacuum_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+vacuum_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	VacuumCtx  *ctx = (VacuumCtx *) arg;
-	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
-	char	   *relname = get_rel_name(chunk_relid);
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	ctx->stmt->relation->relname = relname;
-	ctx->stmt->relation->schemaname = relschema;
+	ctx->stmt->relation->relname = NameStr(chunk->fd.table_name);
+	ctx->stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
 	ExecVacuum(ctx->stmt, ctx->is_toplevel);
 }
 
@@ -319,7 +331,7 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ?
 								 "VACUUM" : "ANALYZE");
 
-	return foreach_chunk(stmt->relation, vacuum_chunk, &ctx) >= 0;
+	return foreach_chunk_relation(stmt->relation, vacuum_chunk, &ctx) >= 0;
 }
 
 static bool
@@ -377,7 +389,7 @@ process_drop_table(DropStmt *stmt)
 }
 
 static void
-process_drop_trigger_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+process_drop_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	const char *trigger_name = arg;
 	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, false);
@@ -390,6 +402,7 @@ process_drop_trigger(DropStmt *stmt)
 {
 	ListCell   *cell1;
 	bool		handled = false;
+	Cache	   *hcache = hypertable_cache_pin();
 
 	foreach(cell1, stmt->objects)
 	{
@@ -412,15 +425,15 @@ process_drop_trigger(DropStmt *stmt)
 
 		if (NULL != relation)
 		{
-			if (is_hypertable(relation->rd_id))
+			Hypertable *ht = hypertable_cache_get_entry(hcache, RelationGetRelid(relation));
+
+			if (NULL != ht)
 			{
 				Form_pg_trigger trigger = trigger_by_oid(address.objectId, stmt->missing_ok);
 
 				if (trigger_is_chunk_trigger(trigger))
 				{
-					foreach_chunk_relid(relation->rd_id,
-										process_drop_trigger_chunk,
-										trigger_name(trigger));
+					foreach_chunk(ht, process_drop_trigger_chunk, trigger_name(trigger));
 					handled = true;
 				}
 			}
@@ -428,6 +441,8 @@ process_drop_trigger(DropStmt *stmt)
 			heap_close(relation, AccessShareLock);
 		}
 	}
+
+	cache_release(hcache);
 
 	return handled;
 }
@@ -499,17 +514,16 @@ process_drop(Node *parsetree)
 }
 
 static void
-reindex_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	ReindexStmt *stmt = (ReindexStmt *) arg;
-	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
-	char	   *relname = get_rel_name(chunk_relid);
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
 	switch (stmt->kind)
 	{
 		case REINDEX_OBJECT_TABLE:
-			stmt->relation->relname = relname;
-			stmt->relation->schemaname = relschema;
+			stmt->relation->relname = NameStr(chunk->fd.table_name);
+			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
 			ReindexTable(stmt->relation, stmt->options);
 			break;
 		case REINDEX_OBJECT_INDEX:
@@ -529,6 +543,9 @@ process_reindex(Node *parsetree)
 {
 	ReindexStmt *stmt = (ReindexStmt *) parsetree;
 	Oid			relid;
+	Cache	   *hcache;
+	Hypertable *ht;
+	bool		ret = false;
 
 	if (NULL == stmt->relation)
 		/* Not a case we are interested in */
@@ -539,36 +556,45 @@ process_reindex(Node *parsetree)
 	if (!OidIsValid(relid))
 		return false;
 
+	hcache = hypertable_cache_pin();
+
 	switch (stmt->kind)
 	{
 		case REINDEX_OBJECT_TABLE:
-			if (!is_hypertable(relid))
-				return false;
+			ht = hypertable_cache_get_entry(hcache, relid);
 
-			PreventCommandDuringRecovery("REINDEX");
+			if (NULL != ht)
+			{
+				PreventCommandDuringRecovery("REINDEX");
 
-			if (foreach_chunk(stmt->relation, reindex_chunk, stmt) >= 0)
-				return true;
+				if (foreach_chunk(ht, reindex_chunk, stmt) >= 0)
+					ret = true;
+			}
 			break;
 		case REINDEX_OBJECT_INDEX:
-			if (!is_hypertable(IndexGetRelation(relid, true)))
-				return false;
+			ht = hypertable_cache_get_entry(hcache, IndexGetRelation(relid, true));
 
-			/*
-			 * Recursing to chunks is currently not supported. Need to look up
-			 * all chunk indexes that corresponds to the hypertable's index.
-			 */
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Reindexing of a specific index on a hypertable is currently unsupported."),
-					 errhint("As a workaround, it is possible to run REINDEX TABLE to reindex all "
-			  "indexes on a hypertable, including all indexes on chunks.")));
+			if (NULL != ht)
+			{
+				/*
+				 * Recursing to chunks is currently not supported. Need to
+				 * look up all chunk indexes that corresponds to the
+				 * hypertable's index.
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("Reindexing of a specific index on a hypertable is currently unsupported."),
+						 errhint("As a workaround, it is possible to run REINDEX TABLE to reindex all "
+								 "indexes on a hypertable, including all indexes on chunks.")));
+			}
 			break;
 		default:
 			break;
 	}
 
-	return false;
+	cache_release(hcache);
+
+	return ret;
 }
 
 static void
@@ -813,7 +839,6 @@ verify_constraint_list(RangeVar *relation, List *constraint_list)
 typedef struct CreateIndexInfo
 {
 	IndexStmt  *stmt;
-	Hypertable *ht;
 	ObjectAddress obj;
 } CreateIndexInfo;
 
@@ -824,13 +849,13 @@ typedef struct CreateIndexInfo
  * "parent" index on the hypertable.
  */
 static void
-process_index_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
 	IndexStmt  *stmt = transformIndexStmt(chunk_relid, info->stmt, NULL);
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, info->ht->space->num_dimensions, true);
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, info->ht->fd.id, info->obj.objectId);
+	chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, ht->fd.id, info->obj.objectId);
 }
 
 static void
@@ -878,7 +903,6 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 	{
 		CreateIndexInfo info = {
 			.stmt = stmt,
-			.ht = ht,
 		};
 
 		switch (cmd->type)
@@ -900,7 +924,7 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 		catalog_become_owner(catalog_get(), &sec_ctx);
 
 		/* Recurse to each chunk and create a corresponding index */
-		foreach_chunk(info.stmt->relation, process_index_chunk, &info);
+		foreach_chunk(ht, process_index_chunk, &info);
 
 		catalog_restore_user(&sec_ctx);
 		handled = true;
@@ -1214,10 +1238,10 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 
 
 static void
-create_trigger_chunk(Oid hypertable_relid, Oid chunk_relid, void *arg)
+create_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	CreateTrigStmt *stmt = arg;
-	Oid			trigger_oid = get_trigger_oid(hypertable_relid, stmt->trigname, false);
+	Oid			trigger_oid = get_trigger_oid(ht->main_table_relid, stmt->trigname, false);
 	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
 	char	   *relname = get_rel_name(chunk_relid);
 
@@ -1232,7 +1256,7 @@ process_create_trigger_end(Node *parsetree)
 	if (!stmt->row)
 		return;
 
-	foreach_chunk(stmt->relation, create_trigger_chunk, stmt);
+	foreach_chunk_relation(stmt->relation, create_trigger_chunk, stmt);
 }
 
 /*
