@@ -167,13 +167,13 @@ if (PG_SOURCE_DIR)
   message(STATUS "Found PostgreSQL source in ${PG_SOURCE_DIR}")
 endif (PG_SOURCE_DIR)
 
+add_subdirectory(sql)
+add_subdirectory(src)
+
 if (UNIX)
   add_subdirectory(test)
   add_subdirectory(scripts)
 endif (UNIX)
-
-add_subdirectory(sql)
-add_subdirectory(src)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
