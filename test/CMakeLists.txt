@@ -68,3 +68,52 @@ add_custom_target(installchecklocal
   COMMAND ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
   ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_LOCAL}
   USES_TERMINAL)
+
+set(PG_REGRESS_DIR "" CACHE PATH "Path to postgresql src regress directory.")
+
+if (NOT ${PG_REGRESS_DIR} STREQUAL "")
+
+set(BASE_TEST_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/base_test)
+set(BASE_TEST_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/base_test)
+set(BASE_TEST_CLUSTER ${BASE_TEST_OUTPUT_DIR}/testcluster)
+
+set(PG_REGRESS_BASE_COMMON_ENV
+  PG_REGRESS_DIR=${PG_REGRESS_DIR}
+  PG_REGRESS=${PG_REGRESS}
+  SQL_BASE_TEST_WORKING_DIR=${BASE_TEST_OUTPUT_DIR}
+  SQL_BASE_DIFF_FILES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/base_test_diff_files/
+)
+
+set(PG_REGRESS_OPTS_BASE_COMMON
+  --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
+  --load-language=plpgsql
+  --inputdir=${BASE_TEST_INPUT_DIR}
+  --outputdir=${BASE_TEST_OUTPUT_DIR}
+  --load-extension=timescaledb
+  --dlpath=${PROJECT_BINARY_DIR}/src)
+
+set(PG_REGRESS_OPTS_BASE_LOCAL
+  --host=${TEST_PGHOST}
+  --port=${TEST_PGPORT_LOCAL}
+)
+
+set(PG_REGRESS_OPTS_BASE_TEMP_INSTANCE
+  --temp-instance=${TEST_CLUSTER}
+  --host=${TEST_PGHOST}
+  --port=${TEST_PGPORT_TEMP_INSTANCE}
+)
+file(MAKE_DIRECTORY ${BASE_TEST_OUTPUT_DIR})
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/base_test_excludes.txt ${CMAKE_CURRENT_BINARY_DIR}/base_test_excludes.txt COPYONLY)
+
+add_custom_target(baseinstallcheck
+  COMMAND ${CMAKE_COMMAND} -E env ${PG_REGRESS_BASE_COMMON_ENV}
+  ${CMAKE_CURRENT_SOURCE_DIR}/base_pg_regress.sh ${PG_REGRESS_OPTS_BASE_COMMON} ${PG_REGRESS_OPTS_BASE_TEMP_INSTANCE}
+  USES_TERMINAL)
+
+add_custom_target(baseinstallchecklocal
+  COMMAND ${CMAKE_COMMAND} -E env ${PG_REGRESS_BASE_COMMON_ENV}
+  ${CMAKE_CURRENT_SOURCE_DIR}/base_pg_regress.sh ${PG_REGRESS_OPTS_BASE_COMMON} ${PG_REGRESS_OPTS_BASE_LOCAL}
+  USES_TERMINAL)
+
+endif (NOT ${PG_REGRESS_DIR} STREQUAL "")

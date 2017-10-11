@@ -1,0 +1,205 @@
+VACUUM;
+--
+-- sanity check, if we don't have indices the test will take years to
+-- complete.  But skip TOAST relations (since they will have varying
+-- names depending on the current OID counter) as well as temp tables
+-- of other backends (to avoid timing-dependent behavior).
+--
+-- temporarily disable fancy output, so catalog changes create less diff noise
+\a\t
+SELECT relname, relhasindex
+   FROM pg_class c LEFT JOIN pg_namespace n ON n.oid = relnamespace
+   WHERE relkind = 'r' AND (nspname ~ '^pg_temp_') IS NOT TRUE
+   ORDER BY relname;
+a|f
+a_star|f
+abstime_tbl|f
+aggtest|f
+array_index_op_test|t
+array_op_test|f
+b|f
+b_star|f
+box_tbl|f
+bprime|f
+bt_f8_heap|t
+bt_i4_heap|t
+bt_name_heap|t
+bt_txt_heap|t
+c|f
+c_star|f
+cache_inval_extension|f
+cache_inval_hypertable|f
+char_tbl|f
+check2_tbl|f
+check_tbl|f
+chunk|t
+chunk_constraint|t
+chunk_index|t
+circle_tbl|t
+city|f
+copy_tbl|f
+d|f
+d_star|f
+date_tbl|f
+default_tbl|f
+defaultexpr_tbl|f
+dept|f
+dimension|t
+dimension_slice|t
+dupindexcols|t
+e_star|f
+emp|f
+equipment_r|f
+f_star|f
+fast_emp4000|t
+float4_tbl|f
+float8_tbl|f
+func_index_heap|t
+hash_f8_heap|t
+hash_i4_heap|t
+hash_name_heap|t
+hash_txt_heap|t
+hobbies_r|f
+hypertable|t
+ihighway|t
+inet_tbl|f
+inhf|f
+inhx|t
+insert_tbl|f
+int2_tbl|f
+int4_tbl|f
+int8_tbl|f
+interval_tbl|f
+invalid_check_con|f
+invalid_check_con_child|f
+iportaltest|f
+kd_point_tbl|t
+line_tbl|f
+log_table|f
+lseg_tbl|f
+main_table|f
+money_data|f
+num_data|f
+num_exp_add|t
+num_exp_div|t
+num_exp_ln|t
+num_exp_log10|t
+num_exp_mul|t
+num_exp_power_10_ln|t
+num_exp_sqrt|t
+num_exp_sub|t
+num_input_test|f
+num_result|f
+onek|t
+onek2|t
+path_tbl|f
+person|f
+pg_aggregate|t
+pg_am|t
+pg_amop|t
+pg_amproc|t
+pg_attrdef|t
+pg_attribute|t
+pg_auth_members|t
+pg_authid|t
+pg_cast|t
+pg_class|t
+pg_collation|t
+pg_constraint|t
+pg_conversion|t
+pg_database|t
+pg_db_role_setting|t
+pg_default_acl|t
+pg_depend|t
+pg_description|t
+pg_enum|t
+pg_event_trigger|t
+pg_extension|t
+pg_foreign_data_wrapper|t
+pg_foreign_server|t
+pg_foreign_table|t
+pg_index|t
+pg_inherits|t
+pg_init_privs|t
+pg_language|t
+pg_largeobject|t
+pg_largeobject_metadata|t
+pg_namespace|t
+pg_opclass|t
+pg_operator|t
+pg_opfamily|t
+pg_pltemplate|t
+pg_policy|t
+pg_proc|t
+pg_range|t
+pg_replication_origin|t
+pg_rewrite|t
+pg_seclabel|t
+pg_shdepend|t
+pg_shdescription|t
+pg_shseclabel|t
+pg_statistic|t
+pg_tablespace|t
+pg_transform|t
+pg_trigger|t
+pg_ts_config|t
+pg_ts_config_map|t
+pg_ts_dict|t
+pg_ts_parser|t
+pg_ts_template|t
+pg_type|t
+pg_user_mapping|t
+point_tbl|t
+polygon_tbl|t
+quad_box_tbl|t
+quad_point_tbl|t
+radix_text_tbl|t
+ramp|f
+real_city|f
+reltime_tbl|f
+road|t
+shighway|t
+slow_emp4000|f
+sql_features|f
+sql_implementation_info|f
+sql_languages|f
+sql_packages|f
+sql_parts|f
+sql_sizing|f
+sql_sizing_profiles|f
+stud_emp|f
+student|f
+tablespace|t
+tenk1|t
+tenk2|t
+test_range_excl|t
+test_range_gist|t
+test_range_spgist|t
+test_tsvector|f
+testjsonb|f
+text_tbl|f
+time_tbl|f
+timestamp_tbl|f
+timestamptz_tbl|f
+timetz_tbl|f
+tinterval_tbl|f
+varchar_tbl|f
+-- restore normal output mode
+\a\t
+--
+-- another sanity check: every system catalog that has OIDs should have
+-- a unique index on OID.  This ensures that the OIDs will be unique,
+-- even after the OID counter wraps around.
+-- We exclude non-system tables from the check by looking at nspname.
+--
+SELECT relname, nspname
+FROM pg_class c LEFT JOIN pg_namespace n ON n.oid = relnamespace
+WHERE relhasoids
+    AND ((nspname ~ '^pg_') IS NOT FALSE)
+    AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE indrelid = c.oid
+                    AND indkey[0] = -2 AND indnatts = 1
+                    AND indisunique AND indimmediate);
+ relname | nspname 
+---------+---------
+(0 rows)
+

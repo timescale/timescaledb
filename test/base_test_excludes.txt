@@ -1,0 +1,13 @@
+# Lists of grep patterns of tests to exclude from the base test
+# sensitive to extra whitespace and empty lines
+# 
+xml
+largeobject
+# privileges
+# tablespace
+# inherit
+# typed_table
+# foreign_key
+# foreign_data
+# rangefuncs
+# alter_table
