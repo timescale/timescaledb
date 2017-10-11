@@ -9,6 +9,9 @@
 \echo 'Date, git commit, and extension version can change without it being an error.'
 \echo 'Adding this tag allows us to run regression tests on this script file.'
 \echo `date`
+\echo 'Postgres version'
+select version();
+
 \echo 'Build tag'
 SELECT * FROM _timescaledb_internal.get_git_commit();
 
