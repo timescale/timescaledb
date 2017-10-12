@@ -58,10 +58,10 @@ typedef struct DimensionSliceScanData
 static bool
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionVec *slices = data;
+	DimensionVec **slices = data;
 	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
 
-	dimension_vec_add_slice(&slices, slice);
+	*slices = dimension_vec_add_slice(slices, slice);
 
 	return true;
 }
@@ -112,7 +112,7 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(coordinate));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, slices, limit);
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &slices, limit);
 
 	return dimension_vec_sort(&slices);
 }
@@ -135,7 +135,7 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 			  BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(range_start));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, slices, limit);
+	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &slices, limit);
 
 	return dimension_vec_sort(&slices);
 }
@@ -210,6 +210,9 @@ DimensionSlice *
 dimension_slice_copy(const DimensionSlice *original)
 {
 	DimensionSlice *new = palloc(sizeof(DimensionSlice));
+
+	Assert(original->storage == NULL);
+	Assert(original->storage_free == NULL);
 
 	memcpy(new, original, sizeof(DimensionSlice));
 	return new;
