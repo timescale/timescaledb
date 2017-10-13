@@ -38,7 +38,7 @@ cleanup() {
     # function
     status="$?"
     set +e # do not exit immediately on failure in cleanup handler
-    if [ $status -eq 0 ]; then 
+    if [ $status -eq 0 ]; then
         rm -rf ${PGTEST_TMPDIR}
     fi
     docker rm -vf timescaledb-orig timescaledb-clean timescaledb-updated 2>/dev/null
