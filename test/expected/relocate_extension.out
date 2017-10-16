@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb SCHEMA "testSchema0";
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 CREATE TABLE test(time timestamp, temp float8, device text);
 SELECT "testSchema0".create_hypertable('test', 'time', 'device', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  

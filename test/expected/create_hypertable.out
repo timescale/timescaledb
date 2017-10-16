@@ -14,7 +14,61 @@ ERROR:  hypertable test_table not found
  test_schema | test_table | table | default_perm_user
 (1 row)
 
+create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
+ERROR:  null value in column "time" violates not-null constraint
+\set ON_ERROR_STOP 1
+insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
+\d test_schema.test_table_no_not_null
+Table "test_schema.test_table_no_not_null"
+  Column   |  Type  | Modifiers 
+-----------+--------+-----------
+ time      | bigint | not null
+ device_id | text   | 
+Indexes:
+    "test_table_no_not_null_device_id_time_idx" btree (device_id, "time" DESC)
+    "test_table_no_not_null_time_idx" btree ("time" DESC)
+Number of child tables: 1 (Use \d+ to list them.)
+
+ALTER TABLE test_schema.test_table_no_not_null ALTER time DROP NOT NULL;
+\d test_schema.test_table_no_not_null
+Table "test_schema.test_table_no_not_null"
+  Column   |  Type  | Modifiers 
+-----------+--------+-----------
+ time      | bigint | 
+ device_id | text   | 
+Indexes:
+    "test_table_no_not_null_device_id_time_idx" btree (device_id, "time" DESC)
+    "test_table_no_not_null_time_idx" btree ("time" DESC)
+Number of child tables: 1 (Use \d+ to list them.)
+
+SELECT _timescaledb_internal.set_time_columns_not_null();
+ set_time_columns_not_null 
+---------------------------
+ 
+(1 row)
+
+\d test_schema.test_table_no_not_null
+Table "test_schema.test_table_no_not_null"
+  Column   |  Type  | Modifiers 
+-----------+--------+-----------
+ time      | bigint | not null
+ device_id | text   | 
+Indexes:
+    "test_table_no_not_null_device_id_time_idx" btree (device_id, "time" DESC)
+    "test_table_no_not_null_time_idx" btree ("time" DESC)
+Number of child tables: 1 (Use \d+ to list them.)
+
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -36,7 +90,7 @@ select add_dimension('test_schema.test_table', 'location', 2);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
-  1 | test_schema | test_table | _timescaledb_internal  | _hyper_1                |              3
+  2 | test_schema | test_table | _timescaledb_internal  | _hyper_2                |              3
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
@@ -44,8 +98,10 @@ select * from _timescaledb_catalog.dimension;
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------
   1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000
   2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
-  3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
-(3 rows)
+  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+(5 rows)
 
 \set ON_ERROR_STOP 0
 -- get_create_command only works on tables w/ 1 or 2 dimensions
@@ -54,6 +110,7 @@ ERROR:  get_create_command only supports hypertables with up to 2 dimensions
 \set ON_ERROR_STOP 1
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', interval_length => 1000);
+NOTICE:  Adding NOT NULL constraint to time column id (NULL time values not allowed)
  add_dimension 
 ---------------
  
@@ -62,7 +119,7 @@ select add_dimension('test_schema.test_table', 'id', interval_length => 1000);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
-  1 | test_schema | test_table | _timescaledb_internal  | _hyper_1                |              4
+  2 | test_schema | test_table | _timescaledb_internal  | _hyper_2                |              4
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
@@ -70,9 +127,11 @@ select * from _timescaledb_catalog.dimension;
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------
   1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000
   2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
-  3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
-  4 |             1 | id          | integer     | t       |            |                          |                    |            1000
-(4 rows)
+  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+  6 |             2 | id          | integer     | t       |            |                          |                    |            1000
+(6 rows)
 
 \set ON_ERROR_STOP 0
 --adding the same dimension twice should fail
@@ -89,6 +148,7 @@ ERROR:  Cannot add new dimension to a non-empty table
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -101,12 +161,13 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
 (1 row)
 
 \dt "test_schema".*
-                  List of relations
-   Schema    |    Name    | Type  |       Owner       
--------------+------------+-------+-------------------
- test_schema | test_1dim  | table | default_perm_user
- test_schema | test_table | table | default_perm_user
-(2 rows)
+                        List of relations
+   Schema    |          Name          | Type  |       Owner       
+-------------+------------------------+-------+-------------------
+ test_schema | test_1dim              | table | default_perm_user
+ test_schema | test_table             | table | default_perm_user
+ test_schema | test_table_no_not_null | table | default_perm_user
+(3 rows)
 
 select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
 NOTICE:  hypertable test_schema.test_1dim already exists, skipping

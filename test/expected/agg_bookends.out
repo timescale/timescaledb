@@ -1,5 +1,6 @@
 CREATE TABLE "btest"(time timestamp, time_alt timestamp, gp INTEGER, temp float, strid TEXT DEFAULT 'testing');
 SELECT create_hypertable('"btest"', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -131,6 +132,7 @@ CREATE TABLE btest_numeric
     quantity numeric
 );
 SELECT create_hypertable('btest_numeric', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  

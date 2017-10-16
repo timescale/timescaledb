@@ -4,13 +4,28 @@ create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 \c single :ROLE_DEFAULT_PERM_USER
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 
+
 \set ON_ERROR_STOP 0
 -- get_create_command should fail since hypertable isn't made yet
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 \set ON_ERROR_STOP 1
 
-
 \dt "test_schema".*
+
+create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+
+\set ON_ERROR_STOP 0
+insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
+\set ON_ERROR_STOP 1
+insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
+
+\d test_schema.test_table_no_not_null
+ALTER TABLE test_schema.test_table_no_not_null ALTER time DROP NOT NULL;
+\d test_schema.test_table_no_not_null
+SELECT _timescaledb_internal.set_time_columns_not_null();
+\d test_schema.test_table_no_not_null
+
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 

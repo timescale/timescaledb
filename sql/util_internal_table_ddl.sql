@@ -200,3 +200,24 @@ BEGIN
     RETURN ret;
 END
 $BODY$;
+
+-- Used to make sure all time dimension columns are set as NOT NULL.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.set_time_columns_not_null()
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+        ht_time_column RECORD;
+BEGIN
+
+        FOR ht_time_column IN
+        SELECT ht.schema_name, ht.table_name, d.column_name
+        FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.dimension d
+        WHERE ht.id = d.hypertable_id AND d.partitioning_func IS NULL
+        LOOP
+                EXECUTE format(
+                $$
+                ALTER TABLE %I.%I ALTER %I SET NOT NULL
+                $$, ht_time_column.schema_name, ht_time_column.table_name, ht_time_column.column_name);
+        END LOOP;
+END
+$BODY$;

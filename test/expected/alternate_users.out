@@ -60,6 +60,7 @@ ERROR:  permission denied for hypertable "public."one_Partition""
 \set ON_ERROR_STOP 1
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -181,6 +182,7 @@ DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
 CREATE TABLE my_ht (time BIGINT, val integer);
 SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+psql:include/ddl_ops_1.sql:62: NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -191,7 +193,7 @@ ALTER TABLE my_ht ADD COLUMN val2 integer;
      Table "public.my_ht"
  Column |  Type   | Modifiers 
 --------+---------+-----------
- time   | bigint  | 
+ time   | bigint  | not null
  val    | integer | 
  val2   | integer | 
 Indexes:
@@ -208,7 +210,7 @@ ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
      Table "public.my_ht"
  Column |  Type   | Modifiers 
 --------+---------+-----------
- time   | bigint  | 
+ time   | bigint  | not null
  val    | integer | 
  val2   | integer | 
  val3   | integer | 
@@ -222,7 +224,7 @@ psql:include/ddl_ops_1.sql:76: NOTICE:  column "val3" of relation "my_ht" alread
      Table "public.my_ht"
  Column |  Type   | Modifiers 
 --------+---------+-----------
- time   | bigint  | 
+ time   | bigint  | not null
  val    | integer | 
  val2   | integer | 
  val3   | integer | 
@@ -235,7 +237,7 @@ ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
      Table "public.my_ht"
  Column |  Type   | Modifiers 
 --------+---------+-----------
- time   | bigint  | 
+ time   | bigint  | not null
  val    | integer | 
  val2   | integer | 
 Indexes:
@@ -248,7 +250,7 @@ psql:include/ddl_ops_1.sql:84: NOTICE:  column "val3" of relation "my_ht" does n
      Table "public.my_ht"
  Column |  Type   | Modifiers 
 --------+---------+-----------
- time   | bigint  | 
+ time   | bigint  | not null
  val    | integer | 
  val2   | integer | 
 Indexes:
@@ -443,6 +445,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 13
 CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
