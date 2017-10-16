@@ -67,6 +67,7 @@ extern DimensionSlice *dimension_calculate_default_slice(Dimension *dim, int64 v
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
 extern Dimension *hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
 extern Dimension *hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
+extern Dimension *hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 
 #define hyperspace_get_open_dimension(space, i)				\
 	hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

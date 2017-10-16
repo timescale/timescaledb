@@ -20,7 +20,11 @@ SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
 ALTER TABLE alter_test RENAME COLUMN time TO time_us;
 ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamp;
 ALTER TABLE alter_test RENAME COLUMN color TO colorname;
+\set ON_ERROR_STOP 0
+-- Changing types on hash-partitioned columns is not safe for some
+-- types and is therefore blocked.
 ALTER TABLE alter_test ALTER COLUMN colorname TYPE text;
+\set ON_ERROR_STOP 1
 
 \d+ alter_test
 \d+ _timescaledb_internal.*

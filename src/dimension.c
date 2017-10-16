@@ -1,6 +1,7 @@
 #include <postgres.h>
 #include <access/relscan.h>
 #include <utils/lsyscache.h>
+#include <utils/builtins.h>
 #include <funcapi.h>
 
 #include "catalog.h"
@@ -35,6 +36,22 @@ hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id)
 
 	return bsearch(&dim, hs->dimensions, hs->num_dimensions,
 				   sizeof(Dimension), cmp_dimension_id);
+}
+
+Dimension *
+hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name)
+{
+	int			i;
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		Dimension  *dim = &hs->dimensions[i];
+
+		if (dim->type == type && namestrcmp(&dim->fd.column_name, name) == 0)
+			return dim;
+	}
+
+	return NULL;
 }
 
 Dimension *
@@ -95,8 +112,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 			   DatumGetName(values[Anum_dimension_partitioning_func - 1]),
 			   NAMEDATALEN);
 
-		d->partitioning = partitioning_info_create(d->fd.num_slices,
-									 NameStr(d->fd.partitioning_func_schema),
+		d->partitioning = partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
 											NameStr(d->fd.partitioning_func),
 												   NameStr(d->fd.column_name),
 												   main_table_relid);

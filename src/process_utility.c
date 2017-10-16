@@ -1005,7 +1005,24 @@ typename_get_unqual_name(TypeName *tn)
 }
 
 static void
-process_alter_column_type(Hypertable *ht, AlterTableCmd *cmd)
+process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
+{
+	int			i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		Dimension  *dim = &ht->space->dimensions[i];
+
+		if (IS_CLOSED_DIMENSION(dim) &&
+		  strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
+			 errmsg("Cannot change the type of a hash-partitioned column")));
+	}
+}
+
+static void
+process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	ColumnDef  *coldef = (ColumnDef *) cmd->def;
 	Oid			new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
@@ -1102,6 +1119,11 @@ process_altertable_start(Node *parsetree)
 					verify_constraint_plaintable(stmt->relation, (Constraint *) cmd->def);
 				else
 					verify_constraint_hypertable(ht, cmd->def);
+				break;
+			case AT_AlterColumnType:
+				Assert(IsA(cmd->def, ColumnDef));
+				process_alter_column_type_start(ht, cmd);
+				break;
 			default:
 				break;
 		}
@@ -1163,7 +1185,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			break;
 		case AT_AlterColumnType:
 			Assert(IsA(cmd->def, ColumnDef));
-			process_alter_column_type(ht, cmd);
+			process_alter_column_type_end(ht, cmd);
 			break;
 		default:
 			break;

@@ -40,11 +40,11 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-----------------------+-----------------
-  1 |             1 | time        | bigint      | t       |            |                          |                       |   2592000000000
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
-  3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+  3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
 (3 rows)
 
 \set ON_ERROR_STOP 0
@@ -66,12 +66,12 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-----------------------+-----------------
-  1 |             1 | time        | bigint      | t       |            |                          |                       |   2592000000000
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
-  3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
-  4 |             1 | id          | integer     | t       |            |                          |                       |            1000
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+  3 |             1 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+  4 |             1 | id          | integer     | t       |            |                          |                    |            1000
 (4 rows)
 
 \set ON_ERROR_STOP 0

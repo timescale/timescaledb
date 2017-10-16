@@ -49,7 +49,7 @@ Indexes:
     "_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device_id) < 2147483647)
 Inherits: "two_Partitions"
 
 Index "_timescaledb_internal._hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"
@@ -118,7 +118,7 @@ Indexes:
     "_hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "_hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device_id) < 2147483647)
     "constraint_3" CHECK ("timeCustom" >= '1257897600000000000'::bigint AND "timeCustom" < '1257900192000000000'::bigint)
 Inherits: "two_Partitions"
 
@@ -188,7 +188,7 @@ Indexes:
     "_hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx" btree ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL
     "_hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device_id) < 2147483647)
     "constraint_4" CHECK ("timeCustom" >= '1257985728000000000'::bigint AND "timeCustom" < '1257988320000000000'::bigint)
 Inherits: "two_Partitions"
 
@@ -259,7 +259,7 @@ Indexes:
     "_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_5" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 0 AND _timescaledb_internal.get_partition_for_key(device_id) < 1073741823)
+    "constraint_5" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 0 AND _timescaledb_internal.get_partition_hash(device_id) < 1073741823)
 Inherits: "two_Partitions"
 
 Index "_timescaledb_internal._hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"
@@ -331,7 +331,7 @@ Indexes:
     "_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device_id) < 2147483647)
 Inherits: "two_Partitions"
 
 ALTER TABLE "two_Partitions" RENAME TO "newname";

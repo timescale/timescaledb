@@ -1,0 +1,252 @@
+-- Test hashing Const values. We should expect the same hash value for
+-- all integer types when values are compatible
+SELECT _timescaledb_internal.get_partition_hash(1::int);
+ get_partition_hash 
+--------------------
+          242423622
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1::bigint);
+ get_partition_hash 
+--------------------
+          242423622
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1::smallint);
+ get_partition_hash 
+--------------------
+          242423622
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(true);
+ get_partition_hash 
+--------------------
+          242423622
+(1 row)
+
+-- Floating point types should also hash the same for compatible values
+SELECT _timescaledb_internal.get_partition_hash(1.0::real);
+ get_partition_hash 
+--------------------
+          376496956
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1.0::double precision);
+ get_partition_hash 
+--------------------
+          376496956
+(1 row)
+
+-- Float aliases
+SELECT _timescaledb_internal.get_partition_hash(1.0::float);
+ get_partition_hash 
+--------------------
+          376496956
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1.0::float4);
+ get_partition_hash 
+--------------------
+          376496956
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1.0::float8);
+ get_partition_hash 
+--------------------
+          376496956
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1.0::numeric);
+ get_partition_hash 
+--------------------
+         1324868424
+(1 row)
+
+-- 'name' and '"char"' are internal PostgreSQL types, which are not
+-- intended for use by the general user. They are included here only
+-- for completeness
+-- https://www.postgresql.org/docs/10/static/datatype-character.html#datatype-character-special-table
+SELECT _timescaledb_internal.get_partition_hash('c'::name);
+ get_partition_hash 
+--------------------
+         1903644986
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('c'::"char");
+ get_partition_hash 
+--------------------
+          203891234
+(1 row)
+
+-- String and character hashes should also have the same output for
+-- compatible values
+SELECT _timescaledb_internal.get_partition_hash('c'::char);
+ get_partition_hash 
+--------------------
+         1903644986
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('c'::varchar(2));
+ get_partition_hash 
+--------------------
+         1903644986
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('c'::text);
+ get_partition_hash 
+--------------------
+         1903644986
+(1 row)
+
+-- 'c' is 0x63 in ASCII
+SELECT _timescaledb_internal.get_partition_hash(E'\\x63'::bytea);
+ get_partition_hash 
+--------------------
+         1903644986
+(1 row)
+
+-- Time and date types
+SELECT _timescaledb_internal.get_partition_hash(interval '1 day');
+ get_partition_hash 
+--------------------
+           93502988
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('2017-03-22T09:18:23'::timestamp);
+ get_partition_hash 
+--------------------
+          307315039
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('2017-03-22T09:18:23'::timestamptz);
+ get_partition_hash 
+--------------------
+         1195163597
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('2017-03-22'::date);
+ get_partition_hash 
+--------------------
+          693590295
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('10:00:00'::time);
+ get_partition_hash 
+--------------------
+         1380652790
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('10:00:00-1'::timetz);
+ get_partition_hash 
+--------------------
+          769387140
+(1 row)
+
+-- Other types
+SELECT _timescaledb_internal.get_partition_hash(ARRAY[1,2,3]);
+ get_partition_hash 
+--------------------
+         1822090118
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('08002b:010203'::macaddr);
+ get_partition_hash 
+--------------------
+          294987870
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('192.168.100.128/25'::cidr);
+ get_partition_hash 
+--------------------
+         1612896565
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('192.168.100.128'::inet);
+ get_partition_hash 
+--------------------
+         1952516432
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('2001:4f8:3:ba:2e0:81ff:fe22:d1f1'::inet);
+ get_partition_hash 
+--------------------
+          933321588
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128'::cidr);
+ get_partition_hash 
+--------------------
+          933321588
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('{ "foo": "bar" }'::jsonb);
+ get_partition_hash 
+--------------------
+          208840587
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('4b6a5eec-b344-11e7-abc4-cec278b6b50a'::uuid);
+ get_partition_hash 
+--------------------
+          504202548
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(1::regclass);
+ get_partition_hash 
+--------------------
+          242423622
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(int4range(10, 20));
+ get_partition_hash 
+--------------------
+         1202375768
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(int8range(10, 20));
+ get_partition_hash 
+--------------------
+         1202375768
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(numrange(10, 20));
+ get_partition_hash 
+--------------------
+         1083987536
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(tsrange('2017-03-22T09:18:23', '2017-03-23T09:18:23'));
+ get_partition_hash 
+--------------------
+         2079608838
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(tstzrange('2017-03-22T09:18:23+01', '2017-03-23T09:18:23+00'));
+ get_partition_hash 
+--------------------
+         1255083771
+(1 row)
+
+-- Test hashing Var values
+CREATE TABLE hash_test(id int, value text);
+INSERT INTO hash_test VALUES (1, 'test');
+-- Test Vars
+SELECT _timescaledb_internal.get_partition_hash(id) FROM hash_test;
+ get_partition_hash 
+--------------------
+          242423622
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(value) FROM hash_test;
+ get_partition_hash 
+--------------------
+         1771415073
+(1 row)
+
+-- Test coerced value
+SELECT _timescaledb_internal.get_partition_hash(id::text) FROM hash_test;
+ get_partition_hash 
+--------------------
+         1516350201
+(1 row)
+

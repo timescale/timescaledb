@@ -1,0 +1,166 @@
+CREATE TABLE part_legacy(time timestamptz, temp float, device int);
+SELECT create_hypertable('part_legacy', 'time', 'device', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                    |   2592000000000
+  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_hash |                
+(2 rows)
+
+\c single :ROLE_SUPERUSER
+UPDATE _timescaledb_catalog.dimension SET partitioning_func = 'get_partition_for_key'
+WHERE partitioning_func IS NOT NULL;
+\c single :ROLE_DEFAULT_PERM_USER
+-- Show updated partitioning function
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |   2592000000000
+  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+(2 rows)
+
+INSERT INTO part_legacy VALUES ('2017-03-22T09:18:23', 23.4, 1);
+INSERT INTO part_legacy VALUES ('2017-03-22T09:18:23', 23.4, 76);
+VACUUM part_legacy;
+-- Show two chunks and CHECK constraint with cast
+\d+ _timescaledb_internal._hyper_1_*_chunk
+                    Table "_timescaledb_internal._hyper_1_1_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+Indexes:
+    "_hyper_1_1_chunk_part_legacy_device_time_idx" btree (device, "time" DESC)
+    "_hyper_1_1_chunk_part_legacy_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_1" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+Inherits: part_legacy
+
+                    Table "_timescaledb_internal._hyper_1_2_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+Indexes:
+    "_hyper_1_2_chunk_part_legacy_device_time_idx" btree (device, "time" DESC)
+    "_hyper_1_2_chunk_part_legacy_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_1" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
+    "constraint_3" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 0 AND _timescaledb_internal.get_partition_for_key(device::text) < 1073741823)
+Inherits: part_legacy
+
+-- Make sure constraint exclusion works on device column
+EXPLAIN (verbose, costs off)
+SELECT * FROM part_legacy WHERE device = 1;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on public.part_legacy
+         Output: part_legacy."time", part_legacy.temp, part_legacy.device
+         Filter: ((part_legacy.device = 1) AND (_timescaledb_internal.get_partition_for_key((part_legacy.device)::text) = 1516350201))
+   ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.temp, _hyper_1_1_chunk.device
+         Filter: ((_hyper_1_1_chunk.device = 1) AND (_timescaledb_internal.get_partition_for_key((_hyper_1_1_chunk.device)::text) = 1516350201))
+(7 rows)
+
+CREATE TABLE part_new(time timestamptz, temp float, device int);
+SELECT create_hypertable('part_new', 'time', 'device', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |   2592000000000
+  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+  3 |             2 | time        | timestamp with time zone | t       |            |                          |                       |   2592000000000
+  4 |             2 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
+(4 rows)
+
+INSERT INTO part_new VALUES ('2017-03-22T09:18:23', 23.4, 1);
+INSERT INTO part_new VALUES ('2017-03-22T09:18:23', 23.4, 2);
+VACUUM part_new;
+-- Show two chunks and CHECK constraint without cast
+\d+ _timescaledb_internal._hyper_2_*_chunk
+                    Table "_timescaledb_internal._hyper_2_3_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+Indexes:
+    "_hyper_2_3_chunk_part_new_device_time_idx" btree (device, "time" DESC)
+    "_hyper_2_3_chunk_part_new_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_4" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
+    "constraint_5" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
+Inherits: part_new
+
+                    Table "_timescaledb_internal._hyper_2_4_chunk"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ time   | timestamp with time zone |           | plain   |              | 
+ temp   | double precision         |           | plain   |              | 
+ device | integer                  |           | plain   |              | 
+Indexes:
+    "_hyper_2_4_chunk_part_new_device_time_idx" btree (device, "time" DESC)
+    "_hyper_2_4_chunk_part_new_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_4" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone AND "time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)
+    "constraint_6" CHECK (_timescaledb_internal.get_partition_hash(device) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device) < 2147483647)
+Inherits: part_new
+
+-- Make sure constraint exclusion works on device column
+EXPLAIN (verbose, costs off)
+SELECT * FROM part_new WHERE device = 1;
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on public.part_new
+         Output: part_new."time", part_new.temp, part_new.device
+         Filter: ((part_new.device = 1) AND (_timescaledb_internal.get_partition_hash(part_new.device) = 242423622))
+   ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
+         Output: _hyper_2_3_chunk."time", _hyper_2_3_chunk.temp, _hyper_2_3_chunk.device
+         Filter: ((_hyper_2_3_chunk.device = 1) AND (_timescaledb_internal.get_partition_hash(_hyper_2_3_chunk.device) = 242423622))
+(7 rows)
+
+CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
+SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO part_new_convert1 VALUES ('2017-03-22T09:18:23', 1.0, 2);
+\set ON_ERROR_STOP 0
+-- Changing the type of a hash-partitioned column should be unsupported
+ALTER TABLE part_new_convert1 ALTER COLUMN temp TYPE numeric;
+ERROR:  Cannot change the type of a hash-partitioned column
+\set ON_ERROR_STOP 1
+-- Should be able to change if not hash partitioned though
+ALTER TABLE part_new_convert1 ALTER COLUMN time TYPE timestamp;
+\d+  _timescaledb_internal._hyper_3_*_chunk
+                     Table "_timescaledb_internal._hyper_3_5_chunk"
+ Column |            Type             | Modifiers | Storage | Stats target | Description 
+--------+-----------------------------+-----------+---------+--------------+-------------
+ time   | timestamp without time zone |           | plain   |              | 
+ temp   | double precision            |           | plain   |              | 
+ device | integer                     |           | plain   |              | 
+Indexes:
+    "_hyper_3_5_chunk_part_new_convert1_temp_time_idx" btree (temp, "time" DESC)
+    "_hyper_3_5_chunk_part_new_convert1_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_7" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017'::timestamp without time zone AND "time" < 'Fri Mar 24 17:00:00 2017'::timestamp without time zone)
+    "constraint_8" CHECK (_timescaledb_internal.get_partition_hash(temp) >= 0 AND _timescaledb_internal.get_partition_hash(temp) < 1073741823)
+Inherits: part_new_convert1
+

@@ -49,7 +49,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   110
+   111
 (1 row)
 
 \d+ public."two_Partitions"
@@ -99,7 +99,7 @@ Indexes:
     "_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device_id) < 2147483647)
 Triggers:
     restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 Inherits: "two_Partitions"
@@ -213,7 +213,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   110
+   111
 (1 row)
 
 --main table and chunk schemas should be the same
@@ -264,7 +264,7 @@ Indexes:
     "_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" btree ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL
 Check constraints:
     "constraint_1" CHECK ("timeCustom" >= '1257892416000000000'::bigint AND "timeCustom" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device_id) < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823 AND _timescaledb_internal.get_partition_hash(device_id) < 2147483647)
 Triggers:
     restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 Inherits: "two_Partitions"

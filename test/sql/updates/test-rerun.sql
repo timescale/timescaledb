@@ -1,7 +1,8 @@
 --keep same order of tables as tables.sql
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 SELECT * FROM _timescaledb_catalog.tablespace ORDER BY id;
-SELECT * FROM _timescaledb_catalog.dimension ORDER BY id;
+--partitioning function changed, so don't output
+SELECT id, hypertable_id, column_name, column_type, aligned, num_slices, interval_length FROM _timescaledb_catalog.dimension ORDER BY id;
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
 SELECT * FROM _timescaledb_catalog.chunk_constraint ORDER BY chunk_id, dimension_slice_id, constraint_name;

@@ -151,7 +151,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
     RETURNS _timescaledb_catalog.dimension LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_for_key';
+    partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_hash';
     partitioning_func_schema _timescaledb_catalog.dimension.partitioning_func_schema%TYPE = '_timescaledb_internal';
     aligned                  BOOL;
     column_type              REGTYPE;
