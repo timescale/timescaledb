@@ -351,6 +351,7 @@ SELECT * FROM ONLY "two_Partitions";
 
 CREATE TABLE error_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('error_test', 'time', 'device', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -401,6 +402,7 @@ SELECT * FROM tick_character;
 
 CREATE TABLE  many_partitions_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test', 'time', 'device', 1000);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -428,6 +430,7 @@ SELECT count(*) FROM  many_partitions_test;
 
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
 SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -445,6 +448,7 @@ SELECT * FROM date_col_test WHERE time > '2001-01-01';
 
 CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  

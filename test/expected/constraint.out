@@ -385,6 +385,7 @@ CREATE TABLE hyper_ex (
     ) WHERE (not canceled)
 );
 SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -433,5 +434,6 @@ CREATE TABLE hyper_ex_invalid (
 );
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
 ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 \set ON_ERROR_STOP 1

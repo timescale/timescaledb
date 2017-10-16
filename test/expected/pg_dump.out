@@ -49,7 +49,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   111
+   113
 (1 row)
 
 \d+ public."two_Partitions"
@@ -213,7 +213,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   111
+   113
 (1 row)
 
 --main table and chunk schemas should be the same

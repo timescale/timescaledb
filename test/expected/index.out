@@ -1,5 +1,6 @@
 CREATE TABLE index_test(time timestamptz, temp float);
 SELECT create_hypertable('index_test', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -10,7 +11,7 @@ SELECT create_hypertable('index_test', 'time');
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
     "index_test_time_idx" btree ("time" DESC)
@@ -23,10 +24,12 @@ CREATE UNIQUE INDEX index_test_time_idx ON index_test (time);
 -- Creating a hypertable from a table with an index that doesn't cover
 -- all partitioning columns should fail
 SELECT create_hypertable('index_test', 'time', 'device', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
 ERROR:  Cannot create a unique index without the column: device (used in partitioning)
 \set ON_ERROR_STOP 1
 -- Partitioning on only time should work
 SELECT create_hypertable('index_test', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -38,7 +41,7 @@ INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 1, 17.5);
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -49,7 +52,7 @@ Child tables: _timescaledb_internal._hyper_3_1_chunk
                     Table "_timescaledb_internal._hyper_3_1_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -70,7 +73,7 @@ INSERT INTO index_test VALUES ('2017-05-20T09:00:01', 3, 17.5);
                     Table "_timescaledb_internal._hyper_3_1_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -82,7 +85,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_3_2_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -104,7 +107,7 @@ DROP INDEX _timescaledb_internal._hyper_3_1_chunk_index_test_time_idx;
                     Table "_timescaledb_internal._hyper_3_1_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Check constraints:
@@ -114,7 +117,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_3_2_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -154,6 +157,7 @@ ALTER TABLE index_test DROP COLUMN id;
 
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -175,7 +179,7 @@ INSERT INTO index_test VALUES ('2017-04-20T09:00:01', 1, 17.5);
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -190,7 +194,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -206,7 +210,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -238,7 +242,7 @@ ALTER INDEX index_test_time_idx RENAME TO index_test_time_idx2;
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -253,7 +257,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -269,7 +273,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -302,7 +306,7 @@ DROP INDEX index_test_time_device_idx;
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -315,7 +319,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -329,7 +333,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -356,7 +360,7 @@ CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates_2 ON i
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -371,7 +375,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -387,7 +391,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -421,7 +425,7 @@ CREATE INDEX index_test_time_idx ON index_test (time) TABLESPACE tablespace1;
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -435,7 +439,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -471,7 +475,7 @@ btree, for table "_timescaledb_internal._hyper_4_3_chunk"
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -512,7 +516,7 @@ ALTER INDEX index_test_time_idx SET TABLESPACE tablespace2;
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -526,7 +530,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -541,7 +545,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -559,7 +563,7 @@ ALTER TABLE index_test ADD UNIQUE (time, device);
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -574,7 +578,7 @@ Child tables: _timescaledb_internal._hyper_4_3_chunk,
                     Table "_timescaledb_internal._hyper_4_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -590,7 +594,7 @@ Inherits: index_test
                     Table "_timescaledb_internal._hyper_4_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  device | integer                  |           | plain   |              | 
  temp   | double precision         |           | plain   |              | 
 Indexes:
@@ -639,6 +643,7 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 CREATE TABLE index_test(time timestamptz, temp float, device int) TABLESPACE tablespace1;
 -- Default indexes should be in the table's tablespace
 SELECT create_hypertable('index_test', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -658,7 +663,7 @@ INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 17.5);
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -672,7 +677,7 @@ Tablespace: "tablespace1"
                     Table "_timescaledb_internal._hyper_5_5_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -691,7 +696,7 @@ CREATE INDEX ON index_test (time, temp) TABLESPACE tablespace2;
                               Table "public.index_test"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -706,7 +711,7 @@ Tablespace: "tablespace1"
                     Table "_timescaledb_internal._hyper_5_5_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:

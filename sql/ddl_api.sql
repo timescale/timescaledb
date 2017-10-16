@@ -82,6 +82,8 @@ BEGIN
 
     EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
 
+    PERFORM _timescaledb_internal.set_time_column_constraint(main_table, time_column_name);
+
     IF main_table_has_items THEN
         RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
         USING ERRCODE = 'IO102';

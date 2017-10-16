@@ -324,7 +324,11 @@ hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 			datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
 
 			if (isnull)
-				elog(ERROR, "Time attribute not found in tuple");
+				ereport(ERROR,
+						(errcode(ERRCODE_NOT_NULL_VIOLATION),
+						 errmsg("null value in column \"%s\" violates not-null constraint",
+								NameStr(d->fd.column_name)),
+						 errhint("Columns used for time partitioning can not be NULL")));
 
 			p->coordinates[p->num_coords++] = time_value_to_internal(datum, d->fd.column_type);
 		}

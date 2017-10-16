@@ -142,7 +142,6 @@ BEGIN
 END
 $BODY$;
 
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
     main_table               REGCLASS,
     hypertable_row           _timescaledb_catalog.hypertable, -- should be locked FOR UPDATE
@@ -189,6 +188,8 @@ BEGIN
         partitioning_func_name := NULL;
         partitioning_func_schema := NULL;
         aligned = TRUE;
+
+        PERFORM _timescaledb_internal.set_time_column_constraint(main_table, column_name);
     ELSE
         -- Closed dimension
         IF (num_slices < 1 OR num_slices > 32767) THEN
@@ -477,7 +478,45 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.set_time_column_constraint(
+    main_table              REGCLASS,
+    column_name             NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
+$BODY$
+DECLARE
+    is_not_null     BOOLEAN;
+    schema_name     NAME;
+    table_name      NAME;
+BEGIN
 
+    SELECT relname, nspname
+    INTO STRICT table_name, schema_name
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    WHERE c.OID = main_table;
+
+    BEGIN
+        SELECT attnotnull
+        INTO STRICT is_not_null
+        FROM pg_attribute
+        WHERE attrelid = main_table AND attname = column_name;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'column "%" does not exist', column_name
+            USING ERRCODE = 'IO102';
+    END;
+
+    -- The proper constraint is already set.
+    IF is_not_null THEN
+       RETURN;
+    END IF;
+
+    RAISE NOTICE 'Adding NOT NULL constraint to time column % (NULL time values not allowed)', column_name;
+    EXECUTE format('ALTER TABLE %I.%I ALTER %I SET NOT NULL', schema_name, table_name, column_name);
+
+END
+$BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
     schema_name     NAME,

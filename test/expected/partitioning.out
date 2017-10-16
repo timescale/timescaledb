@@ -1,5 +1,6 @@
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -21,7 +22,7 @@ VACUUM part_legacy;
                     Table "_timescaledb_internal._hyper_1_1_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -35,7 +36,7 @@ Inherits: part_legacy
                     Table "_timescaledb_internal._hyper_1_2_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -62,6 +63,7 @@ SELECT * FROM part_legacy WHERE device = 1;
 
 CREATE TABLE part_new(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_new', 'time', 'device', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -84,7 +86,7 @@ VACUUM part_new;
                     Table "_timescaledb_internal._hyper_2_3_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -98,7 +100,7 @@ Inherits: part_new
                     Table "_timescaledb_internal._hyper_2_4_chunk"
  Column |           Type           | Modifiers | Storage | Stats target | Description 
 --------+--------------------------+-----------+---------+--------------+-------------
- time   | timestamp with time zone |           | plain   |              | 
+ time   | timestamp with time zone | not null  | plain   |              | 
  temp   | double precision         |           | plain   |              | 
  device | integer                  |           | plain   |              | 
 Indexes:
@@ -125,6 +127,7 @@ SELECT * FROM part_new WHERE device = 1;
 
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
 SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
@@ -142,7 +145,7 @@ ALTER TABLE part_new_convert1 ALTER COLUMN time TYPE timestamp;
                      Table "_timescaledb_internal._hyper_3_5_chunk"
  Column |            Type             | Modifiers | Storage | Stats target | Description 
 --------+-----------------------------+-----------+---------+--------------+-------------
- time   | timestamp without time zone |           | plain   |              | 
+ time   | timestamp without time zone | not null  | plain   |              | 
  temp   | double precision            |           | plain   |              | 
  device | integer                     |           | plain   |              | 
 Indexes:
@@ -155,6 +158,7 @@ Inherits: part_new_convert1
 
 CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
 SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  

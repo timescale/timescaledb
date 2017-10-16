@@ -24,6 +24,7 @@
 --
 CREATE TABLE chunk_test(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test', 'time', 'tag', 2, chunk_time_interval => 3);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
  
