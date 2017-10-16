@@ -110,36 +110,37 @@ hypertable_query_walker(Node *node, void *context)
 
 /* Returns the partitioning info for a var if the var is a partitioning
  * column. If the var is not a partitioning column return NULL */
-static PartitioningInfo *
+static inline PartitioningInfo *
 get_partitioning_info_for_partition_column_var(Var *var_expr, AddPartFuncQualCtx *context)
 {
+	Hypertable *ht = context->hentry;
 	RangeTblEntry *rte = rt_fetch(var_expr->varno, context->parse->rtable);
-	char	   *varname = get_rte_attribute_name(rte, var_expr->varattno);
+	char	   *varname;
+	Dimension  *dim;
 
-	if (rte->relid == context->hentry->main_table_relid)
-	{
-		Dimension  *closed_dim = hyperspace_get_closed_dimension(context->hentry->space, 0);
+	if (rte->relid != ht->main_table_relid)
+		return NULL;
 
-		if (closed_dim != NULL &&
-		 strncmp(closed_dim->fd.column_name.data, varname, NAMEDATALEN) == 0)
-			return closed_dim->partitioning;
-	}
+	varname = get_rte_attribute_name(rte, var_expr->varattno);
+
+	dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_CLOSED, varname);
+
+	if (dim != NULL)
+		return dim->partitioning;
+
 	return NULL;
 }
 
 /* Creates an expression for partioning_func(var_expr, partitioning_mod) =
- * partioning_func(const_expr, partitioning_mod).  This function makes a copy of
+ * partitioning_func(const_expr, partitioning_mod).  This function makes a copy of
  * all nodes given in input. */
 static Expr *
-create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *partitioning_func_schema,
-								   char *partitioning_func)
+create_partition_func_equals_const(PartitioningInfo *pi, Var *var_expr, Const *const_expr)
 {
 	Expr	   *op_expr;
-	List	   *func_name = list_make2(makeString(partitioning_func_schema), makeString(partitioning_func));
-	Var		   *var_for_fn_call;
-	Node	   *var_node_for_fn_call;
-	Const	   *const_for_fn_call;
-	Node	   *const_node_for_fn_call;
+	List	   *func_name = partitioning_func_qualified_name(&pi->partfunc);
+	Node	   *var_node;
+	Node	   *const_node;
 	List	   *args_func_var;
 	List	   *args_func_const;
 	FuncCall   *fc_var;
@@ -147,33 +148,35 @@ create_partition_func_equals_const(Var *var_expr, Const *const_expr, char *parti
 	Node	   *f_var;
 	Node	   *f_const;
 
-	const_for_fn_call = (Const *) palloc(sizeof(Const));
-	memcpy(const_for_fn_call, const_expr, sizeof(Const));
-
-	var_for_fn_call = (Var *) palloc(sizeof(Var));
-	memcpy(var_for_fn_call, var_expr, sizeof(Var));
-
-	if (var_for_fn_call->vartype == TEXTOID)
+	if (pi->partfunc.paramtype == TEXTOID)
 	{
-		var_node_for_fn_call = (Node *) var_for_fn_call;
-		const_node_for_fn_call = (Node *) const_for_fn_call;
+		/* Path for deprecated partitioning function taking text input */
+		if (var_expr->vartype == TEXTOID)
+		{
+			var_node = copyObject(var_expr);
+			const_node = copyObject(const_expr);
+		}
+		else
+		{
+			var_node = coerce_to_target_type(NULL, (Node *) var_expr,
+											 var_expr->vartype,
+											 TEXTOID, -1, COERCION_EXPLICIT,
+											 COERCE_EXPLICIT_CAST, -1);
+			const_node = coerce_to_target_type(NULL, (Node *) const_expr,
+											   const_expr->consttype,
+											   TEXTOID, -1, COERCION_EXPLICIT,
+											   COERCE_EXPLICIT_CAST, -1);
+		}
 	}
 	else
 	{
-		var_node_for_fn_call =
-			coerce_to_target_type(NULL, (Node *) var_for_fn_call,
-								  var_for_fn_call->vartype,
-								  TEXTOID, -1, COERCION_EXPLICIT,
-								  COERCE_EXPLICIT_CAST, -1);
-		const_node_for_fn_call =
-			coerce_to_target_type(NULL, (Node *) const_for_fn_call,
-								  const_for_fn_call->consttype,
-								  TEXTOID, -1, COERCION_EXPLICIT,
-								  COERCE_EXPLICIT_CAST, -1);
+		/* Path for partitioning func taking anyelement */
+		var_node = copyObject(var_expr);
+		const_node = copyObject(const_expr);
 	}
 
-	args_func_var = list_make1(var_node_for_fn_call);
-	args_func_const = list_make1(const_node_for_fn_call);
+	args_func_var = list_make1(var_node);
+	args_func_const = list_make1(const_node);
 
 	fc_var = makeFuncCall(func_name, args_func_var, -1);
 	fc_const = makeFuncCall(func_name, args_func_const, -1);
@@ -248,8 +251,8 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						if (pi != NULL)
 						{
 							/* The var is a partitioning column */
-							Expr	   *partitioning_clause = create_partition_func_equals_const(var_expr, const_expr,
-									 pi->partfunc.schema, pi->partfunc.name);
+							Expr	   *partitioning_clause =
+							create_partition_func_equals_const(pi, var_expr, const_expr);
 
 							return (Node *) make_andclause(list_make2(node, partitioning_clause));
 

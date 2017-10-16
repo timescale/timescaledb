@@ -426,8 +426,8 @@ Indexes:
     "_hyper_7_15_chunk_3dim_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_15" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone AND "time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone)
-    "constraint_16" CHECK (_timescaledb_internal.get_partition_for_key(device) >= 0 AND _timescaledb_internal.get_partition_for_key(device) < 1073741823)
-    "constraint_17" CHECK (_timescaledb_internal.get_partition_for_key(location) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(location) < 2147483647)
+    "constraint_16" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
+    "constraint_17" CHECK (_timescaledb_internal.get_partition_hash(location) >= 1073741823 AND _timescaledb_internal.get_partition_hash(location) < 2147483647)
 Inherits: "3dim"
 
 --queries should work in three dimensions

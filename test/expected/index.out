@@ -200,7 +200,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
                     Table "_timescaledb_internal._hyper_4_4_chunk"
@@ -215,7 +215,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_time_idx" btree ("time" DESC)
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
@@ -263,7 +263,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
                     Table "_timescaledb_internal._hyper_4_4_chunk"
@@ -278,7 +278,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_time_idx2" btree ("time" DESC)
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
@@ -323,7 +323,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
                     Table "_timescaledb_internal._hyper_4_4_chunk"
@@ -336,7 +336,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
@@ -381,7 +381,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
                     Table "_timescaledb_internal._hyper_4_4_chunk"
@@ -396,7 +396,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_device_time_idx" btree (device, "time" DESC)
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
@@ -444,7 +444,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
 Index "_timescaledb_internal._hyper_4_3_chunk_index_test_device_time_idx"
@@ -479,7 +479,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_time_idx" btree ("time"), tablespace "tablespace1"
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
@@ -535,7 +535,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
                     Table "_timescaledb_internal._hyper_4_4_chunk"
@@ -549,7 +549,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_time_idx" btree ("time"), tablespace "tablespace2"
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
@@ -584,7 +584,7 @@ Indexes:
     "_hyper_4_3_chunk_time_temp_idx" btree ("time", temp)
 Check constraints:
     "constraint_3" CHECK ("time" >= 'Sat Dec 24 16:00:00 2016 PST'::timestamp with time zone AND "time" < 'Mon Jan 23 16:00:00 2017 PST'::timestamp with time zone)
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
 Inherits: index_test
 
                     Table "_timescaledb_internal._hyper_4_4_chunk"
@@ -599,7 +599,7 @@ Indexes:
     "_hyper_4_4_chunk_index_test_time_idx" btree ("time"), tablespace "tablespace2"
     "_hyper_4_4_chunk_index_test_time_temp_idx" btree ("time", temp)
 Check constraints:
-    "constraint_4" CHECK (_timescaledb_internal.get_partition_for_key(device::text) >= 1073741823 AND _timescaledb_internal.get_partition_for_key(device::text) < 2147483647)
+    "constraint_4" CHECK (_timescaledb_internal.get_partition_hash(device) >= 0 AND _timescaledb_internal.get_partition_hash(device) < 1073741823)
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 

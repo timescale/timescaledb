@@ -6,16 +6,20 @@ SELECT * FROM PUBLIC."two_Partitions";
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
 
-\echo "The following queries should NOT scan two_Partitions._hyper_1_1_0_partition"
+\echo "The following queries should NOT scan two_Partitions._hyper_1_1_chunk"
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev2';
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
-
 
 --test integer partition key
 CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
 SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
 INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
+INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 2, 22.5);
+
+--check that there are two chunks
+\d _timescaledb_internal._hyper_2_*_chunk
+
 SELECT * FROM "int_part" WHERE object_id = 1;
 --make sure this touches only one partititon
 EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
@@ -37,6 +41,3 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC.
 --TODO: time transform doesn't work
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-
-
-

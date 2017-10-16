@@ -351,7 +351,7 @@ Indexes:
     "_hyper_1_1_chunk_ind_sensor_1" btree ("time", sensor_1)
 Check constraints:
     "constraint_1" CHECK ("time" >= '1257892416000000000'::bigint AND "time" < '1257895008000000000'::bigint)
-    "constraint_2" CHECK (_timescaledb_internal.get_partition_for_key("Device_id") >= 0 AND _timescaledb_internal.get_partition_for_key("Device_id") < 2147483647)
+    "constraint_2" CHECK (_timescaledb_internal.get_partition_hash("Device_id") >= 0 AND _timescaledb_internal.get_partition_hash("Device_id") < 2147483647)
 Inherits: "Hypertable_1"
 
 \ir include/ddl_ops_2.sql
