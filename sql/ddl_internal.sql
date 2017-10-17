@@ -274,9 +274,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunks_impl(
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
-DECLARE 
+DECLARE
     chunk_row _timescaledb_catalog.chunk;
     cascade_mod TEXT = '';
+    exist_count INT = 0;
 BEGIN
     IF older_than_time IS NULL AND table_name IS NULL AND schema_name IS NULL THEN
         RAISE 'Cannot have all 3 arguments to drop_chunks_older_than be NULL';
@@ -284,6 +285,19 @@ BEGIN
 
     IF cascade THEN
         cascade_mod = 'CASCADE';
+    END IF;
+
+    IF table_name IS NOT NULL THEN
+        SELECT COUNT(*)
+        FROM _timescaledb_catalog.hypertable h
+        WHERE (drop_chunks_impl.schema_name IS NULL OR h.schema_name = drop_chunks_impl.schema_name)
+        AND drop_chunks_impl.table_name = h.table_name
+        INTO STRICT exist_count;
+
+        IF exist_count = 0 THEN
+            RAISE 'hypertable % does not exist', drop_chunks_impl.table_name
+            USING ERRCODE = 'IO001';
+        END IF;
     END IF;
 
     FOR chunk_row IN SELECT *

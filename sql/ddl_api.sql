@@ -208,10 +208,10 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION drop_chunks(
-    older_than INTEGER,
+    older_than  BIGINT,
     table_name  NAME = NULL,
     schema_name NAME = NULL,
-    cascade  BOOLEAN = FALSE
+    cascade    BOOLEAN = FALSE
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
