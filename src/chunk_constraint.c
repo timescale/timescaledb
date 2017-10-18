@@ -159,6 +159,8 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *constraint)
 	bool		nulls[Natts_chunk_constraint] = {false};
 	NameData	constraint_name;
 
+	/* quiet valgrind */
+	memset(constraint_name.data, 0,  NAMEDATALEN);
 	snprintf(constraint_name.data, NAMEDATALEN, "constraint_%d", constraint->fd.dimension_slice_id);
 
 	memset(values, 0, sizeof(values));
