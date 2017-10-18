@@ -3,6 +3,10 @@
 CREATE TABLE test (i int, j double precision, ts timestamp);
 --has to be big enough to force at least 2 workers below.
 INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(1,1000000) AS x;
+SET client_min_messages = 'error';
+--avoid warning polluting output
+ANALYZE;
+RESET client_min_messages;
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
 EXPLAIN (costs off) SELECT first(i, j) FROM "test";
@@ -38,19 +42,18 @@ SELECT last(i, j) FROM "test";
 (1 row)
 
 EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j) FROM "test" GROUP BY sec ORDER BY sec LIMIT 5;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Limit
-   ->  Finalize GroupAggregate
-         Group Key: (time_bucket('@ 1 sec'::interval, ts))
-         ->  Sort
-               Sort Key: (time_bucket('@ 1 sec'::interval, ts))
-               ->  Gather
-                     Workers Planned: 2
-                     ->  Partial HashAggregate
-                           Group Key: time_bucket('@ 1 sec'::interval, ts)
-                           ->  Parallel Seq Scan on test
-(10 rows)
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Gather
+   Workers Planned: 1
+   Single Copy: true
+   ->  Limit
+         ->  GroupAggregate
+               Group Key: (time_bucket('@ 1 sec'::interval, ts))
+               ->  Sort
+                     Sort Key: (time_bucket('@ 1 sec'::interval, ts))
+                     ->  Seq Scan on test
+(9 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j) FROM "test" GROUP BY sec ORDER BY sec LIMIT 5;
            sec            | last 
