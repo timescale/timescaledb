@@ -462,7 +462,7 @@ bookend_serializefunc(PG_FUNCTION_ARGS)
 	if (my_extra == NULL)
 	{
 		fcinfo->flinfo->fn_extra =
-			MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(InternalCmpAggStoreIOState));
+			MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(InternalCmpAggStoreIOState));
 		my_extra = (InternalCmpAggStoreIOState *) fcinfo->flinfo->fn_extra;
 	}
 	pq_begintypsend(&buf);
@@ -496,7 +496,7 @@ bookend_deserializefunc(PG_FUNCTION_ARGS)
 	if (my_extra == NULL)
 	{
 		fcinfo->flinfo->fn_extra =
-			MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(InternalCmpAggStoreIOState));
+			MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(InternalCmpAggStoreIOState));
 		my_extra = (InternalCmpAggStoreIOState *) fcinfo->flinfo->fn_extra;
 	}
 
