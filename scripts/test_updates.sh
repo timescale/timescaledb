@@ -41,7 +41,7 @@ cleanup() {
     if [ $status -eq 0 ]; then
         rm -rf ${PGTEST_TMPDIR}
     fi
-    docker rm -vf timescaledb-orig timescaledb-clean timescaledb-updated 2>/dev/null
+    docker rm -vf timescaledb-orig timescaledb-clean-restore timescaledb-updated 2>/dev/null
     echo "Exit status is $status"
     exit $status
 }
@@ -105,13 +105,14 @@ wait_for_pg() {
 
 echo "Using temporary directory $PGTEST_TMPDIR"
 
-docker rm -f timescaledb-orig timescaledb-updated timescaledb-clean 2>/dev/null || true
+docker rm -f timescaledb-orig timescaledb-updated timescaledb-clean-restore timescaledb-clean-rerun 2>/dev/null || true
 IMAGE_NAME=update_test TAG_NAME=latest bash ${SCRIPT_DIR}/docker-build.sh
 
 docker_run timescaledb-orig ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
-docker_run timescaledb-clean ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+docker_run timescaledb-clean-restore ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+docker_run timescaledb-clean-rerun ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
-CLEAN_VOLUME=$(docker inspect timescaledb-clean --format='{{range .Mounts }}{{.Name}}{{end}}')
+CLEAN_VOLUME=$(docker inspect timescaledb-clean-restore --format='{{range .Mounts }}{{.Name}}{{end}}')
 UPDATE_VOLUME=$(docker inspect timescaledb-orig --format='{{range .Mounts }}{{.Name}}{{end}}')
 
 echo "Executing setup script on 0.1.0"
@@ -126,12 +127,19 @@ docker_pgcmd timescaledb-updated "ALTER EXTENSION timescaledb UPDATE"
 docker_exec timescaledb-updated "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
 docker cp timescaledb-updated:/tmp/single.sql ${PGTEST_TMPDIR}/single.sql
 
-echo "Restoring database on new version"
-docker cp ${PGTEST_TMPDIR}/single.sql timescaledb-clean:/tmp/single.sql
-docker_exec timescaledb-clean "createdb -h localhost -U postgres single"
-docker_pgcmd timescaledb-clean "ALTER DATABASE single SET timescaledb.restoring='on'"
-docker_exec timescaledb-clean "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
-docker_pgcmd timescaledb-clean "ALTER DATABASE single SET timescaledb.restoring='off'"
+echo "Executing setup script on clean"
+docker_pgscript timescaledb-clean-rerun /src/test/sql/updates/setup.sql
 
-echo "Testing"
-docker_pgdiff timescaledb-updated timescaledb-clean /src/test/sql/updates/test-0.1.1.sql
+echo "Testing updated vs clean"
+docker_pgdiff timescaledb-updated timescaledb-clean-rerun /src/test/sql/updates/test-rerun.sql
+
+echo "Restoring database on clean version"
+docker cp ${PGTEST_TMPDIR}/single.sql timescaledb-clean-restore:/tmp/single.sql
+docker_exec timescaledb-clean-restore "createdb -h localhost -U postgres single"
+docker_pgcmd timescaledb-clean-restore "ALTER DATABASE single SET timescaledb.restoring='on'"
+docker_exec timescaledb-clean-restore "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
+docker_pgcmd timescaledb-clean-restore "ALTER DATABASE single SET timescaledb.restoring='off'"
+
+echo "Testing restored"
+docker_pgdiff timescaledb-updated timescaledb-clean-restore /src/test/sql/updates/test-0.1.1.sql
+
