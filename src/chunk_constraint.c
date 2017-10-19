@@ -171,7 +171,7 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *constraint)
 	NameData	constraint_name;
 
 	/* quiet valgrind */
-	memset(constraint_name.data, 0,  NAMEDATALEN);
+	memset(constraint_name.data, 0, NAMEDATALEN);
 	snprintf(constraint_name.data, NAMEDATALEN, "constraint_%d", constraint->fd.dimension_slice_id);
 
 	memset(values, 0, sizeof(values));
