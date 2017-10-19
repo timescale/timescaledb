@@ -49,7 +49,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   113
+   110
 (1 row)
 
 \d+ public."two_Partitions"
@@ -171,7 +171,28 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-(28 rows)
+        1 | 1_1_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+        2 | 2_2_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+        3 | 3_3_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+        4 | 4_4_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+(32 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
+----------+--------------------+---------------------------------------+-----------------------------------
+        1 |                  1 | constraint_1                          | 
+        1 |                  2 | constraint_2                          | 
+        2 |                  3 | constraint_3                          | 
+        2 |                  2 | constraint_2                          | 
+        3 |                  4 | constraint_4                          | 
+        3 |                  2 | constraint_2                          | 
+        4 |                  1 | constraint_1                          | 
+        4 |                  5 | constraint_5                          | 
+        1 |                    | 1_1_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+        2 |                    | 2_2_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+        3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+        4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+(12 rows)
 
 \c postgres :ROLE_SUPERUSER
 \! pg_dump -h localhost -U :ROLE_SUPERUSER -Fc single > dump/single.sql
@@ -192,7 +213,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   113
+   110
 (1 row)
 
 --main table and chunk schemas should be the same
@@ -315,7 +336,28 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
         4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-(28 rows)
+        1 | 1_1_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+        2 | 2_2_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+        3 | 3_3_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+        4 | 4_4_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
+(32 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
+----------+--------------------+---------------------------------------+-----------------------------------
+        1 |                  1 | constraint_1                          | 
+        1 |                  2 | constraint_2                          | 
+        2 |                  3 | constraint_3                          | 
+        2 |                  2 | constraint_2                          | 
+        3 |                  4 | constraint_4                          | 
+        3 |                  2 | constraint_2                          | 
+        4 |                  1 | constraint_1                          | 
+        4 |                  5 | constraint_5                          | 
+        1 |                    | 1_1_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+        2 |                    | 2_2_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+        3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+        4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+(12 rows)
 
 --check simple ddl still works
 ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;

@@ -94,8 +94,8 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 		.name = "ddl_change_owner",
 		.args = 2,
 	},
-	[DDL_ADD_CONSTRAINT] = {
-		.name = "add_constraint_by_name",
+	[DDL_CREATE_CHUNK_CONSTRAINT] = {
+		.name = "create_chunk_constraint",
 		.args = 2,
 	},
 	[DDL_DROP_CONSTRAINT] = {

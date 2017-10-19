@@ -320,6 +320,8 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	/* Create all indexes on the chunk */
 	chunk_index_create_all(ht->fd.id, ht->main_table_relid, chunk->fd.id, chunk->table_id);
 
+	chunk_constraint_create_all_on_chunk(ht, chunk);
+
 	catalog_restore_user(&sec_ctx);
 
 	return chunk;

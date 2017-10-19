@@ -603,8 +603,7 @@ Check constraints:
     "constraint_5" CHECK ("time" >= 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone AND "time" < 'Sun Apr 23 17:00:00 2017 PDT'::timestamp with time zone)
 Inherits: index_test
 
--- Constraint indexes NOT added to chunk_index table (maybe they
--- should be for consistency?)
+-- Constraint indexes are added to chunk_index table.
 SELECT * FROM _timescaledb_catalog.chunk_index;
  chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
 ----------+---------------------------------------------+---------------+----------------------------
@@ -614,6 +613,19 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
         4 | _hyper_4_4_chunk_index_test_time_temp_idx   |             4 | index_test_time_temp_idx
         3 | _hyper_4_3_chunk_index_test_time_idx        |             4 | index_test_time_idx
         4 | _hyper_4_4_chunk_index_test_time_idx        |             4 | index_test_time_idx
+        3 | 3_1_index_test_time_device_key              |             4 | index_test_time_device_key
+        4 | 4_2_index_test_time_device_key              |             4 | index_test_time_device_key
+(8 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id |        constraint_name         | hypertable_constraint_name 
+----------+--------------------+--------------------------------+----------------------------
+        3 |                  3 | constraint_3                   | 
+        3 |                  4 | constraint_4                   | 
+        4 |                  5 | constraint_5                   | 
+        4 |                  4 | constraint_4                   | 
+        3 |                    | 3_1_index_test_time_device_key | index_test_time_device_key
+        4 |                    | 4_2_index_test_time_device_key | index_test_time_device_key
 (6 rows)
 
 DROP TABLE index_test;

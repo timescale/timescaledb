@@ -7,6 +7,7 @@
 #include <catalog/index.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_constraint_fn.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
@@ -88,11 +89,6 @@ static bool expect_chunk_modification = false;
 						 ObjectIdGetDatum((hypertable)->main_table_relid), \
 						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
 
-#define process_add_hypertable_constraint(hypertable, constraint_name) \
-	CatalogInternalCall2(DDL_ADD_CONSTRAINT,						   \
-						 Int32GetDatum((hypertable)->fd.id),		   \
-						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
-
 #define process_drop_hypertable_constraint(hypertable, constraint_name) \
 	CatalogInternalCall2(DDL_DROP_CONSTRAINT,							\
 						 Int32GetDatum((hypertable)->fd.id),			\
@@ -163,7 +159,7 @@ process_truncate(Node *parsetree)
 
 			if (ht != NULL)
 			{
-				process_truncate_hypertable(ht, truncatestmt->behavior == DROP_CASCADE)
+				process_truncate_hypertable(ht, truncatestmt->behavior == DROP_CASCADE);
 			}
 		}
 	}
@@ -474,7 +470,7 @@ process_drop_index(DropStmt *stmt)
 			 * chunks
 			 */
 			if (NULL != ht)
-				chunk_index_delete_children_of(ht, idxrelid);
+				chunk_index_delete_children_of(ht, idxrelid, true);
 			else
 			{
 				/* Drop an index on a chunk */
@@ -695,17 +691,22 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 }
 
 static void
+process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	Oid			hypertable_constraint_oid = *((Oid *) arg);
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+
+	chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
+}
+
+static void
 process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 {
-	CatalogSecurityContext sec_ctx;
+	Oid			hypertable_constraint_oid = get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
 
 	Assert(constraint_name != NULL);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
-	process_utility_set_expect_chunk_modification(true);
-	process_add_hypertable_constraint(ht, constraint_name);
-	process_utility_set_expect_chunk_modification(false);
-	catalog_restore_user(&sec_ctx);
+	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
 }
 
 static void
@@ -713,14 +714,25 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 {
 	char	   *constraint_name = NULL;
 	CatalogSecurityContext sec_ctx;
+	Oid			hypertable_constraint_oid,
+				hypertable_constraint_index_oid;
 
 	constraint_name = cmd->name;
 	Assert(constraint_name != NULL);
 
+	hypertable_constraint_oid = get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
+	hypertable_constraint_index_oid = get_constraint_index(hypertable_constraint_oid);
+
 	catalog_become_owner(catalog_get(), &sec_ctx);
+
 	process_utility_set_expect_chunk_modification(true);
 	process_drop_hypertable_constraint(ht, constraint_name);
 	process_utility_set_expect_chunk_modification(false);
+
+	if (OidIsValid(hypertable_constraint_index_oid))
+	{
+		chunk_index_delete_children_of(ht, hypertable_constraint_index_oid, false);
+	}
 	catalog_restore_user(&sec_ctx);
 }
 
@@ -1077,6 +1089,11 @@ process_altertable_start(Node *parsetree)
 						verify_constraint_hypertable(ht, cmd->def);
 				}
 				break;
+			case AT_DropConstraint:
+			case AT_DropConstraintRecurse:
+				if (ht != NULL)
+					process_altertable_drop_constraint(ht, cmd);
+				break;
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				Assert(IsA(cmd->def, Constraint));
@@ -1143,10 +1160,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 
 				process_altertable_add_constraint(ht, conname);
 			}
-			break;
-		case AT_DropConstraint:
-		case AT_DropConstraintRecurse:
-			process_altertable_drop_constraint(ht, cmd);
 			break;
 		case AT_AlterColumnType:
 			Assert(IsA(cmd->def, ColumnDef));

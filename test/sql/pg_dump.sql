@@ -32,6 +32,7 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 
 -- Show all index mappings
 SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 \c postgres :ROLE_SUPERUSER
 
@@ -58,6 +59,7 @@ SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", devi
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
 
 SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 --check simple ddl still works
 ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;
