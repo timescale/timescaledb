@@ -118,10 +118,6 @@ BEGIN
             USING ERRCODE = 'IO101';
     END;
 
-    PERFORM _timescaledb_internal.add_constraint(hypertable_row.id, oid)
-    FROM pg_constraint
-    WHERE conrelid = main_table;
-
    IF create_default_indexes THEN
         PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
     END IF;

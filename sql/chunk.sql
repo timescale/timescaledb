@@ -72,12 +72,5 @@ BEGIN
 
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable WHERE id = chunk_row.hypertable_id;
     main_table_oid := format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass;
-
-    --create the hypertable-constraints copy
-    PERFORM _timescaledb_internal.create_chunk_constraint(chunk_row.id, oid)
-    FROM pg_constraint
-    WHERE conrelid = main_table_oid
-    AND _timescaledb_internal.need_chunk_constraint(oid);
-
 END
 $BODY$;

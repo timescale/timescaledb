@@ -35,43 +35,6 @@ create_index_colnames(Relation indexrel)
 }
 
 /*
- * Get the relation's non-constraint indexes as a list of index OIDs.
- *
- * Constraint indexes are created as a result of creating the associated
- * constraint, so we want to exclude them when we create indexes on a chunk.
- */
-static List *
-relation_get_non_constraint_indexes(Relation rel)
-{
-	List	   *indexlist = RelationGetIndexList(rel);
-	Relation	conrel;
-	SysScanDesc conscan;
-	ScanKeyData skey[1];
-	HeapTuple	htup;
-
-	ScanKeyInit(&skey[0],
-				Anum_pg_constraint_conrelid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(RelationGetRelid(rel)));
-
-	conrel = heap_open(ConstraintRelationId, AccessShareLock);
-	conscan = systable_beginscan(conrel, ConstraintRelidIndexId, true,
-								 NULL, 1, skey);
-
-	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
-	{
-		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
-
-		indexlist = list_delete_oid(indexlist, ObjectIdGetDatum(conform->conindid));
-	}
-
-	systable_endscan(conscan);
-	heap_close(conrel, AccessShareLock);
-
-	return indexlist;
-}
-
-/*
  * Pick a name for a chunk index.
  *
  * The chunk's index name will the original index name prefixed with the chunk's
@@ -254,6 +217,21 @@ chunk_index_insert(int32 chunk_id,
 	return result;
 }
 
+void
+chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constraint, int32 chunk_id, Oid chunk_constraint)
+{
+	Oid			chunk_indexrelid = get_constraint_index(chunk_constraint);
+	Oid			hypertable_indexrelid = get_constraint_index(hypertable_constraint);
+
+	Assert(OidIsValid(chunk_indexrelid));
+	Assert(OidIsValid(hypertable_indexrelid));
+
+	chunk_index_insert(chunk_id,
+					   get_rel_name(chunk_indexrelid),
+					   hypertable_id,
+					   get_rel_name(hypertable_indexrelid));
+}
+
 /*
  * Create a new chunk index as a child of a parent hypertable index.
  *
@@ -261,22 +239,30 @@ chunk_index_insert(int32 chunk_id,
  * relation. This function is typically called when a new chunk is created and
  * it should, for each hypertable index, have a corresponding index of its own.
  */
-static Oid
+static void
 chunk_index_create(int32 hypertable_id,
 				   Relation hypertable_idxrel,
 				   int32 chunk_id,
 				   Relation chunkrel,
-				   bool isconstraint)
+				   Oid constraint_oid)
 {
 	Oid			chunk_indexrelid;
 
-	chunk_indexrelid = chunk_relation_index_create(hypertable_idxrel, chunkrel, isconstraint);
+	if (OidIsValid(constraint_oid))
+	{
+		/*
+		 * If there is an associated constraint then that constraint created
+		 * both the index and the catalog entry for the index
+		 */
+		return;
+	}
+	chunk_indexrelid = chunk_relation_index_create(hypertable_idxrel, chunkrel, false);
 	chunk_index_insert(chunk_id,
 					   get_rel_name(chunk_indexrelid),
 					   hypertable_id,
 					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
 
-	return chunk_indexrelid;
+	return;
 }
 
 /*
@@ -350,13 +336,14 @@ chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id
 	 * from constraints. Instead, we prune the main table's index list,
 	 * removing those indexes that are supporting a constraint.
 	 */
-	indexlist = relation_get_non_constraint_indexes(htrel);
+	indexlist = RelationGetIndexList(htrel);
 
 	foreach(lc, indexlist)
 	{
-		Relation	hypertable_idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
+		Oid			hypertable_idxoid = lfirst_oid(lc);
+		Relation	hypertable_idxrel = relation_open(hypertable_idxoid, AccessShareLock);
 
-		chunk_index_create(hypertable_id, hypertable_idxrel, chunk_id, chunkrel, false);
+		chunk_index_create(hypertable_id, hypertable_idxrel, chunk_id, chunkrel, get_index_constraint(hypertable_idxoid));
 		relation_close(hypertable_idxrel, AccessShareLock);
 	}
 
@@ -407,13 +394,10 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid)
+chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool should_drop)
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(hypertable_indexrelid);
-	bool		should_drop = true;		/* In addition to deleting metadata,
-										 * we should also drop all children
-										 * tables */
 
 	ScanKeyInit(&scankey[0],
 	  Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,

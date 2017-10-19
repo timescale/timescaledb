@@ -129,9 +129,9 @@ ALTER TABLE index_test ADD UNIQUE (time, device);
 
 \d+ index_test
 \d+ _timescaledb_internal._hyper*_chunk
--- Constraint indexes NOT added to chunk_index table (maybe they
--- should be for consistency?)
+-- Constraint indexes are added to chunk_index table.
 SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 DROP TABLE index_test;
 

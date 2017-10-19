@@ -57,13 +57,17 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_constraint(
     chunk_id INTEGER,
     constraint_oid OID
 )
-    RETURNS VOID LANGUAGE PLPGSQL AS
+    RETURNS OID LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
     chunk_constraint_row _timescaledb_catalog.chunk_constraint;
+    chunk_row _timescaledb_catalog.chunk;
     constraint_row pg_constraint;
+    hypertable_index_class_row pg_class;
+    chunk_index_class_row pg_class;
     constraint_name TEXT;
     hypertable_constraint_name TEXT = NULL;
+    chunk_constraint_oid OID;
 BEGIN
     SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
     hypertable_constraint_name := constraint_row.conname;
@@ -72,7 +76,17 @@ BEGIN
     INSERT INTO _timescaledb_catalog.chunk_constraint (chunk_id, constraint_name, dimension_slice_id, hypertable_constraint_name)
     VALUES (chunk_id, constraint_name, NULL, hypertable_constraint_name) RETURNING * INTO STRICT chunk_constraint_row;
 
+    --create actual constraint
     PERFORM _timescaledb_internal.chunk_constraint_add_table_constraint(chunk_constraint_row);
+
+    SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk chunk WHERE chunk.id = chunk_id;
+
+    SELECT oid INTO STRICT chunk_constraint_oid
+    FROM pg_constraint con
+    WHERE con.conrelid = format('%I.%I', chunk_row.schema_name, chunk_row.table_name)::regclass
+    AND con.conname = constraint_name;
+
+    RETURN chunk_constraint_oid;
 END
 $BODY$;
 
@@ -88,6 +102,7 @@ $BODY$
 DECLARE
     chunk_row _timescaledb_catalog.chunk;
     chunk_constraint_row _timescaledb_catalog.chunk_constraint;
+    constraint_row pg_constraint;
 BEGIN
     SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_id;
 
@@ -96,6 +111,11 @@ BEGIN
     AND cc.chunk_id = drop_chunk_constraint.chunk_id
     RETURNING * INTO STRICT chunk_constraint_row;
 
+    SELECT * INTO STRICT constraint_row
+    FROM pg_constraint con
+    WHERE con.conrelid = format('%I.%I', chunk_row.schema_name, chunk_row.table_name)::regclass
+    AND con.conname = constraint_name;
+
     IF alter_table THEN
         EXECUTE format(
             $$  ALTER TABLE %I.%I DROP CONSTRAINT %I $$,
@@ -103,71 +123,6 @@ BEGIN
         );
     END IF;
 
-END
-$BODY$;
-
--- do I need to add a hypertable constraint to the chunks?;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.need_chunk_constraint(
-    constraint_oid OID
-)
-    RETURNS BOOLEAN LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    constraint_row record;
-BEGIN
-    SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
-
-    IF constraint_row.contype IN ('c') THEN
-        -- check and not null constraints handled by regular inheritance (from docs):
-        --    All check constraints and not-null constraints on a parent table are automatically inherited by its children,
-        --    unless explicitly specified otherwise with NO INHERIT clauses. Other types of constraints
-        --    (unique, primary key, and foreign key constraints) are not inherited."
-
-        IF constraint_row.connoinherit THEN
-            RAISE 'NO INHERIT option not supported on hypertables: %', constraint_row.conname
-            USING ERRCODE = 'IO101';
-        END IF;
-
-        RETURN FALSE;
-    END IF;
-    RETURN TRUE;
-END
-$BODY$;
-
--- Creates a constraint on all chunks for a hypertable.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.add_constraint(
-    hypertable_id INTEGER,
-    constraint_oid OID
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    constraint_row pg_constraint;
-    hypertable_row _timescaledb_catalog.hypertable;
-BEGIN
-    IF _timescaledb_internal.need_chunk_constraint(constraint_oid) THEN
-        SELECT * INTO STRICT constraint_row FROM pg_constraint WHERE OID = constraint_oid;
-
-        PERFORM _timescaledb_internal.create_chunk_constraint(c.id, constraint_oid)
-        FROM _timescaledb_catalog.chunk c
-        WHERE c.hypertable_id = add_constraint.hypertable_id;
-    END IF;
-END
-$BODY$;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.add_constraint_by_name(
-    hypertable_id INTEGER,
-    constraint_name name
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    constraint_oid OID;
-BEGIN
-    SELECT oid INTO STRICT constraint_oid FROM pg_constraint WHERE conname = constraint_name
-    AND conrelid = _timescaledb_internal.main_table_from_hypertable(hypertable_id);
-
-    PERFORM _timescaledb_internal.add_constraint(hypertable_id, constraint_oid);
 END
 $BODY$;
 

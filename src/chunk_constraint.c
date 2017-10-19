@@ -4,12 +4,23 @@
 #include <access/heapam.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
+#include <catalog/pg_constraint.h>
+#include <catalog/objectaddress.h>
 
 #include "scanner.h"
 #include "chunk_constraint.h"
+#include "chunk_index.h"
 #include "dimension_slice.h"
 #include "hypercube.h"
 #include "chunk.h"
+#include "hypertable.h"
+#include "errors.h"
+#include "process_utility.h"
+
+#define create_chunk_constraint(chunk, constraint_oid)		\
+	DatumGetObjectId(CatalogInternalCall2(DDL_CREATE_CHUNK_CONSTRAINT, \
+						 Int32GetDatum(chunk->fd.id),	\
+						 ObjectIdGetDatum(constraint_oid)))
 
 static inline ChunkConstraint *
 chunk_constraint_fill(ChunkConstraint *cc, HeapTuple tuple)
@@ -189,4 +200,91 @@ chunk_constraint_insert_multi(ChunkConstraint *constraints, Size num_constraints
 		chunk_constraint_insert_relation(rel, &constraints[i]);
 
 	heap_close(rel, RowExclusiveLock);
+}
+
+static bool
+chunk_constraint_need_on_chunk(Form_pg_constraint conform)
+{
+	if (conform->contype == CONSTRAINT_CHECK)
+	{
+		/*
+		 * check and not null constraints handled by regular inheritance (from
+		 * docs): All check constraints and not-null constraints on a parent
+		 * table are automatically inherited by its children, unless
+		 * explicitly specified otherwise with NO INHERIT clauses. Other types
+		 * of constraints (unique, primary key, and foreign key constraints)
+		 * are not inherited."
+		 */
+		if (conform->connoinherit)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
+					 errmsg("NO INHERIT option not supported on hypertables: %s", conform->conname.data)
+					 ));
+		}
+		return false;
+	}
+	return true;
+}
+
+static void
+chunk_constraint_create_on_chunk_impl(Hypertable *ht, Chunk *chunk, HeapTuple constraint_htup)
+{
+	Form_pg_constraint pg_constraint = (Form_pg_constraint) GETSTRUCT(constraint_htup);
+
+	if (chunk_constraint_need_on_chunk(pg_constraint))
+	{
+		Oid			hypertable_constraint_oid = HeapTupleGetOid(constraint_htup);
+		Oid			chunk_constraint_oid;
+		CatalogSecurityContext sec_ctx;
+
+		catalog_become_owner(catalog_get(), &sec_ctx);
+		process_utility_set_expect_chunk_modification(true);
+		chunk_constraint_oid = create_chunk_constraint(chunk, hypertable_constraint_oid);
+		process_utility_set_expect_chunk_modification(false);
+		catalog_restore_user(&sec_ctx);
+
+		Assert(OidIsValid(chunk_constraint_oid));
+
+		if (OidIsValid(pg_constraint->conindid) && pg_constraint->contype != CONSTRAINT_FOREIGN)
+		{
+			chunk_index_create_from_constraint(ht->fd.id, hypertable_constraint_oid, chunk->fd.id, chunk_constraint_oid);
+		}
+	}
+}
+
+void
+chunk_constraint_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
+{
+	ScanKeyData skey;
+	Relation	rel;
+	SysScanDesc scan;
+	HeapTuple	htup;
+
+	ScanKeyInit(&skey,
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber, F_OIDEQ, ht->main_table_relid);
+
+	rel = heap_open(ConstraintRelationId, AccessShareLock);
+	scan = systable_beginscan(rel, ConstraintRelidIndexId, true,
+							  NULL, 1, &skey);
+
+	while (HeapTupleIsValid(htup = systable_getnext(scan)))
+	{
+		chunk_constraint_create_on_chunk_impl(ht, chunk, htup);
+	}
+	systable_endscan(scan);
+	heap_close(rel, AccessShareLock);
+}
+
+void
+chunk_constraint_create_on_chunk(Hypertable *ht, Chunk *chunk, Oid constraintOid)
+{
+	Relation	rel;
+	HeapTuple	htup;
+
+	rel = heap_open(ConstraintRelationId, AccessShareLock);
+	htup = get_catalog_object_by_oid(rel, constraintOid);
+	chunk_constraint_create_on_chunk_impl(ht, chunk, htup);
+	heap_close(rel, AccessShareLock);
 }

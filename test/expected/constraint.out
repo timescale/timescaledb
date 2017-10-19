@@ -316,7 +316,7 @@ SELECT * FROM create_hypertable('hyper_fk', 'time', chunk_time_interval => 10);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_12_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_11_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO devices VALUES ('dev2');
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
@@ -324,7 +324,7 @@ INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 --delete should fail
 \set ON_ERROR_STOP 0
 DELETE FROM devices;
-ERROR:  update or delete on table "devices" violates foreign key constraint "8_14_hyper_fk_device_id_fkey" on table "_hyper_4_8_chunk"
+ERROR:  update or delete on table "devices" violates foreign key constraint "8_13_hyper_fk_device_id_fkey" on table "_hyper_4_8_chunk"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_fk DROP CONSTRAINT hyper_fk_device_id_fkey;
 --should now be able to add non-fk rows
@@ -395,7 +395,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_17_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_18_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_ex DROP CONSTRAINT hyper_ex_time_device_id_excl;
 --can now add
