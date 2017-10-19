@@ -172,3 +172,17 @@ DROP TABLE index_test CASCADE;
 \c single :ROLE_SUPERUSER
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
+
+-- Test expression indexes
+CREATE TABLE index_expr_test(id serial, time timestamptz, temp float, meta jsonb);
+
+-- Screw up the attribute numbers
+ALTER TABLE index_expr_test DROP COLUMN id;
+
+CREATE INDEX ON index_expr_test ((meta ->> 'field')) ;
+INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "value1"}');
+INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "value2"}');
+
+EXPLAIN (verbose, costs off)
+SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
+SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
