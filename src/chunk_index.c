@@ -12,6 +12,7 @@
 #include <utils/fmgroids.h>
 #include <utils/builtins.h>
 #include <nodes/parsenodes.h>
+#include <optimizer/var.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 
@@ -102,51 +103,138 @@ chunk_index_choose_name(const char *tabname, const char *main_index_name, Oid na
 	return idxname;
 }
 
+static inline AttrNumber
+find_attno_by_attname(TupleDesc tupdesc, Name attname)
+{
+	int			i;
+
+	if (NULL == attname)
+		return InvalidAttrNumber;
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		FormData_pg_attribute *attr = tupdesc->attrs[i];
+
+		if (strncmp(NameStr(attr->attname), NameStr(*attname), NAMEDATALEN) == 0)
+			return attr->attnum;
+	}
+	return InvalidAttrNumber;
+}
+
+static inline Name
+find_attname_by_attno(TupleDesc tupdesc, AttrNumber attno)
+{
+	int			i;
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		FormData_pg_attribute *attr = tupdesc->attrs[i];
+
+		if (attr->attnum == attno)
+			return &attr->attname;
+	}
+	return NULL;
+}
+
 /*
- * Translate a hypertable's index attribute numbers to match a chunk.
+ * Adjust attribute numbers for expression index definitions.
+ */
+static void
+chunk_adjust_expr_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chunkrel)
+{
+	ListCell   *lc;
+
+	foreach(lc, ii->ii_Expressions)
+	{
+		/* Get a list of references to all Vars in the expression */
+		List	   *vars = pull_var_clause(lfirst(lc), 0);
+		ListCell   *lc_var;
+
+		foreach(lc_var, vars)
+		{
+			/*
+			 * Find the chunk attribute that matches the Var. First, we need
+			 * to find the attributes name by looking up the hypertable
+			 * attribute using the Var's varattno. Then, given the attribute's
+			 * name, find the chunk attribute that matches.
+			 */
+			Var		   *var = lfirst(lc_var);
+			Name		attname = find_attname_by_attno(htrel->rd_att, var->varattno);
+
+			if (NULL == attname)
+				elog(ERROR, "Index expression var %u not found in chunk", var->varattno);
+
+			/* Adjust the Var's attno to match the chunk's attno */
+			var->varattno = find_attno_by_attname(chunkrel->rd_att, attname);
+
+			if (var->varattno == InvalidAttrNumber)
+				elog(ERROR, "Index attribute %s not found in chunk", NameStr(*attname));
+		}
+	}
+}
+
+/*
+ * Adjust column reference attribute numbers for regular indexes.
+ */
+static void
+chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
+{
+	int			i;
+
+	for (i = 0; i < idxrel->rd_att->natts; i++)
+	{
+		FormData_pg_attribute *idxattr = idxrel->rd_att->attrs[i];
+		AttrNumber	attno = find_attno_by_attname(chunkrel->rd_att, &idxattr->attname);
+
+		if (attno == InvalidAttrNumber)
+			elog(ERROR, "Index attribute %s not found in chunk",
+				 NameStr(idxattr->attname));
+
+		ii->ii_KeyAttrNumbers[i] = attno;
+	}
+}
+
+static inline bool
+chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
+{
+	/*
+	 * We should be able to safely assume that the only reason the number of
+	 * attributes differ is because we have removed columns in the base table,
+	 * leaving junk attributes that aren't inherited by the chunk.
+	 */
+	return !(htdesc->natts == chunkdesc->natts &&
+			 htdesc->tdhasoid == chunkdesc->tdhasoid);
+}
+
+/*
+ * Adjust a hypertable's index attribute numbers to match a chunk.
  *
  * A hypertable's IndexInfo for one of its indexes references the attributes
  * (columns) in the hypertable by number. These numbers might not be the same
  * for the corresponding attribute in one of its chunks. To be able to use an
  * IndexInfo from a hypertable's index to create a corresponding index on a
- * chunk, we need to translate the attribute numbers to match the chunk.
+ * chunk, we need to adjust the attribute numbers to match the chunk.
+ *
+ * We need to handle two cases: (1) regular indexes that reference columns
+ * directly, and (2) expression indexes that reference columns in expressions.
  */
 static void
-chunk_translate_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
+chunk_adjust_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chunkrel)
 {
-	int			i,
-				natts = 0;
-
 	Assert(ii->ii_NumIndexAttrs == idxrel->rd_att->natts);
 
-	for (i = 0; i < idxrel->rd_att->natts; i++)
-	{
-		bool		found = false;
-		int			j;
-
-		for (j = 0; j < chunkrel->rd_att->natts; j++)
-		{
-			if (strncmp(NameStr(idxrel->rd_att->attrs[i]->attname),
-						NameStr(chunkrel->rd_att->attrs[j]->attname),
-						NAMEDATALEN) == 0)
-			{
-				ii->ii_KeyAttrNumbers[natts++] = chunkrel->rd_att->attrs[j]->attnum;
-				found = true;
-				break;
-			}
-		}
-
-		if (!found)
-			elog(ERROR, "Index attribute %s not found in chunk",
-				 NameStr(idxrel->rd_att->attrs[i]->attname));
-	}
+	if (list_length(ii->ii_Expressions) == 0)
+		chunk_adjust_colref_attnos(ii, idxrel, chunkrel);
+	else
+		chunk_adjust_expr_attnos(ii, htrel, idxrel, chunkrel);
 }
 
 /*
  * Create a chunk index based on the configuration of the "parent" index.
  */
 static Oid
-chunk_relation_index_create(Relation hypertable_indexrel,
+chunk_relation_index_create(Relation htrel,
+							Relation hypertable_indexrel,
 							Relation chunkrel,
 							bool isconstraint)
 {
@@ -164,7 +252,8 @@ chunk_relation_index_create(Relation hypertable_indexrel,
 	 * Convert the IndexInfo's attnos to match the chunk instead of the
 	 * hypertable
 	 */
-	chunk_translate_attnos(indexinfo, hypertable_indexrel, chunkrel);
+	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
+		chunk_adjust_attnos(indexinfo, htrel, hypertable_indexrel, chunkrel);
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(hypertable_indexrel)));
 
@@ -261,22 +350,34 @@ chunk_index_insert(int32 chunk_id,
  * relation. This function is typically called when a new chunk is created and
  * it should, for each hypertable index, have a corresponding index of its own.
  */
-static Oid
-chunk_index_create(int32 hypertable_id,
+static void
+chunk_index_create(Relation hypertable_rel,
+				   int32 hypertable_id,
 				   Relation hypertable_idxrel,
 				   int32 chunk_id,
 				   Relation chunkrel,
-				   bool isconstraint)
+				   Oid constraint_oid)
 {
 	Oid			chunk_indexrelid;
 
-	chunk_indexrelid = chunk_relation_index_create(hypertable_idxrel, chunkrel, isconstraint);
+	if (OidIsValid(constraint_oid))
+	{
+		/*
+		 * If there is an associated constraint then that constraint created
+		 * both the index and the catalog entry for the index
+		 */
+		return;
+	}
+
+	chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
+												   hypertable_idxrel,
+												   chunkrel,
+												   false);
+
 	chunk_index_insert(chunk_id,
 					   get_rel_name(chunk_indexrelid),
 					   hypertable_id,
 					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
-
-	return chunk_indexrelid;
 }
 
 /*
@@ -354,9 +455,16 @@ chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id
 
 	foreach(lc, indexlist)
 	{
-		Relation	hypertable_idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
+		Oid			hypertable_idxoid = lfirst_oid(lc);
+		Relation    hypertable_idxrel = relation_open(hypertable_idxoid, AccessShareLock);
 
-		chunk_index_create(hypertable_id, hypertable_idxrel, chunk_id, chunkrel, false);
+		chunk_index_create(htrel,
+						   hypertable_id,
+						   hypertable_idxrel,
+						   chunk_id,
+						   chunkrel,
+						   get_index_constraint(hypertable_idxoid));
+
 		relation_close(hypertable_idxrel, AccessShareLock);
 	}
 
