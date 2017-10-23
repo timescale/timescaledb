@@ -107,11 +107,11 @@ SELECT * FROM test.show_constraints('public."two_Partitions"');
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-              Constraint               | Type |             Columns             |                             Index                             |                                                                     Expr                                                                     
----------------------------------------+------+---------------------------------+---------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+              Constraint               | Type |             Columns             |                             Index                             |                                                                               Expr                                                                               
+---------------------------------------+------+---------------------------------+---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------
  1_1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_1_timecustom_device_id_series_2_key" | 
  constraint_1                          | c    | {timeCustom}                    | -                                                             | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint))
- constraint_2                          | c    | {device_id}                     | -                                                             | ((_timescaledb_internal.get_partition_hash(device_id) >= 1073741823) AND (_timescaledb_internal.get_partition_hash(device_id) < 2147483647))
+ constraint_2                          | c    | {device_id}                     | -                                                             | ((_timescaledb_internal.get_partition_hash(device_id) >= '1073741824'::bigint) AND (_timescaledb_internal.get_partition_hash(device_id) < '2147483648'::bigint))
 (3 rows)
 
 SELECT * FROM test.show_triggers('public."two_Partitions"');
@@ -294,11 +294,11 @@ SELECT * FROM test.show_constraints('public."two_Partitions"');
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-              Constraint               | Type |             Columns             |                             Index                             |                                                                     Expr                                                                     
----------------------------------------+------+---------------------------------+---------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+              Constraint               | Type |             Columns             |                             Index                             |                                                                               Expr                                                                               
+---------------------------------------+------+---------------------------------+---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------
  1_1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_1_timecustom_device_id_series_2_key" | 
  constraint_1                          | c    | {timeCustom}                    | -                                                             | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint))
- constraint_2                          | c    | {device_id}                     | -                                                             | ((_timescaledb_internal.get_partition_hash(device_id) >= 1073741823) AND (_timescaledb_internal.get_partition_hash(device_id) < 2147483647))
+ constraint_2                          | c    | {device_id}                     | -                                                             | ((_timescaledb_internal.get_partition_hash(device_id) >= '1073741824'::bigint) AND (_timescaledb_internal.get_partition_hash(device_id) < '2147483648'::bigint))
 (3 rows)
 
 SELECT * FROM test.show_triggers('public."two_Partitions"');

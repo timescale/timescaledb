@@ -35,7 +35,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
  id | dimension_id | range_start | range_end  
 ----+--------------+-------------+------------
   1 |            1 |           3 |          6
-  2 |            2 |           0 | 1073741823
+  2 |            2 |           0 | 1073741824
 (2 rows)
 
 INSERT INTO chunk_test VALUES (4, 24.3, 2, 1);
@@ -50,11 +50,11 @@ ORDER BY c.id, d.id;
     chunk_name    | dimension_id | slice_id | range_start | range_end  
 ------------------+--------------+----------+-------------+------------
  _hyper_1_1_chunk |            1 |        1 |           3 |          6
- _hyper_1_1_chunk |            2 |        2 |           0 | 1073741823
+ _hyper_1_1_chunk |            2 |        2 |           0 | 1073741824
  _hyper_1_2_chunk |            1 |        1 |           3 |          6
- _hyper_1_2_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_2_chunk |            2 |        3 |  1073741824 | 2147483648
  _hyper_1_3_chunk |            1 |        4 |           9 |         12
- _hyper_1_3_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_3_chunk |            2 |        3 |  1073741824 | 2147483648
 (6 rows)
 
 \c single :ROLE_SUPERUSER
@@ -94,11 +94,11 @@ ORDER BY c.id, d.id;
     chunk_name    | dimension_id | slice_id | range_start | range_end  
 ------------------+--------------+----------+-------------+------------
  _hyper_1_1_chunk |            1 |        1 |           3 |          6
- _hyper_1_1_chunk |            2 |        2 |           0 | 1073741823
+ _hyper_1_1_chunk |            2 |        2 |           0 | 1073741824
  _hyper_1_2_chunk |            1 |        1 |           3 |          6
- _hyper_1_2_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_2_chunk |            2 |        3 |  1073741824 | 2147483648
  _hyper_1_3_chunk |            1 |        4 |           9 |         12
- _hyper_1_3_chunk |            2 |        3 |  1073741823 | 2147483647
+ _hyper_1_3_chunk |            2 |        3 |  1073741824 | 2147483648
  _hyper_1_4_chunk |            1 |        5 |           8 |          9
  _hyper_1_4_chunk |            2 |        6 |           0 |  715827882
  _hyper_1_5_chunk |            1 |        7 |           6 |          8

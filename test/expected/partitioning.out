@@ -19,12 +19,12 @@ INSERT INTO part_legacy VALUES ('2017-03-22T09:18:23', 23.4, 76);
 VACUUM part_legacy;
 -- Show two chunks and CHECK constraint with cast
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
-                 Table                  |  Constraint  | Type | Columns  | Index |                                                                             Expr                                                                             
-----------------------------------------+--------------+------+----------+-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+                 Table                  |  Constraint  | Type | Columns  | Index |                                                                                       Expr                                                                                       
+----------------------------------------+--------------+------+----------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  _timescaledb_internal._hyper_1_1_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone))
- _timescaledb_internal._hyper_1_1_chunk | constraint_2 | c    | {device} | -     | ((_timescaledb_internal.get_partition_for_key((device)::text) >= 1073741823) AND (_timescaledb_internal.get_partition_for_key((device)::text) < 2147483647))
+ _timescaledb_internal._hyper_1_1_chunk | constraint_2 | c    | {device} | -     | ((_timescaledb_internal.get_partition_for_key((device)::text) >= '1073741824'::bigint) AND (_timescaledb_internal.get_partition_for_key((device)::text) < '2147483648'::bigint))
  _timescaledb_internal._hyper_1_2_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone))
- _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {device} | -     | ((_timescaledb_internal.get_partition_for_key((device)::text) >= 0) AND (_timescaledb_internal.get_partition_for_key((device)::text) < 1073741823))
+ _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {device} | -     | ((_timescaledb_internal.get_partition_for_key((device)::text) >= '0'::bigint) AND (_timescaledb_internal.get_partition_for_key((device)::text) < '1073741824'::bigint))
 (4 rows)
 
 -- Make sure constraint exclusion works on device column
@@ -63,12 +63,12 @@ INSERT INTO part_new VALUES ('2017-03-22T09:18:23', 23.4, 2);
 VACUUM part_new;
 -- Show two chunks and CHECK constraint without cast
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
-                 Table                  |  Constraint  | Type | Columns  | Index |                                                                      Expr                                                                      
-----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------
+                 Table                  |  Constraint  | Type | Columns  | Index |                                                                            Expr                                                                            
+----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------------------
  _timescaledb_internal._hyper_2_3_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone))
- _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {device} | -     | ((_timescaledb_internal.get_partition_hash(device) >= 0) AND (_timescaledb_internal.get_partition_hash(device) < 1073741823))
+ _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {device} | -     | ((_timescaledb_internal.get_partition_hash(device) >= '0'::bigint) AND (_timescaledb_internal.get_partition_hash(device) < '1073741824'::bigint))
  _timescaledb_internal._hyper_2_4_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone))
- _timescaledb_internal._hyper_2_4_chunk | constraint_6 | c    | {device} | -     | ((_timescaledb_internal.get_partition_hash(device) >= 1073741823) AND (_timescaledb_internal.get_partition_hash(device) < 2147483647))
+ _timescaledb_internal._hyper_2_4_chunk | constraint_6 | c    | {device} | -     | ((_timescaledb_internal.get_partition_hash(device) >= '1073741824'::bigint) AND (_timescaledb_internal.get_partition_hash(device) < '2147483648'::bigint))
 (4 rows)
 
 -- Make sure constraint exclusion works on device column
