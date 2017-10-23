@@ -108,7 +108,7 @@ BEGIN
 
         return format(
             $$
-                %1$I.%2$s(%3$I%4$s) >= %5$L AND %1$I.%2$s(%3$I%4$s) < %6$L
+                %1$I.%2$s(%3$I%4$s) >= %5$L::bigint AND %1$I.%2$s(%3$I%4$s) <  %6$L::bigint
             $$,
             dimension_row.partitioning_func_schema,
             dimension_row.partitioning_func,

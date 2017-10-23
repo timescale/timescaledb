@@ -288,11 +288,11 @@ INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
 --show the constraints on the three-dimensional chunk
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_15_chunk');
-  Constraint   | Type |  Columns   | Index |                                                                     Expr                                                                     
----------------+------+------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------
+  Constraint   | Type |  Columns   | Index |                                                                              Expr                                                                              
+---------------+------+------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------
  constraint_15 | c    | {time}     | -     | (("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone) AND ("time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone))
- constraint_16 | c    | {device}   | -     | ((_timescaledb_internal.get_partition_hash(device) >= 0) AND (_timescaledb_internal.get_partition_hash(device) < 1073741823))
- constraint_17 | c    | {location} | -     | ((_timescaledb_internal.get_partition_hash(location) >= 1073741823) AND (_timescaledb_internal.get_partition_hash(location) < 2147483647))
+ constraint_16 | c    | {device}   | -     | ((_timescaledb_internal.get_partition_hash(device) >= '0'::bigint) AND (_timescaledb_internal.get_partition_hash(device) < '1073741824'::bigint))
+ constraint_17 | c    | {location} | -     | ((_timescaledb_internal.get_partition_hash(location) >= '1073741824'::bigint) AND (_timescaledb_internal.get_partition_hash(location) < '2147483648'::bigint))
 (3 rows)
 
 --queries should work in three dimensions

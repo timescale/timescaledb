@@ -143,7 +143,7 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 	return HeapTupleGetDatum(tuple);
 }
 
-#define RANGE_VALUE_MAX PG_INT32_MAX
+#define RANGE_VALUE_MAX ((int64)PG_INT32_MAX + 1)
 
 static DimensionSlice *
 calculate_open_range_default(Dimension *dim, int64 value)
@@ -192,7 +192,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 				range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
-	int64		interval = RANGE_VALUE_MAX / dim->fd.num_slices;
+	int64		interval = RANGE_VALUE_MAX / ((int64)dim->fd.num_slices);
 	int64		last_start = interval * (dim->fd.num_slices - 1);
 
 	if (value < 0)
