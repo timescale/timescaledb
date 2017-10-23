@@ -82,6 +82,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
 	MemoryContext oldcontext = CurrentMemoryContext;
+	ChunkInsertState *prev_cis = NULL;
 
 	ErrorContextCallback errcallback;
 	CommandId	mycid = GetCurrentCommandId(true);
@@ -218,8 +219,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		Oid			loaded_oid = InvalidOid;
 		Point	   *point;
 		ChunkDispatch *dispatch = ccstate->dispatch;
-		ChunkInsertState *cis,
-				   *prev_cis = NULL;
+		ChunkInsertState *cis;
 
 		CHECK_FOR_INTERRUPTS();
 
