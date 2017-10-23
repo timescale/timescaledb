@@ -17,6 +17,7 @@ typedef struct ChunkInsertState
 	List	   *arbiter_indexes;
 	TupleConversionMap *tup_conv_map;
 	TupleTableSlot *slot;
+	MemoryContext mctx;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
