@@ -24,3 +24,9 @@ INNER JOIN pg_constraint pg_hypertable_con ON (
 INNER JOIN pg_class pg_hypertable_index_class ON (
     pg_hypertable_con.conindid = pg_hypertable_index_class.oid
 );
+
+-- Upgrade support for setting partitioning function
+DROP FUNCTION create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean);
+DROP FUNCTION add_dimension(regclass,name,integer,bigint);
+DROP FUNCTION _timescaledb_internal.create_hypertable_row(regclass,name,name,name,name,integer,name,name,bigint,name);
+DROP FUNCTION _timescaledb_internal.add_dimension(regclass,_timescaledb_catalog.hypertable,name,integer,bigint,boolean);
