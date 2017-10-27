@@ -9,7 +9,9 @@
 -- associated_schema_name - (Optional) Schema for internal hypertable tables
 -- associated_table_prefix - (Optional) Prefix for internal hypertable table names
 -- chunk_time_interval - (Optional) Initial time interval for a chunk
--- create_default_indexes - (Optional) Whether or not to create the default indexes.
+-- create_default_indexes - (Optional) Whether or not to create the default indexes
+-- if_not_exists - (Optional) Do not fail if table is already a hypertable
+-- partitioning_func - (Optional) The partitioning function to use for spatial partitioning
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -19,7 +21,8 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     associated_table_prefix NAME = NULL,
     chunk_time_interval     anyelement = NULL::bigint,
     create_default_indexes  BOOLEAN = TRUE,
-    if_not_exists           BOOLEAN = FALSE
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
     SECURITY DEFINER SET search_path = ''
@@ -102,7 +105,8 @@ BEGIN
             associated_schema_name,
             associated_table_prefix,
             chunk_time_interval_actual,
-            tablespace_name
+            tablespace_name,
+            partitioning_func
         );
     EXCEPTION
         WHEN unique_violation THEN
@@ -128,7 +132,8 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     main_table              REGCLASS,
     column_name             NAME,
     number_partitions       INTEGER = NULL,
-    interval_length         BIGINT = NULL
+    interval_length         BIGINT = NULL,
+    partitioning_func       REGPROC = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
     SECURITY DEFINER SET search_path = ''
@@ -162,7 +167,8 @@ BEGIN
                                                 hypertable_row,
                                                 column_name,
                                                 number_partitions,
-                                                interval_length);
+                                                interval_length,
+                                                partitioning_func);
 END
 $BODY$;
 

@@ -1,22 +1,11 @@
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
-SELECT create_hypertable('part_legacy', 'time', 'device', 2);
+SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
  create_hypertable 
 -------------------
  
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                    |   2592000000000
-  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_hash |                
-(2 rows)
-
-\c single :ROLE_SUPERUSER
-UPDATE _timescaledb_catalog.dimension SET partitioning_func = 'get_partition_for_key'
-WHERE partitioning_func IS NOT NULL;
-\c single :ROLE_DEFAULT_PERM_USER
--- Show updated partitioning function
+-- Show legacy partitioning function is used
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
 ----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
@@ -143,7 +132,7 @@ SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
 
 INSERT INTO part_new_convert1 VALUES ('2017-03-22T09:18:23', 1.0, 2);
 \set ON_ERROR_STOP 0
--- Changing the type of a hash-partitioned column should be unsupported
+-- Changing the type of a hash-partitioned column should not be supported
 ALTER TABLE part_new_convert1 ALTER COLUMN temp TYPE numeric;
 ERROR:  Cannot change the type of a hash-partitioned column
 \set ON_ERROR_STOP 1
@@ -163,4 +152,35 @@ Check constraints:
     "constraint_7" CHECK ("time" >= 'Wed Feb 22 16:00:00 2017'::timestamp without time zone AND "time" < 'Fri Mar 24 17:00:00 2017'::timestamp without time zone)
     "constraint_8" CHECK (_timescaledb_internal.get_partition_hash(temp) >= 0 AND _timescaledb_internal.get_partition_hash(temp) < 1073741823)
 Inherits: part_new_convert1
+
+CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
+SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => 'bad_func');
+ERROR:  function "bad_func" does not exist at character 74
+\set ON_ERROR_STOP 1
+SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+ add_dimension 
+---------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                       |   2592000000000
+  2 |             1 | device      | integer                     | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+  3 |             2 | time        | timestamp with time zone    | t       |            |                          |                       |   2592000000000
+  4 |             2 | device      | integer                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
+  6 |             3 | temp        | double precision            | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
+  5 |             3 | time        | timestamp without time zone | t       |            |                          |                       |   2592000000000
+  7 |             4 | time        | timestamp with time zone    | t       |            |                          |                       |   2592000000000
+  8 |             4 | temp        | double precision            | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
+  9 |             4 | location    | integer                     | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
+(9 rows)
 

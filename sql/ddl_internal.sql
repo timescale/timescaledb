@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
     associated_schema_name   NAME,
     associated_table_prefix  NAME,
     chunk_time_interval      BIGINT,
-    tablespace               NAME
+    tablespace               NAME,
+    partitioning_func        REGPROC
 )
     RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
@@ -63,6 +64,7 @@ BEGIN
                                                 time_column_name,
                                                 NULL,
                                                 chunk_time_interval,
+                                                NULL,
                                                 FALSE);
 
     IF partitioning_column IS NOT NULL THEN
@@ -71,7 +73,8 @@ BEGIN
                                                     hypertable_row,
                                                     partitioning_column,
                                                     number_partitions,
-                                                    NULL);
+                                                    NULL,
+                                                    partitioning_func);
     END IF;
 
     -- Verify indexes
@@ -146,12 +149,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
     column_name              NAME,
     num_slices               INTEGER = NULL,
     interval_length          BIGINT = NULL,
+    partitioning_func        REGPROC = NULL,
     increment_num_dimensions BOOLEAN = TRUE
 )
     RETURNS _timescaledb_catalog.dimension LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    partitioning_func        _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_hash';
+    partitioning_func_name   _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_hash';
     partitioning_func_schema _timescaledb_catalog.dimension.partitioning_func_schema%TYPE = '_timescaledb_internal';
     aligned                  BOOL;
     column_type              REGTYPE;
@@ -182,7 +186,7 @@ BEGIN
     END IF;
 
     IF num_slices IS NULL THEN
-        partitioning_func := NULL;
+        partitioning_func_name := NULL;
         partitioning_func_schema := NULL;
         aligned = TRUE;
     ELSE
@@ -192,6 +196,14 @@ BEGIN
             USING ERRCODE ='IO101';
         END IF;
         aligned = FALSE;
+
+        IF partitioning_func IS NOT NULL THEN
+            SELECT n.nspname, p.proname
+            FROM pg_proc p, pg_namespace n
+            WHERE p.pronamespace = n.oid
+            AND p.oid = partitioning_func
+            INTO STRICT partitioning_func_schema, partitioning_func_name;
+        END IF;
     END IF;
 
     BEGIN
@@ -201,7 +213,7 @@ BEGIN
             interval_length
         ) VALUES (
             hypertable_row.id, column_name, column_type, aligned,
-            num_slices::smallint, partitioning_func_schema, partitioning_func,
+            num_slices::smallint, partitioning_func_schema, partitioning_func_name,
             interval_length
         ) RETURNING * INTO dimension_row;
     EXCEPTION
