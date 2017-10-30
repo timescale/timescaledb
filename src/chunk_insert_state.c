@@ -188,6 +188,22 @@ chunk_infer_arbiter_indexes(int rindex, List *rtable, Query *parse)
 }
 
 /*
+ * Check if tuple conversion is needed between a chunk and its parent table.
+ *
+ * Since a chunk should have the same attributes (columns) as its parent, the
+ * only reason tuple conversion should be needed is if the parent has had one or
+ * more columns removed, leading to a garbage attribute and inflated number of
+ * attributes that aren't inherited by new children tables.
+ */
+static inline bool
+tuple_conversion_needed(TupleDesc indesc,
+						TupleDesc outdesc)
+{
+	return (indesc->natts != outdesc->natts ||
+			indesc->tdhasoid != outdesc->tdhasoid);
+}
+
+/*
  * Create new insert chunk state.
  *
  * This is essentially a ResultRelInfo for a chunk. Initialization of the
@@ -256,8 +272,9 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	/* Set tuple conversion map, if tuple needs conversion */
 	parent_rel = heap_open(dispatch->hypertable->main_table_relid, AccessShareLock);
 
-	state->tup_conv_map = convert_tuples_by_name(RelationGetDescr(parent_rel),
-												 RelationGetDescr(rel),
+	if (tuple_conversion_needed(RelationGetDescr(parent_rel), RelationGetDescr(rel)))
+		state->tup_conv_map = convert_tuples_by_name(RelationGetDescr(parent_rel),
+													 RelationGetDescr(rel),
 								 gettext_noop("could not convert row type"));
 
 	/* Need a tuple table slot to store converted tuples */
