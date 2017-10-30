@@ -6,6 +6,7 @@ CREATE TABLE regular_table(time timestamp, temp float8, tag text, color integer)
 -- Renaming indexes should work
 CREATE INDEX time_color_idx ON regular_table(time, color);
 ALTER INDEX time_color_idx RENAME TO time_color_idx2;
+ALTER TABLE regular_table ALTER COLUMN color TYPE bigint;
 \d+ regular_table
                                Table "public.regular_table"
  Column |            Type             | Modifiers | Storage  | Stats target | Description 
@@ -13,7 +14,7 @@ ALTER INDEX time_color_idx RENAME TO time_color_idx2;
  time   | timestamp without time zone |           | plain    |              | 
  temp   | double precision            |           | plain    |              | 
  tag    | text                        |           | extended |              | 
- color  | integer                     |           | plain    |              | 
+ color  | bigint                      |           | plain    |              | 
 Indexes:
     "time_color_idx2" btree ("time", color)
 
