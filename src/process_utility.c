@@ -1074,7 +1074,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 }
 
 static void
-process_altertable_start(Node *parsetree)
+process_altertable_start_table(Node *parsetree)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 	Oid			relid = AlterTableLookupRelation(stmt, NoLock);
@@ -1122,7 +1122,9 @@ process_altertable_start(Node *parsetree)
 				break;
 			case AT_AlterColumnType:
 				Assert(IsA(cmd->def, ColumnDef));
-				process_alter_column_type_start(ht, cmd);
+
+				if (ht != NULL)
+					process_alter_column_type_start(ht, cmd);
 				break;
 			default:
 				break;
@@ -1130,6 +1132,21 @@ process_altertable_start(Node *parsetree)
 	}
 
 	cache_release(hcache);
+}
+
+static void
+process_altertable_start(Node *parsetree)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
+
+	switch (stmt->relkind)
+	{
+		case OBJECT_TABLE:
+			process_altertable_start_table(parsetree);
+			break;
+		default:
+			break;
+	}
 }
 
 static void
@@ -1270,7 +1287,6 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 			break;
 	}
 }
-
 
 static void
 create_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)

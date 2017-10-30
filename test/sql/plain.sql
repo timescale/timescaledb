@@ -8,6 +8,7 @@ CREATE TABLE regular_table(time timestamp, temp float8, tag text, color integer)
 -- Renaming indexes should work
 CREATE INDEX time_color_idx ON regular_table(time, color);
 ALTER INDEX time_color_idx RENAME TO time_color_idx2;
+ALTER TABLE regular_table ALTER COLUMN color TYPE bigint;
 
 \d+ regular_table
 
