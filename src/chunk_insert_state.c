@@ -235,8 +235,6 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	state->mctx = cis_context;
 	state->chunk = chunk;
 	state->rel = rel;
-	state->rti = rti;
-	state->estate = dispatch->estate;
 	state->result_relation_info = create_chunk_result_relation_info(dispatch, rel, rti);
 
 	if (state->result_relation_info->ri_RelationDesc->rd_rel->relhasindex &&

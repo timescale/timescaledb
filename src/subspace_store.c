@@ -73,10 +73,8 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 			vec = last->storage;
 		}
 
-		if (vec->num_slices > 0)
-		{
-			Assert(vec->slices[0]->fd.dimension_id == target->fd.dimension_id);
-		}
+		Assert(0 == vec->num_slices ||
+			   vec->slices[0]->fd.dimension_id == target->fd.dimension_id);
 
 		match = dimension_vec_find_slice(vec, target->fd.range_start);
 
@@ -90,7 +88,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 				 * At dimension 0 only keep one slice. This is an optimization
 				 * to prevent this store from growing too large.
 				 */
-				Assert(vec->num_slices = 1);
+				Assert(1 == vec->num_slices);
 				dimension_vec_remove_slice(vecptr, 0);
 			}
 			copy = dimension_slice_copy(target);
