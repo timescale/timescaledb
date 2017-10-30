@@ -24,6 +24,24 @@ static inline Index
 create_chunk_range_table_entry(EState *estate, Relation rel)
 {
 	RangeTblEntry *rte;
+	ListCell   *lc;
+	Index		rti = 1;
+
+	/*
+	 * Check if we previously created an entry for this relation. This can
+	 * happen if we close a chunk insert state and then reopen it in the same
+	 * transaction. Reusing an entry ensures the range table never grows
+	 * larger than the number of chunks in a table, although it imposes a
+	 * penalty for looking up old entries.
+	 */
+	foreach(lc, estate->es_range_table)
+	{
+		rte = lfirst(lc);
+
+		if (rte->relid == RelationGetRelid(rel))
+			return rti;
+		rti++;
+	}
 
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
@@ -134,7 +152,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	rri = palloc0(sizeof(ResultRelInfo));
 	NodeSetTag(rri, T_ResultRelInfo);
 
-	InitResultRelInfo(rri, rel, rti, 0);
+	InitResultRelInfo(rri, rel, rti, dispatch->estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
 	rri_orig = dispatch->hypertable_result_rel_info;
@@ -198,7 +216,10 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("Hypertables don't support row-level security")));
 
-	/* Switch to executor's per-query context */
+	/*
+	 * We must allocate the range table entry on the executor's per-query
+	 * context
+	 */
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
 	rel = heap_open(chunk->table_id, RowExclusiveLock);
@@ -214,6 +235,8 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	state->mctx = cis_context;
 	state->chunk = chunk;
 	state->rel = rel;
+	state->rti = rti;
+	state->estate = dispatch->estate;
 	state->result_relation_info = create_chunk_result_relation_info(dispatch, rel, rti);
 
 	if (state->result_relation_info->ri_RelationDesc->rd_rel->relhasindex &&
