@@ -28,22 +28,21 @@
 #include <miscadmin.h>
 
 #include "process_utility.h"
-#include "utils.h"
 #include "catalog.h"
-#include "hypertable_cache.h"
-#include "hypercube.h"
-#include "chunk_index.h"
-#include "extension.h"
-#include "executor.h"
-#include "copy.h"
 #include "chunk.h"
-#include "guc.h"
-#include "trigger.h"
-#include "event_trigger.h"
-#include "indexing.h"
-#include "errors.h"
-#include "guc.h"
+#include "chunk_index.h"
 #include "compat.h"
+#include "copy.h"
+#include "errors.h"
+#include "event_trigger.h"
+#include "executor.h"
+#include "extension.h"
+#include "guc.h"
+#include "hypercube.h"
+#include "hypertable_cache.h"
+#include "indexing.h"
+#include "trigger.h"
+#include "utils.h"
 
 void		_process_utility_init(void);
 void		_process_utility_fini(void);
@@ -1632,7 +1631,7 @@ timescaledb_ddl_command_start(
 		prev_ProcessUtility(&args);
 }
 
-PG_FUNCTION_INFO_V1(timescaledb_ddl_command_end);
+TS_FUNCTION_INFO_V1(timescaledb_ddl_command_end);
 
 /*
  * Event trigger hook for DDL commands that have alread been handled by

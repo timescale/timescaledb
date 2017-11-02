@@ -11,6 +11,9 @@ endif (UNIX)
 if (APPLE)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -multiply_defined suppress")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -multiply_defined suppress -Wl,-undefined,dynamic_lookup -Wl,-dead_strip_dylibs -bundle_loader ${PG_BINDIR}/postgres")
+elseif (WIN32)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /MANIFEST:NO")
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /MANIFEST:NO")
 endif (APPLE)
 
 include_directories (${CMAKE_CURRENT_BINARY_DIR} ${PG_INCLUDEDIR_SERVER})
@@ -18,6 +21,7 @@ include_directories (${CMAKE_CURRENT_BINARY_DIR} ${PG_INCLUDEDIR_SERVER})
 if (WIN32)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib ws2_32.lib")
   include_directories(${CMAKE_CURRENT_BINARY_DIR} ${PG_INCLUDEDIR})
+  set(CMAKE_C_FLAGS "-D_CRT_SECURE_NO_WARNINGS")
   include_directories(${PG_INCLUDEDIR_SERVER}/port/win32)
 
 if (MSVC)
@@ -37,6 +41,8 @@ set(HEADERS
   chunk_index.h
   chunk_insert_state.h
   compat-endian.h
+  compat-msvc-enter.h
+  compat-msvc-exit.h
   constraint_aware_append.h
   copy.h
   dimension.h

@@ -7,6 +7,8 @@
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
 
+#include "compat.h"
+
 /* bookend aggregates first and last:
  *	 first(value, cmp) returns the value for the row with the smallest cmp element.
  *	 last(value, cmp) returns the value for the row with the biggest cmp element.
@@ -15,23 +17,13 @@
  *	 SELECT first(metric, time), last(metric, time) FROM metric GROUP BY hostname.
  */
 
-PGDLLEXPORT Datum first_sfunc(PG_FUNCTION_ARGS);
-PGDLLEXPORT Datum first_combinefunc(PG_FUNCTION_ARGS);
-PGDLLEXPORT Datum last_sfunc(PG_FUNCTION_ARGS);
-PGDLLEXPORT Datum last_combinefunc(PG_FUNCTION_ARGS);
-PGDLLEXPORT Datum bookend_finalfunc(PG_FUNCTION_ARGS);
-PGDLLEXPORT Datum bookend_serializefunc(PG_FUNCTION_ARGS);
-PGDLLEXPORT Datum bookend_deserializefunc(PG_FUNCTION_ARGS);
-
-
-PG_FUNCTION_INFO_V1(first_sfunc);
-PG_FUNCTION_INFO_V1(first_combinefunc);
-PG_FUNCTION_INFO_V1(last_sfunc);
-PG_FUNCTION_INFO_V1(last_combinefunc);
-PG_FUNCTION_INFO_V1(bookend_finalfunc);
-PG_FUNCTION_INFO_V1(bookend_serializefunc);
-PG_FUNCTION_INFO_V1(bookend_deserializefunc);
-
+TS_FUNCTION_INFO_V1(first_sfunc);
+TS_FUNCTION_INFO_V1(first_combinefunc);
+TS_FUNCTION_INFO_V1(last_sfunc);
+TS_FUNCTION_INFO_V1(last_combinefunc);
+TS_FUNCTION_INFO_V1(bookend_finalfunc);
+TS_FUNCTION_INFO_V1(bookend_serializefunc);
+TS_FUNCTION_INFO_V1(bookend_deserializefunc);
 
 /* A  PolyDatum represents a polymorphic datum */
 typedef struct PolyDatum

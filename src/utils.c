@@ -17,7 +17,7 @@
 #include <utils/fmgrprotos.h>
 #endif
 
-PG_FUNCTION_INFO_V1(pg_timestamp_to_microseconds);
+TS_FUNCTION_INFO_V1(pg_timestamp_to_microseconds);
 
 /*
  * Convert a Postgres TIMESTAMP to BIGINT microseconds relative the Postgres epoch.
@@ -46,7 +46,7 @@ pg_timestamp_to_microseconds(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(microseconds);
 }
 
-PG_FUNCTION_INFO_V1(pg_microseconds_to_timestamp);
+TS_FUNCTION_INFO_V1(pg_microseconds_to_timestamp);
 
 /*
  * Convert BIGINT microseconds relative the UNIX epoch to a Postgres TIMESTAMP.
@@ -71,7 +71,7 @@ pg_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMPTZ(timestamp);
 }
 
-PG_FUNCTION_INFO_V1(pg_timestamp_to_unix_microseconds);
+TS_FUNCTION_INFO_V1(pg_timestamp_to_unix_microseconds);
 
 /*
  * Convert a Postgres TIMESTAMP to BIGINT microseconds relative the UNIX epoch.
@@ -106,7 +106,7 @@ pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(microseconds);
 }
 
-PG_FUNCTION_INFO_V1(pg_unix_microseconds_to_timestamp);
+TS_FUNCTION_INFO_V1(pg_unix_microseconds_to_timestamp);
 
 /*
  * Convert BIGINT microseconds relative the UNIX epoch to a Postgres TIMESTAMP.
@@ -140,7 +140,7 @@ pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMPTZ(timestamp);
 }
 
-PG_FUNCTION_INFO_V1(time_to_internal);
+TS_FUNCTION_INFO_V1(time_to_internal);
 
 Datum
 time_to_internal(PG_FUNCTION_ARGS)
@@ -270,7 +270,7 @@ get_interval_period(Interval *interval)
 #endif
 }
 
-PG_FUNCTION_INFO_V1(timestamp_bucket);
+TS_FUNCTION_INFO_V1(timestamp_bucket);
 Datum
 timestamp_bucket(PG_FUNCTION_ARGS)
 {
@@ -302,7 +302,7 @@ timestamp_bucket(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMP(result);
 }
 
-PG_FUNCTION_INFO_V1(timestamptz_bucket);
+TS_FUNCTION_INFO_V1(timestamptz_bucket);
 Datum
 timestamptz_bucket(PG_FUNCTION_ARGS)
 {
@@ -359,7 +359,7 @@ check_period_is_daily(int64 period)
 	}
 }
 
-PG_FUNCTION_INFO_V1(date_bucket);
+TS_FUNCTION_INFO_V1(date_bucket);
 
 Datum
 date_bucket(PG_FUNCTION_ARGS)

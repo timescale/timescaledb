@@ -5,12 +5,13 @@
 #include <funcapi.h>
 
 #include "catalog.h"
+#include "compat.h"
 #include "dimension.h"
-#include "hypertable.h"
-#include "scanner.h"
-#include "partitioning.h"
-#include "utils.h"
 #include "dimension_slice.h"
+#include "hypertable.h"
+#include "partitioning.h"
+#include "scanner.h"
+#include "utils.h"
 
 static int
 cmp_dimension_id(const void *left, const void *right)
@@ -181,9 +182,7 @@ calculate_open_range_default(Dimension *dim, int64 value)
 	return dimension_slice_create(dim->fd.id, range_start, range_end);
 }
 
-PGDLLEXPORT Datum dimension_calculate_open_range_default(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(dimension_calculate_open_range_default);
+TS_FUNCTION_INFO_V1(dimension_calculate_open_range_default);
 
 /*
  * Expose open dimension range calculation for testing purposes.
@@ -233,9 +232,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 	return dimension_slice_create(dim->fd.id, range_start, range_end);
 }
 
-PGDLLEXPORT Datum dimension_calculate_closed_range_default(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(dimension_calculate_closed_range_default);
+TS_FUNCTION_INFO_V1(dimension_calculate_closed_range_default);
 
 /*
  * Exposed closed dimension range calculation for testing purposes.

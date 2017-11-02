@@ -37,8 +37,8 @@ extern void _event_trigger_fini(void);
 extern void _parse_analyze_init(void);
 extern void _parse_analyze_fini(void);
 
-extern void _PG_init(void);
-extern void _PG_fini(void);
+extern void PGDLLEXPORT _PG_init(void);
+extern void PGDLLEXPORT _PG_fini(void);
 
 void
 _PG_init(void)

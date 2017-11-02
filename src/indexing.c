@@ -5,10 +5,11 @@
 #include <utils/lsyscache.h>
 #include <fmgr.h>
 
-#include "hypertable_cache.h"
+#include "indexing.h"
+#include "compat.h"
 #include "dimension.h"
 #include "errors.h"
-#include "indexing.h"
+#include "hypertable_cache.h"
 
 /*
  * Verify that index columns cover all partitioning dimensions.
@@ -104,7 +105,7 @@ build_indexcolumn_list(Relation idxrel)
 	return columns;
 }
 
-PG_FUNCTION_INFO_V1(indexing_verify_hypertable_indexes);
+TS_FUNCTION_INFO_V1(indexing_verify_hypertable_indexes);
 
 /*
  * Verify that unique, primary and exclusion indexes on a hypertable cover all
@@ -116,23 +117,18 @@ indexing_verify_hypertable_indexes(PG_FUNCTION_ARGS)
 	Oid			hypertable_relid = PG_GETARG_OID(0);
 	Cache	   *hcache = hypertable_cache_pin();
 	Hypertable *ht = hypertable_cache_get_entry(hcache, hypertable_relid);
-
 	if (NULL != ht)
 	{
 		Relation	tblrel = relation_open(hypertable_relid, AccessShareLock);
 		List	   *indexlist = RelationGetIndexList(tblrel);
 		ListCell   *lc;
-
 		foreach(lc, indexlist)
 		{
 			Relation	idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
-
 			if (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion)
 				indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
-
 			relation_close(idxrel, AccessShareLock);
 		}
-
 		relation_close(tblrel, AccessShareLock);
 	}
 
