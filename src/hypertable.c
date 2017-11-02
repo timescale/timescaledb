@@ -9,6 +9,7 @@
 #include "hypertable.h"
 #include "dimension.h"
 #include "chunk.h"
+#include "compat.h"
 #include "subspace_store.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
@@ -201,7 +202,7 @@ is_hypertable(Oid relid)
 	return hypertable_relid_lookup(relid) != InvalidOid;
 }
 
-PG_FUNCTION_INFO_V1(hypertable_validate_triggers);
+TS_FUNCTION_INFO_V1(hypertable_validate_triggers);
 
 Datum
 hypertable_validate_triggers(PG_FUNCTION_ARGS)

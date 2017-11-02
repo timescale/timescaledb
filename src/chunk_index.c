@@ -758,7 +758,7 @@ chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 	heap_close(rel, AccessShareLock);
 }
 
-PG_FUNCTION_INFO_V1(chunk_index_clone);
+TS_FUNCTION_INFO_V1(chunk_index_clone);
 Datum
 chunk_index_clone(PG_FUNCTION_ARGS)
 {
@@ -795,7 +795,7 @@ chunk_index_clone(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(new_chunk_indexrelid);
 }
 
-PG_FUNCTION_INFO_V1(chunk_index_replace);
+TS_FUNCTION_INFO_V1(chunk_index_replace);
 Datum
 chunk_index_replace(PG_FUNCTION_ARGS)
 {

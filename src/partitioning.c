@@ -19,6 +19,7 @@
 #include <nodes/pg_list.h>
 
 #include "partitioning.h"
+#include "compat.h"
 #include "catalog.h"
 #include "utils.h"
 
@@ -199,7 +200,7 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 /* _timescaledb_catalog.get_partition_for_key(key anyelement) RETURNS INT */
 PGDLLEXPORT Datum get_partition_for_key(PG_FUNCTION_ARGS);
 
-PG_FUNCTION_INFO_V1(get_partition_for_key);
+TS_FUNCTION_INFO_V1(get_partition_for_key);
 
 /*
  * Partition hash function that first converts all inputs to text before
@@ -244,7 +245,7 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 
 PGDLLEXPORT Datum get_partition_hash(PG_FUNCTION_ARGS);
 
-PG_FUNCTION_INFO_V1(get_partition_hash);
+TS_FUNCTION_INFO_V1(get_partition_hash);
 
 /*
  * Compute a partition hash value for any input type.

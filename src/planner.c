@@ -5,10 +5,13 @@
 #include <optimizer/planner.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
-#include <optimizer/cost.h>
 #include <catalog/namespace.h>
 #include <utils/guc.h>
 #include <miscadmin.h>
+
+#include "compat-msvc-enter.h"
+#include <optimizer/cost.h>
+#include "compat-msvc-exit.h"
 
 #include "hypertable_cache.h"
 #include "extension.h"

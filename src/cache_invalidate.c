@@ -7,9 +7,10 @@
 #include <nodes/nodes.h>
 #include <miscadmin.h>
 
-#include "hypertable_cache.h"
 #include "catalog.h"
+#include "compat.h"
 #include "extension.h"
+#include "hypertable_cache.h"
 
 /*
  * Notes on the way cache invalidation works.
@@ -81,7 +82,7 @@ trigger_event_to_cmdtype(TriggerEvent event)
 
 PGDLLEXPORT Datum invalidate_relcache_trigger(PG_FUNCTION_ARGS);
 
-PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
+TS_FUNCTION_INFO_V1(invalidate_relcache_trigger);
 
 /*
  * Trigger for catalog tables that invalidates caches.
@@ -107,9 +108,7 @@ invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 		return PointerGetDatum(trigdata->tg_trigtuple);
 }
 
-PGDLLEXPORT Datum invalidate_relcache(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(invalidate_relcache);
+TS_FUNCTION_INFO_V1(invalidate_relcache);
 
 /*
  * Force a cache invalidation for a catalog table.

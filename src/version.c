@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "fmgr.h"
+#include "compat.h"
 #include "gitcommit.h"
 
 #define STR_EXPAND(x) #x
@@ -9,9 +10,7 @@
 
 const char *git_commit = STR(EXT_GIT_COMMIT);
 
-PGDLLEXPORT Datum get_git_commit(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(get_git_commit);
+TS_FUNCTION_INFO_V1(get_git_commit);
 
 Datum
 get_git_commit(PG_FUNCTION_ARGS)

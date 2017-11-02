@@ -1,12 +1,15 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <access/transam.h>
-#include <commands/extension.h>
 #include <commands/event_trigger.h>
 #include <catalog/namespace.h>
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
+
+#include "compat-msvc-enter.h" /* To label externs in extension.h and miscadmin.h correctly */
+#include <commands/extension.h>
 #include <miscadmin.h>
+#include "compat-msvc-exit.h"
 
 #include "catalog.h"
 #include "extension.h"
@@ -195,7 +198,6 @@ extension_is_loaded(void)
 	if (creating_extension)
 	{
 		Oid			extension_oid = get_extension_oid(EXTENSION_NAME, true);
-
 		if (OidIsValid(extension_oid) && extension_oid == CurrentExtensionObject)
 			return false;
 	}

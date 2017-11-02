@@ -8,8 +8,8 @@
 
 #include <access/heapam.h>
 #include <access/sysattr.h>
-#include <access/xact.h>
 #include <access/hio.h>
+#include <access/xact.h>
 #include <commands/copy.h>
 #include <commands/trigger.h>
 #include <executor/executor.h>
@@ -17,6 +17,7 @@
 #include <nodes/makefuncs.h>
 #include <storage/bufmgr.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
@@ -463,6 +464,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	List	   *attnums;
 	ListCell   *cur;
 	RangeTblEntry *rte;
+    char       *xactReadOnly;
 
 	/* Disallow COPY to/from file or program except to superusers. */
 	if (!pipe && !superuser())
@@ -541,7 +543,8 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	Assert(rel);
 
 	/* check read-only transaction and parallel mode */
-	if (XactReadOnly && !rel->rd_islocaltemp)
+	xactReadOnly = GetConfigOptionByName("transaction_read_only", NULL, false);
+	if (strncmp(xactReadOnly, "on", sizeof("on")) == 0 && !rel->rd_islocaltemp)
 		PreventCommandIfReadOnly("COPY FROM");
 	PreventCommandIfParallelMode("COPY FROM");
 
