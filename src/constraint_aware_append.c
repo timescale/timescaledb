@@ -186,7 +186,8 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	state->num_append_subplans = list_length(*appendplans);
-	node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
+	if(state->num_append_subplans > 0)
+		node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
 }
 
 static TupleTableSlot *
@@ -242,7 +243,10 @@ ca_append_exec(CustomScanState *node)
 static void
 ca_append_end(CustomScanState *node)
 {
-	ExecEndNode(linitial(node->custom_ps));
+	if (node->custom_ps != NIL)
+	{
+		ExecEndNode(linitial(node->custom_ps));
+	}
 }
 
 static void
@@ -258,10 +262,12 @@ ca_append_explain(CustomScanState *node,
 				  ExplainState *es)
 {
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
+	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
 	Index		rti = linitial_int(linitial(cscan->custom_private));
 	RangeTblEntry *rte = rt_fetch(rti, es->rtable);
 
 	ExplainPropertyText("Hypertable", get_rel_name(rte->relid), es);
+	ExplainPropertyInteger("Chunks left after exclusion", state->num_append_subplans, es);
 }
 
 

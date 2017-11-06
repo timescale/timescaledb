@@ -44,6 +44,11 @@ EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_s() + '1 month';
 SELECT * FROM append_test WHERE time > now_s() + '1 month';
 
+--query should exclude all chunks and be a MergeAppend
+EXPLAIN (costs off)
+SELECT * FROM append_test WHERE time > now_s() + '1 month'
+ORDER BY time DESC limit 1;
+
 -- when optimized, the plan should be a constraint-aware append and
 -- cover only one chunk. It should be a backward index scan due to
 -- descending index on time. Should also skip the main table, since it
