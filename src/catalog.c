@@ -195,7 +195,7 @@ catalog_get(void)
 
 	memset(&catalog, 0, sizeof(Catalog));
 	catalog.database_id = MyDatabaseId;
-	strncpy(catalog.database_name, get_database_name(MyDatabaseId), NAMEDATALEN);
+	StrNCpy(catalog.database_name, get_database_name(MyDatabaseId), NAMEDATALEN);
 	catalog.schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
 	catalog.owner_uid = catalog_owner();
 
