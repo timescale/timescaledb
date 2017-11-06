@@ -23,6 +23,17 @@ hypercube_alloc(int16 num_dimensions)
 	return hc;
 }
 
+void
+hypercube_free(Hypercube *hc)
+{
+	int			i;
+
+	for (i = 0; i < hc->num_slices; i++)
+		dimension_slice_free(hc->slices[i]);
+
+	pfree(hc);
+}
+
 #if defined(USE_ASSERT_CHECKING)
 static inline bool
 hypercube_is_sorted(Hypercube *hc)
