@@ -1,5 +1,31 @@
 # TimescaleDB Changelog
 
+## 0.6.1 (2017-11-07)
+
+**High-level changes**
+
+* Fix several memory bugs that caused segfaults
+* Fix bug when creating expression indexes
+* Plug a memory leak with constraint expressions
+* Several other bug fixes and stability improvements
+
+**Notable commits**
+* [2799075] Fix EXPLAIN for ConstraintAware and MergeAppend
+* [8084594] Use per-chunk memory context for cached chunks
+* [a13d9de] Do not convert tuples on insert unless needed
+* [da09f24] Limit growth of range table during chunk inserts
+* [85dee79] Fix issue with creating expression indexes
+* [844ff7f] Fix memory leak due to constraint expressions.
+* [e90d3ee] Consider precvious CIS state in copy FROM file to rel
+* [56d632f] Fix bug with pointer assignment after realloc
+* [f97d624] Make event trigger creation idempotent
+
+**Thanks**
+* @jwdeitch for submitting a patch to correct behavior in the COPY operation
+* @jgraichen for reporting a bug with expression indexes
+* @zixet for reporting a memory leak
+* @djk447 for reporting a bug in EXPLAIN with ConstraintAware and MergeAppend
+
 ## 0.6.0 (2017-10-12)
 
 **High-level changes**
