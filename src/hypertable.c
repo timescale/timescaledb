@@ -27,14 +27,28 @@ hypertable_from_tuple(HeapTuple tuple)
 	return h;
 }
 
+typedef struct ChunkCacheEntry
+{
+	MemoryContext mcxt;
+	Chunk	   *chunk;
+}	ChunkCacheEntry;
+
+static void
+chunk_cache_entry_free(void *cce)
+{
+	MemoryContextDelete(((ChunkCacheEntry *) cce)->mcxt);
+}
+
 Chunk *
 hypertable_get_chunk(Hypertable *h, Point *point)
 {
-	Chunk	   *chunk = subspace_store_get(h->chunk_cache, point);
+	ChunkCacheEntry *cce = subspace_store_get(h->chunk_cache, point);
 
-	if (NULL == chunk)
+	if (NULL == cce)
 	{
-		MemoryContext old;
+		MemoryContext old_mcxt,
+					chunk_mcxt;
+		Chunk	   *chunk;
 
 		/*
 		 * chunk_find() must execute on a per-tuple memory context since it
@@ -50,18 +64,28 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 
 		Assert(chunk != NULL);
 
-		old = MemoryContextSwitchTo(subspace_store_mcxt(h->chunk_cache));
+		chunk_mcxt = AllocSetContextCreate(subspace_store_mcxt(h->chunk_cache),
+										   "chunk cache memory context",
+										   ALLOCSET_SMALL_SIZES);
+
+		old_mcxt = MemoryContextSwitchTo(chunk_mcxt);
+
+		cce = palloc(sizeof(ChunkCacheEntry));
+		cce->mcxt = chunk_mcxt;
 
 		/* Make a copy which lives in the chunk cache's memory context */
-		chunk = chunk_copy(chunk);
+		chunk = cce->chunk = chunk_copy(chunk);
 
-		Assert(NULL != chunk);
-		subspace_store_add(h->chunk_cache, chunk->cube, chunk, pfree);
-		MemoryContextSwitchTo(old);
+		subspace_store_add(h->chunk_cache, chunk->cube, cce, chunk_cache_entry_free);
+		MemoryContextSwitchTo(old_mcxt);
 	}
 
-	Assert(MemoryContextContains(subspace_store_mcxt(h->chunk_cache), chunk));
-	return chunk;
+	Assert(NULL != cce);
+	Assert(NULL != cce->chunk);
+	Assert(MemoryContextContains(cce->mcxt, cce));
+	Assert(MemoryContextContains(cce->mcxt, cce->chunk));
+
+	return cce->chunk;
 }
 
 static inline Oid
