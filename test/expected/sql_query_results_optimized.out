@@ -163,11 +163,12 @@ LIMIT 2;
          Group Key: (date_trunc('minute'::text, hyper_1."time"))
          ->  Custom Scan (ConstraintAwareAppend)
                Hypertable: hyper_1
+               Chunks left after exclusion: 1
                ->  Merge Append
                      Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
                      ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(9 rows)
+(10 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
 FROM hyper_1 
