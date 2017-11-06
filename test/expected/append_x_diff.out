@@ -23,12 +23,36 @@
 > -------------------------------------
 >  Custom Scan (ConstraintAwareAppend)
 >    Hypertable: append_test
->    ->  Append
+>    Chunks left after exclusion: 0
 > (3 rows)
 68,69d62
 < psql:include/append.sql:45: NOTICE:  Stable function now_s() called!
 < psql:include/append.sql:45: NOTICE:  Stable function now_s() called!
-84,95c77,85
+82,83c75,77
+<                                        QUERY PLAN                                       
+< ----------------------------------------------------------------------------------------
+---
+> psql:include/append.sql:50: NOTICE:  Stable function now_s() called!
+>                 QUERY PLAN                 
+> -------------------------------------------
+85,95c79,82
+<    ->  Merge Append
+<          Sort Key: append_test."time" DESC
+<          ->  Index Scan using append_test_time_idx on append_test
+<                Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
+<          ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
+<                Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
+<          ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+<                Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
+<          ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+<                Index Cond: ("time" > (now_s() + '@ 1 mon'::interval))
+< (11 rows)
+---
+>    ->  Custom Scan (ConstraintAwareAppend)
+>          Hypertable: append_test
+>          Chunks left after exclusion: 0
+> (4 rows)
+107,118c94,103
 <                                     QUERY PLAN                                    
 < ----------------------------------------------------------------------------------
 <  Append
@@ -42,25 +66,26 @@
 <          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
 < (9 rows)
 ---
-> psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:57: NOTICE:  Stable function now_s() called!
 >                                        QUERY PLAN                                       
 > ----------------------------------------------------------------------------------------
 >  Custom Scan (ConstraintAwareAppend)
 >    Hypertable: append_test
+>    Chunks left after exclusion: 1
 >    ->  Append
 >          ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
 >                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-> (5 rows)
-105d94
-< psql:include/append.sql:55: NOTICE:  Stable function now_s() called!
-120,121c109,111
+> (6 rows)
+128d112
+< psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
+143,144c127,129
 <                                            QUERY PLAN                                            
 < -------------------------------------------------------------------------------------------------
 ---
-> psql:include/append.sql:61: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:66: NOTICE:  Stable function now_s() called!
 >                                               QUERY PLAN                                               
 > -------------------------------------------------------------------------------------------------------
-123,133c113,119
+146,156c131,138
 <    ->  Merge Append
 <          Sort Key: append_test."time"
 <          ->  Index Scan Backward using append_test_time_idx on append_test
@@ -75,21 +100,22 @@
 ---
 >    ->  Custom Scan (ConstraintAwareAppend)
 >          Hypertable: append_test
+>          Chunks left after exclusion: 1
 >          ->  Merge Append
 >                Sort Key: _hyper_1_3_chunk."time"
 >                ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
 >                      Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-> (7 rows)
-144,145d129
-< psql:include/append.sql:65: NOTICE:  Stable function now_s() called!
-< psql:include/append.sql:65: NOTICE:  Stable function now_s() called!
-179,180c163,164
+> (8 rows)
+167,168d148
+< psql:include/append.sql:70: NOTICE:  Stable function now_s() called!
+< psql:include/append.sql:70: NOTICE:  Stable function now_s() called!
+202,203c182,183
 <                             QUERY PLAN                             
 < -------------------------------------------------------------------
 ---
 >                                QUERY PLAN                                
 > -------------------------------------------------------------------------
-183,191c167,175
+206,215c186,196
 <    ->  Append
 <          ->  Seq Scan on append_test
 <                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
@@ -99,9 +125,11 @@
 <                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
 <          ->  Seq Scan on _hyper_1_3_chunk
 <                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+< (11 rows)
 ---
 >    ->  Custom Scan (ConstraintAwareAppend)
 >          Hypertable: append_test
+>          Chunks left after exclusion: 3
 >          ->  Append
 >                ->  Seq Scan on _hyper_1_1_chunk
 >                      Filter: ("time" > (now_v() - '@ 2 mons'::interval))
@@ -109,10 +137,11 @@
 >                      Filter: ("time" > (now_v() - '@ 2 mons'::interval))
 >                ->  Seq Scan on _hyper_1_3_chunk
 >                      Filter: ("time" > (now_v() - '@ 2 mons'::interval))
-218,219d201
-< psql:include/append.sql:91: NOTICE:  Stable function now_s() called!
-< psql:include/append.sql:91: NOTICE:  Stable function now_s() called!
-227,239c209,218
+> (12 rows)
+241,242d221
+< psql:include/append.sql:96: NOTICE:  Stable function now_s() called!
+< psql:include/append.sql:96: NOTICE:  Stable function now_s() called!
+250,262c229,239
 <                                         QUERY PLAN                                         
 < -------------------------------------------------------------------------------------------
 <  Merge Append
@@ -127,41 +156,43 @@
 <          Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
 < (10 rows)
 ---
-> psql:include/append.sql:94: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
 >                                            QUERY PLAN                                            
 > -------------------------------------------------------------------------------------------------
 >  Custom Scan (ConstraintAwareAppend)
 >    Hypertable: append_test
+>    Chunks left after exclusion: 1
 >    ->  Merge Append
 >          Sort Key: _hyper_1_3_chunk."time"
 >          ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
 >                Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-> (6 rows)
-267a247
-> psql:include/append.sql:107: NOTICE:  Stable function now_s() called!
-274c254,255
+> (7 rows)
+290a268
+> psql:include/append.sql:112: NOTICE:  Stable function now_s() called!
+297c275,277
 <          ->  Result
 ---
 >          ->  Custom Scan (ConstraintAwareAppend)
 >                Hypertable: append_test
-276,279d256
+>                Chunks left after exclusion: 2
+299,302d278
 <                      ->  Seq Scan on append_test
 <                            Filter: ("time" > (now_s() - '@ 4 mons'::interval))
 <                      ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
 <                            Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-284c261
+307c283
 < (14 rows)
 ---
-> (11 rows)
-335,336c312,315
+> (12 rows)
+358,359c334,337
 <                                          QUERY PLAN                                         
 < --------------------------------------------------------------------------------------------
 ---
-> psql:include/append.sql:136: NOTICE:  Stable function now_s() called!
-> psql:include/append.sql:136: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:141: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:141: NOTICE:  Stable function now_s() called!
 >                                             QUERY PLAN                                            
 > --------------------------------------------------------------------------------------------------
-339,357c318,332
+362,380c340,356
 <    ->  Append
 <          ->  Seq Scan on append_test a
 <                Filter: ("time" > (now_s() - '@ 3 hours'::interval))
@@ -184,11 +215,13 @@
 ---
 >    ->  Custom Scan (ConstraintAwareAppend)
 >          Hypertable: append_test
+>          Chunks left after exclusion: 1
 >          ->  Append
 >                ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk a_1
 >                      Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
 >    ->  Custom Scan (ConstraintAwareAppend)
 >          Hypertable: join_test
+>          Chunks left after exclusion: 3
 >          ->  Append
 >                ->  Index Scan using _hyper_2_4_chunk_join_test_time_idx on _hyper_2_4_chunk j_1
 >                      Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
@@ -196,4 +229,4 @@
 >                      Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
 >                ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_3
 >                      Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-> (16 rows)
+> (18 rows)
