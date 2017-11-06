@@ -249,7 +249,6 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	MemoryContextSwitchTo(cis_context);
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;
-	state->chunk = chunk;
 	state->rel = rel;
 	state->result_relation_info = create_chunk_result_relation_info(dispatch, rel, rti);
 

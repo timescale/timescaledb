@@ -371,6 +371,15 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	return false;
 }
 
+void
+chunk_free(Chunk *chunk)
+{
+	if (NULL != chunk->cube)
+		hypercube_free(chunk->cube);
+
+	pfree(chunk);
+}
+
 /* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
  * The rest of the fields will be filled in from the table data. */
 static Chunk *

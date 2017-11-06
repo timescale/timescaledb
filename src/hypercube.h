@@ -23,6 +23,7 @@ typedef struct Hypercube
 
 
 extern Hypercube *hypercube_alloc(int16 num_dimensions);
+extern void hypercube_free(Hypercube *hc);
 extern void hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
 extern Hypercube *hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints);
 extern Hypercube *hypercube_calculate_from_point(Hyperspace *hs, Point *p);
