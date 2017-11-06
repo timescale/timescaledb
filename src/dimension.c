@@ -192,15 +192,16 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 				range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
-	int32		interval = RANGE_VALUE_MAX / dim->fd.num_slices;
+	int64		interval = RANGE_VALUE_MAX / dim->fd.num_slices;
+	int64		last_start = interval * (dim->fd.num_slices - 1);
 
 	if (value < 0)
 		elog(ERROR, "Invalid value " INT64_FORMAT " for closed dimension", value);
 
-	if (value >= (interval * (dim->fd.num_slices - 1)))
+	if (value >= last_start)
 	{
 		/* put overflow from integer-division errors in last range */
-		range_start = interval * (dim->fd.num_slices - 1);
+		range_start = last_start;
 		range_end = RANGE_VALUE_MAX;
 	}
 	else

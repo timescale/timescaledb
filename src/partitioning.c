@@ -85,12 +85,12 @@ partitioning_info_create(const char *schema,
 	FuncExpr   *expr;
 
 	pinfo = palloc0(sizeof(PartitioningInfo));
-	strncpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
-	strncpy(pinfo->column, partcol, NAMEDATALEN);
+	StrNCpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
+	StrNCpy(pinfo->column, partcol, NAMEDATALEN);
 	pinfo->column_attnum = get_attnum(relid, pinfo->column);
 
 	if (schema != NULL)
-		strncpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
+		StrNCpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
 
 	/* Lookup the type cache entry to access the hash function for the type */
 	columntype = get_atttype(relid, pinfo->column_attnum);
