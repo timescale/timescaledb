@@ -476,154 +476,67 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 						   "psql's \\copy command also works for anyone.")));
 	}
 
-	if (stmt->relation)
+	if (!is_from || NULL == stmt->relation)
 	{
-		TupleDesc	tupDesc;
-		AclMode		required_access = (is_from ? ACL_INSERT : ACL_SELECT);
-		List	   *attnums;
-		ListCell   *cur;
-		RangeTblEntry *rte;
-
-		Assert(!stmt->query);
-
-		/* Open and lock the relation, using the appropriate lock type. */
-		rel = heap_openrv(stmt->relation,
-						  (is_from ? RowExclusiveLock : AccessShareLock));
-
-		relid = RelationGetRelid(rel);
-
-		rte = makeNode(RangeTblEntry);
-		rte->rtekind = RTE_RELATION;
-		rte->relid = RelationGetRelid(rel);
-		rte->relkind = rel->rd_rel->relkind;
-		rte->requiredPerms = required_access;
-		range_table = list_make1(rte);
-
-		tupDesc = RelationGetDescr(rel);
-		attnums = timescaledb_CopyGetAttnums(tupDesc, rel, stmt->attlist);
-		foreach(cur, attnums)
-		{
-			int			attno = lfirst_int(cur) -
-			FirstLowInvalidHeapAttributeNumber;
-
-			if (is_from)
-				rte->insertedCols = bms_add_member(rte->insertedCols, attno);
-			else
-				rte->selectedCols = bms_add_member(rte->selectedCols, attno);
-		}
-		ExecCheckRTPerms(range_table, true);
-
-		/*
-		 * Permission check for row security policies.
-		 *
-		 * check_enable_rls will ereport(ERROR) if the user has requested
-		 * something invalid and will otherwise indicate if we should enable
-		 * RLS (returns RLS_ENABLED) or not for this COPY statement.
-		 *
-		 * If the relation has a row security policy and we are to apply it
-		 * then perform a "query" copy and allow the normal query processing
-		 * to handle the policies.
-		 *
-		 * If RLS is not enabled for this, then just fall through to the
-		 * normal non-filtering relation handling.
-		 */
-		if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
-		{
-			SelectStmt *select;
-			ColumnRef  *cr;
-			ResTarget  *target;
-			RangeVar   *from;
-			List	   *targetList = NIL;
-
-			if (is_from)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				   errmsg("COPY FROM not supported with row-level security"),
-						 errhint("Use INSERT statements instead.")));
-
-			/*
-			 * Build target list
-			 *
-			 * If no columns are specified in the attribute list of the COPY
-			 * command, then the target list is 'all' columns. Therefore, '*'
-			 * should be used as the target list for the resulting SELECT
-			 * statement.
-			 *
-			 * In the case that columns are specified in the attribute list,
-			 * create a ColumnRef and ResTarget for each column and add them
-			 * to the target list for the resulting SELECT statement.
-			 */
-			if (!stmt->attlist)
-			{
-				cr = makeNode(ColumnRef);
-				cr->fields = list_make1(makeNode(A_Star));
-				cr->location = -1;
-
-				target = makeNode(ResTarget);
-				target->name = NULL;
-				target->indirection = NIL;
-				target->val = (Node *) cr;
-				target->location = -1;
-
-				targetList = list_make1(target);
-			}
-			else
-			{
-				ListCell   *lc;
-
-				foreach(lc, stmt->attlist)
-				{
-					/*
-					 * Build the ColumnRef for each column.  The ColumnRef
-					 * 'fields' property is a String 'Value' node (see
-					 * nodes/value.h) that corresponds to the column name
-					 * respectively.
-					 */
-					cr = makeNode(ColumnRef);
-					cr->fields = list_make1(lfirst(lc));
-					cr->location = -1;
-
-					/* Build the ResTarget and add the ColumnRef to it. */
-					target = makeNode(ResTarget);
-					target->name = NULL;
-					target->indirection = NIL;
-					target->val = (Node *) cr;
-					target->location = -1;
-
-					/* Add each column to the SELECT statement's target list */
-					targetList = lappend(targetList, target);
-				}
-			}
-
-			/*
-			 * Build RangeVar for from clause, fully qualified based on the
-			 * relation which we have opened and locked.
-			 */
-			from = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)),
-								pstrdup(RelationGetRelationName(rel)),
-								-1);
-
-			/* Build query */
-			select = makeNode(SelectStmt);
-			select->targetList = targetList;
-			select->fromClause = list_make1(from);
-
-			/*
-			 * Close the relation for now, but keep the lock on it to prevent
-			 * changes between now and when we start the query-based COPY.
-			 *
-			 * We'll reopen it later as part of the query-based COPY.
-			 */
-			heap_close(rel, NoLock);
-			rel = NULL;
-		}
+		elog(ERROR, "timescale DoCopy should only be called for COPY FROM");
 	}
-	else
-	{
-		Assert(stmt->query);
 
-		relid = InvalidOid;
-		rel = NULL;
+	TupleDesc	tupDesc;
+	AclMode		required_access = (is_from ? ACL_INSERT : ACL_SELECT);
+	List	   *attnums;
+	ListCell   *cur;
+	RangeTblEntry *rte;
+
+	Assert(!stmt->query);
+
+	/* Open and lock the relation, using the appropriate lock type. */
+	rel = heap_openrv(stmt->relation,
+					  (is_from ? RowExclusiveLock : AccessShareLock));
+
+	relid = RelationGetRelid(rel);
+
+	rte = makeNode(RangeTblEntry);
+	rte->rtekind = RTE_RELATION;
+	rte->relid = RelationGetRelid(rel);
+	rte->relkind = rel->rd_rel->relkind;
+	rte->requiredPerms = required_access;
+	range_table = list_make1(rte);
+
+	tupDesc = RelationGetDescr(rel);
+	attnums = timescaledb_CopyGetAttnums(tupDesc, rel, stmt->attlist);
+	foreach(cur, attnums)
+	{
+		int			attno = lfirst_int(cur) -
+		FirstLowInvalidHeapAttributeNumber;
+
+		if (is_from)
+			rte->insertedCols = bms_add_member(rte->insertedCols, attno);
+		else
+			rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+	}
+	ExecCheckRTPerms(range_table, true);
+
+	/*
+	 * Permission check for row security policies.
+	 *
+	 * check_enable_rls will ereport(ERROR) if the user has requested
+	 * something invalid and will otherwise indicate if we should enable RLS
+	 * (returns RLS_ENABLED) or not for this COPY statement.
+	 *
+	 * If the relation has a row security policy and we are to apply it then
+	 * perform a "query" copy and allow the normal query processing to handle
+	 * the policies.
+	 *
+	 * If RLS is not enabled for this, then just fall through to the normal
+	 * non-filtering relation handling.
+	 */
+	if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
+	{
+		/* is_from is true here */
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("COPY FROM not supported with row-level security"),
+				 errhint("Use INSERT statements instead.")));
 	}
 
 	Assert(rel);
@@ -656,8 +569,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	 * got; if writing, we should hold the lock until end of transaction to
 	 * ensure that updates will be committed before lock is released.
 	 */
-	if (rel != NULL)
-		heap_close(rel, (is_from ? NoLock : AccessShareLock));
+	heap_close(rel, (is_from ? NoLock : AccessShareLock));
 
 	return relid;
 }
