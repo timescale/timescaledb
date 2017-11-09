@@ -2,8 +2,38 @@ set(EXT_SQL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
 set(EXT_SQL_UPDATE_FILE ${PROJECT_NAME}--${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
 set(EXT_SQL_UPDATE_PRE_FILE updates/pre-${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
 set(EXT_SQL_UPDATE_POST_FILE updates/post-${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
-file(STRINGS extra_extension_files.txt EXT_SQL_EXTRA_FILES)
-file(STRINGS load_order.txt SQL_FILES)
+
+set(SQL_FILES
+  schemas.sql
+  tables.sql
+  permissions.sql
+  chunk.sql
+  ddl_internal.sql
+  util_time.sql
+  util_internal_table_ddl.sql
+  chunk_constraint.sql
+  partitioning.sql
+  schema_info.sql
+  ddl_api.sql
+  ddl_triggers.sql
+  tablespace.sql
+  bookend.sql
+  time_bucket.sql
+  version.sql
+  cache_functions.sql
+  size_utils.sql
+  histogram.sql
+  cache.sql)
+
+set(EXT_SQL_EXTRA_FILES
+  timescaledb--0.1.0--0.2.0.sql
+  timescaledb--0.2.0--0.3.0.sql
+  timescaledb--0.3.0--0.4.0.sql
+  timescaledb--0.4.0--0.4.1.sql
+  timescaledb--0.4.1--0.4.2.sql
+  timescaledb--0.4.2--0.5.0.sql
+  timescaledb--0.5.0--0.6.0.sql
+  timescaledb--0.6.0--0.6.1.sql)
 
 if (WIN32)
   # Make list of files into string of files separated by "+"
