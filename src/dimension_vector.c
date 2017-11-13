@@ -6,21 +6,7 @@ cmp_slices(const void *left, const void *right)
 	const DimensionSlice *left_slice = *((DimensionSlice **) left);
 	const DimensionSlice *right_slice = *((DimensionSlice **) right);
 
-	if (left_slice->fd.range_start == right_slice->fd.range_start)
-	{
-		if (left_slice->fd.range_end == right_slice->fd.range_end)
-			return 0;
-
-		if (left_slice->fd.range_end > right_slice->fd.range_end)
-			return 1;
-
-		return -1;
-	}
-
-	if (left_slice->fd.range_start > right_slice->fd.range_start)
-		return 1;
-
-	return -1;
+	return dimension_slice_cmp(left_slice, right_slice);
 }
 
 static int
@@ -29,13 +15,7 @@ cmp_coordinate_and_slice(const void *left, const void *right)
 	int64		coord = *((int64 *) left);
 	const DimensionSlice *slice = *((DimensionSlice **) right);
 
-	if (coord < slice->fd.range_start)
-		return -1;
-
-	if (coord >= slice->fd.range_end)
-		return 1;
-
-	return 0;
+	return dimension_slice_cmp_coordinate(slice, coord);
 }
 
 static DimensionVec *

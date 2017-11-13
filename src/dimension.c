@@ -143,8 +143,6 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 	return HeapTupleGetDatum(tuple);
 }
 
-#define RANGE_VALUE_MAX ((int64)PG_INT32_MAX + 1)
-
 static DimensionSlice *
 calculate_open_range_default(Dimension *dim, int64 value)
 {
@@ -154,12 +152,30 @@ calculate_open_range_default(Dimension *dim, int64 value)
 	if (value < 0)
 	{
 		range_end = ((value + 1) / dim->fd.interval_length) * dim->fd.interval_length;
-		range_start = range_end - dim->fd.interval_length;
+
+		/* prevent integer underflow */
+		if (DIMENSION_SLICE_MINVALUE - range_end > -dim->fd.interval_length)
+		{
+			range_start = DIMENSION_SLICE_MINVALUE;
+		}
+		else
+		{
+			range_start = range_end - dim->fd.interval_length;
+		}
 	}
 	else
 	{
 		range_start = (value / dim->fd.interval_length) * dim->fd.interval_length;
-		range_end = range_start + dim->fd.interval_length;
+
+		/* prevent integer overflow */
+		if (DIMENSION_SLICE_MAXVALUE - range_start < dim->fd.interval_length)
+		{
+			range_end = DIMENSION_SLICE_MAXVALUE;
+		}
+		else
+		{
+			range_end = range_start + dim->fd.interval_length;
+		}
 	}
 
 	return dimension_slice_create(dim->fd.id, range_start, range_end);
@@ -192,7 +208,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 				range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
-	int64		interval = RANGE_VALUE_MAX / ((int64)dim->fd.num_slices);
+	int64		interval = DIMENSION_SLICE_CLOSED_MAX / ((int64)dim->fd.num_slices);
 	int64		last_start = interval * (dim->fd.num_slices - 1);
 
 	if (value < 0)
@@ -202,12 +218,16 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 	{
 		/* put overflow from integer-division errors in last range */
 		range_start = last_start;
-		range_end = RANGE_VALUE_MAX;
+		range_end = DIMENSION_SLICE_MAXVALUE;
 	}
 	else
 	{
 		range_start = (value / interval) * interval;
 		range_end = range_start + interval;
+		if (0 == range_start)
+		{
+			range_start = DIMENSION_SLICE_MINVALUE;
+		}
 	}
 
 	return dimension_slice_create(dim->fd.id, range_start, range_end);

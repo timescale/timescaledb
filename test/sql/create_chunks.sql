@@ -64,3 +64,21 @@ LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
 LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
 WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
 ORDER BY c.id, d.id;
+
+
+--test the edges of an open partition -- INT_64_MAX and INT_64_MIN.
+CREATE TABLE chunk_test_ends(time bigint, temp float8, tag integer, color integer);
+SELECT create_hypertable('chunk_test_ends', 'time', chunk_time_interval => 5);
+
+INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.1, 11233, 1);
+INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.1, 11233, 1);
+
+--try to hit cache
+INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.2, 11233, 1);
+INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.3, 11233, 1), (9223372036854775807::bigint, 24.4, 11233, 1);
+
+INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.2, 11233, 1);
+INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.3, 11233, 1), ((-9223372036854775808)::bigint, 23.4, 11233, 1);
+
+SELECT * FROM chunk_test_ends ORDER BY time asc;
+

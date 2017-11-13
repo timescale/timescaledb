@@ -8,6 +8,12 @@
 #include "dimension.h"
 #include "chunk_constraint.h"
 
+#define DIMENSION_SLICE_MAXVALUE ((int64)PG_INT64_MAX)
+#define DIMENSION_SLICE_MINVALUE ((int64)PG_INT64_MIN)
+
+/* partition functions return int32 */
+#define DIMENSION_SLICE_CLOSED_MAX ((int64)PG_INT32_MAX)
+
 typedef struct DimensionSlice
 {
 	FormData_dimension_slice fd;
@@ -30,6 +36,8 @@ extern bool dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice
 extern bool dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
 extern void dimension_slice_free(DimensionSlice *slice);
 extern void dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
+extern int	dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
+extern int	dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 
 #define dimension_slice_insert(slice) \
 	dimension_slice_insert_multi(&(slice), 1)
