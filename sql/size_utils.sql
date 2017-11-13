@@ -73,6 +73,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
 $BODY$
 DECLARE
 BEGIN
+    IF NOT _timescaledb_internal.dimension_is_finite(time_value) THEN
+        RETURN '';
+    END IF;
     IF time_value IS NULL THEN
         RETURN format('%L', NULL);
     END IF;

@@ -25,7 +25,10 @@ INNER JOIN pg_class pg_hypertable_index_class ON (
     pg_hypertable_con.conindid = pg_hypertable_index_class.oid
 );
 
-UPDATE _timescaledb_catalog.dimension_slice SET range_end = 2147483648 WHERE range_end = 2147483647;
+UPDATE _timescaledb_catalog.dimension_slice SET range_end = 9223372036854775807 WHERE range_end = 2147483647;
+UPDATE _timescaledb_catalog.dimension_slice SET range_start = -9223372036854775808 WHERE range_start = 0;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.range_value_to_pretty(BIGINT, regtype);
 
 -- Upgrade support for setting partitioning function
 DROP FUNCTION create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean);

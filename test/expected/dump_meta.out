@@ -176,12 +176,12 @@ SELECT *,
        GROUP BY c.id, pgc.reltoastrelid, pgc.oid ORDER BY c.id
        ) sub1
 ) sub2;
- chunk_id |                chunk_table                 |  partitioning_columns  | partitioning_column_types |           partitioning_hash_functions           |                                   ranges                                    | table_bytes | index_bytes | toast_bytes | total_bytes 
-----------+--------------------------------------------+------------------------+---------------------------+-------------------------------------------------+-----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
-        1 | "_timescaledb_internal"."_hyper_1_1_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[1073741824,2147483648)"} |        8192 |      114688 |        8192 |      131072
-        2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257897600000000000','1257900192000000000')","[1073741824,2147483648)"} |        8192 |      106496 |        8192 |      122880
-        3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257985728000000000','1257988320000000000')","[1073741824,2147483648)"} |        8192 |       98304 |        8192 |      114688
-        4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[0,1073741824)"}          |        8192 |       98304 |        8192 |      114688
+ chunk_id |                chunk_table                 |  partitioning_columns  | partitioning_column_types |           partitioning_hash_functions           |                              ranges                               | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+--------------------------------------------+------------------------+---------------------------+-------------------------------------------------+-------------------------------------------------------------------+-------------+-------------+-------------+-------------
+        1 | "_timescaledb_internal"."_hyper_1_1_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[1073741823,)"} |        8192 |      114688 |        8192 |      131072
+        2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257897600000000000','1257900192000000000')","[1073741823,)"} |        8192 |      106496 |        8192 |      122880
+        3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257985728000000000','1257988320000000000')","[1073741823,)"} |        8192 |       98304 |        8192 |      114688
+        4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[,1073741823)"} |        8192 |       98304 |        8192 |      114688
 (4 rows)
 
 \echo 'Hypertable index sizes'

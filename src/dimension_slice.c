@@ -5,6 +5,7 @@
 #include <access/heapam.h>
 #include <utils/rel.h>
 #include <catalog/indexing.h>
+#include <funcapi.h>
 
 #include "catalog.h"
 #include "dimension_slice.h"
@@ -13,6 +14,11 @@
 #include "dimension.h"
 #include "chunk_constraint.h"
 #include "dimension_vector.h"
+
+
+/* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
+/* This avoids the problem with coord < range_end where coord and range_end is an int64 */
+#define REMAP_LAST_COORDINATE(coord) ((coord==DIMENSION_SLICE_MAXVALUE) ? DIMENSION_SLICE_MAXVALUE-1 : coord)
 
 static inline DimensionSlice *
 dimension_slice_alloc(void)
@@ -47,6 +53,40 @@ dimension_slice_create(int dimension_id, int64 range_start, int64 range_end)
 	slice->fd.range_end = range_end;
 
 	return slice;
+}
+
+int
+dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right)
+{
+	if (left->fd.range_start == right->fd.range_start)
+	{
+		if (left->fd.range_end == right->fd.range_end)
+			return 0;
+
+		if (left->fd.range_end > right->fd.range_end)
+			return 1;
+
+		return -1;
+	}
+
+	if (left->fd.range_start > right->fd.range_start)
+		return 1;
+
+	return -1;
+}
+
+
+int
+dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
+{
+	coord = REMAP_LAST_COORDINATE(coord);
+	if (coord < slice->fd.range_start)
+		return -1;
+
+	if (coord >= slice->fd.range_end)
+		return 1;
+
+	return 0;
 }
 
 typedef struct DimensionSliceScanData
@@ -100,6 +140,8 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 {
 	ScanKeyData scankey[3];
 	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+
+	coordinate = REMAP_LAST_COORDINATE(coordinate);
 
 	/*
 	 * Perform an index scan for slices matching the dimension's ID and which
@@ -270,6 +312,8 @@ bool
 dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 {
 	Assert(to_cut->fd.dimension_id == other->fd.dimension_id);
+
+	coord = REMAP_LAST_COORDINATE(coord);
 
 	if (other->fd.range_end <= coord &&
 		other->fd.range_end > to_cut->fd.range_start)
