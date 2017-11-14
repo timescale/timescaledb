@@ -1,6 +1,7 @@
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 #include <nodes/nodes.h>
+#include <nodes/makefuncs.h>
 #include <tcop/utility.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
@@ -13,12 +14,15 @@
 #include <commands/defrem.h>
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
+#include <commands/cluster.h>
 #include <commands/event_trigger.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/builtins.h>
+#include <utils/snapmgr.h>
 #include <parser/parse_utilcmd.h>
 
 #include <miscadmin.h>
@@ -970,6 +974,159 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 	return handled;
 }
 
+static Oid
+find_clustered_index(Oid table_relid)
+{
+	Relation	rel;
+	ListCell   *index;
+	Oid			index_relid = InvalidOid;
+
+	rel = heap_open(table_relid, NoLock);
+
+	/* We need to find the index that has indisclustered set. */
+	foreach(index, RelationGetIndexList(rel))
+	{
+		HeapTuple	idxtuple;
+		Form_pg_index indexForm;
+
+		index_relid = lfirst_oid(index);
+		idxtuple = SearchSysCache1(INDEXRELID,
+								   ObjectIdGetDatum(index_relid));
+		if (!HeapTupleIsValid(idxtuple))
+			elog(ERROR, "cache lookup failed for index %u", index_relid);
+		indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
+
+		if (indexForm->indisclustered)
+		{
+			ReleaseSysCache(idxtuple);
+			break;
+		}
+		ReleaseSysCache(idxtuple);
+		index_relid = InvalidOid;
+	}
+
+	heap_close(rel, NoLock);
+
+	if (!OidIsValid(index_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+			errmsg("there is no previously clustered index for table \"%s\"",
+				   get_rel_name(table_relid))));
+
+	return index_relid;
+}
+
+/*
+ * Cluster a hypertable.
+ *
+ * The functionality to cluster all chunks of a hypertable is based on the
+ * regular cluster function's mode to cluster multiple tables. Since clustering
+ * involves taking exclusive locks on all tables for extensive periods of time,
+ * each subtable is clustered in its own transaction. This will release all
+ * locks on subtables once they are done.
+ */
+static bool
+process_cluster_start(Node *parsetree, ProcessUtilityContext context)
+{
+	ClusterStmt *stmt = (ClusterStmt *) parsetree;
+	Cache	   *hcache;
+	Hypertable *ht;
+
+	Assert(IsA(stmt, ClusterStmt));
+
+	/* If this is a re-cluster on all tables, there is nothing we need to do */
+	if (NULL == stmt->relation)
+		return false;
+
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
+
+	if (NULL != ht)
+	{
+		bool		is_top_level = (context == PROCESS_UTILITY_TOPLEVEL);
+		Oid			index_relid;
+		List	   *chunk_indexes;
+		ListCell   *lc;
+		MemoryContext old,
+					mcxt;
+
+		if (!pg_class_ownercheck(ht->main_table_relid, GetUserId()))
+			aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_CLASS,
+						   get_rel_name(ht->main_table_relid));
+
+		/*
+		 * If CLUSTER is run inside a user transaction block; we bail out or
+		 * otherwise we'd be holding locks way too long.
+		 */
+		PreventTransactionChain(is_top_level, "CLUSTER");
+
+		if (NULL == stmt->indexname)
+			index_relid = find_clustered_index(ht->main_table_relid);
+		else
+			index_relid = get_relname_relid(stmt->indexname,
+									get_rel_namespace(ht->main_table_relid));
+
+		if (!OidIsValid(index_relid))
+		{
+			/* Let regular process utility handle */
+			cache_release(hcache);
+			return false;
+		}
+
+		/*
+		 * The list of chunks and their indexes need to be on a memory context
+		 * that will survive moving to a new transaction for each chunk
+		 */
+		mcxt = AllocSetContextCreate(PortalContext,
+									 "Hypertable cluster",
+									 ALLOCSET_DEFAULT_SIZES);
+
+		/*
+		 * Get a list of chunks and indexes that correspond to the
+		 * hypertable's index
+		 */
+		old = MemoryContextSwitchTo(mcxt);
+		chunk_indexes = chunk_index_get_mappings(ht, index_relid);
+		MemoryContextSwitchTo(old);
+
+		/* Commit to get out of starting transaction */
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+
+		foreach(lc, chunk_indexes)
+		{
+			ChunkIndexMapping *cim = lfirst(lc);
+
+			/* Start a new transaction for each relation. */
+			StartTransactionCommand();
+			/* functions in indexes may want a snapshot set */
+			PushActiveSnapshot(GetTransactionSnapshot());
+
+			/*
+			 * We must mark each chunk index as clustered before calling
+			 * cluster_rel() because it expects indexes that need to be
+			 * rechecked (due to new transaction) to already have that mark
+			 * set
+			 */
+			chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+
+			/* Do the job. */
+			cluster_rel(cim->chunkoid, cim->indexoid, true, stmt->verbose);
+			PopActiveSnapshot();
+			CommitTransactionCommand();
+		}
+		/* Start a new transaction for the cleanup work. */
+		StartTransactionCommand();
+
+		/* Clean up working storage */
+		MemoryContextDelete(mcxt);
+	}
+
+	cache_release(hcache);
+
+	return false;
+}
+
 /*
  * Process create table statements.
  *
@@ -1403,12 +1560,8 @@ process_ddl_command_start(Node *parsetree,
 			handled = process_reindex(parsetree);
 			break;
 		case T_ClusterStmt:
-
-			/*
-			 * CLUSTER command on hypertables do not yet recurse to chunks.
-			 * This requires mapping a hypertable index to corresponding
-			 * indexes on each chunk.
-			 */
+			handled = process_cluster_start(parsetree, context);
+			break;
 		default:
 			break;
 	}

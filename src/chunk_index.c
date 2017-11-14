@@ -15,6 +15,8 @@
 #include <optimizer/var.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
+#include <commands/cluster.h>
+#include <access/xact.h>
 
 #include "chunk_index.h"
 #include "hypertable.h"
@@ -484,6 +486,44 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys,
 	chunk_index_scan(idxid, scankey, nkeys, tuple_found, data, RowExclusiveLock)
 
 static bool
+chunk_index_collect(TupleInfo *ti, void *data)
+{
+	List	  **mappings = data;
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	Chunk	   *chunk = chunk_get_by_id(chunk_index->chunk_id, 0, true);
+	Oid			nspoid = get_rel_namespace(chunk->table_id);
+	ChunkIndexMapping *cim = palloc(sizeof(ChunkIndexMapping));
+
+	cim->chunkoid = chunk->table_id;
+	cim->indexoid = get_relname_relid(NameStr(chunk_index->index_name), nspoid);
+	cim->parent_indexoid = get_relname_relid(NameStr(chunk_index->hypertable_index_name), nspoid);
+	*mappings = lappend(*mappings, cim);
+
+	return true;
+}
+
+List *
+chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
+{
+	ScanKeyData scankey[2];
+	const char *indexname = get_rel_name(hypertable_indexrelid);
+	List	   *mappings = NIL;
+
+	ScanKeyInit(&scankey[0],
+	  Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(ht->fd.id));
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
+
+	chunk_index_scan(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
+				scankey, 2, chunk_index_collect, &mappings, AccessShareLock);
+
+	return mappings;
+}
+
+static bool
 chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
@@ -513,7 +553,8 @@ chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool s
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(ht->fd.id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
-				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
 						 scankey, 2, chunk_index_tuple_delete, &should_drop);
@@ -530,7 +571,8 @@ chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
-				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(indexname)));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
 						  scankey, 2, chunk_index_tuple_delete, &drop_index);
@@ -659,4 +701,14 @@ chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
 								scankey, 2, chunk_index_tuple_set_tablespace,
 								   (char *) tablespace);
+}
+
+void
+chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
+{
+	Relation	rel = heap_open(chunkrelid, AccessShareLock);
+
+	mark_index_clustered(rel, indexrelid, true);
+	CommandCounterIncrement();
+	heap_close(rel, AccessShareLock);
 }
