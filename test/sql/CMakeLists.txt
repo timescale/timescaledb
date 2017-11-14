@@ -6,6 +6,7 @@ set(TEST_FILES
   append_unoptimized.sql
   append_x_diff.sql
   chunks.sql
+  cluster.sql
   constraint.sql
   copy_from.sql
   create_chunks.sql
