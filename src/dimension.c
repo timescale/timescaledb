@@ -208,7 +208,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 				range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
-	int64		interval = DIMENSION_SLICE_CLOSED_MAX / ((int64)dim->fd.num_slices);
+	int64		interval = DIMENSION_SLICE_CLOSED_MAX / ((int64) dim->fd.num_slices);
 	int64		last_start = interval * (dim->fd.num_slices - 1);
 
 	if (value < 0)

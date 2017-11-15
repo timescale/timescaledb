@@ -458,6 +458,11 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	Relation	rel;
 	Oid			relid;
 	List	   *range_table = NIL;
+	TupleDesc	tupDesc;
+	AclMode		required_access = (is_from ? ACL_INSERT : ACL_SELECT);
+	List	   *attnums;
+	ListCell   *cur;
+	RangeTblEntry *rte;
 
 	/* Disallow COPY to/from file or program except to superusers. */
 	if (!pipe && !superuser())
@@ -477,15 +482,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	}
 
 	if (!is_from || NULL == stmt->relation)
-	{
 		elog(ERROR, "timescale DoCopy should only be called for COPY FROM");
-	}
-
-	TupleDesc	tupDesc;
-	AclMode		required_access = (is_from ? ACL_INSERT : ACL_SELECT);
-	List	   *attnums;
-	ListCell   *cur;
-	RangeTblEntry *rte;
 
 	Assert(!stmt->query);
 
@@ -504,6 +501,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	tupDesc = RelationGetDescr(rel);
 	attnums = timescaledb_CopyGetAttnums(tupDesc, rel, stmt->attlist);
+
 	foreach(cur, attnums)
 	{
 		int			attno = lfirst_int(cur) -
@@ -514,6 +512,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 		else
 			rte->selectedCols = bms_add_member(rte->selectedCols, attno);
 	}
+
 	ExecCheckRTPerms(range_table, true);
 
 	/*
