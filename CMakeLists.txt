@@ -29,19 +29,45 @@ message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
 # Search paths for Postgres binaries
 if (WIN32)
-set(POSTGRES_PATHS
-  "C:/PostgreSQL"
-  "C:/PostgreSQL/pg96/bin")
+  find_path(PG_PATH
+    bin/postgres
+    HINTS
+    "C:/PostgreSQL"
+    "C:/Program Files/PostgreSQL"
+    PATH_SUFFIXES
+    bin
+    10/bin
+    96/bin
+    pg96/bin
+    DOC
+    "The path to a PostgreSQL installation")
 endif (WIN32)
 
 if (UNIX)
-set(POSTGRES_PATHS
-  "/usr/local/pgsql/bin")
+  find_path(PG_PATH
+    bin/postgres
+    HINTS
+    $ENV{HOME}
+    /opt/local/pgsql
+    /usr/local/pgsql
+    /usr/lib/postgresql
+    PATH_SUFFIXES
+    bin
+    10/bin
+    9.6/bin
+    96/bin
+    pg96/bin
+    DOC
+    "The path to a PostgreSQL installation")
 endif (UNIX)
 
 find_program(PG_CONFIG pg_config
-  PATHS ${POSTGRES_PATHS}
-  DOC "The path to the pg_config of the PostgreSQL version to compile against"
+  HINTS
+  ${PG_PATH}
+  PATH_SUFFIXES
+  bin
+  DOC
+  "The path to the pg_config of the PostgreSQL version to compile against"
   REQUIRED)
 
 if (NOT PG_CONFIG)
@@ -122,12 +148,32 @@ execute_process(
   OUTPUT_VARIABLE PG_LIBS
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-add_subdirectory(sql)
-add_subdirectory(src)
+find_path(PG_SOURCE_DIR
+  src/include/pg_config.h.in
+  HINTS
+  $ENV{HOME}
+  $ENV{HOME}/projects
+  $ENV{HOME}/Projects
+  $ENV{HOME}/development
+  $ENV{HOME}/Development
+  PATH_SUFFIXES
+  postgres
+  postgresql
+  pgsql
+  DOC
+  "The path to the PostgreSQL source tree")
+
+if (PG_SOURCE_DIR)
+  message(STATUS "Found PostgreSQL source in ${PG_SOURCE_DIR}")
+endif (PG_SOURCE_DIR)
 
 if (UNIX)
   add_subdirectory(test)
+  add_subdirectory(scripts)
 endif (UNIX)
+
+add_subdirectory(sql)
+add_subdirectory(src)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
