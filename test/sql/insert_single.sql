@@ -64,7 +64,7 @@ INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
 
 --show the constraints on the three-dimensional chunk
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_15_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_16_chunk');
 
 --queries should work in three dimensions
 SELECT * FROM "3dim";
@@ -117,3 +117,15 @@ SELECT create_hypertable('"hyper_date"', 'time');
 SET timezone=+1;
 INSERT INTO "hyper_date" VALUES('2011-01-26', 22.5);
 RESET timezone;
+
+--make sure timestamp inserts work even when the timezone changes the 
+SET timezone = 'UTC';
+CREATE TABLE "test_tz"(time timestamp PRIMARY KEY, temp float);
+SELECT create_hypertable('"test_tz"', 'time', chunk_time_interval=> INTERVAL '1 day');
+INSERT INTO "test_tz" VALUES('2017-09-22 10:00:00', 21.2);
+INSERT INTO "test_tz" VALUES('2017-09-21 19:00:00', 21.2);
+SET timezone = 'US/central';
+INSERT INTO "test_tz" VALUES('2017-09-21 19:01:00', 21.2);
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_10_20_chunk');
+SELECT * FROM test_tz;

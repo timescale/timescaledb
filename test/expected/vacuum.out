@@ -7,12 +7,12 @@ NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not al
  
 (1 row)
 
-INSERT INTO vacuum_test VALUES ('2017-01-20T09:00:01', 17.5),
-                               ('2017-01-21T09:00:01', 19.1),
-                               ('2017-04-20T09:00:01', 89.5),
-                               ('2017-04-21T09:00:01', 17.1),
-                               ('2017-06-20T09:00:01', 18.5),
-                               ('2017-06-21T09:00:01', 11.0);
+INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
+                               ('2017-01-21T16:00:01', 19.1),
+                               ('2017-04-20T16:00:01', 89.5),
+                               ('2017-04-21T16:00:01', 17.1),
+                               ('2017-06-20T16:00:01', 18.5),
+                               ('2017-06-21T16:00:01', 11.0);
 -- no stats
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
@@ -43,11 +43,11 @@ WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
 ORDER BY schemaname, tablename;
     tablename     | attname |                    histogram_bounds                     | n_distinct 
 ------------------+---------+---------------------------------------------------------+------------
- _hyper_1_1_chunk | time    | {"Fri Jan 20 09:00:01 2017","Sat Jan 21 09:00:01 2017"} |         -1
+ _hyper_1_1_chunk | time    | {"Fri Jan 20 16:00:01 2017","Sat Jan 21 16:00:01 2017"} |         -1
  _hyper_1_1_chunk | temp    | {17.5,19.1}                                             |         -1
- _hyper_1_2_chunk | time    | {"Thu Apr 20 09:00:01 2017","Fri Apr 21 09:00:01 2017"} |         -1
+ _hyper_1_2_chunk | time    | {"Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017"} |         -1
  _hyper_1_2_chunk | temp    | {17.1,89.5}                                             |         -1
- _hyper_1_3_chunk | time    | {"Tue Jun 20 09:00:01 2017","Wed Jun 21 09:00:01 2017"} |         -1
+ _hyper_1_3_chunk | time    | {"Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
  _hyper_1_3_chunk | temp    | {11,18.5}                                               |         -1
 (6 rows)
 

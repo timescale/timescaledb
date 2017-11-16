@@ -242,13 +242,14 @@ SELECT * FROM _timescaledb_catalog.chunk;
   5 |             3 | _timescaledb_internal | _hyper_3_5_chunk
   6 |             3 | _timescaledb_internal | _hyper_3_6_chunk
   7 |             3 | _timescaledb_internal | _hyper_3_7_chunk
-  9 |             5 | _timescaledb_internal | _hyper_5_9_chunk
- 10 |             6 | _timescaledb_internal | _hyper_6_10_chunk
+  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk
+ 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk
  11 |             6 | _timescaledb_internal | _hyper_6_11_chunk
  12 |             6 | _timescaledb_internal | _hyper_6_12_chunk
  13 |             6 | _timescaledb_internal | _hyper_6_13_chunk
  14 |             6 | _timescaledb_internal | _hyper_6_14_chunk
-(13 rows)
+ 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk
+(14 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
  id | dimension_id |     range_start     |      range_end      
@@ -257,16 +258,17 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
   2 |            1 | 1257897600000000000 | 1257900192000000000
   3 |            1 | 1257985728000000000 | 1257988320000000000
   4 |            2 |    1482624000000000 |    1485216000000000
-  5 |            3 |      -2592000000000 |                   0
-  6 |            3 |                   0 |       2592000000000
-  7 |            3 |     -28512000000000 |     -25920000000000
-  9 |            5 |      -2581200000000 |      -2581199000000
- 10 |            6 |                 -20 |                 -10
- 11 |            6 |                 -10 |                   0
- 12 |            6 |                   0 |                  10
- 13 |            6 |                  10 |                  20
- 14 |            6 |                  20 |                  30
-(13 rows)
+  5 |            3 |      -5184000000000 |      -2592000000000
+  6 |            3 |      -2592000000000 |                   0
+  7 |            3 |                   0 |       2592000000000
+  8 |            3 |     -28512000000000 |     -25920000000000
+ 10 |            5 |      -2610000000000 |      -2609999000000
+ 11 |            6 |                 -20 |                 -10
+ 12 |            6 |                 -10 |                   0
+ 13 |            6 |                   0 |                  10
+ 14 |            6 |                  10 |                  20
+ 15 |            6 |                  20 |                  30
+(14 rows)
 
 -- Create a three-dimensional table
 CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
@@ -287,12 +289,12 @@ INSERT INTO "3dim" VALUES('2017-01-20T09:00:01', 22.5, 'blue', 'nyc');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:21', 21.2, 'brown', 'sthlm');
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:47', 25.1, 'yellow', 'la');
 --show the constraints on the three-dimensional chunk
-SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_15_chunk');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_16_chunk');
   Constraint   | Type |  Columns   | Index |                                                                     Expr                                                                     
 ---------------+------+------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------
- constraint_15 | c    | {time}     | -     | (("time" >= 'Sat Dec 24 16:00:00 2016'::timestamp without time zone) AND ("time" < 'Mon Jan 23 16:00:00 2017'::timestamp without time zone))
- constraint_16 | c    | {device}   | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741823)
- constraint_17 | c    | {location} | -     | (_timescaledb_internal.get_partition_hash(location) >= 1073741823)
+ constraint_16 | c    | {time}     | -     | (("time" >= 'Sun Dec 25 00:00:00 2016'::timestamp without time zone) AND ("time" < 'Tue Jan 24 00:00:00 2017'::timestamp without time zone))
+ constraint_17 | c    | {device}   | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741823)
+ constraint_18 | c    | {location} | -     | (_timescaledb_internal.get_partition_hash(location) >= 1073741823)
 (3 rows)
 
 --queries should work in three dimensions
@@ -411,3 +413,30 @@ NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not al
 SET timezone=+1;
 INSERT INTO "hyper_date" VALUES('2011-01-26', 22.5);
 RESET timezone;
+--make sure timestamp inserts work even when the timezone changes the 
+SET timezone = 'UTC';
+CREATE TABLE "test_tz"(time timestamp PRIMARY KEY, temp float);
+SELECT create_hypertable('"test_tz"', 'time', chunk_time_interval=> INTERVAL '1 day');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "test_tz" VALUES('2017-09-22 10:00:00', 21.2);
+INSERT INTO "test_tz" VALUES('2017-09-21 19:00:00', 21.2);
+SET timezone = 'US/central';
+INSERT INTO "test_tz" VALUES('2017-09-21 19:01:00', 21.2);
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_10_20_chunk');
+  Constraint   | Type | Columns | Index |                                Expr                                
+---------------+------+---------+-------+--------------------------------------------------------------------
+ constraint_23 | c    | {time}  | -     | (("time" >= '01-26-2011'::date) AND ("time" < '02-25-2011'::date))
+(1 row)
+
+SELECT * FROM test_tz;
+           time           | temp 
+--------------------------+------
+ Fri Sep 22 10:00:00 2017 | 21.2
+ Thu Sep 21 19:00:00 2017 | 21.2
+ Thu Sep 21 19:01:00 2017 | 21.2
+(3 rows)
+

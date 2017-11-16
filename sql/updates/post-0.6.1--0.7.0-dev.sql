@@ -34,3 +34,21 @@ BEGIN
     END LOOP;
 
 END$$;
+
+--for timestamp (non-tz) columns we used to have internal_time -> constraint_time via local_time. 
+--So the internal time was interpreted as UTC but the constraint was printed in terms of the local time.
+--Now we interpret the internal_time as UTC and the constraints is generated as UTC as well. 
+--These constraints should not be re-written since they are correct for the data. But we should adjust the internal time
+--to be consistent. 
+
+-- So _timescaledb_internal.to_timestamp(internal_time)::timestamp gives you the old constraint
+-- We then convert it to timestamptz as though it was at UTC
+-- finally, we convert it to the internal represtentation back.
+
+UPDATE _timescaledb_catalog.dimension_slice ds
+SET 
+range_end = _timescaledb_internal.to_unix_microseconds(timezone('UTC',_timescaledb_internal.to_timestamp(range_end)::timestamp)),
+range_start = _timescaledb_internal.to_unix_microseconds(timezone('UTC',_timescaledb_internal.to_timestamp(range_start)::timestamp))
+FROM _timescaledb_catalog.dimension d
+WHERE ds.dimension_id = d.id AND d.column_type = 'timestamp'::regtype;
+

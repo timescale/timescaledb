@@ -32,9 +32,12 @@ BEGIN
     CASE column_type
       WHEN 'BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype THEN
         RETURN format('%L', time_value); -- scale determined by user.
-      WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype THEN
+      WHEN 'TIMESTAMP'::regtype THEN
+        --the time_value for timestamps w/o tz does not depend on local timezones. So perform at UTC.
+        RETURN format('TIMESTAMP %1$L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))); -- microseconds
+      WHEN 'TIMESTAMPTZ'::regtype THEN
         -- assume time_value is in microsec
-        RETURN format('%2$s %1$L', _timescaledb_internal.to_timestamp(time_value), column_type); -- microseconds
+        RETURN format('TIMESTAMPTZ %1$L', _timescaledb_internal.to_timestamp(time_value)); -- microseconds
       WHEN 'DATE'::regtype THEN
         RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
     END CASE;
