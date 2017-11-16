@@ -159,8 +159,8 @@ time_value_to_internal(Datum time_val, Oid type)
 	}
 	if (type == TIMESTAMPOID)
 	{
-		Datum		tz = DirectFunctionCall1(timestamp_timestamptz, time_val);
-		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, tz);
+		/* for timestamps, ignore timezones, make believe the timestamp is at UTC */
+		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, time_val);
 
 		return DatumGetInt64(res);
 	}

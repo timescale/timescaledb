@@ -44,8 +44,8 @@ cleanup() {
     set +e # do not exit immediately on failure in cleanup handler
     if [ $status -eq 0 ]; then
         rm -rf ${PGTEST_TMPDIR}
+        docker rm -vf timescaledb-orig timescaledb-clean-restore timescaledb-updated 2>/dev/null
     fi
-    docker rm -vf timescaledb-orig timescaledb-clean-restore timescaledb-updated 2>/dev/null
     echo "Exit status is $status"
     exit $status
 }
@@ -61,7 +61,7 @@ docker_pgcmd() {
 }
 
 docker_pgscript() {
-    docker_exec $1 "psql -h localhost -U postgres -f $2"
+    docker_exec $1 "psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {
@@ -78,12 +78,12 @@ docker_pgdiff() {
 }
 
 docker_run() {
-    docker run -d --name $1 -v ${BASE_DIR}:/src $2
+    docker run -d --name $1 -v ${BASE_DIR}:/src $2 -c timezone="US/Eastern"
     wait_for_pg $1
 }
 
 docker_run_vol() {
-    docker run -d --name $1 -v ${BASE_DIR}:/src -v $2 $3
+    docker run -d --name $1 -v ${BASE_DIR}:/src -v $2 $3 -c timezone="US/Eastern"
     wait_for_pg $1
 }
 

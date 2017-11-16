@@ -19,7 +19,10 @@ SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
 
 -- rename column and change its type
 ALTER TABLE alter_test RENAME COLUMN time TO time_us;
+--converting timestamptz->timestamp should happen under UTC
+SET timezone = 'UTC';
 ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamp;
+RESET timezone;
 ALTER TABLE alter_test RENAME COLUMN color TO colorname;
 \set ON_ERROR_STOP 0
 -- Changing types on hash-partitioned columns is not safe for some

@@ -27,13 +27,17 @@ SELECT * FROM test.show_subtables('reindex_test');
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
-(3 rows)
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+(5 rows)
 
 -- show reindexing
 REINDEX (VERBOSE) TABLE reindex_test;
 INFO:  index "_hyper_1_1_chunk_reindex_test_time_unique_idx" was reindexed
 INFO:  index "_hyper_1_2_chunk_reindex_test_time_unique_idx" was reindexed
 INFO:  index "_hyper_1_3_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "_hyper_1_4_chunk_reindex_test_time_unique_idx" was reindexed
+INFO:  index "_hyper_1_5_chunk_reindex_test_time_unique_idx" was reindexed
 \set ON_ERROR_STOP 0
 -- this one currently doesn't recurse to chunks and instead gives an
 -- error
