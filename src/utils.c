@@ -172,7 +172,7 @@ time_value_to_internal(Datum time_val, Oid type)
 	}
 	if (type == DATEOID)
 	{
-		Datum		tz = DirectFunctionCall1(date_timestamptz, time_val);
+		Datum		tz = DirectFunctionCall1(date_timestamp, time_val);
 		Datum		res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, tz);
 
 		return DatumGetInt64(res);

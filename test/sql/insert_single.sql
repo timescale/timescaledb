@@ -110,3 +110,10 @@ SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>6553
 SELECT create_hypertable('"smallinttime_err"', 'time');
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65535);
+
+--make sure date inserts work even when the timezone changes the 
+CREATE TABLE hyper_date(time date, temp float);
+SELECT create_hypertable('"hyper_date"', 'time');
+SET timezone=+1;
+INSERT INTO "hyper_date" VALUES('2011-01-26', 22.5);
+RESET timezone;
