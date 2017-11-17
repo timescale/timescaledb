@@ -113,11 +113,11 @@ typedef struct ProcessUtilityArgs
 	ParamListInfo params;
 	DestReceiver *dest;
 	char	   *completion_tag;
-}	ProcessUtilityArgs;
+} ProcessUtilityArgs;
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
-prev_ProcessUtility(ProcessUtilityArgs * args)
+prev_ProcessUtility(ProcessUtilityArgs *args)
 {
 	if (prev_ProcessUtility_hook != NULL)
 	{

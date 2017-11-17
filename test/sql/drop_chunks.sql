@@ -16,8 +16,8 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 
 \dt "_timescaledb_internal".*
 
-SELECT  _timescaledb_internal.get_partition_for_key('dev1');
-SELECT  _timescaledb_internal.get_partition_for_key('dev7');
+SELECT  _timescaledb_internal.get_partition_for_key('dev1'::text);
+SELECT  _timescaledb_internal.get_partition_for_key('dev7'::varchar(5));
 
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(1, 1.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(2, 2.0, 'dev1');

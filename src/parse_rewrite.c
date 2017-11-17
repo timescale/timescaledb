@@ -68,32 +68,8 @@ create_partition_func_equals_const(ParseState *pstate, PartitioningInfo *pi, Var
 	Node	   *f_var;
 	Node	   *f_const;
 
-	if (pi->partfunc.paramtype == TEXTOID)
-	{
-		/* Path for deprecated partitioning function taking text input */
-		if (var_expr->vartype == TEXTOID)
-		{
-			var_node = (Node *) copyObject(var_expr);
-			const_node = (Node *) copyObject(const_expr);
-		}
-		else
-		{
-			var_node = coerce_to_target_type(pstate, (Node *) var_expr,
-											 var_expr->vartype,
-											 TEXTOID, -1, COERCION_EXPLICIT,
-											 COERCE_EXPLICIT_CAST, -1);
-			const_node = coerce_to_target_type(pstate, (Node *) const_expr,
-											   const_expr->consttype,
-											   TEXTOID, -1, COERCION_EXPLICIT,
-											   COERCE_EXPLICIT_CAST, -1);
-		}
-	}
-	else
-	{
-		/* Path for partitioning func taking anyelement */
-		var_node = (Node *) copyObject(var_expr);
-		const_node = (Node *) copyObject(const_expr);
-	}
+	var_node = (Node *) copyObject(var_expr);
+	const_node = (Node *) copyObject(const_expr);
 
 	args_func_var = list_make1(var_node);
 	args_func_const = list_make1(const_node);

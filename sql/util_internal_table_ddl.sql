@@ -92,9 +92,7 @@ $BODY$
 DECLARE
     dimension_slice_row _timescaledb_catalog.dimension_slice;
     dimension_row _timescaledb_catalog.dimension;
-    proargtype  OID;
-    typecast TEXT = '';
-    parts TEXT[]; 
+    parts TEXT[];
 BEGIN
     SELECT * INTO STRICT dimension_slice_row
     FROM _timescaledb_catalog.dimension_slice
@@ -105,39 +103,26 @@ BEGIN
     WHERE id = dimension_slice_row.dimension_id;
 
     IF dimension_row.partitioning_func IS NOT NULL THEN
-        SELECT proargtypes[0] INTO STRICT proargtype
-        FROM pg_proc p, pg_namespace n
-        WHERE n.nspname = dimension_row.partitioning_func_schema
-        AND p.proname = dimension_row.partitioning_func
-        AND n.oid = p.pronamespace;
-
-        -- Check if we are using a legacy partitioning function
-        -- that only takes text input
-        IF proargtype = 'text'::regtype THEN
-            typecast := '::text';
-        END IF;
 
         IF  _timescaledb_internal.dimension_is_finite(dimension_slice_row.range_start) THEN
             parts = parts || format(
             $$
-                %1$I.%2$I(%3$I%4$s) >= %5$L
+                %1$I.%2$I(%3$I) >= %4$L
             $$,
-            dimension_row.partitioning_func_schema, 
+            dimension_row.partitioning_func_schema,
             dimension_row.partitioning_func,
-            dimension_row.column_name, 
-            typecast,
+            dimension_row.column_name,
             dimension_slice_row.range_start);
         END IF;
 
         IF _timescaledb_internal.dimension_is_finite(dimension_slice_row.range_end) THEN
             parts = parts || format(
             $$
-                %1$I.%2$I(%3$I%4$s) < %5$L
+                %1$I.%2$I(%3$I) < %4$L
             $$,
-            dimension_row.partitioning_func_schema, 
+            dimension_row.partitioning_func_schema,
             dimension_row.partitioning_func,
             dimension_row.column_name,
-            typecast,
             dimension_slice_row.range_end);
         END IF;
 

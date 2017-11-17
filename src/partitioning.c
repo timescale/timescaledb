@@ -32,14 +32,14 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 	FuncnameGetCandidates(partitioning_func_qualified_name(pf),
 						  1, NULL, false, false, false);
 
-	if (funclist == NULL || funclist->next)
-		elog(ERROR, "Could not resolve the partitioning function");
+	while (funclist != NULL &&
+		   (funclist->nargs != 1 || funclist->args[0] != ANYELEMENTOID))
+		funclist = funclist->next;
+
+	if (NULL == funclist)
+		elog(ERROR, "Partitioning function not found");
 
 	pf->paramtype = funclist->args[0];
-
-	if (!(funclist->nargs == 1 &&
-		  (pf->paramtype == TEXTOID || pf->paramtype == ANYELEMENTOID)))
-		elog(ERROR, "Invalid partitioning function signature");
 
 	fmgr_info_cxt(funclist->oid, &pf->func_fmgr, CurrentMemoryContext);
 }
@@ -132,25 +132,12 @@ partitioning_info_create(const char *schema,
 /*
  * Apply the partitioning function of a hypertable to a value.
  *
- * We support both partitioning functions with the legacy signature int
- * func(text) and the new signature int func(anyelement).
+ * We support both partitioning functions with the signature int
+ * func(anyelement).
  */
 int32
 partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
-	if (pinfo->partfunc.paramtype == TEXTOID)
-	{
-		/* Legacy function signature. We need to convert the datum to text. */
-		Oid			funcid = find_text_coercion_func(pinfo->typcache_entry->type_id);
-
-		if (!OidIsValid(funcid))
-			elog(ERROR, "Could not coerce type %u to text",
-				 pinfo->typcache_entry->type_id);
-
-		value = OidFunctionCall1(funcid, value);
-		value = CStringGetTextDatum(DatumGetCString(value));
-	}
-
 	return DatumGetInt32(FunctionCall1(&pinfo->partfunc.func_fmgr, value));
 }
 
@@ -166,32 +153,6 @@ partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDes
 		return 0;
 
 	return partitioning_func_apply(pinfo, value);
-}
-
-/* _timescaledb_catalog.get_partition_for_key(key TEXT) RETURNS INT */
-PGDLLEXPORT Datum get_partition_for_key(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(get_partition_for_key);
-
-/*
- * Deprecated function to calculate partition hash values.
- *
- * This function assumes text input only.
- */
-Datum
-get_partition_for_key(PG_FUNCTION_ARGS)
-{
-	struct varlena *data = PG_GETARG_VARLENA_PP(0);
-	uint32		hash_u;
-	int32		res;
-
-	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data),
-									 VARSIZE_ANY_EXHDR(data)));
-
-	res = (int32) (hash_u & 0x7fffffff);		/* Only positive numbers */
-
-	PG_FREE_IF_COPY(data, 0);
-	PG_RETURN_INT32(res);
 }
 
 /*
@@ -233,6 +194,52 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 	}
 
 	return argtype;
+}
+
+/* _timescaledb_catalog.get_partition_for_key(key anyelement) RETURNS INT */
+PGDLLEXPORT Datum get_partition_for_key(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(get_partition_for_key);
+
+/*
+ * Partition hash function that first converts all inputs to text before
+ * hashing.
+ */
+Datum
+get_partition_for_key(PG_FUNCTION_ARGS)
+{
+	Datum		arg = PG_GETARG_DATUM(0);
+	struct varlena *data;
+	Oid			argtype;
+	uint32		hash_u;
+	int32		res;
+
+	if (PG_NARGS() != 1)
+		elog(ERROR, "Unexpected number of arguments to partitioning function");
+
+	argtype = resolve_function_argtype(fcinfo);
+
+	if (argtype != TEXTOID)
+	{
+		/* Not TEXT input -> need to convert to text */
+		Oid			funcid = find_text_coercion_func(argtype);
+
+		if (!OidIsValid(funcid))
+			elog(ERROR, "Could not coerce type %u to text",
+				 argtype);
+
+		arg = OidFunctionCall1(funcid, arg);
+		arg = CStringGetTextDatum(DatumGetCString(arg));
+	}
+
+	data = DatumGetTextPP(arg);
+	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data),
+									 VARSIZE_ANY_EXHDR(data)));
+
+	res = (int32) (hash_u & 0x7fffffff);		/* Only positive numbers */
+
+	PG_FREE_IF_COPY(data, 0);
+	PG_RETURN_INT32(res);
 }
 
 PGDLLEXPORT Datum get_partition_hash(PG_FUNCTION_ARGS);
