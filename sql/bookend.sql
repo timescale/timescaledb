@@ -1,37 +1,37 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any")
 RETURNS internal
 AS '$libdir/timescaledb', 'first_sfunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_combinefunc(internal, internal)
 RETURNS internal
 AS '$libdir/timescaledb', 'first_combinefunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any")
 RETURNS internal
 AS '$libdir/timescaledb', 'last_sfunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_combinefunc(internal, internal)
 RETURNS internal
 AS '$libdir/timescaledb', 'last_combinefunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any")
 RETURNS anyelement
 AS '$libdir/timescaledb', 'bookend_finalfunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
 AS '$libdir/timescaledb', 'bookend_serializefunc'
-LANGUAGE C IMMUTABLE STRICT;
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
 AS '$libdir/timescaledb', 'bookend_deserializefunc'
-LANGUAGE C IMMUTABLE STRICT;
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.
 --Ex. first(temp, time) returns the temp value for the row with the lowest time

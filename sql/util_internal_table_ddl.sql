@@ -77,7 +77,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_is_finite(
     val      BIGINT
 )
-    RETURNS BOOLEAN LANGUAGE SQL IMMUTABLE AS
+    RETURNS BOOLEAN LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
     --end values of bigint reserved for infinite
     SELECT val > (-9223372036854775808)::bigint AND val < 9223372036854775807::bigint
@@ -249,4 +249,4 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_triggers(main_table REGCLASS) RETURNS VOID
-    AS '$libdir/timescaledb', 'hypertable_validate_triggers' LANGUAGE C IMMUTABLE STRICT;
+    AS '$libdir/timescaledb', 'hypertable_validate_triggers' LANGUAGE C STRICT;
