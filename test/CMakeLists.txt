@@ -1,6 +1,6 @@
 # Testing support
 find_program(PG_REGRESS pg_regress
-  PATHS
+  HINTS
   "${PG_PKGLIBDIR}/pgxs/src/test/regress/"
   REQUIRED)
 
