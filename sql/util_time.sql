@@ -1,15 +1,15 @@
 -- This file contains utilities for time conversion.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-	AS '$libdir/timescaledb', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT;
+    AS '$libdir/timescaledb', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-	AS '$libdir/timescaledb', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT;
+    AS '$libdir/timescaledb', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
-	AS '$libdir/timescaledb', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT;
+    AS '$libdir/timescaledb', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIGINT) RETURNS TIMESTAMPTZ
-	AS '$libdir/timescaledb', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT;
+    AS '$libdir/timescaledb', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
@@ -45,7 +45,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.interval_to_usec(
        chunk_interval INTERVAL
 )
-RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS
+RETURNS BIGINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
     SELECT (int_sec * 1000000)::bigint from extract(epoch from chunk_interval) as int_sec;
 $BODY$;
@@ -56,7 +56,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.time_interval_specification_to_
     default_value INTERVAL,
     field_name TEXT
 )
-RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
+RETURNS BIGINT LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
     IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') THEN
