@@ -26,12 +26,12 @@ LANGUAGE C IMMUTABLE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
 AS '$libdir/timescaledb', 'bookend_serializefunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
 AS '$libdir/timescaledb', 'bookend_deserializefunc'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C IMMUTABLE STRICT;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.
 --Ex. first(temp, time) returns the temp value for the row with the lowest time
@@ -60,5 +60,3 @@ CREATE AGGREGATE last(anyelement, "any") (
     FINALFUNC = _timescaledb_internal.bookend_finalfunc,
     FINALFUNC_EXTRA
 );
-
-
