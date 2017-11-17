@@ -250,3 +250,52 @@ SELECT _timescaledb_internal.get_partition_hash(id::text) FROM hash_test;
          1516350201
 (1 row)
 
+-- Test legacy function that converts values to text first
+SELECT _timescaledb_internal.get_partition_for_key('4b6a5eec-b344-11e7-abc4-cec278b6b50a'::text);
+ get_partition_for_key 
+-----------------------
+             934882099
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_for_key('4b6a5eec-b344-11e7-abc4-cec278b6b50a'::varchar);
+ get_partition_for_key 
+-----------------------
+             934882099
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_for_key(187);
+ get_partition_for_key 
+-----------------------
+            1161071810
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_for_key(187::bigint);
+ get_partition_for_key 
+-----------------------
+            1161071810
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_for_key(187::numeric);
+ get_partition_for_key 
+-----------------------
+            1161071810
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_for_key(187::double precision);
+ get_partition_for_key 
+-----------------------
+            1161071810
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_for_key(int4range(10, 20));
+ get_partition_for_key 
+-----------------------
+             505239042
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('08002b:010203'::macaddr);
+ get_partition_hash 
+--------------------
+          294987870
+(1 row)
+

@@ -40,13 +40,13 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 --------+------+------+-------
 (0 rows)
 
-SELECT  _timescaledb_internal.get_partition_for_key('dev1');
+SELECT  _timescaledb_internal.get_partition_for_key('dev1'::text);
  get_partition_for_key 
 -----------------------
             1129986420
 (1 row)
 
-SELECT  _timescaledb_internal.get_partition_for_key('dev7');
+SELECT  _timescaledb_internal.get_partition_for_key('dev7'::varchar(5));
  get_partition_for_key 
 -----------------------
              449729092

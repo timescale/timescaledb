@@ -62,3 +62,13 @@ SELECT _timescaledb_internal.get_partition_hash(id) FROM hash_test;
 SELECT _timescaledb_internal.get_partition_hash(value) FROM hash_test;
 -- Test coerced value
 SELECT _timescaledb_internal.get_partition_hash(id::text) FROM hash_test;
+
+-- Test legacy function that converts values to text first
+SELECT _timescaledb_internal.get_partition_for_key('4b6a5eec-b344-11e7-abc4-cec278b6b50a'::text);
+SELECT _timescaledb_internal.get_partition_for_key('4b6a5eec-b344-11e7-abc4-cec278b6b50a'::varchar);
+SELECT _timescaledb_internal.get_partition_for_key(187);
+SELECT _timescaledb_internal.get_partition_for_key(187::bigint);
+SELECT _timescaledb_internal.get_partition_for_key(187::numeric);
+SELECT _timescaledb_internal.get_partition_for_key(187::double precision);
+SELECT _timescaledb_internal.get_partition_for_key(int4range(10, 20));
+SELECT _timescaledb_internal.get_partition_hash('08002b:010203'::macaddr);
