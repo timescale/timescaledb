@@ -88,34 +88,3 @@ $BODY$
         (SELECT hypertable_id FROM _timescaledb_catalog.chunk WHERE id = chunk_id),
         chunk_id);
 $BODY$;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.attach_tablespace(
-       hypertable_id   INTEGER,
-       tablespace_name NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    tablespace_oid OID;
-BEGIN
-    SELECT oid
-    FROM pg_catalog.pg_tablespace
-    WHERE spcname = tablespace_name
-    INTO tablespace_oid;
-
-    IF tablespace_oid IS NULL THEN
-       RAISE EXCEPTION 'No tablespace "%" exists. A tablespace needs to be created before assigning it to a hypertable dimension', tablespace_name
-       USING ERRCODE = 'IO101';
-    END IF;
-
-    BEGIN
-        INSERT INTO _timescaledb_catalog.tablespace (hypertable_id, tablespace_name)
-        VALUES (hypertable_id, tablespace_name);
-    EXCEPTION
-        WHEN unique_violation THEN
-            RAISE EXCEPTION 'Tablespace "%" already assigned to hypertable "%"',
-            tablespace_name, (SELECT table_name FROM _timescaledb_catalog.hypertable
-                              WHERE id = hypertable_id);
-    END;
-END
-$BODY$;

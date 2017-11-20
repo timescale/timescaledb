@@ -298,33 +298,8 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION attach_tablespace(
-       hypertable REGCLASS,
-       tablespace NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
-    AS
+CREATE OR REPLACE FUNCTION attach_tablespace(tablespace NAME, hypertable REGCLASS)
+       RETURNS VOID LANGUAGE SQL AS
 $BODY$
-DECLARE
-    hypertable_id     INTEGER;
-    tablespace_oid    OID;
-BEGIN
-    PERFORM _timescaledb_internal.check_role(hypertable);
-
-    SELECT id
-    FROM _timescaledb_catalog.hypertable h, pg_class c, pg_namespace n
-    WHERE h.schema_name = n.nspname
-    AND h.table_name = c.relname
-    AND c.oid = hypertable
-    AND n.oid = c.relnamespace
-    INTO hypertable_id;
-
-    IF hypertable_id IS NULL THEN
-       RAISE EXCEPTION 'No hypertable "%" exists', main_table_name
-       USING ERRCODE = 'IO101';
-    END IF;
-
-    PERFORM _timescaledb_internal.attach_tablespace(hypertable_id, tablespace);
-END
+    SELECT * FROM _timescaledb_internal.attach_tablespace(tablespace, hypertable);
 $BODY$;

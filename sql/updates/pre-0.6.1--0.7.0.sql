@@ -35,3 +35,6 @@ DROP FUNCTION create_hypertable(regclass,name,name,integer,name,name,anyelement,
 DROP FUNCTION add_dimension(regclass,name,integer,bigint);
 DROP FUNCTION _timescaledb_internal.create_hypertable_row(regclass,name,name,name,name,integer,name,name,bigint,name);
 DROP FUNCTION _timescaledb_internal.add_dimension(regclass,_timescaledb_catalog.hypertable,name,integer,bigint,boolean);
+
+-- Tablespace functions
+DROP FUNCTION _timescaledb_internal.attach_tablespace(integer, name);
