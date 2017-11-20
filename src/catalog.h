@@ -29,6 +29,7 @@ typedef enum CatalogTable
 	CHUNK,
 	CHUNK_CONSTRAINT,
 	CHUNK_INDEX,
+	TABLESPACE,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -375,13 +376,72 @@ enum Anum_chunk_index_chunk_id_index_name_idx
 	_Anum_chunk_index_chunk_id_index_name_idx_max,
 };
 
-
 enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
 {
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id = 1,
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_max,
 };
+
+/************************************
+ *
+ * Tablespace table definitions
+ *
+ ************************************/
+
+#define TABLESPACE_TABLE_NAME "tablespace"
+
+enum Anum_tablespace
+{
+	Anum_tablespace_id = 1,
+	Anum_tablespace_hypertable_id,
+	Anum_tablespace_tablespace_name,
+	_Anum_tablespace_max,
+};
+
+#define Natts_tablespace \
+	(_Anum_tablespace_max - 1)
+
+typedef struct FormData_tablespace
+{
+	int32		id;
+	int32		hypertable_id;
+	NameData	tablespace_name;
+} FormData_tablespace;
+
+typedef FormData_tablespace *Form_tablespace;
+
+enum
+{
+	TABLESPACE_PKEY_IDX = 0,
+	TABLESPACE_HYPERTABLE_ID_TABLESPACE_NAME_IDX,
+	_MAX_TABLESPACE_INDEX,
+};
+
+enum Anum_tablespace_pkey_idx
+{
+	Anum_tablespace_pkey_idx_tablespace_id = 1,
+	_Anum_tablespace_pkey_idx_max,
+};
+
+typedef struct FormData_tablespace_pkey_idx
+{
+	int32		tablespace_id;
+}	FormData_tablespace_pkey_idx;
+
+enum Anum_tablespace_hypertable_id_tablespace_name_idx
+{
+	Anum_tablespace_hypertable_id_tablespace_name_idx_hypertable_id = 1,
+	Anum_tablespace_hypertable_id_tablespace_name_idx_tablespace_name,
+	_Anum_tablespace_hypertable_id_tablespace_name_idx_max,
+};
+
+typedef struct FormData_tablespace_hypertable_id_tablespace_name_idx
+{
+	int32		hypertable_id;
+	NameData	tablespace_name;
+}	FormData_tablespace_hypertable_id_tablespace_name_idx;
+
 
 #define MAX(a, b) \
 	((long)(a) > (long)(b) ? (a) : (b))
@@ -392,7 +452,8 @@ enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
 			MAX(_MAX_DIMENSION_SLICE_INDEX,				\
 				MAX(_MAX_CHUNK_CONSTRAINT_INDEX,		\
 					MAX(_MAX_CHUNK_INDEX_INDEX,			\
-						_MAX_CHUNK_INDEX)))))
+						MAX(_MAX_TABLESPACE_INDEX,		\
+							_MAX_CHUNK_INDEX))))))
 
 typedef enum CacheType
 {

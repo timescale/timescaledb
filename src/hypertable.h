@@ -6,6 +6,7 @@
 
 #include "catalog.h"
 #include "dimension.h"
+#include "tablespace.h"
 
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
@@ -17,6 +18,7 @@ typedef struct Hypertable
 	Oid			main_table_relid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
+	Tablespaces *tablespaces;
 } Hypertable;
 
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
@@ -26,5 +28,7 @@ extern Oid	hypertable_id_to_relid(int32 hypertable_id);
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);
 extern bool is_hypertable(Oid relid);
+extern bool hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
+extern Tablespace *hypertable_add_tablespace(Hypertable *ht, int32 tspc_id, Oid tspc_oid);
 
 #endif   /* TIMESCALEDB_HYPERTABLE_H */

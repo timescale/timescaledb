@@ -55,8 +55,8 @@ SELECT set_chunk_time_interval('"one_Partition"', 1::bigint);
 ERROR:  Permission denied for relation public."one_Partition"
 select add_dimension('"one_Partition"', 'device_id', 2);
 ERROR:  Permission denied for relation public."one_Partition"
-select attach_tablespace('"one_Partition"', 'tablespace1');
-ERROR:  Permission denied for relation public."one_Partition"
+select attach_tablespace('tablespace1', '"one_Partition"');
+ERROR:  Tablespace "tablespace1" does not exist
 \set ON_ERROR_STOP 1
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');
@@ -414,7 +414,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 13
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
 --test proper denials for all security definer functions:
-\c single :ROLE_SUPERUSER 
+\c single :ROLE_SUPERUSER
 CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
@@ -487,7 +487,7 @@ ERROR:  must be owner of relation hypertable_su
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
---change owner 
+--change owner
 \c single :ROLE_SUPERUSER
 ALTER TABLE hypertable_su OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 \c single :ROLE_DEFAULT_PERM_USER_2

@@ -121,3 +121,7 @@ select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true)
 \set ON_ERROR_STOP 0
 select create_hypertable('test_schema.test_1dim', 'time');
 \set ON_ERROR_STOP 1
+
+-- Reset GRANTS
+\c single :ROLE_SUPERUSER
+REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;

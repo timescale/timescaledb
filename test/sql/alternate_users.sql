@@ -13,7 +13,7 @@ CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER
 SELECT * FROM "one_Partition";
 SELECT set_chunk_time_interval('"one_Partition"', 1::bigint);
 select add_dimension('"one_Partition"', 'device_id', 2);
-select attach_tablespace('"one_Partition"', 'tablespace1');
+select attach_tablespace('tablespace1', '"one_Partition"');
 \set ON_ERROR_STOP 1
 
 CREATE TABLE "1dim"(time timestamp, temp float);
@@ -28,7 +28,7 @@ SELECT * FROM "1dim";
 \ir include/ddl_ops_2.sql
 
 --test proper denials for all security definer functions:
-\c single :ROLE_SUPERUSER 
+\c single :ROLE_SUPERUSER
 CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
@@ -77,7 +77,7 @@ CREATE INDEX ON hypertable_su (time, temp);
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 \set ON_ERROR_STOP 1
 
---change owner 
+--change owner
 \c single :ROLE_SUPERUSER
 ALTER TABLE hypertable_su OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 

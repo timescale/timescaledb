@@ -28,6 +28,7 @@ hypertable_from_tuple(HeapTuple tuple)
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
 	h->chunk_cache = subspace_store_init(h->space->num_dimensions, CurrentMemoryContext);
+	h->tablespaces = tablespace_scan(h->fd.id);
 
 	return h;
 }
@@ -211,6 +212,25 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 	Assert(MemoryContextContains(cce->mcxt, cce->chunk));
 
 	return cce->chunk;
+}
+
+bool
+hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
+{
+	Tablespaces *tspcs = ht->tablespaces;
+	int			i;
+
+	for (i = 0; i < tspcs->num_tablespaces; i++)
+		if (tspc_oid == tspcs->tablespaces[i].tablespace_oid)
+			return true;
+
+	return false;
+}
+
+Tablespace *
+hypertable_add_tablespace(Hypertable *ht, int32 tspc_id, Oid tspc_oid)
+{
+	return tablespaces_add(ht->tablespaces, tspc_id, tspc_oid);
 }
 
 static inline Oid

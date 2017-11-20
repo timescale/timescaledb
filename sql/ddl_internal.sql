@@ -80,11 +80,6 @@ BEGIN
     )
     RETURNING * INTO hypertable_row;
 
-    --add default tablespace, if any
-    IF tablespace IS NOT NULL THEN
-        PERFORM _timescaledb_internal.attach_tablespace(hypertable_row.id, tablespace);
-    END IF;
-
     --create time dimension
     PERFORM _timescaledb_internal.add_dimension(main_table,
                                                 hypertable_row,
@@ -110,6 +105,11 @@ BEGIN
 
     IF create_default_indexes THEN
         PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
+    END IF;
+
+    --add default tablespace, if any
+    IF tablespace IS NOT NULL THEN
+        PERFORM _timescaledb_internal.attach_tablespace(tablespace, main_table);
     END IF;
 
     RETURN hypertable_row;
@@ -618,6 +618,8 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.attach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS VOID
+AS '$libdir/timescaledb', 'tablespace_attach' LANGUAGE C VOLATILE;
 
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID

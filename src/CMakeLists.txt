@@ -63,6 +63,7 @@ set(HEADERS
   process_utility.h
   scanner.h
   subspace_store.h
+  tablespace.h
   trigger.h
   utils.h)
 
@@ -105,6 +106,7 @@ set(SOURCES
   scanner.c
   sort_transform.c
   subspace_store.c
+  tablespace.c
   trigger.c
   utils.c
   version.c)

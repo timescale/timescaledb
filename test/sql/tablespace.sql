@@ -21,17 +21,35 @@ SELECT relname, spcname FROM pg_class c
 INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
 INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 
+--check some error conditions
+SELECT attach_tablespace('tablespace2', NULL);
+SELECT attach_tablespace(NULL, 'tspace_2dim');
+SELECT attach_tablespace('none_existing_tablespace', 'tspace_2dim');
+SELECT attach_tablespace('tablespace2', 'none_existing_table');
+
 --attach another tablespace without first creating it --> should generate error
-SELECT attach_tablespace('tspace_2dim', 'tablespace2');
+SELECT attach_tablespace('tablespace2', 'tspace_2dim');
 --attach the same tablespace twice to same table should also generate error
-SELECT attach_tablespace('tspace_2dim', 'tablespace1');
+SELECT attach_tablespace('tablespace1', 'tspace_2dim');
 
 \c single :ROLE_SUPERUSER
-CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
+CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TABLESPACE2_PATH;
+\c single :ROLE_DEFAULT_PERM_USER_2
+
+--attach without permissions on the table should fail
+SELECT attach_tablespace('tablespace2', 'tspace_2dim');
+
 \c single :ROLE_DEFAULT_PERM_USER
 
---attach after creating --> should work
-SELECT attach_tablespace('tspace_2dim', 'tablespace2');
+--attach without permissions on the tablespace should also fail
+SELECT attach_tablespace('tablespace2', 'tspace_2dim');
+
+\c single :ROLE_SUPERUSER
+GRANT :ROLE_DEFAULT_PERM_USER_2 TO :ROLE_DEFAULT_PERM_USER;
+\c single :ROLE_DEFAULT_PERM_USER
+
+--should work with permissions on both the table and the tablespace
+SELECT attach_tablespace('tablespace2', 'tspace_2dim');
 
 SELECT * FROM _timescaledb_catalog.tablespace;
 
@@ -45,7 +63,7 @@ INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 --
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
 SELECT create_hypertable('tspace_1dim', 'time');
-SELECT attach_tablespace('tspace_1dim', 'tablespace2');
+SELECT attach_tablespace('tablespace2', 'tspace_1dim');
 
 INSERT INTO tspace_1dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
 INSERT INTO tspace_1dim VALUES ('2017-03-20T09:00:01', 24.3, 'brown');
@@ -61,3 +79,6 @@ DROP TABLE tspace_2dim CASCADE;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 
+-- revoke grants
+\c single :ROLE_SUPERUSER
+REVOKE :ROLE_DEFAULT_PERM_USER_2 FROM :ROLE_DEFAULT_PERM_USER;

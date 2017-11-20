@@ -34,3 +34,7 @@ FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trig
 DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
 CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.dimension
 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
+
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.tablespace;
+CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.tablespace
+FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();

@@ -11,6 +11,7 @@
 #include "utils.h"
 #include "scanner.h"
 #include "dimension.h"
+#include "tablespace.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);
 
