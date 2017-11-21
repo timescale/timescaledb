@@ -24,7 +24,6 @@ set(TEST_CLUSTER ${TEST_OUTPUT_DIR}/testcluster)
 add_subdirectory(sql)
 
 set(PG_REGRESS_OPTS_BASE
-  --user=${TEST_PGUSER}
   --host=${TEST_PGHOST}
   --load-language=plpgsql
   --dlpath=${PROJECT_BINARY_DIR}/src)
