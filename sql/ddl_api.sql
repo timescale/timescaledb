@@ -38,14 +38,20 @@ DECLARE
     tablespace_name            NAME;
     main_table_has_items       BOOLEAN;
     is_hypertable              BOOLEAN;
+    is_partitioned             BOOLEAN;
     chunk_time_interval_actual BIGINT;
     time_type                  REGTYPE;
 BEGIN
-    SELECT relname, nspname, reltablespace
-    INTO STRICT table_name, schema_name, tablespace_oid
+    SELECT relname, nspname, reltablespace, relkind = 'p'
+    INTO STRICT table_name, schema_name, tablespace_oid, is_partitioned
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
+
+    IF is_partitioned THEN
+        RAISE EXCEPTION 'table % is already partitioned', main_table
+        USING ERRCODE = 'IO110';
+    END IF;
 
     SELECT tableowner
     INTO STRICT table_owner
