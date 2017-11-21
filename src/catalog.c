@@ -5,6 +5,7 @@
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
 #include <utils/syscache.h>
+#include <utils/inval.h>
 #include <access/xact.h>
 #include <access/htup_details.h>
 #include <miscadmin.h>
@@ -20,13 +21,14 @@
 #include <utils/regproc.h>
 #endif
 
-static const char *catalog_table_names[_MAX_CATALOG_TABLES] = {
+static const char *catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
 	[DIMENSION] = DIMENSION_TABLE_NAME,
 	[DIMENSION_SLICE] = DIMENSION_SLICE_TABLE_NAME,
 	[CHUNK] = CHUNK_TABLE_NAME,
 	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME,
 	[CHUNK_INDEX] = CHUNK_INDEX_TABLE_NAME,
+	[_MAX_CATALOG_TABLES] = "invalid table",
 };
 
 typedef struct TableIndexDef
@@ -273,15 +275,29 @@ catalog_reset(void)
 	catalog.database_id = InvalidOid;
 }
 
-const char *
-catalog_get_cache_proxy_name(CacheType type)
-{
-	return cache_proxy_table_names[type];
-}
-
 Oid
 catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 {
+	if (!catalog_is_valid(catalog))
+	{
+		Oid			schema;
+
+		/*
+		 * The catalog can be invalid during upgrade scripts. Try a non-cached
+		 * relation lookup, but we need to be in a transaction for
+		 * get_namespace_oid() to work.
+		 */
+		if (!IsTransactionState())
+			return InvalidOid;
+
+		schema = get_namespace_oid(CACHE_SCHEMA_NAME, true);
+
+		if (!OidIsValid(schema))
+			return InvalidOid;
+
+		return get_relname_relid(cache_proxy_table_names[type], schema);
+	}
+
 	return catalog->caches[type].inval_proxy_id;
 }
 
@@ -289,26 +305,6 @@ Oid
 catalog_get_internal_function_id(Catalog *catalog, InternalFunction func)
 {
 	return catalog->functions[func].function_id;
-}
-
-Oid
-catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname)
-{
-	int			i;
-
-	if (!catalog_is_valid(catalog))
-		return InvalidOid;
-
-	for (i = 0; i < _MAX_CACHE_TYPES; i++)
-	{
-		if (strcmp(relname, cache_proxy_table_names[i]) == 0)
-			break;
-	}
-
-	if (_MAX_CACHE_TYPES == i)
-		return InvalidOid;
-
-	return catalog->caches[i].inval_proxy_id;
 }
 
 /*
@@ -347,11 +343,46 @@ catalog_restore_user(CatalogSecurityContext *sec_ctx)
 	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
 }
 
+Oid
+catalog_table_get_id(Catalog *catalog, CatalogTable table)
+{
+	return catalog->tables[table].id;
+}
+
+CatalogTable
+catalog_table_get(Catalog *catalog, Oid relid)
+{
+	unsigned int i;
+
+	if (!catalog_is_valid(catalog))
+	{
+		const char *relname = get_rel_name(relid);
+
+		for (i = 0; i < _MAX_CATALOG_TABLES; i++)
+			if (strcmp(catalog_table_names[i], relname) == 0)
+				return (CatalogTable) i;
+
+		return INVALID_CATALOG_TABLE;
+	}
+
+	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
+		if (catalog->tables[i].id == relid)
+			return (CatalogTable) i;
+
+	return INVALID_CATALOG_TABLE;
+}
+
+const char *
+catalog_table_name(CatalogTable table)
+{
+	return catalog_table_names[table];
+}
+
 /*
  * Get the next serial ID for a catalog table, if one exists for the given table.
  */
 int64
-catalog_table_next_seq_id(Catalog *catalog, enum CatalogTable table)
+catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 {
 	Oid			relid = catalog->tables[table].serial_relid;
 
@@ -386,7 +417,7 @@ void
 catalog_insert(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleInsert(rel, tuple);
-
+	catalog_invalidate_cache(RelationGetRelid(rel), CMD_INSERT);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -407,6 +438,7 @@ void
 catalog_update(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleUpdate(rel, &tuple->t_self, tuple);
+	catalog_invalidate_cache(RelationGetRelid(rel), CMD_UPDATE);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -415,6 +447,7 @@ void
 catalog_delete_tid(Relation rel, ItemPointer tid)
 {
 	CatalogTupleDelete(rel, tid);
+	catalog_invalidate_cache(RelationGetRelid(rel), CMD_DELETE);
 	CommandCounterIncrement();
 }
 
@@ -422,4 +455,56 @@ void
 catalog_delete(Relation rel, HeapTuple tuple)
 {
 	catalog_delete_tid(rel, &tuple->t_self);
+}
+
+
+/*
+ * Invalidate TimescaleDB catalog caches.
+ *
+ * This function should be called whenever a TimescaleDB catalog table changes
+ * in a way that might invalidate associated caches. It is currently called in
+ * two distinct ways:
+ *
+ * 1. If a catalog table changes via the catalog API in catalog.c
+ * 2. Via a trigger if a SQL INSERT/UPDATE/DELETE occurs on a catalog table
+ *
+ * Since triggers (2) require full parsing, planning and execution of SQL
+ * statements, they aren't supported for simple catalog updates via (1) in
+ * native code and are therefore discouraged. Ideally, catalog updates should
+ * happen consistently via method (1) in the future, obviating the need for
+ * triggers on catalog tables that cause side effects.
+ *
+ * The invalidation event is signaled to other backends (processes) via the
+ * relcache invalidation mechanism on a dummy relation (table).
+ *
+ * Parameters: The OID of the catalog table that changed, and the operation
+ * involved (e.g., INSERT, UPDATE, DELETE).
+ */
+void
+catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
+{
+	Catalog    *catalog = catalog_get();
+	CatalogTable table = catalog_table_get(catalog, catalog_relid);
+	Oid			relid;
+
+	switch (table)
+	{
+		case CHUNK:
+		case CHUNK_CONSTRAINT:
+		case DIMENSION_SLICE:
+			if (operation == CMD_UPDATE || operation == CMD_DELETE)
+			{
+				relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
+				CacheInvalidateRelcacheByRelid(relid);
+			}
+			break;
+		case HYPERTABLE:
+		case DIMENSION:
+			relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
+			CacheInvalidateRelcacheByRelid(relid);
+			break;
+		case CHUNK_INDEX:
+		default:
+			break;
+	}
 }

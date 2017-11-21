@@ -1,36 +1,43 @@
-/*
- *	Notes on the way caching works: Since out caches are stored in per-process
- *	(per-backend memory), we have to have a way to propagate invalidation
- *	messages to all backends, for that we use the Postgres relcache
- *	mechanism. Relcache is a cache that keeps internal info about
- *	relations(tables).  Postgres has a mechanism for registering for relcache
- *	invalidation events that are propagated to all backends:
- *	CacheRegisterRelcacheCallback(). We register inval_cache_callback() with
- *	this mechanism and route all invalidation messages through it to the correct
- *	cache invalidation functions.
- *
- *	The plan for our caches is to use (abuse) this mechanism to serve as a
- *	notify to invalidate our caches.  Thus, we create proxy tables for each
- *	cache we use and attach the invalidate_relcache_trigger trigger to all
- *	tables whose changes should invalidate the cache. This trigger will
- *	invalidate the relcache for the proxy table specified as the first argument
- *	to the trigger (see cache.sql).
- */
-
 #include <postgres.h>
 #include <access/xact.h>
 #include <utils/lsyscache.h>
-#include <catalog/namespace.h>
-#include <miscadmin.h>
-#include <commands/trigger.h>
-#include <commands/event_trigger.h>
-#include <nodes/nodes.h>
 #include <utils/inval.h>
-#include <unistd.h>
+#include <catalog/namespace.h>
+#include <commands/trigger.h>
+#include <nodes/nodes.h>
+#include <miscadmin.h>
 
 #include "hypertable_cache.h"
 #include "catalog.h"
 #include "extension.h"
+
+/*
+ * Notes on the way cache invalidation works.
+ *
+ * Since our caches are stored in per-process (per-backend memory), we need a
+ * way to signal all backends that they should invalidate their caches. For this
+ * we use the PostgreSQL relcache mechanism that propagates relation cache
+ * invalidation events to all backends. We register a callback with this
+ * mechanism to recieve events on all backends whenever a relation cache entry
+ * is invalidated.
+ *
+ * To know which events should trigger invalidation of our caches, we use dummy
+ * (empty) tables. We can trigger relcache invalidation events for these tables
+ * to signal other backends. If the received table OID is a dummy table, we know
+ * that this is an event that we care about.
+ *
+ * Caches for catalog tables should be invalidated on:
+ *
+ * 1. INSERT/UPDATE/DELETE on a catalog table
+ * 2. Aborted transactions that taint the caches
+ *
+ * Generally, INSERTS do not warrant cache invalidation, unless it is an insert
+ * of a subobject that belongs to an object that might already be in the cache
+ * (e.g., a new dimension of a hypertable), or when replacing an existing entry
+ * (e.g., when replacing a negative hypertable entry with a positive one). Note,
+ * also, that INSERTS can taint the cache if the transaction that did the INSERT
+ * fails. This is why we also need to invalidate caches on transaction failure.
+ */
 
 void		_cache_invalidate_init(void);
 void		_cache_invalidate_fini(void);
@@ -41,7 +48,7 @@ void		_cache_invalidate_extload(void);
  * Should route the invalidation to the correct cache.
  */
 static void
-inval_cache_callback(Datum arg, Oid relid)
+cache_invalidate_callback(Datum arg, Oid relid)
 {
 	Catalog    *catalog;
 
@@ -60,41 +67,38 @@ inval_cache_callback(Datum arg, Oid relid)
 		hypertable_cache_invalidate_callback();
 }
 
+static inline CmdType
+trigger_event_to_cmdtype(TriggerEvent event)
+{
+	if (TRIGGER_FIRED_BY_INSERT(event))
+		return CMD_INSERT;
+
+	if (TRIGGER_FIRED_BY_UPDATE(event))
+		return CMD_UPDATE;
+
+	return CMD_DELETE;
+}
+
 PGDLLEXPORT Datum invalidate_relcache_trigger(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(invalidate_relcache_trigger);
 
 /*
- * This trigger causes the relcache for the cache_inval_proxy table (passed in
- * as arg 0) to be invalidated.  It should be called to invalidate the caches
- * associated with a proxy table (usually each cache has it's own proxy table)
- * This function is attached to the right tables in common/cache.sql
+ * Trigger for catalog tables that invalidates caches.
  *
+ * This trigger generates a cache invalidation event on changes to the catalog
+ * table that the trigger is defined for.
  */
 Datum
 invalidate_relcache_trigger(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	Oid			proxy_oid;
-	Catalog    *catalog = catalog_get();
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
 		elog(ERROR, "not called by trigger manager");
 
-	/* arg 0 = name of the proxy table */
-	proxy_oid = catalog_get_cache_proxy_id_by_name(catalog, trigdata->tg_trigger->tgargs[0]);
-	if (proxy_oid != 0)
-	{
-		CacheInvalidateRelcacheByRelid(proxy_oid);
-	}
-	else
-	{
-		/*
-		 * This can happen during  upgrade scripts when the catalog is
-		 * unavailable
-		 */
-		CacheInvalidateRelcacheByRelid(get_relname_relid(trigdata->tg_trigger->tgargs[0], get_namespace_oid(CACHE_SCHEMA_NAME, false)));
-	}
+	catalog_invalidate_cache(RelationGetRelid(trigdata->tg_relation),
+							 trigger_event_to_cmdtype(trigdata->tg_event));
 
 	/* tuple to return to executor */
 	if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
@@ -108,30 +112,52 @@ PGDLLEXPORT Datum invalidate_relcache(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(invalidate_relcache);
 
 /*
- *	This is similar to invalidate_relcache_trigger but not a trigger.
- *	Not used regularly but useful for debugging.
+ * Force a cache invalidation for a catalog table.
  *
+ * This function is used for debugging purposes and triggers
+ * a cache invalidation.
+ *
+ * The first argument should be the catalog table that has changed, warranting a
+ * cache invalidation.
  */
 Datum
 invalidate_relcache(PG_FUNCTION_ARGS)
 {
-	Oid			proxy_oid = PG_GETARG_OID(0);
+	catalog_invalidate_cache(PG_GETARG_OID(0), CMD_UPDATE);
+	PG_RETURN_BOOL(true);
+}
 
-	/* arg 0 = relid of the cache_inval_proxy table */
-	CacheInvalidateRelcacheByRelid(proxy_oid);
+static void
+cache_invalidate_xact_end(XactEvent event, void *arg)
+{
+	switch (event)
+	{
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
 
-	/* tuple to return to executor */
-	return BoolGetDatum(true);
+			/*
+			 * Invalidate caches on aborted transactions to purge entries that
+			 * have been added during the transaction and are now no longer
+			 * valid. Note that we need not signal other backends of this
+			 * change since the transaction hasn't been committed and other
+			 * backends cannot have the invalid state.
+			 */
+			hypertable_cache_invalidate_callback();
+		default:
+			break;
+	}
 }
 
 void
 _cache_invalidate_init(void)
 {
-	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
+	RegisterXactCallback(cache_invalidate_xact_end, NULL);
+	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
 }
 
 void
 _cache_invalidate_fini(void)
 {
+	UnregisterXactCallback(cache_invalidate_xact_end, NULL);
 	/* No way to unregister relcache callback */
 }

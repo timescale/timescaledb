@@ -39,7 +39,7 @@ static Cache *
 hypertable_cache_create()
 {
 	MemoryContext ctx = AllocSetContextCreate(CacheMemoryContext,
-						 catalog_get_cache_proxy_name(CACHE_TYPE_HYPERTABLE),
+											  "Hypertable cache",
 											  ALLOCSET_DEFAULT_SIZES);
 
 	Cache	   *cache = MemoryContextAlloc(ctx, sizeof(Cache));

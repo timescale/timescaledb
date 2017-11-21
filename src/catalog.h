@@ -4,6 +4,7 @@
 #include <postgres.h>
 
 #include <utils/rel.h>
+#include <nodes/nodes.h>
 #include <access/heapam.h>
 /*
  * TimescaleDB catalog.
@@ -20,7 +21,7 @@
  * Generally, definitions and naming should roughly follow how things are done
  * in Postgres internally.
  */
-enum CatalogTable
+typedef enum CatalogTable
 {
 	HYPERTABLE = 0,
 	DIMENSION,
@@ -29,7 +30,9 @@ enum CatalogTable
 	CHUNK_CONSTRAINT,
 	CHUNK_INDEX,
 	_MAX_CATALOG_TABLES,
-};
+} CatalogTable;
+
+#define INVALID_CATALOG_TABLE _MAX_CATALOG_TABLES
 
 #define CatalogInternalCall1(func, datum1) \
 	OidFunctionCall1(catalog_get_internal_function_id(catalog_get(), func), datum1)
@@ -416,6 +419,7 @@ typedef struct Catalog
 	{
 		Oid			inval_proxy_id;
 	}			caches[_MAX_CACHE_TYPES];
+
 	Oid			owner_uid;
 	Oid			internal_schema_id;
 	struct
@@ -436,21 +440,22 @@ Catalog    *catalog_get(void);
 void		catalog_reset(void);
 
 Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
-Oid			catalog_get_cache_proxy_id_by_name(Catalog *catalog, const char *relname);
 
 Oid			catalog_get_internal_function_id(Catalog *catalog, InternalFunction func);
-
-const char *catalog_get_cache_proxy_name(CacheType type);
 
 bool		catalog_become_owner(Catalog *catalog, CatalogSecurityContext *sec_ctx);
 void		catalog_restore_user(CatalogSecurityContext *sec_ctx);
 
-int64		catalog_table_next_seq_id(Catalog *catalog, enum CatalogTable table);
+int64		catalog_table_next_seq_id(Catalog *catalog, CatalogTable table);
+Oid			catalog_table_get_id(Catalog *catalog, CatalogTable table);
+CatalogTable catalog_table_get(Catalog *catalog, Oid relid);
+const char *catalog_table_name(CatalogTable table);
 
 void		catalog_insert(Relation rel, HeapTuple tuple);
 void		catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls);
 void		catalog_update(Relation rel, HeapTuple tuple);
 void		catalog_delete_tid(Relation rel, ItemPointer tid);
 void		catalog_delete(Relation rel, HeapTuple tuple);
+void		catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 
 #endif   /* TIMESCALEDB_CATALOG_H */
