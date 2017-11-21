@@ -1,5 +1,54 @@
 # TimescaleDB Changelog
 
+## 0.7.0 (2017-11-21)
+
+**Please note: This update may take a long time (minutes, even hours) to
+complete, depending on the size of your database**
+
+**High-level changes**
+* **Initial PostgreSQL 10 support**. TimescaleDB now should work on both PostgreSQL 9.6 and 10. As this is our first release supporting PG10, we look forward to community feedback and testing. _Some release channels, like Ubuntu & RPM-based distros will remain on 9.6 for now_
+* Support for `CLUSTER` on hypertables to recursively apply to chunks
+* Improve constraint handling of edge cases for `DATE` and `TIMESTAMP`
+* Fix `range_start` and `range_end` to properly handle the full 32-bit int space
+* Allow users to specify their desired partitioning function
+* Enforce `NOT NULL` constraint on time columns
+* Add testing infrastructure to use Coverity and test PostgreSQL regression tests in TimescaleDB
+* Switch to the CMake build system for better cross-platform support
+* Several other bug fixes, cleanups, and improvements
+
+**Notable commits**
+* [13e1cb5] Add reindex function
+* [6594018] Handle when create_hypertable is invoked on partitioned table
+* [818bdbc] Add coverity testing
+* [5d0cbc1] Recurse CLUSTER command to chunks
+* [9c7191e] Change TIMESTAMP partitioning to be completely tz-independent
+* [741b256] Mark IMMUTABLE functions as PARALLEL SAFE
+* [2ffb30d] Make aggregate serialize and deserialize functions STRICT
+* [c552410] Add build target to run the standard PostgreSQL regression tests
+* [291050b] Change DATE partitioning to be completely tz-independent
+* [ca0968a] Make all partitioning functions take anyelement argument
+* [a4e1e32] Change range_start and range_end semantics
+* [2dfbc82] Fix off-by-one error on range-end
+* [500563f] Add support for PostgreSQL 10
+* [201a948] Check that time dimensions are set as NOT NULL.
+* [4532650] Allow setting partitioning function
+* [4a0a0d8] Fix column type change on plain tables
+* [cf009cc] Avoid string conversion in hash partitioning
+* [8151098] Improve update testing by adding a rerun test
+* [c420c11] Create a catalog entry for constraint-backed indexes
+* [ec746d1] Add ability to run regression test locally
+* [44f9fec] Add analyze to parallel test for stability
+* [9e0422a] Fix bug with pointer assignment after realloc
+* [114fa8d] Refactor functions used to recurse DDL commands to chunks
+* [b1ec4fa] Refactor build system to use CMake
+
+**Thanks**
+* @jgraichen for reporting an issue with `drop_chunks` not accepting `BIGINT`
+* @nathansgreen for reporting an edge case with constraints for `TIMESTAMP`
+* @jonmd for reporting a similar edge case for `DATE`
+* @jwdeitch for a PR to cover an error case in PG10
+
+
 ## 0.6.1 (2017-11-07)
 
 **High-level changes**
