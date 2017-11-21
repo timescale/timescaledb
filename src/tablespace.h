@@ -2,10 +2,11 @@
 #define TIMESCALEDB_TABLESPACE_H
 
 #include <postgres.h>
+#include "catalog.h"
 
 typedef struct Tablespace
 {
-	int32		tablespace_id;
+	FormData_tablespace fd;
 	Oid			tablespace_oid;
 } Tablespace;
 
@@ -16,7 +17,9 @@ typedef struct Tablespaces
 	Tablespace *tablespaces;
 } Tablespaces;
 
-extern Tablespace *tablespaces_add(Tablespaces *tablespaces, int32 tspc_id, Oid tspc_oid);
+extern Tablespace *tablespaces_add(Tablespaces *tablespaces, FormData_tablespace *form, Oid tspc_oid);
+extern bool tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid);
+extern int	tablespaces_clear(Tablespaces *tspcs);
 extern Tablespaces *tablespace_scan(int32 hypertable_id);
 
 #endif   /* TIMESCALEDB_TABLESPACE_H */

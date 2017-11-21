@@ -519,4 +519,7 @@ void		catalog_delete_tid(Relation rel, ItemPointer tid);
 void		catalog_delete(Relation rel, HeapTuple tuple);
 void		catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 
+/* Delete only: do not increment command counter or invalidate caches */
+void		catalog_delete_only(Relation rel, HeapTuple tuple);
+
 #endif   /* TIMESCALEDB_CATALOG_H */

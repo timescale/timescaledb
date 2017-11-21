@@ -467,6 +467,11 @@ catalog_delete(Relation rel, HeapTuple tuple)
 	catalog_delete_tid(rel, &tuple->t_self);
 }
 
+void
+catalog_delete_only(Relation rel, HeapTuple tuple)
+{
+	CatalogTupleDelete(rel, &tuple->t_self);
+}
 
 /*
  * Invalidate TimescaleDB catalog caches.
@@ -510,6 +515,7 @@ catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 			break;
 		case HYPERTABLE:
 		case DIMENSION:
+		case TABLESPACE:
 			relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;

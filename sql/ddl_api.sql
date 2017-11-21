@@ -303,3 +303,17 @@ CREATE OR REPLACE FUNCTION attach_tablespace(tablespace NAME, hypertable REGCLAS
 $BODY$
     SELECT * FROM _timescaledb_internal.attach_tablespace(tablespace, hypertable);
 $BODY$;
+
+-- Detach the given tablespace from a hypertable
+CREATE OR REPLACE FUNCTION detach_tablespace(tablespace NAME, hypertable REGCLASS = NULL)
+       RETURNS INTEGER LANGUAGE SQL AS
+$BODY$
+    SELECT * FROM _timescaledb_internal.detach_tablespace(tablespace, hypertable);
+$BODY$;
+
+-- Detach all tablespaces from the a hypertable
+CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS)
+       RETURNS INTEGER LANGUAGE SQL AS
+$BODY$
+    SELECT * FROM _timescaledb_internal.detach_tablespaces(hypertable);
+$BODY$;

@@ -16,6 +16,8 @@ ORDER BY proname;
  chunk_relation_size
  chunk_relation_size_pretty
  create_hypertable
+ detach_tablespace
+ detach_tablespaces
  drop_chunks
  first
  histogram
@@ -26,5 +28,5 @@ ORDER BY proname;
  last
  set_chunk_time_interval
  time_bucket
-(15 rows)
+(17 rows)
 
