@@ -1594,7 +1594,7 @@ timescaledb_ddl_command_start(
 							  ProcessUtilityContext context,
 							  ParamListInfo params,
 #if PG10
-							  QueryEnvironment * queryEnv,
+							  QueryEnvironment *queryEnv,
 #endif
 							  DestReceiver *dest,
 							  char *completion_tag)

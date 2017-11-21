@@ -21,6 +21,8 @@ typedef struct Hypertable
 	Tablespaces *tablespaces;
 } Hypertable;
 
+extern bool hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
+extern Oid	hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
 extern int	hypertable_set_name(Hypertable *ht, const char *newname);
 extern int	hypertable_set_schema(Hypertable *ht, const char *newname);
@@ -30,5 +32,7 @@ extern Oid	hypertable_relid(RangeVar *rv);
 extern bool is_hypertable(Oid relid);
 extern bool hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
 extern Tablespace *hypertable_add_tablespace(Hypertable *ht, int32 tspc_id, Oid tspc_oid);
+extern bool hypertable_delete_tablespace(Hypertable *ht, Oid tspc_id);
+extern int	hypertable_delete_all_tablespaces(Hypertable *ht);
 
 #endif   /* TIMESCALEDB_HYPERTABLE_H */

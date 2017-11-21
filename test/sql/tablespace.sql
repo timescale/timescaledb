@@ -61,9 +61,20 @@ INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
 INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 
 --
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+-- User doesn't have permission on tablespace1 --> error
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+
+-- Grant permission to tablespace1
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+
 SELECT create_hypertable('tspace_1dim', 'time');
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
+
+SELECT * FROM _timescaledb_catalog.tablespace;
 
 INSERT INTO tspace_1dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
 INSERT INTO tspace_1dim VALUES ('2017-03-20T09:00:01', 24.3, 'brown');
@@ -71,6 +82,24 @@ INSERT INTO tspace_1dim VALUES ('2017-03-20T09:00:01', 24.3, 'brown');
 SELECT relname, spcname FROM pg_class c
 INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
 INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+
+--detach tablespace1 from all tables. Due to lack of permissions,
+--should only detach from 'tspace_1dim' (1 tablespace)
+SELECT detach_tablespace('tablespace1');
+SELECT * FROM _timescaledb_catalog.tablespace;
+
+--detach the other tablespace
+SELECT detach_tablespace('tablespace2', 'tspace_1dim');
+SELECT * FROM _timescaledb_catalog.tablespace;
+
+--detaching a tablespace from table without permissions should fail
+SELECT detach_tablespace('tablespace2', 'tspace_2dim');
+SELECT detach_tablespaces('tspace_2dim');
+
+--set other user should make detach work
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT detach_tablespaces('tspace_2dim');
+SELECT * FROM _timescaledb_catalog.tablespace;
 
 --cleanup
 DROP TABLE tspace_1dim CASCADE;

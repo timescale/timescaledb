@@ -1,10 +1,13 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/memutils.h>
 #include <utils/builtins.h>
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
+#include <commands/tablespace.h>
+#include <miscadmin.h>
 
 #include "hypertable.h"
 #include "dimension.h"
@@ -15,6 +18,48 @@
 #include "trigger.h"
 #include "scanner.h"
 #include "catalog.h"
+
+static Oid
+rel_get_owner(Oid relid)
+{
+	HeapTuple	tuple;
+	Oid			ownerid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("relation with OID %u does not exist", relid)));
+
+	ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
+
+	ReleaseSysCache(tuple);
+
+	return ownerid;
+}
+
+bool
+hypertable_has_privs_of(Oid hypertable_oid, Oid userid)
+{
+	return has_privs_of_role(userid, rel_get_owner(hypertable_oid));
+}
+
+Oid
+hypertable_permissions_check(Oid hypertable_oid, Oid userid)
+{
+	Oid			ownerid = rel_get_owner(hypertable_oid);
+
+	if (!has_privs_of_role(userid, ownerid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("User \"%s\" lacks permissions on table \"%s\"",
+						GetUserNameFromId(userid, true),
+						get_rel_name(hypertable_oid))));
+
+	return ownerid;
+}
+
 
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple)
@@ -230,7 +275,31 @@ hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 Tablespace *
 hypertable_add_tablespace(Hypertable *ht, int32 tspc_id, Oid tspc_oid)
 {
-	return tablespaces_add(ht->tablespaces, tspc_id, tspc_oid);
+	FormData_tablespace form = {
+		.id = tspc_id,
+		.hypertable_id = ht->fd.id,
+	};
+
+	namestrcpy(&form.tablespace_name, get_tablespace_name(tspc_oid));
+	return tablespaces_add(ht->tablespaces, &form, tspc_oid);
+}
+
+bool
+hypertable_delete_tablespace(Hypertable *ht, Oid tspc_oid)
+{
+	if (NULL == ht->tablespaces)
+		return false;
+
+	return tablespaces_delete(ht->tablespaces, tspc_oid);
+}
+
+int
+hypertable_delete_all_tablespaces(Hypertable *ht)
+{
+	if (NULL == ht->tablespaces)
+		return 0;
+
+	return tablespaces_clear(ht->tablespaces);
 }
 
 static inline Oid

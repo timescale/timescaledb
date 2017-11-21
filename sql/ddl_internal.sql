@@ -65,7 +65,7 @@ BEGIN
     -- Create the schema for the hypertable data if needed
     PERFORM _timescaledb_internal.create_hypertable_schema(associated_schema_name);
 
-    id :=  nextval(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'));
+    id := nextval(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'));
 
     IF associated_table_prefix IS NULL THEN
         associated_table_prefix = format('_hyper_%s', id);
@@ -620,6 +620,12 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.attach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS VOID
 AS '$libdir/timescaledb', 'tablespace_attach' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.detach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS INTEGER
+AS '$libdir/timescaledb', 'tablespace_detach' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
+AS '$libdir/timescaledb', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
 
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
