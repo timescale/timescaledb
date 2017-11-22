@@ -28,6 +28,118 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 \set QUIET on
 \o
+-- Make sure UPDATE isn't optimized if it includes Append plans
+-- Need to turn of nestloop to make append appear the same on PG96 and PG10
+set enable_nestloop = 'off';
+CREATE OR REPLACE FUNCTION series_val()
+RETURNS integer LANGUAGE PLPGSQL STABLE AS
+$BODY$
+BEGIN
+    RETURN 5;
+END;
+$BODY$;
+-- ConstraintAwareAppend applied for SELECT
+EXPLAIN (costs off)
+SELECT FROM "one_Partition"
+WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join
+   Hash Cond: ("one_Partition_1".series_1 = "one_Partition".series_1)
+   ->  Append
+         ->  Seq Scan on "one_Partition" "one_Partition_1"
+         ->  Seq Scan on _hyper_1_1_chunk
+         ->  Seq Scan on _hyper_1_2_chunk
+         ->  Seq Scan on _hyper_1_3_chunk
+   ->  Hash
+         ->  HashAggregate
+               Group Key: "one_Partition".series_1
+               ->  Custom Scan (ConstraintAwareAppend)
+                     Hypertable: one_Partition
+                     Chunks left after exclusion: 3
+                     ->  Append
+                           ->  Index Only Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Only Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Only Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+(20 rows)
+
+-- ConstraintAwareAppend NOT applied for UPDATE
+EXPLAIN (costs off)
+UPDATE "one_Partition"
+SET series_1 = 8
+WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
+                                                                   QUERY PLAN                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on "one_Partition"
+   Update on "one_Partition"
+   Update on _hyper_1_1_chunk
+   Update on _hyper_1_2_chunk
+   Update on _hyper_1_3_chunk
+   ->  Hash Join
+         Hash Cond: ("one_Partition_1".series_1 = "one_Partition".series_1)
+         ->  HashAggregate
+               Group Key: "one_Partition_1".series_1
+               ->  Append
+                     ->  Seq Scan on "one_Partition" "one_Partition_1"
+                           Filter: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
+                           Index Cond: (series_1 > (series_val())::double precision)
+         ->  Hash
+               ->  Seq Scan on "one_Partition"
+   ->  Hash Join
+         Hash Cond: (_hyper_1_1_chunk.series_1 = "one_Partition_1".series_1)
+         ->  Seq Scan on _hyper_1_1_chunk
+         ->  Hash
+               ->  HashAggregate
+                     Group Key: "one_Partition_1".series_1
+                     ->  Append
+                           ->  Seq Scan on "one_Partition" "one_Partition_1"
+                                 Filter: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+   ->  Hash Join
+         Hash Cond: (_hyper_1_2_chunk.series_1 = "one_Partition_1".series_1)
+         ->  Seq Scan on _hyper_1_2_chunk
+         ->  Hash
+               ->  HashAggregate
+                     Group Key: "one_Partition_1".series_1
+                     ->  Append
+                           ->  Seq Scan on "one_Partition" "one_Partition_1"
+                                 Filter: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+   ->  Hash Join
+         Hash Cond: (_hyper_1_3_chunk.series_1 = "one_Partition_1".series_1)
+         ->  Seq Scan on _hyper_1_3_chunk
+         ->  Hash
+               ->  HashAggregate
+                     Group Key: "one_Partition_1".series_1
+                     ->  Append
+                           ->  Seq Scan on "one_Partition" "one_Partition_1"
+                                 Filter: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+                           ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
+                                 Index Cond: (series_1 > (series_val())::double precision)
+(65 rows)
+
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
@@ -45,6 +157,26 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
 (12 rows)
 
+UPDATE "one_Partition"
+SET series_1 = 8
+WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
+SELECT * FROM "one_Partition"  ORDER BY "timeCustom", device_id;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
+ 1257894000000000000 | dev1      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        2 |          | 
+ 1257894000000000000 | dev2      |      1.5 |        1 |          | 
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      5.5 |        8 |          | t
+ 1257894002000000000 | dev1      |      5.5 |        8 |          | f
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+ 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          | 
+(12 rows)
+
 UPDATE "one_Partition" SET series_1 = 47;
 UPDATE "one_Partition" SET series_bool = true;
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
@@ -56,9 +188,9 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
  1257894000000000000 | dev2      |      1.5 |       47 |          | t
  1257894000000001000 | dev1      |      2.5 |       47 |          | t
  1257894001000000000 | dev1      |      3.5 |       47 |          | t
+ 1257894002000000000 | dev1      |      5.5 |       47 |          | t
+ 1257894002000000000 | dev1      |      5.5 |       47 |          | t
  1257894002000000000 | dev1      |      2.5 |       47 |          | t
- 1257894002000000000 | dev1      |      5.5 |       47 |          | t
- 1257894002000000000 | dev1      |      5.5 |       47 |          | t
  1257897600000000000 | dev1      |      4.5 |       47 |          | t
  1257987600000000000 | dev1      |      1.5 |       47 |          | t
  1257987600000000000 | dev1      |      1.5 |       47 |          | t
