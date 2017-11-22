@@ -295,7 +295,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 		ht != NULL &&
 		is_append_parent(rel, rte) &&
 	/* Do not optimize result relations (INSERT, UPDATE, DELETE) */
-		rti != (Index) root->parse->resultRelation)
+		0 == root->parse->resultRelation)
 	{
 		ListCell   *lc;
 
