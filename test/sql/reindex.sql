@@ -41,7 +41,8 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal.%');
 SELECT * FROM reindex_norm;
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
-SELECT * FROM _timescaledb_internal.chunk_index_clone('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass);
+SELECT chunk_index_clone::regclass::text
+FROM _timescaledb_internal.chunk_index_clone('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass);
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
 SELECT * FROM _timescaledb_internal.chunk_index_replace('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass, '_timescaledb_internal."_hyper_1_1_chunk_1_1_reindex_test_pkey"'::regclass);
 

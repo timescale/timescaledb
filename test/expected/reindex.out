@@ -94,10 +94,11 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
  _timescaledb_internal."1_1_reindex_test_pkey"                       | {time,temp} | t      | t       | f         | 
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.chunk_index_clone('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass);
- chunk_index_clone 
--------------------
-             31375
+SELECT chunk_index_clone::regclass::text
+FROM _timescaledb_internal.chunk_index_clone('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass);
+                      chunk_index_clone                       
+--------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk_1_1_reindex_test_pkey
 (1 row)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
