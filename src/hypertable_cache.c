@@ -65,7 +65,6 @@ hypertable_cache_create()
 	return cache;
 }
 
-
 static Cache *hypertable_cache_current = NULL;
 
 static bool
@@ -83,7 +82,6 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 	HypertableCacheQuery *hq = (HypertableCacheQuery *) query;
 	Catalog    *catalog = catalog_get();
 	HypertableNameCacheEntry *cache_entry = query->result;
-	Hypertable *ht;
 	int			number_found;
 	ScanKeyData scankey[2];
 	ScannerCtx	scanCtx = {
@@ -123,8 +121,6 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 		case 1:
 			Assert(strncmp(cache_entry->hypertable->fd.schema_name.data, hq->schema, NAMEDATALEN) == 0);
 			Assert(strncmp(cache_entry->hypertable->fd.table_name.data, hq->table, NAMEDATALEN) == 0);
-			ht = cache_entry->hypertable;
-			ht->space = dimension_scan(ht->fd.id, ht->main_table_relid, ht->fd.num_dimensions);
 			break;
 		default:
 			elog(ERROR, "Got an unexpected number of records: %d", number_found);
@@ -156,6 +152,12 @@ Hypertable *
 hypertable_cache_get_entry_rv(Cache *cache, RangeVar *rv)
 {
 	return hypertable_cache_get_entry(cache, RangeVarGetRelid(rv, NoLock, true));
+}
+
+Hypertable *
+hypertable_cache_get_entry_by_id(Cache *cache, int32 hypertable_id)
+{
+	return hypertable_cache_get_entry(cache, hypertable_id_to_relid(hypertable_id));
 }
 
 Hypertable *

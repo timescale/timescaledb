@@ -32,6 +32,47 @@ hypertable_from_tuple(HeapTuple tuple)
 	return h;
 }
 
+static bool
+hypertable_tuple_get_relid(TupleInfo *ti, void *data)
+{
+	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
+	Oid		   *relid = data;
+	Oid			schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
+
+	if (OidIsValid(schema_oid))
+		*relid = get_relname_relid(NameStr(form->table_name), schema_oid);
+
+	return false;
+}
+
+Oid
+hypertable_id_to_relid(int32 hypertable_id)
+{
+	Catalog    *catalog = catalog_get();
+	Oid			relid = InvalidOid;
+	ScanKeyData scankey[1];
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[HYPERTABLE].id,
+		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_ID_INDEX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 1,
+		.scankey = scankey,
+		.tuple_found = hypertable_tuple_get_relid,
+		.data = &relid,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	/* Perform an index scan on the hypertable pkey. */
+	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	scanner_scan(&scanctx);
+
+	return relid;
+}
+
 typedef struct ChunkCacheEntry
 {
 	MemoryContext mcxt;
