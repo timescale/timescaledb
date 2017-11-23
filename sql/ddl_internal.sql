@@ -1,5 +1,29 @@
+CREATE OR REPLACE FUNCTION _timescaledb_internal.check_role(rel REGCLASS)
+    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
+    AS
+$BODY$
+DECLARE
+    username NAME = current_setting('role');
+    relowner OID;
+BEGIN
+    IF username IS NULL OR username = 'none' THEN
+       username := session_user;
+    END IF;
+
+    SELECT c.relowner
+    INTO STRICT relowner
+    FROM pg_class c
+    WHERE c.oid = rel;
+
+    IF NOT pg_has_role(username, relowner, 'USAGE') THEN
+        RAISE 'Permission denied for relation %', rel
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
+END
+$BODY$;
+
 -- Creates a hypertable row.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable(
     main_table               REGCLASS,
     schema_name              NAME,
     table_name               NAME,
@@ -10,14 +34,17 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable_row(
     associated_table_prefix  NAME,
     chunk_time_interval      BIGINT,
     tablespace               NAME,
+    create_default_indexes   BOOLEAN,
     partitioning_func        REGPROC
 )
-    RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _timescaledb_catalog.hypertable LANGUAGE PLPGSQL VOLATILE
+    SECURITY DEFINER AS
 $BODY$
 DECLARE
     id                       INTEGER;
     hypertable_row           _timescaledb_catalog.hypertable;
 BEGIN
+    PERFORM _timescaledb_internal.check_role(main_table);
 
     IF associated_schema_name IS NULL THEN
         associated_schema_name = '_timescaledb_internal';
@@ -55,7 +82,7 @@ BEGIN
 
     --add default tablespace, if any
     IF tablespace IS NOT NULL THEN
-       PERFORM _timescaledb_internal.attach_tablespace(hypertable_row.id, tablespace);
+        PERFORM _timescaledb_internal.attach_tablespace(hypertable_row.id, tablespace);
     END IF;
 
     --create time dimension
@@ -79,6 +106,10 @@ BEGIN
 
     -- Verify indexes
     PERFORM _timescaledb_internal.verify_hypertable_indexes(main_table);
+
+    IF create_default_indexes THEN
+        PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
+    END IF;
 
     RETURN hypertable_row;
 END
@@ -151,7 +182,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
     partitioning_func        REGPROC = NULL,
     increment_num_dimensions BOOLEAN = TRUE
 )
-    RETURNS _timescaledb_catalog.dimension LANGUAGE PLPGSQL VOLATILE AS
+    RETURNS _timescaledb_catalog.dimension LANGUAGE PLPGSQL VOLATILE
+    AS
 $BODY$
 DECLARE
     partitioning_func_name   _timescaledb_catalog.dimension.partitioning_func%TYPE = 'get_partition_hash';
@@ -401,33 +433,6 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_hypertable(
-    old_schema     NAME,
-    old_table_name NAME,
-    new_schema     NAME,
-    new_table_name NAME
-)
-    RETURNS VOID
-    LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
-    AS
-$BODY$
-DECLARE
-    hypertable_row _timescaledb_catalog.hypertable;
-BEGIN
-    SELECT * INTO STRICT hypertable_row
-    FROM _timescaledb_catalog.hypertable
-    WHERE schema_name = old_schema AND table_name = old_table_name;
-
-    UPDATE _timescaledb_catalog.hypertable SET
-            schema_name = new_schema,
-            table_name = new_table_name
-            WHERE
-            schema_name = old_schema AND
-            table_name = old_table_name;
-END
-$BODY$;
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.rename_column(
     hypertable_id INT,
     old_name NAME,
@@ -525,7 +530,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
 )
     RETURNS VOID
     LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
+    SET search_path = ''
     AS
 $BODY$
 DECLARE

@@ -1,9 +1,10 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <utils/lsyscache.h>
+#include <utils/memutils.h>
+#include <utils/builtins.h>
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
-#include <utils/memutils.h>
 
 #include "hypertable.h"
 #include "dimension.h"
@@ -12,6 +13,7 @@
 #include "hypertable_cache.h"
 #include "trigger.h"
 #include "scanner.h"
+#include "catalog.h"
 
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple)
@@ -39,6 +41,85 @@ static void
 chunk_cache_entry_free(void *cce)
 {
 	MemoryContextDelete(((ChunkCacheEntry *) cce)->mcxt);
+}
+
+static int
+hypertable_scan_limit_internal(ScanKeyData *scankey,
+							   int num_scankeys,
+							   int indexid,
+							   tuple_found_func on_tuple_found,
+							   void *scandata,
+							   int limit,
+							   LOCKMODE lock)
+{
+	Catalog    *catalog = catalog_get();
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[HYPERTABLE].id,
+		.index = catalog->tables[HYPERTABLE].index_ids[indexid],
+		.scantype = ScannerTypeIndex,
+		.nkeys = num_scankeys,
+		.scankey = scankey,
+		.data = scandata,
+		.limit = limit,
+		.tuple_found = on_tuple_found,
+		.lockmode = lock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	return scanner_scan(&scanctx);
+}
+
+static bool
+hypertable_tuple_update(TupleInfo *ti, void *data)
+{
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(tuple);
+	FormData_hypertable *update = data;
+	CatalogSecurityContext sec_ctx;
+
+	namecpy(&form->schema_name, &update->schema_name);
+	namecpy(&form->table_name, &update->table_name);
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_update(ti->scanrel, tuple);
+	catalog_restore_user(&sec_ctx);
+
+	heap_freetuple(tuple);
+
+	return false;
+}
+
+static int
+hypertable_update_form(FormData_hypertable *update)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ,
+				Int32GetDatum(update->id));
+
+	return hypertable_scan_limit_internal(scankey,
+										  1,
+										  HYPERTABLE_ID_INDEX,
+										  hypertable_tuple_update,
+										  update,
+										  1,
+										  RowExclusiveLock);
+}
+
+int
+hypertable_set_name(Hypertable *ht, const char *newname)
+{
+	namestrcpy(&ht->fd.table_name, newname);
+
+	return hypertable_update_form(&ht->fd);
+}
+
+int
+hypertable_set_schema(Hypertable *ht, const char *newname)
+{
+	namestrcpy(&ht->fd.schema_name, newname);
+
+	return hypertable_update_form(&ht->fd);
 }
 
 Chunk *
