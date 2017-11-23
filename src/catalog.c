@@ -111,10 +111,6 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 		.name = "drop_hypertable",
 		.args = 2
 	},
-	[DDL_RENAME_HYPERTABLE] = {
-		.name = "rename_hypertable",
-		.args = 4
-	},
 	[DDL_RENAME_COLUMN] = {
 		.name = "rename_column",
 		.args = 3

@@ -1,7 +1,7 @@
 \c single :ROLE_SUPERUSER
 create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 
-\c single :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 
 
@@ -13,6 +13,23 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 \dt "test_schema".*
 
 create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
+
+\set ON_ERROR_STOP 0
+-- Permission denied with unprivileged role
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+
+-- CREATE on schema is not enough
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+GRANT ALL ON SCHEMA test_schema TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set ON_ERROR_STOP 1
+
+-- Should work with when granted table owner role
+RESET ROLE;
+GRANT :ROLE_DEFAULT_PERM_USER TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 
 \set ON_ERROR_STOP 0
