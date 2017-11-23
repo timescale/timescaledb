@@ -39,6 +39,7 @@
 #include "extension.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
+#include "dimension_vector.h"
 #include "indexing.h"
 #include "trigger.h"
 #include "utils.h"
@@ -63,31 +64,10 @@ static bool expect_chunk_modification = false;
 						 NameGetDatum(&(hypertable)->fd.table_name),	\
 						 BoolGetDatum(cascade))
 
-#define drop_chunk_metadata(chunk)				\
-	CatalogInternalCall1(DDL_DROP_CHUNK_METADATA,				\
-						 Int32GetDatum((chunk)->fd.id)) \
-
-#define process_rename_hypertable_column(hypertable, old_name, new_name) \
-	CatalogInternalCall3(DDL_RENAME_COLUMN,								\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 DirectFunctionCall1(namein, CStringGetDatum(old_name)), \
-						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
-
 #define process_change_hypertable_owner(hypertable, rolename )			\
 	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
 						 ObjectIdGetDatum((hypertable)->main_table_relid), \
 						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
-
-#define process_drop_hypertable_constraint(hypertable, constraint_name) \
-	CatalogInternalCall2(DDL_DROP_CONSTRAINT,							\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 DirectFunctionCall1(namein, CStringGetDatum(constraint_name)))
-
-#define process_change_hypertable_column_type(hypertable, column_name, new_type) \
-	CatalogInternalCall3(DDL_CHANGE_COLUMN_TYPE,						\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 DirectFunctionCall1(namein, CStringGetDatum(column_name)), \
-						 ObjectIdGetDatum(new_type))
 
 typedef struct ProcessUtilityArgs
 {
@@ -380,31 +360,23 @@ process_drop_table(DropStmt *stmt)
 		if (OidIsValid(relid))
 		{
 			Hypertable *ht;
-			CatalogSecurityContext sec_ctx;
 
-			catalog_become_owner(catalog_get(), &sec_ctx);
 			ht = hypertable_cache_get_entry(hcache, relid);
 
 			if (NULL != ht)
 			{
+				CatalogSecurityContext sec_ctx;
 
 				if (list_length(stmt->objects) != 1)
 					elog(ERROR, "Cannot drop a hypertable along with other objects");
 
+				catalog_become_owner(catalog_get(), &sec_ctx);
 				process_drop_hypertable(ht, stmt->behavior == DROP_CASCADE);
+				catalog_restore_user(&sec_ctx);
 				handled = true;
 			}
 			else
-			{
-				Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
-
-				if (chunk != NULL)
-				{
-					drop_chunk_metadata(chunk);
-					handled = true;
-				}
-			}
-			catalog_restore_user(&sec_ctx);
+				chunk_delete_by_relid(relid);
 		}
 	}
 
@@ -617,14 +589,17 @@ static void
 process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-	CatalogSecurityContext sec_ctx;
+	Dimension  *dim;
 
 	if (NULL == ht)
 		return;
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
-	process_rename_hypertable_column(ht, stmt->subname, stmt->newname);
-	catalog_restore_user(&sec_ctx);
+	dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
+
+	if (NULL == dim)
+		return;
+
+	dimension_update_name(dim, stmt->newname);
 }
 
 static void
@@ -707,7 +682,7 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	Oid			hypertable_constraint_oid = *((Oid *) arg);
 	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
+	chunk_constraint_create_on_chunk(chunk, hypertable_constraint_oid);
 }
 
 static void
@@ -718,6 +693,15 @@ process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 	Assert(constraint_name != NULL);
 
 	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
+}
+
+static void
+process_drop_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	char	   *hypertable_constraint_name = arg;
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+
+	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, chunk->table_id, hypertable_constraint_name);
 }
 
 static void
@@ -736,14 +720,16 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 
-	process_utility_set_expect_chunk_modification(true);
-	process_drop_hypertable_constraint(ht, constraint_name);
-	process_utility_set_expect_chunk_modification(false);
+	/* Recurse to each chunk and drop the corresponding constraint */
+	foreach_chunk(ht, process_drop_constraint_chunk, constraint_name);
 
+	/*
+	 * If this is a constraint backed by and index, we need to delete
+	 * index-related metadata as well
+	 */
 	if (OidIsValid(hypertable_constraint_index_oid))
-	{
 		chunk_index_delete_children_of(ht, hypertable_constraint_index_oid, false);
-	}
+
 	catalog_restore_user(&sec_ctx);
 }
 
@@ -1190,13 +1176,15 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	ColumnDef  *coldef = (ColumnDef *) cmd->def;
 	Oid			new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
-	CatalogSecurityContext sec_ctx;
+	Dimension  *dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, cmd->name);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	if (NULL == dim)
+		return;
+
+	dimension_update_type(dim, new_type);
 	process_utility_set_expect_chunk_modification(true);
-	process_change_hypertable_column_type(ht, cmd->name, new_type);
+	chunk_recreate_all_constraints_for_dimension(ht->space, dim->fd.id);
 	process_utility_set_expect_chunk_modification(false);
-	catalog_restore_user(&sec_ctx);
 }
 
 static void

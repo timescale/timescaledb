@@ -126,6 +126,18 @@ dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 	return *res;
 }
 
+int
+dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
+{
+	int			i;
+
+	for (i = 0; i < vec->num_slices; i++)
+		if (dimension_slice_id == vec->slices[i]->fd.id)
+			return i;
+
+	return -1;
+}
+
 void
 dimension_vec_free(DimensionVec *vec)
 {

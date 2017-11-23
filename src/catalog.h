@@ -47,14 +47,9 @@ typedef enum CatalogTable
 typedef enum InternalFunction
 {
 	DDL_CHANGE_OWNER = 0,
-	DDL_CREATE_CHUNK_CONSTRAINT,
-	DDL_DROP_CONSTRAINT,
+	DDL_ADD_CHUNK_CONSTRAINT,
 	DDL_DROP_HYPERTABLE,
-	DDL_RENAME_COLUMN,
-	DDL_CHANGE_COLUMN_TYPE,
-	DDL_DROP_CHUNK_METADATA,
 	TRUNCATE_HYPERTABLE,
-	CHUNK_CREATE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
 
@@ -167,6 +162,15 @@ typedef struct FormData_dimension
 } FormData_dimension;
 
 typedef FormData_dimension *Form_dimension;
+
+enum Anum_dimension_id_idx
+{
+	Anum_dimension_id_idx_id = 1,
+	_Anum_dimension_id_idx_max,
+};
+
+#define Natts_dimension_id_idx \
+	(_Anum_dimension_id_idx_max - 1)
 
 enum Anum_dimension_hypertable_id_idx
 {
@@ -514,6 +518,7 @@ const char *catalog_table_name(CatalogTable table);
 
 void		catalog_insert(Relation rel, HeapTuple tuple);
 void		catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls);
+void		catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
 void		catalog_update(Relation rel, HeapTuple tuple);
 void		catalog_delete_tid(Relation rel, ItemPointer tid);
 void		catalog_delete(Relation rel, HeapTuple tuple);

@@ -41,13 +41,13 @@ INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time
 INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1) VALUES
 (1257987800000000000, 'dev2', 11);
 
-
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 1
 
 -- Show constraints on main tables
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 SELECT * FROM test.show_constraints('hyper');
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
 --should have unique constraint not just unique index
@@ -55,6 +55,7 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 -- The constraint should have been removed from the chunk as well
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --uniqueness not enforced
@@ -73,6 +74,7 @@ ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
       ADD CHECK (time > 0),
       ADD UNIQUE (time);
 
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
@@ -80,10 +82,11 @@ ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key,
 DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check;
 
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
-CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx 
+CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx
 ON hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name (time);
 
 \set ON_ERROR_STOP 0
@@ -101,19 +104,19 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --test adding constraint with same name to different table -- should fail
 \set ON_ERROR_STOP 0
-ALTER TABLE hyper 
+ALTER TABLE hyper
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE (time);
 \set ON_ERROR_STOP 1
 
 --uniquness violation fails
 \set ON_ERROR_STOP 0
-INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1) 
+INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1)
 VALUES (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 1
 
 --cannot create unique constraint on non-partition column
 \set ON_ERROR_STOP 0
-ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name 
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
 \set ON_ERROR_STOP 1
 

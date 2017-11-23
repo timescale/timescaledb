@@ -9,11 +9,13 @@
 
 typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
+typedef struct DimensionVec DimensionVec;
 
 typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
 	DIMENSION_TYPE_CLOSED,
+	DIMENSION_TYPE_ANY,
 } DimensionType;
 
 typedef struct Dimension
@@ -68,10 +70,13 @@ extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDe
 extern Dimension *hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
 extern Dimension *hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
 extern Dimension *hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
+extern DimensionVec *dimension_get_slices(Dimension *dim);
+extern int	dimension_update_type(Dimension *dim, Oid newtype);
+extern int	dimension_update_name(Dimension *dim, const char *newname);
 
 #define hyperspace_get_open_dimension(space, i)				\
 	hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)
-#define hyperspace_get_closed_dimension(space, i )				\
+#define hyperspace_get_closed_dimension(space, i)				\
 	hyperspace_get_dimension(space, DIMENSION_TYPE_CLOSED, i)
 
 #endif   /* TIMESCALEDB_DIMENSION_H */

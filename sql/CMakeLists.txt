@@ -16,7 +16,6 @@ set(SQL_FILES
   schema_info.sql
   ddl_api.sql
   ddl_triggers.sql
-  tablespace.sql
   bookend.sql
   time_bucket.sql
   version.sql
