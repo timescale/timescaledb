@@ -53,12 +53,6 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 static bool expect_chunk_modification = false;
 
 /* Macros for DDL upcalls to PL/pgSQL */
-#define process_rename_hypertable_schema(hypertable, new_schema)		\
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 DirectFunctionCall1(namein, CStringGetDatum(new_schema)), \
-						 NameGetDatum(&(hypertable)->fd.table_name))
 
 #define process_drop_hypertable(hypertable, cascade)					\
 	CatalogInternalCall2(DDL_DROP_HYPERTABLE,							\
@@ -70,14 +64,6 @@ static bool expect_chunk_modification = false;
 						 NameGetDatum(&(hypertable)->fd.schema_name),	\
 						 NameGetDatum(&(hypertable)->fd.table_name),	\
 						 BoolGetDatum(cascade))
-
-
-#define process_rename_hypertable(hypertable, new_name)					\
-	CatalogInternalCall4(DDL_RENAME_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 DirectFunctionCall1(namein, CStringGetDatum(new_name)))
 
 #define drop_chunk_metadata(chunk)				\
 	CatalogInternalCall1(DDL_DROP_CHUNK_METADATA,				\
@@ -232,7 +218,7 @@ process_alterobjectschema(Node *parsetree)
 	ht = hypertable_cache_get_entry(hcache, relid);
 
 	if (ht != NULL)
-		process_rename_hypertable_schema(ht, alterstmt->newschema);
+		hypertable_set_schema(ht, alterstmt->newschema);
 
 	cache_release(hcache);
 }
@@ -626,7 +612,7 @@ process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
 
 	if (NULL != ht)
-		process_rename_hypertable(ht, stmt->newname);
+		hypertable_set_name(ht, stmt->newname);
 }
 
 static void

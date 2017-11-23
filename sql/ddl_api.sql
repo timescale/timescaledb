@@ -25,7 +25,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     partitioning_func       REGPROC = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
+    SET search_path = ''
     AS
 $BODY$
 <<vars>>
@@ -33,7 +33,6 @@ DECLARE
     hypertable_row   _timescaledb_catalog.hypertable;
     table_name                 NAME;
     schema_name                NAME;
-    table_owner                NAME;
     tablespace_oid             OID;
     tablespace_name            NAME;
     main_table_has_items       BOOLEAN;
@@ -42,6 +41,9 @@ DECLARE
     chunk_time_interval_actual BIGINT;
     time_type                  REGTYPE;
 BEGIN
+    -- Early abort if lacking permissions
+    PERFORM _timescaledb_internal.check_role(main_table);
+
     SELECT relname, nspname, reltablespace, relkind = 'p'
     INTO STRICT table_name, schema_name, tablespace_oid, is_partitioned
     FROM pg_class c
@@ -51,17 +53,6 @@ BEGIN
     IF is_partitioned THEN
         RAISE EXCEPTION 'table % is already partitioned', main_table
         USING ERRCODE = 'IO110';
-    END IF;
-
-    SELECT tableowner
-    INTO STRICT table_owner
-    FROM pg_catalog.pg_tables
-    WHERE schemaname = schema_name
-          AND tablename = table_name;
-
-    IF table_owner <> session_user THEN
-        RAISE 'Must be owner of relation %', table_name
-        USING ERRCODE = 'insufficient_privilege';
     END IF;
 
     -- tables that don't have an associated tablespace has reltablespace OID set to 0
@@ -106,7 +97,7 @@ BEGIN
     BEGIN
         SELECT *
         INTO hypertable_row
-        FROM  _timescaledb_internal.create_hypertable_row(
+        FROM  _timescaledb_internal.create_hypertable(
             main_table,
             schema_name,
             table_name,
@@ -117,6 +108,7 @@ BEGIN
             associated_table_prefix,
             chunk_time_interval_actual,
             tablespace_name,
+            create_default_indexes,
             partitioning_func
         );
     EXCEPTION
@@ -132,10 +124,6 @@ BEGIN
             RAISE EXCEPTION 'database not configured for hypertable storage (not setup as a data-node)'
             USING ERRCODE = 'IO101';
     END;
-
-   IF create_default_indexes THEN
-        PERFORM _timescaledb_internal.create_default_indexes(hypertable_row, main_table, partitioning_column);
-    END IF;
 END
 $BODY$;
 
@@ -154,18 +142,15 @@ $BODY$
 DECLARE
     table_name       NAME;
     schema_name      NAME;
-    owner_oid        OID;
     hypertable_row   _timescaledb_catalog.hypertable;
 BEGIN
-    SELECT relname, nspname, relowner
-    INTO STRICT table_name, schema_name, owner_oid
+    PERFORM _timescaledb_internal.check_role(main_table);
+
+    SELECT relname, nspname
+    INTO STRICT table_name, schema_name
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
-
-    IF NOT pg_has_role(session_user, owner_oid, 'USAGE') THEN
-        raise 'permission denied for hypertable "%"', main_table;
-    END IF;
 
     SELECT *
     INTO STRICT hypertable_row
@@ -195,17 +180,14 @@ $BODY$
 DECLARE
     main_table_name       NAME;
     main_schema_name      NAME;
-    owner_oid             OID;
 BEGIN
-    SELECT relname, nspname, relowner
-    INTO STRICT main_table_name, main_schema_name, owner_oid
+    PERFORM _timescaledb_internal.check_role(main_table);
+
+    SELECT relname, nspname
+    INTO STRICT main_table_name, main_schema_name
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
-
-    IF NOT pg_has_role(session_user, owner_oid, 'USAGE') THEN
-        raise 'permission denied for hypertable "%"', main_table;
-    END IF;
 
     UPDATE _timescaledb_catalog.dimension d
     SET interval_length = set_chunk_time_interval.chunk_time_interval
@@ -284,26 +266,17 @@ CREATE OR REPLACE FUNCTION attach_tablespace(
     AS
 $BODY$
 DECLARE
-    main_schema_name  NAME;
-    main_table_name   NAME;
-    owner_oid         OID;
     hypertable_id     INTEGER;
     tablespace_oid    OID;
 BEGIN
-    SELECT nspname, relname, relowner
-    FROM pg_class c INNER JOIN pg_namespace n
-    ON (c.relnamespace = n.oid)
-    WHERE c.oid = hypertable
-    INTO STRICT main_schema_name, main_table_name, owner_oid;
-
-    IF NOT pg_has_role(session_user, owner_oid, 'USAGE') THEN
-        raise 'permission denied for hypertable "%"', hypertable;
-    END IF;
+    PERFORM _timescaledb_internal.check_role(hypertable);
 
     SELECT id
-    FROM _timescaledb_catalog.hypertable h
-    WHERE (h.schema_name = main_schema_name)
-    AND (h.table_name = main_table_name)
+    FROM _timescaledb_catalog.hypertable h, pg_class c, pg_namespace n
+    WHERE h.schema_name = n.nspname
+    AND h.table_name = c.relname
+    AND c.oid = hypertable
+    AND n.oid = c.relnamespace
     INTO hypertable_id;
 
     IF hypertable_id IS NULL THEN
