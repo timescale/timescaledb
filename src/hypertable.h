@@ -22,6 +22,7 @@ typedef struct Hypertable
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
 extern int	hypertable_set_name(Hypertable *ht, const char *newname);
 extern int	hypertable_set_schema(Hypertable *ht, const char *newname);
+extern Oid	hypertable_id_to_relid(int32 hypertable_id);
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);
 extern bool is_hypertable(Oid relid);
