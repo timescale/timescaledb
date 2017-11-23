@@ -29,6 +29,7 @@ extern DimensionVec *dimension_slice_collision_scan_limit(int32 dimension_id, in
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
 extern DimensionSlice *dimension_slice_scan_for_existing(DimensionSlice *slice);
 extern DimensionSlice *dimension_slice_scan_by_id(int32 dimension_slice_id);
+extern DimensionVec *dimension_slice_scan_by_dimension(int32 dimension_id, int limit);
 extern DimensionSlice *dimension_slice_create(int dimension_id, int64 range_start, int64 range_end);
 extern DimensionSlice *dimension_slice_copy(const DimensionSlice *original);
 extern bool dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);

@@ -35,13 +35,8 @@ typedef struct Chunk
 	 * chunk table.
 	 */
 	Hypercube  *cube;
-	int16		capacity;
-	int16		num_constraints;
-	ChunkConstraint constraints[FLEXIBLE_ARRAY_MEMBER];
+	ChunkConstraints *constraints;
 } Chunk;
-
-#define CHUNK_SIZE(num_constraints)								\
-	(sizeof(Chunk) + sizeof(ChunkConstraint) * (num_constraints))
 
 /*
  * ChunkScanCtx is used to scan for chunks in a hypertable's N-dimensional
@@ -70,8 +65,6 @@ extern Chunk *chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints);
 extern Chunk *chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern Chunk *chunk_create_stub(int32 id, int16 num_constraints);
 extern void chunk_free(Chunk *chunk);
-extern bool chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint);
-extern bool chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple);
 extern Chunk *chunk_find(Hyperspace *hs, Point *p);
 extern Chunk *chunk_copy(Chunk *chunk);
 extern Chunk *chunk_get_by_name(const char *schema_name, const char *table_name, int16 num_constraints, bool fail_if_not_found);
@@ -79,5 +72,7 @@ extern Chunk *chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_
 extern Chunk *chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found);
 extern bool chunk_exists(const char *schema_name, const char *table_name);
 extern bool chunk_exists_relid(Oid relid);
+extern void chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
+extern int	chunk_delete_by_relid(Oid chunk_oid);
 
 #endif   /* TIMESCALEDB_CHUNK_H */

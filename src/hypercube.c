@@ -130,17 +130,24 @@ hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id)
  * Given a set of constraints, build the corresponding hypercube.
  */
 Hypercube *
-hypercube_from_constraints(ChunkConstraint constraints[], int16 num_constraints)
+hypercube_from_constraints(ChunkConstraints *constraints)
 {
-	Hypercube  *hc = hypercube_alloc(num_constraints);
+	Hypercube  *hc = hypercube_alloc(constraints->num_dimension_constraints);
 	int			i;
 
-	for (i = 0; i < num_constraints; i++)
+	for (i = 0; i < constraints->num_constraints; i++)
 	{
-		DimensionSlice *slice = dimension_slice_scan_by_id(constraints[i].fd.dimension_slice_id);
+		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
 
-		Assert(slice != NULL);
-		hc->slices[hc->num_slices++] = slice;
+		if (is_dimension_constraint(cc))
+		{
+			DimensionSlice *slice;
+
+			Assert(hc->num_slices < constraints->num_dimension_constraints);
+			slice = dimension_slice_scan_by_id(cc->fd.dimension_slice_id);
+			Assert(slice != NULL);
+			hc->slices[hc->num_slices++] = slice;
+		}
 	}
 
 	hypercube_slice_sort(hc);

@@ -4,10 +4,12 @@
 #include <catalog/indexing.h>
 #include <catalog/pg_inherits.h>
 #include <commands/trigger.h>
+#include <commands/tablecmds.h>
 #include <tcop/tcopprot.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <nodes/makefuncs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/hsearch.h>
@@ -57,6 +59,37 @@ parent_relid(Oid relationId)
 	return parent;
 }
 
+
+static void
+chunk_insert_relation(Relation rel, Chunk *chunk)
+{
+	TupleDesc	desc = RelationGetDescr(rel);
+	Datum		values[Natts_chunk];
+	bool		nulls[Natts_chunk] = {false};
+	CatalogSecurityContext sec_ctx;
+
+	memset(values, 0, sizeof(values));
+	values[Anum_chunk_id - 1] = Int32GetDatum(chunk->fd.id);
+	values[Anum_chunk_hypertable_id - 1] = Int32GetDatum(chunk->fd.hypertable_id);
+	values[Anum_chunk_schema_name - 1] = NameGetDatum(&chunk->fd.schema_name);
+	values[Anum_chunk_table_name - 1] = NameGetDatum(&chunk->fd.table_name);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_insert_values(rel, desc, values, nulls);
+	catalog_restore_user(&sec_ctx);
+}
+
+static void
+chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
+{
+	Catalog    *catalog = catalog_get();
+	Relation	rel;
+
+	rel = heap_open(catalog->tables[CHUNK].id, lock);
+	chunk_insert_relation(rel, chunk);
+	heap_close(rel, lock);
+}
+
 static void
 chunk_fill(Chunk *chunk, HeapTuple tuple)
 {
@@ -69,16 +102,15 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 Chunk *
 chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
 {
-	Chunk	   *chunk;
-
-	chunk = palloc0(CHUNK_SIZE(num_constraints));
-	chunk->capacity = num_constraints;
-	chunk->num_constraints = 0;
+	Chunk	   *chunk = palloc0(sizeof(Chunk));
 
 	chunk_fill(chunk, tuple);
 
-	chunk_constraint_scan_by_chunk_id(chunk);
-	chunk->cube = hypercube_from_constraints(chunk->constraints, chunk->num_constraints);
+	if (num_constraints > 0)
+	{
+		chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints);
+		chunk->cube = hypercube_from_constraints(chunk->constraints);
+	}
 
 	return chunk;
 }
@@ -294,18 +326,59 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 	chunk_scan_ctx_destroy(&scanctx);
 }
 
+static int
+chunk_add_constraints(Chunk *chunk)
+{
+	int			num_added;
+
+	num_added = chunk_constraints_add_dimension_constraints(chunk->constraints,
+															chunk->fd.id,
+															chunk->cube);
+	num_added += chunk_constraints_add_inheritable_constraints(chunk->constraints,
+															   chunk->fd.id,
+													chunk->hypertable_relid);
+
+	return num_added;
+}
+
+static Oid
+chunk_create_table(Chunk *chunk, Hypertable *ht)
+{
+	Relation	rel;
+	ObjectAddress objaddr;
+	CatalogSecurityContext sec_ctx;
+	CreateStmt	stmt = {
+		.type = T_CreateStmt,
+		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
+		.inhRelations = list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
+		.tablespacename = hypertable_select_tablespace(ht, chunk),
+	};
+
+	rel = heap_open(ht->main_table_relid, AccessShareLock);
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	objaddr = DefineRelation(&stmt,
+							 RELKIND_RELATION,
+							 rel->rd_rel->relowner,
+							 NULL
+#if PG10
+							 ,NULL
+#endif
+		);
+
+	catalog_restore_user(&sec_ctx);
+	heap_close(rel, AccessShareLock);
+
+	return objaddr.objectId;
+}
+
 static Chunk *
 chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
-	Oid			schema_oid = get_namespace_oid(schema, false);
 	Hyperspace *hs = ht->space;
 	Catalog    *catalog = catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Hypercube  *cube;
 	Chunk	   *chunk;
-	int			i;
-
-	catalog_become_owner(catalog, &sec_ctx);
 
 	/* Calculate the hypercube for a new chunk that covers the tuple's point */
 	cube = hypercube_calculate_from_point(hs, p);
@@ -314,42 +387,45 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	chunk_collision_resolve(hs, cube, p);
 
 	/* Create a new chunk based on the hypercube */
+	catalog_become_owner(catalog, &sec_ctx);
 	chunk = chunk_create_stub(catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	catalog_restore_user(&sec_ctx);
+
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
-	chunk->num_constraints = chunk->capacity;
+	chunk->hypertable_relid = ht->main_table_relid;
 	namestrcpy(&chunk->fd.schema_name, schema);
-
 	snprintf(chunk->fd.table_name.data, NAMEDATALEN,
 			 "%s_%d_chunk", prefix, chunk->fd.id);
+
+	/* Insert chunk. Chunk table already locked in exclusive mode. */
+	chunk_insert_lock(chunk, NoLock);
 
 	/* Insert any new dimension slices */
 	dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
-	/* All slices now have assigned ID's so update the chunk's constraints */
-	for (i = 0; i < hs->num_dimensions; i++)
-	{
-		chunk->constraints[i].fd.chunk_id = chunk->fd.id;
-		chunk->constraints[i].fd.dimension_slice_id = cube->slices[i]->fd.id;
-	}
+	/* Add metadata for dimensional and inheritable constraints */
+	chunk_add_constraints(chunk);
 
-	/* Insert the new chunk constraints */
-	chunk_constraint_insert_multi(chunk->constraints, chunk->num_constraints);
-	process_utility_set_expect_chunk_modification(true);
-	CatalogInternalCall4(CHUNK_CREATE, Int32GetDatum(chunk->fd.id), Int32GetDatum(hs->hypertable_id),
-			   CStringGetDatum(schema), NameGetDatum(&chunk->fd.table_name));
-	process_utility_set_expect_chunk_modification(false);
+	/* Create the actual table relation for the chunk */
+	chunk->table_id = chunk_create_table(chunk, ht);
 
-	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_oid);
+	if (!OidIsValid(chunk->table_id))
+		elog(ERROR, "Could not create chunk table");
+
+	/* Create the chunk's constraints, triggers, and indexes */
+	chunk_constraints_create(chunk->constraints,
+							 chunk->table_id,
+							 chunk->fd.id,
+							 chunk->hypertable_relid,
+							 chunk->fd.hypertable_id);
 
 	trigger_create_all_on_chunk(ht, chunk);
 
-	/* Create all indexes on the chunk */
-	chunk_index_create_all(ht->fd.id, ht->main_table_relid, chunk->fd.id, chunk->table_id);
-
-	chunk_constraint_create_all_on_chunk(ht, chunk);
-
-	catalog_restore_user(&sec_ctx);
+	chunk_index_create_all(chunk->fd.hypertable_id,
+						   chunk->hypertable_relid,
+						   chunk->fd.id,
+						   chunk->table_id);
 
 	return chunk;
 }
@@ -381,10 +457,11 @@ chunk_create_stub(int32 id, int16 num_constraints)
 {
 	Chunk	   *chunk;
 
-	chunk = palloc0(CHUNK_SIZE(num_constraints));
-	chunk->capacity = num_constraints;
-	chunk->num_constraints = 0;
+	chunk = palloc0(sizeof(Chunk));
 	chunk->fd.id = id;
+
+	if (num_constraints > 0)
+		chunk->constraints = chunk_constraints_alloc(num_constraints);
 
 	return chunk;
 }
@@ -443,8 +520,7 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 		elog(ERROR, "No chunk found with ID %d", chunk_stub->fd.id);
 
 	if (NULL == chunk_stub->cube)
-		chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints,
-												chunk_stub->num_constraints);
+		chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints);
 	else
 
 		/*
@@ -454,27 +530,6 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 		hypercube_slice_sort(chunk_stub->cube);
 
 	return chunk_stub;
-}
-
-bool
-chunk_add_constraint(Chunk *chunk, ChunkConstraint *constraint)
-{
-	if (chunk->capacity == chunk->num_constraints)
-		return false;
-
-	memcpy(&chunk->constraints[chunk->num_constraints++], constraint, sizeof(ChunkConstraint));
-	return true;
-}
-
-bool
-chunk_add_constraint_from_tuple(Chunk *chunk, HeapTuple constraint_tuple)
-{
-	if (chunk->capacity == chunk->num_constraints)
-		return false;
-
-	memcpy(&chunk->constraints[chunk->num_constraints++],
-		   GETSTRUCT(constraint_tuple), sizeof(FormData_chunk_constraint));
-	return true;
 }
 
 /*
@@ -634,7 +689,7 @@ chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx,
 static bool
 chunk_is_complete(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	if (scanctx->space->num_dimensions != chunk->num_constraints)
+	if (scanctx->space->num_dimensions != chunk->constraints->num_dimension_constraints)
 		return false;
 
 	scanctx->data = chunk;
@@ -690,14 +745,24 @@ chunk_find(Hyperspace *hs, Point *p)
 	/* Scan for the chunk matching the point */
 	chunk_point_scan(&ctx, p);
 
-	/* Find the chunk that has N matching constraints */
+	/* Find the chunk that has N matching dimension constraints */
 	chunk = chunk_scan_ctx_get_chunk(&ctx);
 
 	chunk_scan_ctx_destroy(&ctx);
 
 	if (NULL != chunk)
+	{
 		/* Fill in the rest of the chunk's data from the chunk table */
 		chunk_fill_stub(chunk, false);
+
+		/*
+		 * When searching for the chunk that matches the point, we only
+		 * scanned for dimensional constraints. We now need to rescan the
+		 * constraints to also get the inherited constraints.
+		 */
+		chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id,
+														 hs->num_dimensions);
+	}
 
 	return chunk;
 }
@@ -706,10 +771,12 @@ Chunk *
 chunk_copy(Chunk *chunk)
 {
 	Chunk	   *copy;
-	size_t		nbytes = CHUNK_SIZE(chunk->capacity);
 
-	copy = palloc(nbytes);
-	memcpy(copy, chunk, nbytes);
+	copy = palloc(sizeof(Chunk));
+	memcpy(copy, chunk, sizeof(Chunk));
+
+	if (NULL != chunk->constraints)
+		copy->constraints = chunk_constraints_copy(chunk->constraints);
 
 	if (NULL != chunk->cube)
 		copy->cube = hypercube_copy(chunk->cube);
@@ -717,63 +784,89 @@ chunk_copy(Chunk *chunk)
 	return copy;
 }
 
-static Chunk *
+static int
 chunk_scan_internal(int indexid,
 					ScanKeyData scankey[],
 					int nkeys,
+					tuple_found_func tuple_found,
+					void *data,
 					int16 num_constraints,
-					bool fail_if_not_found)
+					bool fail_if_not_found,
+					LOCKMODE lockmode)
 {
 	Catalog    *catalog = catalog_get();
-	Chunk	   *chunk = chunk_create_stub(0, num_constraints);
 	ScannerCtx	ctx = {
 		.table = catalog->tables[CHUNK].id,
 		.index = catalog->tables[CHUNK].index_ids[indexid],
 		.scantype = ScannerTypeIndex,
 		.nkeys = nkeys,
-		.data = chunk,
+		.data = data,
 		.scankey = scankey,
-		.tuple_found = chunk_tuple_found,
-		.lockmode = AccessShareLock,
+		.tuple_found = tuple_found,
+		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
 	};
-	int			num_found = scanner_scan(&ctx);
+
+	return scanner_scan(&ctx);
+}
+
+static Chunk *
+chunk_scan_find(int indexid,
+				ScanKeyData scankey[],
+				int nkeys,
+				int16 num_constraints,
+				bool fail_if_not_found)
+{
+	Chunk	   *chunk = palloc0(sizeof(Chunk));
+	int			num_found;
+
+	num_found = chunk_scan_internal(indexid, scankey, nkeys, chunk_tuple_found,
+									chunk, num_constraints, fail_if_not_found,
+									AccessShareLock);
 
 	switch (num_found)
 	{
 		case 0:
 			if (fail_if_not_found)
 				elog(ERROR, "Chunk not found");
+			pfree(chunk);
+			chunk = NULL;
 			break;
 		case 1:
 			if (num_constraints > 0)
 			{
-				chunk = chunk_constraint_scan_by_chunk_id(chunk);
-				chunk->cube = hypercube_from_constraints(chunk->constraints, num_constraints);
+				chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints);
+				chunk->cube = hypercube_from_constraints(chunk->constraints);
 			}
-			return chunk;
+			break;
 		default:
 			elog(ERROR, "Unexpected number of chunks found: %d", num_found);
 	}
-	return NULL;
+
+	return chunk;
 }
 
 Chunk *
 chunk_get_by_name(const char *schema_name, const char *table_name,
 				  int16 num_constraints, bool fail_if_not_found)
 {
+	NameData	schema,
+				table;
 	ScanKeyData scankey[2];
+
+	namestrcpy(&schema, schema_name);
+	namestrcpy(&table, table_name);
 
 	/*
 	 * Perform an index scan on chunk name.
 	 */
 	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
-				F_NAMEEQ, CStringGetDatum(schema_name));
+				F_NAMEEQ, NameGetDatum(&schema));
 	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
-				F_NAMEEQ, CStringGetDatum(table_name));
+				F_NAMEEQ, NameGetDatum(&table));
 
-	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
-							   num_constraints, fail_if_not_found);
+	return chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
+						   num_constraints, fail_if_not_found);
 }
 
 Chunk *
@@ -801,8 +894,8 @@ chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
 	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber,
 				F_INT4EQ, id);
 
-	return chunk_scan_internal(CHUNK_ID_INDEX, scankey, 1,
-							   num_constraints, fail_if_not_found);
+	return chunk_scan_find(CHUNK_ID_INDEX, scankey, 1,
+						   num_constraints, fail_if_not_found);
 }
 
 bool
@@ -815,4 +908,79 @@ bool
 chunk_exists_relid(Oid relid)
 {
 	return chunk_get_by_relid(relid, 0, false) != NULL;
+}
+
+static bool
+chunk_tuple_delete(TupleInfo *ti, void *data)
+{
+	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(ti->tuple);
+	Oid			nspoid = get_namespace_oid(NameStr(form->schema_name), false);
+	Oid			chunk_oid = get_relname_relid(NameStr(form->table_name), nspoid);
+	CatalogSecurityContext sec_ctx;
+
+	chunk_constraint_delete_by_chunk_id(form->id, chunk_oid);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_delete(ti->scanrel, ti->tuple);
+	catalog_restore_user(&sec_ctx);
+
+	return false;
+}
+
+int
+chunk_delete_by_relid(Oid relid)
+{
+	NameData	schema,
+				table;
+	ScanKeyData scankey[2];
+
+	if (!OidIsValid(relid))
+		return 0;
+
+	namestrcpy(&schema, get_namespace_name(get_rel_namespace(relid)));
+	namestrcpy(&table, get_rel_name(relid));
+
+	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
+				F_NAMEEQ, NameGetDatum(&schema));
+	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
+				F_NAMEEQ, NameGetDatum(&table));
+
+	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
+							   chunk_tuple_delete, NULL, 0, false,
+							   RowExclusiveLock);
+}
+
+static bool
+chunk_recreate_constraint(ChunkScanCtx *ctx, Chunk *chunk)
+{
+	ChunkConstraints *ccs = chunk->constraints;
+	int			i;
+
+	chunk_fill_stub(chunk, false);
+
+	for (i = 0; i < ccs->num_constraints; i++)
+		chunk_constraint_recreate(&ccs->constraints[i], chunk->table_id);
+
+	return true;
+}
+
+void
+chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id)
+{
+	DimensionVec *slices;
+	ChunkScanCtx chunkctx;
+	int			i;
+
+	slices = dimension_slice_scan_by_dimension(dimension_id, 0);
+
+	if (NULL == slices)
+		return;
+
+	chunk_scan_ctx_init(&chunkctx, hs, NULL);
+
+	for (i = 0; i < slices->num_slices; i++)
+		chunk_constraint_scan_by_dimension_slice_id(slices->slices[i], &chunkctx);
+
+	chunk_scan_ctx_foreach_chunk(&chunkctx, chunk_recreate_constraint, 0);
+	chunk_scan_ctx_destroy(&chunkctx);
 }

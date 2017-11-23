@@ -95,7 +95,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[DIMENSION] = CATALOG_SCHEMA_NAME ".dimension_id_seq",
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
-	[CHUNK_CONSTRAINT] = NULL,
+	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
 	[CHUNK_INDEX] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 };
@@ -111,37 +111,17 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 		.name = "ddl_change_owner",
 		.args = 2,
 	},
-	[DDL_CREATE_CHUNK_CONSTRAINT] = {
-		.name = "create_chunk_constraint",
-		.args = 2,
-	},
-	[DDL_DROP_CONSTRAINT] = {
-		.name = "drop_constraint",
-		.args = 2,
+	[DDL_ADD_CHUNK_CONSTRAINT] = {
+		.name = "chunk_constraint_add_table_constraint",
+		.args = 1,
 	},
 	[DDL_DROP_HYPERTABLE] = {
 		.name = "drop_hypertable",
 		.args = 2
 	},
-	[DDL_RENAME_COLUMN] = {
-		.name = "rename_column",
-		.args = 3
-	},
-	[DDL_CHANGE_COLUMN_TYPE] = {
-		.name = "change_column_type",
-		.args = 3
-	},
-	[DDL_DROP_CHUNK_METADATA] = {
-		.name = "drop_chunk_metadata",
-		.args = 1
-	},
 	[TRUNCATE_HYPERTABLE] = {
 		.name = "truncate_hypertable",
 		.args = 3
-	},
-	[CHUNK_CREATE] = {
-		.name = "chunk_create",
-		.args = 4
 	}
 };
 
@@ -445,12 +425,18 @@ catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *null
 }
 
 void
-catalog_update(Relation rel, HeapTuple tuple)
+catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
 {
-	CatalogTupleUpdate(rel, &tuple->t_self, tuple);
+	CatalogTupleUpdate(rel, tid, tuple);
 	catalog_invalidate_cache(RelationGetRelid(rel), CMD_UPDATE);
 	/* Make changes visible */
 	CommandCounterIncrement();
+}
+
+void
+catalog_update(Relation rel, HeapTuple tuple)
+{
+	catalog_update_tid(rel, &tuple->t_self, tuple);
 }
 
 void

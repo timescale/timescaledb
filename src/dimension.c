@@ -48,7 +48,8 @@ hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char 
 	{
 		Dimension  *dim = &hs->dimensions[i];
 
-		if (dim->type == type && namestrcmp(&dim->fd.column_name, name) == 0)
+		if ((type == DIMENSION_TYPE_ANY || dim->type == type) &&
+			namestrcmp(&dim->fd.column_name, name) == 0)
 			return dim;
 	}
 
@@ -62,7 +63,7 @@ hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n)
 
 	for (i = 0; i < hs->num_dimensions; i++)
 	{
-		if (hs->dimensions[i].type == type)
+		if (type == DIMENSION_TYPE_ANY || hs->dimensions[i].type == type)
 		{
 			if (n == 0)
 				return &hs->dimensions[i];
@@ -289,7 +290,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 	Catalog    *catalog = catalog_get();
 	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
 	ScanKeyData scankey[1];
-	ScannerCtx	scanCtx = {
+	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION].id,
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
 		.scantype = ScannerTypeIndex,
@@ -306,12 +307,92 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
 			  BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
-	scanner_scan(&scanCtx);
+	scanner_scan(&scanctx);
 
 	/* Sort dimensions in ascending order to allow binary search lookups */
 	qsort(space->dimensions, space->num_dimensions, sizeof(Dimension), cmp_dimension_id);
 
 	return space;
+}
+
+DimensionVec *
+dimension_get_slices(Dimension *dim)
+{
+	return dimension_slice_scan_by_dimension(dim->fd.id, 0);
+}
+
+static int
+dimension_scan_update(int32 dimension_id, tuple_found_func tuple_found, void *data, LOCKMODE lockmode)
+{
+	Catalog    *catalog = catalog_get();
+	ScanKeyData scankey[1];
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[DIMENSION].id,
+		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_ID_IDX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 1,
+		.limit = 1,
+		.scankey = scankey,
+		.data = data,
+		.tuple_found = tuple_found,
+		.lockmode = lockmode,
+		.scandirection = ForwardScanDirection,
+	};
+
+	ScanKeyInit(&scankey[0], Anum_dimension_id_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
+
+	return scanner_scan(&scanctx);
+}
+
+static bool
+dimension_tuple_update(TupleInfo *ti, void *data)
+{
+	Dimension  *dim = data;
+	HeapTuple	tuple;
+	Datum		values[Natts_dimension];
+	bool		nulls[Natts_dimension];
+	CatalogSecurityContext sec_ctx;
+
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+
+	values[Anum_dimension_column_name - 1] = NameGetDatum(&dim->fd.column_name);
+	values[Anum_dimension_column_type - 1] = ObjectIdGetDatum(dim->fd.column_type);
+	values[Anum_dimension_num_slices - 1] = Int16GetDatum(dim->fd.num_slices);
+
+	if (!nulls[Anum_dimension_partitioning_func - 1] &&
+		!nulls[Anum_dimension_partitioning_func_schema - 1])
+	{
+		values[Anum_dimension_partitioning_func - 1] = NameGetDatum(&dim->fd.partitioning_func);
+		values[Anum_dimension_partitioning_func_schema - 1] = NameGetDatum(&dim->fd.partitioning_func_schema);
+	}
+
+	if (!nulls[Anum_dimension_interval_length - 1])
+		values[Anum_dimension_interval_length - 1] = Int64GetDatum(dim->fd.interval_length);
+
+	tuple = heap_form_tuple(ti->desc, values, nulls);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_update_tid(ti->scanrel, &ti->tuple->t_self, tuple);
+	catalog_restore_user(&sec_ctx);
+
+	return false;
+}
+
+int
+dimension_update_type(Dimension *dim, Oid newtype)
+{
+	dim->fd.column_type = newtype;
+
+	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
+}
+
+int
+dimension_update_name(Dimension *dim, const char *newname)
+{
+	namestrcpy(&dim->fd.column_name, newname);
+
+	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }
 
 static Point *

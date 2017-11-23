@@ -30,5 +30,6 @@ extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);
 extern bool is_hypertable(Oid relid);
 extern bool hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
+extern char *hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 
 #endif   /* TIMESCALEDB_HYPERTABLE_H */

@@ -18,6 +18,9 @@
 #include "trigger.h"
 #include "scanner.h"
 #include "catalog.h"
+#include "dimension_slice.h"
+#include "dimension_vector.h"
+#include "hypercube.h"
 
 static Oid
 rel_get_owner(Oid relid)
@@ -264,6 +267,55 @@ hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 	Tablespaces *tspcs = tablespace_scan(ht->fd.id);
 
 	return tablespaces_contain(tspcs, tspc_oid);
+}
+
+/*
+ * Select a tablespace to use for a given chunk.
+ *
+ * Selection happens based on the first closed (space) dimension, if available,
+ * otherwise the first closed (time) one.
+ *
+ * We try to do "sticky" selection to consistently pick the same tablespace for
+ * chunks in the same closed (space) dimension. This ensures chunks in the same
+ * "space" partition will live on the same disk.
+ */
+char *
+hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
+{
+	Dimension  *dim;
+	DimensionVec *vec;
+	DimensionSlice *slice;
+	Tablespaces *tspcs = tablespace_scan(ht->fd.id);
+	int			i = 0;
+
+	if (NULL == tspcs || tspcs->num_tablespaces == 0)
+		return NULL;
+
+	dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	if (NULL == dim)
+		dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	Assert(NULL != dim && (IS_OPEN_DIMENSION(dim) || dim->fd.num_slices > 0));
+
+	vec = dimension_get_slices(dim);
+
+	Assert(NULL != vec && (IS_OPEN_DIMENSION(dim) || vec->num_slices > 0));
+
+	slice = hypercube_get_slice_by_dimension_id(chunk->cube, dim->fd.id);
+
+	Assert(NULL != slice);
+
+	/*
+	 * Find the index (ordinal) of the chunk's slice in the dimension we
+	 * picked
+	 */
+	i = dimension_vec_find_slice_index(vec, slice->fd.id);
+
+	Assert(i >= 0);
+
+	/* Use the index of the slice to find the tablespace */
+	return NameStr(tspcs->tablespaces[i % tspcs->num_tablespaces].fd.tablespace_name);
 }
 
 static inline Oid

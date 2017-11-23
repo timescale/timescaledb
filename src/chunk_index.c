@@ -277,6 +277,7 @@ chunk_index_insert_relation(Relation rel,
 	TupleDesc	desc = RelationGetDescr(rel);
 	Datum		values[Natts_chunk_index];
 	bool		nulls[Natts_chunk_index] = {false};
+	CatalogSecurityContext sec_ctx;
 
 	values[Anum_chunk_index_chunk_id - 1] = Int32GetDatum(chunk_id);
 	values[Anum_chunk_index_index_name - 1] =
@@ -284,7 +285,10 @@ chunk_index_insert_relation(Relation rel,
 	values[Anum_chunk_index_hypertable_id - 1] = Int32GetDatum(hypertable_id);
 	values[Anum_chunk_index_hypertable_index_name - 1] =
 		DirectFunctionCall1(namein, CStringGetDatum(parent_index));
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_insert_values(rel, desc, values, nulls);
+	catalog_restore_user(&sec_ctx);
 
 	return true;
 }

@@ -44,6 +44,16 @@ INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time
 ERROR:  duplicate key value violates unique constraint "4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time"
 \set ON_ERROR_STOP 1
 -- Show constraints on main tables
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id |                         constraint_name                         |                   hypertable_constraint_name                    
+----------+--------------------+-----------------------------------------------------------------+-----------------------------------------------------------------
+        3 |                  3 | constraint_3                                                    | 
+        4 |                  4 | constraint_4                                                    | 
+        4 |                    | 4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
+        5 |                  5 | constraint_5                                                    | 
+        5 |                    | 5_2_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
+(5 rows)
+
 SELECT * FROM test.show_constraints('hyper');
       Constraint      | Type |  Columns   | Index |            Expr            
 ----------------------+------+------------+-------+----------------------------
@@ -68,6 +78,14 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 -- The constraint should have been removed from the chunk as well
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        3 |                  3 | constraint_3    | 
+        4 |                  4 | constraint_4    | 
+        5 |                  5 | constraint_5    | 
+(3 rows)
+
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
                            Constraint                            | Type |  Columns   | Index |                                           Expr                                           
 -----------------------------------------------------------------+------+------------+-------+------------------------------------------------------------------------------------------
@@ -88,6 +106,16 @@ DELETE FROM hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name WHER
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
       ADD CHECK (time > 0),
       ADD UNIQUE (time);
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id |                         constraint_name                         |                   hypertable_constraint_name                    
+----------+--------------------+-----------------------------------------------------------------+-----------------------------------------------------------------
+        3 |                  3 | constraint_3                                                    | 
+        4 |                  4 | constraint_4                                                    | 
+        5 |                  5 | constraint_5                                                    | 
+        4 |                    | 4_4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
+        5 |                    | 5_5_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
+(5 rows)
+
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
                            Constraint                            | Type |  Columns   |                              Index                              |            Expr            
 -----------------------------------------------------------------+------+------------+-----------------------------------------------------------------+----------------------------
@@ -108,6 +136,14 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key,
 DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check;
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        3 |                  3 | constraint_3    | 
+        4 |                  4 | constraint_4    | 
+        5 |                  5 | constraint_5    | 
+(3 rows)
+
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
                            Constraint                            | Type |  Columns   | Index |            Expr            
 -----------------------------------------------------------------+------+------------+-------+----------------------------
@@ -121,7 +157,7 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
  hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
 (2 rows)
 
-CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx 
+CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx
 ON hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name (time);
 \set ON_ERROR_STOP 0
 -- Try adding constraint using existing index
@@ -145,19 +181,19 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --test adding constraint with same name to different table -- should fail
 \set ON_ERROR_STOP 0
-ALTER TABLE hyper 
+ALTER TABLE hyper
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE (time);
 ERROR:  relation "hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key" already exists
 \set ON_ERROR_STOP 1
 --uniquness violation fails
 \set ON_ERROR_STOP 0
-INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1) 
+INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1)
 VALUES (1257987700000000000, 'dev2', 11);
 ERROR:  duplicate key value violates unique constraint "4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time"
 \set ON_ERROR_STOP 1
 --cannot create unique constraint on non-partition column
 \set ON_ERROR_STOP 0
-ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name 
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
 ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 \set ON_ERROR_STOP 1

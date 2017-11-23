@@ -182,6 +182,19 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 	return dimension_vec_sort(&slices);
 }
 
+DimensionVec *
+dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
+{
+	ScanKeyData scankey[1];
+	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
+
+	dimension_slice_scan_limit_internal(scankey, 1, dimension_vec_tuple_found, &slices, limit);
+
+	return dimension_vec_sort(&slices);
+}
 
 static bool
 dimension_slice_fill(TupleInfo *ti, void *data)
@@ -347,19 +360,22 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 	TupleDesc	desc = RelationGetDescr(rel);
 	Datum		values[Natts_dimension_slice];
 	bool		nulls[Natts_dimension_slice] = {false};
+	CatalogSecurityContext sec_ctx;
 
 	if (slice->fd.id > 0)
 		/* Slice already exists in table */
 		return false;
 
+	catalog_become_owner(catalog_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
 	slice->fd.id = catalog_table_next_seq_id(catalog_get(), DIMENSION_SLICE);
 	values[Anum_dimension_slice_id - 1] = Int32GetDatum(slice->fd.id);
 	values[Anum_dimension_slice_dimension_id - 1] = Int32GetDatum(slice->fd.dimension_id);
 	values[Anum_dimension_slice_range_start - 1] = Int64GetDatum(slice->fd.range_start);
-	values[Anum_dimension_slice_range_end - 1] =Int64GetDatum(slice->fd.range_end);
+	values[Anum_dimension_slice_range_end - 1] = Int64GetDatum(slice->fd.range_end);
 
 	catalog_insert_values(rel, desc, values, nulls);
+	catalog_restore_user(&sec_ctx);
 
 	return true;
 }
