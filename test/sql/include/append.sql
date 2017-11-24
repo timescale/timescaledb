@@ -1,35 +1,33 @@
-
-
 -- create a now() function for repeatable testing that always returns
 -- the same timestamp. It needs to be marked STABLE
 CREATE OR REPLACE FUNCTION now_s()
-RETURNS timestamp LANGUAGE PLPGSQL STABLE AS
+RETURNS timestamptz LANGUAGE PLPGSQL STABLE AS
 $BODY$
 BEGIN
     RAISE NOTICE 'Stable function now_s() called!';
-    RETURN '2017-08-22T10:00:00'::timestamp;
+    RETURN '2017-08-22T10:00:00'::timestamptz;
 END;
 $BODY$;
 
 CREATE OR REPLACE FUNCTION now_i()
-RETURNS timestamp LANGUAGE PLPGSQL IMMUTABLE AS
+RETURNS timestamptz LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
     RAISE NOTICE 'Immutable function now_i() called!';
-    RETURN '2017-08-22T10:00:00'::timestamp;
+    RETURN '2017-08-22T10:00:00'::timestamptz;
 END;
 $BODY$;
 
 CREATE OR REPLACE FUNCTION now_v()
-RETURNS timestamp LANGUAGE PLPGSQL VOLATILE AS
+RETURNS timestamptz LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 BEGIN
     RAISE NOTICE 'Volatile function now_v() called!';
-    RETURN '2017-08-22T10:00:00'::timestamp;
+    RETURN '2017-08-22T10:00:00'::timestamptz;
 END;
 $BODY$;
 
-CREATE TABLE append_test(time timestamp, temp float, colorid integer);
+CREATE TABLE append_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('append_test', 'time', chunk_time_interval => 2628000000000);
 
 -- create three chunks
@@ -111,6 +109,17 @@ WHERE time > now_s() - interval '4 months'
 GROUP BY t
 ORDER BY t DESC;
 
+-- querying outside the time range should return nothing. This tests
+-- that ConstraintAwareAppend can handle the case when an Append node
+-- is turned into a Result node due to no children
+EXPLAIN (costs off)
+SELECT date_trunc('year', time) t, avg(temp)
+FROM append_test
+WHERE time < '2016-03-22'
+AND date_part('dow', time) between 1 and 5
+GROUP BY t
+ORDER BY t DESC;
+
 -- a parameterized query can safely constify params, so won't be
 -- optimized by constraint-aware append since regular constraint
 -- exclusion works just fine
@@ -122,7 +131,7 @@ EXECUTE query_param(now_s() - interval '2 months');
 
 
 -- Create another hypertable to join with
-CREATE TABLE join_test(time timestamp, temp float, colorid integer);
+CREATE TABLE join_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('join_test', 'time', chunk_time_interval => 2628000000000);
 
 INSERT INTO join_test VALUES ('2017-01-22T09:18:22', 15.2, 1),
