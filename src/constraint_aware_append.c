@@ -145,6 +145,15 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				appendplans = &append->mergeplans;
 				break;
 			}
+		case T_Result:
+
+			/*
+			 * Append plans are turned into a Result node if empty. This can
+			 * happen if children are pruned first by constraint exclusion
+			 * while we also remove the main table from the appendplans list,
+			 * leaving an empty list. In that case, there is nothing to do.
+			 */
+			return;
 		default:
 			elog(ERROR, "Invalid plan %d", nodeTag(subplan));
 	}
