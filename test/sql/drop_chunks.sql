@@ -108,3 +108,55 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
 
 \dt "_timescaledb_internal".*
+
+CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
+
+CREATE TABLE PUBLIC.drop_chunk_test_tstz(time timestamptz, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test_tstz', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
+
+SET timezone = '+1';
+INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+
+SELECT * FROM test.show_subtables('drop_chunk_test_ts');
+SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+
+BEGIN;
+    SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_ts');
+    SELECT * FROM test.show_subtables('drop_chunk_test_ts');
+    SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_tstz');
+    SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+ROLLBACK;
+
+BEGIN;
+    SELECT drop_chunks(now()::timestamp-interval '1 minute', 'drop_chunk_test_ts');
+    SELECT * FROM test.show_subtables('drop_chunk_test_ts');
+    SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_tstz');
+    SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+ROLLBACK;
+
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(interval '1 minute');
+SELECT drop_chunks(interval '1 minute', 'drop_chunk_test3');
+SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_ts');
+SELECT drop_chunks(now()::timestamp-interval '1 minute', 'drop_chunk_test_tstz');
+\set ON_ERROR_STOP 1
+
+
+CREATE TABLE PUBLIC.drop_chunk_test_date(time date, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
+
+SET timezone = '+100';
+INSERT INTO PUBLIC.drop_chunk_test_date VALUES(now()-INTERVAL '2 day', 1.0, 'dev1');
+
+BEGIN;
+    SELECT drop_chunks(interval '1 day', 'drop_chunk_test_date');
+    SELECT * FROM test.show_subtables('drop_chunk_test_date');
+ROLLBACK;
+
+BEGIN;
+    SELECT drop_chunks((now()-interval '1 day')::date, 'drop_chunk_test_date');
+    SELECT * FROM test.show_subtables('drop_chunk_test_date');
+ROLLBACK;
+
