@@ -202,26 +202,9 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION drop_chunks(
-    older_than  BIGINT,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL,
-    cascade    BOOLEAN = FALSE
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-BEGIN
-    IF older_than IS NULL THEN
-        RAISE 'The time provided to drop_chunks cannot be null';
-    END IF;
-    PERFORM _timescaledb_internal.drop_chunks_impl(older_than, table_name, schema_name, cascade);
-END
-$BODY$;
-
 -- Drop chunks that are older than a timestamp.
 CREATE OR REPLACE FUNCTION drop_chunks(
-    older_than TIMESTAMPTZ,
+    older_than anyelement,
     table_name  NAME = NULL,
     schema_name NAME = NULL,
     cascade  BOOLEAN = FALSE
@@ -235,7 +218,8 @@ BEGIN
         RAISE 'The timestamp provided to drop_chunks cannot be null';
     END IF;
 
-    SELECT (EXTRACT(epoch FROM older_than)*1e6)::BIGINT INTO older_than_internal;
+    PERFORM  _timescaledb_internal.drop_chunks_type_check(pg_typeof(older_than), table_name, schema_name);
+    SELECT _timescaledb_internal.time_to_internal(older_than, pg_typeof(older_than)) INTO older_than_internal;
     PERFORM _timescaledb_internal.drop_chunks_impl(older_than_internal, table_name, schema_name, cascade);
 END
 $BODY$;
@@ -250,10 +234,35 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    older_than_ts TIMESTAMPTZ;
+    time_type REGTYPE;
 BEGIN
-    older_than_ts := now() - older_than;
-    PERFORM drop_chunks(older_than_ts, table_name, schema_name, cascade);
+
+    BEGIN
+        WITH hypertable_ids AS (
+            SELECT id
+            FROM _timescaledb_catalog.hypertable h
+            WHERE (drop_chunks.schema_name IS NULL OR h.schema_name = drop_chunks.schema_name) AND
+            (drop_chunks.table_name IS NULL OR h.table_name = drop_chunks.table_name)
+        )
+        SELECT DISTINCT time_dim.column_type INTO STRICT time_type
+        FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
+    EXCEPTION 
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'No hypertables found';
+        WHEN TOO_MANY_ROWS THEN
+            RAISE EXCEPTION 'Cannot use drop_chunks on multiple tables with different time types';
+    END;
+
+
+    IF time_type = 'TIMESTAMP'::regtype THEN
+        PERFORM drop_chunks((now() - older_than)::timestamp, table_name, schema_name, cascade);
+    ELSIF time_type = 'DATE'::regtype THEN
+        PERFORM drop_chunks((now() - older_than)::date, table_name, schema_name, cascade);
+    ELSIF time_type = 'TIMESTAMPTZ'::regtype THEN
+        PERFORM drop_chunks(now() - older_than, table_name, schema_name, cascade);
+    ELSE
+        RAISE 'Can only use drop_chunks with an INTERVAL for TIMESTAMP and TIMESTAMPTZ types';
+    END IF;
 END
 $BODY$;
 

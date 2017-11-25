@@ -373,6 +373,44 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunks_type_check(
+    given_type REGTYPE,
+    table_name  NAME,
+    schema_name NAME
+)
+    RETURNS VOID LANGUAGE PLPGSQL STABLE AS
+$BODY$
+DECLARE
+    actual_type regtype;
+BEGIN
+    BEGIN
+        WITH hypertable_ids AS (
+            SELECT id
+            FROM _timescaledb_catalog.hypertable h
+            WHERE (drop_chunks_type_check.schema_name IS NULL OR h.schema_name = drop_chunks_type_check.schema_name) AND
+            (drop_chunks_type_check.table_name IS NULL OR h.table_name = drop_chunks_type_check.table_name)
+        )
+        SELECT DISTINCT time_dim.column_type INTO STRICT actual_type
+        FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE EXCEPTION 'No hypertables found';
+        WHEN TOO_MANY_ROWS THEN
+            RAISE EXCEPTION 'Cannot use drop_chunks on multiple tables with different time types';
+    END;
+
+    IF given_type IN ('int'::regtype, 'smallint'::regtype, 'bigint'::regtype ) THEN
+        IF actual_type IN ('int'::regtype, 'smallint'::regtype, 'bigint'::regtype ) THEN
+            RETURN;
+        END IF;
+    END IF;
+    IF actual_type != given_type THEN
+        RAISE EXCEPTION 'Cannot call drop_chunks with a % on hypertables with a time type of: %', given_type, actual_type;
+    END IF;
+END
+$BODY$;
+
+
 -- Creates the default indexes on a hypertable.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_default_indexes(
     hypertable_row _timescaledb_catalog.hypertable,

@@ -262,7 +262,7 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 -- should error because no hypertable
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(5, 'drop_chunk_test4');
-ERROR:  hypertable drop_chunk_test4 does not exist
+ERROR:  No hypertables found
 \set ON_ERROR_STOP 1
 DROP TABLE _timescaledb_internal._hyper_1_6_chunk;
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
@@ -298,3 +298,128 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
  _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
 (8 rows)
 
+CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+CREATE TABLE PUBLIC.drop_chunk_test_tstz(time timestamptz, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test_tstz', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SET timezone = '+1';
+INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+SELECT * FROM test.show_subtables('drop_chunk_test_ts');
+                  Child                  
+-----------------------------------------
+ _timescaledb_internal._hyper_4_19_chunk
+(1 row)
+
+SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+                  Child                  
+-----------------------------------------
+ _timescaledb_internal._hyper_5_20_chunk
+(1 row)
+
+BEGIN;
+    SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_ts');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+    SELECT * FROM test.show_subtables('drop_chunk_test_ts');
+ Child 
+-------
+(0 rows)
+
+    SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_tstz');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+    SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+ Child 
+-------
+(0 rows)
+
+ROLLBACK;
+BEGIN;
+    SELECT drop_chunks(now()::timestamp-interval '1 minute', 'drop_chunk_test_ts');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+    SELECT * FROM test.show_subtables('drop_chunk_test_ts');
+ Child 
+-------
+(0 rows)
+
+    SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_tstz');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+    SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+ Child 
+-------
+(0 rows)
+
+ROLLBACK;
+\set ON_ERROR_STOP 0
+SELECT drop_chunks(interval '1 minute');
+ERROR:  Cannot use drop_chunks on multiple tables with different time types
+SELECT drop_chunks(interval '1 minute', 'drop_chunk_test3');
+ERROR:  Can only use drop_chunks with an INTERVAL for TIMESTAMP and TIMESTAMPTZ types
+SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_ts');
+ERROR:  Cannot call drop_chunks with a timestamp with time zone on hypertables with a time type of: timestamp without time zone
+SELECT drop_chunks(now()::timestamp-interval '1 minute', 'drop_chunk_test_tstz');
+ERROR:  Cannot call drop_chunks with a timestamp without time zone on hypertables with a time type of: timestamp with time zone
+\set ON_ERROR_STOP 1
+CREATE TABLE PUBLIC.drop_chunk_test_date(time date, temp float8, device_id text);
+SELECT create_hypertable('public.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SET timezone = '+100';
+INSERT INTO PUBLIC.drop_chunk_test_date VALUES(now()-INTERVAL '2 day', 1.0, 'dev1');
+BEGIN;
+    SELECT drop_chunks(interval '1 day', 'drop_chunk_test_date');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+    SELECT * FROM test.show_subtables('drop_chunk_test_date');
+ Child 
+-------
+(0 rows)
+
+ROLLBACK;
+BEGIN;
+    SELECT drop_chunks((now()-interval '1 day')::date, 'drop_chunk_test_date');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+    SELECT * FROM test.show_subtables('drop_chunk_test_date');
+ Child 
+-------
+(0 rows)
+
+ROLLBACK;
