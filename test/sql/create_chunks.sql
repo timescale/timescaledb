@@ -82,3 +82,37 @@ INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.3, 11233,
 
 SELECT * FROM chunk_test_ends ORDER BY time asc;
 
+--further tests of set_chunk_time_interval
+CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integer);
+SELECT create_hypertable('chunk_test2', 'time', 'tag', 2, chunk_time_interval => 3);
+SELECT interval_length
+FROM _timescaledb_catalog.dimension d
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
+ORDER BY d.id;
+
+-- should work since time column is non-INT
+SELECT set_chunk_time_interval('chunk_test2', INTERVAL '1 minute');
+SELECT interval_length
+FROM _timescaledb_catalog.dimension d
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
+ORDER BY d.id;
+
+-- should still work for non-INT time columns
+SELECT set_chunk_time_interval('chunk_test2', 1000000);
+SELECT interval_length
+FROM _timescaledb_catalog.dimension d
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
+ORDER BY d.id;
+
+\set ON_ERROR_STOP 0
+-- should fail since time column is an int
+SELECT set_chunk_time_interval('chunk_test', INTERVAL '1 minute');
+-- should fail since its not a valid way to represent time
+SELECT set_chunk_time_interval('chunk_test', 'foo'::TEXT);
+SELECT set_chunk_time_interval('chunk_test', NULL::BIGINT);
+SELECT set_chunk_time_interval('chunk_test2', NULL::BIGINT);
+SELECT set_chunk_time_interval('chunk_test2', NULL::INTERVAL);
+\set ON_ERROR_STOP 1
