@@ -54,11 +54,16 @@ set(TEST_TEMPLATES
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
 # be in the same directory.
+if (${PG_VERSION_MAJOR} EQUAL "10")
+    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
+else ()
+    set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR}.${PG_VERSION_MINOR})
+endif ()
 foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   string(LENGTH ${TEMPLATE_FILE} TEMPLATE_NAME_LEN)
   math(EXPR TEMPLATE_NAME_LEN ${TEMPLATE_NAME_LEN}-7)
   string(SUBSTRING ${TEMPLATE_FILE} 0 ${TEMPLATE_NAME_LEN} TEMPLATE)
-  set(TEST_FILE ${TEMPLATE}-${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}.sql)
+  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
   configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE} COPYONLY)
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
