@@ -140,3 +140,74 @@ SELECT * FROM chunk_test_ends ORDER BY time asc;
   9223372036854775807 | 24.4 | 11233 |     1
 (8 rows)
 
+--further tests of set_chunk_time_interval
+CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integer);
+SELECT create_hypertable('chunk_test2', 'time', 'tag', 2, chunk_time_interval => 3);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+WARNING:  You specified a chunk_time_interval of less than a second, make sure that this is what you intended
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT interval_length
+FROM _timescaledb_catalog.dimension d
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
+ORDER BY d.id;
+ interval_length 
+-----------------
+               3
+                
+(2 rows)
+
+-- should work since time column is non-INT
+SELECT set_chunk_time_interval('chunk_test2', INTERVAL '1 minute');
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+SELECT interval_length
+FROM _timescaledb_catalog.dimension d
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
+ORDER BY d.id;
+ interval_length 
+-----------------
+        60000000
+                
+(2 rows)
+
+-- should still work for non-INT time columns
+SELECT set_chunk_time_interval('chunk_test2', 1000000);
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+SELECT interval_length
+FROM _timescaledb_catalog.dimension d
+LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
+WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
+ORDER BY d.id;
+ interval_length 
+-----------------
+         1000000
+                
+(2 rows)
+
+\set ON_ERROR_STOP 0
+-- should fail since time column is an int
+SELECT set_chunk_time_interval('chunk_test', INTERVAL '1 minute');
+ERROR:  chunk_time_interval needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns
+-- should fail since its not a valid way to represent time
+SELECT set_chunk_time_interval('chunk_test', 'foo'::TEXT);
+ERROR:  chunk_time_interval needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns
+SELECT set_chunk_time_interval('chunk_test', NULL::BIGINT);
+ERROR:  chunk_time_interval cannot be NULL
+SELECT set_chunk_time_interval('chunk_test2', NULL::BIGINT);
+ERROR:  chunk_time_interval cannot be NULL
+SELECT set_chunk_time_interval('chunk_test2', NULL::INTERVAL);
+ERROR:  chunk_time_interval cannot be NULL
+\set ON_ERROR_STOP 1

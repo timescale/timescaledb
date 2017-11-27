@@ -168,20 +168,34 @@ BEGIN
 END
 $BODY$;
 
--- Update chunk_time_interval for a hypertable
+-- Update chunk_time_interval for a hypertable.
+--
+-- main_table - The OID of the table corresponding to a hypertable whose time
+--     interval should be updated
+-- chunk_time_interval - The new time interval. For hypertables with integral
+--     time columns, this must be an integral type. For hypertables with a
+--     TIMESTAMP/TIMESTAMPTZ/DATE type, it can be integral which is treated as
+--     microseconds, or an INTERVAL type.
 CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
     main_table              REGCLASS,
-    chunk_time_interval     BIGINT
+    chunk_time_interval     anyelement
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
     SECURITY DEFINER SET search_path=''
     AS
 $BODY$
 DECLARE
-    main_table_name       NAME;
-    main_schema_name      NAME;
+    main_table_name            NAME;
+    main_schema_name           NAME;
+    chunk_time_interval_actual BIGINT;
+    time_dimension             _timescaledb_catalog.dimension;
+    time_type                  REGTYPE;
 BEGIN
     PERFORM _timescaledb_internal.check_role(main_table);
+    IF chunk_time_interval IS NULL THEN
+        RAISE EXCEPTION 'chunk_time_interval cannot be NULL'
+        USING ERRCODE = 'IO102';
+    END IF;
 
     SELECT relname, nspname
     INTO STRICT main_table_name, main_schema_name
@@ -189,16 +203,23 @@ BEGIN
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
 
-    UPDATE _timescaledb_catalog.dimension d
-    SET interval_length = set_chunk_time_interval.chunk_time_interval
+    SELECT *
+    INTO STRICT time_dimension
     FROM _timescaledb_internal.dimension_get_time(
         (
             SELECT id
             FROM _timescaledb_catalog.hypertable h
             WHERE h.schema_name = main_schema_name AND
             h.table_name = main_table_name
-    )) time_dim
-    WHERE time_dim.id = d.id;
+    ));
+
+    time_type := _timescaledb_internal.dimension_type(main_table, time_dimension.column_name, true);
+    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal(
+        time_type, chunk_time_interval, INTERVAL '1 month', 'chunk_time_interval');
+
+    UPDATE _timescaledb_catalog.dimension d
+    SET interval_length = chunk_time_interval_actual
+    WHERE time_dimension.id = d.id;
 END
 $BODY$;
 
