@@ -1,5 +1,24 @@
 # TimescaleDB Changelog
 
+## 0.7.1 (2017-11-28)
+
+**High-level changes**
+* Fix to the migration script for those coming from 0.6.1 (or earlier)
+* Fix edge case in `drop_chunks` when hypertable uses `TIMESTAMP` type
+* Query planning improvements & fixes
+* Permission fixes and support `SET ROLE` functionality
+
+**Notable commits**
+* [717299f] Change time handling in drop_chunks for TIMESTAMP times
+* [d8ec285] Do not append-optimize plans with result relations (DELETE/UPDATE)
+* [30b72ec] Handle empty append plans in ConstraintAwareAppend
+* [b35509b] Permission fixes and allow SET ROLE
+
+**Thanks**
+* @shaneodonnell for reporting a bug with empty append plans in ConstraintAwareAppend
+* @ryan-shaw for reporting a bug with query plans involving result relations and reporting an issue with our 0.6.1 to 0.7.0 migration script
+
+
 ## 0.7.0 (2017-11-21)
 
 **Please note: This update may take a long time (minutes, even hours) to

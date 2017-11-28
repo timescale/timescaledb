@@ -1,6 +1,5 @@
 DROP FUNCTION _timescaledb_internal.create_hypertable_row(REGCLASS, NAME, NAME, NAME, NAME, INTEGER, NAME, NAME, BIGINT, NAME, REGPROC);
 DROP FUNCTION _timescaledb_internal.rename_hypertable(NAME, NAME, NAME, NAME);
-DROP FUNCTION _timescaledb_cache.invalidate_relcache(oid);
 
 DROP FUNCTION drop_chunks(bigint,name,name,boolean);
 DROP FUNCTION drop_chunks(timestamptz,name,name,boolean);
@@ -19,7 +18,7 @@ INNER JOIN pg_class pg_chunk_index_class ON (
     pg_chunk_con.conindid = pg_chunk_index_class.oid
 )
 )
-DELETE 
+DELETE
 FROM _timescaledb_catalog.chunk_index ci
 USING ind
 WHERE ci.chunk_id = ind.chunk_id AND ci.index_name = ind.index_name;
