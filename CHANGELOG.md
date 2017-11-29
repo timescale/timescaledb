@@ -1,6 +1,6 @@
 # TimescaleDB Changelog
 
-## 0.7.1 (2017-11-28)
+## 0.7.1 (2017-11-29)
 
 **High-level changes**
 * Fix to the migration script for those coming from 0.6.1 (or earlier)
