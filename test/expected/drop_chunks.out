@@ -381,7 +381,7 @@ ROLLBACK;
 SELECT drop_chunks(interval '1 minute');
 ERROR:  Cannot use drop_chunks on multiple tables with different time types
 SELECT drop_chunks(interval '1 minute', 'drop_chunk_test3');
-ERROR:  Can only use drop_chunks with an INTERVAL for TIMESTAMP and TIMESTAMPTZ types
+ERROR:  Can only use drop_chunks with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
 SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_ts');
 ERROR:  Cannot call drop_chunks with a timestamp with time zone on hypertables with a time type of: timestamp without time zone
 SELECT drop_chunks(now()::timestamp-interval '1 minute', 'drop_chunk_test_tstz');
