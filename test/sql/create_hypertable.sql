@@ -60,7 +60,34 @@ select add_dimension('test_schema.test_table', 'id', interval_length => 1000);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 
+-- Test add_dimension: can use interval types for TIMESTAMPTZ columns
+CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
+SELECT create_hypertable('dim_test_time', 'time');
+SELECT add_dimension('dim_test_time', 'time2', interval_length => INTERVAL '1 day');
+
+-- Test add_dimension: only integral should work on BIGINT columns
 \set ON_ERROR_STOP 0
+SELECT add_dimension('dim_test_time', 'time3', interval_length => INTERVAL '1 day');
+
+-- string is not a valid type
+SELECT add_dimension('dim_test_time', 'time3', interval_length => 'foo'::TEXT);
+\set ON_ERROR_STOP 1
+SELECT add_dimension('dim_test_time', 'time3', interval_length => 500);
+
+-- Test add_dimension: integrals should work on TIMESTAMPTZ columns
+CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
+SELECT create_hypertable('dim_test_time2', 'time');
+SELECT add_dimension('dim_test_time2', 'time2', interval_length => 500);
+
+
+\set ON_ERROR_STOP 0
+--adding on a non-hypertable
+CREATE TABLE not_hypertable(time TIMESTAMPTZ, temp float8, device int, location int);
+SELECT add_dimension('not_hypertable', 'time', interval_length => 500);
+
+--adding a non-exist column
+SELECT add_dimension('test_schema.test_table', 'nope', 2);
+
 --adding the same dimension twice should fail
 select add_dimension('test_schema.test_table', 'location', 2);
 

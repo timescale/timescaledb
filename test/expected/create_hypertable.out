@@ -137,7 +137,62 @@ select * from _timescaledb_catalog.dimension;
   6 |             2 | id          | integer     | t       |            |                          |                    |            1000
 (6 rows)
 
+-- Test add_dimension: can use interval types for TIMESTAMPTZ columns
+CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
+SELECT create_hypertable('dim_test_time', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT add_dimension('dim_test_time', 'time2', interval_length => INTERVAL '1 day');
+NOTICE:  Adding NOT NULL constraint to time column time2 (NULL time values not allowed)
+ add_dimension 
+---------------
+ 
+(1 row)
+
+-- Test add_dimension: only integral should work on BIGINT columns
 \set ON_ERROR_STOP 0
+SELECT add_dimension('dim_test_time', 'time3', interval_length => INTERVAL '1 day');
+ERROR:  interval_length needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns
+-- string is not a valid type
+SELECT add_dimension('dim_test_time', 'time3', interval_length => 'foo'::TEXT);
+ERROR:  interval_length needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns
+\set ON_ERROR_STOP 1
+SELECT add_dimension('dim_test_time', 'time3', interval_length => 500);
+NOTICE:  Adding NOT NULL constraint to time column time3 (NULL time values not allowed)
+ add_dimension 
+---------------
+ 
+(1 row)
+
+-- Test add_dimension: integrals should work on TIMESTAMPTZ columns
+CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
+SELECT create_hypertable('dim_test_time2', 'time');
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT add_dimension('dim_test_time2', 'time2', interval_length => 500);
+WARNING:  You specified a interval_length of less than a second, make sure that this is what you intended
+NOTICE:  Adding NOT NULL constraint to time column time2 (NULL time values not allowed)
+ add_dimension 
+---------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+--adding on a non-hypertable
+CREATE TABLE not_hypertable(time TIMESTAMPTZ, temp float8, device int, location int);
+SELECT add_dimension('not_hypertable', 'time', interval_length => 500);
+ERROR:  "not_hypertable" is not a hypertable; cannot add dimension
+--adding a non-exist column
+SELECT add_dimension('test_schema.test_table', 'nope', 2);
+ERROR:  column "nope" does not exist
 --adding the same dimension twice should fail
 select add_dimension('test_schema.test_table', 'location', 2);
 ERROR:  A dimension on column "location" already exists
