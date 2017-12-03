@@ -175,8 +175,8 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *constraint)
 	snprintf(constraint_name.data, NAMEDATALEN, "constraint_%d", constraint->fd.dimension_slice_id);
 
 	memset(values, 0, sizeof(values));
-	values[Anum_chunk_constraint_chunk_id - 1] = constraint->fd.chunk_id;
-	values[Anum_chunk_constraint_dimension_slice_id - 1] = constraint->fd.dimension_slice_id;
+	values[Anum_chunk_constraint_chunk_id - 1] = Int32GetDatum(constraint->fd.chunk_id);
+	values[Anum_chunk_constraint_dimension_slice_id - 1] = Int32GetDatum(constraint->fd.dimension_slice_id);
 	values[Anum_chunk_constraint_constraint_name - 1] = NameGetDatum(&constraint_name);
 
 	nulls[Anum_chunk_constraint_hypertable_constraint_name - 1] = true;
