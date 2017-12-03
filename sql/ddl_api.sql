@@ -91,8 +91,8 @@ BEGIN
 
     time_type := _timescaledb_internal.dimension_type(main_table, time_column_name, true);
 
-    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal(
-        time_type, chunk_time_interval, INTERVAL '1 month', 'chunk_time_interval');
+    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal_with_default_time(
+        time_type, chunk_time_interval, 'chunk_time_interval');
 
     BEGIN
         SELECT *
@@ -127,11 +127,18 @@ BEGIN
 END
 $BODY$;
 
+-- Add a dimension (of partitioning) to a hypertable
+--
+-- main_table - OID of the table to add a dimension to
+-- column_name - NAME of the column to use in partitioning for this dimension
+-- number_partitions - Number of partitions, for non-time dimensions
+-- interval_length - Size of intervals for time dimensions (can be integral or INTERVAL)
+-- partitioning_func - Function used to partition the column
 CREATE OR REPLACE FUNCTION  add_dimension(
     main_table              REGCLASS,
     column_name             NAME,
     number_partitions       INTEGER = NULL,
-    interval_length         BIGINT = NULL,
+    interval_length         anyelement = NULL::BIGINT,
     partitioning_func       REGPROC = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
@@ -165,6 +172,10 @@ BEGIN
                                                 number_partitions,
                                                 interval_length,
                                                 partitioning_func);
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE EXCEPTION '"%" is not a hypertable; cannot add dimension', main_block.table_name
+        USING ERRCODE = 'IO102';
 END
 $BODY$;
 
@@ -214,8 +225,8 @@ BEGIN
     ));
 
     time_type := _timescaledb_internal.dimension_type(main_table, time_dimension.column_name, true);
-    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal(
-        time_type, chunk_time_interval, INTERVAL '1 month', 'chunk_time_interval');
+    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal_with_default_time(
+        time_type, chunk_time_interval, 'chunk_time_interval');
 
     UPDATE _timescaledb_catalog.dimension d
     SET interval_length = chunk_time_interval_actual
@@ -267,7 +278,7 @@ BEGIN
         )
         SELECT DISTINCT time_dim.column_type INTO STRICT time_type
         FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
-    EXCEPTION 
+    EXCEPTION
         WHEN NO_DATA_FOUND THEN
             RAISE EXCEPTION 'No hypertables found';
         WHEN TOO_MANY_ROWS THEN

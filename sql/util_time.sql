@@ -54,10 +54,11 @@ $BODY$
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.time_interval_specification_to_internal(
-    time_type REGTYPE,
-    specification anyelement,
-    default_value INTERVAL,
-    field_name TEXT
+    time_type                 REGTYPE,
+    specification             anyelement,
+    default_value             INTERVAL,
+    field_name                TEXT,
+    ignore_interval_too_small BOOLEAN = FALSE
 )
 RETURNS BIGINT LANGUAGE PLPGSQL AS
 $BODY$
@@ -66,7 +67,7 @@ BEGIN
         IF specification IS NULL THEN
             RETURN _timescaledb_internal.interval_to_usec(default_value);
         ELSIF pg_typeof(specification) IN ('INT'::regtype, 'SMALLINT'::regtype, 'BIGINT'::regtype) THEN
-            IF specification::BIGINT < _timescaledb_internal.interval_to_usec('1 second') THEN
+            IF NOT ignore_interval_too_small AND specification::BIGINT < _timescaledb_internal.interval_to_usec('1 second') THEN
                 RAISE WARNING 'You specified a % of less than a second, make sure that this is what you intended', field_name
                 USING HINT = 'specification is specified in microseconds';
             END IF;
@@ -99,6 +100,21 @@ BEGIN
         RAISE EXCEPTION 'unknown time column type: %', time_type
         USING ERRCODE = 'IO102';
     END IF;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_interval_specification_to_internal_with_default_time(
+    time_type                 REGTYPE,
+    specification             anyelement,
+    field_name                TEXT,
+    ignore_interval_too_small BOOLEAN = FALSE
+)
+RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_internal.time_interval_specification_to_internal(
+        time_type, specification, INTERVAL '1 month', field_name, ignore_interval_too_small
+    );
 END
 $BODY$;
 

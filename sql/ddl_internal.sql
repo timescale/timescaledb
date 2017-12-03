@@ -92,7 +92,8 @@ BEGIN
                                                 NULL,
                                                 chunk_time_interval,
                                                 NULL,
-                                                FALSE);
+                                                FALSE,
+                                                ignore_interval_too_small=>TRUE); -- if we don't, the warning is displayed twice
 
     IF partitioning_column IS NOT NULL THEN
         --create space dimension
@@ -100,7 +101,7 @@ BEGIN
                                                     hypertable_row,
                                                     partitioning_column,
                                                     number_partitions,
-                                                    NULL,
+                                                    NULL::BIGINT,
                                                     partitioning_func);
     END IF;
 
@@ -178,9 +179,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.add_dimension(
     hypertable_row           _timescaledb_catalog.hypertable, -- should be locked FOR UPDATE
     column_name              NAME,
     num_slices               INTEGER = NULL,
-    interval_length          BIGINT = NULL,
+    interval_length          anyelement = NULL::BIGINT,
     partitioning_func        REGPROC = NULL,
-    increment_num_dimensions BOOLEAN = TRUE
+    increment_num_dimensions BOOLEAN = TRUE,
+    ignore_interval_too_small   BOOLEAN = FALSE
 )
     RETURNS _timescaledb_catalog.dimension LANGUAGE PLPGSQL VOLATILE
     AS
@@ -192,6 +194,7 @@ DECLARE
     column_type              REGTYPE;
     dimension_row            _timescaledb_catalog.dimension;
     table_has_items          BOOLEAN;
+    interval_length_actual   BIGINT = NULL;
 BEGIN
     IF num_slices IS NULL AND interval_length IS NULL THEN
         RAISE EXCEPTION 'The number of slices/partitions or an interval must be specified'
@@ -209,8 +212,14 @@ BEGIN
 
     column_type = _timescaledb_internal.dimension_type(main_table, column_name, num_slices IS NULL);
 
+    IF interval_length IS NOT NULL THEN
+        interval_length_actual = _timescaledb_internal.time_interval_specification_to_internal_with_default_time(
+            column_type, interval_length, 'interval_length',
+            ignore_interval_too_small=>ignore_interval_too_small);
+    END IF;
+
     IF column_type = 'DATE'::regtype AND interval_length IS NOT NULL AND
-        (interval_length <= 0 OR interval_length % _timescaledb_internal.interval_to_usec('1 day') != 0)
+        (interval_length_actual <= 0 OR interval_length_actual % _timescaledb_internal.interval_to_usec('1 day') != 0)
         THEN
         RAISE EXCEPTION 'The interval for a hypertable with a DATE time column must be at least one day and given in multiples of days'
         USING ERRCODE = 'IO102';
@@ -247,7 +256,7 @@ BEGIN
         ) VALUES (
             hypertable_row.id, column_name, column_type, aligned,
             num_slices::smallint, partitioning_func_schema, partitioning_func_name,
-            interval_length
+            interval_length_actual
         ) RETURNING * INTO dimension_row;
     EXCEPTION
         WHEN unique_violation THEN
