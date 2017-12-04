@@ -317,3 +317,9 @@ CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS)
 $BODY$
     SELECT * FROM _timescaledb_internal.detach_tablespaces(hypertable);
 $BODY$;
+
+CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS)
+       RETURNS SETOF NAME LANGUAGE SQL AS
+$BODY$
+    SELECT * FROM _timescaledb_internal.show_tablespaces(hypertable);
+$BODY$;

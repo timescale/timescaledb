@@ -8,6 +8,7 @@
 #include <commands/tablespace.h>
 #include <access/xact.h>
 #include <miscadmin.h>
+#include <funcapi.h>
 
 #include "hypertable_cache.h"
 #include "errors.h"
@@ -468,4 +469,52 @@ tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 		elog(ERROR, "Invalid argument");
 
 	PG_RETURN_INT32(tablespace_detach_all(PG_GETARG_OID(0)));
+}
+
+TS_FUNCTION_INFO_V1(tablespace_show);
+
+Datum
+tablespace_show(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	Oid			hypertable_oid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache	   *hcache;
+	Hypertable *ht;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+
+		if (!OidIsValid(hypertable_oid))
+			elog(ERROR, "Invalid argument");
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+		funcctx->user_fctx = hypertable_cache_pin();
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	hcache = funcctx->user_fctx;
+	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+
+	if (NULL == ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
+				 errmsg("Table \"%s\" is not a hypertable",
+						get_rel_name(hypertable_oid))));
+
+	if (NULL != ht->tablespaces && funcctx->call_cntr < (uint64) ht->tablespaces->num_tablespaces)
+	{
+		Tablespaces *tspcs = ht->tablespaces;
+		Oid			tablespace_oid = tspcs->tablespaces[funcctx->call_cntr].tablespace_oid;
+		const char *tablespace_name = get_tablespace_name(tablespace_oid);
+
+		SRF_RETURN_NEXT(funcctx, CStringGetDatum(tablespace_name));
+	}
+	else
+	{
+		cache_release(hcache);
+		SRF_RETURN_DONE(funcctx);
+	}
 }

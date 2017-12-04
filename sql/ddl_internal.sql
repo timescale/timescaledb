@@ -627,6 +627,9 @@ AS '$libdir/timescaledb', 'tablespace_detach' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
 AS '$libdir/timescaledb', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
+AS '$libdir/timescaledb', 'tablespace_show' LANGUAGE C VOLATILE STRICT;
+
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
 AS '$libdir/timescaledb', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;

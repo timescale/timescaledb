@@ -68,6 +68,13 @@ SELECT * FROM _timescaledb_catalog.tablespace;
   2 |             1 | tablespace2
 (2 rows)
 
+SELECT * FROM show_tablespaces('tspace_2dim');
+ show_tablespaces 
+------------------
+ tablespace1
+ tablespace2
+(2 rows)
+
 --insert into another chunk
 INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'brown');
 SELECT relname, spcname FROM pg_class c
@@ -141,6 +148,19 @@ SELECT * FROM _timescaledb_catalog.tablespace;
   4 |             2 | tablespace2
 (3 rows)
 
+SELECT * FROM show_tablespaces('tspace_1dim');
+ show_tablespaces 
+------------------
+ tablespace2
+(1 row)
+
+SELECT * FROM show_tablespaces('tspace_2dim');
+ show_tablespaces 
+------------------
+ tablespace1
+ tablespace2
+(2 rows)
+
 --detach the other tablespace
 SELECT detach_tablespace('tablespace2', 'tspace_1dim');
  detach_tablespace 
@@ -153,6 +173,18 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 ----+---------------+-----------------
   1 |             1 | tablespace1
   2 |             1 | tablespace2
+(2 rows)
+
+SELECT * FROM show_tablespaces('tspace_1dim');
+ show_tablespaces 
+------------------
+(0 rows)
+
+SELECT * FROM show_tablespaces('tspace_2dim');
+ show_tablespaces 
+------------------
+ tablespace1
+ tablespace2
 (2 rows)
 
 --detaching a tablespace from table without permissions should fail
@@ -171,6 +203,16 @@ SELECT detach_tablespaces('tspace_2dim');
 SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
+(0 rows)
+
+SELECT * FROM show_tablespaces('tspace_1dim');
+ show_tablespaces 
+------------------
+(0 rows)
+
+SELECT * FROM show_tablespaces('tspace_2dim');
+ show_tablespaces 
+------------------
 (0 rows)
 
 --cleanup

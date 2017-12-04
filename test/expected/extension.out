@@ -27,6 +27,7 @@ ORDER BY proname;
  indexes_relation_size_pretty
  last
  set_chunk_time_interval
+ show_tablespaces
  time_bucket
-(17 rows)
+(18 rows)
 
