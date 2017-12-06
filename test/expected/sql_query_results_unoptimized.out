@@ -152,11 +152,11 @@ SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2)
 
 --test that when index on time used by constraint, still works correctly
 EXPLAIN (costs off)
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
@@ -175,11 +175,11 @@ LIMIT 2;
                                        Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (13 rows)
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
             t             |  avg  |  min  |       avg        
 --------------------------+-------+-------+------------------
@@ -240,7 +240,7 @@ SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
  Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
@@ -255,7 +255,7 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_1_1_chunk
 (9 rows)
 
-SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
             t             |   avg   |  min  |       avg        
 --------------------------+---------+-------+------------------
@@ -263,7 +263,7 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
  Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
@@ -278,15 +278,15 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_1_1_chunk
 (9 rows)
 
-SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:32:30 1969 |   19975 | 29950 | 141.332930657636
- Wed Dec 31 21:31:30 1969 | 19919.5 | 29890 | 141.136445455771
+            t             |   avg_trunc1   |  min  |  avg_trunc2  
+--------------------------+----------------+-------+--------------
+ Wed Dec 31 21:32:30 1969 | 19975.00000000 | 29950 | 141.33293065
+ Wed Dec 31 21:31:30 1969 | 19919.50000000 | 29890 | 141.13644545
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                 QUERY PLAN                                                 
 -----------------------------------------------------------------------------------------------------------
@@ -301,15 +301,15 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_1_1_chunk
 (9 rows)
 
-SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:32:00 1969 |   19975 | 29950 | 141.332930657636
- Wed Dec 31 21:31:00 1969 | 19919.5 | 29890 | 141.136445455771
+            t             |   avg_trunc1   |  min  |  avg_trunc2  
+--------------------------+----------------+-------+--------------
+ Wed Dec 31 21:32:00 1969 | 19975.00000000 | 29950 | 141.33293065
+ Wed Dec 31 21:31:00 1969 | 19919.50000000 | 29890 | 141.13644545
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
@@ -324,15 +324,15 @@ FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_1_1_chunk
 (9 rows)
 
-SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-            t             |   avg   |  min  |       avg        
---------------------------+---------+-------+------------------
- Wed Dec 31 21:32:30 1969 |   19975 | 29950 | 141.332930657636
- Wed Dec 31 21:31:30 1969 | 19919.5 | 29890 | 141.136445455771
+            t             |   avg_trunc1   |  min  |  avg_trunc2  
+--------------------------+----------------+-------+--------------
+ Wed Dec 31 21:32:30 1969 | 19975.00000000 | 29950 | 141.33293065
+ Wed Dec 31 21:31:30 1969 | 19919.50000000 | 29890 | 141.13644545
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
@@ -347,7 +347,7 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_2_2_chunk
 (9 rows)
 
-SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
               t               |   avg   |  min  |       avg        
 ------------------------------+---------+-------+------------------
@@ -355,7 +355,7 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
  Wed Dec 31 21:32:00 1969 PST | 19949.5 | 29920 | 141.242685621416
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
@@ -370,7 +370,7 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_2_2_chunk
 (9 rows)
 
-SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
             t             |   avg   |  min  |       avg        
 --------------------------+---------+-------+------------------
@@ -378,7 +378,7 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
  Wed Dec 31 21:32:00 1969 | 19949.5 | 29920 | 141.242685621416
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                            QUERY PLAN                            
 -----------------------------------------------------------------
@@ -395,7 +395,7 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_3_5_chunk
 (11 rows)
 
-SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
    t   |   avg   |  min  |       avg        
 -------+---------+-------+------------------
@@ -403,7 +403,7 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
  19990 | 19994.5 | 29990 | 141.401909099017
 (2 rows)
 
-EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -420,7 +420,7 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
                            ->  Seq Scan on _hyper_3_5_chunk
 (11 rows)
 
-SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
    t   |   avg   |  min  |       avg        
 -------+---------+-------+------------------
@@ -430,11 +430,11 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 
 --plain tables shouldnt be optimized by default
 EXPLAIN (costs off)
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM plain_table 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM plain_table
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
                                                 QUERY PLAN                                                 
 -----------------------------------------------------------------------------------------------------------
@@ -449,11 +449,11 @@ LIMIT 2;
                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (9 rows)
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM plain_table 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM plain_table
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
               t               |  avg  |  min  |       avg        
 ------------------------------+-------+-------+------------------
@@ -465,11 +465,11 @@ LIMIT 2;
 BEGIN;
     SET LOCAL timescaledb.optimize_non_hypertables = 'on';
     EXPLAIN (costs off)
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-    FROM plain_table 
-    WHERE time < to_timestamp(900) 
-    GROUP BY t 
-    ORDER BY t DESC 
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+    FROM plain_table
+    WHERE time < to_timestamp(900)
+    GROUP BY t
+    ORDER BY t DESC
     LIMIT 2;
                                                 QUERY PLAN                                                 
 -----------------------------------------------------------------------------------------------------------
@@ -484,11 +484,11 @@ BEGIN;
                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 (9 rows)
 
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-    FROM plain_table 
-    WHERE time < to_timestamp(900) 
-    GROUP BY t 
-    ORDER BY t DESC 
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+    FROM plain_table
+    WHERE time < to_timestamp(900)
+    GROUP BY t
+    ORDER BY t DESC
     LIMIT 2;
               t               |  avg  |  min  |       avg        
 ------------------------------+-------+-------+------------------

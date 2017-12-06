@@ -307,42 +307,42 @@ SELECT * FROM "3dim";
 (3 rows)
 
 -- test that explain works
-EXPLAIN
+EXPLAIN (COSTS FALSE)
 INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
                          ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.03 rows=2 width=80)
-   ->  Insert on "3dim"  (cost=0.00..0.03 rows=2 width=80)
-         ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.03 rows=2 width=80)
-               ->  Values Scan on "*VALUES*"  (cost=0.00..0.03 rows=2 width=80)
+                 QUERY PLAN                  
+---------------------------------------------
+ Custom Scan (HypertableInsert)
+   ->  Insert on "3dim"
+         ->  Custom Scan (ChunkDispatch)
+               ->  Values Scan on "*VALUES*"
 (4 rows)
 
-EXPLAIN
+EXPLAIN (COSTS FALSE)
 WITH "3dim_insert" AS (
      INSERT INTO "3dim" VALUES('2017-01-21T09:01:44', 19.3, 'black', 'la') RETURNING time, temp
 ), regular_insert AS (
    INSERT INTO regular_table VALUES('2017-01-21T10:00:51', 14.3) RETURNING time, temp
 ) INSERT INTO "1dim" (SELECT time, temp FROM "3dim_insert" UNION SELECT time, temp FROM regular_insert);
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.09..0.12 rows=2 width=16)
-   ->  Insert on "1dim"  (cost=0.09..0.12 rows=2 width=16)
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+   ->  Insert on "1dim"
          CTE 3dim_insert
-           ->  Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=80)
-                 ->  Insert on "3dim"  (cost=0.00..0.01 rows=1 width=80)
-                       ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=80)
-                             ->  Result  (cost=0.00..0.01 rows=1 width=80)
+           ->  Custom Scan (HypertableInsert)
+                 ->  Insert on "3dim"
+                       ->  Custom Scan (ChunkDispatch)
+                             ->  Result
          CTE regular_insert
-           ->  Insert on regular_table  (cost=0.00..0.01 rows=1 width=16)
-                 ->  Result  (cost=0.00..0.01 rows=1 width=16)
-         ->  Custom Scan (ChunkDispatch)  (cost=0.07..0.09 rows=2 width=16)
-               ->  Unique  (cost=0.07..0.09 rows=2 width=16)
-                     ->  Sort  (cost=0.07..0.08 rows=2 width=16)
+           ->  Insert on regular_table
+                 ->  Result
+         ->  Custom Scan (ChunkDispatch)
+               ->  Unique
+                     ->  Sort
                            Sort Key: "3dim_insert"."time", "3dim_insert".temp
-                           ->  Append  (cost=0.00..0.06 rows=2 width=16)
-                                 ->  CTE Scan on "3dim_insert"  (cost=0.00..0.02 rows=1 width=16)
-                                 ->  CTE Scan on regular_insert  (cost=0.00..0.02 rows=1 width=16)
+                           ->  Append
+                                 ->  CTE Scan on "3dim_insert"
+                                 ->  CTE Scan on regular_insert
 (17 rows)
 
 -- test prepared statement INSERT
@@ -401,7 +401,7 @@ SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>6553
  
 (1 row)
 
---make sure date inserts work even when the timezone changes the 
+--make sure date inserts work even when the timezone changes the
 CREATE TABLE hyper_date(time date, temp float);
 SELECT create_hypertable('"hyper_date"', 'time');
 NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
@@ -413,7 +413,7 @@ NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not al
 SET timezone=+1;
 INSERT INTO "hyper_date" VALUES('2011-01-26', 22.5);
 RESET timezone;
---make sure timestamp inserts work even when the timezone changes the 
+--make sure timestamp inserts work even when the timezone changes the
 SET timezone = 'UTC';
 CREATE TABLE "test_tz"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"test_tz"', 'time', chunk_time_interval=> INTERVAL '1 day');
