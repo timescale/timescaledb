@@ -70,11 +70,11 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_16_chunk');
 SELECT * FROM "3dim";
 
 -- test that explain works
-EXPLAIN
+EXPLAIN (COSTS FALSE)
 INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
                          ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
 
-EXPLAIN
+EXPLAIN (COSTS FALSE)
 WITH "3dim_insert" AS (
      INSERT INTO "3dim" VALUES('2017-01-21T09:01:44', 19.3, 'black', 'la') RETURNING time, temp
 ), regular_insert AS (
@@ -111,14 +111,14 @@ SELECT create_hypertable('"smallinttime_err"', 'time');
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65535);
 
---make sure date inserts work even when the timezone changes the 
+--make sure date inserts work even when the timezone changes the
 CREATE TABLE hyper_date(time date, temp float);
 SELECT create_hypertable('"hyper_date"', 'time');
 SET timezone=+1;
 INSERT INTO "hyper_date" VALUES('2011-01-26', 22.5);
 RESET timezone;
 
---make sure timestamp inserts work even when the timezone changes the 
+--make sure timestamp inserts work even when the timezone changes the
 SET timezone = 'UTC';
 CREATE TABLE "test_tz"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"test_tz"', 'time', chunk_time_interval=> INTERVAL '1 day');

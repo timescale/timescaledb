@@ -83,18 +83,18 @@ SELECT date_trunc('second', time) t, avg(series_0), min(series_1), avg(series_2)
 
 --test that when index on time used by constraint, still works correctly
 EXPLAIN (costs off)
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
 
 --test that still works with an expression index on data_trunc.
@@ -117,63 +117,63 @@ RESET client_min_messages;
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
 FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
 
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+SELECT time_bucket('1 minute', time - INTERVAL '30 seconds') + INTERVAL '30 seconds' t, trunc(avg(series_0)::numeric, 8) as avg_trunc1, min(series_1), trunc(avg(series_2)::numeric, 8) as avg_trunc2
+FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
+
+
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
-
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2) 
-FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket('1 minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
 
-EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+SELECT time_bucket('1 minute', time::timestamp) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
+
+EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 
-EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2) 
+EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2) 
+SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 
 
 --plain tables shouldnt be optimized by default
 EXPLAIN (costs off)
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM plain_table 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM plain_table
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
 
-SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-FROM plain_table 
-WHERE time < to_timestamp(900) 
-GROUP BY t 
-ORDER BY t DESC 
+SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+FROM plain_table
+WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
 LIMIT 2;
 
 
@@ -181,17 +181,17 @@ LIMIT 2;
 BEGIN;
     SET LOCAL timescaledb.optimize_non_hypertables = 'on';
     EXPLAIN (costs off)
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-    FROM plain_table 
-    WHERE time < to_timestamp(900) 
-    GROUP BY t 
-    ORDER BY t DESC 
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+    FROM plain_table
+    WHERE time < to_timestamp(900)
+    GROUP BY t
+    ORDER BY t DESC
     LIMIT 2;
 
-    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) 
-    FROM plain_table 
-    WHERE time < to_timestamp(900) 
-    GROUP BY t 
-    ORDER BY t DESC 
+    SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
+    FROM plain_table
+    WHERE time < to_timestamp(900)
+    GROUP BY t
+    ORDER BY t DESC
     LIMIT 2;
 ROLLBACK;
