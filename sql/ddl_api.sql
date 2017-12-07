@@ -40,15 +40,20 @@ DECLARE
     is_partitioned             BOOLEAN;
     chunk_time_interval_actual BIGINT;
     time_type                  REGTYPE;
+    relowner                   OID;
 BEGIN
     -- Early abort if lacking permissions
     PERFORM _timescaledb_internal.check_role(main_table);
 
-    SELECT relname, nspname, reltablespace, relkind = 'p'
-    INTO STRICT table_name, schema_name, tablespace_oid, is_partitioned
+    SELECT c.relname, n.nspname, c.reltablespace, c.relkind = 'p', c.relowner
+    INTO STRICT table_name, schema_name, tablespace_oid, is_partitioned, relowner
     FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     WHERE c.OID = main_table;
+
+    -- Check that the user has permissions to create chunks in the
+    -- associated schema
+    PERFORM _timescaledb_internal.check_associated_schema_permissions(associated_schema_name, relowner);
 
     IF is_partitioned THEN
         RAISE EXCEPTION 'table % is already partitioned', main_table

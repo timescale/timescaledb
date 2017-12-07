@@ -5,6 +5,10 @@
 --needed for ddl ops:
 CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 
+--needed for ROLE_DEFAULT_PERM_USER_2 to write to the 'one_Partition' schema which
+--is owned by ROLE_DEFAULT_PERM_USER
+GRANT CREATE ON SCHEMA "one_Partition" TO :ROLE_DEFAULT_PERM_USER_2;
+
 --test creating and using schema as non-superuser
 \c single :ROLE_DEFAULT_PERM_USER_2
 \dt

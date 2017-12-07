@@ -4,9 +4,11 @@
 #include <utils/syscache.h>
 #include <utils/memutils.h>
 #include <utils/builtins.h>
+#include <utils/acl.h>
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
 #include <commands/tablespace.h>
+#include <commands/dbcommands.h>
 #include <miscadmin.h>
 
 #include "hypertable.h"
@@ -357,6 +359,70 @@ hypertable_validate_triggers(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 		errmsg("Hypertables do not support transition tables in triggers.")));
+
+	PG_RETURN_VOID();
+}
+
+TS_FUNCTION_INFO_V1(hypertable_check_associated_schema_permissions);
+
+/*
+ * Check that the current user can create chunks in a hypertable's associated
+ * schema.
+ *
+ * This function is typically called from create_hypertable() to verify that the
+ * table owner has CREATE permissions for the schema (if it already exists) or
+ * the database (if the schema does not exist and needs to be created).
+ */
+Datum
+hypertable_check_associated_schema_permissions(PG_FUNCTION_ARGS)
+{
+	Name		schema_name;
+	Oid			schema_oid;
+	Oid			user_oid;
+
+	if (PG_NARGS() != 2)
+		elog(ERROR, "Invalid number of arguments");
+
+	/*
+	 * If the schema name is NULL, it implies the internal catalog schema and
+	 * anyone should be able to create chunks there.
+	 */
+	if (PG_ARGISNULL(0))
+		PG_RETURN_VOID();
+
+	schema_name = PG_GETARG_NAME(0);
+
+	/* Anyone can create chunks in the internal schema */
+	if (namestrcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
+		PG_RETURN_VOID();
+
+	if (PG_ARGISNULL(1))
+		user_oid = GetUserId();
+	else
+		user_oid = PG_GETARG_OID(1);
+
+	schema_oid = get_namespace_oid(NameStr(*schema_name), true);
+
+	if (!OidIsValid(schema_oid))
+	{
+		/*
+		 * Schema does not exist, so we must check that the user has
+		 * privileges to create the schema in the current database
+		 */
+		if (pg_database_aclcheck(MyDatabaseId, user_oid, ACL_CREATE) != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("User %s lacks permissions to create schema \"%s\" in database \"%s\"",
+							GetUserNameFromId(user_oid, false),
+							NameStr(*schema_name),
+							get_database_name(MyDatabaseId))));
+	}
+	else if (pg_namespace_aclcheck(schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+		errmsg("User %s lacks permissions to create chunks in schema \"%s\"",
+			   GetUserNameFromId(user_oid, false),
+			   NameStr(*schema_name))));
 
 	PG_RETURN_VOID();
 }

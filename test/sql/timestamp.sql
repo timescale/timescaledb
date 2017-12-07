@@ -19,8 +19,11 @@ CREATE TABLE PUBLIC."testNs" (
   series_bool BOOLEAN NULL
 );
 CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
-SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 2, associated_schema_name=>'testNs' );
 
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA "testNs" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c single :ROLE_DEFAULT_PERM_USER
+SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 2, associated_schema_name=>'testNs' );
 
 \c single
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
@@ -142,7 +145,7 @@ SELECT time_bucket('25 hour', DATE '2012-01-01');
 
 SELECT time_bucket(INTERVAL '1 day', TIMESTAMP '2011-01-02 01:01:01');
 
-SELECT time, time_bucket(INTERVAL '2 day ', time) 
+SELECT time, time_bucket(INTERVAL '2 day ', time)
 FROM unnest(ARRAY[
     TIMESTAMP '2011-01-01 01:01:01',
     TIMESTAMP '2011-01-02 01:01:01',
@@ -151,7 +154,7 @@ FROM unnest(ARRAY[
     ]) AS time;
 
 
-SELECT int_def, time_bucket(int_def,TIMESTAMP '2011-01-02 01:01:01.111') 
+SELECT int_def, time_bucket(int_def,TIMESTAMP '2011-01-02 01:01:01.111')
 FROM unnest(ARRAY[
     INTERVAL '1 millisecond',
     INTERVAL '1 second',
@@ -170,7 +173,7 @@ SELECT time_bucket(INTERVAL '1 year',TIMESTAMP '2011-01-02 01:01:01.111');
 SELECT time_bucket(INTERVAL '1 month',TIMESTAMP '2011-01-02 01:01:01.111');
 \set ON_ERROR_STOP 1
 
-SELECT time, time_bucket(INTERVAL '5 minute', time) 
+SELECT time, time_bucket(INTERVAL '5 minute', time)
 FROM unnest(ARRAY[
     TIMESTAMP '1970-01-01 00:59:59.999999',
     TIMESTAMP '1970-01-01 01:01:00',
@@ -179,7 +182,7 @@ FROM unnest(ARRAY[
     ]) AS time;
 
 
-SELECT time, time_bucket(INTERVAL '5 minute', time) 
+SELECT time, time_bucket(INTERVAL '5 minute', time)
 FROM unnest(ARRAY[
     TIMESTAMP '2011-01-02 01:04:59.999999',
     TIMESTAMP '2011-01-02 01:05:00',
@@ -204,7 +207,7 @@ FROM unnest(ARRAY[
     TIMESTAMP '2011-01-02 01:08:00'
     ]) AS time;
 
---example to align with an origin 
+--example to align with an origin
 SELECT time, time_bucket(INTERVAL '5 minute', time - (TIMESTAMP '2011-01-02 00:02:00' - TIMESTAMP 'epoch')) +  (TIMESTAMP '2011-01-02 00:02:00'-TIMESTAMP 'epoch')
 FROM unnest(ARRAY[
     TIMESTAMP '2011-01-02 01:01:59.999999',
@@ -273,7 +276,7 @@ FROM unnest(ARRAY[
     TIMESTAMP WITH TIME ZONE '2011-01-04 01:01:01+02'
     ]) AS time;
 
---dst: same local hour bucketed as two different hours. 
+--dst: same local hour bucketed as two different hours.
 SELECT time, time_bucket(INTERVAL '1 hour', time), date_trunc('hour', time)
 FROM unnest(ARRAY[
     TIMESTAMP WITH TIME ZONE '2017-11-05 12:05:00+07',
@@ -299,7 +302,7 @@ FROM unnest(ARRAY[
     ]) AS time;
 
 
-SELECT time, time_bucket(10, time) 
+SELECT time, time_bucket(10, time)
 FROM unnest(ARRAY[
      '99',
      '100',
@@ -307,7 +310,7 @@ FROM unnest(ARRAY[
      '110'
     ]::int[]) AS time;
 
-SELECT time, time_bucket(10, time,2) 
+SELECT time, time_bucket(10, time,2)
 FROM unnest(ARRAY[
      '101',
      '102',
@@ -315,7 +318,7 @@ FROM unnest(ARRAY[
      '112'
     ]::int[]) AS time;
 
-SELECT time, time_bucket(10, time, -2) 
+SELECT time, time_bucket(10, time, -2)
 FROM unnest(ARRAY[
      '97',
      '98',
