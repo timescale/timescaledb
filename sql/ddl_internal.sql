@@ -22,6 +22,9 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.check_associated_schema_permissions(schema_name NAME, userid OID)
+    RETURNS VOID AS '$libdir/timescaledb', 'hypertable_check_associated_schema_permissions' LANGUAGE C;
+
 -- Creates a hypertable row.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_hypertable(
     main_table               REGCLASS,

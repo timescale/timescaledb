@@ -1,5 +1,6 @@
 \c single :ROLE_SUPERUSER
 create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+create schema chunk_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 \set ON_ERROR_STOP 0
@@ -71,7 +72,18 @@ SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
  device_id | text   | f
 (2 rows)
 
-select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+-- No permissions on associated schema should fail
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
+ERROR:  User default_perm_user lacks permissions to create chunks in schema "chunk_schema"
+\set ON_ERROR_STOP 1
+-- Granting permissions on chunk_schema should make things work
+RESET ROLE;
+GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
 NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
  create_hypertable 
 -------------------
@@ -94,7 +106,7 @@ select add_dimension('test_schema.test_table', 'location', 2);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
-  2 | test_schema | test_table | _timescaledb_internal  | _hyper_2                |              3
+  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              3
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
@@ -123,7 +135,7 @@ NOTICE:  Adding NOT NULL constraint to time column id (NULL time values not allo
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
-  2 | test_schema | test_table | _timescaledb_internal  | _hyper_2                |              4
+  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              4
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
@@ -204,6 +216,14 @@ insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'ny
 select add_dimension('test_schema.test_table', 'device_type', 2);
 ERROR:  Cannot add new dimension to a non-empty table
 \set ON_ERROR_STOP 1
+--show chunks in the associated schema
+\dt "chunk_schema".*
+                      List of relations
+    Schema    |       Name       | Type  |       Owner       
+--------------+------------------+-------+-------------------
+ chunk_schema | _hyper_2_2_chunk | table | default_perm_user
+(1 row)
+
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
@@ -220,10 +240,10 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
 (1 row)
 
 \dt "test_schema".*
-                         List of relations
-   Schema    |          Name          | Type  |        Owner        
--------------+------------------------+-------+---------------------
- test_schema | test_1dim              | table | default_perm_user_2
+                        List of relations
+   Schema    |          Name          | Type  |       Owner       
+-------------+------------------------+-------+-------------------
+ test_schema | test_1dim              | table | default_perm_user
  test_schema | test_table             | table | default_perm_user
  test_schema | test_table_no_not_null | table | default_perm_user
 (3 rows)

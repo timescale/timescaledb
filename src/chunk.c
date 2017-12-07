@@ -13,6 +13,7 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/hsearch.h>
+#include <miscadmin.h>
 
 #include "chunk.h"
 #include "chunk_index.h"
@@ -26,6 +27,7 @@
 #include "scanner.h"
 #include "process_utility.h"
 #include "trigger.h"
+#include "compat.h"
 
 typedef bool (*on_chunk_func) (ChunkScanCtx *ctx, Chunk *chunk);
 
@@ -341,21 +343,59 @@ chunk_add_constraints(Chunk *chunk)
 	return num_added;
 }
 
+/*
+ * Create a chunk's table.
+ *
+ * A chunk inherits from the main hypertable and will have the same owner. Since
+ * chunks can be created either in the TimescaleDB internal schema or in a
+ * user-specified schema, some care has to be taken to use the right
+ * permissions, depending on the case:
+ *
+ * 1. if the chunk is created in the internal schema, we create it as the
+ * catalog/schema owner (i.e., anyone can create chunks there via inserting into
+ * a hypertable, but can not do it via CREATE TABLE).
+ *
+ * 2. if the chunk is created in a user-specified "associated schema", then we
+ * shouldn't use the catalog owner to create the table since that typically
+ * implies super-user permissions. If we would allow that, anyone can specify
+ * someone else's schema in create_hypertable() and create chunks in it without
+ * having the proper permissions to do so. With this logic, the hypertable owner
+ * must have permissions to create tables in the associated schema, or else
+ * table creation will fail. If the schema doesn't yet exist, the table owner
+ * instead needs the proper permissions on the database to create the schema.
+ */
 static Oid
 chunk_create_table(Chunk *chunk, Hypertable *ht)
 {
+	Catalog    *catalog = catalog_get();
 	Relation	rel;
 	ObjectAddress objaddr;
-	CatalogSecurityContext sec_ctx;
+	int			sec_ctx;
 	CreateStmt	stmt = {
 		.type = T_CreateStmt,
 		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.inhRelations = list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
 		.tablespacename = hypertable_select_tablespace(ht, chunk),
 	};
+	Oid			uid,
+				saved_uid;
 
 	rel = heap_open(ht->main_table_relid, AccessShareLock);
-	catalog_become_owner(catalog_get(), &sec_ctx);
+
+	/*
+	 * If the chunk is created in the internal schema, become the catalog
+	 * owner, otherwise become the hypertable owner
+	 */
+	if (namestrcmp(&chunk->fd.schema_name, INTERNAL_SCHEMA_NAME) == 0)
+		uid = catalog->owner_uid;
+	else
+		uid = rel->rd_rel->relowner;
+
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+
 	objaddr = DefineRelation(&stmt,
 							 RELKIND_RELATION,
 							 rel->rd_rel->relowner,
@@ -365,7 +405,9 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 #endif
 		);
 
-	catalog_restore_user(&sec_ctx);
+	if (uid != saved_uid)
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+
 	heap_close(rel, AccessShareLock);
 
 	return objaddr.objectId;
