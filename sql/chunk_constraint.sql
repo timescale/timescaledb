@@ -65,7 +65,7 @@ DECLARE
     constraint_row pg_constraint;
     hypertable_index_class_row pg_class;
     chunk_index_class_row pg_class;
-    constraint_name TEXT;
+    constraint_name NAME;
     hypertable_constraint_name TEXT = NULL;
     chunk_constraint_oid OID;
 BEGIN
