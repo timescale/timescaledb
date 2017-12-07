@@ -2,15 +2,29 @@
 
 BUILD_TYPE=${1:-Release}
 BUILD_DIR=${BUILD_DIR:-./build}
+BUILD_FORCE_REMOVE=${BUILD_FORCE_REMOVE:-false}
+SRC_DIR=$(dirname $0)
 
-if [ -d ${BUILD_DIR} ]; then
+if [ ${BUILD_FORCE_REMOVE} == "true" ]; then
+    rm -fr ${BUILD_DIR}
+elif [ -d ${BUILD_DIR} ]; then
     echo "Build system already initialized in ${BUILD_DIR}"
-    exit
+
+    read  -n 1 -p "Do you want to remove it (this is IMMEDIATE and PERMANENT), y/n? " choice
+    echo ""
+    if [ $choice == "y" ]; then
+        rm -fr ${BUILD_DIR}
+    else
+        exit
+    fi
 fi
+
+set -e
+set -u
 
 mkdir -p ${BUILD_DIR} && \
     cd ${BUILD_DIR} && \
-    cmake .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+    cmake ${SRC_DIR} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
 
 echo "TimescaleDB build system initialized in ${BUILD_DIR}. To compile, do:"
 echo -e "\033[1mcd ${BUILD_DIR} && make\033[0m"
