@@ -116,7 +116,7 @@ add_custom_command(
   OUTPUT ${GITCOMMIT_H}
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
-  COMMAND ${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags >> ${GITCOMMIT_H} || echo "nocommit" >> ${GITCOMMIT_H}
+  COMMAND ${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags >> ${GITCOMMIT_H} || echo "${PROJECT_VERSION_MOD}" >> ${GITCOMMIT_H}
   COMMENT "Generating gitcommit.h"
   VERBATIM)
 
