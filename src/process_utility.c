@@ -1291,6 +1291,24 @@ process_altertable_start_table(Node *parsetree)
 				if (ht != NULL)
 					process_alter_column_type_start(ht, cmd);
 				break;
+#if PG10
+			case AT_AttachPartition:
+				{
+					RangeVar   *relation;
+					PartitionCmd *partstmt;
+
+					partstmt = (PartitionCmd *) cmd->def;
+					relation = partstmt->name;
+					Assert(NULL != relation);
+
+					if (InvalidOid != hypertable_relid(relation))
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("Hypertables do not support native postgres partitioning")));
+					}
+				}
+#endif
 			default:
 				break;
 		}

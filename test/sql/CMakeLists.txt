@@ -49,7 +49,8 @@ set(TEST_FILES
   version.sql)
 
 set(TEST_TEMPLATES
-  parallel.sql.in)
+  parallel.sql.in
+  partitioning.sql.in)
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
