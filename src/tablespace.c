@@ -80,6 +80,19 @@ tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid)
 	return false;
 }
 
+bool
+tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid)
+{
+	int			i;
+
+	for (i = 0; i < tspcs->num_tablespaces; i++)
+		if (tspc_oid == tspcs->tablespaces[i].tablespace_oid)
+			return true;
+
+	return false;
+}
+
+
 static bool
 tablespace_tuple_found(TupleInfo *ti, void *data)
 {
@@ -211,10 +224,7 @@ tablespace_delete(int32 hypertable_id, const char *tspcname)
 	num_deleted = scanner_scan(&scanctx);
 
 	if (num_deleted > 0)
-	{
-		catalog_invalidate_cache(catalog_table_get_id(info.catalog, TABLESPACE), CMD_DELETE);
 		CommandCounterIncrement();
-	}
 
 	return num_deleted;
 }
@@ -270,10 +280,7 @@ tablespace_delete_from_all(const char *tspcname, Oid userid)
 	num_deleted = scanner_scan(&scanctx);
 
 	if (num_deleted > 0)
-	{
-		catalog_invalidate_cache(catalog_table_get_id(info.catalog, TABLESPACE), CMD_DELETE);
 		CommandCounterIncrement();
-	}
 
 	if (info.num_filtered > 0)
 		elog(NOTICE, "Tablespace \"%s\" remains attached to %d hypertable(s) due to lack of permissions",
@@ -292,10 +299,8 @@ tablespace_attach(PG_FUNCTION_ARGS)
 	Cache	   *hcache;
 	Hypertable *ht;
 	Oid			tspc_oid;
-	int32		tspc_id;
 	Oid			ownerid;
 	AclResult	aclresult;
-	MemoryContext old;
 	CatalogSecurityContext sec_ctx;
 
 	if (PG_NARGS() != 2)
@@ -345,13 +350,8 @@ tablespace_attach(PG_FUNCTION_ARGS)
 				NameStr(*tspcname), get_rel_name(hypertable_oid))));
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
-	tspc_id = tablespace_insert(ht->fd.id, NameStr(*tspcname));
+	tablespace_insert(ht->fd.id, NameStr(*tspcname));
 	catalog_restore_user(&sec_ctx);
-
-	/* Add the tablespace to the hypertable */
-	old = cache_switch_to_memory_context(hcache);
-	hypertable_add_tablespace(ht, tspc_id, tspc_oid);
-	MemoryContextSwitchTo(old);
 
 	cache_release(hcache);
 
@@ -383,7 +383,6 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid)
 					tspcname, get_rel_name(hypertable_oid))));
 
 	ret = tablespace_delete(ht->fd.id, tspcname);
-	hypertable_delete_tablespace(ht, tspcoid);
 
 	cache_release(hcache);
 
@@ -480,6 +479,7 @@ tablespace_show(PG_FUNCTION_ARGS)
 	Oid			hypertable_oid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Cache	   *hcache;
 	Hypertable *ht;
+	Tablespaces *tspcs;
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -504,9 +504,10 @@ tablespace_show(PG_FUNCTION_ARGS)
 				 errmsg("Table \"%s\" is not a hypertable",
 						get_rel_name(hypertable_oid))));
 
-	if (NULL != ht->tablespaces && funcctx->call_cntr < (uint64) ht->tablespaces->num_tablespaces)
+	tspcs = tablespace_scan(ht->fd.id);
+
+	if (NULL != tspcs && funcctx->call_cntr < (uint64) tspcs->num_tablespaces)
 	{
-		Tablespaces *tspcs = ht->tablespaces;
 		Oid			tablespace_oid = tspcs->tablespaces[funcctx->call_cntr].tablespace_oid;
 		const char *tablespace_name = get_tablespace_name(tablespace_oid);
 

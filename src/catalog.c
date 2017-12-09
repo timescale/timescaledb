@@ -515,7 +515,6 @@ catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 			break;
 		case HYPERTABLE:
 		case DIMENSION:
-		case TABLESPACE:
 			relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;

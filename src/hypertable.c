@@ -73,7 +73,6 @@ hypertable_from_tuple(HeapTuple tuple)
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
 	h->chunk_cache = subspace_store_init(h->space->num_dimensions, CurrentMemoryContext);
-	h->tablespaces = tablespace_scan(h->fd.id);
 
 	return h;
 }
@@ -262,44 +261,9 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 bool
 hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 {
-	Tablespaces *tspcs = ht->tablespaces;
-	int			i;
+	Tablespaces *tspcs = tablespace_scan(ht->fd.id);
 
-	for (i = 0; i < tspcs->num_tablespaces; i++)
-		if (tspc_oid == tspcs->tablespaces[i].tablespace_oid)
-			return true;
-
-	return false;
-}
-
-Tablespace *
-hypertable_add_tablespace(Hypertable *ht, int32 tspc_id, Oid tspc_oid)
-{
-	FormData_tablespace form = {
-		.id = tspc_id,
-		.hypertable_id = ht->fd.id,
-	};
-
-	namestrcpy(&form.tablespace_name, get_tablespace_name(tspc_oid));
-	return tablespaces_add(ht->tablespaces, &form, tspc_oid);
-}
-
-bool
-hypertable_delete_tablespace(Hypertable *ht, Oid tspc_oid)
-{
-	if (NULL == ht->tablespaces)
-		return false;
-
-	return tablespaces_delete(ht->tablespaces, tspc_oid);
-}
-
-int
-hypertable_delete_all_tablespaces(Hypertable *ht)
-{
-	if (NULL == ht->tablespaces)
-		return 0;
-
-	return tablespaces_clear(ht->tablespaces);
+	return tablespaces_contain(tspcs, tspc_oid);
 }
 
 static inline Oid
