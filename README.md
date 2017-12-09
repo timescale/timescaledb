@@ -100,7 +100,9 @@ We recommend following our detailed [installation instructions](http://docs.time
 
 **Prerequisites**:
 
-- A standard PostgreSQL 9.6 installation with development environment (header files) (e.g., postgresql-server-dev-9.6 package for Linux, Postgres.app for MacOS)
+- A standard PostgreSQL 9.6 or 10 installation with development
+environment (header files) (e.g., `postgresql-server-dev-9.6 `package
+for Linux, Postgres.app for MacOS)
 - C compiler (e.g., gcc or clang)
 - [CMake](https://cmake.org/) version 3.4 or greater
 
@@ -124,7 +126,7 @@ Please see our [additional configuration instructions](http://docs.timescale.com
 
 **Prerequisites**:
 
-- A standard [PostgreSQL 9.6 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
+- A standard [PostgreSQL 9.6 or 10 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git
 - Make sure all relevant binaries are in your PATH: `pg_config`, `cmake`, `MSBuild`
