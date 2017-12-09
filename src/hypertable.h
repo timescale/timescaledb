@@ -18,7 +18,6 @@ typedef struct Hypertable
 	Oid			main_table_relid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
-	Tablespaces *tablespaces;
 } Hypertable;
 
 extern bool hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
@@ -31,8 +30,5 @@ extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);
 extern bool is_hypertable(Oid relid);
 extern bool hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
-extern Tablespace *hypertable_add_tablespace(Hypertable *ht, int32 tspc_id, Oid tspc_oid);
-extern bool hypertable_delete_tablespace(Hypertable *ht, Oid tspc_id);
-extern int	hypertable_delete_all_tablespaces(Hypertable *ht);
 
 #endif   /* TIMESCALEDB_HYPERTABLE_H */
