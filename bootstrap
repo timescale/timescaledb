@@ -4,6 +4,9 @@ BUILD_TYPE=${1:-Release}
 BUILD_DIR=${BUILD_DIR:-./build}
 BUILD_FORCE_REMOVE=${BUILD_FORCE_REMOVE:-false}
 SRC_DIR=$(dirname $0)
+if [[ ! ${SRC_DIR} == /* ]]; then
+    SRC_DIR=$(pwd)/${SRC_DIR}
+fi
 
 if [ ${BUILD_FORCE_REMOVE} == "true" ]; then
     rm -fr ${BUILD_DIR}
