@@ -20,15 +20,15 @@ if [ $(docker ps -q -f name=${CONTAINER_NAME} 2>/dev/null | wc -l) = 0 ]; then
     # Run a Postgres container
     docker run -u postgres -d --name ${CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
     # Install build dependencies
-    docker exec -u root -it ${CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils && mkdir -p /build"
+    docker exec -u root -it ${CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex && mkdir -p /build/debug"
 fi
 
 # Copy the source files to build directory
-docker exec -u root -it ${CONTAINER_NAME} /bin/bash -c "cp -a /src/{src,sql,test,Makefile,timescaledb.control} /build/ &&  make -C /build clean && make -C /build install"
+docker exec -u root -it ${CONTAINER_NAME} /bin/bash -c "cp -a /src/{src,sql,scripts,test,CMakeLists.txt,timescaledb.control.in,version.config} /build/ &&cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug && make -C /build/debug install && chown -R postgres /build/debug"
 
 # Run tests
-docker exec -u postgres -it ${CONTAINER_NAME} /bin/bash -c "make -C /build installcheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
+docker exec -u postgres -it ${CONTAINER_NAME} /bin/bash -c "make -C /build/debug installcheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
 
 if [ "$?" != "0" ]; then
-    docker exec -it ${CONTAINER_NAME} cat /build/test/regression.diffs
+    docker exec -it ${CONTAINER_NAME} cat /build/debug/test/regression.diffs
 fi
