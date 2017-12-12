@@ -263,11 +263,11 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 		elog(ERROR, "insert is not on a table");
 
 	rti = create_chunk_range_table_entry(dispatch->estate, rel);
-	resrelinfo = create_chunk_result_relation_info(dispatch, rel, rti);
-
-	CheckValidResultRelCompat(resrelinfo, operation);
 
 	MemoryContextSwitchTo(cis_context);
+	resrelinfo = create_chunk_result_relation_info(dispatch, rel, rti);
+	CheckValidResultRelCompat(resrelinfo, operation);
+
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;
 	state->rel = rel;
