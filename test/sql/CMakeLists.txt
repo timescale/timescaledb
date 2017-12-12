@@ -8,7 +8,7 @@ set(TEST_FILES
   chunks.sql
   cluster.sql
   constraint.sql
-  copy_from.sql
+  copy.sql
   create_chunks.sql
   create_hypertable.sql
   create_table.sql

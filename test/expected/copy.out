@@ -29,16 +29,51 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 \set QUIET on
 \o
+--old chunks
+COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+\copy "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+--new chunks
+COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+\copy "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
 COPY (SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id) TO STDOUT;
+1257894000000000000	 dev-copy	1.5	2	\N	\N
+1257894000000000000	 dev-copy	1.5	2	\N	\N
 1257894000000000000	dev1	1.5	1	2	t
 1257894000000000000	dev1	1.5	2	\N	\N
-1257894000000000000	dev2	1.5	2	\N	\N
 1257894000000000000	dev2	1.5	1	\N	\N
+1257894000000000000	dev2	1.5	2	\N	\N
 1257894000000001000	dev1	2.5	3	\N	\N
 1257894001000000000	dev1	3.5	4	\N	\N
 1257894002000000000	dev1	2.5	3	\N	\N
 1257894002000000000	dev1	5.5	6	\N	t
 1257894002000000000	dev1	5.5	7	\N	f
 1257897600000000000	dev1	4.5	5	\N	f
-1257987600000000000	dev1	1.5	2	\N	\N
 1257987600000000000	dev1	1.5	1	\N	\N
+1257987600000000000	dev1	1.5	2	\N	\N
+2257894000000000000	 dev-copy	1.5	2	\N	\N
+2257894000000000000	 dev-copy	1.5	2	\N	\N
+---test hypertable with FK
+CREATE TABLE "meta" ("id" serial PRIMARY KEY);
+CREATE TABLE "hyper" (
+    "meta_id" integer NOT NULL REFERENCES meta(id),
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('hyper', 'time', chunk_time_interval => 100);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "meta" ("id") values (1);
+\copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+\set ON_ERROR_STOP 0
+\copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+\set ON_ERROR_STOP 1
+COPY (SELECT * FROM hyper ORDER BY time, meta_id) TO STDOUT;
+1	1	1
+1	2	1
