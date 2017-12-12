@@ -361,6 +361,31 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	ExecResetTupleTable(estate->es_tupleTable, false);
 
 	ExecCloseIndices(resultRelInfo);
+
+#if PG10
+	/* Close any trigger target relations */
+	ExecCleanUpTriggerState(estate);
+#elif PG96
+	{
+		/*
+		 * es_trig_target_relations sometimes created in
+		 * ExecGetTriggerResultRel on chunks. During copy to regular tables,
+		 * this never happens because the ResultRelInfo always already exists
+		 * for the regular table.
+		 */
+		ListCell   *l;
+
+		foreach(l, estate->es_trig_target_relations)
+		{
+			ResultRelInfo *resultRelInfo = (ResultRelInfo *) lfirst(l);
+
+			/* Close indices and then the relation itself */
+			ExecCloseIndices(resultRelInfo);
+			heap_close(resultRelInfo->ri_RelationDesc, NoLock);
+		}
+	}
+#endif
+
 	copy_chunk_state_destroy(ccstate);
 
 	/*
@@ -464,7 +489,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	List	   *attnums;
 	ListCell   *cur;
 	RangeTblEntry *rte;
-    char       *xactReadOnly;
+	char	   *xactReadOnly;
 
 	/* Disallow COPY to/from file or program except to superusers. */
 	if (!pipe && !superuser())
