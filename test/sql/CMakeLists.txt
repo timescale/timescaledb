@@ -33,6 +33,7 @@ set(TEST_FILES
   plain.sql
   reindex.sql
   relocate_extension.sql
+  reloptions.sql
   size_utils.sql
   sql_query_results_optimized.sql
   sql_query_results_unoptimized.sql

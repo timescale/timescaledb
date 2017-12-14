@@ -1187,6 +1187,19 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 	process_utility_set_expect_chunk_modification(false);
 }
 
+/*
+ * Generic function to recurse ALTER TABLE commands to chunks.
+ *
+ * Call with foreach_chunk().
+ */
+static void
+process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = arg;
+
+	AlterTableInternal(chunk_relid, list_make1(cmd), false);
+}
+
 static void
 process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 {
@@ -1373,6 +1386,13 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AlterColumnType:
 			Assert(IsA(cmd->def, ColumnDef));
 			process_alter_column_type_end(ht, cmd);
+			break;
+		case AT_SetRelOptions:
+		case AT_ResetRelOptions:
+		case AT_ReplaceRelOptions:
+		case AT_AddOids:
+		case AT_DropOids:
+			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		default:
 			break;
