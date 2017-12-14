@@ -9,13 +9,19 @@ DECLARE
     chunk_row _timescaledb_catalog.chunk;
     hypertable_row _timescaledb_catalog.hypertable;
     constraint_oid OID;
+    check_sql TEXT;
     def TEXT;
 BEGIN
     SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_constraint_row.chunk_id;
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.id = chunk_row.hypertable_id;
 
     IF chunk_constraint_row.dimension_slice_id IS NOT NULL THEN
-        def := format('CHECK (%s)',  _timescaledb_internal.dimension_slice_get_constraint_sql(chunk_constraint_row.dimension_slice_id));
+        check_sql = _timescaledb_internal.dimension_slice_get_constraint_sql(chunk_constraint_row.dimension_slice_id);
+        IF check_sql IS NOT NULL THEN
+            def := format('CHECK (%s)',  check_sql);
+        ELSE
+            def := NULL;
+        END IF;
     ELSIF chunk_constraint_row.hypertable_constraint_name IS NOT NULL THEN
         SELECT oid INTO STRICT constraint_oid FROM pg_constraint
         WHERE conname=chunk_constraint_row.hypertable_constraint_name AND
@@ -25,11 +31,13 @@ BEGIN
         RAISE 'Unknown constraint type';
     END IF;
 
-    sql_code := format(
-        $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
-        chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name, def
-    );
-    EXECUTE sql_code;
+    IF def IS NOT NULL THEN 
+        sql_code := format(
+            $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
+            chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name, def
+        );
+        EXECUTE sql_code;
+    END IF;
 END
 $BODY$;
 

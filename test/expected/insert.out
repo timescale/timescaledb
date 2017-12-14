@@ -683,3 +683,21 @@ SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
  Wed Dec 31 16:00:00 1969 |   18 | 18
 (10 rows)
 
+CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);
+SELECT create_hypertable('one_space_test', 'time', 'device', 1);
+NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO one_space_test VALUES
+('2001-01-01 01:01:01', 1.0, 'device'),
+('2002-01-01 01:02:01', 1.0, 'device');
+SELECT * FROM one_space_test;
+           time           | temp | device 
+--------------------------+------+--------
+ Mon Jan 01 01:01:01 2001 |    1 | device
+ Tue Jan 01 01:02:01 2002 |    1 | device
+(2 rows)
+

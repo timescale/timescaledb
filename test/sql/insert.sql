@@ -69,3 +69,10 @@ FROM many_partitions_test
 GROUP BY period, device;
 
 SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
+
+CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);
+SELECT create_hypertable('one_space_test', 'time', 'device', 1);
+INSERT INTO one_space_test VALUES
+('2001-01-01 01:01:01', 1.0, 'device'),
+('2002-01-01 01:02:01', 1.0, 'device');
+SELECT * FROM one_space_test;
