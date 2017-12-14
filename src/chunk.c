@@ -9,9 +9,11 @@
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <access/reloptions.h>
 #include <nodes/makefuncs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/hsearch.h>
 #include <miscadmin.h>
 
@@ -343,6 +345,29 @@ chunk_add_constraints(Chunk *chunk)
 	return num_added;
 }
 
+static List *
+get_reloptions(Oid relid)
+{
+	HeapTuple	tuple;
+	Datum		datum;
+	bool		isnull;
+	List	   *options;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions,
+							&isnull);
+
+	options = untransformRelOptions(datum);
+
+	ReleaseSysCache(tuple);
+
+	return options;
+}
+
 /*
  * Create a chunk's table.
  *
@@ -376,6 +401,7 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.inhRelations = list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
 		.tablespacename = hypertable_select_tablespace(ht, chunk),
+		.options = get_reloptions(ht->main_table_relid),
 	};
 	Oid			uid,
 				saved_uid;
