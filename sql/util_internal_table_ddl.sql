@@ -126,6 +126,9 @@ BEGIN
             dimension_slice_row.range_end);
         END IF;
 
+        IF array_length(parts, 1) = 0 THEN
+            RETURN NULL;
+        END IF;
         return array_to_string(parts, 'AND');
     ELSE
         --TODO: only works with time for now

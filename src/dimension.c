@@ -223,10 +223,11 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 	{
 		range_start = (value / interval) * interval;
 		range_end = range_start + interval;
-		if (0 == range_start)
-		{
-			range_start = DIMENSION_SLICE_MINVALUE;
-		}
+	}
+
+	if (0 == range_start)
+	{
+		range_start = DIMENSION_SLICE_MINVALUE;
 	}
 
 	return dimension_slice_create(dim->fd.id, range_start, range_end);
