@@ -577,7 +577,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
 )
     RETURNS VOID
     LANGUAGE PLPGSQL VOLATILE
-    SET search_path = ''
+    SET search_path = '_timescaledb_internal'
     AS
 $BODY$
 DECLARE
@@ -594,7 +594,7 @@ AS '$libdir/timescaledb', 'indexing_verify_hypertable_indexes' LANGUAGE C STRICT
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
     RETURNS void LANGUAGE plpgsql
-    SECURITY DEFINER SET search_path = ''
+    SECURITY DEFINER SET search_path = '_timescaledb_internal'
     AS
 $BODY$
 DECLARE

@@ -13,6 +13,7 @@
 
 #include "catalog.h"
 #include "extension.h"
+#include "guc.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
@@ -184,6 +185,10 @@ extension_invalidate(Oid relid)
 bool
 extension_is_loaded(void)
 {
+	/* when restoring deactivate extension */
+	if (guc_restoring)
+		return false;
+
 	if (EXTENSION_STATE_UNKNOWN == extstate || EXTENSION_STATE_TRANSITIONING == extstate)
 	{
 		/* status may have updated without a relcache invalidate event */
