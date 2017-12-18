@@ -510,8 +510,12 @@ tablespace_show(PG_FUNCTION_ARGS)
 	{
 		Oid			tablespace_oid = tspcs->tablespaces[funcctx->call_cntr].tablespace_oid;
 		const char *tablespace_name = get_tablespace_name(tablespace_oid);
+		Datum name;
 
-		SRF_RETURN_NEXT(funcctx, CStringGetDatum(tablespace_name));
+		Assert(tablespace_name != NULL);
+		name = DirectFunctionCall1(namein, CStringGetDatum(tablespace_name));
+
+		SRF_RETURN_NEXT(funcctx, name);
 	}
 	else
 	{
