@@ -37,7 +37,6 @@
 #include "event_trigger.h"
 #include "executor.h"
 #include "extension.h"
-#include "guc.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
@@ -1632,11 +1631,7 @@ timescaledb_ddl_command_start(
 #endif
 	};
 
-	/*
-	 * If we are restoring, we don't want to recurse to chunks or block
-	 * operations on chunks. If we do, the restore will fail.
-	 */
-	if (!extension_is_loaded() || guc_restoring)
+	if (!extension_is_loaded())
 	{
 		prev_ProcessUtility(&args);
 		return;
@@ -1664,7 +1659,7 @@ timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
 	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
 		elog(ERROR, "not fired by event trigger manager");
 
-	if (!extension_is_loaded() || guc_restoring)
+	if (!extension_is_loaded())
 		PG_RETURN_NULL();
 
 	Assert(strcmp("ddl_command_end", trigdata->event) == 0);

@@ -25,7 +25,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     partitioning_func       REGPROC = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SET search_path = ''
+    SET search_path = '_timescaledb_catalog'
     AS
 $BODY$
 <<vars>>
@@ -142,7 +142,7 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     partitioning_func       REGPROC = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = ''
+    SECURITY DEFINER SET search_path = '_timescaledb_catalog'
     AS
 $BODY$
 <<main_block>>
@@ -192,7 +192,7 @@ CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
     chunk_time_interval     anyelement
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path=''
+    SECURITY DEFINER SET search_path='_timescaledb_catalog'
     AS
 $BODY$
 DECLARE

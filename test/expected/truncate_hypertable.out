@@ -133,7 +133,7 @@ CREATE TRIGGER _test_truncate_after
 TRUNCATE "two_Partitions";
 WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: TRUNCATE cnt: <NULL> trigger_name _test_truncate_before
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: TRUNCATE cnt: <NULL> trigger_name _test_truncate_after
-ERROR:  cannot drop table _timescaledb_internal._hyper_1_5_chunk because other objects depend on it
+ERROR:  cannot drop table _hyper_1_5_chunk because other objects depend on it
 \set ON_ERROR_STOP 1
 TRUNCATE "two_Partitions" CASCADE;
 WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: TRUNCATE cnt: <NULL> trigger_name _test_truncate_before
