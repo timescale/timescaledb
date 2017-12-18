@@ -4,18 +4,18 @@
 
 --old chunks
 COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
-1257894000000000000, dev-copy, 1.5, 2
+1257894000000000000,dev3,1.5,2
 \.
 \copy "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
-1257894000000000000, dev-copy, 1.5, 2
+1257894000000000000,dev3,1.5,2
 \.
 
 --new chunks
 COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
-2257894000000000000, dev-copy, 1.5, 2
+2257894000000000000,dev3,1.5,2
 \.
 \copy "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
-2257894000000000000, dev-copy, 1.5, 2
+2257894000000000000,dev3,1.5,2
 \.
 
 COPY (SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id) TO STDOUT;
