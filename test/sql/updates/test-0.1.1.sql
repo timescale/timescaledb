@@ -35,6 +35,8 @@ SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 \d+ _timescaledb_internal._hyper*
 
 -- INSERT data to create a new chunk after update or restore.
+INSERT INTO devices(id,floor) VALUES
+('dev5', 5);
 INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series_2) VALUES
 (1258894000000000000, 'dev5', 2.2, 1, 2);
 
@@ -83,6 +85,7 @@ BEGIN
     FOR constraint_row IN
     SELECT c.conname, h.id AS hypertable_id FROM _timescaledb_catalog.hypertable h INNER JOIN
            pg_constraint c ON (c.conrelid = format('%I.%I', h.schema_name, h.table_name)::regclass)
+        WHERE c.contype != 'c'
     LOOP
         SELECT count(*) FROM _timescaledb_catalog.chunk c
         WHERE c.hypertable_id = constraint_row.hypertable_id
@@ -96,7 +99,7 @@ BEGIN
         INTO STRICT chunk_constraint_count;
 
         IF chunk_constraint_count != chunk_count THEN
-           RAISE EXCEPTION 'Missing chunk constraints. Expected %, but found %', chunk_count, chunk_constraint_count;
+           RAISE EXCEPTION 'Missing chunk constraints for %. Expected %, but found %', constraint_row.conname, chunk_count, chunk_constraint_count;
         END IF;
     END LOOP;
 END;
