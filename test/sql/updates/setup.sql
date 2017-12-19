@@ -3,10 +3,15 @@ CREATE DATABASE single;
 \c single
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
+CREATE TABLE devices (
+    id TEXT PRIMARY KEY,
+    floor INTEGER
+);
+
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
-  device_id TEXT NOT NULL,
-  series_0 DOUBLE PRECISION NULL,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  series_0 DOUBLE PRECISION NOT NULL CHECK(series_0 > 0),
   series_1 DOUBLE PRECISION NULL,
   series_2 DOUBLE PRECISION NULL,
   series_bool BOOLEAN NULL,
@@ -21,6 +26,10 @@ CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id
 
 SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 
+INSERT INTO devices(id,floor) VALUES
+('dev1', 1),
+('dev2', 2);
+
 INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1, series_2) VALUES
 (1257987600000000000, 'dev1', 1.5, 1, 1),
 (1257987600000000000, 'dev1', 1.5, 2, 2),
@@ -33,7 +42,10 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series
 CREATE TABLE PUBLIC.hyper_timestamp (
   time timestamp NOT NULL,
   device_id TEXT NOT NULL,
-  value int NOT NULL
+  value int NOT NULL,
+  EXCLUDE USING btree (
+        "time" WITH =, device_id WITH =
+   ) WHERE (value > 0)
 );
 
 SELECT * FROM create_hypertable('hyper_timestamp'::regclass, 'time'::name, 'device_id'::name, number_partitions => 2, 
