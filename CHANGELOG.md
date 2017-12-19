@@ -1,5 +1,51 @@
 # TimescaleDB Changelog
 
+## 0.8.0 (2017-12-19)
+
+**High-level changes**
+* TimescaleDB now builds and runs on Windows! Now in addition to using
+Docker, users can choose to build the extension from source and install
+on 64-bit Windows
+* Update functions `add_dimension` and `set_chunk_time_interval` to take `INTERVAL` types
+* Improved tablespace management including detaching tablespaces from hypertables and looking up tablespaces associated with a hypertable
+* Reduced memory usage for `INSERT`s with out-of-order data
+* Fixes inserts on 32-bit architectures, in particular ARM
+* Other correctness improvements including preventing attachment of
+PG10 partitions to hypertables, improved handling of space dimensions
+with one partition, and correctly working with `pg_upgrade`
+* Test and build improvements making those both more robust and easier
+to do
+
+**Notable commits**
+* [26971d2] Make `tablespace_show` function return Name instead of CString
+* [2fe447b] Make TimescaleDB work with pg_upgrade
+* [90c7a6f] Fix logic for one space partition
+* [6cfdd79] Prevent native partitioning attachment of hypertables
+* [438d79d] Fix trigger relcache handling for COPY
+* [cc1ad95] Reduce memory usage for out-of-order inserts
+* [a0f62c5] Improve bootstrap script's robustness
+* [00a096f] Modify tests to make more platform agnostic
+* [0e76b5f] Do not add tablespaces to hypertable objects
+* [176b75e] Add command to show tablespaces attached to a hypertable
+* [6e92383] Add function to detach tablespaces from hypertables
+* [e593876] Refactor tablespace handling
+* [c4a46ac] Add hypertable cache lookup on ID/pkey
+* [f38a578] Fix handling of long constraint names
+* [20c9b28] Unconditionally add pg_config --includedir to src build
+* [12dff61] Fixes insert for 32bit architecture
+* [e44e47e] Update add_dimension to take INTERVAL times
+* [0763e62] Update set_chunk_time_interval to take INTERVAL times
+* [87c4b4f] Fix test generator to work for PG 10.1
+* [51854ac] Fix error message to reflect that drop_chunks can take a DATE interval
+* [66396fb] Add build support for Windows
+* [e1a0e81] Refactor and fix cache invalidation
+
+**Thanks**
+* @oldgreen for reporting an issue where `COPY` was warning of relcache reference leaks
+* @campeterson for pointing out some documentation typos
+* @jwdeitch for the PR to prevent attaching PG10 partitions to hypertables
+* @vjpr and @sztanpet for reporting bugs and suggesting improvements to the bootstrap script
+
 ## 0.7.1 (2017-11-29)
 
 **High-level changes**
