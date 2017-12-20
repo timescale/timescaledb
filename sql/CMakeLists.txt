@@ -36,7 +36,8 @@ set(EXT_SQL_EXTRA_FILES
   timescaledb--0.6.0--0.6.1.sql
   timescaledb--0.6.1--0.7.0.sql
   timescaledb--0.6.1--0.7.1.sql
-  timescaledb--0.7.0--0.7.1.sql)
+  timescaledb--0.7.0--0.7.1.sql
+  timescaledb--0.7.1--0.8.0.sql)
 
 if (WIN32)
   # Make list of files into string of files separated by "+"
