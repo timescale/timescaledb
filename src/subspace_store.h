@@ -13,7 +13,7 @@ typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct SubspaceStore SubspaceStore;
 
-extern SubspaceStore *subspace_store_init(int16 num_dimensions, MemoryContext mcxt);
+extern SubspaceStore *subspace_store_init(int16 num_dimensions, MemoryContext mcxt, int16 max_slices_first_dimension);
 
 /* Store an object associate with the subspace represented by a hypercube */
 extern void subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
