@@ -18,6 +18,8 @@ typedef struct SubspaceStore
 {
 	MemoryContext mcxt;
 	int16		num_dimensions;
+/* limit growth of store by  limiting number of slices in first dimension,	0 for no limit */
+	int16		max_slices_first_dimension;
 	DimensionVec *origin;		/* origin of the tree */
 } SubspaceStore;
 
@@ -28,13 +30,14 @@ subspace_store_dimension_create()
 }
 
 SubspaceStore *
-subspace_store_init(int16 num_dimensions, MemoryContext mcxt)
+subspace_store_init(int16 num_dimensions, MemoryContext mcxt, int16 max_slices_first_dimension)
 {
 	MemoryContext old = MemoryContextSwitchTo(mcxt);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
 
 	sst->origin = subspace_store_dimension_create();
 	sst->num_dimensions = num_dimensions;
+	sst->max_slices_first_dimension = max_slices_first_dimension;
 	sst->mcxt = mcxt;
 	MemoryContextSwitchTo(old);
 	return sst;
@@ -82,13 +85,14 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 		{
 			DimensionSlice *copy;
 
-			if (i == 0 && vec->num_slices > 0)
+			if (store->max_slices_first_dimension > 0 && i == 0 && vec->num_slices >= store->max_slices_first_dimension)
 			{
 				/*
-				 * At dimension 0 only keep one slice. This is an optimization
-				 * to prevent this store from growing too large.
+				 * At dimension 0 only keep store->max_slices_first_dimension
+				 * slices. This is to prevent this store from growing too
+				 * large. Always delete the oldest.
 				 */
-				Assert(1 == vec->num_slices);
+				Assert(store->max_slices_first_dimension == vec->num_slices);
 				dimension_vec_remove_slice(vecptr, 0);
 			}
 			copy = dimension_slice_copy(target);
