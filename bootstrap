@@ -1,6 +1,9 @@
 #!/bin/bash
 
-BUILD_TYPE=${1:-Release}
+# This bootstrap scripts set up the build environment for TimescaleDB
+# Any flags will be passed on to CMake, e.g.,
+# ./bootstrap -DCMAKE_BUILD_TYPE="Debug"
+
 BUILD_DIR=${BUILD_DIR:-./build}
 BUILD_FORCE_REMOVE=${BUILD_FORCE_REMOVE:-false}
 SRC_DIR=$(dirname $0)
@@ -27,7 +30,7 @@ set -u
 
 mkdir -p ${BUILD_DIR} && \
     cd ${BUILD_DIR} && \
-    cmake ${SRC_DIR} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+    cmake ${SRC_DIR} "$@"
 
 echo "TimescaleDB build system initialized in ${BUILD_DIR}. To compile, do:"
 echo -e "\033[1mcd ${BUILD_DIR} && make\033[0m"
