@@ -44,6 +44,13 @@ void		_cache_invalidate_init(void);
 void		_cache_invalidate_fini(void);
 void		_cache_invalidate_extload(void);
 
+
+static void
+cache_invalidate_all()
+{
+	hypertable_cache_invalidate_callback();
+}
+
 /*
  * This function is called when any relcache is invalidated.
  * Should route the invalidation to the correct cache.
@@ -55,7 +62,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 
 	if (extension_invalidate(relid))
 	{
-		hypertable_cache_invalidate_callback();
+		cache_invalidate_all();
 		return;
 	}
 
@@ -141,16 +148,34 @@ cache_invalidate_xact_end(XactEvent event, void *arg)
 			 * change since the transaction hasn't been committed and other
 			 * backends cannot have the invalid state.
 			 */
-			hypertable_cache_invalidate_callback();
+			cache_invalidate_all();
 		default:
 			break;
 	}
 }
 
+static void
+cache_invalidate_subxact_end(SubXactEvent event, SubTransactionId mySubid,
+							 SubTransactionId parentSubid, void *arg)
+{
+	switch (event)
+	{
+		case SUBXACT_EVENT_ABORT_SUB:
+
+			/*
+			 * Invalidate caches on aborted sub transactions. See notes above
+			 * in cache_invalidate_xact_end.
+			 */
+			cache_invalidate_all();
+		default:
+			break;
+	}
+}
 void
 _cache_invalidate_init(void)
 {
 	RegisterXactCallback(cache_invalidate_xact_end, NULL);
+	RegisterSubXactCallback(cache_invalidate_subxact_end, NULL);
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
 }
 
@@ -158,5 +183,6 @@ void
 _cache_invalidate_fini(void)
 {
 	UnregisterXactCallback(cache_invalidate_xact_end, NULL);
+	UnregisterSubXactCallback(cache_invalidate_subxact_end, NULL);
 	/* No way to unregister relcache callback */
 }
