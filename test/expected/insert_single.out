@@ -489,3 +489,50 @@ SELECT * FROM "nondefault_mem_settings";
  Sun Apr 20 09:00:00 2003 | 35.9
 (11 rows)
 
+--test rollback
+BEGIN;
+\set QUIET off
+CREATE TABLE "data_records" ("time" bigint NOT NULL, "value" integer CHECK (VALUE >= 0));
+CREATE TABLE
+SELECT create_hypertable('data_records', 'time', chunk_time_interval => 2592000000);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "data_records" ("time", "value") VALUES (0, 1);
+INSERT 0 1
+SAVEPOINT savepoint_1;
+SAVEPOINT
+INSERT INTO "data_records" ("time", "value") VALUES (1, 0);
+INSERT 0 1
+ROLLBACK TO SAVEPOINT savepoint_1;
+ROLLBACK
+INSERT INTO "data_records" ("time", "value") VALUES (2, 1);
+INSERT 0 1
+SAVEPOINT savepoint_2;
+SAVEPOINT
+\set ON_ERROR_STOP 0
+INSERT INTO "data_records" ("time", "value") VALUES (3, -1);
+ERROR:  new row for relation "_hyper_13_34_chunk" violates check constraint "data_records_value_check"
+\set ON_ERROR_STOP 1
+ROLLBACK TO SAVEPOINT savepoint_2;
+ROLLBACK
+INSERT INTO "data_records" ("time", "value") VALUES (4, 1);
+INSERT 0 1
+SAVEPOINT savepoint_3;
+SAVEPOINT
+INSERT INTO "data_records" ("time", "value") VALUES (5, 0);
+INSERT 0 1
+ROLLBACK TO SAVEPOINT savepoint_3;
+ROLLBACK
+SELECT * FROM data_records;
+ time | value 
+------+-------
+    0 |     1
+    2 |     1
+    4 |     1
+(3 rows)
+
+\set QUIET on
+ROLLBACK;
