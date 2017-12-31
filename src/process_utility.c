@@ -320,18 +320,33 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 		.stmt = stmt,
 		.is_toplevel = (context == PROCESS_UTILITY_TOPLEVEL),
 	};
+	Oid			hypertable_oid;
+	Cache	   *hcache;
+	Hypertable *ht;
 
 	if (stmt->relation == NULL)
 		/* Vacuum is for all tables */
 		return false;
 
-	if (!OidIsValid(hypertable_relid(stmt->relation)))
+	hypertable_oid = hypertable_relid(stmt->relation);
+
+	if (!OidIsValid(hypertable_oid))
 		return false;
 
 	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ?
 								 "VACUUM" : "ANALYZE");
 
-	return foreach_chunk_relation(stmt->relation, vacuum_chunk, &ctx) >= 0;
+	hcache = hypertable_cache_pin();
+	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+
+	/* allow vacuum to be cross-commit */
+	hcache->release_on_commit = false;
+	foreach_chunk(ht, vacuum_chunk, &ctx);
+	hcache->release_on_commit = true;
+
+	cache_release(hcache);
+
+	return true;
 }
 
 static bool
@@ -1774,12 +1789,33 @@ process_utility_set_expect_chunk_modification(bool expect)
 }
 
 static void
-process_utility_AtEOXact_abort(XactEvent event, void *arg)
+process_utility_xact_abort(XactEvent event, void *arg)
 {
 	switch (event)
 	{
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
+
+			/*
+			 * Reset the expect_chunk_modification flag because it this is an
+			 * internal safety flag that is set to true only temporarily
+			 * during chunk operations. It should never remain true across
+			 * transactions.
+			 */
+			expect_chunk_modification = false;
+		default:
+			break;
+	}
+}
+
+static void
+process_utility_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
+							  SubTransactionId parentSubid, void *arg)
+{
+	switch (event)
+	{
+		case SUBXACT_EVENT_ABORT_SUB:
+			/* see note in process_utility_xact_abort */
 			expect_chunk_modification = false;
 		default:
 			break;
@@ -1791,11 +1827,14 @@ _process_utility_init(void)
 {
 	prev_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = timescaledb_ddl_command_start;
-	RegisterXactCallback(process_utility_AtEOXact_abort, NULL);
+	RegisterXactCallback(process_utility_xact_abort, NULL);
+	RegisterSubXactCallback(process_utility_subxact_abort, NULL);
 }
 
 void
 _process_utility_fini(void)
 {
 	ProcessUtility_hook = prev_ProcessUtility_hook;
+	UnregisterXactCallback(process_utility_xact_abort, NULL);
+	UnregisterSubXactCallback(process_utility_subxact_abort, NULL);
 }
