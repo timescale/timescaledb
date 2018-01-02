@@ -49,7 +49,6 @@ set(HEADERS
   dimension_vector.h
   errors.h
   event_trigger.h
-  executor.h
   extension.h
   guc.h
   hypercube.h
@@ -87,7 +86,6 @@ set(SOURCES
   dimension_slice.c
   dimension_vector.c
   event_trigger.c
-  executor.c
   extension.c
   guc.c
   histogram.c

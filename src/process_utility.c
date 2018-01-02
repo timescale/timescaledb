@@ -35,7 +35,6 @@
 #include "copy.h"
 #include "errors.h"
 #include "event_trigger.h"
-#include "executor.h"
 #include "extension.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
@@ -231,11 +230,7 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 		return false;
 	}
 
-	executor_level_enter();
 	timescaledb_DoCopy(stmt, query_string, &processed, ht);
-	executor_level_exit();
-
-	processed += executor_get_additional_tuples_processed();
 
 	if (completion_tag)
 		snprintf(completion_tag, COMPLETION_TAG_BUFSIZE,
