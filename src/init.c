@@ -5,7 +5,6 @@
 #include <miscadmin.h>
 #include <utils/guc.h>
 
-#include "executor.h"
 #include "extension.h"
 #include "guc.h"
 #include "catalog.h"
@@ -57,7 +56,6 @@ _PG_init(void)
 	_hypertable_cache_init();
 	_cache_invalidate_init();
 	_planner_init();
-	_executor_init();
 	_event_trigger_init();
 	_process_utility_init();
 	_parse_analyze_init();
@@ -75,7 +73,6 @@ _PG_fini(void)
 	_parse_analyze_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
-	_executor_fini();
 	_planner_fini();
 	_cache_invalidate_fini();
 	_hypertable_cache_fini();
