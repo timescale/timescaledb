@@ -25,6 +25,7 @@ cache_init(Cache *cache)
 	cache->htab = hash_create(cache->name, cache->numelements,
 							  &cache->hctl, cache->flags);
 	cache->refcount = 1;
+	cache->release_on_commit = true;
 }
 
 static void
@@ -155,6 +156,26 @@ cache_remove(Cache *cache, void *key)
 }
 
 
+static void
+release_all_pinned_caches()
+{
+	ListCell   *lc;
+
+	/*
+	 * release once for every occurence of a cache in the pinned caches list.
+	 * On abort, release irrespective of cache->release_on_commit.
+	 */
+	foreach(lc, pinned_caches)
+	{
+		Cache	   *cache = lfirst(lc);
+
+		cache->refcount--;
+		cache_destroy(cache);
+	}
+	list_free(pinned_caches);
+	pinned_caches = NIL;
+}
+
 /*
  * Transaction end callback that cleans up any pinned caches. This is a
  * safeguard that protects against indefinitely pinned caches (memory leaks)
@@ -163,39 +184,61 @@ cache_remove(Cache *cache, void *key)
  * cache_release() call and wrapped in a PG_TRY() block to capture and handle
  * any exceptions that occur.
  *
- * Note that this makes cache_release() optional, although timely
- * cache_release() calls are still encouraged to release memory as early as
- * possible during long-running transactions. PG_TRY() blocks are not needed,
- * however.
- */
+ * Note that this checks that cache_release() is always called by the end
+ * of a non-aborted transaction unless cache->release_on_commit is set to true.
+ * */
 static void
 cache_xact_end(XactEvent event, void *arg)
 {
 	switch (event)
 	{
-		case XACT_EVENT_COMMIT:
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
+			release_all_pinned_caches();
+		default:
 			{
 				ListCell   *lc;
 
 				/*
-				 * release once for every occurence of a cache in the pinned
-				 * caches list
+				 * Only caches left should be marked as non-released
 				 */
 				foreach(lc, pinned_caches)
 				{
 					Cache	   *cache = lfirst(lc);
 
-					cache->refcount--;
-					cache_destroy(cache);
+					/*
+					 * This assert makes sure that that we don't have a cache
+					 * leak when running with debugging
+					 */
+					Assert(!cache->release_on_commit);
+
+					/*
+					 * This may still happen in optimized environments where
+					 * Assert is turned off. In that case, release.
+					 */
+					if (cache->release_on_commit)
+						cache_release(cache);
 				}
 			}
-		default:
 			break;
 	}
-	list_free(pinned_caches);
-	pinned_caches = NIL;
+}
+
+static void
+cache_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
+					SubTransactionId parentSubid, void *arg)
+{
+	/*
+	 * Note that cache->release_on_commit is irrelevant here since can't have
+	 * cross-commit operations in subtxns
+	 */
+
+	/*
+	 * In subtxns, caches should have already been released, unless an abort
+	 * happened
+	 */
+	Assert(SUBXACT_EVENT_ABORT_SUB == event || list_length(pinned_caches) == 0);
+	release_all_pinned_caches();
 }
 
 
@@ -203,10 +246,12 @@ void
 _cache_init(void)
 {
 	RegisterXactCallback(cache_xact_end, NULL);
+	RegisterSubXactCallback(cache_subxact_abort, NULL);
 }
 
 void
 _cache_fini(void)
 {
 	UnregisterXactCallback(cache_xact_end, NULL);
+	UnregisterSubXactCallback(cache_subxact_abort, NULL);
 }

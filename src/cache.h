@@ -31,6 +31,9 @@ typedef struct Cache
 	void	   *(*create_entry) (struct Cache *, CacheQuery *);
 	void	   *(*update_entry) (struct Cache *, CacheQuery *);
 	void		(*pre_destroy_hook) (struct Cache *);
+	bool		release_on_commit;		/* This should be false if doing
+										 * cross-commit operations like
+										 * CLUSTER or VACUUM */
 } Cache;
 
 extern void cache_init(Cache *cache);
