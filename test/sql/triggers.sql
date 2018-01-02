@@ -197,3 +197,41 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 UPDATE hyper SET sensor_1 = 2;
 
 DELETE FROM hyper;
+
+CREATE TABLE vehicles (
+  vehicle_id INTEGER PRIMARY KEY,
+  vin_number CHAR(17),
+  last_checkup TIMESTAMP
+);
+
+CREATE TABLE location (
+  time TIMESTAMP NOT NULL,
+  vehicle_id INTEGER REFERENCES vehicles (vehicle_id),
+  latitude FLOAT,
+  longitude FLOAT
+);
+
+CREATE OR REPLACE FUNCTION create_vehicle_trigger_fn()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN 
+    INSERT INTO vehicles VALUES(NEW.vehicle_id, NULL, NULL) ON CONFLICT DO NOTHING;
+    RETURN NEW;
+END
+$BODY$;
+
+CREATE TRIGGER create_vehicle_trigger
+    BEFORE INSERT OR UPDATE ON location
+    FOR EACH ROW EXECUTE PROCEDURE create_vehicle_trigger_fn();
+
+SELECT create_hypertable('location', 'time');
+
+INSERT INTO location VALUES('2017-01-01 01:02:03', 1, 40.7493226,-73.9771259);
+INSERT INTO location VALUES('2017-01-01 01:02:04', 1, 24.7493226,-73.9771259);
+INSERT INTO location VALUES('2017-01-01 01:02:03', 23, 40.7493226,-73.9771269);
+INSERT INTO location VALUES('2017-01-01 01:02:03', 53, 40.7493226,-73.9771269);
+
+UPDATE location SET vehicle_id = 52 WHERE vehicle_id = 53;
+
+SELECT * FROM location;
+SELECT * FROM vehicles;
