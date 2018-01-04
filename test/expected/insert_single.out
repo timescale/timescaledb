@@ -443,3 +443,49 @@ SELECT * FROM test_tz;
  Thu Sep 21 19:01:00 2017 | 21.2
 (3 rows)
 
+-- test various memory settings --
+SET timescaledb.max_open_chunks_per_insert = 10;
+SET timescaledb.max_cached_chunks_per_hypertable = 10;
+CREATE TABLE "nondefault_mem_settings"(time timestamp PRIMARY KEY, temp float);
+SELECT create_hypertable('"nondefault_mem_settings"', 'time', chunk_time_interval=> INTERVAL '1 Month');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO "nondefault_mem_settings" VALUES('2000-12-01T19:00:00', 21.2);
+INSERT INTO "nondefault_mem_settings" VALUES('2001-12-20T09:00:00', 25.1);
+--lowest possible
+SET timescaledb.max_open_chunks_per_insert = 1;
+SET timescaledb.max_cached_chunks_per_hypertable = 1;
+INSERT INTO "nondefault_mem_settings" VALUES
+('2001-01-20T09:00:00', 26.6),
+('2002-02-20T09:00:00', 27.9), 
+('2003-02-20T09:00:00', 28.9);
+INSERT INTO "nondefault_mem_settings" VALUES
+('2001-03-20T09:00:00', 30.6),
+('2002-03-20T09:00:00', 31.9), 
+('2003-03-20T09:00:00', 32.9);
+--unlimited
+SET timescaledb.max_open_chunks_per_insert = 0;
+SET timescaledb.max_cached_chunks_per_hypertable = 0;
+INSERT INTO "nondefault_mem_settings" VALUES
+('2001-04-20T09:00:00', 33.6),
+('2002-04-20T09:00:00', 34.9), 
+('2003-04-20T09:00:00', 35.9);
+SELECT * FROM "nondefault_mem_settings";
+           time           | temp 
+--------------------------+------
+ Fri Dec 01 19:00:00 2000 | 21.2
+ Thu Dec 20 09:00:00 2001 | 25.1
+ Sat Jan 20 09:00:00 2001 | 26.6
+ Wed Feb 20 09:00:00 2002 | 27.9
+ Thu Feb 20 09:00:00 2003 | 28.9
+ Tue Mar 20 09:00:00 2001 | 30.6
+ Wed Mar 20 09:00:00 2002 | 31.9
+ Thu Mar 20 09:00:00 2003 | 32.9
+ Fri Apr 20 09:00:00 2001 | 33.6
+ Sat Apr 20 09:00:00 2002 | 34.9
+ Sun Apr 20 09:00:00 2003 | 35.9
+(11 rows)
+

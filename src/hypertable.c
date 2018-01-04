@@ -23,6 +23,7 @@
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "hypercube.h"
+#include "guc.h"
 
 static Oid
 rel_get_owner(Oid relid)
@@ -77,7 +78,7 @@ hypertable_from_tuple(HeapTuple tuple)
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
-	h->chunk_cache = subspace_store_init(h->space->num_dimensions, CurrentMemoryContext, 1);
+	h->chunk_cache = subspace_store_init(h->space, CurrentMemoryContext, guc_max_cached_chunks_per_hypertable);
 
 	return h;
 }

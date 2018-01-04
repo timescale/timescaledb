@@ -14,46 +14,80 @@
  * for the N dimensions. The leaf DimensionSlice points to the data being stored.
  *
  * */
+
+typedef struct SubspaceStoreInternalNode
+{
+	DimensionVec *vector;
+	size_t		descendants;
+	bool		last_internal_node;
+} SubspaceStoreInternalNode;
+
 typedef struct SubspaceStore
 {
 	MemoryContext mcxt;
 	int16		num_dimensions;
 /* limit growth of store by  limiting number of slices in first dimension,	0 for no limit */
-	int16		max_slices_first_dimension;
-	DimensionVec *origin;		/* origin of the tree */
+	int16		max_items;
+	SubspaceStoreInternalNode *origin;	/* origin of the tree */
 } SubspaceStore;
 
-static inline DimensionVec *
-subspace_store_dimension_create()
+static inline SubspaceStoreInternalNode *
+subspace_store_internal_node_create(bool last_internal_node)
 {
-	return dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
+	SubspaceStoreInternalNode *node = palloc(sizeof(SubspaceStoreInternalNode));
+
+	node->vector = dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
+	node->descendants = 0;
+	node->last_internal_node = last_internal_node;
+	return node;
+}
+
+static inline void
+subspace_store_internal_node_free(void *node)
+{
+	dimension_vec_free(((SubspaceStoreInternalNode *) node)->vector);
+	pfree(node);
+}
+
+static size_t
+subspace_store_internal_node_descendants(SubspaceStoreInternalNode *node, int index)
+{
+	DimensionSlice *slice = dimension_vec_get(node->vector, index);
+
+	if (slice == NULL)
+		return 0;
+
+	if (node->last_internal_node)
+		return 1;
+
+	return ((SubspaceStoreInternalNode *) slice->storage)->descendants;
 }
 
 SubspaceStore *
-subspace_store_init(int16 num_dimensions, MemoryContext mcxt, int16 max_slices_first_dimension)
+subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items)
 {
 	MemoryContext old = MemoryContextSwitchTo(mcxt);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
 
-	sst->origin = subspace_store_dimension_create();
-	sst->num_dimensions = num_dimensions;
-	sst->max_slices_first_dimension = max_slices_first_dimension;
+	/*
+	 * make sure that the first dimension is a time dimension, otherwise the
+	 * tree will grow in a way that makes prunning less effective.
+	 */
+	Assert(space->num_dimensions < 1 || space->dimensions[0].type == DIMENSION_TYPE_OPEN);
+
+	sst->origin = subspace_store_internal_node_create(space->num_dimensions == 1);
+	sst->num_dimensions = space->num_dimensions;
+	sst->max_items = max_items;
 	sst->mcxt = mcxt;
 	MemoryContextSwitchTo(old);
 	return sst;
-}
-
-static inline void
-subspace_store_free_internal_node(void *node)
-{
-	dimension_vec_free((DimensionVec *) node);
 }
 
 void
 subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 				   void *object, void (*object_free) (void *))
 {
-	DimensionVec **vecptr = &store->origin;
+	SubspaceStoreInternalNode *node = store->origin;
 	DimensionSlice *last = NULL;
 	MemoryContext old = MemoryContextSwitchTo(store->mcxt);
 	int			i;
@@ -64,46 +98,58 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 	{
 		const DimensionSlice *target = hc->slices[i];
 		DimensionSlice *match;
-		DimensionVec *vec = *vecptr;
 
 		Assert(target->storage == NULL);
 
-		if (vec == NULL)
+		if (node == NULL)
 		{
 			Assert(last != NULL);
-			last->storage = subspace_store_dimension_create();
-			last->storage_free = subspace_store_free_internal_node;
-			vec = last->storage;
+			last->storage = subspace_store_internal_node_create(i == hc->num_slices - 1);
+			last->storage_free = subspace_store_internal_node_free;
+			node = last->storage;
 		}
 
-		Assert(0 == vec->num_slices ||
-			   vec->slices[0]->fd.dimension_id == target->fd.dimension_id);
+		node->descendants += 1;
 
-		match = dimension_vec_find_slice(vec, target->fd.range_start);
+		Assert(0 == node->vector->num_slices ||
+		node->vector->slices[0]->fd.dimension_id == target->fd.dimension_id);
+
+		match = dimension_vec_find_slice(node->vector, target->fd.range_start);
 
 		if (match == NULL)
 		{
 			DimensionSlice *copy;
 
-			if (store->max_slices_first_dimension > 0 && i == 0 && vec->num_slices >= store->max_slices_first_dimension)
+			if (store->max_items > 0 && i == 0 && node->descendants > store->max_items)
 			{
 				/*
 				 * At dimension 0 only keep store->max_slices_first_dimension
 				 * slices. This is to prevent this store from growing too
-				 * large. Always delete the oldest.
+				 * large. Always delete the oldest. Note that we made sure
+				 * that the first dimension is a time dimension when creating
+				 * the subspace_store.
 				 */
-				Assert(store->max_slices_first_dimension == vec->num_slices);
-				dimension_vec_remove_slice(vecptr, 0);
+				size_t		items_removed = subspace_store_internal_node_descendants(node, 0);
+
+				Assert(store->max_items + 1 == node->descendants);
+
+				dimension_vec_remove_slice(&node->vector, 0);
+
+				/*
+				 * Note we would have to do this to ancestors if this was not
+				 * the root.
+				 */
+				node->descendants -= items_removed;
 			}
 			copy = dimension_slice_copy(target);
 
-			dimension_vec_add_slice_sort(vecptr, copy);
+			dimension_vec_add_slice_sort(&node->vector, copy);
 			match = copy;
 		}
 
 		last = match;
-		/* internal nodes point to the next dimension's vector */
-		vecptr = (DimensionVec **) &last->storage;
+		/* internal slices point to the next SubspaceStoreInternalNode */
+		node = last->storage;
 	}
 
 	Assert(last != NULL && last->storage == NULL);
@@ -117,7 +163,7 @@ void *
 subspace_store_get(SubspaceStore *store, Point *target)
 {
 	int			i;
-	DimensionVec *vec = store->origin;
+	DimensionVec *vec = store->origin->vector;
 	DimensionSlice *match = NULL;
 
 	Assert(target->cardinality == store->num_dimensions);
@@ -129,7 +175,7 @@ subspace_store_get(SubspaceStore *store, Point *target)
 		if (NULL == match)
 			return NULL;
 
-		vec = match->storage;
+		vec = ((SubspaceStoreInternalNode *) match->storage)->vector;
 	}
 	Assert(match != NULL);
 	return match->storage;
@@ -138,7 +184,7 @@ subspace_store_get(SubspaceStore *store, Point *target)
 void
 subspace_store_free(SubspaceStore *store)
 {
-	dimension_vec_free(store->origin);
+	subspace_store_internal_node_free(store->origin);
 	pfree(store);
 }
 

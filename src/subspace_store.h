@@ -2,6 +2,7 @@
 #define TIMESCALEDB_SUBSPACE_STORE_H
 
 #include <postgres.h>
+#include "dimension.h"
 
 /* A subspace store allows you to save data associated with
  * a multidimensional-subspace. Subspaces are defined conceptually
@@ -13,7 +14,7 @@ typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct SubspaceStore SubspaceStore;
 
-extern SubspaceStore *subspace_store_init(int16 num_dimensions, MemoryContext mcxt, int16 max_slices_first_dimension);
+extern SubspaceStore *subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items);
 
 /* Store an object associate with the subspace represented by a hypercube */
 extern void subspace_store_add(SubspaceStore *cache, const Hypercube *hc,
