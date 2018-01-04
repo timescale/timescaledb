@@ -41,8 +41,8 @@ post_analyze_hook(ParseState *pstate, Query *query)
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
 	if (prev_post_parse_analyze_hook != NULL)
 		elog(ERROR, "The extension called with a loader should always have a NULL prev hook");
-	if(BROKEN && !creating_extension)
-		elog(ERROR, "mock broken "STR(TIMESCALEDB_VERSION_MOD));
+	if (BROKEN && !creating_extension)
+		elog(ERROR, "mock broken " STR(TIMESCALEDB_VERSION_MOD));
 }
 
 void
@@ -75,6 +75,12 @@ catalog_reset()
 {
 }
 
+/* mock for guc.c */
+void		hypertable_cache_invalidate_callback(void);
+void
+hypertable_cache_invalidate_callback(void)
+{
+}
 
 TS_FUNCTION_INFO_V1(mock_function);
 
