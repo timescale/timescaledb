@@ -23,6 +23,13 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif ()
 
+if (WIN32)
+  if (NOT CMAKE_CONFIGURATION_TYPES)
+    # Default to only include Release builds so MSBuild.exe 'just works'
+    set(CMAKE_CONFIGURATION_TYPES Release CACHE STRING "Semicolon separated list of supported configuration types, only supports Debug, Release, MinSizeRel, and RelWithDebInfo, anything else will be ignored." FORCE)
+  endif ()
+endif (WIN32)
+
 project(timescaledb VERSION ${VERSION} LANGUAGES C)
 
 message(STATUS "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}")
