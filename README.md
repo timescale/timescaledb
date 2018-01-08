@@ -150,6 +150,9 @@ cd timescaledb
 cd build
 MSBuild.exe timescaledb.sln
 
+# To install
+MSBuild.exe /p:Configuration=Release INSTALL.vcxproj
+
 # Alternatively, open build/timescaledb.sln in Visual Studio and build
 ```
 
