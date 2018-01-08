@@ -197,6 +197,52 @@ ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
 ERROR:  Cannot create a unique index without the column: time (used in partitioning)
 \set ON_ERROR_STOP 1
+----------------------- RENAME CONSTRAINT  ------------------
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key TO new_name;
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name *
+RENAME CONSTRAINT new_name TO new_name2;
+ALTER TABLE IF EXISTS hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT  hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check TO check_2;
+SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
+ Constraint | Type |  Columns   |   Index   |            Expr            
+------------+------+------------+-----------+----------------------------
+ check_2    | c    | {sensor_1} | -         | (sensor_1 > (10)::numeric)
+ new_name2  | u    | {time}     | new_name2 | 
+(2 rows)
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+   Constraint   | Type |  Columns   |                 Index                  |                                           Expr                                           
+----------------+------+------------+----------------------------------------+------------------------------------------------------------------------------------------
+ 4_10_new_name2 | u    | {time}     | _timescaledb_internal."4_10_new_name2" | 
+ check_2        | c    | {sensor_1} | -                                      | (sensor_1 > (10)::numeric)
+ constraint_4   | c    | {time}     | -                                      | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        3 |                  3 | constraint_3    | 
+        4 |                  4 | constraint_4    | 
+        5 |                  5 | constraint_5    | 
+        4 |                    | 4_10_new_name2  | new_name2
+        5 |                    | 5_11_new_name2  | new_name2
+(5 rows)
+
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name TO new_name2;
+ERROR:  constraint "new_name" for table "hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name" does not exist
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name2 TO check_2;
+ERROR:  constraint "check_2" for relation "hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name" already exists
+ALTER TABLE ONLY hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name2 TO new_name;
+ERROR:  ONLY option not supported when renaming hypertable constraints
+ALTER TABLE _timescaledb_internal._hyper_2_4_chunk
+RENAME CONSTRAINT "4_10_new_name2" TO new_name;
+ERROR:  Renaming constraints on chunks is not supported
+\set ON_ERROR_STOP 1
 ----------------------- PRIMARY KEY  ------------------
 CREATE TABLE hyper_pk (
   time BIGINT NOT NULL PRIMARY KEY,
@@ -214,15 +260,15 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  duplicate key value violates unique constraint "6_8_hyper_pk_pkey"
+ERROR:  duplicate key value violates unique constraint "6_14_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 --should have unique constraint not just unique index
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
-       Constraint        | Type |  Columns   |                   Index                   |                                           Expr                                           
--------------------------+------+------------+-------------------------------------------+------------------------------------------------------------------------------------------
- 6_8_hyper_pk_pkey       | p    | {time}     | _timescaledb_internal."6_8_hyper_pk_pkey" | 
- constraint_6            | c    | {time}     | -                                         | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_pk_sensor_1_check | c    | {sensor_1} | -                                         | (sensor_1 > (10)::numeric)
+       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           
+-------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------
+ 6_14_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_14_hyper_pk_pkey" | 
+ constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)
 (3 rows)
 
 ALTER TABLE hyper_pk DROP CONSTRAINT hyper_pk_pkey;
@@ -239,7 +285,7 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 --shouldn't be able to create pk
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
-ERROR:  could not create unique index "6_9_hyper_pk_pkey"
+ERROR:  could not create unique index "6_15_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_pk WHERE device_id = 'dev3';
 --cannot create pk constraint on non-partition column
@@ -252,7 +298,7 @@ ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
        Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           
 -------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------
- 6_10_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_10_hyper_pk_pkey" | 
+ 6_16_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_16_hyper_pk_pkey" | 
  constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
  hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)
 (3 rows)
@@ -266,7 +312,7 @@ ERROR:  relation "hyper_pk_pkey" already exists
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  duplicate key value violates unique constraint "6_10_hyper_pk_pkey"
+ERROR:  duplicate key value violates unique constraint "6_16_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 ----------------------- FOREIGN KEY  ------------------
 CREATE TABLE devices(
@@ -288,7 +334,7 @@ SELECT * FROM create_hypertable('hyper_fk', 'time', chunk_time_interval => 10);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_11_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_17_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO devices VALUES ('dev2');
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
@@ -296,7 +342,7 @@ INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 --delete should fail
 \set ON_ERROR_STOP 0
 DELETE FROM devices;
-ERROR:  update or delete on table "devices" violates foreign key constraint "8_13_hyper_fk_device_id_fkey" on table "_hyper_4_8_chunk"
+ERROR:  update or delete on table "devices" violates foreign key constraint "8_19_hyper_fk_device_id_fkey" on table "_hyper_4_8_chunk"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_fk DROP CONSTRAINT hyper_fk_device_id_fkey;
 --should now be able to add non-fk rows
@@ -306,7 +352,7 @@ INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (device_id) REFERENCES devices(device_id);
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_15_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_21_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_fk WHERE device_id = 'dev3';
 ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
@@ -314,7 +360,7 @@ FOREIGN KEY (device_id) REFERENCES devices(device_id);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000002, 'dev3', 11);
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_16_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_22_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 ----------------------- FOREIGN KEY INTO A HYPERTABLE  ------------------
 --FOREIGN KEY references into a hypertable are currently broken.
@@ -368,7 +414,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_18_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_24_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_ex DROP CONSTRAINT hyper_ex_time_device_id_excl;
 --can now add
@@ -381,7 +427,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
         time WITH =, device_id WITH =
     ) WHERE (not canceled)
 ;
-ERROR:  could not create exclusion constraint "9_19_hyper_ex_time_device_id_excl"
+ERROR:  could not create exclusion constraint "9_25_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_ex WHERE sensor_1 = 12;
 ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
@@ -392,7 +438,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_20_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_26_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 --cannot add exclusion constraint without partition key.
 CREATE TABLE hyper_ex_invalid (

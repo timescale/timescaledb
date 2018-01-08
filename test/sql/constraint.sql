@@ -120,6 +120,32 @@ ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
 \set ON_ERROR_STOP 1
 
+----------------------- RENAME CONSTRAINT  ------------------
+
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key TO new_name;
+
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name *
+RENAME CONSTRAINT new_name TO new_name2;
+
+ALTER TABLE IF EXISTS hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT  hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check TO check_2;
+
+
+SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name TO new_name2;
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name2 TO check_2;
+ALTER TABLE ONLY hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name2 TO new_name;
+ALTER TABLE _timescaledb_internal._hyper_2_4_chunk
+RENAME CONSTRAINT "4_10_new_name2" TO new_name;
+\set ON_ERROR_STOP 1
 
 ----------------------- PRIMARY KEY  ------------------
 

@@ -312,6 +312,7 @@ enum Anum_chunk_constraint
 #define Natts_chunk_constraint \
 	(_Anum_chunk_constraint_max - 1)
 
+/* Do Not use GET_STRUCT with FormData_chunk_constraint. It contains NULLS */
 typedef struct FormData_chunk_constraint
 {
 	int32		chunk_id;

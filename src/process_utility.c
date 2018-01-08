@@ -620,6 +620,49 @@ process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
 }
 
 static void
+rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	RenameStmt *stmt = (RenameStmt *) arg;
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+
+	chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
+}
+
+
+static void
+process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
+{
+	Hypertable *ht;
+
+	ht = hypertable_cache_get_entry(hcache, relid);
+
+	if (NULL != ht)
+	{
+#if PG10
+		bool		only = !stmt->relation->inh;
+#elif PG96
+		bool		only = (stmt->relation->inhOpt == INH_NO);
+#endif
+		if (only)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("ONLY option not supported when renaming hypertable constraints")));
+		foreach_chunk(ht, rename_hypertable_constraint, stmt);
+	}
+	else
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("Renaming constraints on chunks is not supported")));
+
+	}
+}
+
+
+static void
 process_rename(Node *parsetree)
 {
 	RenameStmt *stmt = (RenameStmt *) parsetree;
@@ -649,6 +692,9 @@ process_rename(Node *parsetree)
 			break;
 		case OBJECT_INDEX:
 			process_rename_index(hcache, relid, stmt);
+			break;
+		case OBJECT_TABCONSTRAINT:
+			process_rename_constraint(hcache, relid, stmt);
 			break;
 		default:
 			break;
