@@ -24,7 +24,7 @@ IF EXIST "%BUILD_DIR%" (
 
 mkdir "%BUILD_DIR%"
 cd "%BUILD_DIR%"
-cmake %SRC_DIR% -B. -A x64 %*
+cmake %SRC_DIR% -A x64 %*
 
 ECHO ---
 ECHO TimescaleDB build system initialized in %BUILD_DIR%.
