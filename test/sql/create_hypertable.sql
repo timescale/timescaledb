@@ -38,12 +38,6 @@ insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
 \set ON_ERROR_STOP 1
 insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
 
-SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
-ALTER TABLE test_schema.test_table_no_not_null ALTER time DROP NOT NULL;
-SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
-SELECT _timescaledb_internal.set_time_columns_not_null();
-SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
-
 RESET ROLE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
