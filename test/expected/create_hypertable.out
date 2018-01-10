@@ -44,34 +44,6 @@ insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
 ERROR:  null value in column "time" violates not-null constraint
 \set ON_ERROR_STOP 1
 insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
-SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
-  Column   |  Type  | Nullable 
------------+--------+----------
- time      | bigint | t
- device_id | text   | f
-(2 rows)
-
-ALTER TABLE test_schema.test_table_no_not_null ALTER time DROP NOT NULL;
-SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
-  Column   |  Type  | Nullable 
------------+--------+----------
- time      | bigint | f
- device_id | text   | f
-(2 rows)
-
-SELECT _timescaledb_internal.set_time_columns_not_null();
- set_time_columns_not_null 
----------------------------
- 
-(1 row)
-
-SELECT * FROM test.show_columns('test_schema.test_table_no_not_null');
-  Column   |  Type  | Nullable 
------------+--------+----------
- time      | bigint | t
- device_id | text   | f
-(2 rows)
-
 RESET ROLE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0

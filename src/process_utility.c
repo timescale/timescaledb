@@ -774,6 +774,23 @@ process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
 	catalog_restore_user(&sec_ctx);
 }
 
+static void
+process_altertable_drop_not_null(Hypertable *ht, AlterTableCmd *cmd)
+{
+	int			i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		Dimension  *dim = &ht->space->dimensions[i];
+
+		if (IS_OPEN_DIMENSION(dim) &&
+		  strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
+					 errmsg("Cannot Drop NOT NULL constraint from a time-partitioned column")));
+	}
+}
+
 /* process all regular-table alter commands to make sure they aren't adding
  * foreign-key constraints to hypertables */
 static void
@@ -1311,6 +1328,10 @@ process_altertable_start_table(Node *parsetree)
 					if (NULL != ht && istmt->isconstraint)
 						verify_constraint_hypertable(ht, cmd->def);
 				}
+				break;
+			case AT_DropNotNull:
+				if (ht != NULL)
+					process_altertable_drop_not_null(ht, cmd);
 				break;
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:

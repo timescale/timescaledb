@@ -16,6 +16,8 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, NULL, 11);
 
+ALTER TABLE hyper ALTER COLUMN time DROP NOT NULL;
+
 \set ON_ERROR_STOP 1
 
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
@@ -23,6 +25,11 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
+
+ALTER TABLE hyper ALTER COLUMN device_id DROP NOT NULL;
+
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987700000000000, NULL, 11);
 
 ----------------------- UNIQUE CONSTRAINTS ------------------
 
