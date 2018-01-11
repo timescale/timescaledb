@@ -45,4 +45,7 @@ SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
 ALTER TABLE alter_test ALTER COLUMN colorname TYPE varchar(3);
 -- conversion that messes up partitioning fails
 ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamptz USING time_us::timestamptz+INTERVAL '1 year';
+--ONLY blocked
+ALTER TABLE ONLY alter_test RENAME COLUMN colorname TO colorname2;
+ALTER TABLE ONLY alter_test ALTER COLUMN colorname TYPE varchar(10);
 \set ON_ERROR_STOP 1

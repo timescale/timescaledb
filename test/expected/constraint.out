@@ -19,6 +19,10 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 ERROR:  null value in column "device_id" violates not-null constraint
 ALTER TABLE hyper ALTER COLUMN time DROP NOT NULL;
 ERROR:  Cannot Drop NOT NULL constraint from a time-partitioned column
+ALTER TABLE ONLY hyper ALTER COLUMN sensor_1 SET NOT NULL;
+ERROR:  ONLY option not supported on hypertable operations
+ALTER TABLE ONLY hyper ALTER COLUMN device_id DROP NOT NULL;
+ERROR:  ONLY option not supported on hypertable operations
 \set ON_ERROR_STOP 1
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
@@ -243,7 +247,7 @@ RENAME CONSTRAINT new_name2 TO check_2;
 ERROR:  constraint "check_2" for relation "hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name" already exists
 ALTER TABLE ONLY hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 RENAME CONSTRAINT new_name2 TO new_name;
-ERROR:  ONLY option not supported when renaming hypertable constraints
+ERROR:  ONLY option not supported on hypertable operations
 ALTER TABLE _timescaledb_internal._hyper_2_4_chunk
 RENAME CONSTRAINT "4_10_new_name2" TO new_name;
 ERROR:  Renaming constraints on chunks is not supported

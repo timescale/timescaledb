@@ -18,6 +18,9 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 
 ALTER TABLE hyper ALTER COLUMN time DROP NOT NULL;
 
+ALTER TABLE ONLY hyper ALTER COLUMN sensor_1 SET NOT NULL;
+ALTER TABLE ONLY hyper ALTER COLUMN device_id DROP NOT NULL;
+
 \set ON_ERROR_STOP 1
 
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
