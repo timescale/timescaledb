@@ -143,6 +143,20 @@ check_chunk_operation_allowed(Oid relid)
 	}
 }
 
+static void
+relation_not_only(RangeVar *rv)
+{
+#if PG10
+	bool		only = !rv->inh;
+#elif PG96
+	bool		only = (rv->inhOpt == INH_NO);
+#endif
+	if (only)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("ONLY option not supported on hypertable operations")));
+}
+
 /* Truncate a hypertable */
 static void
 process_truncate(Node *parsetree)
@@ -660,15 +674,7 @@ process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
 
 	if (NULL != ht)
 	{
-#if PG10
-		bool		only = !stmt->relation->inh;
-#elif PG96
-		bool		only = (stmt->relation->inhOpt == INH_NO);
-#endif
-		if (only)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("ONLY option not supported when renaming hypertable constraints")));
+		relation_not_only(stmt->relation);
 		foreach_chunk(ht, rename_hypertable_constraint, stmt);
 	}
 	else
@@ -1337,6 +1343,8 @@ process_altertable_start_table(Node *parsetree)
 
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry(hcache, relid);
+	if (ht != NULL)
+		relation_not_only(stmt->relation);
 
 	foreach(lc, stmt->cmds)
 	{

@@ -123,4 +123,9 @@ ERROR:  Cannot change the type of a hash-partitioned column
 -- conversion that messes up partitioning fails
 ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamptz USING time_us::timestamptz+INTERVAL '1 year';
 ERROR:  check constraint "constraint_1" is violated by some row
+--ONLY blocked
+ALTER TABLE ONLY alter_test RENAME COLUMN colorname TO colorname2;
+ERROR:  inherited column "colorname" must be renamed in child tables too
+ALTER TABLE ONLY alter_test ALTER COLUMN colorname TYPE varchar(10);
+ERROR:  ONLY option not supported on hypertable operations
 \set ON_ERROR_STOP 1
