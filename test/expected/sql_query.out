@@ -122,10 +122,10 @@ INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);
 INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 2, 22.5);
 --check that there are two chunks
 SELECT * FROM test.show_subtables('int_part');
-                 Child                  
-----------------------------------------
- _timescaledb_internal._hyper_2_5_chunk
- _timescaledb_internal._hyper_2_6_chunk
+                 Child                  | Tablespace 
+----------------------------------------+------------
+ _timescaledb_internal._hyper_2_5_chunk | 
+ _timescaledb_internal._hyper_2_6_chunk | 
 (2 rows)
 
 SELECT * FROM "int_part" WHERE object_id = 1;

@@ -195,6 +195,35 @@ chunk_adjust_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chu
 		chunk_adjust_expr_attnos(ii, htrel, idxrel, chunkrel);
 }
 
+#define CHUNK_INDEX_TABLESPACE_OFFSET 1
+
+
+/*
+ * Pick a chunk index's tablespace at an offset from the chunk's tablespace in
+ * order to avoid colocating chunks and their indexes in the same tablespace.
+ * This hopefully leads to more I/O parallelism.
+ */
+static Oid
+chunk_index_select_tablespace(Relation htrel, Relation chunkrel)
+{
+	Cache	   *hcache = hypertable_cache_pin();
+	Hypertable *ht = hypertable_cache_get_entry(hcache, htrel->rd_id);
+	Tablespace *tspc;
+	Oid			tablespace_oid = InvalidOid;
+
+	Assert(ht != NULL);
+
+	tspc = hypertable_get_tablespace_at_offset_from(ht, chunkrel->rd_rel->reltablespace,
+													CHUNK_INDEX_TABLESPACE_OFFSET);
+
+	if (NULL != tspc)
+		tablespace_oid = tspc->tablespace_oid;
+
+	cache_release(hcache);
+
+	return tablespace_oid;
+}
+
 /*
  * Create a chunk index based on the configuration of the "parent" index.
  */
@@ -213,6 +242,7 @@ chunk_relation_index_create(Relation htrel,
 	Datum		indclass;
 	oidvector  *indclassoid;
 	List	   *colnames = create_index_colnames(template_indexrel);
+	Oid			tablespace = InvalidOid;
 
 	/*
 	 * Convert the IndexInfo's attnos to match the chunk instead of the
@@ -239,6 +269,15 @@ chunk_relation_index_create(Relation htrel,
 										get_rel_name(RelationGetRelid(template_indexrel)),
 										get_rel_namespace(RelationGetRelid(chunkrel)));
 
+	/*
+	 * Determine the index's tablespace. Use the main index's tablespace, or,
+	 * if not set, select one at an offset from the chunk's tablespace.
+	 */
+	if (OidIsValid(template_indexrel->rd_rel->reltablespace))
+		tablespace = template_indexrel->rd_rel->reltablespace;
+	else
+		tablespace = chunk_index_select_tablespace(htrel, chunkrel);
+
 	chunk_indexrelid = index_create(chunkrel,
 									indexname,
 									InvalidOid,
@@ -246,7 +285,7 @@ chunk_relation_index_create(Relation htrel,
 									indexinfo,
 									colnames,
 									template_indexrel->rd_rel->relam,
-									template_indexrel->rd_rel->reltablespace,
+									tablespace,
 									template_indexrel->rd_indcollation,
 									indclassoid->values,
 									template_indexrel->rd_indoption,

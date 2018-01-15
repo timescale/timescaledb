@@ -198,19 +198,22 @@ END
 $BODY$;
 
 CREATE OR REPLACE FUNCTION test.show_subtables(rel regclass)
-RETURNS TABLE("Child" regclass) LANGUAGE SQL STABLE AS
+RETURNS TABLE("Child" regclass,
+              "Tablespace" name) LANGUAGE SQL STABLE AS
 $BODY$
-    SELECT objid::regclass
-    FROM pg_depend d
+    SELECT objid::regclass, (SELECT t.spcname FROM pg_tablespace t WHERE t.oid = c.reltablespace)
+    FROM pg_depend d, pg_class c
     WHERE d.refobjid = rel
     AND d.deptype = 'n'
     AND d.classid = 'pg_class'::regclass
+    AND d.objid = c.oid
     ORDER BY d.refobjid, d.objid;
 $BODY$;
 
 CREATE OR REPLACE FUNCTION test.show_subtablesp(pattern text)
 RETURNS TABLE("Parent" regclass,
-              "Child" regclass) LANGUAGE PLPGSQL STABLE AS
+              "Child" regclass,
+              "Tablespace" name) LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     schema_name name = split_part(pattern, '.', 1);
@@ -223,7 +226,8 @@ BEGIN
 
     RETURN QUERY
     SELECT refobjid::regclass,
-    objid::regclass
+    objid::regclass,
+    (SELECT t.spcname FROM pg_class cc, pg_tablespace t WHERE cc.oid = d.objid AND t.oid = cc.reltablespace)
     FROM pg_class c, pg_depend d
     WHERE format('%I.%I', c.relnamespace::regnamespace::name, c.relname) LIKE format('%I.%s', schema_name, table_name)
     AND d.refobjid = c.oid

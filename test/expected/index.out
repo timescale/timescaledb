@@ -398,7 +398,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 ----------------------------------------+-------------------------------------------------------------------+--------------------+--------+---------+-----------+-------------
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_device_idx | {time,temp,device} | f      | f       | f         | tablespace2
- _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_device_idx      | {time,temp,device} | f      | f       | f         | 
+ _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_device_idx      | {time,temp,device} | f      | f       | f         | tablespace1
 (3 rows)
 
 -- Creating a new index should propagate to existing chunks, including
@@ -418,7 +418,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 ----------------------------------------+-------------------------------------------------------------------+--------------------+--------+---------+-----------+-------------
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_time_device_idx | {time,temp,device} | f      | f       | f         | tablespace2
- _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_device_idx      | {time,temp,device} | f      | f       | f         | 
+ _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_index_test_device_idx      | {time,temp,device} | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_time_temp_idx              | {time,temp,device} | f      | f       | f         | tablespace2
 (4 rows)
 
