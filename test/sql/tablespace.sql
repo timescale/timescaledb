@@ -57,22 +57,24 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 --insert into another chunk
 INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'brown');
 
-SELECT relname, spcname FROM pg_class c
-INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
-INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+SELECT * FROM test.show_subtables('tspace_2dim');
+
+--indexes should inherit the tablespace of their chunk
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 --
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 -- User doesn't have permission on tablespace1 --> error
-CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 
 -- Grant permission to tablespace1
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-CREATE TABLE tspace_1dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
+CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 
 SELECT create_hypertable('tspace_1dim', 'time');
+SELECT attach_tablespace('tablespace1', 'tspace_1dim');
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
 
 SELECT * FROM _timescaledb_catalog.tablespace;
@@ -80,9 +82,15 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 INSERT INTO tspace_1dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
 INSERT INTO tspace_1dim VALUES ('2017-03-20T09:00:01', 24.3, 'brown');
 
-SELECT relname, spcname FROM pg_class c
-INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
-INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+SELECT * FROM test.show_subtablesp('tspace_%');
+--indexes should inherit the tablespace of their chunk, unless the
+--parent index has a tablespace set, in which case the chunks'
+--corresponding indexes are pinned to the parent index's
+--tablespace. The parent index can have a tablespace set in two cases:
+--(1) if explicitly set in CREATE INDEX, or (2) if the main table was
+--created with a tablespace, because then default indexes will be
+--created in that tablespace too.
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 --detach tablespace1 from all tables. Due to lack of permissions,
 --should only detach from 'tspace_1dim' (1 tablespace)

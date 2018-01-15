@@ -45,12 +45,12 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (4 rows)
 
 SELECT * FROM test.show_subtables('"two_Partitions"');
-                 Child                  
-----------------------------------------
- _timescaledb_internal._hyper_1_1_chunk
- _timescaledb_internal._hyper_1_2_chunk
- _timescaledb_internal._hyper_1_3_chunk
- _timescaledb_internal._hyper_1_4_chunk
+                 Child                  | Tablespace 
+----------------------------------------+------------
+ _timescaledb_internal._hyper_1_1_chunk | 
+ _timescaledb_internal._hyper_1_2_chunk | 
+ _timescaledb_internal._hyper_1_3_chunk | 
+ _timescaledb_internal._hyper_1_4_chunk | 
 (4 rows)
 
 SELECT * FROM "two_Partitions";
@@ -85,8 +85,8 @@ SELECT * FROM _timescaledb_catalog.chunk;
 
 -- should be empty
 SELECT * FROM test.show_subtables('"two_Partitions"');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
 SELECT * FROM "two_Partitions";
@@ -140,8 +140,8 @@ WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: TRUNCATE cnt: <NULL> 
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: TRUNCATE cnt: <NULL> trigger_name _test_truncate_after
 -- should be empty
 SELECT * FROM test.show_subtables('"two_Partitions"');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
 SELECT * FROM "two_Partitions";

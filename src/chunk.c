@@ -400,7 +400,7 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 		.type = T_CreateStmt,
 		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.inhRelations = list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
-		.tablespacename = hypertable_select_tablespace(ht, chunk),
+		.tablespacename = hypertable_select_tablespace_name(ht, chunk),
 		.options = get_reloptions(ht->main_table_relid),
 	};
 	Oid			uid,

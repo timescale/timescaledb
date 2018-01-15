@@ -318,15 +318,15 @@ SET timezone = '+1';
 INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
 SELECT * FROM test.show_subtables('drop_chunk_test_ts');
-                  Child                  
------------------------------------------
- _timescaledb_internal._hyper_4_19_chunk
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_4_19_chunk | 
 (1 row)
 
 SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
-                  Child                  
------------------------------------------
- _timescaledb_internal._hyper_5_20_chunk
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_5_20_chunk | 
 (1 row)
 
 BEGIN;
@@ -337,8 +337,8 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
     SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_tstz');
@@ -348,8 +348,8 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
 ROLLBACK;
@@ -361,8 +361,8 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
     SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_tstz');
@@ -372,8 +372,8 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
 ROLLBACK;
@@ -405,8 +405,8 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
 ROLLBACK;
@@ -418,8 +418,8 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
- Child 
--------
+ Child | Tablespace 
+-------+------------
 (0 rows)
 
 ROLLBACK;

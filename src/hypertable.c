@@ -282,7 +282,7 @@ hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
  * chunks in the same closed (space) dimension. This ensures chunks in the same
  * "space" partition will live on the same disk.
  */
-char *
+Tablespace *
 hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 {
 	Dimension  *dim;
@@ -318,7 +318,39 @@ hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 	Assert(i >= 0);
 
 	/* Use the index of the slice to find the tablespace */
-	return NameStr(tspcs->tablespaces[i % tspcs->num_tablespaces].fd.tablespace_name);
+	return &tspcs->tablespaces[i % tspcs->num_tablespaces];
+}
+
+char *
+hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk)
+{
+	Tablespace *tspc = hypertable_select_tablespace(ht, chunk);
+
+	if (NULL == tspc)
+		return NULL;
+
+	return NameStr(tspc->fd.tablespace_name);
+}
+
+/*
+ * Get the tablespace at an offset from the given tablespace.
+ */
+Tablespace *
+hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset)
+{
+	Tablespaces *tspcs = tablespace_scan(ht->fd.id);
+	int			i = 0;
+
+	if (NULL == tspcs || tspcs->num_tablespaces == 0)
+		return NULL;
+
+	for (i = 0; i < tspcs->num_tablespaces; i++)
+	{
+		if (tablespace_oid == tspcs->tablespaces[i].tablespace_oid)
+			return &tspcs->tablespaces[(i + offset) % tspcs->num_tablespaces];
+	}
+
+	return NULL;
 }
 
 static inline Oid
