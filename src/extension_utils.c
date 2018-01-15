@@ -18,6 +18,8 @@
 #include <utils/rel.h>
 #include <catalog/indexing.h>
 
+#include "extension.h"
+
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
 #define MAX_SO_NAME_LEN NAMEDATALEN+NAMEDATALEN+1+1 /* extname+"-"+version */

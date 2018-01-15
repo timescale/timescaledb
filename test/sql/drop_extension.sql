@@ -23,6 +23,9 @@ CREATE EXTENSION timescaledb;
 \set ON_ERROR_STOP 1
 \c single :ROLE_DEFAULT_PERM_USER
 
+-- CREATE twice with IF NOT EXISTS should be OK
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
 
