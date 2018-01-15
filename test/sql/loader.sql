@@ -6,6 +6,24 @@ DROP EXTENSION timescaledb;
 SELECT 1;
 
 CREATE EXTENSION timescaledb VERSION 'mock-1';
+SELECT 1;
+\dx
+
+CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-1';
+CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-2';
+
+DROP EXTENSION timescaledb;
+\set ON_ERROR_STOP 0
+--test that we cannot accidentally load another library version
+CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-2';
+\set ON_ERROR_STOP 1
+
+\c single :ROLE_SUPERUSER
+--no extension
+\dx
+SELECT 1;
+
+CREATE EXTENSION timescaledb VERSION 'mock-1';
 --same backend as create extension;
 SELECT 1;
 \dx
@@ -22,7 +40,6 @@ SELECT mock_function();
 \c single :ROLE_DEFAULT_PERM_USER
 --test fn call as first command
 SELECT mock_function();
-
 
 --use guc to prevent loading
 \c single :ROLE_SUPERUSER
@@ -164,4 +181,3 @@ CREATE EXTENSION timescaledb VERSION 'mock-2';
 \c single :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 \dx
-

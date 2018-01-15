@@ -36,9 +36,12 @@ CREATE EXTENSION timescaledb;
 -- Test that calling twice generates proper error
 \set ON_ERROR_STOP 0
 CREATE EXTENSION timescaledb;
-ERROR:  Cannot create the extension after the another version has already been loaded
+ERROR:  the session already has "timescaledb" shared library version "0.9.0-dev" loaded
 \set ON_ERROR_STOP 1
 \c single :ROLE_DEFAULT_PERM_USER
+-- CREATE twice with IF NOT EXISTS should be OK
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+NOTICE:  extension "timescaledb" already exists, skipping
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
  create_hypertable 

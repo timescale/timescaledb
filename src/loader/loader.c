@@ -43,6 +43,9 @@ extern void PGDLLEXPORT _PG_fini(void);
 /* was the versioned-extension loaded*/
 static bool loaded = false;
 
+#define MAX_VERSION_LEN (NAMEDATALEN+1)
+static char soversion[MAX_VERSION_LEN];
+
 /* GUC to disable the load */
 static bool guc_disable_load = false;
 
@@ -92,41 +95,86 @@ drop_statement_drops_extension(DropStmt *stmt)
 }
 
 static bool
-load_utility_cmd(Node *utilityStmt)
+should_load_on_variable_set(Node *utility_stmt)
 {
-	switch (nodeTag(utilityStmt))
+	VariableSetStmt *stmt = (VariableSetStmt *) utility_stmt;
+
+	/* Do not load when setting the guc */
+	return strcmp(stmt->name, GUC_DISABLE_LOAD_NAME) != 0;
+}
+
+static bool
+should_load_on_alter_extension(Node *utility_stmt)
+{
+	AlterExtensionStmt *stmt = (AlterExtensionStmt *) utility_stmt;
+
+	if (strcmp(stmt->extname, EXTENSION_NAME) != 0)
+		return true;
+
+	/* disallow loading two .so from different versions */
+	if (loaded)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("extension \"%s\" cannot be updated after the old version has already been loaded", stmt->extname),
+				 errhint("You should start a new session and execute ALTER EXTENSION as the first command")));
+
+	/* do not load the current (old) version's .so */
+	return false;
+}
+
+static bool
+should_load_on_create_extension(Node *utility_stmt)
+{
+	CreateExtensionStmt *stmt = (CreateExtensionStmt *) utility_stmt;
+	bool		is_extension = strcmp(stmt->extname, EXTENSION_NAME) == 0;
+
+	if (!is_extension)
+		return false;
+
+	if (!loaded)
+		return true;
+
+	/*
+	 * If the extension exists and the create statement has an IF NOT EXISTS
+	 * option, we continue without loading and let CREATE EXTENSION bail out
+	 * with a standard NOTICE. We can only do this if the extension actually
+	 * exists (is created), or else we might potentially load the shared
+	 * library of another version of the extension. Loading typically happens
+	 * on CREATE EXTENSION (via CREATE FUNCTION as SQL files are installed)
+	 * even if we do not explicitly load the library here. If we load another
+	 * version of the library, in addition to the currently loaded version, we
+	 * might taint the backend.
+	 */
+	if (extension_exists() && stmt->if_not_exists)
+		return false;
+
+	/* disallow loading two .so from different versions */
+	ereport(ERROR,
+			(errcode(ERRCODE_DUPLICATE_OBJECT),
+			 errmsg("the session already has \"%s\" shared library version \"%s\" loaded",
+					stmt->extname, soversion),
+			 errhint("You should start a new session and execute CREATE EXTENSION as the first command")));
+}
+
+static bool
+should_load_on_drop_extension(Node *utility_stmt)
+{
+	return !drop_statement_drops_extension((DropStmt *) utility_stmt);
+}
+
+static bool
+load_utility_cmd(Node *utility_stmt)
+{
+	switch (nodeTag(utility_stmt))
 	{
 		case T_VariableSetStmt:
-			if (strcmp(((VariableSetStmt *) utilityStmt)->name, GUC_DISABLE_LOAD_NAME) == 0)
-				/* Do not load when setting the guc */
-				return false;
-			return true;
+			return should_load_on_variable_set(utility_stmt);
 		case T_AlterExtensionStmt:
-			if (strcmp(((AlterExtensionStmt *) utilityStmt)->extname, EXTENSION_NAME) != 0)
-				return true;
-
-			/* disallow loading two .so from different versions */
-			if (loaded)
-				ereport(ERROR,
-						(errmsg("Cannot update the extension after the old version has already been loaded"),
-						 errhint("You should start a new session and execute ALTER EXTENSION as the first command")));
-
-			/* do not load the current (old) version's .so */
-			return false;
+			return should_load_on_alter_extension(utility_stmt);
 		case T_CreateExtensionStmt:
-			if (!loaded || strcmp(((CreateExtensionStmt *) utilityStmt)->extname, EXTENSION_NAME) != 0)
-				return true;
-
-			/* disallow loading two .so from different versions */
-			ereport(ERROR,
-					(errmsg("Cannot create the extension after the another version has already been loaded"),
-					 errhint("You should start a new session and execute CREATE EXTENSION as the first command")));
-
+			return should_load_on_create_extension(utility_stmt);
 		case T_DropStmt:
-			if (drop_statement_drops_extension((DropStmt *) utilityStmt))
-				/* do not load when dropping */
-				return false;
-			return true;
+			return should_load_on_drop_extension(utility_stmt);
 		default:
 			return true;
 	}
@@ -135,7 +183,8 @@ load_utility_cmd(Node *utilityStmt)
 static void
 post_analyze_hook(ParseState *pstate, Query *query)
 {
-	if (!guc_disable_load && (query->commandType != CMD_UTILITY || load_utility_cmd(query->utilityStmt)))
+	if (!guc_disable_load &&
+		(query->commandType != CMD_UTILITY || load_utility_cmd(query->utilityStmt)))
 		extension_check();
 
 	/*
@@ -223,7 +272,7 @@ do_load()
 	char		soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
 
-
+	strncpy(soversion, version, MAX_VERSION_LEN);
 	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_NAME, version);
 
 	/*
