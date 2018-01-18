@@ -8,4 +8,4 @@ bool		extension_invalidate(Oid relid);
 bool		extension_is_loaded(void);
 void		extension_check_version(const char *so_version);
 
-#endif   /* TIMESCALEDB_EXTENSION_H */
+#endif							/* TIMESCALEDB_EXTENSION_H */

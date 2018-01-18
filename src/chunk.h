@@ -75,4 +75,4 @@ extern bool chunk_exists_relid(Oid relid);
 extern void chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern int	chunk_delete_by_relid(Oid chunk_oid);
 
-#endif   /* TIMESCALEDB_CHUNK_H */
+#endif							/* TIMESCALEDB_CHUNK_H */

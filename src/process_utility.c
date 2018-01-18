@@ -678,7 +678,7 @@ process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
 		if (NULL != chunk)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Renaming constraints on chunks is not supported")));
+					 errmsg("Renaming constraints on chunks is not supported")));
 
 	}
 }
@@ -806,7 +806,7 @@ process_altertable_drop_not_null(Hypertable *ht, AlterTableCmd *cmd)
 		Dimension  *dim = &ht->space->dimensions[i];
 
 		if (IS_OPEN_DIMENSION(dim) &&
-		  strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
 					 errmsg("Cannot Drop NOT NULL constraint from a time-partitioned column")));
@@ -833,7 +833,7 @@ verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
 			if (NULL != ht)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				  errmsg("Foreign keys to hypertables are not supported.")));
+						 errmsg("Foreign keys to hypertables are not supported.")));
 			break;
 		default:
 			break;
@@ -1060,8 +1060,8 @@ find_clustered_index(Oid table_relid)
 	if (!OidIsValid(index_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-			errmsg("there is no previously clustered index for table \"%s\"",
-				   get_rel_name(table_relid))));
+				 errmsg("there is no previously clustered index for table \"%s\"",
+						get_rel_name(table_relid))));
 
 	return index_relid;
 }
@@ -1114,7 +1114,7 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 			index_relid = find_clustered_index(ht->main_table_relid);
 		else
 			index_relid = get_relname_relid(stmt->indexname,
-									get_rel_namespace(ht->main_table_relid));
+											get_rel_namespace(ht->main_table_relid));
 
 		if (!OidIsValid(index_relid))
 		{
@@ -1247,10 +1247,10 @@ process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
 		Dimension  *dim = &ht->space->dimensions[i];
 
 		if (IS_CLOSED_DIMENSION(dim) &&
-		  strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
-			 errmsg("Cannot change the type of a hash-partitioned column")));
+					 errmsg("Cannot change the type of a hash-partitioned column")));
 	}
 }
 
@@ -1591,7 +1591,7 @@ process_create_trigger_start(Node *parsetree)
 	if (stmt->transitionRels != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-		errmsg("Hypertables do not support transition tables in triggers.")));
+				 errmsg("Hypertables do not support transition tables in triggers.")));
 #endif
 }
 

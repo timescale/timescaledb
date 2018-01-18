@@ -229,8 +229,8 @@ create_fmgr(char *schema, char *function_name, int num_args)
 {
 	FmgrInfo   *finfo = palloc(sizeof(FmgrInfo));
 	FuncCandidateList func_list = FuncnameGetCandidates(list_make2(makeString(schema),
-												  makeString(function_name)),
-										num_args, NULL, false, false, false);
+																   makeString(function_name)),
+														num_args, NULL, false, false, false);
 
 	if (func_list == NULL)
 	{

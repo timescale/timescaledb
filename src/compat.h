@@ -38,10 +38,10 @@
 
 #error "Unsupported PostgreSQL version"
 
-#endif   /* PG_VERSION_NUM */
+#endif							/* PG_VERSION_NUM */
 
 #define TS_FUNCTION_INFO_V1(fn) \
 	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS); \
 	PG_FUNCTION_INFO_V1(fn)
 
-#endif   /* TIMESCALEDB_COMPAT_H */
+#endif							/* TIMESCALEDB_COMPAT_H */

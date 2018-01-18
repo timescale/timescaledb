@@ -8,4 +8,4 @@ typedef struct Hypertable Hypertable;
 
 Oid			timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht);
 
-#endif   /* TIMESCALEDB_COPY_H */
+#endif							/* TIMESCALEDB_COPY_H */

@@ -237,7 +237,7 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data),
 									 VARSIZE_ANY_EXHDR(data)));
 
-	res = (int32) (hash_u & 0x7fffffff);		/* Only positive numbers */
+	res = (int32) (hash_u & 0x7fffffff);	/* Only positive numbers */
 
 	PG_FREE_IF_COPY(data, 0);
 	PG_RETURN_INT32(res);

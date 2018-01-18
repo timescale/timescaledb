@@ -237,7 +237,7 @@ catalog_get(void)
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
 		catalog.caches[i].inval_proxy_id = get_relname_relid(cache_proxy_table_names[i],
-													catalog.cache_schema_id);
+															 catalog.cache_schema_id);
 
 	catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
 
@@ -315,7 +315,7 @@ catalog_become_owner(Catalog *catalog, CatalogSecurityContext *sec_ctx)
 	if (sec_ctx->saved_uid != catalog->owner_uid)
 	{
 		SetUserIdAndSecContext(catalog->owner_uid,
-			 sec_ctx->saved_security_context | SECURITY_LOCAL_USERID_CHANGE);
+							   sec_ctx->saved_security_context | SECURITY_LOCAL_USERID_CHANGE);
 		return true;
 	}
 
@@ -398,7 +398,7 @@ catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 #define CatalogTupleDelete(relation, tid)		\
 	simple_heap_delete(relation, tid);
 
-#endif   /* PG96 */
+#endif							/* PG96 */
 
 /*
  * Insert a new row into a catalog table.

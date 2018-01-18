@@ -86,4 +86,4 @@ int			scanner_scan(ScannerCtx *ctx);
 bool		scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type);
 
 
-#endif   /* TIMESCALEDB_SCANNER_H */
+#endif							/* TIMESCALEDB_SCANNER_H */

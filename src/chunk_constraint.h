@@ -48,4 +48,4 @@ extern void chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid);
 extern int	chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname, const char *newname);
 
 
-#endif   /* TIMESCALEDB_CHUNK_CONSTRAINT_H */
+#endif							/* TIMESCALEDB_CHUNK_CONSTRAINT_H */

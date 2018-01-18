@@ -9,6 +9,6 @@
 #undef extern
 #undef PGDLLIMPORT
 #define PGDLLIMPORT __declspec (dllexport)
-#endif /* _MSC_VER */
+#endif							/* _MSC_VER */
 
-#endif /* TIMESCALEDB_COMPAT_MSVC_EXIT_H */
+#endif							/* TIMESCALEDB_COMPAT_MSVC_EXIT_H */

@@ -124,7 +124,7 @@ tablespace_scan(int32 hypertable_id)
 	};
 
 	ScanKeyInit(&scankey[0], Anum_tablespace_hypertable_id_tablespace_name_idx_hypertable_id,
-			  BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	scanner_scan(&scanctx);
 
@@ -209,14 +209,14 @@ tablespace_delete(int32 hypertable_id, const char *tspcname)
 	int			num_deleted;
 
 	ScanKeyInit(&scankey[scanctx.nkeys++],
-			 Anum_tablespace_hypertable_id_tablespace_name_idx_hypertable_id,
+				Anum_tablespace_hypertable_id_tablespace_name_idx_hypertable_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(hypertable_id));
 
 	if (NULL != tspcname)
 		ScanKeyInit(&scankey[scanctx.nkeys++],
-		   Anum_tablespace_hypertable_id_tablespace_name_idx_tablespace_name,
+					Anum_tablespace_hypertable_id_tablespace_name_idx_tablespace_name,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
 					DirectFunctionCall1(namein, CStringGetDatum(tspcname)));
@@ -320,7 +320,7 @@ tablespace_attach(PG_FUNCTION_ARGS)
 	if (!OidIsValid(tspc_oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-			  errmsg("Tablespace \"%s\" does not exist", NameStr(*tspcname)),
+				 errmsg("Tablespace \"%s\" does not exist", NameStr(*tspcname)),
 				 errhint("A tablespace needs to be created"
 						 " before attaching it to a hypertable")));
 
@@ -331,8 +331,8 @@ tablespace_attach(PG_FUNCTION_ARGS)
 	if (aclresult != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-		 errmsg("Table owner \"%s\" lacks permissions for tablespace \"%s\"",
-				GetUserNameFromId(ownerid, true), NameStr(*tspcname))));
+				 errmsg("Table owner \"%s\" lacks permissions for tablespace \"%s\"",
+						GetUserNameFromId(ownerid, true), NameStr(*tspcname))));
 
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
@@ -346,8 +346,8 @@ tablespace_attach(PG_FUNCTION_ARGS)
 	if (hypertable_has_tablespace(ht, tspc_oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_IO_TABLESPACE_ALREADY_ATTACHED),
-		 errmsg("Tablespace \"%s\" is already attached to hypertable \"%s\"",
-				NameStr(*tspcname), get_rel_name(hypertable_oid))));
+				 errmsg("Tablespace \"%s\" is already attached to hypertable \"%s\"",
+						NameStr(*tspcname), get_rel_name(hypertable_oid))));
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	tablespace_insert(ht->fd.id, NameStr(*tspcname));
@@ -379,8 +379,8 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid)
 	if (!hypertable_has_tablespace(ht, tspcoid))
 		ereport(ERROR,
 				(errcode(ERRCODE_IO_TABLESPACE_NOT_ATTACHED),
-			 errmsg("Tablespace \"%s\" is not attached to hypertable \"%s\"",
-					tspcname, get_rel_name(hypertable_oid))));
+				 errmsg("Tablespace \"%s\" is not attached to hypertable \"%s\"",
+						tspcname, get_rel_name(hypertable_oid))));
 
 	ret = tablespace_delete(ht->fd.id, tspcname);
 
@@ -510,7 +510,7 @@ tablespace_show(PG_FUNCTION_ARGS)
 	{
 		Oid			tablespace_oid = tspcs->tablespaces[funcctx->call_cntr].tablespace_oid;
 		const char *tablespace_name = get_tablespace_name(tablespace_oid);
-		Datum name;
+		Datum		name;
 
 		Assert(tablespace_name != NULL);
 		name = DirectFunctionCall1(namein, CStringGetDatum(tablespace_name));

@@ -135,7 +135,7 @@ create_trigger_handler(Trigger *trigger, void *arg)
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-		errmsg("Hypertables do not support transition tables in triggers.")));
+				 errmsg("Hypertables do not support transition tables in triggers.")));
 #endif
 	if (trigger_is_chunk_trigger(trigger))
 		trigger_create_on_chunk(trigger->tgoid,

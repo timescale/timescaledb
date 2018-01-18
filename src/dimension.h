@@ -79,4 +79,4 @@ extern int	dimension_update_name(Dimension *dim, const char *newname);
 #define hyperspace_get_closed_dimension(space, i)				\
 	hyperspace_get_dimension(space, DIMENSION_TYPE_CLOSED, i)
 
-#endif   /* TIMESCALEDB_DIMENSION_H */
+#endif							/* TIMESCALEDB_DIMENSION_H */

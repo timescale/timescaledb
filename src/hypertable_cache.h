@@ -17,4 +17,4 @@ extern Cache *hypertable_cache_pin(void);
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
 
-#endif   /* TIMESCALEDB_HYPERTABLE_CACHE_H */
+#endif							/* TIMESCALEDB_HYPERTABLE_CACHE_H */

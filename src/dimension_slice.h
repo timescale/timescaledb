@@ -50,4 +50,4 @@ extern int	dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coo
 	dimension_slice_collision_scan_limit(dimension_id, range_start, range_end, 0)
 
 
-#endif   /* TIMESCALEDB_DIMENSION_SLICE_H */
+#endif							/* TIMESCALEDB_DIMENSION_SLICE_H */

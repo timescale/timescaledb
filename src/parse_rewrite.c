@@ -92,7 +92,7 @@ create_partition_func_equals_const(ParseState *pstate, PartitioningInfo *pi, Var
 									  -1);
 
 	op_expr = make_op_compat(pstate,
-					   list_make2(makeString("pg_catalog"), makeString("=")),
+							 list_make2(makeString("pg_catalog"), makeString("=")),
 							 f_var,
 							 f_const,
 							 -1);
@@ -155,7 +155,7 @@ add_partitioning_func_qual_mutator(Node *node, AddPartFuncQualCtx *context)
 						 */
 						PartitioningInfo *pi =
 						get_partitioning_info_for_partition_column_var(var_expr,
-																	context);
+																	   context);
 
 						if (pi != NULL)
 						{

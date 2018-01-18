@@ -236,8 +236,8 @@ chunk_relation_index_create(Relation htrel,
 	indclassoid = (oidvector *) DatumGetPointer(indclass);
 
 	indexname = chunk_index_choose_name(get_rel_name(RelationGetRelid(chunkrel)),
-						   get_rel_name(RelationGetRelid(template_indexrel)),
-							  get_rel_namespace(RelationGetRelid(chunkrel)));
+										get_rel_name(RelationGetRelid(template_indexrel)),
+										get_rel_namespace(RelationGetRelid(chunkrel)));
 
 	chunk_indexrelid = index_create(chunkrel,
 									indexname,
@@ -253,13 +253,13 @@ chunk_relation_index_create(Relation htrel,
 									reloptions,
 									template_indexrel->rd_index->indisprimary,
 									isconstraint,
-									false,		/* deferrable */
-									false,		/* init deferred */
-									false,		/* allow system table mods */
-									false,		/* skip build */
-									false,		/* concurrent */
-									false,		/* is internal */
-									false);		/* if not exists */
+									false,	/* deferrable */
+									false,	/* init deferred */
+									false,	/* allow system table mods */
+									false,	/* skip build */
+									false,	/* concurrent */
+									false,	/* is internal */
+									false); /* if not exists */
 
 	ReleaseSysCache(tuple);
 
@@ -385,7 +385,7 @@ chunk_index_create_from_stmt(IndexStmt *stmt,
 	if (NULL != stmt->idxname)
 		stmt->idxname = chunk_index_choose_name(get_rel_name(chunkrelid),
 												hypertable_indexname,
-											  get_rel_namespace(chunkrelid));
+												get_rel_namespace(chunkrelid));
 
 	idxobj = DefineIndex(chunkrelid,
 						 stmt,
@@ -528,7 +528,7 @@ chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 	List	   *mappings = NIL;
 
 	ScanKeyInit(&scankey[0],
-	  Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
+				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(ht->fd.id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
@@ -536,7 +536,7 @@ chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
 
 	chunk_index_scan(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-				scankey, 2, chunk_index_collect, &mappings, AccessShareLock);
+					 scankey, 2, chunk_index_collect, &mappings, AccessShareLock);
 
 	return mappings;
 }
@@ -567,7 +567,7 @@ chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool s
 	const char *indexname = get_rel_name(hypertable_indexrelid);
 
 	ScanKeyInit(&scankey[0],
-	  Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
+				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(ht->fd.id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
@@ -575,7 +575,7 @@ chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool s
 				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-						 scankey, 2, chunk_index_tuple_delete, &should_drop);
+								   scankey, 2, chunk_index_tuple_delete, &should_drop);
 }
 
 int
@@ -593,7 +593,7 @@ chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 				DirectFunctionCall1(namein, CStringGetDatum(indexname)));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-						  scankey, 2, chunk_index_tuple_delete, &drop_index);
+								   scankey, 2, chunk_index_tuple_delete, &drop_index);
 }
 
 static bool
@@ -621,7 +621,7 @@ chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
 				BTEqualStrategyNumber, F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(indexname)));
 
 	chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-				  scankey, 2, chunk_index_tuple_found, cim, AccessShareLock);
+					 scankey, 2, chunk_index_tuple_found, cim, AccessShareLock);
 
 	return cim;
 }
@@ -651,7 +651,7 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 		Oid			chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
 		const char *chunk_index_name = chunk_index_choose_name(NameStr(chunk->fd.table_name),
 															   info->newname,
-															chunk_schemaoid);
+															   chunk_schemaoid);
 		Oid			chunk_indexrelid = get_relname_relid(NameStr(chunk_index->index_name),
 														 chunk_schemaoid);
 
@@ -690,7 +690,7 @@ chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname)
 				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-						  scankey, 2, chunk_index_tuple_rename, &renameinfo);
+								   scankey, 2, chunk_index_tuple_rename, &renameinfo);
 }
 
 int
@@ -705,14 +705,14 @@ chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char 
 	};
 
 	ScanKeyInit(&scankey[0],
-	  Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
+				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(ht->fd.id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-						  scankey, 2, chunk_index_tuple_rename, &renameinfo);
+								   scankey, 2, chunk_index_tuple_rename, &renameinfo);
 }
 
 static bool
@@ -741,14 +741,14 @@ chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char
 	char	   *indexname = get_rel_name(hypertable_indexrelid);
 
 	ScanKeyInit(&scankey[0],
-	  Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
+				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(ht->fd.id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								scankey, 2, chunk_index_tuple_set_tablespace,
+								   scankey, 2, chunk_index_tuple_set_tablespace,
 								   (char *) tablespace);
 }
 
@@ -788,7 +788,7 @@ chunk_index_clone(PG_FUNCTION_ARGS)
 	constraint_oid = get_index_constraint(cim->parent_indexoid);
 
 	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel, chunk_index_rel,
-									  chunk_rel, OidIsValid(constraint_oid));
+													   chunk_rel, OidIsValid(constraint_oid));
 
 	heap_close(chunk_rel, NoLock);
 

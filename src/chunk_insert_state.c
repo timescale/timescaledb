@@ -236,7 +236,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 	Index		rti;
 	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
-										 "chunk insert state memory context",
+													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
 	Query	   *parse = dispatch->parse;
 	OnConflictAction onconflict = ONCONFLICT_NONE;
@@ -295,7 +295,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 	if (tuple_conversion_needed(RelationGetDescr(parent_rel), RelationGetDescr(rel)))
 		state->tup_conv_map = convert_tuples_by_name(RelationGetDescr(parent_rel),
 													 RelationGetDescr(rel),
-								 gettext_noop("could not convert row type"));
+													 gettext_noop("could not convert row type"));
 
 	/* Need a tuple table slot to store converted tuples */
 	if (state->tup_conv_map)

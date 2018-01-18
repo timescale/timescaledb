@@ -65,8 +65,8 @@ compat_bswap16(uint16_t v)
 #define le32toh(x) ((uint32_t)(x))
 #define le64toh(x) ((uint64_t)(x))
 
-#endif   /* !WORDS_BIGENDIAN */
+#endif							/* !WORDS_BIGENDIAN */
 
-#endif   /* _NEED_ENDIAN_COMPAT */
+#endif							/* _NEED_ENDIAN_COMPAT */
 
 #endif

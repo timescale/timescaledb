@@ -185,10 +185,10 @@ scanner_scan(ScannerCtx *ctx)
 				HeapUpdateFailureData hufd;
 
 				ictx.tinfo.lockresult = heap_lock_tuple(ictx.tablerel, ictx.tinfo.tuple,
-												  GetCurrentCommandId(false),
+														GetCurrentCommandId(false),
 														ctx->tuplock.lockmode,
-													 ctx->tuplock.waitpolicy,
-													  false, &buffer, &hufd);
+														ctx->tuplock.waitpolicy,
+														false, &buffer, &hufd);
 
 				/*
 				 * A tuple lock pins the underlying buffer, so we need to

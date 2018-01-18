@@ -32,4 +32,4 @@ extern bool is_hypertable(Oid relid);
 extern bool hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
 extern char *hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 
-#endif   /* TIMESCALEDB_HYPERTABLE_H */
+#endif							/* TIMESCALEDB_HYPERTABLE_H */

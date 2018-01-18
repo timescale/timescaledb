@@ -32,4 +32,4 @@ extern int	int_cmp(const void *a, const void *b);
 #define DATUM_GET(values, attno) \
 	values[attno-1]
 
-#endif   /* TIMESCALEDB_UTILS_H */
+#endif							/* TIMESCALEDB_UTILS_H */
