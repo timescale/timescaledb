@@ -8,4 +8,4 @@ extern List *event_trigger_ddl_commands(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
 
-#endif   /* TIMESCALEDB_EVENT_TRIGGER_H */
+#endif							/* TIMESCALEDB_EVENT_TRIGGER_H */

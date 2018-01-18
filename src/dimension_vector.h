@@ -32,4 +32,4 @@ extern int	dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_sli
 extern DimensionSlice *dimension_vec_get(DimensionVec *vec, int32 index);
 extern void dimension_vec_free(DimensionVec *vec);
 
-#endif   /* TIMESCALEDB_DIMENSION_VECTOR_H */
+#endif							/* TIMESCALEDB_DIMENSION_VECTOR_H */

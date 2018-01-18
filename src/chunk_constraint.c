@@ -228,7 +228,7 @@ chunk_constraints_add_from_tuple(ChunkConstraints *ccs, TupleInfo *ti)
 	}
 
 	return chunk_constraints_add(ccs,
-				   DatumGetInt32(values[Anum_chunk_constraint_chunk_id - 1]),
+								 DatumGetInt32(values[Anum_chunk_constraint_chunk_id - 1]),
 								 dimension_slice_id,
 								 NameStr(*constraint_name),
 								 NameStr(*hypertable_constraint_name));
@@ -288,8 +288,8 @@ chunk_constraint_create(ChunkConstraint *cc,
 	if (!is_dimension_constraint(cc))
 	{
 		Oid			hypertable_constraint_oid = get_relation_constraint_oid(hypertable_oid,
-								  NameStr(cc->fd.hypertable_constraint_name),
-																	  false);
+																			NameStr(cc->fd.hypertable_constraint_name),
+																			false);
 		HeapTuple	tuple = SearchSysCache1(CONSTROID, hypertable_constraint_oid);
 
 		if (HeapTupleIsValid(tuple))
@@ -374,7 +374,7 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 	};
 
 	ScanKeyInit(&scankey[0],
-			  Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
+				Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(chunk_id));
@@ -394,7 +394,7 @@ chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint)
 	int			num_found;
 
 	num_found = chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-												chunk_constraint_tuple_found,
+														   chunk_constraint_tuple_found,
 														   NULL,
 														   constraints,
 														   AccessShareLock);
@@ -473,7 +473,7 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 	};
 
 	ScanKeyInit(&scankey[0],
-	Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
+				Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(slice->fd.id));
@@ -598,7 +598,7 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 	ObjectAddress constrobj = {
 		.classId = ConstraintRelationId,
 		.objectId = get_relation_constraint_oid(chunk->table_id,
-								  NameStr(*DatumGetName(constrname)), false),
+												NameStr(*DatumGetName(constrname)), false),
 	};
 
 	catalog_delete(ti->scanrel, ti->tuple);
@@ -629,15 +629,15 @@ hypertable_constraint_tuple_filter(TupleInfo *ti, void *data)
 int
 chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 													  Oid chunk_oid,
-											char *hypertable_constraint_name)
+													  char *hypertable_constraint_name)
 {
 	ConstraintInfo info = {
 		.hypertable_constraint_name = hypertable_constraint_name,
 	};
 
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-											   chunk_constraint_delete_tuple,
-										  hypertable_constraint_tuple_filter,
+													  chunk_constraint_delete_tuple,
+													  hypertable_constraint_tuple_filter,
 													  &info,
 													  RowExclusiveLock);
 }
@@ -646,7 +646,7 @@ int
 chunk_constraint_delete_by_chunk_id(int32 chunk_id, Oid chunk_oid)
 {
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-											   chunk_constraint_delete_tuple,
+													  chunk_constraint_delete_tuple,
 													  NULL,
 													  NULL,
 													  RowExclusiveLock);
@@ -658,7 +658,7 @@ chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid)
 	ObjectAddress constrobj = {
 		.classId = ConstraintRelationId,
 		.objectId = get_relation_constraint_oid(chunk_oid,
-									 NameStr(cc->fd.constraint_name), false),
+												NameStr(cc->fd.constraint_name), false),
 	};
 
 	performDeletion(&constrobj, DROP_RESTRICT, 0);
@@ -730,8 +730,8 @@ chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldnam
 	};
 
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-									chunk_constraint_rename_hypertable_tuple,
-										  hypertable_constraint_tuple_filter,
+													  chunk_constraint_rename_hypertable_tuple,
+													  hypertable_constraint_tuple_filter,
 													  &info,
 													  RowExclusiveLock);
 }

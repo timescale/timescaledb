@@ -81,6 +81,7 @@ drop_statement_drops_extension(DropStmt *stmt)
 			ext_name = strVal(linitial(names));
 #elif PG10
 			void	   *name = linitial(stmt->objects);
+
 			ext_name = strVal(name);
 #endif
 			if (strcmp(ext_name, EXTENSION_NAME) == 0)
@@ -169,7 +170,7 @@ _PG_init(void)
 			ereport(ERROR,
 					(errmsg("The timescaledb library is not preloaded"),
 					 errhint("Please preload the timescaledb library via shared_preload_libraries.\n\n"
-					 "This can be done by editing the config file at: %1$s\n"
+							 "This can be done by editing the config file at: %1$s\n"
 							 "and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
 							 "	# Modify postgresql.conf:\n	shared_preload_libraries = 'timescaledb'\n\n"
 							 "Another way to do this, if not preloading other libraries, is with the command:\n"

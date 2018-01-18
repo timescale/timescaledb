@@ -25,4 +25,4 @@ extern HeapTuple chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapT
 extern ChunkInsertState *chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operation);
 extern void chunk_insert_state_destroy(ChunkInsertState *state);
 
-#endif   /* TIMESCALEDB_CHUNK_INSERT_STATE_H */
+#endif							/* TIMESCALEDB_CHUNK_INSERT_STATE_H */

@@ -112,7 +112,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 		node->descendants += 1;
 
 		Assert(0 == node->vector->num_slices ||
-		node->vector->slices[0]->fd.dimension_id == target->fd.dimension_id);
+			   node->vector->slices[0]->fd.dimension_id == target->fd.dimension_id);
 
 		match = dimension_vec_find_slice(node->vector, target->fd.range_start);
 

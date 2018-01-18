@@ -431,7 +431,7 @@ enum Anum_tablespace_pkey_idx
 typedef struct FormData_tablespace_pkey_idx
 {
 	int32		tablespace_id;
-}	FormData_tablespace_pkey_idx;
+}			FormData_tablespace_pkey_idx;
 
 enum Anum_tablespace_hypertable_id_tablespace_name_idx
 {
@@ -444,7 +444,7 @@ typedef struct FormData_tablespace_hypertable_id_tablespace_name_idx
 {
 	int32		hypertable_id;
 	NameData	tablespace_name;
-}	FormData_tablespace_hypertable_id_tablespace_name_idx;
+}			FormData_tablespace_hypertable_id_tablespace_name_idx;
 
 
 #define MAX(a, b) \
@@ -527,4 +527,4 @@ void		catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 /* Delete only: do not increment command counter or invalidate caches */
 void		catalog_delete_only(Relation rel, HeapTuple tuple);
 
-#endif   /* TIMESCALEDB_CATALOG_H */
+#endif							/* TIMESCALEDB_CATALOG_H */

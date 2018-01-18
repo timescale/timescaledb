@@ -36,4 +36,4 @@ ChunkDispatch *chunk_dispatch_create(Hypertable *ht, EState *estate, Query *quer
 void		chunk_dispatch_destroy(ChunkDispatch *dispatch);
 ChunkInsertState *chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, CmdType operation);
 
-#endif   /* TIMESCALEDB_CHUNK_DISPATCH_H */
+#endif							/* TIMESCALEDB_CHUNK_DISPATCH_H */

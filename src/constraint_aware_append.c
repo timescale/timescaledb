@@ -330,14 +330,13 @@ constraint_aware_append_plan_create(PlannerInfo *root,
 	Plan	   *subplan = linitial(custom_plans);
 
 	cscan->scan.scanrelid = 0;	/* Not a real relation we are scanning */
-	cscan->scan.plan.targetlist = tlist;		/* Target list we expect as
-												 * output */
+	cscan->scan.plan.targetlist = tlist;	/* Target list we expect as output */
 	cscan->custom_plans = custom_plans;
 	cscan->custom_private = list_make3(list_make1_int(rel->relid),
 									   list_copy(root->append_rel_list),
 									   list_copy(clauses));
-	cscan->custom_scan_tlist = subplan->targetlist;		/* Target list of tuples
-														 * we expect as input */
+	cscan->custom_scan_tlist = subplan->targetlist; /* Target list of tuples
+													 * we expect as input */
 	cscan->flags = path->flags;
 	cscan->methods = &constraint_aware_append_plan_methods;
 

@@ -23,4 +23,4 @@ extern int	tablespaces_clear(Tablespaces *tspcs);
 extern bool tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid);
 extern Tablespaces *tablespace_scan(int32 hypertable_id);
 
-#endif   /* TIMESCALEDB_TABLESPACE_H */
+#endif							/* TIMESCALEDB_TABLESPACE_H */

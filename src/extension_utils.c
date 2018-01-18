@@ -20,7 +20,7 @@
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
-#define MAX_SO_NAME_LEN NAMEDATALEN+NAMEDATALEN+1+1		/* extname+"-"+version */
+#define MAX_SO_NAME_LEN NAMEDATALEN+NAMEDATALEN+1+1 /* extname+"-"+version */
 
 enum ExtensionState
 {

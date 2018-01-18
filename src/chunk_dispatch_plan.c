@@ -20,7 +20,7 @@ static Node *
 create_chunk_dispatch_state(CustomScan *cscan)
 {
 	return (Node *) chunk_dispatch_state_create(linitial(cscan->custom_private),
-											  linitial(cscan->custom_plans));
+												linitial(cscan->custom_plans));
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -100,7 +100,7 @@ build_customscan_targetlist(Relation rel, List *targetlist)
 	if (attno != tupdesc->natts)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
-		  errmsg("table row type and query-specified row type do not match"),
+				 errmsg("table row type and query-specified row type do not match"),
 				 errdetail("Query has too few columns.")));
 
 	return new_targetlist;

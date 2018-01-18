@@ -46,4 +46,4 @@ extern void chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
 PGDLLEXPORT Datum chunk_index_clone(PG_FUNCTION_ARGS);
 PGDLLEXPORT Datum chunk_index_replace(PG_FUNCTION_ARGS);
 
-#endif   /* TIMESCALEDB_CHUNK_INDEX_H */
+#endif							/* TIMESCALEDB_CHUNK_INDEX_H */

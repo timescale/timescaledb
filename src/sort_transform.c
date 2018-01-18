@@ -361,7 +361,7 @@ sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	 * 3) Transform the  pathkey of the new paths back into the original form
 	 * to make this transparent to upper levels in the planner.
 	 *
-	 * */
+	 */
 	ListCell   *lc_pathkey;
 	List	   *transformed_query_pathkey = NIL;
 	bool		was_transformed = false;

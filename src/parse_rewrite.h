@@ -8,4 +8,4 @@ typedef struct Hypertable Hypertable;
 
 extern void parse_rewrite_query(ParseState *pstate, Query *parse, Hypertable *ht);
 
-#endif   /* TIMESCALEDB_PARSE_REWRITE_H */
+#endif							/* TIMESCALEDB_PARSE_REWRITE_H */

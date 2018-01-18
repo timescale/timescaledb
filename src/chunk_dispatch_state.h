@@ -36,4 +36,4 @@ typedef struct ChunkDispatchState
 
 ChunkDispatchState *chunk_dispatch_state_create(ChunkDispatchInfo *, Plan *);
 
-#endif   /* TIMESCALEDB_CHUNK_DISPATCH_STATE_H */
+#endif							/* TIMESCALEDB_CHUNK_DISPATCH_STATE_H */

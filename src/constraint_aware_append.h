@@ -22,4 +22,4 @@ typedef struct Hypertable Hypertable;
 Path	   *constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *subpath);
 
 
-#endif   /* TIMESCALEDB_CONSTRAINT_AWARE_APPEND_H */
+#endif							/* TIMESCALEDB_CONSTRAINT_AWARE_APPEND_H */

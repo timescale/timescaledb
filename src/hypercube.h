@@ -32,4 +32,4 @@ extern DimensionSlice *hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 
 extern Hypercube *hypercube_copy(Hypercube *hc);
 extern void hypercube_slice_sort(Hypercube *hc);
 
-#endif   /* TIMESCALEDB_HYPERCUBE_H */
+#endif							/* TIMESCALEDB_HYPERCUBE_H */

@@ -49,4 +49,4 @@ extern List *partitioning_func_qualified_name(PartitioningFunc *pf);
 extern int32 partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
 extern int32 partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
 
-#endif   /* TIMESCALEDB_PARTITIONING_H */
+#endif							/* TIMESCALEDB_PARTITIONING_H */

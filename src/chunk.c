@@ -99,7 +99,7 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 {
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-					   get_namespace_oid(chunk->fd.schema_name.data, false));
+										get_namespace_oid(chunk->fd.schema_name.data, false));
 	chunk->hypertable_relid = parent_relid(chunk->table_id);
 }
 
@@ -340,7 +340,7 @@ chunk_add_constraints(Chunk *chunk)
 															chunk->cube);
 	num_added += chunk_constraints_add_inheritable_constraints(chunk->constraints,
 															   chunk->fd.id,
-													chunk->hypertable_relid);
+															   chunk->hypertable_relid);
 
 	return num_added;
 }
@@ -829,7 +829,7 @@ chunk_find(Hyperspace *hs, Point *p)
 		 * constraints to also get the inherited constraints.
 		 */
 		chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id,
-														 hs->num_dimensions);
+															   hs->num_dimensions);
 	}
 
 	return chunk;

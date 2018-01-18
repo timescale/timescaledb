@@ -14,4 +14,4 @@ extern void trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, ch
 extern void trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk);
 extern bool relation_has_transition_table_trigger(Oid relid);
 
-#endif   /* TIMESCALEDB_TRIGGER_H */
+#endif							/* TIMESCALEDB_TRIGGER_H */

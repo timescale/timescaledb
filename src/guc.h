@@ -12,4 +12,4 @@ extern int	guc_max_cached_chunks_per_hypertable;
 void		_guc_init(void);
 void		_guc_fini(void);
 
-#endif   /* TIMESCALEDB_GUC_H */
+#endif							/* TIMESCALEDB_GUC_H */

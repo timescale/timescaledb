@@ -27,4 +27,4 @@ extern void *subspace_store_get(SubspaceStore *cache, Point *target);
 extern void subspace_store_free(SubspaceStore *cache);
 extern MemoryContext subspace_store_mcxt(SubspaceStore *cache);
 
-#endif   /* TIMESCALEDB_SUBSPACE_STORE_H */
+#endif							/* TIMESCALEDB_SUBSPACE_STORE_H */

@@ -108,14 +108,14 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	{
 		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
 		memcpy(&d->fd.partitioning_func_schema,
-		   DatumGetName(values[Anum_dimension_partitioning_func_schema - 1]),
+			   DatumGetName(values[Anum_dimension_partitioning_func_schema - 1]),
 			   NAMEDATALEN);
 		memcpy(&d->fd.partitioning_func,
 			   DatumGetName(values[Anum_dimension_partitioning_func - 1]),
 			   NAMEDATALEN);
 
 		d->partitioning = partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
-											NameStr(d->fd.partitioning_func),
+												   NameStr(d->fd.partitioning_func),
 												   NameStr(d->fd.column_name),
 												   main_table_relid);
 	}
@@ -305,7 +305,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 
 	/* Perform an index scan on hypertable_id. */
 	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
-			  BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	scanner_scan(&scanctx);
 

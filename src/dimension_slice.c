@@ -93,7 +93,7 @@ typedef struct DimensionSliceScanData
 {
 	DimensionVec *slices;
 	int			limit;
-}	DimensionSliceScanData;
+}			DimensionSliceScanData;
 
 static bool
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
@@ -150,7 +150,7 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
 	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-			 BTLessEqualStrategyNumber, F_INT8LE, Int64GetDatum(coordinate));
+				BTLessEqualStrategyNumber, F_INT8LE, Int64GetDatum(coordinate));
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(coordinate));
 
@@ -175,7 +175,7 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
 				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(range_end));
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-			  BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(range_start));
+				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(range_start));
 
 	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &slices, limit);
 
@@ -215,11 +215,11 @@ dimension_slice_scan_for_existing(DimensionSlice *slice)
 	ScanKeyData scankey[3];
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
-	 BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.dimension_id));
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(slice->fd.dimension_id));
 	ScanKeyInit(&scankey[1], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-	  BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_start));
+				BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_start));
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-		BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_end));
+				BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_end));
 
 	dimension_slice_scan_limit_internal(scankey, 3, dimension_slice_fill, &slice, 1);
 
@@ -255,7 +255,7 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 	};
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_idx_dimension_id,
-		 BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_slice_id));
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_slice_id));
 	scanner_scan(&scanCtx);
 
 	return slice;

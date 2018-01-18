@@ -359,7 +359,7 @@ hypertable_validate_triggers(PG_FUNCTION_ARGS)
 	if (relation_has_transition_table_trigger(PG_GETARG_OID(0)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-		errmsg("Hypertables do not support transition tables in triggers.")));
+				 errmsg("Hypertables do not support transition tables in triggers.")));
 
 	PG_RETURN_VOID();
 }
@@ -421,9 +421,9 @@ hypertable_check_associated_schema_permissions(PG_FUNCTION_ARGS)
 	else if (pg_namespace_aclcheck(schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-		errmsg("User %s lacks permissions to create chunks in schema \"%s\"",
-			   GetUserNameFromId(user_oid, false),
-			   NameStr(*schema_name))));
+				 errmsg("User %s lacks permissions to create chunks in schema \"%s\"",
+						GetUserNameFromId(user_oid, false),
+						NameStr(*schema_name))));
 
 	PG_RETURN_VOID();
 }
