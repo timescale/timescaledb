@@ -1,8 +1,10 @@
 #ifndef TIMESCALEDB_UTILS_H
 #define TIMESCALEDB_UTILS_H
 
-#include "fmgr.h"
-#include "nodes/primnodes.h"
+#include <postgres.h>
+#include <fmgr.h>
+#include <nodes/primnodes.h>
+#include <catalog/pg_proc.h>
 
 /*
  * Convert a column value into the internal time representation.

@@ -1,14 +1,16 @@
 #include <postgres.h>
 #include <fmgr.h>
-#include <utils/datetime.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
-#include <utils/guc.h>
-#include <utils/date.h>
+#include <access/htup_details.h>
 #include <nodes/nodes.h>
 #include <nodes/makefuncs.h>
+#include <utils/guc.h>
+#include <utils/date.h>
+#include <utils/datetime.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 
 #include "utils.h"
 #include "compat.h"

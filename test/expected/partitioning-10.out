@@ -9,7 +9,7 @@ ERROR:  table public.partitioned_ht_create is already partitioned
 CREATE TABLE partitioned_attachment_vanilla(time timestamptz, temp float, device int) PARTITION BY RANGE (time);
 CREATE TABLE attachment_hypertable(time timestamptz, temp float, device int);
 SELECT create_hypertable('attachment_hypertable', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
