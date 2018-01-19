@@ -23,107 +23,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
     partitioning_func       REGPROC = NULL
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SET search_path = '_timescaledb_catalog'
-    AS
-$BODY$
-<<vars>>
-DECLARE
-    hypertable_row   _timescaledb_catalog.hypertable;
-    table_name                 NAME;
-    schema_name                NAME;
-    tablespace_oid             OID;
-    tablespace_name            NAME;
-    main_table_has_items       BOOLEAN;
-    is_hypertable              BOOLEAN;
-    is_partitioned             BOOLEAN;
-    chunk_time_interval_actual BIGINT;
-    time_type                  REGTYPE;
-    relowner                   OID;
-BEGIN
-    -- Early abort if lacking permissions
-    PERFORM _timescaledb_internal.check_role(main_table);
-
-    SELECT c.relname, n.nspname, c.reltablespace, c.relkind = 'p', c.relowner
-    INTO STRICT table_name, schema_name, tablespace_oid, is_partitioned, relowner
-    FROM pg_class c
-    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    WHERE c.OID = main_table;
-
-    -- Check that the user has permissions to create chunks in the
-    -- associated schema
-    PERFORM _timescaledb_internal.check_associated_schema_permissions(associated_schema_name, relowner);
-
-    IF is_partitioned THEN
-        RAISE EXCEPTION 'table % is already partitioned', main_table
-        USING ERRCODE = 'IO110';
-    END IF;
-
-    -- tables that don't have an associated tablespace has reltablespace OID set to 0
-    -- in pg_class and there is no matching row in pg_tablespace
-    SELECT spcname
-    INTO tablespace_name
-    FROM pg_tablespace t
-    WHERE t.OID = tablespace_oid;
-
-    EXECUTE format('SELECT TRUE FROM _timescaledb_catalog.hypertable WHERE
-                    hypertable.schema_name = %L AND
-                    hypertable.table_name = %L',
-                    schema_name, table_name) INTO is_hypertable;
-
-    IF is_hypertable THEN
-       IF if_not_exists THEN
-          RAISE NOTICE 'hypertable % already exists, skipping', main_table;
-              RETURN;
-        ELSE
-              RAISE EXCEPTION 'hypertable % already exists', main_table
-              USING ERRCODE = 'IO110';
-          END IF;
-    END IF;
-
-    EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
-
-    IF main_table_has_items THEN
-        RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
-        USING ERRCODE = 'IO102';
-    END IF;
-
-    -- Validate that the hypertable supports the triggers in the main table
-    PERFORM _timescaledb_internal.validate_triggers(main_table);
-
-    BEGIN
-        SELECT *
-        INTO hypertable_row
-        FROM  _timescaledb_internal.create_hypertable(
-            main_table,
-            schema_name,
-            table_name,
-            time_column_name,
-            partitioning_column,
-            number_partitions,
-            associated_schema_name,
-            associated_table_prefix,
-            chunk_time_interval,
-            tablespace_name,
-            create_default_indexes,
-            partitioning_func
-        );
-    EXCEPTION
-        WHEN unique_violation THEN
-            IF if_not_exists THEN
-               RAISE NOTICE 'hypertable % already exists, skipping', main_table;
-               RETURN;
-            ELSE
-               RAISE EXCEPTION 'hypertable % already exists', main_table
-               USING ERRCODE = 'IO110';
-            END IF;
-        WHEN foreign_key_violation THEN
-            RAISE EXCEPTION 'database not configured for hypertable storage (not setup as a data-node)'
-            USING ERRCODE = 'IO101';
-    END;
-END
-$BODY$;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'hypertable_create' LANGUAGE C VOLATILE;
 
 -- Update chunk_time_interval for a hypertable.
 --
@@ -224,36 +124,17 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
     if_not_exists           BOOLEAN = FALSE
-)
-    RETURNS VOID LANGUAGE SQL AS
-$BODY$
-    SELECT * FROM _timescaledb_internal.add_dimension(main_table, column_name, number_partitions,
-           chunk_time_interval, partitioning_func, if_not_exists);
-$BODY$;
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'dimension_add' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION attach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'tablespace_attach' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION attach_tablespace(tablespace NAME, hypertable REGCLASS)
-       RETURNS VOID LANGUAGE SQL AS
-$BODY$
-    SELECT * FROM _timescaledb_internal.attach_tablespace(tablespace, hypertable);
-$BODY$;
+CREATE OR REPLACE FUNCTION detach_tablespace(tablespace NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'tablespace_detach' LANGUAGE C VOLATILE;
 
--- Detach the given tablespace from a hypertable
-CREATE OR REPLACE FUNCTION detach_tablespace(tablespace NAME, hypertable REGCLASS = NULL)
-       RETURNS INTEGER LANGUAGE SQL AS
-$BODY$
-    SELECT * FROM _timescaledb_internal.detach_tablespace(tablespace, hypertable);
-$BODY$;
+CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
 
--- Detach all tablespaces from the a hypertable
-CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS)
-       RETURNS INTEGER LANGUAGE SQL AS
-$BODY$
-    SELECT * FROM _timescaledb_internal.detach_tablespaces(hypertable);
-$BODY$;
-
-CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS)
-       RETURNS SETOF NAME LANGUAGE SQL AS
-$BODY$
-    SELECT * FROM _timescaledb_internal.show_tablespaces(hypertable);
-$BODY$;
+CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
+AS '@MODULE_PATHNAME@', 'tablespace_show' LANGUAGE C VOLATILE STRICT;

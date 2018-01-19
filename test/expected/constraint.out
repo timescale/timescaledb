@@ -204,7 +204,7 @@ ERROR:  duplicate key value violates unique constraint "4_6_hyper_unique_with_lo
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
-ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
 ----------------------- RENAME CONSTRAINT  ------------------
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
@@ -300,7 +300,7 @@ DELETE FROM hyper_pk WHERE device_id = 'dev3';
 --cannot create pk constraint on non-partition column
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_invalid PRIMARY KEY (device_id);
-ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
 --now can create
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
@@ -462,5 +462,5 @@ CREATE TABLE hyper_ex_invalid (
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 NOTICE:  adding NOT NULL constraint to column "time"
-ERROR:  Cannot create a unique index without the column: time (used in partitioning)
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1

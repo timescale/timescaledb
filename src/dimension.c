@@ -545,7 +545,7 @@ interval_to_usec(Interval *interval)
 	((num_slices) >= 1 && (num_slices) <= INT16_MAX)
 
 static int64
-get_validated_integer_interval(Oid coltype, int64 value, bool show_warnings)
+get_validated_integer_interval(Oid coltype, int64 value)
 {
 	if (value < 1 || value > INT_TYPE_MAX(coltype))
 		ereport(ERROR,
@@ -553,7 +553,7 @@ get_validated_integer_interval(Oid coltype, int64 value, bool show_warnings)
 				 errmsg("invalid interval: must be between 1 and " INT64_FORMAT,
 						INT_TYPE_MAX(coltype))));
 
-	if (show_warnings && IS_TIMESTAMP_TYPE(coltype) && value < USECS_PER_SEC)
+	if (IS_TIMESTAMP_TYPE(coltype) && value < USECS_PER_SEC)
 		ereport(WARNING,
 				(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
 				 errmsg("unexpected interval: smaller than one second"),
@@ -563,7 +563,7 @@ get_validated_integer_interval(Oid coltype, int64 value, bool show_warnings)
 }
 
 static int64
-dimension_interval_to_internal(const char *colname, Oid coltype, Oid valuetype, Datum value, bool show_warnings)
+dimension_interval_to_internal(const char *colname, Oid coltype, Oid valuetype, Datum value)
 {
 	int64		interval;
 
@@ -587,13 +587,13 @@ dimension_interval_to_internal(const char *colname, Oid coltype, Oid valuetype, 
 	switch (valuetype)
 	{
 		case INT2OID:
-			interval = get_validated_integer_interval(coltype, DatumGetInt16(value), show_warnings);
+			interval = get_validated_integer_interval(coltype, DatumGetInt16(value));
 			break;
 		case INT4OID:
-			interval = get_validated_integer_interval(coltype, DatumGetInt32(value), show_warnings);
+			interval = get_validated_integer_interval(coltype, DatumGetInt32(value));
 			break;
 		case INT8OID:
-			interval = get_validated_integer_interval(coltype, DatumGetInt64(value), show_warnings);
+			interval = get_validated_integer_interval(coltype, DatumGetInt64(value));
 			break;
 		case INTERVALOID:
 			if (IS_INTEGER_TYPE(coltype))
@@ -630,7 +630,7 @@ dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 	Datum		value = PG_GETARG_DATUM(1);
 	Oid			valuetype = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 
-	PG_RETURN_INT64(dimension_interval_to_internal("testcol", coltype, valuetype, value, true));
+	PG_RETURN_INT64(dimension_interval_to_internal("testcol", coltype, valuetype, value));
 }
 
 static void
@@ -705,8 +705,7 @@ dimension_update(FunctionCallInfo fcinfo,
 		dim->fd.interval_length = dimension_interval_to_internal(NameStr(dim->fd.column_name),
 																 dim->fd.column_type,
 																 intervaltype,
-																 *interval,
-																 true);
+																 *interval);
 	}
 
 	if (NULL != num_slices)
@@ -768,34 +767,7 @@ dimension_set_interval(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-/*
- * Dimension information used to validate, create and update dimensions.
- */
-typedef struct DimensionInfo
-{
-	Oid			table_relid;
-	Name		colname;
-	Oid			coltype;
-	DimensionType type;
-	Datum		interval_datum;
-	Oid			interval_type;	/* Type of the interval datum */
-	int64		interval;
-	int32		num_slices;
-	regproc		partitioning_func;
-	bool		if_not_exists;
-	bool		skip;
-	bool		set_not_null;
-	bool		num_slices_is_set;
-	bool		show_warnings;
-	Hypertable *ht;
-} DimensionInfo;
-
-#define DIMENSION_INFO_IS_SET(di)										\
-	(OidIsValid((di)->table_relid) &&									\
-	 (di)->colname != NULL &&											\
-	 ((di)->num_slices_is_set || OidIsValid((di)->interval_datum)))
-
-static void
+void
 dimension_validate_info(DimensionInfo *info)
 {
 	Dimension  *dim;
@@ -885,29 +857,20 @@ dimension_validate_info(DimensionInfo *info)
 		info->interval = dimension_interval_to_internal(NameStr(*info->colname),
 														info->coltype,
 														info->interval_type,
-														info->interval_datum,
-														info->show_warnings);
+														info->interval_datum);
 	}
 }
 
-TS_FUNCTION_INFO_V1(dimension_validate);
-
-Datum
-dimension_validate(PG_FUNCTION_ARGS)
+void
+dimension_add_from_info(DimensionInfo *info)
 {
-	DimensionInfo info = {
-		.table_relid = PG_GETARG_OID(0),
-		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
-		.num_slices = PG_ARGISNULL(2) ? DatumGetInt32(-1) : PG_GETARG_INT32(2),
-		.num_slices_is_set = !PG_ARGISNULL(2),
-		.interval_datum = PG_ARGISNULL(3) ? DatumGetInt32(-1) : PG_GETARG_DATUM(3),
-		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
-		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
-	};
+	if (info->set_not_null)
+		dimension_add_not_null_on_column(info->table_relid, NameStr(*info->colname));
 
-	dimension_validate_info(&info);
+	Assert(info->ht != NULL);
 
-	PG_RETURN_VOID();
+	dimension_insert(info->ht->fd.id, info->colname, info->coltype,
+					 info->num_slices, info->partitioning_func, info->interval);
 }
 
 TS_FUNCTION_INFO_V1(dimension_add);
@@ -936,7 +899,6 @@ dimension_add(PG_FUNCTION_ARGS)
 		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
-		.show_warnings = true,
 	};
 
 	hypertable_permissions_check(info.table_relid, GetUserId());
@@ -984,12 +946,7 @@ dimension_add(PG_FUNCTION_ARGS)
 		 * table.
 		 */
 		hypertable_set_num_dimensions(info.ht, info.ht->space->num_dimensions + 1);
-
-		if (info.set_not_null)
-			dimension_add_not_null_on_column(info.table_relid, NameStr(*info.colname));
-
-		dimension_insert(info.ht->fd.id, info.colname, info.coltype,
-						 info.num_slices, info.partitioning_func, info.interval);
+		dimension_add_from_info(&info);
 	}
 
 	cache_release(hcache);
