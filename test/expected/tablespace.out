@@ -10,7 +10,7 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 --assigning a tablespace via the main table should work
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
 SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -46,7 +46,7 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TAB
 \c single :ROLE_DEFAULT_PERM_USER_2
 --attach without permissions on the table should fail
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
-ERROR:  User "default_perm_user_2" lacks permissions on table "tspace_2dim"
+ERROR:  permission denied for relation "tspace_2dim"
 \c single :ROLE_DEFAULT_PERM_USER
 --attach without permissions on the tablespace should also fail
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
@@ -105,7 +105,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 ERROR:  relation "tspace_1dim" already exists
 SELECT create_hypertable('tspace_1dim', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -219,9 +219,9 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 
 --detaching a tablespace from table without permissions should fail
 SELECT detach_tablespace('tablespace2', 'tspace_2dim');
-ERROR:  User "default_perm_user_2" lacks permissions on table "tspace_2dim"
+ERROR:  permission denied for relation "tspace_2dim"
 SELECT detach_tablespaces('tspace_2dim');
-ERROR:  User "default_perm_user_2" lacks permissions on table "tspace_2dim"
+ERROR:  permission denied for relation "tspace_2dim"
 --set other user should make detach work
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT detach_tablespaces('tspace_2dim');

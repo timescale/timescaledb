@@ -112,7 +112,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev
 --test integer partition key
 CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
 SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

@@ -1,7 +1,7 @@
 CREATE TABLE reloptions_test(time integer, temp float8, color integer)
 WITH (fillfactor=75, oids=true, autovacuum_vacuum_threshold=100);
 SELECT create_hypertable('reloptions_test', 'time', chunk_time_interval => 3);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

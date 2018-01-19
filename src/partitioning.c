@@ -1,6 +1,8 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
+#include <utils/catcache.h>
 #include <utils/numeric.h>
 #include <utils/timestamp.h>
 #include <utils/inet.h>
@@ -23,26 +25,84 @@
 #include "catalog.h"
 #include "utils.h"
 
+#define IS_VALID_PARTITIONING_FUNC(proform)							\
+	((proform)->prorettype == INT4OID &&							\
+	 (proform)->pronargs == 1 &&									\
+	 (proform)->proargtypes.values[0] == ANYELEMENTOID)
+/*
+ * Get the OID of the partitioning function given a qualified name.
+ *
+ * Only functions that match the supported function signature will be returned.
+ */
+static regproc
+partitioning_func_get(const char *schema, const char *funcname)
+{
+	Oid			namespace_oid = LookupExplicitNamespace(schema, false);
+	regproc		func = InvalidOid;
+	CatCList   *catlist;
+	NameData	proname;
+	int			i;
+
+	namestrcpy(&proname, funcname);
+
+	catlist = SearchSysCacheList1(PROCNAMEARGSNSP, NameGetDatum(&proname));
+
+	for (i = 0; i < catlist->n_members; i++)
+	{
+		HeapTuple	proctup = &catlist->members[i]->tuple;
+		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
+
+		if (procform->pronamespace == namespace_oid &&
+			IS_VALID_PARTITIONING_FUNC(procform))
+		{
+			func = HeapTupleGetOid(proctup);
+			break;
+		}
+	}
+
+	ReleaseSysCacheList(catlist);
+
+	return func;
+}
+
+bool
+partitioning_func_is_valid(regproc funcoid)
+{
+	HeapTuple	tuple;
+	bool		isvalid;
+
+	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcoid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for function %u", funcoid);
+
+	isvalid = IS_VALID_PARTITIONING_FUNC((Form_pg_proc) GETSTRUCT(tuple));
+
+	ReleaseSysCache(tuple);
+
+	return isvalid;
+}
+
+Oid
+partitioning_func_get_default(void)
+{
+	return partitioning_func_get(DEFAULT_PARTITIONING_FUNC_SCHEMA,
+								 DEFAULT_PARTITIONING_FUNC_NAME);
+}
+
 /*
  * Resolve the partitioning function set for a hypertable.
  */
 static void
 partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 {
-	FuncCandidateList funclist =
-	FuncnameGetCandidates(partitioning_func_qualified_name(pf),
-						  1, NULL, false, false, false);
+	Oid			funcoid = partitioning_func_get(pf->schema, pf->name);
 
-	while (funclist != NULL &&
-		   (funclist->nargs != 1 || funclist->args[0] != ANYELEMENTOID))
-		funclist = funclist->next;
+	if (!OidIsValid(funcoid))
+		ereport(ERROR,
+				(errmsg("invalid partitioning function: must have the signature (anyelement) -> integer")));
 
-	if (NULL == funclist)
-		elog(ERROR, "Partitioning function not found");
-
-	pf->paramtype = funclist->args[0];
-
-	fmgr_info_cxt(funclist->oid, &pf->func_fmgr, CurrentMemoryContext);
+	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
 }
 
 List *

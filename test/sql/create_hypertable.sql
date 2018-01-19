@@ -55,43 +55,58 @@ select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 
 --test adding one more closed dimension
-select add_dimension('test_schema.test_table', 'location', 2);
+select add_dimension('test_schema.test_table', 'location', 4);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
+
+--test that we can change the number of partitions and that 1 is allowed
+SELECT set_number_partitions('test_schema.test_table', 1, 'location');
+select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
+SELECT set_number_partitions('test_schema.test_table', 2, 'location');
+select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
+
 \set ON_ERROR_STOP 0
+--must give an explicit dimension when there are multiple space dimensions
+SELECT set_number_partitions('test_schema.test_table', 3);
+--too few
+SELECT set_number_partitions('test_schema.test_table', 0, 'location');
+-- Too many
+SELECT set_number_partitions('test_schema.test_table', 32768, 'location');
 -- get_create_command only works on tables w/ 1 or 2 dimensions
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 \set ON_ERROR_STOP 1
 
 --test adding one more open dimension
-select add_dimension('test_schema.test_table', 'id', interval_length => 1000);
+select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 
 -- Test add_dimension: can use interval types for TIMESTAMPTZ columns
 CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time', 'time');
-SELECT add_dimension('dim_test_time', 'time2', interval_length => INTERVAL '1 day');
+SELECT add_dimension('dim_test_time', 'time2', chunk_time_interval => INTERVAL '1 day');
 
 -- Test add_dimension: only integral should work on BIGINT columns
 \set ON_ERROR_STOP 0
-SELECT add_dimension('dim_test_time', 'time3', interval_length => INTERVAL '1 day');
+SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => INTERVAL '1 day');
 
 -- string is not a valid type
-SELECT add_dimension('dim_test_time', 'time3', interval_length => 'foo'::TEXT);
+SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 'foo'::TEXT);
 \set ON_ERROR_STOP 1
-SELECT add_dimension('dim_test_time', 'time3', interval_length => 500);
+SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 500);
 
 -- Test add_dimension: integrals should work on TIMESTAMPTZ columns
 CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time2', 'time');
-SELECT add_dimension('dim_test_time2', 'time2', interval_length => 500);
+SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500);
 
+--adding a dimension twice should not fail with 'if_not_exists'
+SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500, if_not_exists => true);
 
 \set ON_ERROR_STOP 0
 --adding on a non-hypertable
 CREATE TABLE not_hypertable(time TIMESTAMPTZ, temp float8, device int, location int);
-SELECT add_dimension('not_hypertable', 'time', interval_length => 500);
+SELECT add_dimension('not_hypertable', 'time', chunk_time_interval => 500);
 
 --adding a non-exist column
 SELECT add_dimension('test_schema.test_table', 'nope', 2);
@@ -99,8 +114,8 @@ SELECT add_dimension('test_schema.test_table', 'nope', 2);
 --adding the same dimension twice should fail
 select add_dimension('test_schema.test_table', 'location', 2);
 
---adding dimension with both number_partitions and interval_length should fail
-select add_dimension('test_schema.test_table', 'id2', number_partitions => 2, interval_length => 1000);
+--adding dimension with both number_partitions and chunk_time_interval should fail
+select add_dimension('test_schema.test_table', 'id2', number_partitions => 2, chunk_time_interval => 1000);
 
 --adding a new dimension on a non-empty table should also fail
 insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'nyc', 1, 1);

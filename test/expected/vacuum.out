@@ -1,7 +1,7 @@
 CREATE TABLE vacuum_test(time timestamp, temp float);
 -- create hypertable with three chunks
 SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

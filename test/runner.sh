@@ -11,6 +11,10 @@ TEST_DBNAME2=${TEST_DBNAME2:-${TEST_DBNAME}_2}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 
+# Read the extension version from version.config
+read -r VERSION < ../version.config
+EXT_VERSION=${VERSION##version = }
+
 #docker doesn't set user
 USER=${USER:-`whoami`}
 # This mktemp line will work on both OSX and GNU systems
@@ -57,4 +61,5 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER} \
      -v ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
+     -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      $@ -d single 2>&1 | sed '/<exclude_from_test>/,/<\/exclude_from_test>/d'

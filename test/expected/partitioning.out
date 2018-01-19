@@ -1,6 +1,6 @@
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -43,7 +43,7 @@ SELECT * FROM part_legacy WHERE device = 1;
 
 CREATE TABLE part_new(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_new', 'time', 'device', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -87,7 +87,7 @@ SELECT * FROM part_new WHERE device = 1;
 
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
 SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -111,7 +111,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_3_%_chunk');
 
 CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
 SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

@@ -7,6 +7,7 @@
 #include "catalog.h"
 #include "dimension.h"
 #include "tablespace.h"
+#include "scanner.h"
 
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
@@ -23,8 +24,13 @@ typedef struct Hypertable
 extern bool hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern Oid	hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
+extern int	hypertable_scan(const char *schema, const char *table, tuple_found_func tuple_found, void *data, LOCKMODE lockmode, bool tuplock);
+extern int	hypertable_scan_relid(Oid table_relid, tuple_found_func tuple_found, void *data, LOCKMODE lockmode, bool tuplock);
+extern HTSU_Result hypertable_lock_tuple(Oid table_relid);
+extern bool hypertable_lock_tuple_simple(Oid table_relid);
 extern int	hypertable_set_name(Hypertable *ht, const char *newname);
 extern int	hypertable_set_schema(Hypertable *ht, const char *newname);
+extern int	hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
 extern Oid	hypertable_id_to_relid(int32 hypertable_id);
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);
@@ -33,5 +39,6 @@ extern bool hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
 extern Tablespace *hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 extern char *hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
 extern Tablespace *hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset);
+extern bool hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
 
 #endif							/* TIMESCALEDB_HYPERTABLE_H */

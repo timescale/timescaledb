@@ -595,52 +595,56 @@ FROM unnest(ARRAY[
  11-09-2017 | 11-09-2017
 (4 rows)
 
-------------------------------------
--- Test time input functions --
-------------------------------------
-SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', INTERVAL '1 day', INTERVAL '1 month', 'test_name');
- time_interval_specification_to_internal 
------------------------------------------
-                             86400000000
+-------------------------------------
+--- Test time input functions --
+-------------------------------------
+\c single :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION test.interval_to_internal(coltype REGTYPE, value ANYELEMENT = NULL::BIGINT) RETURNS BIGINT
+AS :MODULE_PATHNAME, 'dimension_interval_to_internal_test' LANGUAGE C VOLATILE;
+\c single :ROLE_DEFAULT_PERM_USER
+SELECT test.interval_to_internal('TIMESTAMP'::regtype, INTERVAL '1 day');
+ interval_to_internal 
+----------------------
+          86400000000
 (1 row)
 
-SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', 86400000000, INTERVAL '1 month', 'test_name');
- time_interval_specification_to_internal 
------------------------------------------
-                             86400000000
+SELECT test.interval_to_internal('TIMESTAMP'::regtype, 86400000000);
+ interval_to_internal 
+----------------------
+          86400000000
 (1 row)
 
---should give warning
-SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', 86400, INTERVAL '1 month', 'test_name');
-WARNING:  You specified a test_name of less than a second, make sure that this is what you intended
-HINT:  specification is specified in microseconds
- time_interval_specification_to_internal 
------------------------------------------
-                                   86400
+---should give warning
+SELECT test.interval_to_internal('TIMESTAMP'::regtype, 86400);
+WARNING:  unexpected interval: smaller than one second
+HINT:  The interval is specified in microseconds
+ interval_to_internal 
+----------------------
+                86400
 (1 row)
 
-SELECT _timescaledb_internal.time_interval_specification_to_internal('TIMESTAMP', NULL::bigint, INTERVAL '1 month', 'test_name');
- time_interval_specification_to_internal 
------------------------------------------
-                           2592000000000
+SELECT test.interval_to_internal('TIMESTAMP'::regtype);
+ interval_to_internal 
+----------------------
+        2592000000000
 (1 row)
 
-SELECT _timescaledb_internal.time_interval_specification_to_internal('BIGINT', 2147483649::bigint, INTERVAL '1 month', 'test_name');
- time_interval_specification_to_internal 
------------------------------------------
-                              2147483649
+SELECT test.interval_to_internal('BIGINT'::regtype, 2147483649::bigint);
+ interval_to_internal 
+----------------------
+           2147483649
 (1 row)
 
 \set VERBOSITY terse
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.time_interval_specification_to_internal('INT', NULL::bigint, INTERVAL '1 month', 'test_name');
-ERROR:  test_name needs to be explicitly set for time columns of type SMALLINT, INTEGER, and BIGINT
-SELECT _timescaledb_internal.time_interval_specification_to_internal('INT', 2147483649::bigint, INTERVAL '1 month', 'test_name');
-ERROR:  test_name is too large for type INTEGER (max: 2147483647)
-SELECT _timescaledb_internal.time_interval_specification_to_internal('SMALLINT', 65536::bigint, INTERVAL '1 month', 'test_name');
-ERROR:  test_name is too large for type SMALLINT (max: 65535)
-SELECT _timescaledb_internal.time_interval_specification_to_internal('TEXT', 65536::bigint, INTERVAL '1 month', 'test_name');
-ERROR:  unknown time column type: text
-SELECT _timescaledb_internal.time_interval_specification_to_internal('INT', INTERVAL '1 day', INTERVAL '1 month', 'test_name');
-ERROR:  test_name needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns
+SELECT test.interval_to_internal('INT'::regtype);
+ERROR:  integer dimensions require an explicit interval
+SELECT test.interval_to_internal('INT'::regtype, 2147483649::bigint);
+ERROR:  invalid interval: must be between 1 and 2147483647
+SELECT test.interval_to_internal('SMALLINT'::regtype, 32768::bigint);
+ERROR:  invalid interval: must be between 1 and 32767
+SELECT test.interval_to_internal('TEXT'::regtype, 32768::bigint);
+ERROR:  invalid dimension type: "testcol" must be an integer, date or timestamp
+SELECT test.interval_to_internal('INT'::regtype, INTERVAL '1 day');
+ERROR:  invalid interval: must be an integer type for integer dimensions
 \set ON_ERROR_STOP 1

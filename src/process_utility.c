@@ -630,7 +630,7 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 	if (NULL == dim)
 		return;
 
-	dimension_update_name(dim, stmt->newname);
+	dimension_set_name(dim, stmt->newname);
 }
 
 static void
@@ -1270,7 +1270,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 	if (NULL == dim)
 		return;
 
-	dimension_update_type(dim, new_type);
+	dimension_set_type(dim, new_type);
 	process_utility_set_expect_chunk_modification(true);
 	chunk_recreate_all_constraints_for_dimension(ht->space, dim->fd.id);
 	process_utility_set_expect_chunk_modification(false);
