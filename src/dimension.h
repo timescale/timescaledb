@@ -66,6 +66,34 @@ typedef struct Point
 
 #define DEFAULT_CHUNK_TIME_INTERVAL (USECS_PER_DAY * 30)	/* 1 month */
 
+typedef struct Hypertable Hypertable;
+
+/*
+ * Dimension information used to validate, create and update dimensions.
+ */
+typedef struct DimensionInfo
+{
+	Oid			table_relid;
+	Name		colname;
+	Oid			coltype;
+	DimensionType type;
+	Datum		interval_datum;
+	Oid			interval_type;	/* Type of the interval datum */
+	int64		interval;
+	int32		num_slices;
+	regproc		partitioning_func;
+	bool		if_not_exists;
+	bool		skip;
+	bool		set_not_null;
+	bool		num_slices_is_set;
+	Hypertable *ht;
+} DimensionInfo;
+
+#define DIMENSION_INFO_IS_SET(di)										\
+	(OidIsValid((di)->table_relid) &&									\
+	 (di)->colname != NULL &&											\
+	 ((di)->num_slices_is_set || OidIsValid((di)->interval_datum)))
+
 extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
 extern DimensionSlice *dimension_calculate_default_slice(Dimension *dim, int64 value);
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
@@ -75,6 +103,8 @@ extern Dimension *hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType
 extern DimensionVec *dimension_get_slices(Dimension *dim);
 extern int	dimension_set_type(Dimension *dim, Oid newtype);
 extern int	dimension_set_name(Dimension *dim, const char *newname);
+extern void dimension_validate_info(DimensionInfo *info);
+extern void dimension_add_from_info(DimensionInfo *info);
 
 #define hyperspace_get_open_dimension(space, i)				\
 	hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

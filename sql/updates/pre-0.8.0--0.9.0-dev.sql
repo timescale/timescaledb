@@ -23,3 +23,18 @@ DROP FUNCTION _timescaledb_internal.time_interval_specification_to_internal(regt
 DROP FUNCTION _timescaledb_internal.time_interval_specification_to_internal_with_default_time(regtype, anyelement, text, boolean);
 DROP FUNCTION _timescaledb_internal.create_hypertable(regclass, name, name, name, name, integer, name, name, bigint, name, boolean, regproc);
 DROP FUNCTION set_chunk_time_interval(regclass, anyelement);
+
+-- Hypertable and related functions
+DROP FUNCTION _timescaledb_internal.set_time_columns_not_null();
+DROP FUNCTION _timescaledb_internal.create_schema(name);
+DROP FUNCTION _timescaledb_internal.check_role(regclass);
+DROP FUNCTION _timescaledb_internal.attach_tablespace(name,regclass);
+DROP FUNCTION _timescaledb_internal.create_default_indexes(_timescaledb_catalog.hypertable,regclass,name);
+DROP FUNCTION _timescaledb_internal.create_hypertable_schema(name);
+DROP FUNCTION _timescaledb_internal.detach_tablespace(name,regclass);
+DROP FUNCTION _timescaledb_internal.detach_tablespaces(regclass);
+DROP FUNCTION _timescaledb_internal.dimension_type(regclass,name,boolean);
+DROP FUNCTION _timescaledb_internal.show_tablespaces(regclass);
+DROP FUNCTION _timescaledb_internal.verify_hypertable_indexes(regclass);
+DROP FUNCTION _timescaledb_internal.validate_triggers(regclass);
+DROP FUNCTION _timescaledb_internal.chunk_create_table(int, name);

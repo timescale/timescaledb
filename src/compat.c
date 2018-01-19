@@ -3,7 +3,7 @@
 
 #include "compat.h"
 
-/* Old functions that are no longer used but are needed for compatibiliy when
+/* Old functions that are no longer used but are needed for compatibility when
  * updating the extension. */
 TS_FUNCTION_INFO_V1(insert_main_table_trigger);
 
@@ -36,6 +36,24 @@ TS_FUNCTION_INFO_V1(ddl_change_owner_to);
 
 Datum
 ddl_change_owner_to(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "Deprecated function should not be invoked");
+	PG_RETURN_NULL();
+}
+
+TS_FUNCTION_INFO_V1(indexing_verify_hypertable_indexes);
+
+Datum
+indexing_verify_hypertable_indexes(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "Deprecated function should not be invoked");
+	PG_RETURN_NULL();
+}
+
+TS_FUNCTION_INFO_V1(hypertable_validate_triggers);
+
+Datum
+hypertable_validate_triggers(PG_FUNCTION_ARGS)
 {
 	elog(ERROR, "Deprecated function should not be invoked");
 	PG_RETURN_NULL();
