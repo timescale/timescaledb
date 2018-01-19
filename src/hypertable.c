@@ -1,17 +1,20 @@
 #include <postgres.h>
 #include <access/htup_details.h>
+#include <access/heapam.h>
+#include <access/relscan.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/memutils.h>
 #include <utils/builtins.h>
 #include <utils/acl.h>
-#include <utils/tqual.h>
 #include <utils/snapmgr.h>
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
 #include <commands/tablespace.h>
 #include <commands/dbcommands.h>
+#include <commands/schemacmds.h>
+#include <storage/lmgr.h>
 #include <miscadmin.h>
 
 #include "hypertable.h"
@@ -26,6 +29,7 @@
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "hypercube.h"
+#include "indexing.h"
 #include "guc.h"
 #include "errors.h"
 
@@ -355,6 +359,66 @@ hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 	return hypertable_update_form(&ht->fd);
 }
 
+#define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
+
+static void
+hypertable_insert_relation(Relation rel,
+						   Name schema_name,
+						   Name table_name,
+						   Name associated_schema_name,
+						   Name associated_table_prefix,
+						   int16 num_dimensions)
+{
+	TupleDesc	desc = RelationGetDescr(rel);
+	Datum		values[Natts_hypertable];
+	bool		nulls[Natts_hypertable] = {false};
+	NameData	default_associated_table_prefix;
+	CatalogSecurityContext sec_ctx;
+
+	values[Anum_hypertable_schema_name - 1] = NameGetDatum(schema_name);
+	values[Anum_hypertable_table_name - 1] = NameGetDatum(table_name);
+	values[Anum_hypertable_associated_schema_name - 1] = NameGetDatum(associated_schema_name);
+	values[Anum_hypertable_num_dimensions - 1] = Int16GetDatum(num_dimensions);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	values[Anum_hypertable_id - 1] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), HYPERTABLE));
+
+	if (NULL != associated_table_prefix)
+		values[Anum_hypertable_associated_table_prefix - 1] = NameGetDatum(associated_table_prefix);
+	else
+	{
+		snprintf(NameStr(default_associated_table_prefix),
+				 NAMEDATALEN,
+				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
+				 DatumGetInt32(values[Anum_hypertable_id - 1]));
+		values[Anum_hypertable_associated_table_prefix - 1] =
+			NameGetDatum(&default_associated_table_prefix);
+	}
+
+	catalog_insert_values(rel, desc, values, nulls);
+	catalog_restore_user(&sec_ctx);
+}
+
+static void
+hypertable_insert(Name schema_name,
+				  Name table_name,
+				  Name associated_schema_name,
+				  Name associated_table_prefix,
+				  int16 num_dimensions)
+{
+	Catalog    *catalog = catalog_get();
+	Relation	rel;
+
+	rel = heap_open(catalog->tables[HYPERTABLE].id, RowExclusiveLock);
+	hypertable_insert_relation(rel,
+							   schema_name,
+							   table_name,
+							   associated_schema_name,
+							   associated_table_prefix,
+							   num_dimensions);
+	heap_close(rel, RowExclusiveLock);
+}
+
 Chunk *
 hypertable_get_chunk(Hypertable *h, Point *point)
 {
@@ -523,21 +587,6 @@ is_hypertable(Oid relid)
 	return hypertable_relid_lookup(relid) != InvalidOid;
 }
 
-TS_FUNCTION_INFO_V1(hypertable_validate_triggers);
-
-Datum
-hypertable_validate_triggers(PG_FUNCTION_ARGS)
-{
-	if (relation_has_transition_table_trigger(PG_GETARG_OID(0)))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Hypertables do not support transition tables in triggers.")));
-
-	PG_RETURN_VOID();
-}
-
-TS_FUNCTION_INFO_V1(hypertable_check_associated_schema_permissions);
-
 /*
  * Check that the current user can create chunks in a hypertable's associated
  * schema.
@@ -546,35 +595,26 @@ TS_FUNCTION_INFO_V1(hypertable_check_associated_schema_permissions);
  * table owner has CREATE permissions for the schema (if it already exists) or
  * the database (if the schema does not exist and needs to be created).
  */
-Datum
-hypertable_check_associated_schema_permissions(PG_FUNCTION_ARGS)
+static Oid
+hypertable_check_associated_schema_permissions(const char *schema_name, Oid user_oid)
 {
-	Name		schema_name;
 	Oid			schema_oid;
-	Oid			user_oid;
-
-	if (PG_NARGS() != 2)
-		elog(ERROR, "Invalid number of arguments");
 
 	/*
 	 * If the schema name is NULL, it implies the internal catalog schema and
 	 * anyone should be able to create chunks there.
 	 */
-	if (PG_ARGISNULL(0))
-		PG_RETURN_VOID();
+	if (NULL == schema_name)
+		return InvalidOid;
 
-	schema_name = PG_GETARG_NAME(0);
+	schema_oid = get_namespace_oid(schema_name, true);
 
 	/* Anyone can create chunks in the internal schema */
-	if (namestrcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
-		PG_RETURN_VOID();
-
-	if (PG_ARGISNULL(1))
-		user_oid = GetUserId();
-	else
-		user_oid = PG_GETARG_OID(1);
-
-	schema_oid = get_namespace_oid(NameStr(*schema_name), true);
+	if (strncmp(schema_name, INTERNAL_SCHEMA_NAME, NAMEDATALEN) == 0)
+	{
+		Assert(OidIsValid(schema_oid));
+		return schema_oid;
+	}
 
 	if (!OidIsValid(schema_oid))
 	{
@@ -585,19 +625,17 @@ hypertable_check_associated_schema_permissions(PG_FUNCTION_ARGS)
 		if (pg_database_aclcheck(MyDatabaseId, user_oid, ACL_CREATE) != ACLCHECK_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("User %s lacks permissions to create schema \"%s\" in database \"%s\"",
-							GetUserNameFromId(user_oid, false),
-							NameStr(*schema_name),
+					 errmsg("permissions denied: cannot create schema \"%s\" in database \"%s\"",
+							schema_name,
 							get_database_name(MyDatabaseId))));
 	}
 	else if (pg_namespace_aclcheck(schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("User %s lacks permissions to create chunks in schema \"%s\"",
-						GetUserNameFromId(user_oid, false),
-						NameStr(*schema_name))));
+				 errmsg("permissions denied: cannot create chunks in schema \"%s\"",
+						schema_name)));
 
-	PG_RETURN_VOID();
+	return schema_oid;
 }
 
 static bool
@@ -622,10 +660,214 @@ hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 	{
 		Oid			chunk_relid = lfirst_oid(lc);
 
-		/* Chunks already already locked by find_inheritance_children() */
+		/* Chunks already locked by find_inheritance_children() */
 		if (table_has_tuples(chunk_relid, GetActiveSnapshot(), NoLock))
 			return true;
 	}
 
 	return false;
+}
+
+static void
+hypertable_create_schema(const char *schema_name)
+{
+	CreateSchemaStmt stmt = {
+		.schemaname = (char *) schema_name,
+		.authrole = NULL,
+		.schemaElts = NIL,
+		.if_not_exists = true,
+	};
+
+	CreateSchemaCommand(&stmt,
+						"(generated CREATE SCHEMA command)"
+#if PG10
+						,-1, -1
+#endif
+		);
+}
+
+TS_FUNCTION_INFO_V1(hypertable_create);
+
+/*
+ * Create a hypertable from an existing table.
+ *
+ * Arguments:
+ * main_table              REGCLASS
+ * time_column_name        NAME
+ * partitioning_column     NAME = NULL
+ * number_partitions       INTEGER = NULL
+ * associated_schema_name  NAME = NULL
+ * associated_table_prefix NAME = NULL
+ * chunk_time_interval     anyelement = NULL::BIGINT
+ * create_default_indexes  BOOLEAN = TRUE
+ * if_not_exists           BOOLEAN = FALSE
+ * partitioning_func       REGPROC = NULL
+ */
+Datum
+hypertable_create(PG_FUNCTION_ARGS)
+{
+	Oid			table_relid = PG_GETARG_OID(0);
+	Name		associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
+	Name		associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
+	bool		create_default_indexes = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
+	bool		if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
+	DimensionInfo time_dim_info = {
+		.table_relid = table_relid,
+		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
+		.interval_datum = PG_ARGISNULL(6) ? DatumGetInt64(-1) : PG_GETARG_DATUM(6),
+		.interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
+	};
+	DimensionInfo space_dim_info = {
+		.table_relid = table_relid,
+		.colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2),
+		.num_slices = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3),
+		.num_slices_is_set = !PG_ARGISNULL(3),
+		.partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9),
+	};
+	Cache	   *hcache;
+	Oid			associated_schema_oid;
+	Oid			user_oid = GetUserId();
+	Oid			tspc_oid = get_rel_tablespace(table_relid);
+	NameData	schema_name,
+				table_name,
+				default_associated_schema_name;
+
+	/*
+	 * Serialize hypertable creation to avoid having multiple transactions
+	 * creating the same hypertable simultaneously. Hold until transaction
+	 * end.
+	 */
+	LockRelationOid(table_relid, ShareUpdateExclusiveLock);
+
+	if (is_hypertable(table_relid))
+	{
+		if (if_not_exists)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
+					 errmsg("table \"%s\" is already a hypertable, skipping",
+							get_rel_name(table_relid))));
+			PG_RETURN_VOID();
+		}
+
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
+				 errmsg("table \"%s\" is already a hypertable",
+						get_rel_name(table_relid))));
+	}
+
+	/*
+	 * Check that the user has permissions to make this table into a
+	 * hypertable
+	 */
+	hypertable_permissions_check(table_relid, user_oid);
+
+	/* Is this the right kind of relation? */
+	switch (get_rel_relkind(table_relid))
+	{
+#if PG10
+		case RELKIND_PARTITIONED_TABLE:
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
+					 errdetail("It is not possible to turn partitioned tables into hypertables")));
+#endif
+		case RELKIND_RELATION:
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("invalid relation type")));
+	}
+
+	if (table_has_tuples(table_relid, GetActiveSnapshot(), NoLock))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("table \"%s\" is not empty", get_rel_name(table_relid)),
+				 errhint("Create a new hypertable and transfer the data from"
+						 " table \"%s\" into the new hypertable",
+						 get_rel_name(table_relid))));
+
+	if (find_inheritance_children(table_relid, AccessShareLock) != NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
+				 errdetail("It is not possible to turn tables that use inheritance into hypertables")));
+
+	/*
+	 * Create the associated schema where chunks are stored, or, check
+	 * permissions if it already exists
+	 */
+	if (NULL == associated_schema_name)
+	{
+		namestrcpy(&default_associated_schema_name, INTERNAL_SCHEMA_NAME);
+		associated_schema_name = &default_associated_schema_name;
+	}
+
+	associated_schema_oid =
+		hypertable_check_associated_schema_permissions(NameStr(*associated_schema_name), user_oid);
+
+	/* Create the associated schema if it doesn't already exist */
+	if (!OidIsValid(associated_schema_oid))
+		hypertable_create_schema(NameStr(*associated_schema_name));
+
+	/*
+	 * Hypertables do not support transition tables in triggers, so if the
+	 * table already has such triggers we bail out
+	 */
+	if (relation_has_transition_table_trigger(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("hypertables do not support transition tables in triggers")));
+
+	/* Validate that the dimensions are OK */
+	dimension_validate_info(&time_dim_info);
+
+	if (DIMENSION_INFO_IS_SET(&space_dim_info))
+		dimension_validate_info(&space_dim_info);
+
+	/* Checks pass, now we can create the catalog information */
+	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
+	namestrcpy(&table_name, get_rel_name(table_relid));
+
+	hypertable_insert(&schema_name,
+					  &table_name,
+					  associated_schema_name,
+					  associated_table_prefix,
+					  DIMENSION_INFO_IS_SET(&space_dim_info) ? 2 : 1);
+
+	/* Get the a Hypertable object via the cache */
+	hcache = hypertable_cache_pin();
+	time_dim_info.ht = space_dim_info.ht = hypertable_cache_get_entry(hcache, table_relid);
+
+	Assert(time_dim_info.ht != NULL);
+
+	/* Add validated dimensions */
+	dimension_add_from_info(&time_dim_info);
+
+	if (DIMENSION_INFO_IS_SET(&space_dim_info))
+		dimension_add_from_info(&space_dim_info);
+
+	/* Refresh the cache to get the updated hypertable with added dimensions */
+	cache_release(hcache);
+	hcache = hypertable_cache_pin();
+	time_dim_info.ht = space_dim_info.ht = hypertable_cache_get_entry(hcache, table_relid);
+
+	Assert(time_dim_info.ht != NULL);
+
+	/* Verify existing indexes and create default ones, if needed */
+	indexing_create_and_verify_hypertable_indexes(time_dim_info.ht, create_default_indexes);
+
+	/* Attach tablespace, if any */
+	if (OidIsValid(tspc_oid))
+	{
+		NameData	tspc_name;
+
+		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
+		DirectFunctionCall2(tablespace_attach, NameGetDatum(&tspc_name), ObjectIdGetDatum(table_relid));
+	}
+
+	cache_release(hcache);
+
+	PG_RETURN_VOID();
 }

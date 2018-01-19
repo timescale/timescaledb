@@ -22,7 +22,7 @@ CREATE UNIQUE INDEX index_test_time_idx ON index_test (time);
 -- all partitioning columns should fail
 SELECT create_hypertable('index_test', 'time', 'device', 2);
 NOTICE:  adding NOT NULL constraint to column "time"
-ERROR:  Cannot create a unique index without the column: device (used in partitioning)
+ERROR:  cannot create a unique index without the column "device" (used in partitioning)
 \set ON_ERROR_STOP 1
 -- Partitioning on only time should work
 SELECT create_hypertable('index_test', 'time');
@@ -117,7 +117,7 @@ INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 1, 17.5);
 \set ON_ERROR_STOP 0
 -- Create unique index without all partitioning columns should fail
 CREATE UNIQUE INDEX index_test_time_device_idx ON index_test (time);
-ERROR:  Cannot create a unique index without the column: device (used in partitioning)
+ERROR:  cannot create a unique index without the column "device" (used in partitioning)
 \set ON_ERROR_STOP 1
 CREATE UNIQUE INDEX index_test_time_device_idx ON index_test (time, device);
 -- Regular index need not cover all partitioning columns

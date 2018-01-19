@@ -26,7 +26,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT ALL ON SCHEMA test_schema TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-ERROR:  Permission denied for relation test_schema.test_table_no_not_null
+ERROR:  permission denied for relation "test_table_no_not_null"
 \set ON_ERROR_STOP 1
 -- Should work with when granted table owner role
 RESET ROLE;
@@ -49,7 +49,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- No permissions on associated schema should fail
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
-ERROR:  User default_perm_user lacks permissions to create chunks in schema "chunk_schema"
+ERROR:  permissions denied: cannot create chunks in schema "chunk_schema"
 \set ON_ERROR_STOP 1
 -- Granting permissions on chunk_schema should make things work
 RESET ROLE;
@@ -263,7 +263,7 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
 (3 rows)
 
 select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
-NOTICE:  hypertable test_schema.test_1dim already exists, skipping
+NOTICE:  table "test_1dim" is already a hypertable, skipping
  create_hypertable 
 -------------------
  
@@ -272,12 +272,12 @@ NOTICE:  hypertable test_schema.test_1dim already exists, skipping
 -- Should error when creating again without if_not_exists set to true
 \set ON_ERROR_STOP 0
 select create_hypertable('test_schema.test_1dim', 'time');
-ERROR:  hypertable test_schema.test_1dim already exists
+ERROR:  table "test_1dim" is already a hypertable
 \set ON_ERROR_STOP 1
 -- if_not_exist should also work with data in the hypertable
 insert into test_schema.test_1dim VALUES ('2004-10-19 10:23:54+02', 1.0);
 select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
-NOTICE:  hypertable test_schema.test_1dim already exists, skipping
+NOTICE:  table "test_1dim" is already a hypertable, skipping
  create_hypertable 
 -------------------
  
@@ -286,7 +286,7 @@ NOTICE:  hypertable test_schema.test_1dim already exists, skipping
 -- Should error when creating again without if_not_exists set to true
 \set ON_ERROR_STOP 0
 select create_hypertable('test_schema.test_1dim', 'time');
-ERROR:  hypertable test_schema.test_1dim already exists
+ERROR:  table "test_1dim" is already a hypertable
 \set ON_ERROR_STOP 1
 -- Reset GRANTS
 \c single :ROLE_SUPERUSER

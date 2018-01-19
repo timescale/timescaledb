@@ -1,8 +1,12 @@
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 #include <nodes/value.h>
+#include <nodes/makefuncs.h>
+#include <catalog/index.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <commands/defrem.h>
+#include <commands/tablespace.h>
 #include <fmgr.h>
 
 #include "indexing.h"
@@ -10,6 +14,51 @@
 #include "dimension.h"
 #include "errors.h"
 #include "hypertable_cache.h"
+
+static bool
+index_has_attribute(List *indexelems, const char *attrname)
+{
+	ListCell   *lc;
+
+	foreach(lc, indexelems)
+	{
+		Node	   *node = lfirst(lc);
+		const char *colname;
+
+		/*
+		 * The type of the element varies depending on whether the list is
+		 * from an index or a constraint
+		 */
+		switch (nodeTag(node))
+		{
+			case T_IndexElem:
+				colname = ((IndexElem *) node)->name;
+				break;
+			case T_String:
+				colname = strVal(node);
+				break;
+			case T_List:
+				{
+					List	   *pair = (List *) lfirst(lc);
+
+					if (list_length(pair) == 2 &&
+						IsA(linitial(pair), IndexElem) &&
+						IsA(lsecond(pair), List))
+					{
+						colname = ((IndexElem *) linitial(pair))->name;
+						break;
+					}
+				}
+			default:
+				elog(ERROR, "unsupported index list element");
+		}
+
+		if (strncmp(colname, attrname, NAMEDATALEN) == 0)
+			return true;
+	}
+
+	return false;
+}
 
 /*
  * Verify that index columns cover all partitioning dimensions.
@@ -27,53 +76,11 @@ indexing_verify_columns(Hyperspace *hs, List *indexelems)
 	for (i = 0; i < hs->num_dimensions; i++)
 	{
 		Dimension  *dim = &hs->dimensions[i];
-		bool		found = false;
-		ListCell   *lc;
 
-		foreach(lc, indexelems)
-		{
-			Node	   *node = lfirst(lc);
-			const char *colname;
-
-			/*
-			 * The type of the element varies depending on whether the list is
-			 * from an index or a constraint
-			 */
-			switch (nodeTag(node))
-			{
-				case T_IndexElem:
-					colname = ((IndexElem *) node)->name;
-					break;
-				case T_String:
-					colname = strVal(node);
-					break;
-				case T_List:
-					{
-						List	   *pair = (List *) lfirst(lc);
-
-						if (list_length(pair) == 2 &&
-							IsA(linitial(pair), IndexElem) &&
-							IsA(lsecond(pair), List))
-						{
-							colname = ((IndexElem *) linitial(pair))->name;
-							break;
-						}
-					}
-				default:
-					elog(ERROR, "Unsupported index list element");
-			}
-
-			if (namestrcmp(&dim->fd.column_name, colname) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-
-		if (!found)
+		if (!index_has_attribute(indexelems, NameStr(dim->fd.column_name)))
 			ereport(ERROR,
 					(errcode(ERRCODE_IO_BAD_HYPERTABLE_INDEX_DEFINITION),
-					 errmsg("Cannot create a unique index without the column: %s (used in partitioning)",
+					 errmsg("cannot create a unique index without the column \"%s\" (used in partitioning)",
 							NameStr(dim->fd.column_name))));
 	}
 }
@@ -105,37 +112,117 @@ build_indexcolumn_list(Relation idxrel)
 	return columns;
 }
 
-TS_FUNCTION_INFO_V1(indexing_verify_hypertable_indexes);
+static void
+create_default_index(Hypertable *ht, List *indexelems)
+{
+	IndexStmt	stmt = {
+		.type = T_IndexStmt,
+		.accessMethod = DEFAULT_INDEX_TYPE,
+		.idxname = NULL,
+		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+		.tableSpace = get_tablespace_name(get_rel_tablespace(ht->main_table_relid)),
+		.indexParams = indexelems,
+	};
+
+	DefineIndex(ht->main_table_relid,
+				&stmt,
+				InvalidOid,
+				false,			/* is alter table */
+				false,			/* check rights */
+#if PG10
+				false,			/* check not in use */
+#endif
+				false,			/* skip_build */
+				true);			/* quiet */
+}
+
+static void
+create_default_indexes(Hypertable *ht,
+					   Dimension *time_dim,
+					   Dimension *space_dim,
+					   bool has_time_idx,
+					   bool has_time_space_idx)
+{
+	IndexElem	telem = {
+		.type = T_IndexElem,
+		.name = NameStr(time_dim->fd.column_name),
+		.ordering = SORTBY_DESC,
+	};
+
+	/* In case we'd allow tables that are only space partitioned */
+	if (NULL == time_dim)
+		return;
+
+	/* Create ("time") index */
+	if (!has_time_idx)
+		create_default_index(ht, list_make1(&telem));
+
+	/* Create ("space", "time") index */
+	if (space_dim != NULL && !has_time_space_idx)
+	{
+		IndexElem	selem = {
+			.type = T_IndexElem,
+			.name = NameStr(space_dim->fd.column_name),
+			.ordering = SORTBY_ASC,
+		};
+
+		create_default_index(ht, list_make2(&selem, &telem));
+	}
+}
 
 /*
  * Verify that unique, primary and exclusion indexes on a hypertable cover all
- * partitioning columns.
+ * partitioning columns and create any default indexes.
+ *
+ * Default indexes are assumed to cover the first open ("time") dimension, and,
+ * optionally, the first closed ("space") dimension.
  */
-Datum
-indexing_verify_hypertable_indexes(PG_FUNCTION_ARGS)
+void
+indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default)
 {
-	Oid			hypertable_relid = PG_GETARG_OID(0);
-	Cache	   *hcache = hypertable_cache_pin();
-	Hypertable *ht = hypertable_cache_get_entry(hcache, hypertable_relid);
+	Relation	tblrel = relation_open(ht->main_table_relid, AccessShareLock);
+	Dimension  *time_dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	Dimension  *space_dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
+	List	   *indexlist = RelationGetIndexList(tblrel);
+	bool		has_time_idx = false;
+	bool		has_time_space_idx = false;
+	ListCell   *lc;
 
-	if (NULL != ht)
+	foreach(lc, indexlist)
 	{
-		Relation	tblrel = relation_open(hypertable_relid, AccessShareLock);
-		List	   *indexlist = RelationGetIndexList(tblrel);
-		ListCell   *lc;
+		Relation	idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
 
-		foreach(lc, indexlist)
+		if (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion)
+			indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
+
+		/* Check for existence of "default" indexes */
+		if (create_default && NULL != time_dim)
 		{
-			Relation	idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
+			Form_pg_attribute *attrs = idxrel->rd_att->attrs;
 
-			if (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion)
-				indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
-			relation_close(idxrel, AccessShareLock);
+			switch (idxrel->rd_att->natts)
+			{
+				case 1:
+					/* ("time") index */
+					if (namestrcmp(&attrs[0]->attname, NameStr(time_dim->fd.column_name)) == 0)
+						has_time_idx = true;
+					break;
+				case 2:
+					/* ("space", "time") index */
+					if (space_dim != NULL &&
+						namestrcmp(&attrs[0]->attname, NameStr(space_dim->fd.column_name)) == 0 &&
+						namestrcmp(&attrs[1]->attname, NameStr(time_dim->fd.column_name)) == 0)
+						has_time_space_idx = true;
+					break;
+				default:
+					break;
+			}
 		}
-		relation_close(tblrel, AccessShareLock);
+		relation_close(idxrel, AccessShareLock);
 	}
 
-	cache_release(hcache);
+	if (create_default)
+		create_default_indexes(ht, time_dim, space_dim, has_time_idx, has_time_space_idx);
 
-	PG_RETURN_NULL();
+	relation_close(tblrel, AccessShareLock);
 }
