@@ -43,7 +43,7 @@ ERROR:  duplicate key value violates unique constraint "1_1_upsert_test_pkey"
 -- Test with UNIQUE index on multiple columns instead of PRIMARY KEY constraint
 CREATE TABLE upsert_test_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_unique', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -77,7 +77,7 @@ SELECT * FROM upsert_test_unique ORDER BY time, color DESC;
 -- Test with multiple UNIQUE indexes
 CREATE TABLE upsert_test_multi_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_multi_unique', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

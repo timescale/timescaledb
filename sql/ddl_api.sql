@@ -84,8 +84,6 @@ BEGIN
 
     EXECUTE format('SELECT TRUE FROM %s LIMIT 1', main_table) INTO main_table_has_items;
 
-    PERFORM _timescaledb_internal.set_time_column_constraint(main_table, time_column_name);
-
     IF main_table_has_items THEN
         RAISE EXCEPTION 'the table being converted to a hypertable must be empty'
         USING ERRCODE = 'IO102';
@@ -93,11 +91,6 @@ BEGIN
 
     -- Validate that the hypertable supports the triggers in the main table
     PERFORM _timescaledb_internal.validate_triggers(main_table);
-
-    time_type := _timescaledb_internal.dimension_type(main_table, time_column_name, true);
-
-    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal_with_default_time(
-        time_type, chunk_time_interval, 'chunk_time_interval');
 
     BEGIN
         SELECT *
@@ -111,7 +104,7 @@ BEGIN
             number_partitions,
             associated_schema_name,
             associated_table_prefix,
-            chunk_time_interval_actual,
+            chunk_time_interval,
             tablespace_name,
             create_default_indexes,
             partitioning_func
@@ -132,58 +125,6 @@ BEGIN
 END
 $BODY$;
 
--- Add a dimension (of partitioning) to a hypertable
---
--- main_table - OID of the table to add a dimension to
--- column_name - NAME of the column to use in partitioning for this dimension
--- number_partitions - Number of partitions, for non-time dimensions
--- interval_length - Size of intervals for time dimensions (can be integral or INTERVAL)
--- partitioning_func - Function used to partition the column
-CREATE OR REPLACE FUNCTION  add_dimension(
-    main_table              REGCLASS,
-    column_name             NAME,
-    number_partitions       INTEGER = NULL,
-    interval_length         anyelement = NULL::BIGINT,
-    partitioning_func       REGPROC = NULL
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path = '_timescaledb_catalog'
-    AS
-$BODY$
-<<main_block>>
-DECLARE
-    table_name       NAME;
-    schema_name      NAME;
-    hypertable_row   _timescaledb_catalog.hypertable;
-BEGIN
-    PERFORM _timescaledb_internal.check_role(main_table);
-
-    SELECT relname, nspname
-    INTO STRICT table_name, schema_name
-    FROM pg_class c
-    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    WHERE c.OID = main_table;
-
-    SELECT *
-    INTO STRICT hypertable_row
-    FROM _timescaledb_catalog.hypertable h
-    WHERE h.schema_name = main_block.schema_name
-    AND h.table_name = main_block.table_name
-    FOR UPDATE;
-
-    PERFORM _timescaledb_internal.add_dimension(main_table,
-                                                hypertable_row,
-                                                column_name,
-                                                number_partitions,
-                                                interval_length,
-                                                partitioning_func);
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE EXCEPTION '"%" is not a hypertable; cannot add dimension', main_block.table_name
-        USING ERRCODE = 'IO102';
-END
-$BODY$;
-
 -- Update chunk_time_interval for a hypertable.
 --
 -- main_table - The OID of the table corresponding to a hypertable whose time
@@ -194,50 +135,15 @@ $BODY$;
 --     microseconds, or an INTERVAL type.
 CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
     main_table              REGCLASS,
-    chunk_time_interval     anyelement
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE
-    SECURITY DEFINER SET search_path='_timescaledb_catalog'
-    AS
-$BODY$
-DECLARE
-    main_table_name            NAME;
-    main_schema_name           NAME;
-    chunk_time_interval_actual BIGINT;
-    time_dimension             _timescaledb_catalog.dimension;
-    time_type                  REGTYPE;
-BEGIN
-    PERFORM _timescaledb_internal.check_role(main_table);
-    IF chunk_time_interval IS NULL THEN
-        RAISE EXCEPTION 'chunk_time_interval cannot be NULL'
-        USING ERRCODE = 'IO102';
-    END IF;
+    chunk_time_interval     ANYELEMENT,
+    dimension_name          NAME = NULL
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'dimension_set_interval' LANGUAGE C VOLATILE;
 
-    SELECT relname, nspname
-    INTO STRICT main_table_name, main_schema_name
-    FROM pg_class c
-    INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    WHERE c.OID = main_table;
-
-    SELECT *
-    INTO STRICT time_dimension
-    FROM _timescaledb_internal.dimension_get_time(
-        (
-            SELECT id
-            FROM _timescaledb_catalog.hypertable h
-            WHERE h.schema_name = main_schema_name AND
-            h.table_name = main_table_name
-    ));
-
-    time_type := _timescaledb_internal.dimension_type(main_table, time_dimension.column_name, true);
-    chunk_time_interval_actual := _timescaledb_internal.time_interval_specification_to_internal_with_default_time(
-        time_type, chunk_time_interval, 'chunk_time_interval');
-
-    UPDATE _timescaledb_catalog.dimension d
-    SET interval_length = chunk_time_interval_actual
-    WHERE time_dimension.id = d.id;
-END
-$BODY$;
+CREATE OR REPLACE FUNCTION  set_number_partitions(
+    main_table              REGCLASS,
+    number_partitions       INTEGER,
+    dimension_name          NAME = NULL
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'dimension_set_num_slices' LANGUAGE C VOLATILE;
 
 -- Drop chunks that are older than a timestamp.
 CREATE OR REPLACE FUNCTION drop_chunks(
@@ -302,6 +208,29 @@ BEGIN
     END IF;
 END
 $BODY$;
+
+-- Add a dimension (of partitioning) to a hypertable
+--
+-- main_table - OID of the table to add a dimension to
+-- column_name - NAME of the column to use in partitioning for this dimension
+-- number_partitions - Number of partitions, for non-time dimensions
+-- interval_length - Size of intervals for time dimensions (can be integral or INTERVAL)
+-- partitioning_func - Function used to partition the column
+-- if_not_exists - If set, and the dimension already exists, generate a notice instead of an error
+CREATE OR REPLACE FUNCTION  add_dimension(
+    main_table              REGCLASS,
+    column_name             NAME,
+    number_partitions       INTEGER = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::BIGINT,
+    partitioning_func       REGPROC = NULL,
+    if_not_exists           BOOLEAN = FALSE
+)
+    RETURNS VOID LANGUAGE SQL AS
+$BODY$
+    SELECT * FROM _timescaledb_internal.add_dimension(main_table, column_name, number_partitions,
+           chunk_time_interval, partitioning_func, if_not_exists);
+$BODY$;
+
 
 CREATE OR REPLACE FUNCTION attach_tablespace(tablespace NAME, hypertable REGCLASS)
        RETURNS VOID LANGUAGE SQL AS

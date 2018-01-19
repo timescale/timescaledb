@@ -5,8 +5,11 @@
 #include <utils/memutils.h>
 #include <utils/builtins.h>
 #include <utils/acl.h>
+#include <utils/tqual.h>
+#include <utils/snapmgr.h>
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_inherits_fn.h>
 #include <commands/tablespace.h>
 #include <commands/dbcommands.h>
 #include <miscadmin.h>
@@ -24,6 +27,7 @@
 #include "dimension_vector.h"
 #include "hypercube.h"
 #include "guc.h"
+#include "errors.h"
 
 static Oid
 rel_get_owner(Oid relid)
@@ -59,8 +63,7 @@ hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	if (!has_privs_of_role(userid, ownerid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("User \"%s\" lacks permissions on table \"%s\"",
-						GetUserNameFromId(userid, true),
+				 errmsg("permission denied for relation \"%s\"",
 						get_rel_name(hypertable_oid))));
 
 	return ownerid;
@@ -143,7 +146,8 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 							   tuple_found_func on_tuple_found,
 							   void *scandata,
 							   int limit,
-							   LOCKMODE lock)
+							   LOCKMODE lock,
+							   bool tuplock)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
@@ -157,10 +161,16 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 		.tuple_found = on_tuple_found,
 		.lockmode = lock,
 		.scandirection = ForwardScanDirection,
+		.tuplock = {
+			.waitpolicy = LockWaitBlock,
+			.lockmode = LockTupleExclusive,
+			.enabled = tuplock,
+		}
 	};
 
 	return scanner_scan(&scanctx);
 }
+
 
 static bool
 hypertable_tuple_update(TupleInfo *ti, void *data)
@@ -172,6 +182,8 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 
 	namecpy(&form->schema_name, &update->schema_name);
 	namecpy(&form->table_name, &update->table_name);
+	form->num_dimensions = update->num_dimensions;
+
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_update(ti->scanrel, tuple);
 	catalog_restore_user(&sec_ctx);
@@ -196,7 +208,127 @@ hypertable_update_form(FormData_hypertable *update)
 										  hypertable_tuple_update,
 										  update,
 										  1,
-										  RowExclusiveLock);
+										  RowExclusiveLock,
+										  false);
+}
+
+int
+hypertable_scan(const char *schema,
+				const char *table,
+				tuple_found_func tuple_found,
+				void *data,
+				LOCKMODE lockmode,
+				bool tuplock)
+{
+	ScanKeyData scankey[2];
+	NameData	schema_name,
+				table_name;
+
+	namestrcpy(&schema_name, schema);
+	namestrcpy(&table_name, table);
+
+	/* Perform an index scan on schema and table. */
+	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				NameGetDatum(&schema_name));
+	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				NameGetDatum(&table_name));
+
+	return hypertable_scan_limit_internal(scankey, 2,
+										  HYPERTABLE_NAME_INDEX,
+										  tuple_found,
+										  data,
+										  1,
+										  lockmode,
+										  tuplock);
+}
+
+int
+hypertable_scan_relid(Oid table_relid,
+					  tuple_found_func tuple_found,
+					  void *data,
+					  LOCKMODE lockmode,
+					  bool tuplock)
+{
+	return hypertable_scan(get_namespace_name(get_rel_namespace(table_relid)),
+						   get_rel_name(table_relid),
+						   tuple_found,
+						   data,
+						   lockmode,
+						   tuplock);
+}
+
+static bool
+tuple_found_lock(TupleInfo *ti, void *data)
+{
+	HTSU_Result *result = data;
+
+	*result = ti->lockresult;
+	return false;
+}
+
+HTSU_Result
+hypertable_lock_tuple(Oid table_relid)
+{
+	HTSU_Result result;
+	int			num_found;
+
+	num_found = hypertable_scan(get_namespace_name(get_rel_namespace(table_relid)),
+								get_rel_name(table_relid),
+								tuple_found_lock,
+								&result,
+								RowExclusiveLock,
+								true);
+
+	if (num_found != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
+				 errmsg("table \"%s\" is not a hypertable",
+						get_rel_name(table_relid))));
+
+	return result;
+}
+
+bool
+hypertable_lock_tuple_simple(Oid table_relid)
+{
+	HTSU_Result result = hypertable_lock_tuple(table_relid);
+
+	switch (result)
+	{
+		case HeapTupleSelfUpdated:
+
+			/*
+			 * Updated by the current transaction already. We equate this with
+			 * a successul lock since the tuple should be locked if updated by
+			 * us.
+			 */
+			return true;
+		case HeapTupleMayBeUpdated:
+			/* successfully locked */
+			return true;
+		case HeapTupleUpdated:
+			ereport(ERROR,
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+					 errmsg("hypertable \"%s\" has already been updated by another transaction",
+							get_rel_name(table_relid)),
+					 errhint("Retry the operation again")));
+		case HeapTupleBeingUpdated:
+			ereport(ERROR,
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+					 errmsg("hypertable \"%s\" is being updated by another transaction",
+							get_rel_name(table_relid)),
+					 errhint("Retry the operation again")));
+		case HeapTupleWouldBlock:
+			/* Locking would block. Let caller decide what to do */
+			return false;
+		case HeapTupleInvisible:
+			elog(ERROR, "attempted to lock invisible tuple");
+			break;
+		default:
+			elog(ERROR, "unexpected tuple lock status");
+	}
 }
 
 int
@@ -212,6 +344,14 @@ hypertable_set_schema(Hypertable *ht, const char *newname)
 {
 	namestrcpy(&ht->fd.schema_name, newname);
 
+	return hypertable_update_form(&ht->fd);
+}
+
+int
+hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
+{
+	Assert(num_dimensions > 0);
+	ht->fd.num_dimensions = num_dimensions;
 	return hypertable_update_form(&ht->fd);
 }
 
@@ -458,4 +598,34 @@ hypertable_check_associated_schema_permissions(PG_FUNCTION_ARGS)
 						NameStr(*schema_name))));
 
 	PG_RETURN_VOID();
+}
+
+static bool
+table_has_tuples(Oid table_relid, Snapshot snapshot, LOCKMODE lockmode)
+{
+	Relation	rel = heap_open(table_relid, lockmode);
+	HeapScanDesc scandesc = heap_beginscan(rel, snapshot, 0, NULL);
+	bool		hastuples = HeapTupleIsValid(heap_getnext(scandesc, ForwardScanDirection));
+
+	heap_endscan(scandesc);
+	heap_close(rel, lockmode);
+	return hastuples;
+}
+
+bool
+hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
+{
+	ListCell   *lc;
+	List	   *chunks = find_inheritance_children(table_relid, lockmode);
+
+	foreach(lc, chunks)
+	{
+		Oid			chunk_relid = lfirst_oid(lc);
+
+		/* Chunks already already locked by find_inheritance_children() */
+		if (table_has_tuples(chunk_relid, GetActiveSnapshot(), NoLock))
+			return true;
+	}
+
+	return false;
 }

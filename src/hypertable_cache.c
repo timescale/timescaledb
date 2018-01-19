@@ -81,21 +81,8 @@ static void *
 hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 {
 	HypertableCacheQuery *hq = (HypertableCacheQuery *) query;
-	Catalog    *catalog = catalog_get();
 	HypertableNameCacheEntry *cache_entry = query->result;
 	int			number_found;
-	ScanKeyData scankey[2];
-	ScannerCtx	scanCtx = {
-		.table = catalog->tables[HYPERTABLE].id,
-		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_NAME_INDEX],
-		.scantype = ScannerTypeIndex,
-		.nkeys = 2,
-		.scankey = scankey,
-		.data = query->result,
-		.tuple_found = hypertable_tuple_found,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-	};
 
 	if (NULL == hq->schema)
 		hq->schema = get_namespace_name(get_rel_namespace(hq->relid));
@@ -103,15 +90,12 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 	if (NULL == hq->table)
 		hq->table = get_rel_name(hq->relid);
 
-	/* Perform an index scan on schema and table. */
-	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber, F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(hq->schema)));
-	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
-				BTEqualStrategyNumber, F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(hq->table)));
-
-	number_found = scanner_scan(&scanCtx);
+	number_found = hypertable_scan(hq->schema,
+								   hq->table,
+								   hypertable_tuple_found,
+								   query->result,
+								   AccessShareLock,
+								   false);
 
 	switch (number_found)
 	{

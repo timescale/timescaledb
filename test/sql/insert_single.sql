@@ -106,10 +106,10 @@ SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>214748364
 -- Test that large intervals and no interval fail for SMALLINT
 \set ON_ERROR_STOP 0
 CREATE TABLE "smallinttime_err"(time SMALLINT PRIMARY KEY, temp float);
-SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65536);
+SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>32768);
 SELECT create_hypertable('"smallinttime_err"', 'time');
 \set ON_ERROR_STOP 1
-SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65535);
+SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>32767);
 
 --make sure date inserts work even when the timezone changes the
 CREATE TABLE hyper_date(time date, temp float);
@@ -143,11 +143,11 @@ SET timescaledb.max_open_chunks_per_insert = 1;
 SET timescaledb.max_cached_chunks_per_hypertable = 1;
 INSERT INTO "nondefault_mem_settings" VALUES
 ('2001-01-20T09:00:00', 26.6),
-('2002-02-20T09:00:00', 27.9), 
+('2002-02-20T09:00:00', 27.9),
 ('2003-02-20T09:00:00', 28.9);
 INSERT INTO "nondefault_mem_settings" VALUES
 ('2001-03-20T09:00:00', 30.6),
-('2002-03-20T09:00:00', 31.9), 
+('2002-03-20T09:00:00', 31.9),
 ('2003-03-20T09:00:00', 32.9);
 
 --unlimited
@@ -155,7 +155,7 @@ SET timescaledb.max_open_chunks_per_insert = 0;
 SET timescaledb.max_cached_chunks_per_hypertable = 0;
 INSERT INTO "nondefault_mem_settings" VALUES
 ('2001-04-20T09:00:00', 33.6),
-('2002-04-20T09:00:00', 34.9), 
+('2002-04-20T09:00:00', 34.9),
 ('2003-04-20T09:00:00', 35.9);
 
 SELECT * FROM "nondefault_mem_settings";

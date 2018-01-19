@@ -1,6 +1,6 @@
 CREATE TABLE index_test(time timestamptz, temp float);
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -21,12 +21,12 @@ CREATE UNIQUE INDEX index_test_time_idx ON index_test (time);
 -- Creating a hypertable from a table with an index that doesn't cover
 -- all partitioning columns should fail
 SELECT create_hypertable('index_test', 'time', 'device', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
 ERROR:  Cannot create a unique index without the column: device (used in partitioning)
 \set ON_ERROR_STOP 1
 -- Partitioning on only time should work
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -107,7 +107,7 @@ SELECT * FROM test.show_columns('index_test');
 
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -369,7 +369,7 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 CREATE TABLE index_test(time timestamptz, temp float, device int) TABLESPACE tablespace1;
 -- Default indexes should be in the table's tablespace
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

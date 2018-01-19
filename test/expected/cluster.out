@@ -1,6 +1,6 @@
 CREATE TABLE cluster_test(time timestamptz, temp float, location int);
 SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => interval '1 day');
-NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

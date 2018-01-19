@@ -28,7 +28,7 @@ END;
 $BODY$;
 CREATE TABLE append_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('append_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append.sql:31: NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+psql:include/append.sql:31: NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -361,7 +361,7 @@ psql:include/append.sql:130: NOTICE:  Stable function now_s() called!
 -- Create another hypertable to join with
 CREATE TABLE join_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('join_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append.sql:135: NOTICE:  Adding NOT NULL constraint to time column time (NULL time values not allowed)
+psql:include/append.sql:135: NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
  

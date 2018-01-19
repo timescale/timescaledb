@@ -9,8 +9,13 @@
 #include <utils/typcache.h>
 #include <fmgr.h>
 
+#include "catalog.h"
+
 #define OPEN_START_TIME -1
 #define OPEN_END_TIME PG_INT64_MAX
+
+#define DEFAULT_PARTITIONING_FUNC_SCHEMA INTERNAL_SCHEMA_NAME
+#define DEFAULT_PARTITIONING_FUNC_NAME "get_partition_hash"
 
 typedef struct PartitioningFunc
 {
@@ -22,12 +27,6 @@ typedef struct PartitioningFunc
 	 * partitioning column's text representation.
 	 */
 	FmgrInfo	func_fmgr;
-
-	/*
-	 * The type of the parameter that the partitioning function accepts. This
-	 * can be either TEXTOID or ANYELEMENTOID.
-	 */
-	Oid			paramtype;
 } PartitioningFunc;
 
 
@@ -39,6 +38,9 @@ typedef struct PartitioningInfo
 	PartitioningFunc partfunc;
 } PartitioningInfo;
 
+
+extern Oid	partitioning_func_get_default(void);
+extern bool partitioning_func_is_valid(regproc funcoid);
 
 extern PartitioningInfo *partitioning_info_create(const char *schema,
 						 const char *partfunc,
