@@ -15,6 +15,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/hsearch.h>
+#include <storage/lmgr.h>
 #include <miscadmin.h>
 
 #include "chunk.h"
@@ -466,8 +467,8 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	snprintf(chunk->fd.table_name.data, NAMEDATALEN,
 			 "%s_%d_chunk", prefix, chunk->fd.id);
 
-	/* Insert chunk. Chunk table already locked in exclusive mode. */
-	chunk_insert_lock(chunk, NoLock);
+	/* Insert chunk */
+	chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* Insert any new dimension slices */
 	dimension_slice_insert_multi(cube->slices, cube->num_slices);
@@ -501,19 +502,21 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 Chunk *
 chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
-	Catalog    *catalog = catalog_get();
 	Chunk	   *chunk;
-	Relation	rel;
 
-	rel = heap_open(catalog->tables[CHUNK].id, ExclusiveLock);
+	/*
+	 * Serialize chunk creation around a lock on the "main table" to avoid
+	 * multiple processes trying to create the same chunk. We use a
+	 * ShareUpdateExclusiveLock, which is the weakest lock possible that
+	 * conflicts with itself. The lock needs to be held until transaction end.
+	 */
+	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
 
 	/* Recheck if someone else created the chunk before we got the table lock */
 	chunk = chunk_find(ht->space, p);
 
 	if (NULL == chunk)
 		chunk = chunk_create_after_lock(ht, p, schema, prefix);
-
-	heap_close(rel, ExclusiveLock);
 
 	Assert(chunk != NULL);
 
