@@ -273,7 +273,10 @@ ca_append_rescan(CustomScanState *node)
 #if PG96
 	node->ss.ps.ps_TupFromTlist = false;
 #endif
-	ExecReScan(linitial(node->custom_ps));
+	if (node->custom_ps != NIL)
+	{
+		ExecReScan(linitial(node->custom_ps));
+	}
 }
 
 static void
