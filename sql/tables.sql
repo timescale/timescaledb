@@ -95,8 +95,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.dimension_slice (
     CHECK (range_start <= range_end),
     UNIQUE (dimension_id, range_start, range_end)
 );
-CREATE INDEX IF NOT EXISTS dimension_slice_dimension_id_range_start_range_end_idx
-ON _timescaledb_catalog.dimension_slice(dimension_id, range_start, range_end);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice','id'), '');
 

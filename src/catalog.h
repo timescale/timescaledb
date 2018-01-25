@@ -48,7 +48,6 @@ typedef enum InternalFunction
 {
 	DDL_CHANGE_OWNER = 0,
 	DDL_ADD_CHUNK_CONSTRAINT,
-	DDL_DROP_HYPERTABLE,
 	TRUNCATE_HYPERTABLE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
@@ -217,6 +216,15 @@ typedef struct FormData_dimension_slice
 
 typedef FormData_dimension_slice *Form_dimension_slice;
 
+enum Anum_dimension_slice_id_idx
+{
+	Anum_dimension_slice_id_idx_id = 1,
+	_Anum_dimension_slice_id_idx_max,
+};
+
+#define Natts_dimension_slice_id_idx \
+	(_Anum_dimension_slice_id_idx_max - 1)
+
 enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 {
 	Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id = 1,
@@ -224,13 +232,6 @@ enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 	Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 	_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max,
 };
-
-enum Anum_dimension_slice_dimension_id_idx
-{
-	Anum_dimension_slice_dimension_id_idx_dimension_id = 1,
-	_Anum_dimension_slice_dimension_id_idx_max,
-};
-
 
 #define Natts_dimension_slice_dimension_id_range_start_range_end_idx \
 	(_Anum_dimension_slice_dimension_id_range_start_range_end_idx_max - 1)
@@ -283,6 +284,11 @@ enum
 enum Anum_chunk_idx
 {
 	Anum_chunk_idx_id = 1,
+};
+
+enum Anum_chunk_hypertable_id_idx
+{
+	Anum_chunk_hypertable_id_idx_hypertable_id = 1,
 };
 
 enum Anum_chunk_schema_name_idx

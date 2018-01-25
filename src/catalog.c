@@ -57,7 +57,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_DIMENSION_SLICE_INDEX,
 		.names = (char *[]) {
 			[DIMENSION_SLICE_ID_IDX] = "dimension_slice_pkey",
-			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_idx",
+			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_key",
 		}
 	},
 	[CHUNK] = {
@@ -114,10 +114,6 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,
-	},
-	[DDL_DROP_HYPERTABLE] = {
-		.name = "drop_hypertable",
-		.args = 2
 	},
 	[TRUNCATE_HYPERTABLE] = {
 		.name = "truncate_hypertable",

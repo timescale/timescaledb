@@ -245,9 +245,39 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 ------------------
 (0 rows)
 
---cleanup
-DROP TABLE tspace_1dim CASCADE;
-DROP TABLE tspace_2dim CASCADE;
+--cleanup - make sure tablespace metadata is removed
+SELECT attach_tablespace('tablespace2', 'tspace_1dim');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT attach_tablespace('tablespace1', 'tspace_2dim');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.tablespace;
+ id | hypertable_id | tablespace_name 
+----+---------------+-----------------
+  5 |             2 | tablespace2
+  6 |             1 | tablespace1
+(2 rows)
+
+DROP TABLE tspace_1dim;
+SELECT * FROM _timescaledb_catalog.tablespace;
+ id | hypertable_id | tablespace_name 
+----+---------------+-----------------
+  6 |             1 | tablespace1
+(1 row)
+
+DROP TABLE tspace_2dim;
+SELECT * FROM _timescaledb_catalog.tablespace;
+ id | hypertable_id | tablespace_name 
+----+---------------+-----------------
+(0 rows)
+
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 -- revoke grants
