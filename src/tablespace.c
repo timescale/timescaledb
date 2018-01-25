@@ -187,7 +187,7 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 	return (info->stopcount == 0 || ti->count < info->stopcount);
 }
 
-static int
+int
 tablespace_delete(int32 hypertable_id, const char *tspcname)
 {
 	ScanKeyData scankey[2];

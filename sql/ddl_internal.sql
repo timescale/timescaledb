@@ -1,34 +1,3 @@
--- Drops a hypertable
-CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_hypertable(
-    hypertable_id INT,
-    is_cascade BOOLEAN
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    cascade_mod TEXT := '';
-    chunk_row _timescaledb_catalog.chunk;
-BEGIN
-    IF is_cascade THEN
-        cascade_mod = 'CASCADE';
-    END IF;
-    FOR chunk_row IN SELECT c.*
-        FROM _timescaledb_catalog.hypertable h
-        INNER JOIN _timescaledb_catalog.chunk c ON (c.hypertable_id = h.id)
-        WHERE h.id = drop_hypertable.hypertable_id
-        LOOP
-            EXECUTE format(
-                $$
-                DROP TABLE %I.%I %s
-                $$, chunk_row.schema_name, chunk_row.table_name, cascade_mod
-            );
-        END LOOP;
-
-    DELETE FROM _timescaledb_catalog.hypertable h
-    WHERE h.id = drop_hypertable.hypertable_id;
-END
-$BODY$;
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_get_time(
     hypertable_id INT
 )

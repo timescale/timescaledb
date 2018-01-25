@@ -107,23 +107,25 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 }
 
 static int
-dimension_slice_scan_limit_internal(ScanKeyData *scankey,
-									int num_scankeys,
+dimension_slice_scan_limit_internal(int indexid,
+									ScanKeyData *scankey,
+									int nkeys,
 									tuple_found_func on_tuple_found,
 									void *scandata,
-									int limit)
+									int limit,
+									LOCKMODE lockmode)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
-		.index = catalog->tables[DIMENSION_SLICE].index_ids[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX],
+		.index = catalog->tables[DIMENSION_SLICE].index_ids[indexid],
 		.scantype = ScannerTypeIndex,
-		.nkeys = num_scankeys,
+		.nkeys = nkeys,
 		.scankey = scankey,
 		.data = scandata,
 		.limit = limit,
 		.tuple_found = on_tuple_found,
-		.lockmode = AccessShareLock,
+		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
 	};
 
@@ -154,7 +156,13 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(coordinate));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &slices, limit);
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										3,
+										dimension_vec_tuple_found,
+										&slices,
+										limit,
+										AccessShareLock);
 
 	return dimension_vec_sort(&slices);
 }
@@ -177,7 +185,13 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTGreaterStrategyNumber, F_INT8GT, Int64GetDatum(range_start));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_vec_tuple_found, &slices, limit);
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										3,
+										dimension_vec_tuple_found,
+										&slices,
+										limit,
+										AccessShareLock);
 
 	return dimension_vec_sort(&slices);
 }
@@ -191,9 +205,76 @@ dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
 
-	dimension_slice_scan_limit_internal(scankey, 1, dimension_vec_tuple_found, &slices, limit);
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										1,
+										dimension_vec_tuple_found,
+										&slices,
+										limit,
+										AccessShareLock);
 
 	return dimension_vec_sort(&slices);
+}
+
+static bool
+dimension_slice_tuple_delete(TupleInfo *ti, void *data)
+{
+	bool		isnull;
+	Datum		dimension_slice_id = heap_getattr(ti->tuple, Anum_dimension_slice_id, ti->desc, &isnull);
+	bool	   *delete_constraints = data;
+	CatalogSecurityContext sec_ctx;
+
+	Assert(!isnull);
+
+	/* delete chunk constraints */
+	if (NULL != delete_constraints && *delete_constraints)
+		chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_delete(ti->scanrel, ti->tuple);
+	catalog_restore_user(&sec_ctx);
+
+	return true;
+}
+
+int
+dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+
+	return dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+											   scankey,
+											   1,
+											   dimension_slice_tuple_delete,
+											   &delete_constraints,
+											   0,
+											   RowExclusiveLock);
+}
+
+int
+dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_id_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_slice_id));
+
+	return dimension_slice_scan_limit_internal(DIMENSION_SLICE_ID_IDX,
+											   scankey,
+											   1,
+											   dimension_slice_tuple_delete,
+											   &delete_constraints,
+											   1,
+											   RowExclusiveLock);
 }
 
 static bool
@@ -221,7 +302,8 @@ dimension_slice_scan_for_existing(DimensionSlice *slice)
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_end));
 
-	dimension_slice_scan_limit_internal(scankey, 3, dimension_slice_fill, &slice, 1);
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey, 3, dimension_slice_fill, &slice, 1, AccessShareLock);
 
 	return slice;
 }
@@ -238,25 +320,19 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 DimensionSlice *
 dimension_slice_scan_by_id(int32 dimension_slice_id)
 {
-	Catalog    *catalog = catalog_get();
 	DimensionSlice *slice = NULL;
 	ScanKeyData scankey[1];
-	ScannerCtx	scanCtx = {
-		.table = catalog->tables[DIMENSION_SLICE].id,
-		.index = catalog->tables[DIMENSION_SLICE].index_ids[DIMENSION_SLICE_ID_IDX],
-		.scantype = ScannerTypeIndex,
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = &slice,
-		.limit = 1,
-		.tuple_found = dimension_slice_tuple_found,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-	};
 
-	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_idx_dimension_id,
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_id_idx_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_slice_id));
-	scanner_scan(&scanCtx);
+
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_ID_IDX,
+										scankey,
+										1,
+										dimension_slice_tuple_found,
+										&slice,
+										1,
+										AccessShareLock);
 
 	return slice;
 }

@@ -348,6 +348,36 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 	return true;
 }
 
+#define NO_INDEXSCAN -1
+
+static int
+chunk_constraint_scan_internal(int indexid,
+							   ScanKeyData *scankey,
+							   int nkeys,
+							   tuple_found_func tuple_found,
+							   tuple_found_func tuple_filter,
+							   void *data,
+							   LOCKMODE lockmode)
+{
+	Catalog    *catalog = catalog_get();
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[CHUNK_CONSTRAINT].id,
+		.scantype = (indexid == NO_INDEXSCAN) ? ScannerTypeHeap : ScannerTypeIndex,
+		.nkeys = nkeys,
+		.scankey = scankey,
+		.data = data,
+		.tuple_found = tuple_found,
+		.filter = tuple_filter,
+		.lockmode = lockmode,
+		.scandirection = ForwardScanDirection,
+	};
+
+	if (indexid != NO_INDEXSCAN)
+		scanctx.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[indexid];
+
+	return scanner_scan(&scanctx);
+}
+
 /*
  * Scan for chunk constraints given a chunk ID.
  */
@@ -358,20 +388,7 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 										   void *data,
 										   LOCKMODE lockmode)
 {
-	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
-	ScannerCtx	scanctx = {
-		.table = catalog->tables[CHUNK_CONSTRAINT].id,
-		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX],
-		.scantype = ScannerTypeIndex,
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = data,
-		.tuple_found = tuple_found,
-		.filter = tuple_filter,
-		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
-	};
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
@@ -379,7 +396,13 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 				F_INT4EQ,
 				Int32GetDatum(chunk_id));
 
-	return scanner_scan(&scanctx);
+	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
+										  scankey,
+										  1,
+										  tuple_found,
+										  tuple_filter,
+										  data,
+										  lockmode);
 }
 
 /*
@@ -453,23 +476,10 @@ chunk_constraint_dimension_slice_id_tuple_found(TupleInfo *ti, void *data)
 int
 chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx *ctx)
 {
-	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
 	ChunkConstraintScanData data = {
 		.scanctx = ctx,
 		.slice = slice,
-	};
-	ScannerCtx	scanctx = {
-		.table = catalog->tables[CHUNK_CONSTRAINT].id,
-		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX],
-		.scantype = ScannerTypeIndex,
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = &data,
-		.filter = chunk_constraint_for_dimension_slice,
-		.tuple_found = chunk_constraint_dimension_slice_id_tuple_found,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
 	};
 
 	ScanKeyInit(&scankey[0],
@@ -478,7 +488,13 @@ chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx 
 				F_INT4EQ,
 				Int32GetDatum(slice->fd.id));
 
-	return scanner_scan(&scanctx);
+	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
+										  scankey,
+										  1,
+										  chunk_constraint_dimension_slice_id_tuple_found,
+										  chunk_constraint_for_dimension_slice,
+										  &data,
+										  AccessShareLock);
 }
 
 static bool
@@ -594,12 +610,20 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 	int32		chunk_id = DatumGetInt32(heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id,
 													  ti->desc, &isnull));
 	Chunk	   *chunk = chunk_get_by_id(chunk_id, 0, true);
-
 	ObjectAddress constrobj = {
 		.classId = ConstraintRelationId,
 		.objectId = get_relation_constraint_oid(chunk->table_id,
 												NameStr(*DatumGetName(constrname)), false),
 	};
+	Oid			index_relid = get_constraint_index(constrobj.objectId);
+
+	/*
+	 * If this is an index constraint, we need to cleanup the index metadata.
+	 * Don't drop the index though, since that will happend when the
+	 * constraint is dropped.
+	 */
+	if (OidIsValid(index_relid))
+		chunk_index_delete(chunk, index_relid, false);
 
 	catalog_delete(ti->scanrel, ti->tuple);
 	performDeletion(&constrobj, DROP_RESTRICT, 0);
@@ -628,7 +652,6 @@ hypertable_constraint_tuple_filter(TupleInfo *ti, void *data)
 
 int
 chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
-													  Oid chunk_oid,
 													  char *hypertable_constraint_name)
 {
 	ConstraintInfo info = {
@@ -643,13 +666,33 @@ chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 }
 
 int
-chunk_constraint_delete_by_chunk_id(int32 chunk_id, Oid chunk_oid)
+chunk_constraint_delete_by_chunk_id(int32 chunk_id)
 {
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
 													  chunk_constraint_delete_tuple,
 													  NULL,
 													  NULL,
 													  RowExclusiveLock);
+}
+
+int
+chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_constraint_dimension_slice_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_slice_id));
+
+	return chunk_constraint_scan_internal(NO_INDEXSCAN,
+										  scankey,
+										  1,
+										  chunk_constraint_delete_tuple,
+										  NULL,
+										  NULL,
+										  RowExclusiveLock);
 }
 
 void

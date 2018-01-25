@@ -103,6 +103,7 @@ extern Dimension *hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType
 extern DimensionVec *dimension_get_slices(Dimension *dim);
 extern int	dimension_set_type(Dimension *dim, Oid newtype);
 extern int	dimension_set_name(Dimension *dim, const char *newname);
+extern int	dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
 extern void dimension_validate_info(DimensionInfo *info);
 extern void dimension_add_from_info(DimensionInfo *info);
 

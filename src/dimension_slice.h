@@ -30,6 +30,8 @@ extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
 extern DimensionSlice *dimension_slice_scan_for_existing(DimensionSlice *slice);
 extern DimensionSlice *dimension_slice_scan_by_id(int32 dimension_slice_id);
 extern DimensionVec *dimension_slice_scan_by_dimension(int32 dimension_id, int limit);
+extern int	dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints);
+extern int	dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints);
 extern DimensionSlice *dimension_slice_create(int dimension_id, int64 range_start, int64 range_end);
 extern DimensionSlice *dimension_slice_copy(const DimensionSlice *original);
 extern bool dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);

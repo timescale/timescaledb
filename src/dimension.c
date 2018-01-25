@@ -306,30 +306,43 @@ dimension_tuple_found(TupleInfo *ti, void *data)
 	return true;
 }
 
-Hyperspace *
-dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
+static int
+dimension_scan_internal(ScanKeyData *scankey,
+						int nkeys,
+						tuple_found_func tuple_found,
+						void *data,
+						int limit,
+						LOCKMODE lockmode)
 {
 	Catalog    *catalog = catalog_get();
-	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
-	ScanKeyData scankey[1];
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION].id,
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
 		.scantype = ScannerTypeIndex,
-		.nkeys = 1,
-		.limit = num_dimensions,
+		.nkeys = nkeys,
+		.limit = limit,
 		.scankey = scankey,
-		.data = space,
-		.tuple_found = dimension_tuple_found,
-		.lockmode = AccessShareLock,
+		.data = data,
+		.tuple_found = tuple_found,
+		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
 	};
+
+	return scanner_scan(&scanctx);
+}
+
+Hyperspace *
+dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
+{
+	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
+	ScanKeyData scankey[1];
 
 	/* Perform an index scan on hypertable_id. */
 	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
-	scanner_scan(&scanctx);
+	dimension_scan_internal(scankey, 1, dimension_tuple_found,
+							space, num_dimensions, AccessShareLock);
 
 	/* Sort dimensions in ascending order to allow binary search lookups */
 	qsort(space->dimensions, space->num_dimensions, sizeof(Dimension), cmp_dimension_id);
@@ -365,6 +378,40 @@ dimension_scan_update(int32 dimension_id, tuple_found_func tuple_found, void *da
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
 
 	return scanner_scan(&scanctx);
+}
+
+static bool
+dimension_tuple_delete(TupleInfo *ti, void *data)
+{
+	CatalogSecurityContext sec_ctx;
+	bool		isnull;
+	Datum		dimension_id = heap_getattr(ti->tuple, Anum_dimension_id, ti->desc, &isnull);
+	bool	   *delete_slices = data;
+
+	Assert(!isnull);
+
+	/* delete dimension slices */
+	if (NULL != delete_slices && *delete_slices)
+		dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id), false);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_delete(ti->scanrel, ti->tuple);
+	catalog_restore_user(&sec_ctx);
+
+	return true;
+}
+
+int
+dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices)
+{
+	ScanKeyData scankey[1];
+
+	/* Perform an index scan to delete based on hypertable_id */
+	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
+
+	return dimension_scan_internal(scankey, 1, dimension_tuple_delete,
+								   &delete_slices, 0, RowExclusiveLock);
 }
 
 static bool

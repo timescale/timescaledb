@@ -585,16 +585,20 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
 	Oid			schemaid = chunk_index_get_schemaid(chunk_index);
-	ObjectAddress idxobj = {
-		.classId = RelationRelationId,
-		.objectId = get_relname_relid(NameStr(chunk_index->index_name), schemaid),
-	};
 	bool	   *should_drop = data;
 
 	catalog_delete(ti->scanrel, ti->tuple);
 
 	if (*should_drop)
+	{
+		ObjectAddress idxobj = {
+			.classId = RelationRelationId,
+			.objectId = get_relname_relid(NameStr(chunk_index->index_name), schemaid),
+		};
+
+		Assert(OidIsValid(idxobj.objectId));
 		performDeletion(&idxobj, DROP_RESTRICT, 0);
+	}
 
 	return true;
 }
@@ -633,6 +637,32 @@ chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
 								   scankey, 2, chunk_index_tuple_delete, &drop_index);
+}
+
+int
+chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk_id));
+
+	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
+								   scankey, 1, chunk_index_tuple_delete, &drop_index);
+}
+
+int
+chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
+
+	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
+								   scankey, 1, chunk_index_tuple_delete, &drop_index);
 }
 
 static bool
