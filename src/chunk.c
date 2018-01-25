@@ -861,8 +861,7 @@ chunk_scan_internal(int indexid,
 					int nkeys,
 					tuple_found_func tuple_found,
 					void *data,
-					int16 num_constraints,
-					bool fail_if_not_found,
+					int limit,
 					LOCKMODE lockmode)
 {
 	Catalog    *catalog = catalog_get();
@@ -874,6 +873,7 @@ chunk_scan_internal(int indexid,
 		.data = data,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
+		.limit = limit,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
 	};
@@ -891,15 +891,19 @@ chunk_scan_find(int indexid,
 	Chunk	   *chunk = palloc0(sizeof(Chunk));
 	int			num_found;
 
-	num_found = chunk_scan_internal(indexid, scankey, nkeys, chunk_tuple_found,
-									chunk, num_constraints, fail_if_not_found,
+	num_found = chunk_scan_internal(indexid,
+									scankey,
+									nkeys,
+									chunk_tuple_found,
+									chunk,
+									num_constraints,
 									AccessShareLock);
 
 	switch (num_found)
 	{
 		case 0:
 			if (fail_if_not_found)
-				elog(ERROR, "Chunk not found");
+				elog(ERROR, "chunk not found");
 			pfree(chunk);
 			chunk = NULL;
 			break;
@@ -911,7 +915,7 @@ chunk_scan_find(int indexid,
 			}
 			break;
 		default:
-			elog(ERROR, "Unexpected number of chunks found: %d", num_found);
+			elog(ERROR, "unexpected number of chunks found: %d", num_found);
 	}
 
 	return chunk;
@@ -985,17 +989,16 @@ static bool
 chunk_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(ti->tuple);
-	Oid			nspoid = get_namespace_oid(NameStr(form->schema_name), false);
-	Oid			chunk_oid = get_relname_relid(NameStr(form->table_name), nspoid);
 	CatalogSecurityContext sec_ctx;
 
-	chunk_constraint_delete_by_chunk_id(form->id, chunk_oid);
+	chunk_constraint_delete_by_chunk_id(form->id);
+	chunk_index_delete_by_chunk_id(form->id, true);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
-	return false;
+	return true;
 }
 
 int
@@ -1017,7 +1020,20 @@ chunk_delete_by_relid(Oid relid)
 				F_NAMEEQ, NameGetDatum(&table));
 
 	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
-							   chunk_tuple_delete, NULL, 0, false,
+							   chunk_tuple_delete, NULL, 0,
+							   RowExclusiveLock);
+}
+
+int
+chunk_delete_by_hypertable_id(int32 hypertable_id)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_chunk_hypertable_id_idx_hypertable_id, BTEqualStrategyNumber,
+				F_INT4EQ, Int32GetDatum(hypertable_id));
+
+	return chunk_scan_internal(CHUNK_HYPERTABLE_ID_INDEX, scankey, 1,
+							   chunk_tuple_delete, NULL, 0,
 							   RowExclusiveLock);
 }
 

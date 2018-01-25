@@ -52,11 +52,6 @@ static bool expect_chunk_modification = false;
 
 /* Macros for DDL upcalls to PL/pgSQL */
 
-#define process_drop_hypertable(hypertable, cascade)					\
-	CatalogInternalCall2(DDL_DROP_HYPERTABLE,							\
-						 Int32GetDatum((hypertable)->fd.id),			\
-						 BoolGetDatum(cascade))
-
 #define process_truncate_hypertable(hypertable, cascade)				\
 	CatalogInternalCall3(TRUNCATE_HYPERTABLE,							\
 						 NameGetDatum(&(hypertable)->fd.schema_name),	\
@@ -368,6 +363,18 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 	return true;
 }
 
+static void
+process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	DropStmt   *stmt = arg;
+	ObjectAddress objaddr = {
+		.classId = RelationRelationId,
+		.objectId = chunk_relid,
+	};
+
+	performDeletion(&objaddr, stmt->behavior, 0);
+}
+
 static bool
 process_drop_table(DropStmt *stmt)
 {
@@ -394,18 +401,23 @@ process_drop_table(DropStmt *stmt)
 
 			if (NULL != ht)
 			{
-				CatalogSecurityContext sec_ctx;
-
 				if (list_length(stmt->objects) != 1)
 					elog(ERROR, "Cannot drop a hypertable along with other objects");
 
-				catalog_become_owner(catalog_get(), &sec_ctx);
-				process_drop_hypertable(ht, stmt->behavior == DROP_CASCADE);
-				catalog_restore_user(&sec_ctx);
-				handled = true;
+				/*
+				 * Delete the hypertable catalog information. This will
+				 * cascade to other dependent objects, like dimensions,
+				 * chunks, etc.
+				 */
+				hypertable_delete_by_id(ht->fd.id);
+
+				/* Drop each chunk table */
+				foreach_chunk(ht, process_drop_table_chunk, stmt);
 			}
 			else
 				chunk_delete_by_relid(relid);
+
+			handled = true;
 		}
 	}
 
@@ -770,7 +782,7 @@ process_drop_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	char	   *hypertable_constraint_name = arg;
 	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, chunk->table_id, hypertable_constraint_name);
+	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name);
 }
 
 static void

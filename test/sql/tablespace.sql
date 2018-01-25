@@ -116,9 +116,14 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');
 
---cleanup
-DROP TABLE tspace_1dim CASCADE;
-DROP TABLE tspace_2dim CASCADE;
+--cleanup - make sure tablespace metadata is removed
+SELECT attach_tablespace('tablespace2', 'tspace_1dim');
+SELECT attach_tablespace('tablespace1', 'tspace_2dim');
+SELECT * FROM _timescaledb_catalog.tablespace;
+DROP TABLE tspace_1dim;
+SELECT * FROM _timescaledb_catalog.tablespace;
+DROP TABLE tspace_2dim;
+SELECT * FROM _timescaledb_catalog.tablespace;
 
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

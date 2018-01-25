@@ -264,6 +264,41 @@ hypertable_scan_relid(Oid table_relid,
 }
 
 static bool
+hypertable_tuple_delete(TupleInfo *ti, void *data)
+{
+	CatalogSecurityContext sec_ctx;
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_delete(ti->scanrel, ti->tuple);
+	catalog_restore_user(&sec_ctx);
+
+	return false;
+}
+
+int
+hypertable_delete_by_id(int32 hypertable_id)
+{
+	ScanKeyData scankey[1];
+
+	tablespace_delete(hypertable_id, NULL);
+	chunk_delete_by_hypertable_id(hypertable_id);
+	dimension_delete_by_hypertable_id(hypertable_id, true);
+
+	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	return hypertable_scan_limit_internal(scankey,
+										  1,
+										  HYPERTABLE_ID_INDEX,
+										  hypertable_tuple_delete,
+										  NULL,
+										  1,
+										  RowExclusiveLock,
+										  false);
+}
+
+static bool
 tuple_found_lock(TupleInfo *ti, void *data)
 {
 	HTSU_Result *result = data;

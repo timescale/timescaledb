@@ -38,3 +38,8 @@ DROP FUNCTION _timescaledb_internal.show_tablespaces(regclass);
 DROP FUNCTION _timescaledb_internal.verify_hypertable_indexes(regclass);
 DROP FUNCTION _timescaledb_internal.validate_triggers(regclass);
 DROP FUNCTION _timescaledb_internal.chunk_create_table(int, name);
+
+-- Remove redundant index
+DROP INDEX _timescaledb_catalog.dimension_slice_dimension_id_range_start_range_end_idx;
+
+DROP FUNCTION _timescaledb_internal.drop_hypertable(int,boolean);
