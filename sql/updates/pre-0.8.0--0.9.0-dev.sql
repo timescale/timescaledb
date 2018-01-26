@@ -40,6 +40,8 @@ DROP FUNCTION _timescaledb_internal.validate_triggers(regclass);
 DROP FUNCTION _timescaledb_internal.chunk_create_table(int, name);
 DROP FUNCTION _timescaledb_internal.ddl_change_owner(oid, name);
 DROP FUNCTION _timescaledb_internal.truncate_hypertable(name,name,boolean);
+DROP FUNCTION attach_tablespace(name,regclass);
+DROP FUNCTION detach_tablespace(name,regclass);
 
 -- Remove redundant index
 DROP INDEX _timescaledb_catalog.dimension_slice_dimension_id_range_start_range_end_idx;

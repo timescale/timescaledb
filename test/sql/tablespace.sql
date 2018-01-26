@@ -32,6 +32,9 @@ SELECT attach_tablespace('tablespace2', 'tspace_2dim');
 --attach the same tablespace twice to same table should also generate error
 SELECT attach_tablespace('tablespace1', 'tspace_2dim');
 
+--no error if if_not_attached is given
+SELECT attach_tablespace('tablespace1', 'tspace_2dim', if_not_attached => true);
+
 \c single :ROLE_SUPERUSER
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TABLESPACE2_PATH;
 \c single :ROLE_DEFAULT_PERM_USER_2
@@ -64,18 +67,24 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 --
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
--- User doesn't have permission on tablespace1 --> error
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
+SELECT create_hypertable('tspace_1dim', 'time');
+--user doesn't have permission on tablespace1 --> error
+SELECT attach_tablespace('tablespace1', 'tspace_1dim');
 
--- Grant permission to tablespace1
+--grant permission to tablespace1
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
-
-SELECT create_hypertable('tspace_1dim', 'time');
+--should work fine now
 SELECT attach_tablespace('tablespace1', 'tspace_1dim');
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
+
+--trying to revoke permissions while attached should fail
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+REVOKE CREATE ON TABLESPACE tablespace1 FROM :ROLE_DEFAULT_PERM_USER_2;
+REVOKE ALL ON TABLESPACE tablespace1 FROM :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 
 SELECT * FROM _timescaledb_catalog.tablespace;
 
@@ -92,12 +101,19 @@ SELECT * FROM test.show_subtablesp('tspace_%');
 --created in that tablespace too.
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
---detach tablespace1 from all tables. Due to lack of permissions,
---should only detach from 'tspace_1dim' (1 tablespace)
+--detach tablespace1 from tspace_2dim should fail due to lack of permissions
+SELECT detach_tablespace('tablespace1', 'tspace_2dim');
+--detach tablespace1 from all tables. Should only detach from
+--'tspace_1dim' (1 tablespace) due to lack of permissions
 SELECT detach_tablespace('tablespace1');
 SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');
+
+--it should now be possible to revoke permissions on tablespace1
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+REVOKE CREATE ON TABLESPACE tablespace1 FROM :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 
 --detach the other tablespace
 SELECT detach_tablespace('tablespace2', 'tspace_1dim');
@@ -105,9 +121,16 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');
 
---detaching a tablespace from table without permissions should fail
+--detaching tablespace2 from a table without permissions should fail
 SELECT detach_tablespace('tablespace2', 'tspace_2dim');
 SELECT detach_tablespaces('tspace_2dim');
+
+\c single :ROLE_SUPERUSER
+-- PERM_USER_2 owns tablespace2, and PERM_USER owns the table
+-- 'tspace_2dim', which has tablespace2 attached. Revoking PERM_USER_2
+-- FROM PERM_USER should therefore fail
+REVOKE :ROLE_DEFAULT_PERM_USER_2 FROM :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 
 --set other user should make detach work
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -116,18 +139,39 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');
 
---cleanup - make sure tablespace metadata is removed
+\c single :ROLE_SUPERUSER
+-- It should now be possible to revoke PERM_USER_2 from PERM_USER
+-- since tablespace2 is no longer attched to tspace_2dim
+REVOKE :ROLE_DEFAULT_PERM_USER_2 FROM :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+--detaching twice should fail
+SELECT detach_tablespace('tablespace2', 'tspace_2dim');
+--adding if_attached should only generate notice
+SELECT detach_tablespace('tablespace2', 'tspace_2dim', if_attached => true);
+
+--attach tablespaces again to verify that tablespaces are cleaned up
+--when tables are dropped
+\c single :ROLE_SUPERUSER
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
 SELECT attach_tablespace('tablespace1', 'tspace_2dim');
+
 SELECT * FROM _timescaledb_catalog.tablespace;
 DROP TABLE tspace_1dim;
 SELECT * FROM _timescaledb_catalog.tablespace;
 DROP TABLE tspace_2dim;
 SELECT * FROM _timescaledb_catalog.tablespace;
 
+-- verify that one cannot DROP a tablespace while it is attached to a
+-- hypertable
+CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
+
+SELECT create_hypertable('tspace_1dim', 'time');
+SELECT attach_tablespace('tablespace1', 'tspace_1dim');
+SELECT * FROM show_tablespaces('tspace_1dim');
+
+DROP TABLESPACE tablespace1;
+--after detaching we should now be able to drop the tablespace
+SELECT detach_tablespace('tablespace1', 'tspace_1dim');
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
-
--- revoke grants
-\c single :ROLE_SUPERUSER
-REVOKE :ROLE_DEFAULT_PERM_USER_2 FROM :ROLE_DEFAULT_PERM_USER;

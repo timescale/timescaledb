@@ -62,7 +62,7 @@ ERROR:  permission denied for relation "one_Partition"
 select add_dimension('"one_Partition"', 'device_id', 2);
 ERROR:  permission denied for relation "one_Partition"
 select attach_tablespace('tablespace1', '"one_Partition"');
-ERROR:  Tablespace "tablespace1" does not exist
+ERROR:  tablespace "tablespace1" does not exist
 \set ON_ERROR_STOP 1
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');

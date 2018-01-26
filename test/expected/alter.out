@@ -20,16 +20,17 @@ SELECT * FROM alter_before;
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
-AND a.attnum > 0;
+AND a.attnum > 0
+ORDER BY c.relname, a.attnum;
      relname      |           attname            | attnum 
 ------------------+------------------------------+--------
+ _hyper_1_1_chunk | time                         |      1
+ _hyper_1_1_chunk | temp                         |      2
+ _hyper_1_1_chunk | colorid                      |      3
  alter_before     | ........pg.dropped.1........ |      1
  alter_before     | time                         |      2
  alter_before     | temp                         |      3
  alter_before     | colorid                      |      4
- _hyper_1_1_chunk | time                         |      1
- _hyper_1_1_chunk | temp                         |      2
- _hyper_1_1_chunk | colorid                      |      3
 (7 rows)
 
 -- DROP a table's column after making it a hypertable and having data
@@ -67,13 +68,10 @@ SELECT * FROM alter_after;
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
-AND a.attnum > 0;
+AND a.attnum > 0
+ORDER BY c.relname, a.attnum;
      relname      |           attname            | attnum 
 ------------------+------------------------------+--------
- alter_after      | ........pg.dropped.1........ |      1
- alter_after      | time                         |      2
- alter_after      | temp                         |      3
- alter_after      | colorid                      |      4
  _hyper_2_2_chunk | ........pg.dropped.1........ |      1
  _hyper_2_2_chunk | time                         |      2
  _hyper_2_2_chunk | temp                         |      3
@@ -84,6 +82,10 @@ AND a.attnum > 0;
  _hyper_2_4_chunk | time                         |      1
  _hyper_2_4_chunk | temp                         |      2
  _hyper_2_4_chunk | colorid                      |      3
+ alter_after      | ........pg.dropped.1........ |      1
+ alter_after      | time                         |      2
+ alter_after      | temp                         |      3
+ alter_after      | colorid                      |      4
 (14 rows)
 
 -- Add an ID column again
@@ -92,14 +94,10 @@ INSERT INTO alter_after (time, temp, colorid) VALUES ('2017-08-22T09:19:14', 12.
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
-AND a.attnum > 0;
+AND a.attnum > 0
+ORDER BY c.relname, a.attnum;
      relname      |           attname            | attnum 
 ------------------+------------------------------+--------
- alter_after      | ........pg.dropped.1........ |      1
- alter_after      | time                         |      2
- alter_after      | temp                         |      3
- alter_after      | colorid                      |      4
- alter_after      | id                           |      5
  _hyper_2_2_chunk | ........pg.dropped.1........ |      1
  _hyper_2_2_chunk | time                         |      2
  _hyper_2_2_chunk | temp                         |      3
@@ -113,6 +111,11 @@ AND a.attnum > 0;
  _hyper_2_4_chunk | temp                         |      2
  _hyper_2_4_chunk | colorid                      |      3
  _hyper_2_4_chunk | id                           |      4
+ alter_after      | ........pg.dropped.1........ |      1
+ alter_after      | time                         |      2
+ alter_after      | temp                         |      3
+ alter_after      | colorid                      |      4
+ alter_after      | id                           |      5
 (18 rows)
 
 SELECT * FROM alter_after;

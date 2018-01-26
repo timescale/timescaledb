@@ -13,7 +13,8 @@ SELECT * FROM alter_before;
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
-AND a.attnum > 0;
+AND a.attnum > 0
+ORDER BY c.relname, a.attnum;
 
 -- DROP a table's column after making it a hypertable and having data
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer);
@@ -40,7 +41,8 @@ SELECT * FROM alter_after;
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
-AND a.attnum > 0;
+AND a.attnum > 0
+ORDER BY c.relname, a.attnum;
 
 -- Add an ID column again
 ALTER TABLE alter_after ADD COLUMN id serial;
@@ -50,6 +52,7 @@ INSERT INTO alter_after (time, temp, colorid) VALUES ('2017-08-22T09:19:14', 12.
 SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
-AND a.attnum > 0;
+AND a.attnum > 0
+ORDER BY c.relname, a.attnum;
 
 SELECT * FROM alter_after;
