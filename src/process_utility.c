@@ -252,33 +252,6 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 
 typedef void (*process_chunk_t) (Hypertable *ht, Oid chunk_relid, void *arg);
 
-/*
- * Applies a function to each chunk of a hypertable.
- *
- * Returns the number of processed chunks, or -1 if the table was not a
- * hypertable.
- */
-static int
-foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
-{
-	List	   *chunks;
-	ListCell   *lc;
-	int			n = 0;
-
-	if (NULL == ht)
-		return -1;
-
-	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
-
-	foreach(lc, chunks)
-	{
-		process_chunk(ht, lfirst_oid(lc), arg);
-		n++;
-	}
-
-	return n;
-}
-
 static int
 foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 {
@@ -293,7 +266,7 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 	}
 
 	hcache->release_on_commit = false;
-	ret = foreach_chunk(ht, process_chunk, arg);
+	ret = hypertable_foreach_chunk(ht, process_chunk, arg);
 	hcache->release_on_commit = true;
 
 	cache_release(hcache);
@@ -355,7 +328,7 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 
 	/* allow vacuum to be cross-commit */
 	hcache->release_on_commit = false;
-	foreach_chunk(ht, vacuum_chunk, &ctx);
+	hypertable_foreach_chunk(ht, vacuum_chunk, &ctx);
 	hcache->release_on_commit = true;
 
 	cache_release(hcache);
@@ -412,7 +385,7 @@ process_drop_table(DropStmt *stmt)
 				hypertable_delete_by_id(ht->fd.id);
 
 				/* Drop each chunk table */
-				foreach_chunk(ht, process_drop_table_chunk, stmt);
+				hypertable_foreach_chunk(ht, process_drop_table_chunk, stmt);
 			}
 			else
 				chunk_delete_by_relid(relid);
@@ -459,59 +432,12 @@ process_drop_trigger(DropStmt *stmt)
 													  stmt->missing_ok);
 
 				if (trigger_is_chunk_trigger(trigger))
-					foreach_chunk(ht, process_drop_trigger_chunk, trigger);
+					hypertable_foreach_chunk(ht, process_drop_trigger_chunk, trigger);
 			}
 		}
 	}
 
 	cache_release(hcache);
-}
-
-static void
-process_drop_index(DropStmt *stmt)
-{
-	ListCell   *lc;
-
-	foreach(lc, stmt->objects)
-	{
-		List	   *object = lfirst(lc);
-		RangeVar   *relation = makeRangeVarFromNameList(object);
-		Oid			idxrelid;
-
-		if (NULL == relation)
-			continue;
-
-		idxrelid = RangeVarGetRelid(relation, NoLock, true);
-
-		if (OidIsValid(idxrelid))
-		{
-			Oid			tblrelid = IndexGetRelation(idxrelid, false);
-			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *ht = hypertable_cache_get_entry(hcache, tblrelid);
-
-			/*
-			 * Drop a hypertable index, i.e., all corresponding indexes on all
-			 * chunks
-			 */
-			if (NULL != ht)
-				chunk_index_delete_children_of(ht, idxrelid, true);
-			else
-			{
-				/* Drop an index on a chunk */
-				Chunk	   *chunk = chunk_get_by_relid(tblrelid, 0, false);
-
-				if (NULL != chunk)
-
-					/*
-					 * No need DROP the index here since DDL statement drops
-					 * (hence 'false' parameter), just delete the metadata
-					 */
-					chunk_index_delete(chunk, idxrelid, false);
-			}
-
-			cache_release(hcache);
-		}
-	}
 }
 
 static void
@@ -526,9 +452,6 @@ process_drop(Node *parsetree)
 			break;
 		case OBJECT_TRIGGER:
 			process_drop_trigger(stmt);
-			break;
-		case OBJECT_INDEX:
-			process_drop_index(stmt);
 			break;
 		default:
 			break;
@@ -589,7 +512,7 @@ process_reindex(Node *parsetree)
 			{
 				PreventCommandDuringRecovery("REINDEX");
 
-				if (foreach_chunk(ht, reindex_chunk, stmt) >= 0)
+				if (hypertable_foreach_chunk(ht, reindex_chunk, stmt) >= 0)
 					ret = true;
 			}
 			break;
@@ -687,7 +610,7 @@ process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
 	if (NULL != ht)
 	{
 		relation_not_only(stmt->relation);
-		foreach_chunk(ht, rename_hypertable_constraint, stmt);
+		hypertable_foreach_chunk(ht, rename_hypertable_constraint, stmt);
 	}
 	else
 	{
@@ -773,45 +696,7 @@ process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 
 	Assert(constraint_name != NULL);
 
-	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
-}
-
-static void
-process_drop_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
-{
-	char	   *hypertable_constraint_name = arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
-
-	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name);
-}
-
-static void
-process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
-{
-	char	   *constraint_name = NULL;
-	CatalogSecurityContext sec_ctx;
-	Oid			hypertable_constraint_oid,
-				hypertable_constraint_index_oid;
-
-	constraint_name = cmd->name;
-	Assert(constraint_name != NULL);
-
-	hypertable_constraint_oid = get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
-	hypertable_constraint_index_oid = get_constraint_index(hypertable_constraint_oid);
-
-	catalog_become_owner(catalog_get(), &sec_ctx);
-
-	/* Recurse to each chunk and drop the corresponding constraint */
-	foreach_chunk(ht, process_drop_constraint_chunk, constraint_name);
-
-	/*
-	 * If this is a constraint backed by and index, we need to delete
-	 * index-related metadata as well
-	 */
-	if (OidIsValid(hypertable_constraint_index_oid))
-		chunk_index_delete_children_of(ht, hypertable_constraint_index_oid, false);
-
-	catalog_restore_user(&sec_ctx);
+	hypertable_foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
 }
 
 static void
@@ -1031,7 +916,7 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 		catalog_become_owner(catalog_get(), &sec_ctx);
 
 		/* Recurse to each chunk and create a corresponding index */
-		foreach_chunk(ht, process_index_chunk, &info);
+		hypertable_foreach_chunk(ht, process_index_chunk, &info);
 
 		catalog_restore_user(&sec_ctx);
 		handled = true;
@@ -1378,11 +1263,6 @@ process_altertable_start_table(Node *parsetree)
 				if (ht != NULL)
 					process_altertable_drop_not_null(ht, cmd);
 				break;
-			case AT_DropConstraint:
-			case AT_DropConstraintRecurse:
-				if (ht != NULL)
-					process_altertable_drop_constraint(ht, cmd);
-				break;
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				Assert(IsA(cmd->def, Constraint));
@@ -1499,7 +1379,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ReplaceRelOptions:
 		case AT_AddOids:
 		case AT_DropOids:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			hypertable_foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		default:
 			break;

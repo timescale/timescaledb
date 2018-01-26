@@ -21,6 +21,8 @@ typedef struct Hypertable
 	SubspaceStore *chunk_cache;
 } Hypertable;
 
+typedef void (*process_chunk_t) (Hypertable *ht, Oid chunk_relid, void *arg);
+
 extern bool hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern Oid	hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);
@@ -41,5 +43,6 @@ extern Tablespace *hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 extern char *hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
 extern Tablespace *hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset);
 extern bool hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
+extern int	hypertable_foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg);
 
 #endif							/* TIMESCALEDB_HYPERTABLE_H */

@@ -413,6 +413,44 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 										  lockmode);
 }
 
+static int
+chunk_constraint_scan_by_chunk_id_constraint_name_internal(int32 chunk_id,
+														   const char *constraint_name,
+														   tuple_found_func tuple_found,
+														   tuple_found_func tuple_filter,
+														   void *data,
+														   LOCKMODE lockmode)
+{
+	Catalog    *catalog = catalog_get();
+	ScanKeyData scankey[2];
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[CHUNK_CONSTRAINT].id,
+		.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX],
+		.scantype = ScannerTypeIndex,
+		.nkeys = 2,
+		.scankey = scankey,
+		.data = data,
+		.tuple_found = tuple_found,
+		.filter = tuple_filter,
+		.lockmode = lockmode,
+		.scandirection = ForwardScanDirection,
+	};
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk_id));
+
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(constraint_name)));
+
+	return scanner_scan(&scanctx);
+}
+
 /*
  * Scan all the chunk's constraints given its chunk ID.
  *
@@ -643,6 +681,18 @@ static bool
 chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 {
 	ConstraintInfo *info = data;
+
+	/* Collect the deleted constraints */
+	if (NULL != info && NULL != info->ccs)
+		chunk_constraint_tuple_found(ti, info->ccs);
+
+	catalog_delete(ti->scanrel, ti->tuple);
+	return true;
+}
+
+static bool
+chunk_constraint_drop_tuple(TupleInfo *ti, void *data)
+{
 	bool		isnull;
 	Datum		constrname = heap_getattr(ti->tuple, Anum_chunk_constraint_constraint_name,
 										  ti->desc, &isnull);
@@ -654,23 +704,8 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 		.objectId = get_relation_constraint_oid(chunk->table_id,
 												NameStr(*DatumGetName(constrname)), false),
 	};
-	Oid			index_relid = get_constraint_index(constrobj.objectId);
 
-	/* Collect the deleted constraints */
-	if (NULL != info && NULL != info->ccs)
-		chunk_constraint_tuple_found(ti, info->ccs);
-
-	/*
-	 * If this is an index constraint, we need to cleanup the index metadata.
-	 * Don't drop the index though, since that will happend when the
-	 * constraint is dropped.
-	 */
-	if (OidIsValid(index_relid))
-		chunk_index_delete(chunk, index_relid, false);
-
-	catalog_delete(ti->scanrel, ti->tuple);
 	performDeletion(&constrobj, DROP_RESTRICT, 0);
-
 	return true;
 }
 
@@ -694,15 +729,16 @@ hypertable_constraint_tuple_filter(TupleInfo *ti, void *data)
 }
 
 int
-chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
-													  char *hypertable_constraint_name)
+chunk_constraint_drop_by_hypertable_constraint_name(int32 chunk_id,
+													Oid chunk_oid,
+													char *hypertable_constraint_name)
 {
 	ConstraintInfo info = {
 		.hypertable_constraint_name = hypertable_constraint_name,
 	};
 
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
-													  chunk_constraint_delete_tuple,
+													  chunk_constraint_drop_tuple,
 													  hypertable_constraint_tuple_filter,
 													  &info,
 													  RowExclusiveLock);
@@ -745,6 +781,19 @@ chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 										  RowExclusiveLock);
 }
 
+int
+chunk_constraint_delete_by_constraint_oid(int32 chunk_id, Oid constraint_oid)
+{
+	char	   *constrname = get_constraint_name(constraint_oid);
+
+	return chunk_constraint_scan_by_chunk_id_constraint_name_internal(chunk_id,
+																	  constrname,
+																	  chunk_constraint_delete_tuple,
+																	  NULL,
+																	  NULL,
+																	  RowExclusiveLock);
+}
+
 void
 chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid)
 {
@@ -754,7 +803,7 @@ chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid)
 												NameStr(cc->fd.constraint_name), false),
 	};
 
-	performDeletion(&constrobj, DROP_RESTRICT, 0);
+	performDeletion(&constrobj, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
 	chunk_constraint_create_on_table(cc, chunk_oid);
 }
 

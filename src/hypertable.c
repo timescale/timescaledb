@@ -16,6 +16,7 @@
 #include <commands/schemacmds.h>
 #include <storage/lmgr.h>
 #include <miscadmin.h>
+#include <catalog/pg_inherits_fn.h>
 
 #include "hypertable.h"
 #include "dimension.h"
@@ -905,4 +906,31 @@ hypertable_create(PG_FUNCTION_ARGS)
 	cache_release(hcache);
 
 	PG_RETURN_VOID();
+}
+
+/*
+ * Applies a function to each chunk of a hypertable.
+ *
+ * Returns the number of processed chunks, or -1 if the table was not a
+ * hypertable.
+ */
+int
+hypertable_foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
+{
+	List	   *chunks;
+	ListCell   *lc;
+	int			n = 0;
+
+	if (NULL == ht)
+		return -1;
+
+	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+
+	foreach(lc, chunks)
+	{
+		process_chunk(ht, lfirst_oid(lc), arg);
+		n++;
+	}
+
+	return n;
 }

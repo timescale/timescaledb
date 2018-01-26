@@ -95,6 +95,13 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         5 |                  5 | constraint_5    | 
 (3 rows)
 
+-- The index should also have been removed
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id |           index_name            | hypertable_id | hypertable_index_name 
+----------+---------------------------------+---------------+-----------------------
+        3 | _hyper_1_3_chunk_hyper_time_idx |             1 | hyper_time_idx
+(1 row)
+
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
                            Constraint                            | Type |  Columns   | Index |                                           Expr                                           
 -----------------------------------------------------------------+------+------------+-------+------------------------------------------------------------------------------------------
@@ -371,6 +378,26 @@ INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000002, 'dev3', 11);
 ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_22_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
+--test CASCADE drop behavior
+DROP TABLE devices CASCADE;
+NOTICE:  drop cascades to 2 other objects
+--the fk went away.
+INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
+(1257987700000000002, 'dev3', 11);
+CREATE TABLE devices(
+    device_id TEXT NOT NULL,
+    PRIMARY KEY (device_id)
+);
+INSERT INTO devices VALUES ('dev2'), ('dev3');
+ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
+FOREIGN KEY (device_id) REFERENCES devices(device_id);
+\set ON_ERROR_STOP 0
+INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
+(1257987700000000003, 'dev4', 11);
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_23_hyper_fk_device_id_fkey"
+\set ON_ERROR_STOP 1
+--this tests that there are no extra chunk_constraints left on hyper_fk
+TRUNCATE hyper_fk;
 ----------------------- FOREIGN KEY INTO A HYPERTABLE  ------------------
 --FOREIGN KEY references into a hypertable are currently broken.
 --The referencing table will never find the corresponding row in the hypertable
@@ -423,7 +450,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_24_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_25_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_ex DROP CONSTRAINT hyper_ex_time_device_id_excl;
 --can now add
@@ -436,7 +463,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
         time WITH =, device_id WITH =
     ) WHERE (not canceled)
 ;
-ERROR:  could not create exclusion constraint "9_25_hyper_ex_time_device_id_excl"
+ERROR:  could not create exclusion constraint "9_26_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_ex WHERE sensor_1 = 12;
 ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
@@ -447,7 +474,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_26_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_27_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 --cannot add exclusion constraint without partition key.
 CREATE TABLE hyper_ex_invalid (

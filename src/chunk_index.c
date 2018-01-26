@@ -603,8 +603,24 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 	return true;
 }
 
+static bool
+chunk_index_tuple_drop(TupleInfo *ti, void *data)
+{
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	Oid			schemaid = chunk_index_get_schemaid(chunk_index);
+	ObjectAddress idxobj = {
+		.classId = RelationRelationId,
+		.objectId = get_relname_relid(NameStr(chunk_index->index_name), schemaid),
+	};
+
+	performDeletion(&idxobj, DROP_RESTRICT, 0);
+	return true;
+}
+
+
+
 int
-chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool should_drop)
+chunk_index_drop_children_of(Hypertable *ht, Oid hypertable_indexrelid)
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(hypertable_indexrelid);
@@ -618,7 +634,7 @@ chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool s
 				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey, 2, chunk_index_tuple_delete, &should_drop);
+								   scankey, 2, chunk_index_tuple_drop, NULL);
 }
 
 int
