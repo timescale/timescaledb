@@ -50,3 +50,8 @@ DELETE FROM _timescaledb_catalog.dimension_slice WHERE id IN
  FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds
  ON (ds.id = cc.dimension_slice_id)
  WHERE dimension_slice_id IS NULL);
+
+ -- Histogram
+ DROP AGGREGATE IF EXISTS histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER);
+ DROP FUNCTION _timescaledb_internal.hist_sfunc(INTERNAL, DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER);
+ DROP FUNCTION _timescaledb_internal.hist_finalfunc(INTERNAL, DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER);

@@ -38,6 +38,12 @@ LIMIT 5;
 EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
 
+EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2, 'sum') FROM "test";
+SELECT histogram(i, 1, 1000000, 2, 'sum') FROM "test";
+
+EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2, 'avg') FROM "test";
+SELECT histogram(i, 1, 1000000, 2, 'avg') FROM "test";
+
 EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
 

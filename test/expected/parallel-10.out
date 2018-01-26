@@ -94,6 +94,38 @@ SELECT histogram(i, 1, 1000000, 2) FROM "test";
  {0,500000,499999,1}
 (1 row)
 
+EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2, 'sum') FROM "test";
+                 QUERY PLAN                  
+---------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Seq Scan on test
+(5 rows)
+
+SELECT histogram(i, 1, 1000000, 2, 'sum') FROM "test";
+               histogram               
+---------------------------------------
+ {0,125000250000,374999250000,1000000}
+(1 row)
+
+EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2, 'avg') FROM "test";
+                 QUERY PLAN                  
+---------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Partial Aggregate
+               ->  Parallel Seq Scan on test
+(5 rows)
+
+SELECT histogram(i, 1, 1000000, 2, 'avg') FROM "test";
+          histogram          
+-----------------------------
+ {0,250000.5,750000,1000000}
+(1 row)
+
 EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
                  QUERY PLAN                  
 ---------------------------------------------
