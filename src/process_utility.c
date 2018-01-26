@@ -612,6 +612,72 @@ process_drop_index(DropStmt *stmt)
 }
 
 static void
+process_drop_tablespace(Node *parsetree)
+{
+	DropTableSpaceStmt *stmt = (DropTableSpaceStmt *) parsetree;
+	int			count = tablespace_count_attached(stmt->tablespacename);
+
+	if (count > 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("tablespace \"%s\" is still attached to %d hypertables",
+						stmt->tablespacename, count),
+				 errhint("Detach the tablespace from all hypertables before removing it.")));
+}
+
+/*
+ * Handle GRANT / REVOKE.
+ *
+ * A revoke is a GrantStmt with 'is_grant' set to false.
+ */
+static bool
+process_grant_and_revoke(ProcessUtilityArgs *args)
+{
+	GrantStmt  *stmt = (GrantStmt *) args->parsetree;
+
+	/*
+	 * Need to apply the REVOKE first to be able to check remaining
+	 * permissions
+	 */
+	prev_ProcessUtility(args);
+
+	/* We only care about revokes and setting privileges on a specific object */
+	if (stmt->is_grant || stmt->targtype != ACL_TARGET_OBJECT)
+		return true;
+
+	switch (stmt->objtype)
+	{
+		case ACL_OBJECT_TABLESPACE:
+			tablespace_validate_revoke(stmt);
+			break;
+		default:
+			break;
+	}
+
+	return true;
+}
+
+static bool
+process_grant_and_revoke_role(ProcessUtilityArgs *args)
+{
+	GrantRoleStmt *stmt = (GrantRoleStmt *) args->parsetree;
+
+	/*
+	 * Need to apply the REVOKE first to be able to check remaining
+	 * permissions
+	 */
+	prev_ProcessUtility(args);
+
+	/* We only care about revokes and setting privileges on a specific object */
+	if (stmt->is_grant)
+		return true;
+
+	tablespace_validate_revoke_role(stmt);
+
+	return true;
+}
+
+static void
 process_drop(Node *parsetree)
 {
 	DropStmt   *stmt = (DropStmt *) parsetree;
@@ -1766,6 +1832,15 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			 * way.
 			 */
 			process_drop(args->parsetree);
+			break;
+		case T_DropTableSpaceStmt:
+			process_drop_tablespace(args->parsetree);
+			break;
+		case T_GrantStmt:
+			handled = process_grant_and_revoke(args);
+			break;
+		case T_GrantRoleStmt:
+			handled = process_grant_and_revoke_role(args);
 			break;
 		case T_CopyStmt:
 			handled = process_copy(args->parsetree, args->query_string, args->completion_tag);

@@ -127,10 +127,18 @@ CREATE OR REPLACE FUNCTION  add_dimension(
 ) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'dimension_add' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION attach_tablespace(tablespace NAME, hypertable REGCLASS) RETURNS VOID
+CREATE OR REPLACE FUNCTION attach_tablespace(
+    tablespace NAME,
+    hypertable REGCLASS,
+    if_not_attached BOOLEAN = false
+) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'tablespace_attach' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION detach_tablespace(tablespace NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+CREATE OR REPLACE FUNCTION detach_tablespace(
+    tablespace NAME,
+    hypertable REGCLASS = NULL,
+    if_attached BOOLEAN = false
+) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'tablespace_detach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
