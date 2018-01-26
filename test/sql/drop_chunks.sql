@@ -6,6 +6,11 @@ SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval 
 SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval => 1, create_default_indexes=>false);
 SELECT create_hypertable('public.drop_chunk_test3', 'time', chunk_time_interval => 1, create_default_indexes=>false);
 
+-- Add space dimensions to ensure chunks share dimension slices
+SELECT add_dimension('public.drop_chunk_test1', 'device_id', 2);
+SELECT add_dimension('public.drop_chunk_test2', 'device_id', 2);
+SELECT add_dimension('public.drop_chunk_test3', 'device_id', 2);
+
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
@@ -55,7 +60,35 @@ CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chu
 SELECT drop_chunks(2);
 \set ON_ERROR_STOP 1
 
+-- show created constraints and dimension slices for each chunk
+SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id);
+SELECT * FROM _timescaledb_catalog.dimension_slice;
+
+-- Drop one chunk "manually" and verify that dimension slices and
+-- constraints are cleaned up. Each chunk has two constraints and two
+-- dimension slices. Both constraints should be deleted, but only one
+-- slice should be deleted since the space-dimension slice is shared
+-- with other chunks in the same hypertable
+DROP TABLE _timescaledb_internal._hyper_2_7_chunk;
+
+-- Two constraints deleted compared to above
+SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id);
+-- Only one dimension slice deleted
+SELECT * FROM _timescaledb_catalog.dimension_slice;
+
 SELECT drop_chunks(2, CASCADE=>true);
+
+SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
+FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id);
+SELECT * FROM _timescaledb_catalog.dimension_slice;
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -159,4 +192,3 @@ BEGIN;
     SELECT drop_chunks((now()-interval '1 day')::date, 'drop_chunk_test_date');
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
 ROLLBACK;
-

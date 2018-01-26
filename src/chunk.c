@@ -647,7 +647,7 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, DimensionVec *v
 		 * For each dimension slice, find matching constraints. These will be
 		 * saved in the scan context
 		 */
-		chunk_constraint_scan_by_dimension_slice_id(vec->slices[i], scanctx);
+		chunk_constraint_scan_by_dimension_slice(vec->slices[i], scanctx);
 	}
 }
 
@@ -990,9 +990,25 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(ti->tuple);
 	CatalogSecurityContext sec_ctx;
+	ChunkConstraints *ccs = chunk_constraints_alloc(2);
+	int			i;
 
-	chunk_constraint_delete_by_chunk_id(form->id);
+	chunk_constraint_delete_by_chunk_id(form->id, ccs);
 	chunk_index_delete_by_chunk_id(form->id, true);
+
+	/* Check for dimension slices that are orphaned by the chunk deletion */
+	for (i = 0; i < ccs->num_constraints; i++)
+	{
+		ChunkConstraint *cc = &ccs->constraints[i];
+
+		/*
+		 * Delete the dimension slice if there are no remaining constraints
+		 * referencing it
+		 */
+		if (is_dimension_constraint(cc) &&
+			chunk_constraint_scan_by_dimension_slice_id(cc->fd.dimension_slice_id, NULL) == 0)
+			dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+	}
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
@@ -1066,7 +1082,7 @@ chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id)
 	chunk_scan_ctx_init(&chunkctx, hs, NULL);
 
 	for (i = 0; i < slices->num_slices; i++)
-		chunk_constraint_scan_by_dimension_slice_id(slices->slices[i], &chunkctx);
+		chunk_constraint_scan_by_dimension_slice(slices->slices[i], &chunkctx);
 
 	chunk_scan_ctx_foreach_chunk(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);

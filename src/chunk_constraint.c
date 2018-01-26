@@ -67,10 +67,13 @@ chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 	ccs->constraints = repalloc(ccs->constraints, CHUNK_CONSTRAINTS_SIZE(new_capacity));
 }
 
-
 static
 void
-chunk_constraint_choose_name(Name dst, bool is_dimension, int32 dimension_slice_id, const char *hypertable_constraint_name, int32 chunk_id)
+chunk_constraint_choose_name(Name dst,
+							 bool is_dimension,
+							 int32 dimension_slice_id,
+							 const char *hypertable_constraint_name,
+							 int32 chunk_id)
 {
 	if (is_dimension)
 	{
@@ -216,7 +219,8 @@ chunk_constraints_add_from_tuple(ChunkConstraints *ccs, TupleInfo *ti)
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
 	constraint_name = DatumGetName(values[Anum_chunk_constraint_constraint_name - 1]);
-	if (heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id))
+
+	if (nulls[Anum_chunk_constraint_dimension_slice_id - 1])
 	{
 		dimension_slice_id = 0;
 		hypertable_constraint_name = DatumGetName(values[Anum_chunk_constraint_hypertable_constraint_name - 1]);
@@ -332,6 +336,9 @@ chunk_constraints_create(ChunkConstraints *ccs,
 								hypertable_id);
 }
 
+/*
+ * Scan filter function for only getting dimension constraints.
+ */
 static bool
 chunk_constraint_for_dimension_slice(TupleInfo *ti, void *data)
 {
@@ -343,7 +350,8 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 {
 	ChunkConstraints *ccs = data;
 
-	chunk_constraints_add_from_tuple(ccs, ti);
+	if (NULL != ccs)
+		chunk_constraints_add_from_tuple(ccs, ti);
 
 	return true;
 }
@@ -469,32 +477,56 @@ chunk_constraint_dimension_slice_id_tuple_found(TupleInfo *ti, void *data)
 	return true;
 }
 
-/*
- * Scan for all chunk constraints that match the given slice ID. The chunk
- * constraints are saved in the chunk scan context.
- */
-int
-chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx *ctx)
+static int
+scan_by_dimension_slice_id(int32 dimension_slice_id,
+						   tuple_found_func tuple_found,
+						   void *data)
 {
 	ScanKeyData scankey[1];
-	ChunkConstraintScanData data = {
-		.scanctx = ctx,
-		.slice = slice,
-	};
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(slice->fd.id));
+				Int32GetDatum(dimension_slice_id));
 
 	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
 										  scankey,
 										  1,
-										  chunk_constraint_dimension_slice_id_tuple_found,
+										  tuple_found,
 										  chunk_constraint_for_dimension_slice,
-										  &data,
+										  data,
 										  AccessShareLock);
+}
+
+/*
+ * Scan for all chunk constraints that match the given slice ID. The chunk
+ * constraints are saved in the chunk scan context.
+ */
+int
+chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx)
+{
+	ChunkConstraintScanData data = {
+		.scanctx = ctx,
+		.slice = slice,
+	};
+
+	return scan_by_dimension_slice_id(slice->fd.id,
+									  chunk_constraint_dimension_slice_id_tuple_found,
+									  &data);
+}
+
+/*
+ * Scan for chunk constraints given a dimension slice ID.
+ *
+ * Optionally, collect all chunk constraints if ChunkConstraints is non-NULL.
+ */
+int
+chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs)
+{
+	return scan_by_dimension_slice_id(dimension_slice_id,
+									  chunk_constraint_tuple_found,
+									  ccs);
 }
 
 static bool
@@ -592,6 +624,7 @@ chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid)
 typedef struct ConstraintInfo
 {
 	const char *hypertable_constraint_name;
+	ChunkConstraints *ccs;
 } ConstraintInfo;
 
 typedef struct RenameHypertableConstraintInfo
@@ -601,9 +634,15 @@ typedef struct RenameHypertableConstraintInfo
 } RenameHypertableConstraintInfo;
 
 
+/*
+ * Delete a chunk constraint tuple.
+ *
+ * Optionally, the data argument is a ConstraintInfo.
+ */
 static bool
 chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 {
+	ConstraintInfo *info = data;
 	bool		isnull;
 	Datum		constrname = heap_getattr(ti->tuple, Anum_chunk_constraint_constraint_name,
 										  ti->desc, &isnull);
@@ -616,6 +655,10 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 												NameStr(*DatumGetName(constrname)), false),
 	};
 	Oid			index_relid = get_constraint_index(constrobj.objectId);
+
+	/* Collect the deleted constraints */
+	if (NULL != info && NULL != info->ccs)
+		chunk_constraint_tuple_found(ti, info->ccs);
 
 	/*
 	 * If this is an index constraint, we need to cleanup the index metadata.
@@ -665,13 +708,20 @@ chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 													  RowExclusiveLock);
 }
 
+/*
+ * Delete all constraints for a chunk. Optionally, collect the deleted constraints.
+ */
 int
-chunk_constraint_delete_by_chunk_id(int32 chunk_id)
+chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs)
 {
+	ConstraintInfo info = {
+		.ccs = ccs,
+	};
+
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
 													  chunk_constraint_delete_tuple,
 													  NULL,
-													  NULL,
+													  &info,
 													  RowExclusiveLock);
 }
 
