@@ -33,7 +33,7 @@
 #include "guc.h"
 #include "errors.h"
 
-static Oid
+Oid
 rel_get_owner(Oid relid)
 {
 	HeapTuple	tuple;
@@ -963,7 +963,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 		NameData	tspc_name;
 
 		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
-		tablespace_attach_internal(&tspc_name, table_relid);
+		tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
 
 	cache_release(hcache);

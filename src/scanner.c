@@ -198,7 +198,7 @@ scanner_scan(ScannerCtx *ctx)
 			}
 
 			/* Abort the scan if the handler wants us to */
-			if (!ctx->tuple_found(&ictx.tinfo, ctx->data))
+			if (ctx->tuple_found != NULL && !ctx->tuple_found(&ictx.tinfo, ctx->data))
 				break;
 		}
 
