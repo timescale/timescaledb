@@ -36,14 +36,14 @@ typedef struct ChunkScanCtx ChunkScanCtx;
 extern ChunkConstraints *chunk_constraints_alloc(int size_hint);
 extern ChunkConstraints *chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint);
 extern ChunkConstraints *chunk_constraints_copy(ChunkConstraints *constraints);
+extern int	chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx);
+extern int	chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs);
 extern int	chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id, Hypercube *cube);
 extern int	chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id, Oid hypertable_oid);
 extern void chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id, Oid hypertable_oid, int32 hypertable_id);
-
-extern int	chunk_constraint_scan_by_dimension_slice_id(DimensionSlice *slice, ChunkScanCtx *ctx);
 extern void chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid);
 extern int	chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id, char *hypertable_constraint_name);
-extern int	chunk_constraint_delete_by_chunk_id(int32 chunk_i);
+extern int	chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs);
 extern int	chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id);
 extern void chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid);
 extern int	chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname, const char *newname);

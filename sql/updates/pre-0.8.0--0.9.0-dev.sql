@@ -43,3 +43,10 @@ DROP FUNCTION _timescaledb_internal.chunk_create_table(int, name);
 DROP INDEX _timescaledb_catalog.dimension_slice_dimension_id_range_start_range_end_idx;
 
 DROP FUNCTION _timescaledb_internal.drop_hypertable(int,boolean);
+
+-- Delete orphaned slices
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id IN
+(SELECT dimension_id FROM _timescaledb_catalog.chunk_constraint cc
+ FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds
+ ON (ds.id = cc.dimension_slice_id)
+ WHERE dimension_slice_id IS NULL);
