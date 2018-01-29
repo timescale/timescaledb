@@ -154,6 +154,7 @@ should_load_on_create_extension(Node *utility_stmt)
 			 errmsg("the session already has \"%s\" shared library version \"%s\" loaded",
 					stmt->extname, soversion),
 			 errhint("You should start a new session and execute CREATE EXTENSION as the first command")));
+	return false;
 }
 
 static bool

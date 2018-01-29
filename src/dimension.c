@@ -8,6 +8,9 @@
 #include <utils/timestamp.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#ifdef _WIN32
+#include <stdint.h>
+#endif
 
 #include "catalog.h"
 #include "compat.h"

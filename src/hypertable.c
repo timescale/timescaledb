@@ -364,9 +364,10 @@ hypertable_lock_tuple_simple(Oid table_relid)
 			return false;
 		case HeapTupleInvisible:
 			elog(ERROR, "attempted to lock invisible tuple");
-			break;
+			return false;
 		default:
 			elog(ERROR, "unexpected tuple lock status");
+			return false;
 	}
 }
 
@@ -899,7 +900,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 		NameData	tspc_name;
 
 		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
-		DirectFunctionCall2(tablespace_attach, NameGetDatum(&tspc_name), ObjectIdGetDatum(table_relid));
+		tablespace_attach_internal(&tspc_name, table_relid);
 	}
 
 	cache_release(hcache);
