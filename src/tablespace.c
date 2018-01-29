@@ -296,12 +296,6 @@ tablespace_attach(PG_FUNCTION_ARGS)
 {
 	Oid			hypertable_oid;
 	Name		tspcname;
-	Cache	   *hcache;
-	Hypertable *ht;
-	Oid			tspc_oid;
-	Oid			ownerid;
-	AclResult	aclresult;
-	CatalogSecurityContext sec_ctx;
 
 	if (PG_NARGS() != 2)
 		elog(ERROR, "Invalid number of arguments");
@@ -314,6 +308,21 @@ tablespace_attach(PG_FUNCTION_ARGS)
 
 	tspcname = PG_GETARG_NAME(0);
 	hypertable_oid = PG_GETARG_OID(1);
+
+	tablespace_attach_internal(tspcname, hypertable_oid);
+
+	PG_RETURN_VOID();
+}
+
+void
+tablespace_attach_internal(Name tspcname, Oid hypertable_oid)
+{
+	Cache	   *hcache;
+	Hypertable *ht;
+	Oid			tspc_oid;
+	Oid			ownerid;
+	AclResult	aclresult;
+	CatalogSecurityContext sec_ctx;
 
 	tspc_oid = get_tablespace_oid(NameStr(*tspcname), true);
 
@@ -354,8 +363,6 @@ tablespace_attach(PG_FUNCTION_ARGS)
 	catalog_restore_user(&sec_ctx);
 
 	cache_release(hcache);
-
-	PG_RETURN_VOID();
 }
 
 static int

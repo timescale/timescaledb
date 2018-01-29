@@ -164,6 +164,7 @@ find_path(PG_SOURCE_DIR
   $ENV{HOME}/Projects
   $ENV{HOME}/development
   $ENV{HOME}/Development
+  $ENV{HOME}/workspace
   PATH_SUFFIXES
   postgres
   postgresql
