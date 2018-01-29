@@ -238,5 +238,6 @@ scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
 			return true;
 		default:
 			elog(ERROR, "More than one %s found.", item_type);
+			return false;
 	}
 }

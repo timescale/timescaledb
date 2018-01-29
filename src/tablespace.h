@@ -22,7 +22,7 @@ extern bool tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid);
 extern int	tablespaces_clear(Tablespaces *tspcs);
 extern bool tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid);
 extern Tablespaces *tablespace_scan(int32 hypertable_id);
-extern Datum tablespace_attach(PG_FUNCTION_ARGS);
+extern void tablespace_attach_internal(Name tspcname, Oid hypertable_oid);
 extern int	tablespace_delete(int32 hypertable_id, const char *tspcname);
 
 
