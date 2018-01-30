@@ -22,6 +22,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
 #include <utils/snapmgr.h>
 #include <parser/parse_utilcmd.h>
 
@@ -49,14 +50,6 @@ void		_process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
-
-/* Macros for DDL upcalls to PL/pgSQL */
-
-#define process_truncate_hypertable(hypertable, cascade)				\
-	CatalogInternalCall3(TRUNCATE_HYPERTABLE,							\
-						 NameGetDatum(&(hypertable)->fd.schema_name),	\
-						 NameGetDatum(&(hypertable)->fd.table_name),	\
-						 BoolGetDatum(cascade))
 
 typedef struct ProcessUtilityArgs
 {
@@ -145,37 +138,6 @@ relation_not_only(RangeVar *rv)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("ONLY option not supported on hypertable operations")));
-}
-
-/* Truncate a hypertable */
-static void
-process_truncate(Node *parsetree)
-{
-	TruncateStmt *truncatestmt = (TruncateStmt *) parsetree;
-	Cache	   *hcache = hypertable_cache_pin();
-	ListCell   *cell;
-
-	foreach(cell, truncatestmt->relations)
-	{
-		RangeVar   *relation = lfirst(cell);
-		Oid			relid;
-
-		if (NULL == relation)
-			continue;
-
-		relid = RangeVarGetRelid(relation, NoLock, true);
-
-		if (OidIsValid(relid))
-		{
-			Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
-
-			if (ht != NULL)
-			{
-				process_truncate_hypertable(ht, truncatestmt->behavior == DROP_CASCADE);
-			}
-		}
-	}
-	cache_release(hcache);
 }
 
 /* Change the schema of a hypertable */
@@ -352,6 +314,77 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 	hcache->release_on_commit = false;
 	foreach_chunk(ht, vacuum_chunk, &ctx);
 	hcache->release_on_commit = true;
+
+	cache_release(hcache);
+
+	return true;
+}
+
+static void
+process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	TruncateStmt *stmt = arg;
+	ObjectAddress objaddr = {
+		.classId = RelationRelationId,
+		.objectId = chunk_relid,
+	};
+
+	performDeletion(&objaddr, stmt->behavior, 0);
+}
+
+#if PG10
+#define TRUNCATE_RECURSE(rv) \
+	(rv)->inh
+#elif PG96
+#define TRUNCATE_RECURSE(rv) \
+	((rv)->inhOpt == INH_DEFAULT ? SQL_inheritance : ((rv)->inhOpt == INH_YES))
+#endif
+
+/*
+ * Truncate a hypertable.
+ */
+static bool
+process_truncate(ProcessUtilityArgs *args)
+{
+	TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
+	Cache	   *hcache = hypertable_cache_pin();
+	ListCell   *cell;
+
+	/* Call standard process utility first to truncate all tables */
+	prev_ProcessUtility(args);
+
+	/* For all hypertables, we drop the now empty chunks */
+	foreach(cell, stmt->relations)
+	{
+		RangeVar   *rv = lfirst(cell);
+		Oid			relid;
+
+		if (NULL == rv)
+			continue;
+
+		relid = RangeVarGetRelid(rv, NoLock, true);
+
+		if (OidIsValid(relid))
+		{
+			Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+
+			if (ht != NULL)
+			{
+				if (!TRUNCATE_RECURSE(rv))
+					ereport(ERROR,
+							(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+							 errmsg("cannot truncate only a hypertable"),
+							 errhint("Do not specify the ONLY keyword, or use truncate"
+									 " only on the chunks directly.")));
+
+				/* Delete the metadata */
+				chunk_delete_by_hypertable_id(ht->fd.id);
+
+				/* Drop the chunk tables */
+				foreach_chunk(ht, process_truncate_chunk, stmt);
+			}
+		}
+	}
 
 	cache_release(hcache);
 
@@ -1628,32 +1661,29 @@ process_create_trigger_end(Node *parsetree)
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
 static bool
-process_ddl_command_start(Node *parsetree,
-						  const char *query_string,
-						  ProcessUtilityContext context,
-						  char *completion_tag)
+process_ddl_command_start(ProcessUtilityArgs *args)
 {
 	bool		handled = false;
 
-	switch (nodeTag(parsetree))
+	switch (nodeTag(args->parsetree))
 	{
-		case T_TruncateStmt:
-			process_truncate(parsetree);
-			break;
 		case T_AlterObjectSchemaStmt:
-			process_alterobjectschema(parsetree);
+			process_alterobjectschema(args->parsetree);
+			break;
+		case T_TruncateStmt:
+			handled = process_truncate(args);
 			break;
 		case T_AlterTableStmt:
-			process_altertable_start(parsetree);
+			process_altertable_start(args->parsetree);
 			break;
 		case T_RenameStmt:
-			process_rename(parsetree);
+			process_rename(args->parsetree);
 			break;
 		case T_IndexStmt:
-			process_index_start(parsetree);
+			process_index_start(args->parsetree);
 			break;
 		case T_CreateTrigStmt:
-			process_create_trigger_start(parsetree);
+			process_create_trigger_start(args->parsetree);
 			break;
 		case T_DropStmt:
 
@@ -1663,19 +1693,19 @@ process_ddl_command_start(Node *parsetree,
 			 * table is dropped, the drop respects CASCADE in the expected
 			 * way.
 			 */
-			process_drop(parsetree);
+			process_drop(args->parsetree);
 			break;
 		case T_CopyStmt:
-			handled = process_copy(parsetree, query_string, completion_tag);
+			handled = process_copy(args->parsetree, args->query_string, args->completion_tag);
 			break;
 		case T_VacuumStmt:
-			handled = process_vacuum(parsetree, context);
+			handled = process_vacuum(args->parsetree, args->context);
 			break;
 		case T_ReindexStmt:
-			handled = process_reindex(parsetree);
+			handled = process_reindex(args->parsetree);
 			break;
 		case T_ClusterStmt:
-			handled = process_cluster_start(parsetree, context);
+			handled = process_cluster_start(args->parsetree, args->context);
 			break;
 		default:
 			break;
@@ -1762,10 +1792,7 @@ timescaledb_ddl_command_start(
 		return;
 	}
 
-	if (!process_ddl_command_start(args.parsetree,
-								   args.query_string,
-								   args.context,
-								   args.completion_tag))
+	if (!process_ddl_command_start(&args))
 		prev_ProcessUtility(&args);
 }
 

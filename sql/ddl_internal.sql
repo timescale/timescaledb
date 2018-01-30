@@ -112,26 +112,6 @@ BEGIN
 END
 $BODY$;
 
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.truncate_hypertable(
-    schema_name     NAME,
-    table_name      NAME,
-    cascade      BOOLEAN = FALSE
-)
-    RETURNS VOID
-    LANGUAGE PLPGSQL VOLATILE
-    SET search_path = '_timescaledb_internal'
-    AS
-$BODY$
-DECLARE
-    hypertable_row _timescaledb_catalog.hypertable;
-    chunk_row _timescaledb_catalog.chunk;
-BEGIN
-    --TODO: should this cascade?
-    PERFORM  _timescaledb_internal.drop_chunks_impl(NULL, table_name, schema_name, cascade, true);
-END
-$BODY$;
-
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
 AS '@MODULE_PATHNAME@', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;

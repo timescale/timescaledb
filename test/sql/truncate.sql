@@ -53,9 +53,19 @@ CREATE TRIGGER _test_truncate_after
 
 \set ON_ERROR_STOP 0
 TRUNCATE "two_Partitions";
+-- cannot TRUNCATE ONLY a hypertable
+TRUNCATE ONLY "two_Partitions" CASCADE;
 \set ON_ERROR_STOP 1
 
-TRUNCATE "two_Partitions" CASCADE;
+-- create a regular table to make sure we can truncate it in the same call
+CREATE TABLE truncate_normal (color int);
+INSERT INTO truncate_normal VALUES (1);
+SELECT * FROM truncate_normal;
+
+SELECT * FROM test.show_subtables('"two_Partitions"');
+
+TRUNCATE "two_Partitions", truncate_normal CASCADE;
 -- should be empty
 SELECT * FROM test.show_subtables('"two_Partitions"');
 SELECT * FROM "two_Partitions";
+SELECT * FROM truncate_normal;
