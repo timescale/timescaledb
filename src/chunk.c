@@ -1053,6 +1053,19 @@ chunk_delete_by_hypertable_id(int32 hypertable_id)
 							   RowExclusiveLock);
 }
 
+int
+chunk_delete_by_schema_name(const char *schema_name)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
+				F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
+
+	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 1,
+							   chunk_tuple_delete, NULL, 0,
+							   RowExclusiveLock);
+}
+
 static bool
 chunk_recreate_constraint(ChunkScanCtx *ctx, Chunk *chunk)
 {

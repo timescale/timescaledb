@@ -17,6 +17,7 @@ set(TEST_FILES
   ddl_single.sql
   ddl.sql
   delete.sql
+  drop_schema.sql
   drop_chunks.sql
   drop_extension.sql
   drop_hypertable.sql

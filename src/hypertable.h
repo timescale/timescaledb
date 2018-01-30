@@ -32,6 +32,8 @@ extern int	hypertable_set_name(Hypertable *ht, const char *newname);
 extern int	hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int	hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
 extern int	hypertable_delete_by_id(int32 hypertable_id);
+extern int	hypertable_delete_by_schema_name(const char *schema_name);
+extern int	hypertable_reset_associated_schema_name(const char *associated_schema);
 extern Oid	hypertable_id_to_relid(int32 hypertable_id);
 extern Chunk *hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	hypertable_relid(RangeVar *rv);

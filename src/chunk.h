@@ -75,5 +75,6 @@ extern bool chunk_exists_relid(Oid relid);
 extern void chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern int	chunk_delete_by_relid(Oid chunk_oid);
 extern int	chunk_delete_by_hypertable_id(int32 hypertable_id);
+extern int	chunk_delete_by_schema_name(const char *schema_name);
 
 #endif							/* TIMESCALEDB_CHUNK_H */
