@@ -399,6 +399,67 @@ process_truncate(ProcessUtilityArgs *args)
 	return true;
 }
 
+/*
+ * Handle DROP SCHEMA.
+ *
+ * There are three cases to handle. The DROP can be for a schema that:
+ *
+ * 1. Is the schema for one or more hypertables
+ * 2. Is an associated schema for chunks
+ * 3. Is a schema for one or more chunks (possibly different from
+ *    the associated schema if it has been changed)
+ */
+static void
+process_drop_schema(DropStmt *stmt)
+{
+	ListCell   *lc;
+
+	foreach(lc, stmt->objects)
+	{
+		int			count;
+#if PG10
+		const char *schema = strVal(lfirst(lc));;
+#elif PG96
+		const char *schema = NameListToString(lfirst(lc));
+#endif
+		if (strcmp(schema, INTERNAL_SCHEMA_NAME) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot drop the internal schema for extension \"%s\"",
+							EXTENSION_NAME),
+					 errhint("Use DROP EXTENSION to remove the extension and the schema.")));
+
+		/*
+		 * For hypertables and chunks, we only care about this DROP if it
+		 * cascades
+		 */
+		if (stmt->behavior == DROP_CASCADE)
+		{
+
+			/* Delete any hypertables that exists in the schema */
+			hypertable_delete_by_schema_name(schema);
+
+			/*
+			 * There might be chunks that exist in the dropped schema although
+			 * the hypertable does not
+			 */
+			chunk_delete_by_schema_name(schema);
+		}
+
+		/*
+		 * Check for any remaining hypertables that use the schema as its
+		 * associated schema. For matches, we reset their associated schema to
+		 * the INTERNAL schema
+		 */
+		count = hypertable_reset_associated_schema_name(schema);
+
+		if (count > 0)
+			ereport(NOTICE,
+					(errmsg("the chunk storage schema changed to \"%s\" for %d hypertable%c",
+							INTERNAL_SCHEMA_NAME, count, (count > 1) ? 's' : '\0')));
+	}
+}
+
 static void
 process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -557,6 +618,9 @@ process_drop(Node *parsetree)
 
 	switch (stmt->removeType)
 	{
+		case OBJECT_SCHEMA:
+			process_drop_schema(stmt);
+			break;
 		case OBJECT_TABLE:
 			process_drop_table(stmt);
 			break;

@@ -143,6 +143,8 @@ chunk_cache_entry_free(void *cce)
 	MemoryContextDelete(((ChunkCacheEntry *) cce)->mcxt);
 }
 
+#define NOINDEX -1
+
 static int
 hypertable_scan_limit_internal(ScanKeyData *scankey,
 							   int num_scankeys,
@@ -156,8 +158,8 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[HYPERTABLE].id,
-		.index = catalog->tables[HYPERTABLE].index_ids[indexid],
-		.scantype = ScannerTypeIndex,
+		.index = (indexid == NOINDEX) ? 0 : catalog->tables[HYPERTABLE].index_ids[indexid],
+		.scantype = (indexid == NOINDEX) ? ScannerTypeHeap : ScannerTypeIndex,
 		.nkeys = num_scankeys,
 		.scankey = scankey,
 		.data = scandata,
@@ -267,22 +269,24 @@ static bool
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
+	bool		isnull;
+	int			hypertable_id = heap_getattr(ti->tuple, Anum_hypertable_id, ti->desc, &isnull);
+
+	tablespace_delete(hypertable_id, NULL);
+	chunk_delete_by_hypertable_id(hypertable_id);
+	dimension_delete_by_hypertable_id(hypertable_id, true);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
-	return false;
+	return true;
 }
 
 int
 hypertable_delete_by_id(int32 hypertable_id)
 {
 	ScanKeyData scankey[1];
-
-	tablespace_delete(hypertable_id, NULL);
-	chunk_delete_by_hypertable_id(hypertable_id);
-	dimension_delete_by_hypertable_id(hypertable_id, true);
 
 	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
 				BTEqualStrategyNumber, F_INT4EQ,
@@ -294,6 +298,65 @@ hypertable_delete_by_id(int32 hypertable_id)
 										  hypertable_tuple_delete,
 										  NULL,
 										  1,
+										  RowExclusiveLock,
+										  false);
+}
+
+
+int
+hypertable_delete_by_schema_name(const char *schema_name)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
+
+	return hypertable_scan_limit_internal(scankey,
+										  1,
+										  HYPERTABLE_NAME_INDEX,
+										  hypertable_tuple_delete,
+										  NULL,
+										  0,
+										  RowExclusiveLock,
+										  false);
+}
+
+static bool
+reset_associated_tuple_found(TupleInfo *ti, void *data)
+{
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(tuple);
+	CatalogSecurityContext sec_ctx;
+
+	namestrcpy(&form->associated_schema_name, INTERNAL_SCHEMA_NAME);
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_update(ti->scanrel, tuple);
+	catalog_restore_user(&sec_ctx);
+
+	heap_freetuple(tuple);
+
+	return true;
+}
+
+/*
+ * Reset the matching associated schema to the internal schema.
+ */
+int
+hypertable_reset_associated_schema_name(const char *associated_schema)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_hypertable_associated_schema_name,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(associated_schema)));
+
+	return hypertable_scan_limit_internal(scankey,
+										  1,
+										  NOINDEX,
+										  reset_associated_tuple_found,
+										  NULL,
+										  0,
 										  RowExclusiveLock,
 										  false);
 }
