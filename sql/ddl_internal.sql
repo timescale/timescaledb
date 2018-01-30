@@ -132,32 +132,6 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_change_owner(main_table OID, new_table_owner NAME)
-    RETURNS void LANGUAGE plpgsql
-    SECURITY DEFINER SET search_path = '_timescaledb_internal'
-    AS
-$BODY$
-DECLARE
-    hypertable_row _timescaledb_catalog.hypertable;
-    chunk_row      _timescaledb_catalog.chunk;
-BEGIN
-    hypertable_row := _timescaledb_internal.hypertable_from_main_table(main_table);
-    FOR chunk_row IN
-        SELECT *
-        FROM _timescaledb_catalog.chunk
-        WHERE hypertable_id = hypertable_row.id
-        LOOP
-            EXECUTE format(
-                $$
-                ALTER TABLE %1$I.%2$I OWNER TO %3$I
-                $$,
-                chunk_row.schema_name, chunk_row.table_name,
-                new_table_owner
-            );
-    END LOOP;
-END
-$BODY$;
-
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
 AS '@MODULE_PATHNAME@', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;

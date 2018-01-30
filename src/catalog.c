@@ -107,10 +107,6 @@ typedef struct InternalFunctionDef
 } InternalFunctionDef;
 
 const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
-	[DDL_CHANGE_OWNER] = {
-		.name = "ddl_change_owner",
-		.args = 2,
-	},
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,
