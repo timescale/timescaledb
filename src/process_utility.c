@@ -58,11 +58,6 @@ static bool expect_chunk_modification = false;
 						 NameGetDatum(&(hypertable)->fd.table_name),	\
 						 BoolGetDatum(cascade))
 
-#define process_change_hypertable_owner(hypertable, rolename )			\
-	CatalogInternalCall2(DDL_CHANGE_OWNER,								\
-						 ObjectIdGetDatum((hypertable)->main_table_relid), \
-						 DirectFunctionCall1(namein, CStringGetDatum(rolename)))
-
 typedef struct ProcessUtilityArgs
 {
 #if PG10
@@ -743,18 +738,21 @@ process_rename(Node *parsetree)
 	cache_release(hcache);
 }
 
+static void
+process_altertable_change_owner_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = arg;
+	Oid			roleid = get_rolespec_oid(cmd->newowner, false);
+
+	ATExecChangeOwner(chunk_relid, roleid, false, AccessExclusiveLock);
+}
 
 static void
 process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 {
-	RoleSpec   *role;
-
 	Assert(IsA(cmd->newowner, RoleSpec));
-	role = (RoleSpec *) cmd->newowner;
 
-	process_utility_set_expect_chunk_modification(true);
-	process_change_hypertable_owner(ht, role->rolename);
-	process_utility_set_expect_chunk_modification(false);
+	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
 }
 
 static void
