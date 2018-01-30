@@ -24,7 +24,7 @@ set(TEST_FILES
   dump_meta.sql
   extension.sql
   hash.sql
-  histogram_test.sql
+  histogram.sql
   index.sql
   insert_single.sql
   insert.sql
