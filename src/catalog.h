@@ -47,7 +47,6 @@ typedef enum CatalogTable
 typedef enum InternalFunction
 {
 	DDL_ADD_CHUNK_CONSTRAINT,
-	TRUNCATE_HYPERTABLE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
 
