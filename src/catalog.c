@@ -110,10 +110,6 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,
-	},
-	[TRUNCATE_HYPERTABLE] = {
-		.name = "truncate_hypertable",
-		.args = 3
 	}
 };
 

@@ -42,7 +42,7 @@ set(TEST_FILES
   tablespace.sql
   timestamp.sql
   triggers.sql
-  truncate_hypertable.sql
+  truncate.sql
   update.sql
   upsert.sql
   util.sql
