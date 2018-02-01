@@ -332,13 +332,21 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
+static bool
+relation_should_recurse(RangeVar *rv)
+{
 #if PG10
-#define TRUNCATE_RECURSE(rv) \
-	(rv)->inh
+	return rv->inh;
 #elif PG96
-#define TRUNCATE_RECURSE(rv) \
-	((rv)->inhOpt == INH_DEFAULT ? SQL_inheritance : ((rv)->inhOpt == INH_YES))
+	if (rv->inhOpt == INH_DEFAULT)
+	{
+		char	   *inherit_guc = GetConfigOptionByName("SQL_inheritance", NULL, false);
+
+		return strncmp(inherit_guc, "on", 2) == 0;
+	}
+	return rv->inhOpt == INH_YES;
 #endif
+}
 
 /*
  * Truncate a hypertable.
@@ -370,7 +378,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 			if (ht != NULL)
 			{
-				if (!TRUNCATE_RECURSE(rv))
+				if (!relation_should_recurse(rv))
 					ereport(ERROR,
 							(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 							 errmsg("cannot truncate only a hypertable"),
