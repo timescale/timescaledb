@@ -23,6 +23,8 @@ typedef struct Hypertable
 
 
 extern Oid	rel_get_owner(Oid relid);
+extern Hypertable *hypertable_get_by_id(int32 hypertable_id);
+extern Hypertable *hypertable_get_by_name(char *schema, char *name);
 extern bool hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern Oid	hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 extern Hypertable *hypertable_from_tuple(HeapTuple tuple);

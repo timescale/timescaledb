@@ -336,13 +336,12 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
         1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
         1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
         1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_time_temp_c_idx    |             1 | Hypertable_1_time_temp_c_idx
         1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
         2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
         2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
         2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
         1 | _hyper_1_1_chunk_ind_humdity2                    |             1 | ind_humdity2
-(9 rows)
+(8 rows)
 
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;

@@ -566,7 +566,6 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	ScannerCtx	ctx = {
 		.table = catalog->tables[CHUNK].id,
 		.index = catalog->tables[CHUNK].index_ids[CHUNK_ID_INDEX],
-		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = chunk_stub,
@@ -868,7 +867,6 @@ chunk_scan_internal(int indexid,
 	ScannerCtx	ctx = {
 		.table = catalog->tables[CHUNK].id,
 		.index = catalog->tables[CHUNK].index_ids[indexid],
-		.scantype = ScannerTypeIndex,
 		.nkeys = nkeys,
 		.data = data,
 		.scankey = scankey,

@@ -106,8 +106,6 @@ tablespace_tuple_found(TupleInfo *ti, void *data)
 	return true;
 }
 
-#define NO_INDEX -1
-
 static int
 tablespace_scan_internal(int indexid,
 						 ScanKeyData *scankey,
@@ -121,8 +119,7 @@ tablespace_scan_internal(int indexid,
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[TABLESPACE].id,
-		.index = (indexid == NO_INDEX) ? 0 : catalog->tables[TABLESPACE].index_ids[indexid],
-		.scantype = (indexid == NO_INDEX) ? ScannerTypeHeap : ScannerTypeIndex,
+		.index = CATALOG_INDEX(catalog, TABLESPACE, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
@@ -180,7 +177,7 @@ tablespace_scan_by_name(const char *tspcname, tuple_found_func tuple_found, void
 					BTEqualStrategyNumber, F_NAMEEQ,
 					DirectFunctionCall1(namein, CStringGetDatum(tspcname)));
 
-	return tablespace_scan_internal(NO_INDEX,
+	return tablespace_scan_internal(INVALID_INDEXID,
 									scankey,
 									nkeys,
 									tuple_found,
@@ -433,7 +430,7 @@ tablespace_delete_from_all(const char *tspcname, Oid userid)
 				BTEqualStrategyNumber, F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(tspcname)));
 
-	num_deleted = tablespace_scan_internal(NO_INDEX,
+	num_deleted = tablespace_scan_internal(INVALID_INDEXID,
 										   scankey,
 										   1,
 										   tablespace_tuple_delete,

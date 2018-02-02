@@ -11,7 +11,7 @@ typedef enum ScannerType
 {
 	ScannerTypeHeap,
 	ScannerTypeIndex,
-} ScannerType;
+}			ScannerType;
 
 /* Tuple information passed on to handlers when scanning for tuples. */
 typedef struct TupleInfo
@@ -32,12 +32,12 @@ typedef struct TupleInfo
 } TupleInfo;
 
 typedef bool (*tuple_found_func) (TupleInfo *ti, void *data);
+typedef bool (*tuple_filter_func) (TupleInfo *ti, void *data);
 
 typedef struct ScannerCtx
 {
 	Oid			table;
 	Oid			index;
-	ScannerType scantype;
 	ScanKey		scankey;
 	int			nkeys,
 				norderbys,

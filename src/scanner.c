@@ -154,10 +154,16 @@ scanner_scan(ScannerCtx *ctx)
 {
 	TupleDesc	tuple_desc;
 	bool		is_valid;
-	Scanner    *scanner = &scanners[ctx->scantype];
+	Scanner    *scanner;
+
 	InternalScannerCtx ictx = {
 		.sctx = ctx,
 	};
+
+	if (OidIsValid(ctx->index))
+		scanner = &scanners[ScannerTypeIndex];
+	else
+		scanner = &scanners[ScannerTypeHeap];
 
 	scanner->openheap(&ictx);
 	scanner->beginscan(&ictx);
