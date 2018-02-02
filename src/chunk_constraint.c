@@ -356,8 +356,6 @@ chunk_constraint_tuple_found(TupleInfo *ti, void *data)
 	return true;
 }
 
-#define NO_INDEXSCAN -1
-
 static int
 chunk_constraint_scan_internal(int indexid,
 							   ScanKeyData *scankey,
@@ -370,7 +368,7 @@ chunk_constraint_scan_internal(int indexid,
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[CHUNK_CONSTRAINT].id,
-		.scantype = (indexid == NO_INDEXSCAN) ? ScannerTypeHeap : ScannerTypeIndex,
+		.index = CATALOG_INDEX(catalog, CHUNK_CONSTRAINT, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.data = data,
@@ -379,9 +377,6 @@ chunk_constraint_scan_internal(int indexid,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
 	};
-
-	if (indexid != NO_INDEXSCAN)
-		scanctx.index = catalog->tables[CHUNK_CONSTRAINT].index_ids[indexid];
 
 	return scanner_scan(&scanctx);
 }
@@ -407,6 +402,38 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
 										  scankey,
 										  1,
+										  tuple_found,
+										  tuple_filter,
+										  data,
+										  lockmode);
+}
+
+static int
+chunk_constraint_scan_by_chunk_id_constraint_name_internal(int32 chunk_id,
+														   const char *constraint_name,
+														   tuple_found_func tuple_found,
+														   tuple_found_func tuple_filter,
+														   void *data,
+														   LOCKMODE lockmode)
+{
+	ScanKeyData scankey[2];
+
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk_id));
+
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(constraint_name)));
+
+	return chunk_constraint_scan_internal(CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX,
+										  scankey,
+										  2,
 										  tuple_found,
 										  tuple_filter,
 										  data,
@@ -625,6 +652,8 @@ typedef struct ConstraintInfo
 {
 	const char *hypertable_constraint_name;
 	ChunkConstraints *ccs;
+	bool		delete_metadata;
+	bool		drop_constraint;
 } ConstraintInfo;
 
 typedef struct RenameHypertableConstraintInfo
@@ -652,24 +681,29 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 	ObjectAddress constrobj = {
 		.classId = ConstraintRelationId,
 		.objectId = get_relation_constraint_oid(chunk->table_id,
-												NameStr(*DatumGetName(constrname)), false),
+												NameStr(*DatumGetName(constrname)), true),
 	};
 	Oid			index_relid = get_constraint_index(constrobj.objectId);
 
 	/* Collect the deleted constraints */
-	if (NULL != info && NULL != info->ccs)
+	if (NULL != info->ccs)
 		chunk_constraint_tuple_found(ti, info->ccs);
 
-	/*
-	 * If this is an index constraint, we need to cleanup the index metadata.
-	 * Don't drop the index though, since that will happend when the
-	 * constraint is dropped.
-	 */
-	if (OidIsValid(index_relid))
-		chunk_index_delete(chunk, index_relid, false);
+	if (info->delete_metadata)
+	{
+		/*
+		 * If this is an index constraint, we need to cleanup the index
+		 * metadata. Don't drop the index though, since that will happend when
+		 * the constraint is dropped.
+		 */
+		if (OidIsValid(index_relid))
+			chunk_index_delete(chunk, index_relid, false);
 
-	catalog_delete(ti->scanrel, ti->tuple);
-	performDeletion(&constrobj, DROP_RESTRICT, 0);
+		catalog_delete(ti->scanrel, ti->tuple);
+	}
+
+	if (info->drop_constraint && OidIsValid(constrobj.objectId))
+		performDeletion(&constrobj, DROP_RESTRICT, 0);
 
 	return true;
 }
@@ -695,10 +729,13 @@ hypertable_constraint_tuple_filter(TupleInfo *ti, void *data)
 
 int
 chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
-													  char *hypertable_constraint_name)
+													  char *hypertable_constraint_name,
+													  bool delete_metadata, bool drop_constraint)
 {
 	ConstraintInfo info = {
 		.hypertable_constraint_name = hypertable_constraint_name,
+		.delete_metadata = delete_metadata,
+		.drop_constraint = drop_constraint
 	};
 
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
@@ -706,6 +743,23 @@ chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 													  hypertable_constraint_tuple_filter,
 													  &info,
 													  RowExclusiveLock);
+}
+
+int
+chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constraint_name,
+										   bool delete_metadata, bool drop_constraint)
+{
+	ConstraintInfo info = {
+		.delete_metadata = delete_metadata,
+		.drop_constraint = drop_constraint
+	};
+
+	return chunk_constraint_scan_by_chunk_id_constraint_name_internal(chunk_id,
+																	  constraint_name,
+																	  chunk_constraint_delete_tuple,
+																	  NULL,
+																	  &info,
+																	  RowExclusiveLock);
 }
 
 /*
@@ -716,6 +770,8 @@ chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs)
 {
 	ConstraintInfo info = {
 		.ccs = ccs,
+		.delete_metadata = true,
+		.drop_constraint = true,
 	};
 
 	return chunk_constraint_scan_by_chunk_id_internal(chunk_id,
@@ -728,6 +784,11 @@ chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs)
 int
 chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 {
+	ConstraintInfo info = {
+		.delete_metadata = true,
+		.drop_constraint = true,
+	};
+
 	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0],
@@ -736,12 +797,12 @@ chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 				F_INT4EQ,
 				Int32GetDatum(dimension_slice_id));
 
-	return chunk_constraint_scan_internal(NO_INDEXSCAN,
+	return chunk_constraint_scan_internal(INVALID_INDEXID,
 										  scankey,
 										  1,
 										  chunk_constraint_delete_tuple,
 										  NULL,
-										  NULL,
+										  &info,
 										  RowExclusiveLock);
 }
 

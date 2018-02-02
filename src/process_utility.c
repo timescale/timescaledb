@@ -9,6 +9,7 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_constraint_fn.h>
+#include <catalog/pg_constraint.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
@@ -565,53 +566,6 @@ process_drop_trigger(DropStmt *stmt)
 }
 
 static void
-process_drop_index(DropStmt *stmt)
-{
-	ListCell   *lc;
-
-	foreach(lc, stmt->objects)
-	{
-		List	   *object = lfirst(lc);
-		RangeVar   *relation = makeRangeVarFromNameList(object);
-		Oid			idxrelid;
-
-		if (NULL == relation)
-			continue;
-
-		idxrelid = RangeVarGetRelid(relation, NoLock, true);
-
-		if (OidIsValid(idxrelid))
-		{
-			Oid			tblrelid = IndexGetRelation(idxrelid, false);
-			Cache	   *hcache = hypertable_cache_pin();
-			Hypertable *ht = hypertable_cache_get_entry(hcache, tblrelid);
-
-			/*
-			 * Drop a hypertable index, i.e., all corresponding indexes on all
-			 * chunks
-			 */
-			if (NULL != ht)
-				chunk_index_delete_children_of(ht, idxrelid, true);
-			else
-			{
-				/* Drop an index on a chunk */
-				Chunk	   *chunk = chunk_get_by_relid(tblrelid, 0, false);
-
-				if (NULL != chunk)
-
-					/*
-					 * No need DROP the index here since DDL statement drops
-					 * (hence 'false' parameter), just delete the metadata
-					 */
-					chunk_index_delete(chunk, idxrelid, false);
-			}
-
-			cache_release(hcache);
-		}
-	}
-}
-
-static void
 process_drop_tablespace(Node *parsetree)
 {
 	DropTableSpaceStmt *stmt = (DropTableSpaceStmt *) parsetree;
@@ -692,9 +646,6 @@ process_drop(Node *parsetree)
 			break;
 		case OBJECT_TRIGGER:
 			process_drop_trigger(stmt);
-			break;
-		case OBJECT_INDEX:
-			process_drop_index(stmt);
 			break;
 		default:
 			break;
@@ -943,44 +894,6 @@ process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 	Assert(constraint_name != NULL);
 
 	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
-}
-
-static void
-process_drop_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
-{
-	char	   *hypertable_constraint_name = arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
-
-	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name);
-}
-
-static void
-process_altertable_drop_constraint(Hypertable *ht, AlterTableCmd *cmd)
-{
-	char	   *constraint_name = NULL;
-	CatalogSecurityContext sec_ctx;
-	Oid			hypertable_constraint_oid,
-				hypertable_constraint_index_oid;
-
-	constraint_name = cmd->name;
-	Assert(constraint_name != NULL);
-
-	hypertable_constraint_oid = get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
-	hypertable_constraint_index_oid = get_constraint_index(hypertable_constraint_oid);
-
-	catalog_become_owner(catalog_get(), &sec_ctx);
-
-	/* Recurse to each chunk and drop the corresponding constraint */
-	foreach_chunk(ht, process_drop_constraint_chunk, constraint_name);
-
-	/*
-	 * If this is a constraint backed by and index, we need to delete
-	 * index-related metadata as well
-	 */
-	if (OidIsValid(hypertable_constraint_index_oid))
-		chunk_index_delete_children_of(ht, hypertable_constraint_index_oid, false);
-
-	catalog_restore_user(&sec_ctx);
 }
 
 static void
@@ -1547,11 +1460,6 @@ process_altertable_start_table(Node *parsetree)
 				if (ht != NULL)
 					process_altertable_drop_not_null(ht, cmd);
 				break;
-			case AT_DropConstraint:
-			case AT_DropConstraintRecurse:
-				if (ht != NULL)
-					process_altertable_drop_constraint(ht, cmd);
-				break;
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				Assert(IsA(cmd->def, Constraint));
@@ -1886,6 +1794,75 @@ process_ddl_command_end(CollectedCommand *cmd)
 	}
 }
 
+static void
+process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	char	   *hypertable_constraint_name = arg;
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+
+	/* drop both metadata and table; sql_drop won't be called recursively */
+	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name, true, true);
+}
+
+static void
+process_drop_table_constraint(EventTriggerDropObject *obj)
+{
+	EventTriggerDropTableConstraint *constraint;
+	Hypertable *ht;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE_CONSTRAINT);
+	constraint = (EventTriggerDropTableConstraint *) obj;
+
+	/* do not use relids because underlying table could be gone */
+	ht = hypertable_get_by_name(constraint->schema, constraint->table);
+
+	if (ht != NULL)
+	{
+		CatalogSecurityContext sec_ctx;
+
+		catalog_become_owner(catalog_get(), &sec_ctx);
+
+		/* Recurse to each chunk and drop the corresponding constraint */
+		foreach_chunk(ht, process_drop_constraint_on_chunk, constraint->constraint_name);
+
+		catalog_restore_user(&sec_ctx);
+	}
+	else
+	{
+		Chunk	   *chunk = chunk_get_by_name(constraint->schema, constraint->table, 0, false);
+
+		if (NULL != chunk)
+		{
+			chunk_constraint_delete_by_constraint_name(chunk->fd.id, constraint->constraint_name, true, false);
+		}
+	}
+}
+
+static void
+process_drop_index(EventTriggerDropObject *obj)
+{
+	EventTriggerDropIndex *index;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_INDEX);
+	index = (EventTriggerDropIndex *) obj;
+
+	chunk_index_delete_by_name(index->schema, index->index_name, true);
+}
+
+static void
+process_ddl_sql_drop(EventTriggerDropObject *obj)
+{
+	switch (obj->type)
+	{
+		case EVENT_TRIGGER_DROP_TABLE_CONSTRAINT:
+			process_drop_table_constraint(obj);
+			break;
+		case EVENT_TRIGGER_DROP_INDEX:
+			process_drop_index(obj);
+			break;
+	}
+}
+
 /*
  * ProcessUtility hook for DDL commands that have not yet been processed by
  * PostgreSQL.
@@ -1943,25 +1920,11 @@ timescaledb_ddl_command_start(
 		prev_ProcessUtility(&args);
 }
 
-TS_FUNCTION_INFO_V1(timescaledb_ddl_command_end);
-
-/*
- * Event trigger hook for DDL commands that have alread been handled by
- * PostgreSQL (i.e., "ddl_command_end" events).
- */
-Datum
-timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
+static
+void
+process_ddl_event_command_end(EventTriggerData *trigdata)
 {
-	EventTriggerData *trigdata = (EventTriggerData *) fcinfo->context;
 	ListCell   *lc;
-
-	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
-		elog(ERROR, "not fired by event trigger manager");
-
-	if (!extension_is_loaded())
-		PG_RETURN_NULL();
-
-	Assert(strcmp("ddl_command_end", trigdata->event) == 0);
 
 	/* Inhibit collecting new commands while in the trigger */
 	EventTriggerInhibitCommandCollection();
@@ -1980,6 +1943,32 @@ timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
 	}
 
 	EventTriggerUndoInhibitCommandCollection();
+}
+
+TS_FUNCTION_INFO_V1(timescaledb_process_ddl_event);
+/*
+ * Event trigger hook for DDL commands that have alread been handled by
+ * PostgreSQL (i.e., "ddl_command_end" and "sql_drop" events).
+ */
+Datum
+timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
+{
+	EventTriggerData *trigdata = (EventTriggerData *) fcinfo->context;
+	ListCell   *lc;
+
+	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
+		elog(ERROR, "not fired by event trigger manager");
+
+	if (!extension_is_loaded())
+		PG_RETURN_NULL();
+
+	if (strcmp("ddl_command_end", trigdata->event) == 0)
+		process_ddl_event_command_end(trigdata);
+	else if (strcmp("sql_drop", trigdata->event) == 0)
+	{
+		foreach(lc, event_trigger_dropped_objects())
+			process_ddl_sql_drop(lfirst(lc));
+	}
 
 	PG_RETURN_NULL();
 }

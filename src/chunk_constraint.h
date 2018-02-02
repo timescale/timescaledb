@@ -42,9 +42,10 @@ extern int	chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, in
 extern int	chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id, Oid hypertable_oid);
 extern void chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id, Oid hypertable_oid, int32 hypertable_id);
 extern void chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid);
-extern int	chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id, char *hypertable_constraint_name);
+extern int	chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id, char *hypertable_constraint_name, bool delete_metadata, bool drop_constraint);
 extern int	chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs);
 extern int	chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id);
+extern int	chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constraint_name, bool delete_metadata, bool drop_constraint);
 extern void chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid);
 extern int	chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldname, const char *newname);
 

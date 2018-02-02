@@ -2,6 +2,7 @@
 #include <funcapi.h>
 
 #include "compat.h"
+#include "extension.h"
 
 /* Old functions that are no longer used but are needed for compatibility when
  * updating the extension. */
@@ -55,6 +56,18 @@ TS_FUNCTION_INFO_V1(hypertable_validate_triggers);
 Datum
 hypertable_validate_triggers(PG_FUNCTION_ARGS)
 {
+	elog(ERROR, "Deprecated function should not be invoked");
+	PG_RETURN_NULL();
+}
+
+TS_FUNCTION_INFO_V1(timescaledb_ddl_command_end);
+
+Datum
+timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
+{
+	if (!extension_is_loaded())
+		PG_RETURN_NULL();
+
 	elog(ERROR, "Deprecated function should not be invoked");
 	PG_RETURN_NULL();
 }
