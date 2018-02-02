@@ -993,8 +993,14 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 	ChunkConstraints *ccs = chunk_constraints_alloc(2);
 	int			i;
 
+	/*
+	 * FIXME should we be deleting constraints and indexes? Perhaps better
+	 * handle in object_access? right now its necessary to get the ccs for
+	 * dimension delete below.
+	 */
 	chunk_constraint_delete_by_chunk_id(form->id, ccs);
-	chunk_index_delete_by_chunk_id(form->id, true);
+
+	chunk_index_delete_by_chunk_id(form->id, false);
 
 	/* Check for dimension slices that are orphaned by the chunk deletion */
 	for (i = 0; i < ccs->num_constraints; i++)

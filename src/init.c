@@ -9,6 +9,7 @@
 #include "guc.h"
 #include "catalog.h"
 #include "version.h"
+#include "object_access.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -58,6 +59,7 @@ _PG_init(void)
 	_planner_init();
 	_event_trigger_init();
 	_process_utility_init();
+	_object_access_init();
 	_parse_analyze_init();
 	_guc_init();
 }
@@ -71,6 +73,7 @@ _PG_fini(void)
 	 */
 	_guc_fini();
 	_parse_analyze_fini();
+	_object_access_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
 	_planner_fini();

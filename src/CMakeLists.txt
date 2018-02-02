@@ -56,6 +56,7 @@ set(HEADERS
   hypertable.h
   hypertable_insert.h
   indexing.h
+  object_access.h
   parse_rewrite.h
   partitioning.h
   planner_utils.h
@@ -95,6 +96,7 @@ set(SOURCES
   hypertable_insert.c
   indexing.c
   init.c
+  object_access.c
   parse_analyze.c
   parse_rewrite.c
   partitioning.c
