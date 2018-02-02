@@ -321,7 +321,6 @@ dimension_scan_internal(ScanKeyData *scankey,
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION].id,
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
-		.scantype = ScannerTypeIndex,
 		.nkeys = nkeys,
 		.limit = limit,
 		.scankey = scankey,
@@ -367,7 +366,6 @@ dimension_scan_update(int32 dimension_id, tuple_found_func tuple_found, void *da
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION].id,
 		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_ID_IDX],
-		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.limit = 1,
 		.scankey = scankey,

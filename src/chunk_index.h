@@ -22,6 +22,7 @@ extern int	chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexre
 extern int	chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index);
 extern int	chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index);
 extern int	chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index);
+extern void chunk_index_delete_by_name(const char *schema, const char *index_name, bool drop_index);
 extern int	chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname);
 extern int	chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *newname);
 extern int	chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char *tablespace);

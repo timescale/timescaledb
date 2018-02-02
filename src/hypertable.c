@@ -112,7 +112,6 @@ hypertable_id_to_relid(int32 hypertable_id)
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[HYPERTABLE].id,
 		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_ID_INDEX],
-		.scantype = ScannerTypeIndex,
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = hypertable_tuple_get_relid,
@@ -143,8 +142,6 @@ chunk_cache_entry_free(void *cce)
 	MemoryContextDelete(((ChunkCacheEntry *) cce)->mcxt);
 }
 
-#define NOINDEX -1
-
 static int
 hypertable_scan_limit_internal(ScanKeyData *scankey,
 							   int num_scankeys,
@@ -158,8 +155,7 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[HYPERTABLE].id,
-		.index = (indexid == NOINDEX) ? 0 : catalog->tables[HYPERTABLE].index_ids[indexid],
-		.scantype = (indexid == NOINDEX) ? ScannerTypeHeap : ScannerTypeIndex,
+		.index = CATALOG_INDEX(catalog, HYPERTABLE, indexid),
 		.nkeys = num_scankeys,
 		.scankey = scankey,
 		.data = scandata,
@@ -353,7 +349,7 @@ hypertable_reset_associated_schema_name(const char *associated_schema)
 
 	return hypertable_scan_limit_internal(scankey,
 										  1,
-										  NOINDEX,
+										  INVALID_INDEXID,
 										  reset_associated_tuple_found,
 										  NULL,
 										  0,
@@ -516,6 +512,51 @@ hypertable_insert(Name schema_name,
 							   associated_table_prefix,
 							   num_dimensions);
 	heap_close(rel, RowExclusiveLock);
+}
+
+static bool
+hypertable_tuple_found(TupleInfo *ti, void *data)
+{
+	Hypertable **entry = data;
+
+	*entry = hypertable_from_tuple(ti->tuple);
+	return false;
+}
+
+Hypertable *
+hypertable_get_by_name(char *schema, char *name)
+{
+	Hypertable *ht = NULL;
+
+	hypertable_scan(schema,
+					name,
+					hypertable_tuple_found,
+					&ht,
+					AccessShareLock,
+					false);
+
+	return ht;
+}
+
+Hypertable *
+hypertable_get_by_id(int32 hypertable_id)
+{
+	ScanKeyData scankey[1];
+	Hypertable *ht = NULL;
+
+	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	hypertable_scan_limit_internal(scankey,
+								   1,
+								   HYPERTABLE_ID_INDEX,
+								   hypertable_tuple_found,
+								   &ht,
+								   1,
+								   AccessShareLock,
+								   false);
+	return ht;
 }
 
 Chunk *

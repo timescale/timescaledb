@@ -58,6 +58,7 @@ INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time
 
 -- Show constraints on main tables
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
+SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM test.show_constraints('hyper');
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
 --should have unique constraint not just unique index
@@ -66,6 +67,8 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 -- The constraint should have been removed from the chunk as well
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
+-- The index should also have been removed
+SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --uniqueness not enforced
@@ -268,6 +271,37 @@ FOREIGN KEY (device_id) REFERENCES devices(device_id);
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000002, 'dev3', 11);
 \set ON_ERROR_STOP 1
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+
+--test CASCADE drop behavior
+DROP TABLE devices CASCADE;
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+
+--the fk went away.
+INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
+(1257987700000000002, 'dev3', 11);
+
+CREATE TABLE devices(
+    device_id TEXT NOT NULL,
+    PRIMARY KEY (device_id)
+);
+
+INSERT INTO devices VALUES ('dev2'), ('dev3');
+
+ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
+FOREIGN KEY (device_id) REFERENCES devices(device_id);
+
+\set ON_ERROR_STOP 0
+INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
+(1257987700000000003, 'dev4', 11);
+\set ON_ERROR_STOP 1
+
+--this tests that there are no extra chunk_constraints left on hyper_fk
+TRUNCATE hyper_fk;
 
 ----------------------- FOREIGN KEY INTO A HYPERTABLE  ------------------
 

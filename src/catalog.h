@@ -34,6 +34,10 @@ typedef enum CatalogTable
 } CatalogTable;
 
 #define INVALID_CATALOG_TABLE _MAX_CATALOG_TABLES
+#define INVALID_INDEXID -1
+
+#define CATALOG_INDEX(catalog, tableid, indexid) \
+    (indexid == INVALID_INDEXID ? InvalidOid : (catalog)->tables[tableid].index_ids[indexid])
 
 #define CatalogInternalCall1(func, datum1) \
 	OidFunctionCall1(catalog_get_internal_function_id(catalog_get(), func), datum1)
@@ -329,7 +333,8 @@ typedef FormData_chunk_constraint *Form_chunk_constraint;
 
 enum
 {
-	CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX = 0,
+	CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX = 0,
+	CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX,
 	_MAX_CHUNK_CONSTRAINT_INDEX,
 };
 
@@ -338,6 +343,13 @@ enum Anum_chunk_constraint_chunk_id_dimension_slice_id_idx
 	Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id = 1,
 	Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
 	_Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_max,
+};
+
+enum Anum_chunk_constraint_chunk_id_constraint_name_idx
+{
+	Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id = 1,
+	Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
+	_Anum_chunk_constraint_chunk_id_constraint_name_idx_max,
 };
 
 /************************************

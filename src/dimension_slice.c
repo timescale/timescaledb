@@ -119,7 +119,6 @@ dimension_slice_scan_limit_internal(int indexid,
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[DIMENSION_SLICE].id,
 		.index = catalog->tables[DIMENSION_SLICE].index_ids[indexid],
-		.scantype = ScannerTypeIndex,
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.data = scandata,

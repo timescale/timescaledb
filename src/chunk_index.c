@@ -507,16 +507,16 @@ chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id
 
 static int
 chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys,
-				 tuple_found_func tuple_found, void *data, LOCKMODE lockmode)
+				 tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanCtx = {
 		.table = catalog->tables[CHUNK_INDEX].id,
-		.index = catalog->tables[CHUNK_INDEX].index_ids[indexid],
-		.scantype = ScannerTypeIndex,
+		.index = CATALOG_INDEX(catalog, CHUNK_INDEX, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
+		.filter = tuple_filter,
 		.data = data,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
@@ -525,8 +525,8 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys,
 	return scanner_scan(&scanCtx);
 }
 
-#define chunk_index_scan_update(idxid, scankey, nkeys, tuple_found, data)	\
-	chunk_index_scan(idxid, scankey, nkeys, tuple_found, data, RowExclusiveLock)
+#define chunk_index_scan_update(idxid, scankey, nkeys, tuple_found, tuple_filter, data)	\
+	chunk_index_scan(idxid, scankey, nkeys, tuple_found, tuple_filter, data, RowExclusiveLock)
 
 static ChunkIndexMapping *
 chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
@@ -575,32 +575,66 @@ chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
 
 	chunk_index_scan(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-					 scankey, 2, chunk_index_collect, &mappings, AccessShareLock);
+					 scankey, 2, chunk_index_collect, NULL, &mappings, AccessShareLock);
 
 	return mappings;
 }
+
+typedef struct ChunkIndexDeleteData
+{
+	const char *index_name;
+	const char *schema;
+	bool		drop_index;
+} ChunkIndexDeleteData;
 
 static bool
 chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
 	Oid			schemaid = chunk_index_get_schemaid(chunk_index);
-	bool	   *should_drop = data;
+	ChunkIndexDeleteData *cid = data;
 
 	catalog_delete(ti->scanrel, ti->tuple);
 
-	if (*should_drop)
+	if (cid->drop_index)
 	{
 		ObjectAddress idxobj = {
 			.classId = RelationRelationId,
 			.objectId = get_relname_relid(NameStr(chunk_index->index_name), schemaid),
 		};
 
-		Assert(OidIsValid(idxobj.objectId));
-		performDeletion(&idxobj, DROP_RESTRICT, 0);
+		if (OidIsValid(idxobj.objectId))
+			performDeletion(&idxobj, DROP_RESTRICT, 0);
 	}
 
 	return true;
+}
+
+static bool
+chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
+{
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	ChunkIndexDeleteData *cid = data;
+
+	if (namestrcmp(&chunk_index->index_name, cid->index_name) == 0)
+	{
+		Chunk	   *chunk = chunk_get_by_id(chunk_index->chunk_id, 0, false);
+
+		if (NULL != chunk && namestrcmp(&chunk->fd.schema_name, cid->schema) == 0)
+			return true;
+	}
+
+	if (namestrcmp(&chunk_index->hypertable_index_name, cid->index_name) == 0)
+	{
+		Hypertable *ht;
+
+		ht = hypertable_get_by_id(chunk_index->hypertable_id);
+
+		if (NULL != ht && namestrcmp(&ht->fd.schema_name, cid->schema) == 0)
+			return true;
+	}
+
+	return false;
 }
 
 int
@@ -608,6 +642,10 @@ chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool s
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(hypertable_indexrelid);
+
+	ChunkIndexDeleteData data = {
+		.drop_index = should_drop,
+	};
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
@@ -618,7 +656,7 @@ chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool s
 				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey, 2, chunk_index_tuple_delete, &should_drop);
+								   scankey, 2, chunk_index_tuple_delete, NULL, &data);
 }
 
 int
@@ -626,6 +664,10 @@ chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(chunk_indexrelid);
+	ChunkIndexDeleteData data = {
+		.drop_index = drop_index,
+	};
+
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
@@ -636,33 +678,54 @@ chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 				DirectFunctionCall1(namein, CStringGetDatum(indexname)));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-								   scankey, 2, chunk_index_tuple_delete, &drop_index);
+								   scankey, 2, chunk_index_tuple_delete, NULL, &data);
+}
+
+void
+chunk_index_delete_by_name(const char *schema, const char *index_name, bool drop_index)
+{
+	ChunkIndexDeleteData data = {
+		.index_name = index_name,
+		.drop_index = drop_index,
+		.schema = schema,
+	};
+
+	chunk_index_scan_update(INVALID_INDEXID,
+							NULL, 0, chunk_index_tuple_delete, chunk_index_name_and_schema_filter, &data);
 }
 
 int
 chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index)
 {
 	ScanKeyData scankey[1];
+	ChunkIndexDeleteData data = {
+		.drop_index = drop_index,
+	};
+
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk_id));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-								   scankey, 1, chunk_index_tuple_delete, &drop_index);
+								   scankey, 1, chunk_index_tuple_delete, NULL, &data);
 }
 
 int
 chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index)
 {
 	ScanKeyData scankey[1];
+	ChunkIndexDeleteData data = {
+		.drop_index = drop_index,
+	};
+
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey, 1, chunk_index_tuple_delete, &drop_index);
+								   scankey, 1, chunk_index_tuple_delete, NULL, &data);
 }
 
 static bool
@@ -690,7 +753,7 @@ chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
 				BTEqualStrategyNumber, F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(indexname)));
 
 	chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-					 scankey, 2, chunk_index_tuple_found, cim, AccessShareLock);
+					 scankey, 2, chunk_index_tuple_found, NULL, cim, AccessShareLock);
 
 	return cim;
 }
@@ -759,7 +822,7 @@ chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname)
 				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-								   scankey, 2, chunk_index_tuple_rename, &renameinfo);
+								   scankey, 2, chunk_index_tuple_rename, NULL, &renameinfo);
 }
 
 int
@@ -781,7 +844,7 @@ chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char 
 				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey, 2, chunk_index_tuple_rename, &renameinfo);
+								   scankey, 2, chunk_index_tuple_rename, NULL, &renameinfo);
 }
 
 static bool
@@ -817,7 +880,7 @@ chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char
 				BTEqualStrategyNumber, F_NAMEEQ, CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey, 2, chunk_index_tuple_set_tablespace,
+								   scankey, 2, chunk_index_tuple_set_tablespace, NULL,
 								   (char *) tablespace);
 }
 
