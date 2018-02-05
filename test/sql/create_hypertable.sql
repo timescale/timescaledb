@@ -148,6 +148,28 @@ select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true)
 select create_hypertable('test_schema.test_1dim', 'time');
 \set ON_ERROR_STOP 1
 
+--test data migration
+create table test_schema.test_migrate(time timestamp, temp float);
+insert into test_schema.test_migrate VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
+select * from only test_schema.test_migrate;
+\set ON_ERROR_STOP 0
+--should fail without migrate_data => true
+select create_hypertable('test_schema.test_migrate', 'time');
+\set ON_ERROR_STOP 1
+select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
+
+--there should be two new chunks
+select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
+select * from _timescaledb_catalog.chunk;
+select * from test_schema.test_migrate;
+--main table should now be empty
+select * from only test_schema.test_migrate;
+select * from only _timescaledb_internal._hyper_6_4_chunk;
+select * from only _timescaledb_internal._hyper_6_5_chunk;
+
+create table test_schema.test_migrate_empty(time timestamp, temp float);
+select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
+
 -- Reset GRANTS
 \c single :ROLE_SUPERUSER
 REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;

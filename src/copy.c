@@ -12,6 +12,7 @@
 #include <access/xact.h>
 #include <commands/copy.h>
 #include <commands/trigger.h>
+#include <commands/tablecmds.h>
 #include <executor/executor.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
@@ -40,23 +41,38 @@
  *
  */
 
+typedef struct CopyChunkState CopyChunkState;
+
+typedef bool (*CopyFromFunc) (CopyChunkState *ccstate, ExprContext *econtext,
+							  Datum *values, bool *nulls, Oid *tuple_oid);
+
 typedef struct CopyChunkState
 {
+	Relation	rel;
 	EState	   *estate;
 	ChunkDispatch *dispatch;
-	CopyState	cstate;
+	CopyFromFunc next_copy_from;
+	union
+	{
+		CopyState	cstate;
+		HeapScanDesc scandesc;
+		void	   *data;
+	}			fromctx;
 } CopyChunkState;
 
+
 static CopyChunkState *
-copy_chunk_state_create(Hypertable *ht, Relation rel, CopyState cstate)
+copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, void *fromctx)
 {
 	CopyChunkState *ccstate;
 	EState	   *estate = CreateExecutorState();
 
 	ccstate = palloc(sizeof(CopyChunkState));
+	ccstate->rel = rel;
 	ccstate->estate = estate;
 	ccstate->dispatch = chunk_dispatch_create(ht, estate, NULL);
-	ccstate->cstate = cstate;
+	ccstate->fromctx.data = fromctx;
+	ccstate->next_copy_from = from_func;
 
 	return ccstate;
 }
@@ -68,11 +84,18 @@ copy_chunk_state_destroy(CopyChunkState *ccstate)
 	FreeExecutorState(ccstate->estate);
 }
 
+static bool
+next_copy_from(CopyChunkState *ccstate, ExprContext *econtext,
+			   Datum *values, bool *nulls, Oid *tuple_oid)
+{
+	return NextCopyFrom(ccstate->fromctx.cstate, econtext, values, nulls, tuple_oid);
+}
+
 /*
  * Copy FROM file to relation.
  */
 static uint64
-timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hypertable *ht)
+timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 {
 	HeapTuple	tuple;
 	TupleDesc	tupDesc;
@@ -80,7 +103,6 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	bool	   *nulls;
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
-	CopyChunkState *ccstate = copy_chunk_state_create(ht, main_rel, cstate);
 	EState	   *estate = ccstate->estate;	/* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
@@ -93,36 +115,36 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	BulkInsertState bistate;
 	uint64		processed = 0;
 
-	if (main_rel->rd_rel->relkind != RELKIND_RELATION)
+	if (ccstate->rel->rd_rel->relkind != RELKIND_RELATION)
 	{
-		if (main_rel->rd_rel->relkind == RELKIND_VIEW)
+		if (ccstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to view \"%s\"",
-							RelationGetRelationName(main_rel))));
-		else if (main_rel->rd_rel->relkind == RELKIND_MATVIEW)
+							RelationGetRelationName(ccstate->rel))));
+		else if (ccstate->rel->rd_rel->relkind == RELKIND_MATVIEW)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to materialized view \"%s\"",
-							RelationGetRelationName(main_rel))));
-		else if (main_rel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+							RelationGetRelationName(ccstate->rel))));
+		else if (ccstate->rel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to foreign table \"%s\"",
-							RelationGetRelationName(main_rel))));
-		else if (main_rel->rd_rel->relkind == RELKIND_SEQUENCE)
+							RelationGetRelationName(ccstate->rel))));
+		else if (ccstate->rel->rd_rel->relkind == RELKIND_SEQUENCE)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to sequence \"%s\"",
-							RelationGetRelationName(main_rel))));
+							RelationGetRelationName(ccstate->rel))));
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to non-table relation \"%s\"",
-							RelationGetRelationName(main_rel))));
+							RelationGetRelationName(ccstate->rel))));
 	}
 
-	tupDesc = RelationGetDescr(main_rel);
+	tupDesc = RelationGetDescr(ccstate->rel);
 
 	/*----------
 	 * Check to see if we can avoid writing WAL
@@ -160,8 +182,8 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	 *----------
 	 */
 	/* createSubid is creation check, newRelfilenodeSubid is truncation check */
-	if (main_rel->rd_createSubid != InvalidSubTransactionId ||
-		main_rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
+	if (ccstate->rel->rd_createSubid != InvalidSubTransactionId ||
+		ccstate->rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
 	{
 		hi_options |= HEAP_INSERT_SKIP_FSM;
 		if (!XLogIsNeeded())
@@ -175,7 +197,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
 	InitResultRelInfoCompat(resultRelInfo,
-							main_rel,
+							ccstate->rel,
 							1,	/* dummy rangetable index */
 							0);
 
@@ -211,7 +233,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 
 	/* Set up callback to identify error line number */
 	errcallback.callback = CopyFromErrorCallback;
-	errcallback.arg = (void *) ccstate->cstate;
+	errcallback.arg = (void *) ccstate->fromctx.cstate;
 	errcallback.previous = error_context_stack;
 	error_context_stack = &errcallback;
 
@@ -232,7 +254,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		/* Switch into its memory context */
 		MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
-		if (!NextCopyFrom(ccstate->cstate, econtext, values, nulls, &loaded_oid))
+		if (!ccstate->next_copy_from(ccstate, econtext, values, nulls, &loaded_oid))
 			break;
 
 		/* And now we can form the input tuple. */
@@ -304,7 +326,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 		if (!skip_tuple)
 		{
 			/* Check the constraints of the tuple */
-			if (main_rel->rd_att->constr)
+			if (ccstate->rel->rd_att->constr)
 				ExecConstraints(resultRelInfo, slot, estate);
 
 			{
@@ -393,7 +415,7 @@ timescaledb_CopyFrom(CopyState cstate, Relation main_rel, List *range_table, Hyp
 	 * indexes since those use WAL anyway)
 	 */
 	if (hi_options & HEAP_INSERT_SKIP_WAL)
-		heap_sync(main_rel);
+		heap_sync(ccstate->rel);
 
 	return processed;
 }
@@ -475,69 +497,27 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 	return attnums;
 }
 
-Oid
-timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht)
+static void
+copy_security_check(Relation rel, List *attnums)
 {
-	CopyState	cstate;
-	bool		is_from = stmt->is_from;
-	bool		pipe = (stmt->filename == NULL);
-	Relation	rel;
-	Oid			relid;
 	List	   *range_table = NIL;
-	TupleDesc	tupDesc;
-	AclMode		required_access = (is_from ? ACL_INSERT : ACL_SELECT);
-	List	   *attnums;
 	ListCell   *cur;
 	RangeTblEntry *rte;
 	char	   *xactReadOnly;
-
-	/* Disallow COPY to/from file or program except to superusers. */
-	if (!pipe && !superuser())
-	{
-		if (stmt->is_program)
-			ereport(ERROR,
-					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("must be superuser to COPY to or from an external program"),
-					 errhint("Anyone can COPY to stdout or from stdin. "
-							 "psql's \\copy command also works for anyone.")));
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("must be superuser to COPY to or from a file"),
-					 errhint("Anyone can COPY to stdout or from stdin. "
-							 "psql's \\copy command also works for anyone.")));
-	}
-
-	if (!is_from || NULL == stmt->relation)
-		elog(ERROR, "timescale DoCopy should only be called for COPY FROM");
-
-	Assert(!stmt->query);
-
-	/* Open and lock the relation, using the appropriate lock type. */
-	rel = heap_openrv(stmt->relation,
-					  (is_from ? RowExclusiveLock : AccessShareLock));
-
-	relid = RelationGetRelid(rel);
 
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
 	rte->relid = RelationGetRelid(rel);
 	rte->relkind = rel->rd_rel->relkind;
-	rte->requiredPerms = required_access;
+	rte->requiredPerms = ACL_INSERT;
 	range_table = list_make1(rte);
-
-	tupDesc = RelationGetDescr(rel);
-	attnums = timescaledb_CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 	foreach(cur, attnums)
 	{
 		int			attno = lfirst_int(cur) -
 		FirstLowInvalidHeapAttributeNumber;
 
-		if (is_from)
-			rte->insertedCols = bms_add_member(rte->insertedCols, attno);
-		else
-			rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
 	}
 
 	ExecCheckRTPerms(range_table, true);
@@ -558,27 +538,67 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	 */
 	if (check_enable_rls(rte->relid, InvalidOid, false) == RLS_ENABLED)
 	{
-		/* is_from is true here */
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("COPY FROM not supported with row-level security"),
 				 errhint("Use INSERT statements instead.")));
 	}
 
-	Assert(rel);
-
 	/* check read-only transaction and parallel mode */
 	xactReadOnly = GetConfigOptionByName("transaction_read_only", NULL, false);
+
 	if (strncmp(xactReadOnly, "on", sizeof("on")) == 0 && !rel->rd_islocaltemp)
 		PreventCommandIfReadOnly("COPY FROM");
 	PreventCommandIfParallelMode("COPY FROM");
+}
+
+void
+timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht)
+{
+	CopyChunkState *ccstate;
+	CopyState	cstate;
+	bool		pipe = (stmt->filename == NULL);
+	Relation	rel;
+	List	   *range_table = NIL;
+	List	   *attnums = NIL;
+
+	/* Disallow COPY to/from file or program except to superusers. */
+	if (!pipe && !superuser())
+	{
+		if (stmt->is_program)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("must be superuser to COPY to or from an external program"),
+					 errhint("Anyone can COPY to stdout or from stdin. "
+							 "psql's \\copy command also works for anyone.")));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("must be superuser to COPY to or from a file"),
+					 errhint("Anyone can COPY to stdout or from stdin. "
+							 "psql's \\copy command also works for anyone.")));
+	}
+
+	if (!stmt->is_from || NULL == stmt->relation)
+		elog(ERROR, "timescale DoCopy should only be called for COPY FROM");
+
+	Assert(!stmt->query);
+
+	/*
+	 * We never actually write to the main table, but we need RowExclusiveLock
+	 * to ensure no one else is
+	 */
+	rel = heap_openrv(stmt->relation, RowExclusiveLock);
+
+	attnums = timescaledb_CopyGetAttnums(RelationGetDescr(rel), rel, stmt->attlist);
+
+	copy_security_check(rel, attnums);
 
 #if PG10
 	{
 		ParseState *pstate = make_parsestate(NULL);
 
 		pstate->p_sourcetext = queryString;
-
 		cstate = BeginCopyFrom(pstate, rel, stmt->filename, stmt->is_program,
 							   NULL, stmt->attlist, stmt->options);
 		free_parsestate(pstate);
@@ -586,17 +606,77 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 #elif PG96
 	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program,
 						   stmt->attlist, stmt->options);
+
 #endif
-	*processed = timescaledb_CopyFrom(cstate, rel, range_table, ht);	/* copy from file to
-																		 * database */
+	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate);
+
+	*processed = timescaledb_CopyFrom(ccstate, range_table, ht);
 	EndCopyFrom(cstate);
 
-	/*
-	 * Close the relation. If reading, we can release the AccessShareLock we
-	 * got; if writing, we should hold the lock until end of transaction to
-	 * ensure that updates will be committed before lock is released.
-	 */
-	heap_close(rel, (is_from ? NoLock : AccessShareLock));
+	heap_close(rel, NoLock);
+}
 
-	return relid;
+static bool
+next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext,
+							   Datum *values, bool *nulls, Oid *tuple_oid)
+{
+	HeapScanDesc scandesc = ccstate->fromctx.scandesc;
+	HeapTuple	tuple = heap_getnext(scandesc, ForwardScanDirection);
+
+	if (!HeapTupleIsValid(tuple))
+		return false;
+
+	heap_deform_tuple(tuple, RelationGetDescr(ccstate->rel), values, nulls);
+	*tuple_oid = HeapTupleGetOid(tuple);
+
+	return true;
+}
+
+/*
+ * Move data from the given hypertable's main table to chunks.
+ *
+ * The data moving is essentially a COPY from the main table to the chunks
+ * followed by a TRUNCATE on the main table.
+ */
+void
+timescaledb_copy_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
+{
+	Relation	rel;
+	CopyChunkState *ccstate;
+	HeapScanDesc scandesc;
+	Snapshot	snapshot;
+	List	   *attnums = NIL;
+	List	   *range_table = NIL;
+	RangeVar	rv = {
+		.schemaname = NameStr(ht->fd.schema_name),
+		.relname = NameStr(ht->fd.table_name),
+#if PG10
+		.inh = false,			/* Don't recurse */
+#elif PG96
+		.inhOpt = INH_NO,
+#endif
+
+	};
+	TruncateStmt stmt = {
+		.type = T_TruncateStmt,
+		.relations = list_make1(&rv),
+		.behavior = DROP_RESTRICT,
+	};
+	int			i;
+
+	rel = heap_open(ht->main_table_relid, lockmode);
+
+	for (i = 0; i < rel->rd_att->natts; i++)
+		attnums = lappend_int(attnums, rel->rd_att->attrs[i]->attnum);
+
+	copy_security_check(rel, attnums);
+	snapshot = RegisterSnapshot(GetLatestSnapshot());
+	scandesc = heap_beginscan(rel, snapshot, 0, NULL);
+	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, scandesc);
+	timescaledb_CopyFrom(ccstate, range_table, ht);
+	heap_endscan(scandesc);
+	UnregisterSnapshot(snapshot);
+	heap_close(rel, lockmode);
+
+	ExecuteTruncate(&stmt);
 }

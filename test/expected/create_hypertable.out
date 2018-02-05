@@ -288,6 +288,79 @@ NOTICE:  table "test_1dim" is already a hypertable, skipping
 select create_hypertable('test_schema.test_1dim', 'time');
 ERROR:  table "test_1dim" is already a hypertable
 \set ON_ERROR_STOP 1
+--test data migration
+create table test_schema.test_migrate(time timestamp, temp float);
+insert into test_schema.test_migrate VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
+select * from only test_schema.test_migrate;
+           time           | temp 
+--------------------------+------
+ Tue Oct 19 10:23:54 2004 |    1
+ Sun Dec 19 10:23:54 2004 |    2
+(2 rows)
+
+\set ON_ERROR_STOP 0
+--should fail without migrate_data => true
+select create_hypertable('test_schema.test_migrate', 'time');
+ERROR:  table "test_migrate" is not empty
+\set ON_ERROR_STOP 1
+select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
+NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  migrating data to chunks
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+--there should be two new chunks
+select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
+ id | schema_name |  table_name  | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+--------------+------------------------+-------------------------+----------------
+  6 | test_schema | test_migrate | _timescaledb_internal  | _hyper_6                |              1
+(1 row)
+
+select * from _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    
+----+---------------+-----------------------+------------------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
+  2 |             2 | chunk_schema          | _hyper_2_2_chunk
+  3 |             5 | _timescaledb_internal | _hyper_5_3_chunk
+  4 |             6 | _timescaledb_internal | _hyper_6_4_chunk
+  5 |             6 | _timescaledb_internal | _hyper_6_5_chunk
+(5 rows)
+
+select * from test_schema.test_migrate;
+           time           | temp 
+--------------------------+------
+ Tue Oct 19 10:23:54 2004 |    1
+ Sun Dec 19 10:23:54 2004 |    2
+(2 rows)
+
+--main table should now be empty
+select * from only test_schema.test_migrate;
+ time | temp 
+------+------
+(0 rows)
+
+select * from only _timescaledb_internal._hyper_6_4_chunk;
+           time           | temp 
+--------------------------+------
+ Tue Oct 19 10:23:54 2004 |    1
+(1 row)
+
+select * from only _timescaledb_internal._hyper_6_5_chunk;
+           time           | temp 
+--------------------------+------
+ Sun Dec 19 10:23:54 2004 |    2
+(1 row)
+
+create table test_schema.test_migrate_empty(time timestamp, temp float);
+select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 -- Reset GRANTS
 \c single :ROLE_SUPERUSER
 REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;
