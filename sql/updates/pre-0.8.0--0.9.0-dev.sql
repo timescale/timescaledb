@@ -22,6 +22,7 @@ DROP FUNCTION add_dimension(regclass, name, integer, anyelement, regproc);
 DROP FUNCTION _timescaledb_internal.time_interval_specification_to_internal(regtype, anyelement, interval, text, boolean);
 DROP FUNCTION _timescaledb_internal.time_interval_specification_to_internal_with_default_time(regtype, anyelement, text, boolean);
 DROP FUNCTION _timescaledb_internal.create_hypertable(regclass, name, name, name, name, integer, name, name, bigint, name, boolean, regproc);
+DROP FUNCTION create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc);
 DROP FUNCTION set_chunk_time_interval(regclass, anyelement);
 
 -- Hypertable and related functions
