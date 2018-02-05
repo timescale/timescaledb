@@ -177,8 +177,8 @@ create_default_indexes(Hypertable *ht,
  * Default indexes are assumed to cover the first open ("time") dimension, and,
  * optionally, the first closed ("space") dimension.
  */
-void
-indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default)
+static void
+indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default, bool verify)
 {
 	Relation	tblrel = relation_open(ht->main_table_relid, AccessShareLock);
 	Dimension  *time_dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
@@ -192,7 +192,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 	{
 		Relation	idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
 
-		if (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion)
+		if (verify && (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion))
 			indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
 
 		/* Check for existence of "default" indexes */
@@ -225,4 +225,17 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 		create_default_indexes(ht, time_dim, space_dim, has_time_idx, has_time_space_idx);
 
 	relation_close(tblrel, AccessShareLock);
+}
+
+void
+indexing_verify_indexes(Hypertable *ht)
+{
+	indexing_create_and_verify_hypertable_indexes(ht, false, true);
+}
+
+
+void
+indexing_create_default_indexes(Hypertable *ht)
+{
+	indexing_create_and_verify_hypertable_indexes(ht, true, false);
 }

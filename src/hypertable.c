@@ -32,6 +32,7 @@
 #include "indexing.h"
 #include "guc.h"
 #include "errors.h"
+#include "copy.h"
 
 Oid
 rel_get_owner(Oid relid)
@@ -851,6 +852,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 	Name		associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
 	bool		create_default_indexes = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
 	bool		if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
+	bool		migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
 	DimensionInfo time_dim_info = {
 		.table_relid = table_relid,
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
@@ -865,19 +867,22 @@ hypertable_create(PG_FUNCTION_ARGS)
 		.partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9),
 	};
 	Cache	   *hcache;
+	Hypertable *ht;
 	Oid			associated_schema_oid;
 	Oid			user_oid = GetUserId();
 	Oid			tspc_oid = get_rel_tablespace(table_relid);
+	bool		table_has_data;
 	NameData	schema_name,
 				table_name,
 				default_associated_schema_name;
 
 	/*
 	 * Serialize hypertable creation to avoid having multiple transactions
-	 * creating the same hypertable simultaneously. Hold until transaction
-	 * end.
+	 * creating the same hypertable simultaneously. The lock should conflict
+	 * with itself and RowExclusive, to prevent simultaneous inserts on the
+	 * table. Hold until transaction end.
 	 */
-	LockRelationOid(table_relid, ShareUpdateExclusiveLock);
+	LockRelationOid(table_relid, ShareRowExclusiveLock);
 
 	if (is_hypertable(table_relid))
 	{
@@ -910,7 +915,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
-					 errdetail("It is not possible to turn partitioned tables into hypertables")));
+					 errdetail("It is not possible to turn partitioned tables into hypertables.")));
 #endif
 		case RELKIND_RELATION:
 			break;
@@ -920,19 +925,19 @@ hypertable_create(PG_FUNCTION_ARGS)
 					 errmsg("invalid relation type")));
 	}
 
-	if (table_has_tuples(table_relid, GetActiveSnapshot(), NoLock))
+	table_has_data = table_has_tuples(table_relid, GetActiveSnapshot(), NoLock);
+
+	if (!migrate_data && table_has_data)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is not empty", get_rel_name(table_relid)),
-				 errhint("Create a new hypertable and transfer the data from"
-						 " table \"%s\" into the new hypertable",
-						 get_rel_name(table_relid))));
+				 errhint("You can migrate data by specifying 'migrate_data => true' when calling this function.")));
 
 	if (find_inheritance_children(table_relid, AccessShareLock) != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
-				 errdetail("It is not possible to turn tables that use inheritance into hypertables")));
+				 errdetail("It is not possible to turn tables that use inheritance into hypertables.")));
 
 	/*
 	 * Create the associated schema where chunks are stored, or, check
@@ -991,12 +996,12 @@ hypertable_create(PG_FUNCTION_ARGS)
 	/* Refresh the cache to get the updated hypertable with added dimensions */
 	cache_release(hcache);
 	hcache = hypertable_cache_pin();
-	time_dim_info.ht = space_dim_info.ht = hypertable_cache_get_entry(hcache, table_relid);
+	ht = hypertable_cache_get_entry(hcache, table_relid);
 
-	Assert(time_dim_info.ht != NULL);
+	Assert(ht != NULL);
 
-	/* Verify existing indexes and create default ones, if needed */
-	indexing_create_and_verify_hypertable_indexes(time_dim_info.ht, create_default_indexes);
+	/* Verify that existing indexes are compatible with a hypertable */
+	indexing_verify_indexes(ht);
 
 	/* Attach tablespace, if any */
 	if (OidIsValid(tspc_oid))
@@ -1006,6 +1011,19 @@ hypertable_create(PG_FUNCTION_ARGS)
 		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
 		tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
+
+	/* Migrate data from the main table to chunks */
+	if (table_has_data)
+	{
+		ereport(NOTICE,
+				(errmsg("migrating data to chunks"),
+				 errdetail("Migration might take a while depending on the amount of data.")));
+
+		timescaledb_copy_from_table_to_chunks(ht, AccessShareLock);
+	}
+
+	if (create_default_indexes)
+		indexing_create_default_indexes(ht);
 
 	cache_release(hcache);
 

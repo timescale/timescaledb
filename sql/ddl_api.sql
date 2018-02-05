@@ -12,6 +12,7 @@
 -- create_default_indexes - (Optional) Whether or not to create the default indexes
 -- if_not_exists - (Optional) Do not fail if table is already a hypertable
 -- partitioning_func - (Optional) The partitioning function to use for spatial partitioning
+-- migrate_data - (Optional) Set to true to migrate any existing data in the table to chunks
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -22,7 +23,8 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     chunk_time_interval     anyelement = NULL::bigint,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
-    partitioning_func       REGPROC = NULL
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'hypertable_create' LANGUAGE C VOLATILE;
 
 -- Update chunk_time_interval for a hypertable.
