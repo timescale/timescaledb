@@ -88,7 +88,10 @@ message(STATUS "Using pg_config ${PG_CONFIG}")
 
 # Check PostgreSQL version
 execute_process(
-  COMMAND ${PG_CONFIG} --version
+  #COMMAND ${PG_CONFIG} --version
+  # Fix: If some PostgreSQL distribution returns something like PostgreSQL 10.2 (Ubuntu 10.2-1.pgdg16.04+1)
+  # Just strip distribution information out.
+  COMMAND /bin/sh -c "${PG_CONFIG} --version | grep -o -E 'PostgreSQL [0-9]*\.?[0-9]+'"
   OUTPUT_VARIABLE PG_VERSION_STRING
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
