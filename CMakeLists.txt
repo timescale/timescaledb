@@ -92,7 +92,7 @@ execute_process(
   OUTPUT_VARIABLE PG_VERSION_STRING
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-if (NOT ${PG_VERSION_STRING} MATCHES "^PostgreSQL[ ]+([0-9]+)\\.([0-9]+)(\\.([0-9]+))*$")
+if (NOT ${PG_VERSION_STRING} MATCHES "^PostgreSQL[ ]+([0-9]+)\\.([0-9]+)(\\.([0-9]+))*")
   message(FATAL_ERROR "Could not parse PostgreSQL version ${PG_VERSION}")
 endif ()
 
