@@ -273,7 +273,7 @@ do_load()
 	char		soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
 
-	strncpy(soversion, version, MAX_VERSION_LEN);
+	StrNCpy(soversion, version, MAX_VERSION_LEN);
 	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_NAME, version);
 
 	/*
