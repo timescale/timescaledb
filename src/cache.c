@@ -195,6 +195,7 @@ cache_xact_end(XactEvent event, void *arg)
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
 			release_all_pinned_caches();
+			break;
 		default:
 			{
 				ListCell   *lc;

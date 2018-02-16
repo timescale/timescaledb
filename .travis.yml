@@ -46,6 +46,6 @@ jobs:
             name: "timescale/timescaledb"
             description: "TimescaledDB an open-source time-series DB"
           notification_email: ci@timescale.com
-          build_command_prepend: "./bootstrap Debug && cd build"
+          build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug && cd build"
           build_command: "make"
           branch_pattern: coverity_scan
