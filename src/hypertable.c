@@ -483,6 +483,7 @@ hypertable_insert_relation(Relation rel,
 		values[Anum_hypertable_associated_table_prefix - 1] = NameGetDatum(associated_table_prefix);
 	else
 	{
+		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
 		snprintf(NameStr(default_associated_table_prefix),
 				 NAMEDATALEN,
 				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
