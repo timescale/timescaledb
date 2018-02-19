@@ -1,69 +1,7 @@
 # TimescaleDB Changelog
 
-## 0.9.0 (2018-02-19)
-
-**High-level changes**
-* Support for multiple extension versions on different databases in the
-same PostgreSQL instance. This allows different databases to be updated
-independently and provides for smoother updates between versions. No
-more spurious errors in the log as the extension is being
-updated, and new versions no longer require a restart of the database.
-* Significant refactoring to simplify and improve codebase, including
-improvements to error handling, security/permissions, and more.
-* Corrections to edge-case scenarios involving dropping schemas,
-hypertables, dimensions, and more
-* Correctness improvements through propagating reloptions from main
-table to chunk tables and blocking `ONLY` commands that try to alter
-hypertables (i.e., changes should be applied to chunks as well)
-* Addition of a `migrate_data` option to `create_hypertable` to allow
-non-empty tables to be turned into hypertables without separate
-creation & insertion steps. Note, this option may take a while if the
-original table has lots of data.
-* Support for `ALTER TABLE RENAME CONSTRAINT`
-* Support for adjusting the number of partitions for a space dimension
-* Improvements to tablespace handling
-
-**Notable commits**
-* [f13969e] Fix possible memory safety issue and squash valgrind error.
-* [ef74491] Migrate table data when creating a hypertable
-* [2696582] Move index and constraints drop handling to event trigger
-* [d6baccb] Improve tablespace handling, including blocks for DROP and REVOKE
-* [b9a6f89] Handle DROP SCHEMA for hypertable and chunk schemas
-* [b534a5a] Add test case for adding metadata entries automatically
-* [6adce4c] Handle TRUNCATE without upcall and handle ONLY modifier
-* [b7ebe06] Handle change owner without upcall
-* [71b1124] Delete orphaned dimension slices
-* [fa19a54] Handle deletes on metadata objects via native catalog API
-* [6e011d1] Refactor hypertable-related API functions
-* [5afd39a] Fix locking for serializing chunk creation
-* [6dd2c46] Add check for null in ca_append_rescan to prevent segfault
-* [71962b8] Refactor dimension-related API functions
-* [cc254a9] Fix CREATE EXTENSION IF NOT EXISTS and error messages
-* [d135256] Spread chunk indexes across tablespaces like chunks
-* [e85721a] Block ONLY hypertable on all ALTER TABLE commands.
-* [78d36b5] Handle subtxn for cache pinning
-* [26ef77f] Add subtxn abort logic to process_utility.c
-* [25f3284] Handle cache invalidation during subtxn rollback
-* [264956f] Block DROP NOT NULL on time-partitioned columns.
-* [ad7d361] Better accounting for number of items stored in a subspace
-* [12f92ea] Improve speed of out-of-order inserts
-* [87f055d] Add support for ALTER TABLE RENAME CONSTRAINT.
-* [da8cc79] Add support for multiple extension version in one pg instance
-* [68faddc] Make chunks inherit reloptions set on the hypertable
-* [4df8f28] Add proper permissions handling for associated (chunk) schemas
-* [21efcce] Refactor chunk table creation and unify constraint handling
-
-**Thanks**
-* @Anthares for a request to pass reloptions like fill factor to child chunks
-* @oldgreen for reporting an issue with subtransaction handling
-* @fvannee for a PR that fixed a bug with `ca_append_rescan`
-* @maksm90 for reporting an superfluous index being created in an internal catalog table
-* @Rashid987 for reporting an issue where deleting a chunk, then changing the time interval would not apply the change when a replacement chunk is created
-* RaedA from Slack for reporting compilation issues on Windows between
-0.8.0 and this release
-* @haohello for a request to adjust the number of partitions for a given dimension
-* @LonghronShen and @devereaux for reporting an issue (and submitting a PR) for handling version identification when there is more to the version than just major and minor numbers
-* @carlospeon for reporting an issue with dropping hypertables
+**A revised version of 0.9.0 is forthcoming soon. Please do not attempt
+to update yet**
 
 ## 0.8.0 (2017-12-19)
 
