@@ -12,6 +12,7 @@
 #include <utils/jsonb.h>
 #include <utils/acl.h>
 #include <utils/rangetypes.h>
+#include <utils/memutils.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <access/hash.h>
@@ -158,7 +159,7 @@ partitioning_info_create(const char *schema,
 	pinfo->typcache_entry = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
 	if (pinfo->typcache_entry->hash_proc == InvalidOid)
-		elog(ERROR, "No hash function for type %u", columntype);
+		elog(ERROR, "could not find hash function for type %u", columntype);
 
 	partitioning_func_set_func_fmgr(&pinfo->partfunc);
 
@@ -181,20 +182,13 @@ partitioning_info_create(const char *schema,
 
 	fmgr_info_set_expr((Node *) expr, &pinfo->partfunc.func_fmgr);
 
-	/*
-	 * Set the type cache entry in fn_extra to avoid an extry lookup in the
-	 * partition hash function
-	 */
-	pinfo->partfunc.func_fmgr.fn_extra = pinfo->typcache_entry;
-
 	return pinfo;
 }
 
 /*
  * Apply the partitioning function of a hypertable to a value.
  *
- * We support both partitioning functions with the signature int
- * func(anyelement).
+ * We support partitioning functions with the signature (anyelement) -> int.
  */
 int32
 partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
@@ -232,10 +226,10 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 	fe = (FuncExpr *) fcinfo->flinfo->fn_expr;
 
 	if (NULL == fe || !IsA(fe, FuncExpr))
-		elog(ERROR, "No function expression set when invoking partitioning function");
+		elog(ERROR, "no function expression set when invoking partitioning function");
 
 	if (list_length(fe->args) != 1)
-		elog(ERROR, "Unexpected number of arguments in function expression");
+		elog(ERROR, "unexpected number of arguments in function expression");
 
 	node = linitial(fe->args);
 
@@ -250,11 +244,48 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 		case T_CoerceViaIO:
 			argtype = ((CoerceViaIO *) node)->resulttype;
 			break;
+		case T_FuncExpr:
+			/* Argument is function, so our input is its result type */
+			argtype = ((FuncExpr *) node)->funcresulttype;
+			break;
 		default:
-			elog(ERROR, "Unsupported expression argument node type %u", nodeTag(node));
+			elog(ERROR, "unsupported expression argument node type %u", nodeTag(node));
 	}
 
 	return argtype;
+}
+
+/*
+ * Partitioning function cache.
+ *
+ * Holds type information to avoid repeated lookups. The cache is allocated on a
+ * child memory context of the context that created the associated FmgrInfo
+ * struct. For partitioning functions invoked on the insert path, this is
+ * typically the Hypertable cache's memory context. Hence, the type cache lives
+ * for the duration of the hypertable cache and can be reused across multiple
+ * invokations of the partitioning function, even across transactions.
+ *
+ * If the partitioning function is invoked outside the insert path, the FmgrInfo
+ * and its memory context has a lifetime corresponding to that invokation.
+ */
+typedef struct PartFuncCache
+{
+	Oid			argtype;
+	Oid			coerce_funcid;
+	TypeCacheEntry *tce;
+} PartFuncCache;
+
+static PartFuncCache *
+part_func_cache_create(Oid argtype, TypeCacheEntry *tce, Oid coerce_funcid, MemoryContext mcxt)
+{
+	PartFuncCache *pfc;
+
+	pfc = MemoryContextAlloc(mcxt, sizeof(PartFuncCache));
+	pfc->argtype = argtype;
+	pfc->tce = tce;
+	pfc->coerce_funcid = coerce_funcid;
+
+	return pfc;
 }
 
 /* _timescaledb_catalog.get_partition_for_key(key anyelement) RETURNS INT */
@@ -270,26 +301,35 @@ Datum
 get_partition_for_key(PG_FUNCTION_ARGS)
 {
 	Datum		arg = PG_GETARG_DATUM(0);
+	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;
 	struct varlena *data;
-	Oid			argtype;
 	uint32		hash_u;
 	int32		res;
 
 	if (PG_NARGS() != 1)
-		elog(ERROR, "Unexpected number of arguments to partitioning function");
+		elog(ERROR, "unexpected number of arguments to partitioning function");
 
-	argtype = resolve_function_argtype(fcinfo);
-
-	if (argtype != TEXTOID)
+	if (NULL == pfc)
 	{
-		/* Not TEXT input -> need to convert to text */
-		Oid			funcid = find_text_coercion_func(argtype);
+		Oid			funcid = InvalidOid;
+		Oid			argtype = resolve_function_argtype(fcinfo);
 
-		if (!OidIsValid(funcid))
-			elog(ERROR, "Could not coerce type %u to text",
-				 argtype);
+		if (argtype != TEXTOID)
+		{
+			/* Not TEXT input -> need to convert to text */
+			funcid = find_text_coercion_func(argtype);
 
-		arg = OidFunctionCall1(funcid, arg);
+			if (!OidIsValid(funcid))
+				elog(ERROR, "could not coerce type %u to text", argtype);
+		}
+
+		pfc = part_func_cache_create(argtype, NULL, funcid, fcinfo->flinfo->fn_mcxt);
+		fcinfo->flinfo->fn_extra = pfc;
+	}
+
+	if (pfc->argtype != TEXTOID)
+	{
+		arg = OidFunctionCall1(pfc->coerce_funcid, arg);
 		arg = CStringGetTextDatum(DatumGetCString(arg));
 	}
 
@@ -320,23 +360,26 @@ Datum
 get_partition_hash(PG_FUNCTION_ARGS)
 {
 	Datum		arg = PG_GETARG_DATUM(0);
-	TypeCacheEntry *tce = fcinfo->flinfo->fn_extra;
-	Oid			argtype;
+	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;
 	Datum		hash;
 	int32		res;
 
 	if (PG_NARGS() != 1)
-		elog(ERROR, "Unexpected number of arguments to partitioning function");
+		elog(ERROR, "unexpected number of arguments to partitioning function");
 
-	argtype = resolve_function_argtype(fcinfo);
+	if (NULL == pfc)
+	{
+		Oid			argtype = resolve_function_argtype(fcinfo);
+		TypeCacheEntry *tce = lookup_type_cache(argtype, TYPECACHE_HASH_FLAGS);
 
-	if (tce == NULL)
-		tce = lookup_type_cache(argtype, TYPECACHE_HASH_FLAGS);
+		pfc = part_func_cache_create(argtype, tce, InvalidOid, fcinfo->flinfo->fn_mcxt);
+		fcinfo->flinfo->fn_extra = pfc;
+	}
 
-	if (tce->hash_proc == InvalidOid)
-		elog(ERROR, "No hash function for type %u", argtype);
+	if (pfc->tce->hash_proc == InvalidOid)
+		elog(ERROR, "could not find hash function for type %u", pfc->argtype);
 
-	hash = FunctionCall1(&tce->hash_proc_finfo, arg);
+	hash = FunctionCall1(&pfc->tce->hash_proc_finfo, arg);
 
 	/* Only positive numbers */
 	res = (int32) (DatumGetUInt32(hash) & 0x7fffffff);

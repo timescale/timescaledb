@@ -141,3 +141,56 @@ SELECT * FROM _timescaledb_catalog.dimension;
   9 |             4 | location    | integer                     | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
 (9 rows)
 
+-- Test that we support custom SQL-based partitioning functions and
+-- that our native partitioning function handles function expressions
+-- as argument
+CREATE OR REPLACE FUNCTION custom_partfunc(source anyelement)
+    RETURNS INTEGER LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    retval INTEGER;
+BEGIN
+    retval = _timescaledb_internal.get_partition_hash(substring(source::text FROM '[A-za-z0-9 ]+'));
+    RAISE NOTICE 'hash value for % is %', source, retval;
+    RETURN retval;
+END
+$BODY$;
+CREATE TABLE part_custom_func(time timestamptz, temp float8, device text);
+SELECT create_hypertable('part_custom_func', 'time', 'device', 2, partitioning_func => 'custom_partfunc');
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash(substring('dev1' FROM '[A-za-z0-9 ]+'));
+ get_partition_hash 
+--------------------
+         1129986420
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('dev1'::text);
+ get_partition_hash 
+--------------------
+         1129986420
+(1 row)
+
+SELECT _timescaledb_internal.get_partition_hash('dev7'::text);
+ get_partition_hash 
+--------------------
+          449729092
+(1 row)
+
+INSERT INTO part_custom_func VALUES ('2017-03-22T09:18:23', 23.4, 'dev1'),
+                                    ('2017-03-22T09:18:23', 23.4, 'dev7');
+NOTICE:  hash value for dev1 is 1129986420
+NOTICE:  hash value for dev1 is 1129986420
+NOTICE:  hash value for dev7 is 449729092
+NOTICE:  hash value for dev7 is 449729092
+SELECT * FROM test.show_subtables('part_custom_func');
+                 Child                  | Tablespace 
+----------------------------------------+------------
+ _timescaledb_internal._hyper_5_6_chunk | 
+ _timescaledb_internal._hyper_5_7_chunk | 
+(2 rows)
+
