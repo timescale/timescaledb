@@ -1,3 +1,7 @@
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
+CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
+RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C STRICT;
 DROP FUNCTION _timescaledb_internal.create_hypertable_row(REGCLASS, NAME, NAME, NAME, NAME, INTEGER, NAME, NAME, BIGINT, NAME, REGPROC);
 DROP FUNCTION _timescaledb_internal.rename_hypertable(NAME, NAME, NAME, NAME);
 

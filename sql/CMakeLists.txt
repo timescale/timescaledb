@@ -3,8 +3,19 @@ set(EXT_SQL_UPDATE_FILE ${PROJECT_NAME}--${UPDATE_FROM_VERSION}--${PROJECT_VERSI
 set(EXT_SQL_UPDATE_PRE_FILE updates/pre-${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
 set(EXT_SQL_UPDATE_POST_FILE updates/post-${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
 
-set(SQL_FILES
+#These files called before anything else
+set(PRE_UPDATE_FILES
+  updates/pre-global.sql
+  #trigger functions need to go first to associate them with new .so before they are called
+  trigger_functions.sql
+)
+
+set(PRE_INSTALL_FILES
   schemas.sql
+  trigger_functions.sql
+)
+
+set(COMMON_FILES
   tables.sql
   permissions.sql
   chunk.sql
@@ -44,22 +55,24 @@ set(EXT_SQL_SPECIAL_FILES
     timescaledb--0.7.0--0.7.1.sql
 )
 
-set(EXT_SQL_UPDATE_PRE_GLOBAL_FILE updates/pre-global.sql)
-set(EXT_SQL_UPDATE_POST_GLOBAL_FILE updates/post-global.sql)
-set(UPDATE_FILE_LIST ${EXT_SQL_UPDATE_PRE_GLOBAL_FILE} ${EXT_SQL_UPDATE_PRE_FILE} ${SQL_FILES} ${EXT_SQL_UPDATE_POST_FILE}  ${EXT_SQL_UPDATE_POST_GLOBAL_FILE})
+set(SQL_FILES ${PRE_INSTALL_FILES} ${COMMON_FILES})
+set(UPDATE_FILE_LIST ${PRE_UPDATE_FILES} ${EXT_SQL_UPDATE_PRE_FILE} ${COMMON_FILES} ${EXT_SQL_UPDATE_POST_FILE})
 
 #replace MODULE PATHNAME for files making up EXT_SQL_FILE (timescaledb--version.sql) and EXT_SQL_UPDATE_FILE (timescaledb--previous_version--version.sql)
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
-set(UPDATE_FILE_LIST_VERSIONED "")
-set(SQL_FILES_VERSIONED "")
-foreach(update_file ${UPDATE_FILE_LIST})
-  set(update_file_versioned ${update_file}.${PROJECT_VERSION_MOD})
-  configure_file(${update_file} ${update_file_versioned} @ONLY)
-  list(APPEND UPDATE_FILE_LIST_VERSIONED ${CMAKE_CURRENT_BINARY_DIR}/${update_file_versioned})
-  if (${update_file} IN_LIST SQL_FILES)
-    list(APPEND SQL_FILES_VERSIONED ${CMAKE_CURRENT_BINARY_DIR}/${update_file_versioned})
-  endif()
-endforeach(update_file)
+
+function(version_files SRC_FILE_LIST OUTPUT_FILE_LIST)
+  set(result "")
+  foreach(unversioned_file ${SRC_FILE_LIST})
+    set(versioned_file ${unversioned_file}.${PROJECT_VERSION_MOD})
+    configure_file(${unversioned_file} ${versioned_file} @ONLY)
+    list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/${versioned_file})
+  endforeach(unversioned_file)
+  set(${OUTPUT_FILE_LIST} "${result}" PARENT_SCOPE)
+endfunction()
+
+version_files("${UPDATE_FILE_LIST}" UPDATE_FILE_LIST_VERSIONED)
+version_files("${SQL_FILES}" SQL_FILES_VERSIONED)
 
 #function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
 function(cat_files SRC_FILE_LIST OUTPUT_FILE)

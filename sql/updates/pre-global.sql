@@ -1,4 +1,3 @@
---Disable the event trigger during updates. Two reasons:
----1- Prevents the old extension .so being loaded during upgrade to process the event trigger.
----2- Probably the right thing to do anyway since you don't necessarly know which version of the trigger will be fired during upgrade.
-ALTER EVENT TRIGGER timescaledb_ddl_command_end DISABLE;
+--need to keep this legacy functions around for 0.9 since it's still used in 0.8, delete after 0.9
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
