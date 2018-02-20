@@ -1,3 +1,9 @@
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
+-- this trigger function causes an invalidation event on the table whose name is
+-- passed in as the first element.
+CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
+RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C STRICT;
 DROP FUNCTION _timescaledb_cache.invalidate_relcache(oid);
 
 
@@ -1841,8 +1847,6 @@ CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS)
 $BODY$
     SELECT * FROM _timescaledb_internal.show_tablespaces(hypertable);
 $BODY$;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
-AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
 
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 CREATE EVENT TRIGGER timescaledb_ddl_command_end ON ddl_command_end
@@ -2069,10 +2073,6 @@ $BODY$
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
     AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
--- this trigger function causes an invalidation event on the table whose name is
--- passed in as the first element.
-CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
-RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C STRICT;
 
 -- This function is only used for debugging
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(catalog_table REGCLASS)
