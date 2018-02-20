@@ -1,3 +1,10 @@
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
+-- this trigger function causes an invalidation event on the table whose name is
+-- passed in as the first element.
+CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
+ RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C;
+
 DROP FUNCTION IF EXISTS drop_chunks(INTEGER, NAME, NAME, BOOLEAN);
 
 DROP FUNCTION _timescaledb_internal.create_chunk_constraint(integer,oid);
@@ -1751,8 +1758,6 @@ BEGIN
     PERFORM _timescaledb_internal.attach_tablespace(hypertable_id, tablespace);
 END
 $BODY$;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
-AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
 
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 CREATE EVENT TRIGGER timescaledb_ddl_command_end ON ddl_command_end
@@ -2010,10 +2015,6 @@ $BODY$
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
     AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
--- this trigger function causes an invalidation event on the table whose name is
--- passed in as the first element.
-CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
- RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C;
 
 -- This function is only used for debugging
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(proxy_oid OID)

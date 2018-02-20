@@ -1,6 +1,3 @@
-CREATE OR REPLACE FUNCTION _timescaledb_internal.process_ddl_event() RETURNS event_trigger
-AS '@MODULE_PATHNAME@', 'timescaledb_process_ddl_event' LANGUAGE C;
-
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 --EVENT TRIGGER MUST exclude the ALTER EXTENSION tag.
 CREATE EVENT TRIGGER timescaledb_ddl_command_end ON ddl_command_end

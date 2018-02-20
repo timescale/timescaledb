@@ -1,7 +1,21 @@
---Disable the event trigger during updates. Two reasons:
----1- Prevents the old extension .so being loaded during upgrade to process the event trigger.
----2- Probably the right thing to do anyway since you don't necessarly know which version of the trigger will be fired during upgrade.
-ALTER EVENT TRIGGER timescaledb_ddl_command_end DISABLE;
+--need to keep this legacy functions around for 0.9 since it's still used in 0.8, delete after 0.9
+CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
+AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
+-- Make sure any trigger functions or event trigger functions defined here.
+-- This file is called first in any upgrade or install script to make sure 
+-- these functions match the new .so before they are called.
+-- All functions here should be disabled -- in c -- during upgrades.
+
+-- This function is called for any ddl event.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.process_ddl_event() RETURNS event_trigger
+AS '@MODULE_PATHNAME@', 'timescaledb_process_ddl_event' LANGUAGE C;
+
+-- this trigger function causes an invalidation event on the table whose name is
+-- passed in as the first element.
+CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
+RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C STRICT;
+
+
 -- Tablespace changes
 DROP FUNCTION _timescaledb_internal.select_tablespace(integer, integer[]);
 DROP FUNCTION _timescaledb_internal.select_tablespace(integer, integer);
@@ -26,6 +40,7 @@ DROP FUNCTION add_dimension(regclass, name, integer, anyelement, regproc);
 DROP FUNCTION _timescaledb_internal.time_interval_specification_to_internal(regtype, anyelement, interval, text, boolean);
 DROP FUNCTION _timescaledb_internal.time_interval_specification_to_internal_with_default_time(regtype, anyelement, text, boolean);
 DROP FUNCTION _timescaledb_internal.create_hypertable(regclass, name, name, name, name, integer, name, name, bigint, name, boolean, regproc);
+DROP FUNCTION create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc);
 DROP FUNCTION set_chunk_time_interval(regclass, anyelement);
 
 -- Hypertable and related functions
@@ -58,9 +73,6 @@ DELETE FROM _timescaledb_catalog.dimension_slice WHERE id IN
  FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds
  ON (ds.id = cc.dimension_slice_id)
  WHERE dimension_slice_id IS NULL);
-CREATE SCHEMA IF NOT EXISTS _timescaledb_catalog;
-CREATE SCHEMA IF NOT EXISTS _timescaledb_internal;
-CREATE SCHEMA IF NOT EXISTS _timescaledb_cache;
 --NOTICE: UPGRADE-SCRIPT-NEEDED contents in this file are not auto-upgraded.
 
 -- This file contains table definitions for various abstractions and data
@@ -222,14 +234,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
         interval_length   BIGINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '$libdir/timescaledb-0.9.0', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_closed(
         dimension_value   BIGINT,
         num_slices        SMALLINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '$libdir/timescaledb-0.9.0', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_get_time(
     hypertable_id INT
 )
@@ -346,22 +358,22 @@ $BODY$;
 
 --documentation of these function located in chunk_index.h
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid OID) RETURNS OID
-AS '$libdir/timescaledb-0.9.0', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'chunk_index_clone' LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_replace(chunk_index_oid_old OID, chunk_index_oid_new OID) RETURNS VOID
-AS '$libdir/timescaledb-0.9.0', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'chunk_index_replace' LANGUAGE C VOLATILE STRICT;
 -- This file contains utilities for time conversion.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '$libdir/timescaledb-0.9.0', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '$libdir/timescaledb-0.9.0', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '$libdir/timescaledb-0.9.0', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_pg(postgres_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '$libdir/timescaledb-0.9.0', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'pg_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 
 
@@ -406,7 +418,7 @@ $BODY$
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_element anyelement, time_type REGTYPE) RETURNS BIGINT
-    AS '$libdir/timescaledb-0.9.0', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+    AS '@MODULE_PATHNAME@', 'time_to_internal' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 -- This file contains functions associated with creating new
 -- hypertables.
 
@@ -608,11 +620,11 @@ $BODY$;
 -- Deprecated partition hash function
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement)
     RETURNS int
-    AS '$libdir/timescaledb-0.9.0', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_hash(val anyelement)
     RETURNS int
-    AS '$libdir/timescaledb-0.9.0', 'get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 -- This file contains functions related to getting information about the
 -- schema of a hypertable, including columns, their types, etc.
@@ -724,6 +736,7 @@ $BODY$;
 -- create_default_indexes - (Optional) Whether or not to create the default indexes
 -- if_not_exists - (Optional) Do not fail if table is already a hypertable
 -- partitioning_func - (Optional) The partitioning function to use for spatial partitioning
+-- migrate_data - (Optional) Set to true to migrate any existing data in the table to chunks
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -734,8 +747,9 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     chunk_time_interval     anyelement = NULL::bigint,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
-    partitioning_func       REGPROC = NULL
-) RETURNS VOID AS '$libdir/timescaledb-0.9.0', 'hypertable_create' LANGUAGE C VOLATILE;
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'hypertable_create' LANGUAGE C VOLATILE;
 
 -- Update chunk_time_interval for a hypertable.
 --
@@ -749,13 +763,13 @@ CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
     main_table              REGCLASS,
     chunk_time_interval     ANYELEMENT,
     dimension_name          NAME = NULL
-) RETURNS VOID AS '$libdir/timescaledb-0.9.0', 'dimension_set_interval' LANGUAGE C VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'dimension_set_interval' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION  set_number_partitions(
     main_table              REGCLASS,
     number_partitions       INTEGER,
     dimension_name          NAME = NULL
-) RETURNS VOID AS '$libdir/timescaledb-0.9.0', 'dimension_set_num_slices' LANGUAGE C VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'dimension_set_num_slices' LANGUAGE C VOLATILE;
 
 -- Drop chunks that are older than a timestamp.
 CREATE OR REPLACE FUNCTION drop_chunks(
@@ -837,30 +851,27 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     partitioning_func       REGPROC = NULL,
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS VOID
-AS '$libdir/timescaledb-0.9.0', 'dimension_add' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'dimension_add' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION attach_tablespace(
     tablespace NAME,
     hypertable REGCLASS,
     if_not_attached BOOLEAN = false
 ) RETURNS VOID
-AS '$libdir/timescaledb-0.9.0', 'tablespace_attach' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'tablespace_attach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION detach_tablespace(
     tablespace NAME,
     hypertable REGCLASS = NULL,
     if_attached BOOLEAN = false
 ) RETURNS INTEGER
-AS '$libdir/timescaledb-0.9.0', 'tablespace_detach' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'tablespace_detach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
-AS '$libdir/timescaledb-0.9.0', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
-AS '$libdir/timescaledb-0.9.0', 'tablespace_show' LANGUAGE C VOLATILE STRICT;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.process_ddl_event() RETURNS event_trigger
-AS '$libdir/timescaledb-0.9.0', 'timescaledb_process_ddl_event' LANGUAGE C;
-
+AS '@MODULE_PATHNAME@', 'tablespace_show' LANGUAGE C VOLATILE STRICT;
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 --EVENT TRIGGER MUST exclude the ALTER EXTENSION tag.
 CREATE EVENT TRIGGER timescaledb_ddl_command_end ON ddl_command_end
@@ -872,37 +883,37 @@ CREATE EVENT TRIGGER timescaledb_ddl_sql_drop ON sql_drop
 EXECUTE PROCEDURE _timescaledb_internal.process_ddl_event();
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb-0.9.0', 'first_sfunc'
+AS '@MODULE_PATHNAME@', 'first_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.first_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb-0.9.0', 'first_combinefunc'
+AS '@MODULE_PATHNAME@', 'first_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_sfunc(internal, anyelement, "any")
 RETURNS internal
-AS '$libdir/timescaledb-0.9.0', 'last_sfunc'
+AS '@MODULE_PATHNAME@', 'last_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.last_combinefunc(internal, internal)
 RETURNS internal
-AS '$libdir/timescaledb-0.9.0', 'last_combinefunc'
+AS '@MODULE_PATHNAME@', 'last_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_finalfunc(internal, anyelement, "any")
 RETURNS anyelement
-AS '$libdir/timescaledb-0.9.0', 'bookend_finalfunc'
+AS '@MODULE_PATHNAME@', 'bookend_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_serializefunc(internal)
 RETURNS bytea
-AS '$libdir/timescaledb-0.9.0', 'bookend_serializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.bookend_deserializefunc(bytea, internal)
 RETURNS internal
-AS '$libdir/timescaledb-0.9.0', 'bookend_deserializefunc'
+AS '@MODULE_PATHNAME@', 'bookend_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 --This aggregate returns the "first" element of the first argument when ordered by the second argument.
@@ -935,15 +946,15 @@ CREATE AGGREGATE last(anyelement, "any") (
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
-	AS '$libdir/timescaledb-0.9.0', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of timestamptz happens at UTC time
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
-	AS '$libdir/timescaledb-0.9.0', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 --bucketing on date should not do any timezone conversion
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '$libdir/timescaledb-0.9.0', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
@@ -1001,15 +1012,10 @@ $BODY$
     SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
-    AS '$libdir/timescaledb-0.9.0', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
--- this trigger function causes an invalidation event on the table whose name is
--- passed in as the first element.
-CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
-RETURNS TRIGGER AS '$libdir/timescaledb-0.9.0', 'invalidate_relcache_trigger' LANGUAGE C STRICT;
-
+    AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 -- This function is only used for debugging
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(catalog_table REGCLASS)
-RETURNS BOOLEAN AS '$libdir/timescaledb-0.9.0', 'invalidate_relcache' LANGUAGE C STRICT;
+RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'invalidate_relcache' LANGUAGE C STRICT;
 
 -- This file contains utility functions to get the relation size
 -- of hypertables, chunks, and indexes on hypertables.
@@ -1431,27 +1437,27 @@ END;
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTERNAL
-AS '$libdir/timescaledb-0.9.0', 'hist_sfunc'
+AS '@MODULE_PATHNAME@', 'hist_sfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_combinefunc(state1 INTERNAL, state2 INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb-0.9.0', 'hist_combinefunc'
+AS '@MODULE_PATHNAME@', 'hist_combinefunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_serializefunc(INTERNAL)
 RETURNS bytea
-AS '$libdir/timescaledb-0.9.0', 'hist_serializefunc'
+AS '@MODULE_PATHNAME@', 'hist_serializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_deserializefunc(bytea, INTERNAL)
 RETURNS INTERNAL
-AS '$libdir/timescaledb-0.9.0', 'hist_deserializefunc'
+AS '@MODULE_PATHNAME@', 'hist_deserializefunc'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
 RETURNS INTEGER[]
-AS '$libdir/timescaledb-0.9.0', 'hist_finalfunc'
+AS '@MODULE_PATHNAME@', 'hist_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- Tell Postgres how to use the new function
@@ -1503,4 +1509,3 @@ DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
 CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.dimension
 FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
 DROP FUNCTION _timescaledb_internal.ddl_command_end();
-ALTER EVENT TRIGGER timescaledb_ddl_command_end ENABLE;

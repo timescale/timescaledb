@@ -1,3 +1,7 @@
+-- this trigger function causes an invalidation event on the table whose name is
+-- passed in as the first element.
+CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
+ RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C;
 -- Error codes defined in errors.h
 -- The functions in this file are just utility commands for throwing common errors.
 
@@ -2353,10 +2357,6 @@ $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
 	AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT;
--- this trigger function causes an invalidation event on the table whose name is
--- passed in as the first element.
-CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
- RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C;
 
 -- This function is only used for debugging
 CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(proxy_oid OID)
