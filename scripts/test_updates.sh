@@ -119,7 +119,7 @@ docker_run timescaledb-clean-rerun ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 CLEAN_VOLUME=$(docker inspect timescaledb-clean-restore --format='{{range .Mounts }}{{.Name}}{{end}}')
 UPDATE_VOLUME=$(docker inspect timescaledb-orig --format='{{range .Mounts }}{{.Name}}{{end}}')
 
-echo "Executing setup script on 0.1.0"
+echo "Executing setup script on version '${UPDATE_FROM_TAG}'"
 docker_pgscript timescaledb-orig /src/test/sql/updates/setup.sql
 docker rm -f timescaledb-orig
 

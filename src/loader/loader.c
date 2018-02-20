@@ -3,6 +3,7 @@
 #include <access/xact.h>
 #include "../compat-msvc-enter.h"
 #include <commands/extension.h>
+#include <commands/trigger.h>
 #include <miscadmin.h>
 #include <parser/analyze.h>
 #include "../compat-msvc-exit.h"
@@ -13,6 +14,7 @@
 #define EXTENSION_NAME "timescaledb"
 
 #include "../extension_utils.c"
+#include "../catalog.h"
 
 #define PG96 ((PG_VERSION_NUM >= 90600) && (PG_VERSION_NUM < 100000))
 #define PG10 ((PG_VERSION_NUM >= 100000) && (PG_VERSION_NUM < 110000))
@@ -59,7 +61,6 @@ static void inline extension_check(void);
 static void call_extension_post_parse_analyze_hook(ParseState *pstate,
 									   Query *query);
 
-
 static void
 inval_cache_callback(Datum arg, Oid relid)
 {
@@ -67,7 +68,6 @@ inval_cache_callback(Datum arg, Oid relid)
 		return;
 	extension_check();
 }
-
 
 static bool
 drop_statement_drops_extension(DropStmt *stmt)
@@ -163,6 +163,53 @@ should_load_on_drop_extension(Node *utility_stmt)
 	return !drop_statement_drops_extension((DropStmt *) utility_stmt);
 }
 
+static const char *catalog_tables[] = {
+	HYPERTABLE_TABLE_NAME,
+	CHUNK_TABLE_NAME,
+	CHUNK_INDEX_TABLE_NAME,
+	CHUNK_CONSTRAINT_TABLE_NAME,
+	DIMENSION_SLICE_TABLE_NAME,
+	DIMENSION_TABLE_NAME,
+	TABLESPACE_TABLE_NAME
+};
+
+#define NUM_CATALOG_TABLES (sizeof(catalog_tables) / sizeof(const char *))
+#define CACHE_INVAL_TRIGGER_NAME "0_cache_inval"
+
+/*
+ * Drop cache invalidation triggers on catalog tables.
+ *
+ * During extension upgrades, we need to remove the cache invalidation triggers
+ * from the extension's catalog tables to avoid having changes to them trigger a
+ * load of the old extension's shared library.
+ */
+static void
+drop_cache_inval_triggers(void)
+{
+	Oid			nspcid = get_namespace_oid(CATALOG_SCHEMA_NAME, true);
+	Size		i;
+
+	/*
+	 * We should probably expect the catalog schema to be present, but it is
+	 * not in, e.g., our mock tests. Therefore we allow it to not exist.
+	 */
+	if (!OidIsValid(nspcid))
+		return;
+
+	for (i = 0; i < NUM_CATALOG_TABLES; i++)
+	{
+		Oid			relid = get_relname_relid(catalog_tables[i], nspcid);
+
+		if (OidIsValid(relid))
+		{
+			Oid			trigoid = get_trigger_oid(relid, CACHE_INVAL_TRIGGER_NAME, true);
+
+			if (OidIsValid(trigoid))
+				RemoveTriggerById(trigoid);
+		}
+	}
+}
+
 static bool
 load_utility_cmd(Node *utility_stmt)
 {
@@ -171,6 +218,7 @@ load_utility_cmd(Node *utility_stmt)
 		case T_VariableSetStmt:
 			return should_load_on_variable_set(utility_stmt);
 		case T_AlterExtensionStmt:
+			drop_cache_inval_triggers();
 			return should_load_on_alter_extension(utility_stmt);
 		case T_CreateExtensionStmt:
 			return should_load_on_create_extension(utility_stmt);
@@ -199,9 +247,7 @@ post_analyze_hook(ParseState *pstate, Query *query)
 	call_extension_post_parse_analyze_hook(pstate, query);
 
 	if (prev_post_parse_analyze_hook != NULL)
-	{
 		prev_post_parse_analyze_hook(pstate, query);
-	}
 }
 
 void
