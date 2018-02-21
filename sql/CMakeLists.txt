@@ -49,8 +49,7 @@ set(EXT_SQL_EXTRA_FILES
   timescaledb--0.7.1--0.8.0.sql
 )
 
-#TODO handle these manually.
-set(EXT_SQL_SPECIAL_FILES
+set(EXT_SQL_SKIPPED_FILES
     timescaledb--0.6.1--0.7.0.sql
     timescaledb--0.7.0--0.7.1.sql
 )
@@ -122,15 +121,23 @@ add_custom_target(sqlreleaseupdate ALL DEPENDS  ${CMAKE_CURRENT_BINARY_DIR}/${EX
 #replace MODULE_PATHNAME in all the intermediate update files to point to $libdir/timescaledb-current_version
 #note that intermediate update files are never installed/packaged. Rather, they are only used to build the
 #update scripts below.
-set(INTERMEDIATE_UPDATE_VERSIONED "")
-foreach(intermediate_update_file ${EXT_SQL_EXTRA_FILES})
-  set(intermediate_update_file_versioned ${intermediate_update_file}.${PROJECT_VERSION_MOD})
-  configure_file(${intermediate_update_file} ${intermediate_update_file_versioned} @ONLY)
-  list(APPEND INTERMEDIATE_UPDATE_VERSIONED ${CMAKE_CURRENT_BINARY_DIR}/${intermediate_update_file_versioned})
-endforeach(intermediate_update_file)
+version_files("${EXT_SQL_EXTRA_FILES}" INTERMEDIATE_UPDATE_VERSIONED)
+version_files("${EXT_SQL_SKIPPED_FILES}" SKIPPED_FILES_VERSIONED)
+
 
 #we expect INTERMEDIATE_UPDATE_VERSIONED to be in order. For example, it should be 1--2, 2--3.
 set(INTERMEDIATE_FILE_REGEX "${CMAKE_CURRENT_BINARY_DIR}/timescaledb--([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql.${PROJECT_VERSION_MOD}")
+
+set(SKIPPED_FILE_START "")
+set(SKIPPED_FILE_END "")
+foreach(skipped_file ${SKIPPED_FILES_VERSIONED})
+  if (NOT (${skipped_file} MATCHES ${INTERMEDIATE_FILE_REGEX}))
+    message(FATAL_ERROR "Cannot parse update file name ${skipped_file}")
+  endif ()
+  list(APPEND SKIPPED_FILE_START ${CMAKE_MATCH_1})
+  list(APPEND SKIPPED_FILE_END ${CMAKE_MATCH_2})
+endforeach(skipped_file)
+
 #build the actual update scripts for historic versions.
 set(PREVIOUS_UPDATE_SCRIPTS "")
 while(INTERMEDIATE_UPDATE_VERSIONED) #while list not empty
@@ -148,6 +155,16 @@ while(INTERMEDIATE_UPDATE_VERSIONED) #while list not empty
 
   cat_files("${UPDATE_FILES}" ${CMAKE_CURRENT_BINARY_DIR}/${PREV_UPDATE_FILE})
   list(APPEND PREVIOUS_UPDATE_SCRIPTS ${CMAKE_CURRENT_BINARY_DIR}/${PREV_UPDATE_FILE})
+
+  list(FIND SKIPPED_FILE_END ${START_VERSION} skipped_index)
+  if(NOT (skipped_index EQUAL -1))
+    list(GET SKIPPED_FILE_START ${skipped_index} skipped_start)
+    list(GET SKIPPED_FILES_VERSIONED ${skipped_index} skipped_file)
+    set(SKIPPED_UPDATE_FILENAME "${PROJECT_NAME}--${skipped_start}--${PROJECT_VERSION_MOD}.sql")
+    set(SKIPPED_UPDATE_FILES ${skipped_file} ${UPDATE_FILES})
+    cat_files("${SKIPPED_UPDATE_FILES}" ${CMAKE_CURRENT_BINARY_DIR}/${SKIPPED_UPDATE_FILENAME})
+    list(APPEND PREVIOUS_UPDATE_SCRIPTS ${CMAKE_CURRENT_BINARY_DIR}/${SKIPPED_UPDATE_FILENAME})
+  endif()
 
   #drop the head and start again
   list(REMOVE_AT INTERMEDIATE_UPDATE_VERSIONED 0)
