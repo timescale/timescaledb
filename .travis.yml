@@ -29,7 +29,7 @@ jobs:
   include:
     - stage: test
       script:
-        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates.sh
+        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_all.sh
 
     - stage: test
       env:
