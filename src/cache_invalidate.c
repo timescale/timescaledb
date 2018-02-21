@@ -3,7 +3,6 @@
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
 #include <catalog/namespace.h>
-#include <commands/trigger.h>
 #include <nodes/nodes.h>
 #include <miscadmin.h>
 
@@ -42,11 +41,9 @@
 
 void		_cache_invalidate_init(void);
 void		_cache_invalidate_fini(void);
-void		_cache_invalidate_extload(void);
-
 
 static void
-cache_invalidate_all()
+cache_invalidate_all(void)
 {
 	hypertable_cache_invalidate_callback();
 }
@@ -75,62 +72,22 @@ cache_invalidate_callback(Datum arg, Oid relid)
 		hypertable_cache_invalidate_callback();
 }
 
-static inline CmdType
-trigger_event_to_cmdtype(TriggerEvent event)
-{
-	if (TRIGGER_FIRED_BY_INSERT(event))
-		return CMD_INSERT;
-
-	if (TRIGGER_FIRED_BY_UPDATE(event))
-		return CMD_UPDATE;
-
-	return CMD_DELETE;
-}
-
-PGDLLEXPORT Datum invalidate_relcache_trigger(PG_FUNCTION_ARGS);
-
-TS_FUNCTION_INFO_V1(invalidate_relcache_trigger);
-
-/*
- * Trigger for catalog tables that invalidates caches.
- *
- * This trigger generates a cache invalidation event on changes to the catalog
- * table that the trigger is defined for.
- */
-Datum
-invalidate_relcache_trigger(PG_FUNCTION_ARGS)
-{
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "not called by trigger manager");
-
-	catalog_invalidate_cache(RelationGetRelid(trigdata->tg_relation),
-							 trigger_event_to_cmdtype(trigdata->tg_event));
-
-	/* tuple to return to executor */
-	if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
-		return PointerGetDatum(trigdata->tg_newtuple);
-	else
-		return PointerGetDatum(trigdata->tg_trigtuple);
-}
-
-TS_FUNCTION_INFO_V1(invalidate_relcache);
+TS_FUNCTION_INFO_V1(timescaledb_invalidate_cache);
 
 /*
  * Force a cache invalidation for a catalog table.
  *
- * This function is used for debugging purposes and triggers
- * a cache invalidation.
+ * This function is used for debugging purposes and triggers a cache
+ * invalidation.
  *
  * The first argument should be the catalog table that has changed, warranting a
  * cache invalidation.
  */
 Datum
-invalidate_relcache(PG_FUNCTION_ARGS)
+timescaledb_invalidate_cache(PG_FUNCTION_ARGS)
 {
 	catalog_invalidate_cache(PG_GETARG_OID(0), CMD_UPDATE);
-	PG_RETURN_BOOL(true);
+	PG_RETURN_VOID();
 }
 
 static void
@@ -171,6 +128,7 @@ cache_invalidate_subxact_end(SubXactEvent event, SubTransactionId mySubid,
 			break;
 	}
 }
+
 void
 _cache_invalidate_init(void)
 {

@@ -1,3 +1,12 @@
+-- Cache invalidation functions and triggers
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.hypertable;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk_constraint;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
+DROP FUNCTION _timescaledb_cache.invalidate_relcache_trigger();
+DROP FUNCTION _timescaledb_cache.invalidate_relcache(regclass);
+
 -- Tablespace changes
 DROP FUNCTION _timescaledb_internal.select_tablespace(integer, integer[]);
 DROP FUNCTION _timescaledb_internal.select_tablespace(integer, integer);

@@ -2,7 +2,7 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ddl_command_end() RETURNS event_trigger
 AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
 -- Make sure any trigger functions or event trigger functions defined here.
--- This file is called first in any upgrade or install script to make sure 
+-- This file is called first in any upgrade or install script to make sure
 -- these functions match the new .so before they are called.
 -- All functions here should be disabled -- in c -- during upgrades.
 
@@ -10,11 +10,14 @@ AS '@MODULE_PATHNAME@', 'timescaledb_ddl_command_end' LANGUAGE C;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.process_ddl_event() RETURNS event_trigger
 AS '@MODULE_PATHNAME@', 'timescaledb_process_ddl_event' LANGUAGE C;
 
--- this trigger function causes an invalidation event on the table whose name is
--- passed in as the first element.
-CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache_trigger()
-RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'invalidate_relcache_trigger' LANGUAGE C STRICT;
-
+-- Cache invalidation functions and triggers
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.hypertable;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk_constraint;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
+DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
+DROP FUNCTION _timescaledb_cache.invalidate_relcache_trigger();
+DROP FUNCTION _timescaledb_cache.invalidate_relcache(regclass);
 
 -- Tablespace changes
 DROP FUNCTION _timescaledb_internal.select_tablespace(integer, integer[]);
@@ -652,7 +655,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.is_main_table(
 $BODY$
      SELECT EXISTS(
          SELECT 1 FROM _timescaledb_catalog.hypertable h
-         WHERE h.schema_name = is_main_table.schema_name AND 
+         WHERE h.schema_name = is_main_table.schema_name AND
                h.table_name = is_main_table.table_name
      );
 $BODY$;
@@ -946,15 +949,15 @@ CREATE AGGREGATE last(anyelement, "any") (
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
-	AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of timestamptz happens at UTC time
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
-	AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 --bucketing on date should not do any timezone conversion
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
@@ -1013,9 +1016,6 @@ $BODY$
 $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_git_commit() RETURNS TEXT
     AS '@MODULE_PATHNAME@', 'get_git_commit' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
--- This function is only used for debugging
-CREATE OR REPLACE FUNCTION _timescaledb_cache.invalidate_relcache(catalog_table REGCLASS)
-RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'invalidate_relcache' LANGUAGE C STRICT;
 
 -- This file contains utility functions to get the relation size
 -- of hypertables, chunks, and indexes on hypertables.
@@ -1488,24 +1488,4 @@ CREATE TABLE IF NOT EXISTS  _timescaledb_cache.cache_inval_extension();
 -- not actually strictly needed but good for sanity as all tables should be dumped.
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_extension', '');
-
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.hypertable;
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.hypertable
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
-
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk;
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.chunk
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
-
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk_constraint;
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.chunk_constraint
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
-
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.dimension_slice
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
-
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
-CREATE TRIGGER "0_cache_inval" AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON _timescaledb_catalog.dimension
-FOR EACH STATEMENT EXECUTE PROCEDURE _timescaledb_cache.invalidate_relcache_trigger();
 DROP FUNCTION _timescaledb_internal.ddl_command_end();

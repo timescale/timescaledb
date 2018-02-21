@@ -30,7 +30,6 @@ set(COMMON_FILES
   bookend.sql
   time_bucket.sql
   version.sql
-  cache_functions.sql
   size_utils.sql
   histogram.sql
   cache.sql
