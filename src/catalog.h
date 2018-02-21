@@ -37,7 +37,7 @@ typedef enum CatalogTable
 #define INVALID_INDEXID -1
 
 #define CATALOG_INDEX(catalog, tableid, indexid) \
-    (indexid == INVALID_INDEXID ? InvalidOid : (catalog)->tables[tableid].index_ids[indexid])
+	(indexid == INVALID_INDEXID ? InvalidOid : (catalog)->tables[tableid].index_ids[indexid])
 
 #define CatalogInternalCall1(func, datum1) \
 	OidFunctionCall1(catalog_get_internal_function_id(catalog_get(), func), datum1)

@@ -1,5 +1,6 @@
 #include <postgres.h>
 #include <funcapi.h>
+#include <commands/trigger.h>
 
 #include "compat.h"
 #include "extension.h"
@@ -68,6 +69,31 @@ timescaledb_ddl_command_end(PG_FUNCTION_ARGS)
 	if (!extension_is_loaded())
 		PG_RETURN_NULL();
 
+	elog(ERROR, "Deprecated function should not be invoked");
+	PG_RETURN_NULL();
+}
+
+TS_FUNCTION_INFO_V1(invalidate_relcache_trigger);
+
+Datum
+invalidate_relcache_trigger(PG_FUNCTION_ARGS)
+{
+	TriggerData *trigdata = (TriggerData *) fcinfo->context;
+
+	if (!CALLED_AS_TRIGGER(fcinfo))
+		elog(ERROR, "not called by trigger manager");
+
+	if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
+		PG_RETURN_POINTER(trigdata->tg_newtuple);
+	else
+		PG_RETURN_POINTER(trigdata->tg_trigtuple);
+}
+
+TS_FUNCTION_INFO_V1(invalidate_relcache);
+
+Datum
+invalidate_relcache(PG_FUNCTION_ARGS)
+{
 	elog(ERROR, "Deprecated function should not be invoked");
 	PG_RETURN_NULL();
 }
