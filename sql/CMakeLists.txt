@@ -62,7 +62,7 @@ set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 function(version_files SRC_FILE_LIST OUTPUT_FILE_LIST)
   set(result "")
   foreach(unversioned_file ${SRC_FILE_LIST})
-    set(versioned_file ${unversioned_file}.${PROJECT_VERSION_MOD})
+    set(versioned_file ${unversioned_file})
     configure_file(${unversioned_file} ${versioned_file} @ONLY)
     list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/${versioned_file})
   endforeach(unversioned_file)
@@ -125,7 +125,7 @@ version_files("${EXT_SQL_SKIPPED_FILES}" SKIPPED_FILES_VERSIONED)
 
 
 #we expect INTERMEDIATE_UPDATE_VERSIONED to be in order. For example, it should be 1--2, 2--3.
-set(INTERMEDIATE_FILE_REGEX "${CMAKE_CURRENT_BINARY_DIR}/timescaledb--([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql.${PROJECT_VERSION_MOD}")
+set(INTERMEDIATE_FILE_REGEX "${CMAKE_CURRENT_BINARY_DIR}/timescaledb--([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
 
 set(SKIPPED_FILE_START "")
 set(SKIPPED_FILE_END "")
