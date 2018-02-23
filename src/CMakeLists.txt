@@ -39,6 +39,7 @@ set(HEADERS
   chunk.h
   chunk_index.h
   chunk_insert_state.h
+  compat.h
   compat-endian.h
   compat-msvc-enter.h
   compat-msvc-exit.h
@@ -79,7 +80,6 @@ set(SOURCES
   chunk_dispatch_state.c
   chunk_index.c
   chunk_insert_state.c
-  compat.c
   constraint_aware_append.c
   copy.c
   dimension.c
