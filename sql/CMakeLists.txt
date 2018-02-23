@@ -1,23 +1,13 @@
-set(EXT_SQL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
-set(EXT_SQL_UPDATE_FILE ${PROJECT_NAME}--${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
-set(EXT_SQL_UPDATE_PRE_FILE updates/pre-${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
-set(EXT_SQL_UPDATE_POST_FILE updates/post-${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql)
+set(INSTALL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
 
-#These files called before anything else
-set(PRE_UPDATE_FILES
-  updates/pre-global.sql
-  #trigger functions need to go first to associate them with new .so before they are called
-  trigger_functions.sql
-)
-
-set(PRE_INSTALL_FILES
-  schemas.sql
-  trigger_functions.sql
-)
-
-set(COMMON_FILES
+# Source files that define the schemas and tables for our metadata
+set(CATALOG_SOURCE_FILES
+  schemas.sql # Must be first
   tables.sql
-  permissions.sql
+)
+
+# The rest of the source files defining mostly functions
+set(SOURCE_FILES
   chunk.sql
   ddl_internal.sql
   util_time.sql
@@ -35,44 +25,58 @@ set(COMMON_FILES
   cache.sql
 )
 
-set(EXT_SQL_EXTRA_FILES
-  timescaledb--0.1.0--0.2.0.sql
-  timescaledb--0.2.0--0.3.0.sql
-  timescaledb--0.3.0--0.4.0.sql
-  timescaledb--0.4.0--0.4.1.sql
-  timescaledb--0.4.1--0.4.2.sql
-  timescaledb--0.4.2--0.5.0.sql
-  timescaledb--0.5.0--0.6.0.sql
-  timescaledb--0.6.0--0.6.1.sql
-  timescaledb--0.6.1--0.7.1.sql
-  timescaledb--0.7.1--0.8.0.sql
+# These files should be pre-pended to update scripts so that they are
+# executed before anything else during updates
+set(PRE_UPDATE_FILES
+  updates/pre-global.sql
 )
 
-set(EXT_SQL_SKIPPED_FILES
-    timescaledb--0.6.1--0.7.0.sql
-    timescaledb--0.7.0--0.7.1.sql
+# These files represent the modifications that happen in each version,
+# excluding new objects or updates to functions. We use them to build
+# a path (update script) from every historical version to the current
+# version. Note that not all of these files may exist on disk, in case
+# they would have no contents. There still needs to be an entry here
+# to build an update script for that version. Thus, for every new
+# release, an entry should be added here.
+set(MOD_FILES
+  updates/0.1.0--0.2.0.sql
+  updates/0.2.0--0.3.0.sql
+  updates/0.3.0--0.4.0.sql
+  updates/0.4.0--0.4.1.sql
+  updates/0.4.1--0.4.2.sql
+  updates/0.4.2--0.5.0.sql
+  updates/0.5.0--0.6.0.sql
+  updates/0.6.0--0.6.1.sql
+  updates/0.6.1--0.7.0.sql
+  updates/0.7.0--0.7.1.sql
+  updates/0.7.1--0.8.0.sql
+  updates/0.8.0--0.9.0.sql
 )
 
-set(SQL_FILES ${PRE_INSTALL_FILES} ${COMMON_FILES})
-set(UPDATE_FILE_LIST ${PRE_UPDATE_FILES} ${EXT_SQL_UPDATE_PRE_FILE} ${COMMON_FILES} ${EXT_SQL_UPDATE_POST_FILE})
-
-#replace MODULE PATHNAME for files making up EXT_SQL_FILE (timescaledb--version.sql) and EXT_SQL_UPDATE_FILE (timescaledb--previous_version--version.sql)
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 
+# Function to replace @MODULE_PATHNAME@ in source files, producing an
+# output file in the build dir
 function(version_files SRC_FILE_LIST OUTPUT_FILE_LIST)
   set(result "")
   foreach(unversioned_file ${SRC_FILE_LIST})
     set(versioned_file ${unversioned_file})
-    configure_file(${unversioned_file} ${versioned_file} @ONLY)
     list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/${versioned_file})
+    if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${unversioned_file})
+      configure_file(${unversioned_file} ${versioned_file} @ONLY)
+    endif ()
   endforeach(unversioned_file)
   set(${OUTPUT_FILE_LIST} "${result}" PARENT_SCOPE)
 endfunction()
 
-version_files("${UPDATE_FILE_LIST}" UPDATE_FILE_LIST_VERSIONED)
-version_files("${SQL_FILES}" SQL_FILES_VERSIONED)
+# Create versioned files (replacing MODULE_PATHNAME) in the build
+# directory of all our source files
+version_files("${PRE_UPDATE_FILES}" PRE_UPDATE_FILES_VERSIONED)
+version_files("${CATALOG_SOURCE_FILES}" CATALOG_SOURCE_FILES_VERSIONED)
+version_files("${SOURCE_FILES}" SOURCE_FILES_VERSIONED)
+version_files("${MOD_FILES}" MOD_FILES_VERSIONED)
 
-#function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
+# Function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
 function(cat_files SRC_FILE_LIST OUTPUT_FILE)
   if (WIN32)
     # Make list of files into string of files separated by "+"
@@ -96,83 +100,54 @@ function(cat_files SRC_FILE_LIST OUTPUT_FILE)
   )
 endfunction()
 
-cat_files("${SQL_FILES_VERSIONED}" ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE})
-add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE})
+# Generate the extension file used with CREATE EXTENSION
+cat_files("${CATALOG_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED}" ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
+add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
 
-cat_files("${UPDATE_FILE_LIST_VERSIONED}" ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE})
-add_custom_target(sqlupdatefile ALL DEPENDS  ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE})
+# Generate the update files used with ALTER EXTENSION <name> UPDATE
+set(MOD_FILE_REGEX "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
 
-#This generates the update file without MODULE_PATHNAME replaced. This file should be copied for the release.
-cat_files("${UPDATE_FILE_LIST}" ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE}.release)
-add_custom_target(sqlreleaseupdate ALL DEPENDS  ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE}.release)
+# We'd like to process the updates in reverse (descending) order
+set(MOD_FILES_LIST ${MOD_FILES_VERSIONED})
+list(REVERSE MOD_FILES_LIST)
 
-#You want to create timescaledb-old_version--current_version for all possible old_versions.
-#This is done for 2 reasons:
-# 1) Each of the update files should point to $libdir/timescaledb-current_version. Since you cannot guarantee that
-#    Previous .so for each intermediate version has been installed.
-# 2) You don't want intermediate version updates installed without the .so. For example, if you have versions 1,2,3
-#    and you are installing version 3, you want the upgrade files 1--3, 2--3 but not 1--2 because if you have 1--2
-#    then a user could do ALTER EXTENSION timescaledb UPDATE TO 2. But the .so for version 2 may not be installed.
-#
-# Note that we build these update files by concatenating intermediate files. So we should have the intermediate update
-# files of 1--2, 2--3. From these we build the actual update scripts 1--3, 2--3.
+# Variable that will hold the list of update scripts from every
+# previous version to the current version
+set(UPDATE_SCRIPTS "")
 
-#replace MODULE_PATHNAME in all the intermediate update files to point to $libdir/timescaledb-current_version
-#note that intermediate update files are never installed/packaged. Rather, they are only used to build the
-#update scripts below.
-version_files("${EXT_SQL_EXTRA_FILES}" INTERMEDIATE_UPDATE_VERSIONED)
-version_files("${EXT_SQL_SKIPPED_FILES}" SKIPPED_FILES_VERSIONED)
+# A list of current modfiles. We append to this list for every
+# previous version that moves us further away from the current
+# version, thus making the update path longer as we move back in
+# history
+set(CURR_MOD_FILES "")
 
+# Now loop through the modfiles and generate the update files
+foreach(mod_file ${MOD_FILES_LIST})
 
-#we expect INTERMEDIATE_UPDATE_VERSIONED to be in order. For example, it should be 1--2, 2--3.
-set(INTERMEDIATE_FILE_REGEX "${CMAKE_CURRENT_BINARY_DIR}/timescaledb--([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
-
-set(SKIPPED_FILE_START "")
-set(SKIPPED_FILE_END "")
-foreach(skipped_file ${SKIPPED_FILES_VERSIONED})
-  if (NOT (${skipped_file} MATCHES ${INTERMEDIATE_FILE_REGEX}))
-    message(FATAL_ERROR "Cannot parse update file name ${skipped_file}")
-  endif ()
-  list(APPEND SKIPPED_FILE_START ${CMAKE_MATCH_1})
-  list(APPEND SKIPPED_FILE_END ${CMAKE_MATCH_2})
-endforeach(skipped_file)
-
-#build the actual update scripts for historic versions.
-set(PREVIOUS_UPDATE_SCRIPTS "")
-while(INTERMEDIATE_UPDATE_VERSIONED) #while list not empty
-  #start with the first (oldest) file in the list and create an update for that version to current version
-  list(GET INTERMEDIATE_UPDATE_VERSIONED 0 FIRST_INTERMEDIATE_FILE)
-  if (NOT (${FIRST_INTERMEDIATE_FILE} MATCHES ${INTERMEDIATE_FILE_REGEX}))
-    message(FATAL_ERROR "Cannot parse update file name ${FIRST_INTERMEDIATE_FILE}")
+  if (NOT (${mod_file} MATCHES ${MOD_FILE_REGEX}))
+    message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
   endif ()
 
   set(START_VERSION ${CMAKE_MATCH_1})
-  set(PREV_UPDATE_FILE "${PROJECT_NAME}--${START_VERSION}--${PROJECT_VERSION_MOD}.sql")
+  set(END_VERSION ${CMAKE_MATCH_2})
 
-  #the files that go into this update are all the intermediate files + latest update
-  set(UPDATE_FILES ${INTERMEDIATE_UPDATE_VERSIONED} ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE})
+  # There might not have been any changes in the modfile, in which
+  # case the modfile need not be present
+  if (EXISTS ${mod_file})
+    # Prepend the modfile as we are moving throught the version in
+    # descending order
+    list(INSERT CURR_MOD_FILES 0 ${mod_file})
+  endif ()
 
-  cat_files("${UPDATE_FILES}" ${CMAKE_CURRENT_BINARY_DIR}/${PREV_UPDATE_FILE})
-  list(APPEND PREVIOUS_UPDATE_SCRIPTS ${CMAKE_CURRENT_BINARY_DIR}/${PREV_UPDATE_FILE})
+  set(UPDATE_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/timescaledb--${START_VERSION}--${PROJECT_VERSION_MOD}.sql)
+  cat_files("${PRE_UPDATE_FILES_VERSIONED};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+  list(APPEND UPDATE_SCRIPTS ${UPDATE_SCRIPT})
+endforeach(mod_file)
 
-  list(FIND SKIPPED_FILE_END ${START_VERSION} skipped_index)
-  if(NOT (skipped_index EQUAL -1))
-    list(GET SKIPPED_FILE_START ${skipped_index} skipped_start)
-    list(GET SKIPPED_FILES_VERSIONED ${skipped_index} skipped_file)
-    set(SKIPPED_UPDATE_FILENAME "${PROJECT_NAME}--${skipped_start}--${PROJECT_VERSION_MOD}.sql")
-    set(SKIPPED_UPDATE_FILES ${skipped_file} ${UPDATE_FILES})
-    cat_files("${SKIPPED_UPDATE_FILES}" ${CMAKE_CURRENT_BINARY_DIR}/${SKIPPED_UPDATE_FILENAME})
-    list(APPEND PREVIOUS_UPDATE_SCRIPTS ${CMAKE_CURRENT_BINARY_DIR}/${SKIPPED_UPDATE_FILENAME})
-  endif()
+add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})
 
-  #drop the head and start again
-  list(REMOVE_AT INTERMEDIATE_UPDATE_VERSIONED 0)
-endwhile(INTERMEDIATE_UPDATE_VERSIONED)
-
-add_custom_target(sqlprevupdatescripts ALL DEPENDS ${PREVIOUS_UPDATE_SCRIPTS})
-
+# Install target for the extension file and update scripts
 install(
-  FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_FILE}
-  ${CMAKE_CURRENT_BINARY_DIR}/${EXT_SQL_UPDATE_FILE}
-  ${PREVIOUS_UPDATE_SCRIPTS}
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
+  ${UPDATE_SCRIPTS}
   DESTINATION "${PG_SHAREDIR}/extension")
