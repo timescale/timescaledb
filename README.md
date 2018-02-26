@@ -18,6 +18,8 @@ Below is an introduction to TimescaleDB. For more information, please check out 
 - [Slack Channel](https://slack-login.timescale.com)
 - [Support Email](mailto:support@timescale.com)
 
+(Before building from source, see instructions below.)
+
 ### Using TimescaleDB
 
 TimescaleDB scales PostgreSQL for time-series data via automatic
@@ -101,6 +103,11 @@ We recommend following our detailed [installation instructions](http://docs.time
 
 #### Building from source (Unix-based systems)
 
+If you are building from source for **non-development purposes**
+(i.e., you want to run TimescaleDB, not submit a patch), you should
+**always use a release-tagged commit and not build from `master`**.
+See the Releases tab for the latest release.
+
 **Prerequisites**:
 
 - A standard PostgreSQL 9.6 or 10 installation with development
@@ -112,6 +119,9 @@ for Linux, Postgres.app for MacOS)
 ```bash
 git clone git@github.com:timescale/timescaledb.git
 cd timescaledb
+
+# Find the latest release and checkout, e.g. for 0.8.0:
+git checkout 0.8.0
 
 # Bootstrap the build system
 ./bootstrap
@@ -126,6 +136,11 @@ make install
 Please see our [additional configuration instructions](http://docs.timescale.com/getting-started/installation#update-postgresql-conf).
 
 #### Building from source (Windows)
+
+If you are building from source for **non-development purposes**
+(i.e., you want to run TimescaleDB, not submit a patch), you should
+**always use a release-tagged commit and not build from `master`**.
+See the Releases tab for the latest release.
 
 **Prerequisites**:
 
@@ -143,6 +158,9 @@ be built in the following way:
 ```bash
 git clone git@github.com:timescale/timescaledb.git
 cd timescaledb
+
+# Find the latest release and checkout, e.g. for 0.8.0:
+git checkout 0.8.0
 
 # Bootstrap the build system
 ./bootstrap.bat
