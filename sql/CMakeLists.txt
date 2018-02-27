@@ -122,27 +122,34 @@ set(UPDATE_SCRIPTS "")
 set(CURR_MOD_FILES "")
 
 # Now loop through the modfiles and generate the update files
-foreach(mod_file ${MOD_FILES_LIST})
+foreach(transition_mod_file ${MOD_FILES_LIST})
 
-  if (NOT (${mod_file} MATCHES ${MOD_FILE_REGEX}))
+  if (NOT (${transition_mod_file} MATCHES ${MOD_FILE_REGEX}))
     message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
   endif ()
 
   set(START_VERSION ${CMAKE_MATCH_1})
   set(END_VERSION ${CMAKE_MATCH_2})
+  set(PRE_FILES ${PRE_UPDATE_FILES_VERSIONED})
+
+  # Check for version-specific update code with fixes
+  if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/updates/${START_VERSION}.sql)
+    version_files("updates/${START_VERSION}.sql" ORIGIN_MOD_FILE)
+    list(APPEND PRE_FILES ${ORIGIN_MOD_FILE})
+  endif ()
 
   # There might not have been any changes in the modfile, in which
   # case the modfile need not be present
-  if (EXISTS ${mod_file})
-    # Prepend the modfile as we are moving throught the version in
+  if (EXISTS ${transition_mod_file})
+    # Prepend the modfile as we are moving through the versions in
     # descending order
-    list(INSERT CURR_MOD_FILES 0 ${mod_file})
+    list(INSERT CURR_MOD_FILES 0 ${transition_mod_file})
   endif ()
 
   set(UPDATE_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/timescaledb--${START_VERSION}--${PROJECT_VERSION_MOD}.sql)
-  cat_files("${PRE_UPDATE_FILES_VERSIONED};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
   list(APPEND UPDATE_SCRIPTS ${UPDATE_SCRIPT})
-endforeach(mod_file)
+  cat_files("${PRE_FILES};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+endforeach(transition_mod_file)
 
 add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})
 
