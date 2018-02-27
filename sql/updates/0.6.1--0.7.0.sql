@@ -13,6 +13,7 @@ INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = 
 INNER JOIN pg_constraint pg_chunk_con ON (
         pg_chunk_con.conrelid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass
         AND pg_chunk_con.conname = chunk_con.constraint_name
+        AND pg_chunk_con.contype != 'f'
 )
 INNER JOIN pg_class pg_chunk_index_class ON (
     pg_chunk_con.conindid = pg_chunk_index_class.oid
