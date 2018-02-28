@@ -53,10 +53,9 @@ DROP INDEX IF EXISTS _timescaledb_catalog.dimension_slice_dimension_id_range_sta
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.drop_hypertable(int,boolean);
 
--- Delete orphaned slices
 DELETE FROM _timescaledb_catalog.dimension_slice WHERE id IN
-(SELECT dimension_id FROM _timescaledb_catalog.chunk_constraint cc
- FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds
+(SELECT ds.id FROM _timescaledb_catalog.chunk_constraint cc
+ RIGHT JOIN _timescaledb_catalog.dimension_slice ds
  ON (ds.id = cc.dimension_slice_id)
  WHERE dimension_slice_id IS NULL);
 
