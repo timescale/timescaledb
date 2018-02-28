@@ -18,6 +18,12 @@ CREATE TABLE PUBLIC."two_Partitions" (
   PRIMARY KEY("timeCustom", device_id),
   UNIQUE("timeCustom", device_id, series_2)
 );
+
+ALTER TABLE  "two_Partitions" ADD COLUMN device_id_2 TEXT NOT NULL;
+
+ALTER TABLE "two_Partitions" ADD CONSTRAINT two_Partitions_device_id_2_fkey
+FOREIGN KEY (device_id_2) REFERENCES devices(id);
+
 CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
 CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
 CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
@@ -32,14 +38,14 @@ INSERT INTO devices(id,floor) VALUES
 ('dev2', 2),
 ('dev3', 3);
 
-INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1, series_2) VALUES
-(1257987600000000000, 'dev1', 1.5, 2, 2),
-(1257894000000000000, 'dev2', 1.5, 1, 3),
-(1257987600000000000, 'dev3', 1.5, 1, 1),
-(1257894002000000000, 'dev1', 2.5, 3, 4);
+INSERT INTO public."two_Partitions"("timeCustom", device_id, device_id_2, series_0, series_1, series_2) VALUES
+(1257987600000000000, 'dev1', 'dev2', 1.5, 2, 2),
+(1257894000000000000, 'dev2', 'dev2', 1.5, 1, 3),
+(1257987600000000000, 'dev3', 'dev2', 1.5, 1, 1),
+(1257894002000000000, 'dev1', 'dev2', 2.5, 3, 4);
 
-INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series_2) VALUES
-(1257894100000000000, 'dev2', 1.5, 2, 6);
+INSERT INTO "two_Partitions"("timeCustom", device_id, device_id_2, series_0, series_1, series_2) VALUES
+(1257894100000000000, 'dev2', 'dev2', 1.5, 2, 6);
 
 CREATE TABLE PUBLIC.hyper_timestamp (
   time timestamp NOT NULL,
