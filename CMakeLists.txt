@@ -93,7 +93,7 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if (NOT ${PG_VERSION_STRING} MATCHES "^PostgreSQL[ ]+([0-9]+)\\.([0-9]+)(\\.([0-9]+))*")
-  message(FATAL_ERROR "Could not parse PostgreSQL version ${PG_VERSION}")
+  message(FATAL_ERROR "Could not parse PostgreSQL version ${PG_VERSION_STRING}")
 endif ()
 
 set(PG_VERSION_MAJOR ${CMAKE_MATCH_1})
