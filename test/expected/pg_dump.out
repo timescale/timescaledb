@@ -29,8 +29,12 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 \set QUIET on
 \o
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+\c single
+ALTER TABLE PUBLIC."two_Partitions" SET SCHEMA "test_schema";
 -- Test that we can restore constraints
-ALTER TABLE PUBLIC."two_Partitions"
+ALTER TABLE "test_schema"."two_Partitions"
 ADD CONSTRAINT timeCustom_device_id_series_2_key
 UNIQUE ("timeCustom", device_id, series_2);
 -- Test that we can restore triggers
@@ -41,7 +45,7 @@ BEGIN
     RETURN NEW;
 END
 $BODY$;
-CREATE TRIGGER restore_trigger BEFORE INSERT ON PUBLIC."two_Partitions"
+CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 SELECT count(*)
   FROM pg_depend
@@ -52,7 +56,7 @@ SELECT count(*)
     93
 (1 row)
 
-SELECT * FROM test.show_columns('public."two_Partitions"');
+SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
    Column    |       Type       | Nullable 
 -------------+------------------+----------
  timeCustom  | bigint           | t
@@ -74,17 +78,17 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
  series_bool | boolean          | f
 (6 rows)
 
-SELECT * FROM test.show_indexes('public."two_Partitions"');
-                    Index                    |             Columns             | Unique | Primary | Exclusion | Tablespace 
----------------------------------------------+---------------------------------+--------+---------+-----------+------------
- "two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
- "two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
- "two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
- "two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
- "two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
- "two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
- "two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
- timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} | t      | f       | f         | 
+SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
+                          Index                          |             Columns             | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------+---------------------------------+--------+---------+-----------+------------
+ test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
@@ -100,10 +104,10 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
  _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} | t      | f       | f         | 
 (8 rows)
 
-SELECT * FROM test.show_constraints('public."two_Partitions"');
-            Constraint             | Type |             Columns             |               Index               | Expr 
------------------------------------+------+---------------------------------+-----------------------------------+------
- timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | timecustom_device_id_series_2_key | 
+SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
+            Constraint             | Type |             Columns             |                     Index                     | Expr 
+-----------------------------------+------+---------------------------------+-----------------------------------------------+------
+ timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | test_schema.timecustom_device_id_series_2_key | 
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
@@ -114,10 +118,10 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
  constraint_2                          | c    | {device_id}                     | -                                                             | (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823)
 (3 rows)
 
-SELECT * FROM test.show_triggers('public."two_Partitions"');
-     Trigger     | Type |   Function   |                                            Definition                                            
------------------+------+--------------+--------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON "two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
+     Trigger     | Type |   Function   |                                                  Definition                                                  
+-----------------+------+--------------+--------------------------------------------------------------------------------------------------------------
+ restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
@@ -126,7 +130,7 @@ SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
  restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
@@ -239,7 +243,7 @@ SELECT count(*)
 (1 row)
 
 --main table and chunk schemas should be the same
-SELECT * FROM test.show_columns('public."two_Partitions"');
+SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
    Column    |       Type       | Nullable 
 -------------+------------------+----------
  timeCustom  | bigint           | t
@@ -261,17 +265,17 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
  series_bool | boolean          | f
 (6 rows)
 
-SELECT * FROM test.show_indexes('public."two_Partitions"');
-                    Index                    |             Columns             | Unique | Primary | Exclusion | Tablespace 
----------------------------------------------+---------------------------------+--------+---------+-----------+------------
- "two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
- "two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
- "two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
- "two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
- "two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
- "two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
- "two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
- timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} | t      | f       | f         | 
+SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
+                          Index                          |             Columns             | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------+---------------------------------+--------+---------+-----------+------------
+ test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
@@ -287,10 +291,10 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
  _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} | t      | f       | f         | 
 (8 rows)
 
-SELECT * FROM test.show_constraints('public."two_Partitions"');
-            Constraint             | Type |             Columns             |               Index               | Expr 
------------------------------------+------+---------------------------------+-----------------------------------+------
- timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | timecustom_device_id_series_2_key | 
+SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
+            Constraint             | Type |             Columns             |                     Index                     | Expr 
+-----------------------------------+------+---------------------------------+-----------------------------------------------+------
+ timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | test_schema.timecustom_device_id_series_2_key | 
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
@@ -301,10 +305,10 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
  constraint_2                          | c    | {device_id}                     | -                                                             | (_timescaledb_internal.get_partition_hash(device_id) >= 1073741823)
 (3 rows)
 
-SELECT * FROM test.show_triggers('public."two_Partitions"');
-     Trigger     | Type |   Function   |                                            Definition                                            
------------------+------+--------------+--------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON "two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
+     Trigger     | Type |   Function   |                                                  Definition                                                  
+-----------------+------+--------------+--------------------------------------------------------------------------------------------------------------
+ restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
@@ -314,7 +318,7 @@ SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
 (1 row)
 
 --data should be the same
-SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
+SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
@@ -404,8 +408,8 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 (12 rows)
 
 --check simple ddl still works
-ALTER TABLE "two_Partitions" ADD COLUMN series_3 integer;
-INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1, series_3) VALUES
+ALTER TABLE "test_schema"."two_Partitions" ADD COLUMN series_3 integer;
+INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1, series_3) VALUES
 (1357894000000000000, 'dev5', 1.5, 2, 4);
 --query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
 SELECT objid::regclass
