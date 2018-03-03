@@ -154,6 +154,48 @@ SET timescaledb.disable_load = 'not bool';
 WARNING:  mock post_analyze_hook "mock-1"
 ERROR:  parameter "timescaledb.disable_load" requires a Boolean value
 \set ON_ERROR_STOP 1
+\c single :ROLE_SUPERUSER
+RESET ALL;
+WARNING:  mock init "mock-1"
+WARNING:  mock post_analyze_hook "mock-1"
+SELECT 1;
+WARNING:  mock post_analyze_hook "mock-1"
+ ?column? 
+----------
+        1
+(1 row)
+
+\c single :ROLE_SUPERUSER
+SET timescaledb.disable_load TO DEFAULT;
+SELECT 1;
+WARNING:  mock init "mock-1"
+WARNING:  mock post_analyze_hook "mock-1"
+ ?column? 
+----------
+        1
+(1 row)
+
+\c single :ROLE_SUPERUSER
+RESET timescaledb.disable_load;
+SELECT 1;
+WARNING:  mock init "mock-1"
+WARNING:  mock post_analyze_hook "mock-1"
+ ?column? 
+----------
+        1
+(1 row)
+
+\c single :ROLE_SUPERUSER
+SET timescaledb.other = 'on';
+WARNING:  mock init "mock-1"
+WARNING:  mock post_analyze_hook "mock-1"
+SELECT 1;
+WARNING:  mock post_analyze_hook "mock-1"
+ ?column? 
+----------
+        1
+(1 row)
+
 \set ON_ERROR_STOP 0
 --cannot update extension after .so of previous version already loaded
 ALTER EXTENSION timescaledb UPDATE TO 'mock-2';

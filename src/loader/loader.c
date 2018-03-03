@@ -99,8 +99,16 @@ should_load_on_variable_set(Node *utility_stmt)
 {
 	VariableSetStmt *stmt = (VariableSetStmt *) utility_stmt;
 
-	/* Do not load when setting the guc */
-	return strcmp(stmt->name, GUC_DISABLE_LOAD_NAME) != 0;
+	switch (stmt->kind)
+	{
+		case VAR_SET_VALUE:
+		case VAR_SET_DEFAULT:
+		case VAR_RESET:
+			/* Do not load when setting the guc to disable load */
+			return stmt->name == NULL || strcmp(stmt->name, GUC_DISABLE_LOAD_NAME) != 0;
+		default:
+			return true;
+	}
 }
 
 static bool
