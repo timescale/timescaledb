@@ -52,6 +52,21 @@ SELECT 1;
 SET timescaledb.disable_load = 'not bool';
 \set ON_ERROR_STOP 1
 
+\c single :ROLE_SUPERUSER
+RESET ALL;
+SELECT 1;
+
+\c single :ROLE_SUPERUSER
+SET timescaledb.disable_load TO DEFAULT;
+SELECT 1;
+
+\c single :ROLE_SUPERUSER
+RESET timescaledb.disable_load;
+SELECT 1;
+
+\c single :ROLE_SUPERUSER
+SET timescaledb.other = 'on';
+SELECT 1;
 
 \set ON_ERROR_STOP 0
 --cannot update extension after .so of previous version already loaded
