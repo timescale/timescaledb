@@ -51,6 +51,7 @@ set(MOD_FILES
   updates/0.7.0--0.7.1.sql
   updates/0.7.1--0.8.0.sql
   updates/0.8.0--0.9.0.sql
+  updates/0.9.0--0.10.0-dev.sql
 )
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
@@ -105,7 +106,7 @@ cat_files("${CATALOG_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED}" ${CMAKE_
 add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
 
 # Generate the update files used with ALTER EXTENSION <name> UPDATE
-set(MOD_FILE_REGEX "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
+set(MOD_FILE_REGEX "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*[-dev]*).sql")
 
 # We'd like to process the updates in reverse (descending) order
 set(MOD_FILES_LIST ${MOD_FILES_VERSIONED})

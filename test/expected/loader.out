@@ -43,7 +43,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 \set ON_ERROR_STOP 0
 --test that we cannot accidentally load another library version
 CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-2';
-ERROR:  the session already has "timescaledb" shared library version "mock-1" loaded
+ERROR:  the session already has another shared library loaded for extension "timescaledb"
 \set ON_ERROR_STOP 1
 \c single :ROLE_SUPERUSER
 --no extension
@@ -389,7 +389,7 @@ ERROR:  Mismatched timescaledb version. Shared object file mock-4-mismatch, SQL 
 \set ON_ERROR_STOP 0
 --should not allow since the errored-out mock-4 above already poisoned the well.
 CREATE EXTENSION timescaledb VERSION 'mock-5';
-ERROR:  the session already has "timescaledb" shared library version "mock-4" loaded
+ERROR:  the session already has another shared library loaded for extension "timescaledb"
 \set ON_ERROR_STOP 1
 \c single_2 :ROLE_SUPERUSER
 --broken version and drop
@@ -498,7 +498,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 
 \set ON_ERROR_STOP 0
 CREATE EXTENSION timescaledb VERSION 'mock-2';
-ERROR:  the session already has "timescaledb" shared library version "mock-1" loaded
+ERROR:  the session already has another shared library loaded for extension "timescaledb"
 \set ON_ERROR_STOP 1
 \dx
                  List of installed extensions

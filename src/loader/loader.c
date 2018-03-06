@@ -159,8 +159,8 @@ should_load_on_create_extension(Node *utility_stmt)
 	/* disallow loading two .so from different versions */
 	ereport(ERROR,
 			(errcode(ERRCODE_DUPLICATE_OBJECT),
-			 errmsg("the session already has \"%s\" shared library version \"%s\" loaded",
-					stmt->extname, soversion),
+             errmsg("the session already has another shared library loaded for extension \"%s\"", stmt->extname),
+			 errdetail("The loaded version is \"%s\"", soversion),
 			 errhint("You should start a new session and execute CREATE EXTENSION as the first command")));
 	return false;
 }
