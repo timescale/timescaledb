@@ -972,12 +972,6 @@ dimension_add(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(info.table_relid))));
 
-	if (hypertable_has_tuples(info.table_relid, AccessShareLock))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertable \"%s\" is not empty", get_rel_name(info.table_relid)),
-				 errdetail("It is not possible to add dimensions to a non-empty hypertable")));
-
 	if ((!info.num_slices_is_set && !OidIsValid(info.interval_type)) ||
 		(info.num_slices_is_set && OidIsValid(info.interval_type)))
 		ereport(ERROR,
@@ -988,6 +982,12 @@ dimension_add(PG_FUNCTION_ARGS)
 
 	if (!info.skip)
 	{
+		if (hypertable_has_tuples(info.table_relid, AccessShareLock))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertable \"%s\" is not empty", get_rel_name(info.table_relid)),
+					 errdetail("It is not possible to add dimensions to a non-empty hypertable")));
+
 		/*
 		 * Note that space->num_dimensions reflects the actual number of
 		 * dimension rows and not the num_dimensions in the hypertable catalog

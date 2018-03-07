@@ -120,7 +120,14 @@ select add_dimension('test_schema.test_table', 'id2', number_partitions => 2, ch
 --adding a new dimension on a non-empty table should also fail
 insert into test_schema.test_table values (123456789, 23.8, 'blue', 'type1', 'nyc', 1, 1);
 select add_dimension('test_schema.test_table', 'device_type', 2);
+
+-- should fail on non-empty table with 'if_not_exists' in case the dimension does not exists
+select add_dimension('test_schema.test_table', 'device_type', 2, if_not_exists => true);
+
 \set ON_ERROR_STOP 1
+
+-- should not fail on non-empty table with 'if_not_exists' in case the dimension exists
+select add_dimension('test_schema.test_table', 'location', 2, if_not_exists => true);
 
 --show chunks in the associated schema
 \dt "chunk_schema".*
