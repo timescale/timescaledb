@@ -446,11 +446,11 @@ chunk_index_create_from_stmt(IndexStmt *stmt,
 }
 
 static inline Oid
-chunk_index_get_schemaid(Form_chunk_index chunk_index)
+chunk_index_get_schemaid(Form_chunk_index chunk_index, bool missing_ok)
 {
 	Chunk	   *chunk = chunk_get_by_id(chunk_index->chunk_id, 0, true);
 
-	return get_namespace_oid(NameStr(chunk->fd.schema_name), false);
+	return get_namespace_oid(NameStr(chunk->fd.schema_name), missing_ok);
 }
 
 #define chunk_index_tuple_get_schema(tuple) \
@@ -591,7 +591,7 @@ static bool
 chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
-	Oid			schemaid = chunk_index_get_schemaid(chunk_index);
+	Oid			schemaid = chunk_index_get_schemaid(chunk_index, true);
 	ChunkIndexDeleteData *cid = data;
 
 	catalog_delete(ti->scanrel, ti->tuple);
@@ -852,7 +852,7 @@ chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 {
 	char	   *tablespace = data;
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
-	Oid			schemaoid = chunk_index_get_schemaid(chunk_index);
+	Oid			schemaoid = chunk_index_get_schemaid(chunk_index, false);
 	Oid			indexrelid = get_relname_relid(NameStr(chunk_index->index_name), schemaoid);
 	AlterTableCmd *cmd = makeNode(AlterTableCmd);
 	List	   *cmds = NIL;

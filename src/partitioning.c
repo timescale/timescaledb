@@ -151,6 +151,10 @@ partitioning_info_create(const char *schema,
 	StrNCpy(pinfo->column, partcol, NAMEDATALEN);
 	pinfo->column_attnum = get_attnum(relid, pinfo->column);
 
+	/* handle the case that the attribute has been dropped */
+	if (pinfo->column_attnum == InvalidAttrNumber)
+		return NULL;
+
 	if (schema != NULL)
 		StrNCpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
 

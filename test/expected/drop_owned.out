@@ -1,0 +1,82 @@
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA hypertable_schema;
+GRANT ALL ON SCHEMA hypertable_schema TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+CREATE TABLE hypertable_schema.default_perm_user (time timestamptz, temp float, location int);
+SELECT create_hypertable('hypertable_schema.default_perm_user', 'time', 'location', 2);
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO hypertable_schema.default_perm_user VALUES ('2001-01-01 01:01:01', 23.3, 1);
+RESET ROLE;
+CREATE TABLE hypertable_schema.superuser (time timestamptz, temp float, location int);
+SELECT create_hypertable('hypertable_schema.superuser', 'time', 'location', 2);
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO hypertable_schema.superuser VALUES ('2001-01-01 01:01:01', 23.3, 1);
+SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
+ id |    schema_name    |    table_name     | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------------+-------------------+------------------------+-------------------------+----------------
+  1 | hypertable_schema | default_perm_user | _timescaledb_internal  | _hyper_1                |              2
+  2 | hypertable_schema | superuser         | _timescaledb_internal  | _hyper_2                |              2
+(2 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    
+----+---------------+-----------------------+------------------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk
+(2 rows)
+
+DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
+ id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------------+------------+------------------------+-------------------------+----------------
+  2 | hypertable_schema | superuser  | _timescaledb_internal  | _hyper_2                |              2
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    
+----+---------------+-----------------------+------------------
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk
+(1 row)
+
+DROP TABLE  hypertable_schema.superuser;
+--everything should be cleaned up
+SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
+----+-------------+------------+------------------------+-------------------------+----------------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id | schema_name | table_name 
+----+---------------+-------------+------------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.dimension_slice;
+ id | dimension_id | range_start | range_end 
+----+--------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id | index_name | hypertable_id | hypertable_index_name 
+----------+------------+---------------+-----------------------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_constraint;
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+(0 rows)
+
