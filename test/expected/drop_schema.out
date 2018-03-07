@@ -44,8 +44,8 @@ RESET ROLE;
 --drop the associated schema. We drop the extra schema to show we can
 --handle multi-schema drops
 DROP SCHEMA chunk_schema1, extra_schema CASCADE;
-NOTICE:  the chunk storage schema changed to "_timescaledb_internal" for 1 hypertable
 NOTICE:  drop cascades to table chunk_schema1._hyper_1_1_chunk
+NOTICE:  the chunk storage schema changed to "_timescaledb_internal" for 1 hypertable
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --show that the metadata for the table using the dropped schema is
 --changed. The other table is not affected.
@@ -75,7 +75,7 @@ RESET ROLE;
 --dropping the internal schema should not work
 \set ON_ERROR_STOP 0
 DROP SCHEMA _timescaledb_internal CASCADE;
-ERROR:  cannot drop the internal schema for extension "timescaledb"
+ERROR:  cannot drop schema _timescaledb_internal because extension timescaledb requires it
 \set ON_ERROR_STOP 1
 --dropping the hypertable schema should delete everything
 DROP SCHEMA hypertable_schema CASCADE;

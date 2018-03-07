@@ -6,6 +6,8 @@
 #include <catalog/pg_type.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_class.h>
+#include <catalog/pg_namespace.h>
+#include <catalog/pg_trigger.h>
 
 #include "event_trigger.h"
 
@@ -97,7 +99,7 @@ extract_addrnames(ArrayType *arr)
 }
 
 static EventTriggerDropTableConstraint *
-makeEventTriggerDropTableConstraint(char *constraint_name, char *schema, char *table)
+make_event_trigger_drop_table_constraint(char *constraint_name, char *schema, char *table)
 {
 	EventTriggerDropTableConstraint *obj = palloc(sizeof(EventTriggerDropTableConstraint));
 
@@ -116,7 +118,7 @@ makeEventTriggerDropTableConstraint(char *constraint_name, char *schema, char *t
 }
 
 static EventTriggerDropIndex *
-makeEventTriggerDropIndex(char *index_name, char *schema)
+make_event_trigger_drop_index(char *index_name, char *schema)
 {
 	EventTriggerDropIndex *obj = palloc(sizeof(EventTriggerDropIndex));
 
@@ -131,6 +133,59 @@ makeEventTriggerDropIndex(char *index_name, char *schema)
 	};
 	return obj;
 }
+
+static EventTriggerDropTable *
+make_event_trigger_drop_table(char *table_name, char *schema)
+{
+	EventTriggerDropTable *obj = palloc(sizeof(EventTriggerDropTable));
+
+	*obj = (EventTriggerDropTable)
+	{
+		.obj =
+		{
+			.type = EVENT_TRIGGER_DROP_TABLE
+		},
+			.table_name = table_name,
+			.schema = schema,
+	};
+	return obj;
+}
+
+static EventTriggerDropSchema *
+make_event_trigger_drop_schema(char *schema)
+{
+	EventTriggerDropSchema *obj = palloc(sizeof(EventTriggerDropSchema));
+
+	*obj = (EventTriggerDropSchema)
+	{
+		.obj =
+		{
+			.type = EVENT_TRIGGER_DROP_SCHEMA
+		},
+			.schema = schema,
+	};
+	return obj;
+}
+
+static EventTriggerDropTrigger *
+make_event_trigger_drop_trigger(char *trigger_name, char *schema, char *table)
+{
+	EventTriggerDropTrigger *obj = palloc(sizeof(EventTriggerDropTrigger));
+
+	*obj = (EventTriggerDropTrigger)
+	{
+		.obj =
+		{
+			.type = EVENT_TRIGGER_DROP_TRIGGER
+		},
+			.trigger_name = trigger_name,
+			.schema = schema,
+			.table = table
+	};
+
+	return obj;
+}
+
 
 List *
 event_trigger_dropped_objects(void)
@@ -173,22 +228,51 @@ event_trigger_dropped_objects(void)
 					List	   *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
 
 					objects = lappend(objects,
-									  makeEventTriggerDropTableConstraint(lthird(addrnames),
-																		  linitial(addrnames),
-																		  lsecond(addrnames)));
+									  make_event_trigger_drop_table_constraint(lthird(addrnames),
+																			   linitial(addrnames),
+																			   lsecond(addrnames)));
 				}
 				break;
 			case RelationRelationId:
 				objtype = TextDatumGetCString(values[6]);
-				if (objtype != NULL && strcmp(objtype, "index") == 0)
+				if (objtype == NULL)
+					break;
+				if (strcmp(objtype, "index") == 0)
 				{
 					List	   *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
 
 					objects = lappend(objects,
-									  makeEventTriggerDropIndex(lsecond(addrnames),
-																linitial(addrnames)));
+									  make_event_trigger_drop_index(lsecond(addrnames),
+																	linitial(addrnames)));
+				}
+				else if (strcmp(objtype, "table") == 0)
+				{
+					List	   *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+
+					objects = lappend(objects,
+									  make_event_trigger_drop_table(lsecond(addrnames),
+																	linitial(addrnames)));
 				}
 				break;
+			case NamespaceRelationId:
+				{
+					List	   *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+
+					objects = lappend(objects,
+									  make_event_trigger_drop_schema(linitial(addrnames)));
+				}
+				break;
+			case TriggerRelationId:
+				{
+					List	   *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
+
+					objects = lappend(objects,
+									  make_event_trigger_drop_trigger(lthird(addrnames),
+																	  linitial(addrnames),
+																	  lsecond(addrnames)));
+				}
+				break;
+
 			default:
 				break;
 		}
