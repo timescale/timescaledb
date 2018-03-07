@@ -14,7 +14,7 @@ TimescaleDB is packaged as a PostgreSQL extension and released under
 the Apache 2 open-source license. [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
 
 Below is an introduction to TimescaleDB. For more information, please check out these other resources:
-- [Developer Documentation](http://docs.timescale.com/)
+- [Developer Documentation](https://docs.timescale.com/)
 - [Slack Channel](https://slack-login.timescale.com)
 - [Support Email](mailto:support@timescale.com)
 
@@ -30,11 +30,11 @@ In other words, TimescaleDB exposes what look like regular tables, but
 are actually only an
 abstraction (or a virtual view) of many individual tables comprising the
 actual data. This single-table view, which we call a
-[hypertable](http://docs.timescale.com/introduction/architecture#hypertables),
+[hypertable](https://docs.timescale.com/latest/introduction/architecture#hypertables),
 is comprised of many chunks, which are created by partitioning
 the hypertable's data in either one or two dimensions: by a time
 interval, and by an (optional) "partition key" such as
-device id, location, user id, etc. ([Architecture discussion](http://docs.timescale.com/introduction/architecture))
+device id, location, user id, etc. ([Architecture discussion](https://docs.timescale.com/latest/introduction/architecture))
 
 Virtually all user interactions with TimescaleDB are with
 hypertables. Creating tables and indexes, altering tables, inserting
@@ -61,8 +61,8 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
 ```
 
-- [Quick start: Creating hypertables](http://docs.timescale.com/getting-started/setup/starting-from-scratch)
-- [Reference examples](http://docs.timescale.com/api#schema)
+- [Quick start: Creating hypertables](https://docs.timescale.com/latest/getting-started/creating-hypertables)
+- [Reference examples](https://docs.timescale.com/latest/using-timescaledb/schema-management)
 
 #### Inserting and querying data
 
@@ -87,19 +87,19 @@ SELECT time_bucket('15 minutes', time) AS fifteen_min,
 In addition, TimescaleDB includes additional functions for time-series
 analysis that are not present in vanilla PostgreSQL. (For example, the `time_bucket` function above.)
 
-- [Quick start: Basic operations](http://docs.timescale.com/getting-started/basic-operations)
-- [Reference examples](http://docs.timescale.com/api#insert)
-- [TimescaleDB API](http://docs.timescale.com/api/api-timescaledb)
+- [Quick start: Basic operations](https://docs.timescale.com/latest/getting-started/basic-operations)
+- [Reference examples](https://docs.timescale.com/latest/using-timescaledb/writing-data)
+- [TimescaleDB API](https://docs.timescale.com/latest/api)
 
 ### Installation
 
 TimescaleDB can be installed via a variety of ways:
 
-- Linux: [yum](http://docs.timescale.com/getting-started/installation?OS=linux&method=yum), [apt](http://docs.timescale.com/getting-started/installation?OS=linux&method=apt), [Docker](http://docs.timescale.com/getting-started/installation?OS=linux&method=Docker)
-- MacOS: [brew](http://docs.timescale.com/getting-started/installation?OS=mac&method=Homebrew), [Docker](http://docs.timescale.com/getting-started/installation?OS=mac&method=Docker)
-- Windows: [Docker](http://docs.timescale.com/getting-started/installation?OS=windows&method=Docker)
+- Linux: [yum](https://docs.timescale.com/latest/getting-started/installation/linux/installation-yum), [apt (Ubuntu)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-ubuntu), [apt (Debian)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-debian) [Docker](https://docs.timescale.com/latest/getting-started/installation/linux/installation-docker)
+- MacOS: [brew](https://docs.timescale.com/latest/getting-started/installation/mac/installation-homebrew), [Docker](https://docs.timescale.com/latest/getting-started/installation/mac/installation-docker)
+- Windows: [Docker](https://docs.timescale.com/latest/getting-started/installation/windows/installation-docker)
 
-We recommend following our detailed [installation instructions](http://docs.timescale.com/getting-started/installation).
+We recommend following our detailed [installation instructions](https://docs.timescale.com/latest/getting-started/installation).
 
 #### Building from source (Unix-based systems)
 
@@ -133,7 +133,7 @@ cd build && make
 make install
 ```
 
-Please see our [additional configuration instructions](http://docs.timescale.com/getting-started/installation#update-postgresql-conf).
+Please see our [additional configuration instructions](https://docs.timescale.com/latest/getting-started/installation#update-postgresql-conf).
 
 #### Building from source (Windows)
 
@@ -177,11 +177,11 @@ MSBuild.exe /p:Configuration=Release INSTALL.vcxproj
 
 ### Additional documentation
 
-- [Why use TimescaleDB?](http://docs.timescale.com/introduction)
-- [Migrating from PostgreSQL](http://docs.timescale.com/getting-started/setup/migrate-from-postgresql)
-- [Writing data](http://docs.timescale.com/api#insert)
-- [Querying and data analytics](http://docs.timescale.com/api#select)
-- [Tutorials and sample data](http://docs.timescale.com/tutorials)
+- [Why use TimescaleDB?](https://docs.timescale.com/latest/introduction)
+- [Migrating from PostgreSQL](https://docs.timescale.com/latest/getting-started/setup/migrate-from-postgresql)
+- [Writing data](https://docs.timescale.com/latest/using-timescaledb/writing-data)
+- [Querying and data analytics](https://docs.timescale.com/latest/using-timescaledb/reading-data)
+- [Tutorials and sample data](https://docs.timescale.com/latest/tutorials)
 
 ### Support
 
