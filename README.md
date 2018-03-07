@@ -95,7 +95,7 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 
 TimescaleDB can be installed via a variety of ways:
 
-- Linux: [yum](https://docs.timescale.com/latest/getting-started/installation/linux/installation-yum), [apt (Ubuntu)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-ubuntu), [apt (Debian)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-debian) [Docker](https://docs.timescale.com/latest/getting-started/installation/linux/installation-docker)
+- Linux: [yum](https://docs.timescale.com/latest/getting-started/installation/linux/installation-yum), [apt (Ubuntu)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-ubuntu), [apt (Debian)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-debian), [Docker](https://docs.timescale.com/latest/getting-started/installation/linux/installation-docker)
 - MacOS: [brew](https://docs.timescale.com/latest/getting-started/installation/mac/installation-homebrew), [Docker](https://docs.timescale.com/latest/getting-started/installation/mac/installation-docker)
 - Windows: [Docker](https://docs.timescale.com/latest/getting-started/installation/windows/installation-docker)
 

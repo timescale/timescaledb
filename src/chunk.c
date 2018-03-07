@@ -100,7 +100,7 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 {
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, false));
+										get_namespace_oid(chunk->fd.schema_name.data, true));
 	chunk->hypertable_relid = parent_relid(chunk->table_id);
 }
 
@@ -1016,26 +1016,27 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-chunk_delete_by_relid(Oid relid)
+chunk_delete_by_name(const char *schema, const char *table)
 {
-	NameData	schema,
-				table;
 	ScanKeyData scankey[2];
 
-	if (!OidIsValid(relid))
-		return 0;
-
-	namestrcpy(&schema, get_namespace_name(get_rel_namespace(relid)));
-	namestrcpy(&table, get_rel_name(relid));
-
 	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
-				F_NAMEEQ, NameGetDatum(&schema));
+				F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(schema)));
 	ScanKeyInit(&scankey[1], Anum_chunk_schema_name_idx_table_name, BTEqualStrategyNumber,
-				F_NAMEEQ, NameGetDatum(&table));
+				F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(table)));
 
 	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
 							   chunk_tuple_delete, NULL, 0,
 							   RowExclusiveLock);
+}
+
+int
+chunk_delete_by_relid(Oid relid)
+{
+	if (!OidIsValid(relid))
+		return 0;
+
+	return chunk_delete_by_name(get_namespace_name(get_rel_namespace(relid)), get_rel_name(relid));
 }
 
 int
@@ -1047,19 +1048,6 @@ chunk_delete_by_hypertable_id(int32 hypertable_id)
 				F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	return chunk_scan_internal(CHUNK_HYPERTABLE_ID_INDEX, scankey, 1,
-							   chunk_tuple_delete, NULL, 0,
-							   RowExclusiveLock);
-}
-
-int
-chunk_delete_by_schema_name(const char *schema_name)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name, BTEqualStrategyNumber,
-				F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
-
-	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 1,
 							   chunk_tuple_delete, NULL, 0,
 							   RowExclusiveLock);
 }

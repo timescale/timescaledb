@@ -400,66 +400,6 @@ process_truncate(ProcessUtilityArgs *args)
 	return true;
 }
 
-/*
- * Handle DROP SCHEMA.
- *
- * There are three cases to handle. The DROP can be for a schema that:
- *
- * 1. Is the schema for one or more hypertables
- * 2. Is an associated schema for chunks
- * 3. Is a schema for one or more chunks (possibly different from
- *    the associated schema if it has been changed)
- */
-static void
-process_drop_schema(DropStmt *stmt)
-{
-	ListCell   *lc;
-
-	foreach(lc, stmt->objects)
-	{
-		int			count;
-#if PG10
-		const char *schema = strVal(lfirst(lc));;
-#elif PG96
-		const char *schema = NameListToString(lfirst(lc));
-#endif
-		if (strcmp(schema, INTERNAL_SCHEMA_NAME) == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot drop the internal schema for extension \"%s\"",
-							EXTENSION_NAME),
-					 errhint("Use DROP EXTENSION to remove the extension and the schema.")));
-
-		/*
-		 * For hypertables and chunks, we only care about this DROP if it
-		 * cascades
-		 */
-		if (stmt->behavior == DROP_CASCADE)
-		{
-
-			/* Delete any hypertables that exists in the schema */
-			hypertable_delete_by_schema_name(schema);
-
-			/*
-			 * There might be chunks that exist in the dropped schema although
-			 * the hypertable does not
-			 */
-			chunk_delete_by_schema_name(schema);
-		}
-
-		/*
-		 * Check for any remaining hypertables that use the schema as its
-		 * associated schema. For matches, we reset their associated schema to
-		 * the INTERNAL schema
-		 */
-		count = hypertable_reset_associated_schema_name(schema);
-
-		if (count > 0)
-			ereport(NOTICE,
-					(errmsg("the chunk storage schema changed to \"%s\" for %d hypertable%c",
-							INTERNAL_SCHEMA_NAME, count, (count > 1) ? 's' : '\0')));
-	}
-}
 
 static void
 process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
@@ -473,8 +413,12 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
+/*
+ *  We need to drop hypertable chunks before the hypertable to avoid the need
+ *  to CASCADE such drops;
+ */
 static bool
-process_drop_table(DropStmt *stmt)
+process_drop_hypertable_chunks(DropStmt *stmt)
 {
 	Cache	   *hcache = hypertable_cache_pin();
 	ListCell   *lc;
@@ -502,18 +446,9 @@ process_drop_table(DropStmt *stmt)
 				if (list_length(stmt->objects) != 1)
 					elog(ERROR, "Cannot drop a hypertable along with other objects");
 
-				/*
-				 * Delete the hypertable catalog information. This will
-				 * cascade to other dependent objects, like dimensions,
-				 * chunks, etc.
-				 */
-				hypertable_delete_by_id(ht->fd.id);
-
 				/* Drop each chunk table */
 				foreach_chunk(ht, process_drop_table_chunk, stmt);
 			}
-			else
-				chunk_delete_by_relid(relid);
 
 			handled = true;
 		}
@@ -524,47 +459,8 @@ process_drop_table(DropStmt *stmt)
 	return handled;
 }
 
-static void
-process_drop_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
-{
-	Trigger    *trigger = arg;
-	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger->tgname, false);
-
-	RemoveTriggerById(trigger_oid);
-}
-
-static void
-process_drop_trigger(DropStmt *stmt)
-{
-	Cache	   *hcache = hypertable_cache_pin();
-	ListCell   *lc;
-
-	foreach(lc, stmt->objects)
-	{
-		List	   *object = list_copy(lfirst(lc));
-		const char *trigname = strVal(llast(object));
-		List	   *relname = list_truncate(object, list_length(object) - 1);
-
-		if (relname != NIL)
-		{
-			RangeVar   *relation = makeRangeVarFromNameList(relname);
-			Hypertable *ht = hypertable_cache_get_entry_rv(hcache, relation);
-
-			if (NULL != ht)
-			{
-				Trigger    *trigger = trigger_by_name(ht->main_table_relid,
-													  trigname,
-													  stmt->missing_ok);
-
-				if (trigger_is_chunk_trigger(trigger))
-					foreach_chunk(ht, process_drop_trigger_chunk, trigger);
-			}
-		}
-	}
-
-	cache_release(hcache);
-}
-
+/* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
+ * through process_ddl_sql_drop */
 static void
 process_drop_tablespace(Node *parsetree)
 {
@@ -638,14 +534,8 @@ process_drop(Node *parsetree)
 
 	switch (stmt->removeType)
 	{
-		case OBJECT_SCHEMA:
-			process_drop_schema(stmt);
-			break;
 		case OBJECT_TABLE:
-			process_drop_table(stmt);
-			break;
-		case OBJECT_TRIGGER:
-			process_drop_trigger(stmt);
+			process_drop_hypertable_chunks(stmt);
 			break;
 		default:
 			break;
@@ -1850,6 +1740,77 @@ process_drop_index(EventTriggerDropObject *obj)
 }
 
 static void
+process_drop_table(EventTriggerDropObject *obj)
+{
+	EventTriggerDropTable *table;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE);
+	table = (EventTriggerDropTable *) obj;
+
+	hypertable_delete_by_name(table->schema, table->table_name);
+	chunk_delete_by_name(table->schema, table->table_name);
+}
+
+static void
+process_drop_schema(EventTriggerDropObject *obj)
+{
+	EventTriggerDropSchema *schema;
+	int			count;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_SCHEMA);
+	schema = (EventTriggerDropSchema *) obj;
+
+	if (strcmp(schema->schema, INTERNAL_SCHEMA_NAME) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot drop the internal schema for extension \"%s\"",
+						EXTENSION_NAME),
+				 errhint("Use DROP EXTENSION to remove the extension and the schema.")));
+
+	/*
+	 * Check for any remaining hypertables that use the schema as its
+	 * associated schema. For matches, we reset their associated schema to the
+	 * INTERNAL schema
+	 */
+	count = hypertable_reset_associated_schema_name(schema->schema);
+
+	if (count > 0)
+		ereport(NOTICE,
+				(errmsg("the chunk storage schema changed to \"%s\" for %d hypertable%c",
+						INTERNAL_SCHEMA_NAME, count, (count > 1) ? 's' : '\0')));
+}
+
+static void
+process_drop_trigger_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	const char *trigger_name = arg;
+	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, true);
+
+	if (OidIsValid(trigger_oid))
+		RemoveTriggerById(trigger_oid);
+}
+
+static void
+process_drop_trigger(EventTriggerDropObject *obj)
+{
+	EventTriggerDropTrigger *trigger_event;
+	Hypertable *ht;
+
+	Assert(obj->type == EVENT_TRIGGER_DROP_TRIGGER);
+	trigger_event = (EventTriggerDropTrigger *) obj;
+
+	/* do not use relids because underlying table could be gone */
+	ht = hypertable_get_by_name(trigger_event->schema, trigger_event->table);
+
+	if (ht != NULL)
+	{
+		/* Recurse to each chunk and drop the corresponding trigger */
+		foreach_chunk(ht, process_drop_trigger_on_chunk, trigger_event->trigger_name);
+	}
+}
+
+
+static void
 process_ddl_sql_drop(EventTriggerDropObject *obj)
 {
 	switch (obj->type)
@@ -1859,6 +1820,15 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			break;
 		case EVENT_TRIGGER_DROP_INDEX:
 			process_drop_index(obj);
+			break;
+		case EVENT_TRIGGER_DROP_TABLE:
+			process_drop_table(obj);
+			break;
+		case EVENT_TRIGGER_DROP_SCHEMA:
+			process_drop_schema(obj);
+			break;
+		case EVENT_TRIGGER_DROP_TRIGGER:
+			process_drop_trigger(obj);
 			break;
 	}
 }
