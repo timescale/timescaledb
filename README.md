@@ -87,9 +87,9 @@ SELECT time_bucket('15 minutes', time) AS fifteen_min,
 In addition, TimescaleDB includes additional functions for time-series
 analysis that are not present in vanilla PostgreSQL. (For example, the `time_bucket` function above.)
 
-- [Quick start: Basic operations](http://docs.timescale.com/getting-started/basic-operations)
-- [Reference examples](http://docs.timescale.com/api#insert)
-- [TimescaleDB API](http://docs.timescale.com/api/api-timescaledb)
+- [Quick start: Basic operations](http://docs.timescale.com/current/getting-started/basic-operations)
+- [Reference examples](http://docs.timescale.com/current/api#insert)
+- [TimescaleDB API](http://docs.timescale.com/current/api/api-timescaledb)
 
 ### Installation
 
