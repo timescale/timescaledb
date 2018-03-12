@@ -112,13 +112,23 @@ set(SOURCES
 configure_file(version.h.in version.h)
 set(GITCOMMIT_H ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
 
-add_custom_command(
-  OUTPUT ${GITCOMMIT_H}
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
-  COMMAND ${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags >> ${GITCOMMIT_H} || echo "${PROJECT_VERSION_MOD}" >> ${GITCOMMIT_H}
-  COMMENT "Generating gitcommit.h"
-  VERBATIM)
+if (WIN32)
+  add_custom_command(
+    OUTPUT ${GITCOMMIT_H}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
+    COMMAND (${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags 2> $null || call && echo "${PROJECT_VERSION_MOD}") >> ${GITCOMMIT_H}
+    COMMENT "Generating gitcommit.h"
+    VERBATIM)
+else ()
+  add_custom_command(
+    OUTPUT ${GITCOMMIT_H}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
+    COMMAND sh -c "if `${GIT_EXECUTABLE} status > /dev/null 2>&1`; then ${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags ; else echo ${PROJECT_VERSION_MOD} ; fi" >> ${GITCOMMIT_H}
+    COMMENT "Generating gitcommit.h"
+    VERBATIM)
+endif (WIN32)
 
 find_program(PGINDENT pgindent
   HINTS ${PG_SOURCE_DIR}
