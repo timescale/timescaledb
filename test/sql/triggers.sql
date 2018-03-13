@@ -12,7 +12,8 @@ DECLARE
 BEGIN
     SELECT count(*) INTO cnt FROM hyper;
     RAISE WARNING 'FIRING trigger when: % level: % op: % cnt: % trigger_name %',
-          tg_when, tg_level, tg_op, cnt, tg_name;
+        tg_when, tg_level, tg_op, cnt, tg_name;
+
     IF TG_OP = 'DELETE' THEN
         RETURN OLD;
     END IF;
@@ -204,9 +205,16 @@ CREATE TABLE vehicles (
   last_checkup TIMESTAMP
 );
 
+CREATE TABLE color (
+  color_id INTEGER PRIMARY KEY,
+  notes text
+);
+
+
 CREATE TABLE location (
   time TIMESTAMP NOT NULL,
   vehicle_id INTEGER REFERENCES vehicles (vehicle_id),
+  color_id INTEGER, --no reference since gonna populate a hypertable
   latitude FLOAT,
   longitude FLOAT
 );
@@ -220,18 +228,41 @@ BEGIN
 END
 $BODY$;
 
+
+CREATE OR REPLACE FUNCTION create_color_trigger_fn()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    --test subtxns within triggers
+    BEGIN
+        INSERT INTO color VALUES(NEW.color_id, 'n/a');
+    EXCEPTION WHEN unique_violation THEN
+			-- Nothing to do, just continue
+	END;
+    RETURN NEW;
+END
+$BODY$;
+
 CREATE TRIGGER create_vehicle_trigger
     BEFORE INSERT OR UPDATE ON location
     FOR EACH ROW EXECUTE PROCEDURE create_vehicle_trigger_fn();
 
-SELECT create_hypertable('location', 'time');
+CREATE TRIGGER create_color_trigger
+    BEFORE INSERT OR UPDATE ON location
+    FOR EACH ROW EXECUTE PROCEDURE create_color_trigger_fn();
 
-INSERT INTO location VALUES('2017-01-01 01:02:03', 1, 40.7493226,-73.9771259);
-INSERT INTO location VALUES('2017-01-01 01:02:04', 1, 24.7493226,-73.9771259);
-INSERT INTO location VALUES('2017-01-01 01:02:03', 23, 40.7493226,-73.9771269);
-INSERT INTO location VALUES('2017-01-01 01:02:03', 53, 40.7493226,-73.9771269);
+
+SELECT create_hypertable('location', 'time');
+--make color also a hypertable
+SELECT create_hypertable('color', 'color_id', chunk_time_interval=>10);
+
+INSERT INTO location VALUES('2017-01-01 01:02:03', 1, 1, 40.7493226,-73.9771259);
+INSERT INTO location VALUES('2017-01-01 01:02:04', 1, 20, 24.7493226,-73.9771259);
+INSERT INTO location VALUES('2017-01-01 01:02:03', 23, 1, 40.7493226,-73.9771269);
+INSERT INTO location VALUES('2017-01-01 01:02:03', 53, 20, 40.7493226,-73.9771269);
 
 UPDATE location SET vehicle_id = 52 WHERE vehicle_id = 53;
 
 SELECT * FROM location;
 SELECT * FROM vehicles;
+SELECT * FROM color;
