@@ -6,6 +6,11 @@
 /* List of pinned caches. A cache occurs once in this list for every pin
  * taken */
 static List *pinned_caches = NIL;
+typedef struct CachePin
+{
+	Cache	   *cache;
+	SubTransactionId subtxnid;
+} CachePin;
 
 void
 cache_init(Cache *cache)
@@ -67,26 +72,58 @@ extern Cache *
 cache_pin(Cache *cache)
 {
 	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+	CachePin   *cp = palloc(sizeof(CachePin));
 
-	pinned_caches = lappend(pinned_caches, cache);
+	cp->cache = cache;
+	cp->subtxnid = GetCurrentSubTransactionId();
+	pinned_caches = lappend(pinned_caches, cp);
 	MemoryContextSwitchTo(old);
 	cache->refcount++;
 	return cache;
 }
 
-extern int
-cache_release(Cache *cache)
+static void
+remove_pin(Cache *cache, SubTransactionId subtxnid)
+{
+	ListCell   *lc,
+			   *prev = NULL;
+
+	foreach(lc, pinned_caches)
+	{
+		CachePin   *cp = lfirst(lc);
+
+		if (cp->cache == cache && cp->subtxnid == subtxnid)
+		{
+			pinned_caches = list_delete_cell(pinned_caches, lc, prev);
+			return;
+		}
+
+		prev = lc;
+	}
+
+	/* should never reach here: there should always be a pin to remove */
+	Assert(false);
+}
+
+static int
+cache_release_subtxn(Cache *cache, SubTransactionId subtxnid)
 {
 	int			refcount = cache->refcount - 1;
 
 	Assert(cache->refcount > 0);
 	cache->refcount--;
-	pinned_caches = list_delete_ptr(pinned_caches, cache);
+
+	remove_pin(cache, subtxnid);
 	cache_destroy(cache);
 
 	return refcount;
 }
 
+extern int
+cache_release(Cache *cache)
+{
+	return cache_release_subtxn(cache, GetCurrentSubTransactionId());
+}
 
 MemoryContext
 cache_memory_ctx(Cache *cache)
@@ -167,13 +204,38 @@ release_all_pinned_caches()
 	 */
 	foreach(lc, pinned_caches)
 	{
-		Cache	   *cache = lfirst(lc);
+		CachePin   *cp = lfirst(lc);
 
-		cache->refcount--;
-		cache_destroy(cache);
+		cp->cache->refcount--;
+		cache_destroy(cp->cache);
 	}
 	list_free(pinned_caches);
 	pinned_caches = NIL;
+}
+
+static void
+release_subtxn_pinned_caches(SubTransactionId subtxnid, bool abort)
+{
+	ListCell   *lc;
+
+	/* Need a copy because cache_release will modify pinned_caches */
+	List	   *pinned_caches_copy = list_copy(pinned_caches);
+
+	/* Only release caches created in subtxn */
+	foreach(lc, pinned_caches_copy)
+	{
+		CachePin   *cp = lfirst(lc);
+
+		if (cp->subtxnid == subtxnid)
+		{
+			/*
+			 * This assert makes sure that that we don't have a cache leak
+			 * when running with debugging
+			 */
+			Assert(abort);
+			cache_release_subtxn(cp->cache, subtxnid);
+		}
+	}
 }
 
 /*
@@ -205,20 +267,20 @@ cache_xact_end(XactEvent event, void *arg)
 				 */
 				foreach(lc, pinned_caches)
 				{
-					Cache	   *cache = lfirst(lc);
+					CachePin   *cp = lfirst(lc);
 
 					/*
 					 * This assert makes sure that that we don't have a cache
 					 * leak when running with debugging
 					 */
-					Assert(!cache->release_on_commit);
+					Assert(!cp->cache->release_on_commit);
 
 					/*
 					 * This may still happen in optimized environments where
 					 * Assert is turned off. In that case, release.
 					 */
-					if (cache->release_on_commit)
-						cache_release(cache);
+					if (cp->cache->release_on_commit)
+						cache_release(cp->cache);
 				}
 			}
 			break;
@@ -226,20 +288,32 @@ cache_xact_end(XactEvent event, void *arg)
 }
 
 static void
-cache_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
+cache_subxact_abort(SubXactEvent event, SubTransactionId subtxn_id,
 					SubTransactionId parentSubid, void *arg)
 {
 	/*
 	 * Note that cache->release_on_commit is irrelevant here since can't have
 	 * cross-commit operations in subtxns
 	 */
-
 	/*
 	 * In subtxns, caches should have already been released, unless an abort
-	 * happened
+	 * happened. Be careful to only release caches that were created in the
+	 * same subtxn.
 	 */
-	Assert(SUBXACT_EVENT_ABORT_SUB == event || list_length(pinned_caches) == 0);
-	release_all_pinned_caches();
+
+	switch (event)
+	{
+		case SUBXACT_EVENT_START_SUB:
+		case SUBXACT_EVENT_PRE_COMMIT_SUB:
+			/* do nothing */
+			break;
+		case SUBXACT_EVENT_COMMIT_SUB:
+			release_subtxn_pinned_caches(subtxn_id, false);
+			break;
+		case SUBXACT_EVENT_ABORT_SUB:
+			release_subtxn_pinned_caches(subtxn_id, true);
+			break;
+	}
 }
 
 
