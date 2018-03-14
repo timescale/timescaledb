@@ -45,6 +45,16 @@ static Oid	extension_proxy_oid = InvalidOid;
 
 static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
 
+static bool
+extension_loader_present()
+{
+	char	   *guc_value = GetConfigOptionByName(GUC_LOADER_PRESENT_NAME, NULL, true);
+
+	if (guc_value != NULL && strcmp(guc_value, "on") == 0)
+		return true;
+	return false;
+}
+
 void
 extension_check_version(const char *so_version)
 {
@@ -60,6 +70,12 @@ extension_check_version(const char *so_version)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("Mismatched timescaledb version. Shared object file %s, SQL %s", so_version, sql_version)));
+	}
+
+
+	if (!process_shared_preload_libraries_in_progress && !extension_loader_present())
+	{
+		extension_load_without_preload();
 	}
 }
 
