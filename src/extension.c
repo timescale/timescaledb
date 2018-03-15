@@ -69,7 +69,7 @@ extension_check_version(const char *so_version)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Mismatched timescaledb version. Shared object file %s, SQL %s", so_version, sql_version)));
+				 errmsg("extension \"%s\" version mismatch: shared library version %s; SQL version %s", EXTENSION_NAME, so_version, sql_version)));
 	}
 
 

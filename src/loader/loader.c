@@ -124,8 +124,8 @@ should_load_on_alter_extension(Node *utility_stmt)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("extension \"%s\" cannot be updated after the old version has already been loaded", stmt->extname),
-				 errhint("You should start a new session and execute ALTER EXTENSION as the first command")));
-
+				 errhint("Start a new session and execute ALTER EXTENSION as the first command. "
+						 "Make sure to pass the \"-X\" flag to psql.")));
 	/* do not load the current (old) version's .so */
 	return false;
 }
@@ -159,9 +159,10 @@ should_load_on_create_extension(Node *utility_stmt)
 	/* disallow loading two .so from different versions */
 	ereport(ERROR,
 			(errcode(ERRCODE_DUPLICATE_OBJECT),
-			 errmsg("the session already has another shared library loaded for extension \"%s\"", stmt->extname),
-			 errdetail("The loaded version is \"%s\"", soversion),
-			 errhint("You should start a new session and execute CREATE EXTENSION as the first command")));
+			 errmsg("extension \"%s\" has already been loaded with another version", stmt->extname),
+			 errdetail("The loaded version is \"%s\".", soversion),
+			 errhint("Start a new session and execute CREATE EXTENSION as the first command. "
+					 "Make sure to pass the \"-X\" flag to psql.")));
 	return false;
 }
 
