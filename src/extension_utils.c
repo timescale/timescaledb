@@ -101,7 +101,7 @@ extension_version(void)
 
 	if (sql_version == NULL)
 	{
-		elog(ERROR, "Extension not found when getting version");
+		elog(ERROR, "extension not found while getting version");
 	}
 	return sql_version;
 }
@@ -136,7 +136,7 @@ extension_is_transitioning()
 		char	   *current_extension_name = get_extension_name(CurrentExtensionObject);
 
 		if (NULL == current_extension_name)
-			elog(ERROR, "Unknown current extension while creating");
+			elog(ERROR, "current extension name is missing");
 
 		if (strcmp(EXTENSION_NAME, current_extension_name) == 0)
 			return true;
@@ -200,7 +200,7 @@ extension_load_without_preload()
 			char	   *config_file = GetConfigOptionByName("config_file", NULL, false);
 
 			ereport(FATAL,
-					(errmsg("The timescaledb library is not preloaded"),
+					(errmsg("extension \"%s\" must be preloaded", EXTENSION_NAME),
 					 errhint("Please preload the timescaledb library via shared_preload_libraries.\n\n"
 							 "This can be done by editing the config file at: %1$s\n"
 							 "and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
@@ -214,7 +214,7 @@ extension_load_without_preload()
 		else
 		{
 			ereport(FATAL,
-					(errmsg("The timescaledb library is not preloaded"),
+					(errmsg("extension \"%s\" must be preloaded", EXTENSION_NAME),
 					 errhint("Please preload the timescaledb library via shared_preload_libraries.\n\n"
 							 "This can be done by editing the postgres config file \n"
 							 "and adding 'timescaledb' to the list in the shared_preload_libraries config.\n"
