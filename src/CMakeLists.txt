@@ -57,11 +57,11 @@ set(HEADERS
   hypertable.h
   hypertable_insert.h
   indexing.h
-  parse_rewrite.h
   partitioning.h
   planner_utils.h
   process_utility.h
   scanner.h
+  hypertable_restrict_info.h
   subspace_store.h
   tablespace.h
   trigger.h
@@ -95,14 +95,13 @@ set(SOURCES
   hypertable_insert.c
   indexing.c
   init.c
-  parse_analyze.c
-  parse_rewrite.c
   partitioning.c
   planner.c
   planner_utils.c
   process_utility.c
   scanner.c
   sort_transform.c
+  hypertable_restrict_info.c
   subspace_store.c
   tablespace.c
   trigger.c
