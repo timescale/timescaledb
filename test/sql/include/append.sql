@@ -129,6 +129,43 @@ SELECT * FROM append_test WHERE time > $1 ORDER BY time;
 EXPLAIN (costs off)
 EXECUTE query_param(now_s() - interval '2 months');
 
+--test with cte
+EXPLAIN (costs off)
+WITH data AS (
+    SELECT time_bucket(INTERVAL '30 day', TIME) AS btime, AVG(temp) AS VALUE
+    FROM append_test
+    WHERE
+        TIME > now_s() - INTERVAL '400 day'
+    AND colorid > 0
+    GROUP BY btime
+),
+period AS (
+    SELECT time_bucket(INTERVAL '30 day', TIME) AS btime
+      FROM  GENERATE_SERIES('2017-03-22T01:01:01', '2017-08-23T01:01:01', INTERVAL '30 day') TIME
+  )
+SELECT period.btime, VALUE
+    FROM period
+    LEFT JOIN DATA USING (btime)
+    ORDER BY period.btime;
+
+WITH data AS (
+    SELECT time_bucket(INTERVAL '30 day', TIME) AS btime, AVG(temp) AS VALUE
+    FROM append_test
+    WHERE
+        TIME > now_s() - INTERVAL '400 day'
+    AND colorid > 0
+    GROUP BY btime
+),
+period AS (
+    SELECT time_bucket(INTERVAL '30 day', TIME) AS btime
+      FROM  GENERATE_SERIES('2017-03-22T01:01:01', '2017-08-23T01:01:01', INTERVAL '30 day') TIME
+  )
+SELECT period.btime, VALUE
+    FROM period
+    LEFT JOIN DATA USING (btime)
+    ORDER BY period.btime;
+
+
 
 -- Create another hypertable to join with
 CREATE TABLE join_test(time timestamptz, temp float, colorid integer);
@@ -152,3 +189,5 @@ WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 h
 -- result should be the same as when optimizations are turned off
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
 WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
+
+
