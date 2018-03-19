@@ -234,15 +234,44 @@
 >                Hypertable: append_test
 >                Chunks left after exclusion: 0
 > (7 rows)
-390,391c358,361
+383,384c351,353
+<                                               QUERY PLAN                                               
+< -------------------------------------------------------------------------------------------------------
+---
+> psql:include/append.sql:149: NOTICE:  Stable function now_s() called!
+>                                                   QUERY PLAN                                                   
+> ---------------------------------------------------------------------------------------------------------------
+390c359,361
+<            ->  Result
+---
+>            ->  Custom Scan (ConstraintAwareAppend)
+>                  Hypertable: append_test
+>                  Chunks left after exclusion: 3
+392,394c363
+<                        ->  Seq Scan on append_test
+<                              Filter: ((colorid > 0) AND ("time" > (now_s() - '@ 400 days'::interval)))
+<                        ->  Index Scan using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
+---
+>                        ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
+397c366
+<                        ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+---
+>                        ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+400c369
+<                        ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+---
+>                        ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+435a405
+> psql:include/append.sql:166: NOTICE:  Stable function now_s() called!
+475,476c445,448
 <                                          QUERY PLAN                                         
 < --------------------------------------------------------------------------------------------
 ---
-> psql:include/append.sql:150: NOTICE:  Stable function now_s() called!
-> psql:include/append.sql:150: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:187: NOTICE:  Stable function now_s() called!
+> psql:include/append.sql:187: NOTICE:  Stable function now_s() called!
 >                                             QUERY PLAN                                            
 > --------------------------------------------------------------------------------------------------
-394,412c364,380
+479,497c451,467
 <    ->  Append
 <          ->  Seq Scan on append_test a
 <                Filter: ("time" > (now_s() - '@ 3 hours'::interval))
