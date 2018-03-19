@@ -286,10 +286,9 @@ ca_append_explain(CustomScanState *node,
 {
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
-	Index		rti = linitial_int(linitial(cscan->custom_private));
-	RangeTblEntry *rte = rt_fetch(rti, es->rtable);
+	Oid			relid = linitial_oid(linitial(cscan->custom_private));
 
-	ExplainPropertyText("Hypertable", get_rel_name(rte->relid), es);
+	ExplainPropertyText("Hypertable", get_rel_name(relid), es);
 	ExplainPropertyInteger("Chunks left after exclusion", state->num_append_subplans, es);
 }
 
@@ -331,11 +330,12 @@ constraint_aware_append_plan_create(PlannerInfo *root,
 {
 	CustomScan *cscan = makeNode(CustomScan);
 	Plan	   *subplan = linitial(custom_plans);
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
 	cscan->scan.scanrelid = 0;	/* Not a real relation we are scanning */
 	cscan->scan.plan.targetlist = tlist;	/* Target list we expect as output */
 	cscan->custom_plans = custom_plans;
-	cscan->custom_private = list_make3(list_make1_int(rel->relid),
+	cscan->custom_private = list_make3(list_make1_oid(rte->relid),
 									   list_copy(root->append_rel_list),
 									   list_copy(clauses));
 	cscan->custom_scan_tlist = subplan->targetlist; /* Target list of tuples
