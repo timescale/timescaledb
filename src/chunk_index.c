@@ -758,6 +758,37 @@ chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
 	return cim;
 }
 
+static bool
+chunk_hypertable_index_name_filter(TupleInfo *ti, void *data)
+{
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	ChunkIndexMapping *cim = data;
+	const char *hypertable_indexname = get_rel_name(cim->parent_indexoid);
+
+	if (namestrcmp(&chunk_index->hypertable_index_name, hypertable_indexname) == 0)
+		return true;
+
+	return false;
+}
+
+ChunkIndexMapping *
+chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid)
+{
+	ScanKeyData scankey[1];
+	ChunkIndexMapping *cim = palloc(sizeof(ChunkIndexMapping));
+
+	cim->parent_indexoid = hypertable_indexrelid;
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
+
+	chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
+					 scankey, 1, chunk_index_tuple_found, chunk_hypertable_index_name_filter, cim, AccessShareLock);
+
+	return cim;
+}
+
 
 typedef struct ChunkIndexRenameInfo
 {

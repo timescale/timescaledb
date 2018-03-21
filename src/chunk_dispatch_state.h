@@ -22,7 +22,6 @@ typedef struct ChunkDispatchState
 	 * plan node. We need these to compute and update the arbiter indexes for
 	 * each chunk we INSERT into.
 	 */
-	Query	   *parse;
 	ModifyTableState *parent;
 
 	/*
@@ -35,5 +34,8 @@ typedef struct ChunkDispatchState
 #define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
 
 ChunkDispatchState *chunk_dispatch_state_create(ChunkDispatchInfo *, Plan *);
+void
+			chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
+
 
 #endif							/* TIMESCALEDB_CHUNK_DISPATCH_STATE_H */

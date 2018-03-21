@@ -8,6 +8,7 @@
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "subspace_store.h"
+#include "chunk_dispatch_state.h"
 
 /*
  * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is
@@ -25,15 +26,17 @@ typedef struct ChunkDispatch
 	 * will reset the pointer in EState as we lookup new chunks.
 	 */
 	ResultRelInfo *hypertable_result_rel_info;
-	Query	   *parse;
+	OnConflictAction on_conflict;
+	List	   *arbiter_indexes;
+	CmdType		cmd_type;
 
 } ChunkDispatch;
 
 typedef struct Point Point;
 typedef struct ChunkInsertState ChunkInsertState;
 
-ChunkDispatch *chunk_dispatch_create(Hypertable *ht, EState *estate, Query *query);
+ChunkDispatch *chunk_dispatch_create(Hypertable *ht, EState *estate);
 void		chunk_dispatch_destroy(ChunkDispatch *dispatch);
-ChunkInsertState *chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, CmdType operation);
+ChunkInsertState *chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p);
 
 #endif							/* TIMESCALEDB_CHUNK_DISPATCH_H */

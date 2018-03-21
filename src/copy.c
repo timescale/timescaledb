@@ -70,7 +70,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, vo
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
 	ccstate->estate = estate;
-	ccstate->dispatch = chunk_dispatch_create(ht, estate, NULL);
+	ccstate->dispatch = chunk_dispatch_create(ht, estate);
 	ccstate->fromctx.data = fromctx;
 	ccstate->next_copy_from = from_func;
 
@@ -271,7 +271,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point, CMD_INSERT);
+		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
 		Assert(cis != NULL);
 

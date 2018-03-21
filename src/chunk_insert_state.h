@@ -8,6 +8,7 @@
 #include "hypertable.h"
 #include "chunk.h"
 #include "cache.h"
+#include "chunk_dispatch_state.h"
 
 typedef struct ChunkInsertState
 {
@@ -22,7 +23,7 @@ typedef struct ChunkInsertState
 typedef struct ChunkDispatch ChunkDispatch;
 
 extern HeapTuple chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple, TupleTableSlot **existing_slot);
-extern ChunkInsertState *chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operation);
+extern ChunkInsertState *chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);
 extern void chunk_insert_state_destroy(ChunkInsertState *state);
 
 #endif							/* TIMESCALEDB_CHUNK_INSERT_STATE_H */
