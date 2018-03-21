@@ -701,3 +701,30 @@ SELECT * FROM one_space_test;
  Tue Jan 01 01:02:01 2002 |    1 | device
 (2 rows)
 
+--CTE & EXPLAIN ANALYZE TESTS
+WITH insert_cte as (
+	INSERT INTO one_space_test VALUES
+		('2001-01-01 01:02:01', 1.0, 'device')
+	RETURNING *)
+SELECT * FROM insert_cte;
+           time           | temp | device 
+--------------------------+------+--------
+ Mon Jan 01 01:02:01 2001 |    1 | device
+(1 row)
+
+EXPLAIN (analyze, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
+WITH insert_cte as (
+	INSERT INTO one_space_test VALUES
+		('2001-01-01 01:03:01', 1.0, 'device')
+	)
+SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Result (actual rows=1 loops=1)
+   CTE insert_cte
+     ->  Custom Scan (HypertableInsert) (never executed)
+           ->  Insert on one_space_test (actual rows=0 loops=1)
+                 ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+                       ->  Result (actual rows=1 loops=1)
+(8 rows)
+
