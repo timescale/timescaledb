@@ -11,7 +11,6 @@ chunk_dispatch_info_copy(struct ExtensibleNode *newnode,
 	const ChunkDispatchInfo *oldinfo = (const ChunkDispatchInfo *) oldnode;
 
 	newinfo->hypertable_relid = oldinfo->hypertable_relid;
-	newinfo->parse = copyObject(oldinfo->parse);
 }
 
 static bool
@@ -21,8 +20,7 @@ chunk_dispatch_info_equal(const struct ExtensibleNode *an,
 	const ChunkDispatchInfo *a = (const ChunkDispatchInfo *) an;
 	const ChunkDispatchInfo *b = (const ChunkDispatchInfo *) bn;
 
-	return a->hypertable_relid == b->hypertable_relid &&
-		equal(a->parse, b->parse);
+	return a->hypertable_relid == b->hypertable_relid;
 }
 
 static void
@@ -32,8 +30,6 @@ chunk_dispatch_info_out(struct StringInfoData *str,
 	const ChunkDispatchInfo *info = (const ChunkDispatchInfo *) node;
 
 	appendStringInfo(str, " :hypertableOid %d", info->hypertable_relid);
-	appendStringInfo(str, " :Query ");
-	outNode(str, info->parse);
 }
 
 static void
@@ -59,8 +55,6 @@ chunk_dispatch_info_read(struct ExtensibleNode *node)
 
 	if (token == NULL)
 		elog(ERROR, "Missing Query node");
-
-	info->parse = stringToNode(token);
 }
 
 static ExtensibleNodeMethods chunk_dispatch_info_methods = {
@@ -80,7 +74,6 @@ chunk_dispatch_info_create(Oid hypertable_relid, Query *parse)
 
 	info->enode.extnodename = chunk_dispatch_info_methods.extnodename;
 	info->hypertable_relid = hypertable_relid;
-	info->parse = parse;
 	return info;
 }
 

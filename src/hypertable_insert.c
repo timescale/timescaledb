@@ -51,7 +51,7 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 				{
 					ChunkDispatchState *cdstate = (ChunkDispatchState *) mtstate->mt_plans[i];
 
-					cdstate->parent = mtstate;
+					chunk_dispatch_state_set_parent(cdstate, mtstate);
 				}
 			}
 		}

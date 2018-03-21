@@ -12,14 +12,16 @@
 #include "guc.h"
 
 ChunkDispatch *
-chunk_dispatch_create(Hypertable *ht, EState *estate, Query *parse)
+chunk_dispatch_create(Hypertable *ht, EState *estate)
 {
 	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
 	cd->hypertable = ht;
 	cd->estate = estate;
 	cd->hypertable_result_rel_info = NULL;
-	cd->parse = parse;
+	cd->on_conflict = ONCONFLICT_NONE;
+	cd->arbiter_indexes = NIL;
+	cd->cmd_type = CMD_INSERT;
 	cd->cache = subspace_store_init(ht->space, estate->es_query_cxt, guc_max_open_chunks_per_insert);
 
 	return cd;
@@ -42,7 +44,7 @@ destroy_chunk_insert_state(void *cis)
  * partitioned hyperspace.
  */
 extern ChunkInsertState *
-chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point, CmdType operation)
+chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 {
 	ChunkInsertState *cis;
 
@@ -57,7 +59,7 @@ chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point, Cmd
 		if (NULL == new_chunk)
 			elog(ERROR, "No chunk found or created");
 
-		cis = chunk_insert_state_create(new_chunk, dispatch, operation);
+		cis = chunk_insert_state_create(new_chunk, dispatch);
 		subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
 	}
 
