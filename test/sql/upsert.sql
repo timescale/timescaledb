@@ -48,3 +48,26 @@ SELECT * FROM upsert_test_multi_unique ORDER BY time, color DESC;
 INSERT INTO upsert_test_multi_unique VALUES ('2017-01-20T09:00:01', 23.5, 'purple') ON CONFLICT (time, color)
 DO UPDATE set temp = 23.5;
 \set ON_ERROR_STOP 1
+
+WITH CTE AS (
+    INSERT INTO upsert_test_multi_unique
+    VALUES ('2017-01-20T09:00:01', 25.9, 'purple')
+    ON CONFLICT DO NOTHING
+    RETURNING *
+) SELECT 1;
+
+WITH CTE AS (
+    INSERT INTO upsert_test_multi_unique
+    VALUES ('2017-01-20T09:00:01', 25.9, 'purple'),
+    ('2017-01-20T09:00:01', 29.9, 'purple1')
+    ON CONFLICT DO NOTHING
+    RETURNING *
+) SELECT * FROM CTE;
+
+WITH CTE AS (
+    INSERT INTO upsert_test_multi_unique
+    VALUES ('2017-01-20T09:00:01', 25.9, 'blue')
+    ON CONFLICT (time, temp) DO UPDATE SET color = 'blue'
+    RETURNING *
+)
+SELECT * FROM CTE;

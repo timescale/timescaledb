@@ -34,7 +34,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = chunk_dispatch_create(ht, estate, state->parse);
+	state->dispatch = chunk_dispatch_create(ht, estate);
 	node->custom_ps = list_make1(ps);
 }
 
@@ -57,7 +57,6 @@ chunk_dispatch_exec(CustomScanState *node)
 		HeapTuple	tuple;
 		TupleDesc	tupdesc = slot->tts_tupleDescriptor;
 		EState	   *estate = node->ss.ps.state;
-		CmdType		operation = state->parent->operation;
 		MemoryContext old;
 
 		/* Switch to the executor's per-tuple memory context */
@@ -73,7 +72,7 @@ chunk_dispatch_exec(CustomScanState *node)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point, operation);
+		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
 		/*
 		 * Update the arbiter indexes for ON CONFLICT statements so that they
@@ -134,8 +133,16 @@ chunk_dispatch_state_create(ChunkDispatchInfo *info, Plan *subplan)
 
 	state = (ChunkDispatchState *) newNode(sizeof(ChunkDispatchState), T_CustomScanState);
 	state->hypertable_relid = info->hypertable_relid;
-	state->parse = info->parse;
 	state->subplan = subplan;
 	state->cscan_state.methods = &chunk_dispatch_state_methods;
 	return state;
+}
+
+void
+chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent)
+{
+	state->parent = parent;
+	state->dispatch->arbiter_indexes = parent->mt_arbiterindexes;
+	state->dispatch->on_conflict = parent->mt_onconflict;
+	state->dispatch->cmd_type = parent->operation;
 }

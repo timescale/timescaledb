@@ -15,7 +15,9 @@
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
+#include "chunk_dispatch_state.h"
 #include "compat.h"
+#include "chunk_index.h"
 
 /*
  * Create a new RangeTblEntry for the chunk in the executor's range table and
@@ -187,25 +189,6 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 }
 
 /*
- * Infer a chunk's set of arbiter indexes. This is a subset of the chunk's
- * indexes that match the ON CONFLICT statement.
- */
-static List *
-chunk_infer_arbiter_indexes(int rindex, List *rtable, Query *parse)
-{
-	Query		query = *parse;
-	PlannerInfo info = {
-		.type = T_PlannerInfo,
-		.parse = &query,
-	};
-
-	query.resultRelation = rindex;
-	query.rtable = rtable;
-
-	return infer_arbiter_indexes(&info);
-}
-
-/*
  * Check if tuple conversion is needed between a chunk and its parent table.
  *
  * Since a chunk should have the same attributes (columns) as its parent, the
@@ -221,6 +204,23 @@ tuple_conversion_needed(TupleDesc indesc,
 			indesc->tdhasoid != outdesc->tdhasoid);
 }
 
+/* Translate hypertable indexes to chunk indexes in the arbiter clause */
+static void
+chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch, Relation chunk_rel)
+{
+	ListCell   *lc;
+
+	state->arbiter_indexes = NIL;
+	foreach(lc, dispatch->arbiter_indexes)
+	{
+		Oid			hypertable_index = lfirst_oid(lc);
+		Chunk	   *chunk = chunk_get_by_relid(RelationGetRelid(chunk_rel), 0, true);
+		ChunkIndexMapping *cim = chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index);
+
+		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim->indexoid);
+	}
+}
+
 /*
  * Create new insert chunk state.
  *
@@ -228,7 +228,7 @@ tuple_conversion_needed(TupleDesc indesc,
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operation)
+chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
 	Relation	rel,
@@ -238,12 +238,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	Query	   *parse = dispatch->parse;
-	OnConflictAction onconflict = ONCONFLICT_NONE;
 	ResultRelInfo *resrelinfo;
-
-	if (parse && parse->onConflict)
-		onconflict = parse->onConflict->action;
 
 	/* permissions NOT checked here; were checked at hypertable level */
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
@@ -266,7 +261,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 
 	MemoryContextSwitchTo(cis_context);
 	resrelinfo = create_chunk_result_relation_info(dispatch, rel, rti);
-	CheckValidResultRelCompat(resrelinfo, operation);
+	CheckValidResultRelCompat(resrelinfo, dispatch->cmd_type);
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->mctx = cis_context;
@@ -275,7 +270,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 
 	if (resrelinfo->ri_RelationDesc->rd_rel->relhasindex &&
 		resrelinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(resrelinfo, onconflict != ONCONFLICT_NONE);
+		ExecOpenIndices(resrelinfo, dispatch->on_conflict != ONCONFLICT_NONE);
 
 	if (resrelinfo->ri_TrigDesc != NULL)
 	{
@@ -286,8 +281,8 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch, CmdType operati
 	}
 
 	/* Set the chunk's arbiter indexes for ON CONFLICT statements */
-	if (parse != NULL && parse->onConflict != NULL)
-		state->arbiter_indexes = chunk_infer_arbiter_indexes(rti, dispatch->estate->es_range_table, dispatch->parse);
+	if (dispatch->on_conflict != ONCONFLICT_NONE)
+		chunk_insert_state_set_arbiter_indexes(state, dispatch, rel);
 
 	/* Set tuple conversion map, if tuple needs conversion */
 	parent_rel = heap_open(dispatch->hypertable->main_table_relid, AccessShareLock);

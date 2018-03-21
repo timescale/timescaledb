@@ -28,6 +28,7 @@ extern int	chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, 
 extern int	chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char *tablespace);
 extern void chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constaint, int32 chunk_id, Oid chunk_constraint);
 extern List *chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid);
+extern ChunkIndexMapping *chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid);
 extern void chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
 
 /* chunk_index_recreate  is a process akin to reindex
