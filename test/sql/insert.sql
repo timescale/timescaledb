@@ -76,3 +76,17 @@ INSERT INTO one_space_test VALUES
 ('2001-01-01 01:01:01', 1.0, 'device'),
 ('2002-01-01 01:02:01', 1.0, 'device');
 SELECT * FROM one_space_test;
+
+--CTE & EXPLAIN ANALYZE TESTS
+WITH insert_cte as (
+	INSERT INTO one_space_test VALUES
+		('2001-01-01 01:02:01', 1.0, 'device')
+	RETURNING *)
+SELECT * FROM insert_cte;
+
+EXPLAIN (analyze, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
+WITH insert_cte as (
+	INSERT INTO one_space_test VALUES
+		('2001-01-01 01:03:01', 1.0, 'device')
+	)
+SELECT 1 \g | grep -v "Planning" | grep -v "Execution"

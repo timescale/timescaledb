@@ -11,6 +11,7 @@
 #include <optimizer/clauses.h>
 #include <optimizer/planner.h>
 #include <miscadmin.h>
+#include <parser/parsetree.h>
 
 #include "errors.h"
 #include "chunk_insert_state.h"
@@ -24,11 +25,13 @@
  * return the index.
  */
 static inline Index
-create_chunk_range_table_entry(EState *estate, Relation rel)
+create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
 {
 	RangeTblEntry *rte;
 	ListCell   *lc;
 	Index		rti = 1;
+	EState	   *estate = dispatch->estate;
+
 
 	/*
 	 * Check if we previously created an entry for this relation. This can
@@ -46,11 +49,24 @@ create_chunk_range_table_entry(EState *estate, Relation rel)
 		rti++;
 	}
 
+
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
 	rte->relid = RelationGetRelid(rel);
 	rte->relkind = rel->rd_rel->relkind;
 	rte->requiredPerms = ACL_INSERT;
+
+	/*
+	 * If the hypertable has a rangetable entry, copy some information from
+	 * its eref to the chunk's eref so that explain analyze works correctly.
+	 */
+	if (0 != dispatch->hypertable_result_rel_info->ri_RangeTableIndex)
+	{
+		RangeTblEntry *hypertable_rte;
+
+		hypertable_rte = rt_fetch(dispatch->hypertable_result_rel_info->ri_RangeTableIndex, estate->es_range_table);
+		rte->eref = hypertable_rte->eref;
+	}
 
 	/*
 	 * If this is the first tuple, we make a copy of the range table to avoid
@@ -257,7 +273,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (rel->rd_rel->relkind != RELKIND_RELATION)
 		elog(ERROR, "insert is not on a table");
 
-	rti = create_chunk_range_table_entry(dispatch->estate, rel);
+	rti = create_chunk_range_table_entry(dispatch, rel);
 
 	MemoryContextSwitchTo(cis_context);
 	resrelinfo = create_chunk_result_relation_info(dispatch, rel, rti);
