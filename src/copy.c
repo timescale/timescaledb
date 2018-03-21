@@ -198,7 +198,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	resultRelInfo = makeNode(ResultRelInfo);
 	InitResultRelInfoCompat(resultRelInfo,
 							ccstate->rel,
-							1,	/* dummy rangetable index */
+							0,	/* dummy rangetable index - original was 1
+								 * which isn't dummy-nuf */
 							0);
 
 	ExecOpenIndices(resultRelInfo, false);
