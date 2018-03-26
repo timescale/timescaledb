@@ -4,6 +4,34 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.9.1 (2018-03-26)
+
+**High-level changes**
+* **For this release only**, you will need to restart the database before
+running `ALTER EXTENSION`
+* Several edge cases regarding CTEs addressed
+* Updated preloader with better error messaging and fixed edge case
+* ABI compatibility with latest PostgreSQL to help catch any breaking
+changes
+
+**Notable commits**
+* [40ce037] Fix crash on explain analyze with insert cte
+* [8378beb] Enable hypertable inserts within CTEs
+* [bdfda75] Fix double-loading of extension
+* [01ea77e] Fix EXPLAIN output for ConstraintAwareAppend inside CTE
+* [fc05637] Add no preload error to versioned library.
+* [38f8e0c] Add ABI compatibility tests
+* [744ca09] Fix Cache Pinning for Subtxns
+* [39010db] Move more drops into event trigger system
+* [fc36699] Do not fail add_dimension() on non-empty table with 'if_not_exists'
+
+**Thanks**
+* @The-Alchemist for pointing out broken links in the README
+* @chaintng for pointing out a broken link in the docs
+* @jgranstrom for reporting a edge case crash with UPSERTs in CTEs
+* @saosebastiao for reporting the lack of an error message when the library is not preloaded and trying to delete/modify a hypertable
+* @jbylund for reporting a cache invalidation issue with the preloader
+
 ## 0.9.0 (2018-03-05)
 
 **High-level changes**
