@@ -51,7 +51,7 @@ set(MOD_FILES
   updates/0.7.0--0.7.1.sql
   updates/0.7.1--0.8.0.sql
   updates/0.8.0--0.9.0.sql
-  updates/0.9.0--0.10.0-dev.sql
+  updates/0.9.0--0.9.1.sql
 )
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
@@ -149,7 +149,11 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
 
   set(UPDATE_SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/timescaledb--${START_VERSION}--${PROJECT_VERSION_MOD}.sql)
   list(APPEND UPDATE_SCRIPTS ${UPDATE_SCRIPT})
-  cat_files("${PRE_FILES};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+  if (CURR_MOD_FILES)
+    cat_files("${PRE_FILES};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+  else ()
+    cat_files("${PRE_FILES};${SOURCE_FILES_VERSIONED}" ${UPDATE_SCRIPT})
+  endif ()
 endforeach(transition_mod_file)
 
 add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})
