@@ -30,6 +30,7 @@ set(TEST_FILES
   index.sql
   insert_single.sql
   insert.sql
+  median_test.sql
   partitioning.sql
   pg_dump.sql
   plain.sql
@@ -49,7 +50,8 @@ set(TEST_FILES
   upsert.sql
   util.sql
   vacuum.sql
-  version.sql)
+  version.sql
+)
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
@@ -57,8 +59,9 @@ IF(CMAKE_BUILD_TYPE MATCHES Debug)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(TEST_TEMPLATES
-  parallel.sql.in
-  partitioning.sql.in)
+    parallel.sql.in
+    partitioning.sql.in
+  )
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
