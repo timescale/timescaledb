@@ -5,11 +5,24 @@
 #include <fmgr.h>
 #include <nodes/primnodes.h>
 #include <catalog/pg_proc.h>
+#include <utils/datetime.h>
 
 /*
  * Convert a column value into the internal time representation.
  */
-extern int64 time_value_to_internal(Datum time_val, Oid type);
+extern int64 time_value_to_internal(Datum time_val, Oid type, bool failure_ok);
+
+/*
+ * Return the period in microseconds of the first argument to date_trunc.
+ * This is approximate -- to be used for planning;
+ */
+extern int64 date_trunc_interval_period_approx(text *units);
+
+/*
+ * Return the interval period in microseconds.
+ * This is approximate -- to be used for planning;
+ */
+extern int64 get_interval_period_approx(Interval *interval);
 
 #if 0
 #define CACHE1_elog(a,b)				elog(a,b)

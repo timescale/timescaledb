@@ -1,0 +1,6 @@
+\set ECHO errors
+ ?column? 
+----------
+ Done
+(1 row)
+

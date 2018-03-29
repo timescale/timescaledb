@@ -68,6 +68,7 @@ set(HEADERS
   planner_utils.h
   planner_import.h
   plan_expand_hypertable.h
+  plan_add_hashagg.h
   process_utility.h
   scanner.h
   subspace_store.h
@@ -106,9 +107,10 @@ set(SOURCES
   init.c
   partitioning.c
   planner.c
+  plan_expand_hypertable.c
+  plan_add_hashagg.c
   planner_import.c
   planner_utils.c
-  plan_expand_hypertable.c
   process_utility.c
   scanner.c
   sort_transform.c
