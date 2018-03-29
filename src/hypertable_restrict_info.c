@@ -72,7 +72,7 @@ dimension_restrict_info_create(Dimension *d)
 static bool
 dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy, Const *c)
 {
-	int64		value = time_value_to_internal(c->constvalue, c->consttype);
+	int64		value = time_value_to_internal(c->constvalue, c->consttype, false);
 
 	switch (strategy)
 	{

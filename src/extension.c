@@ -111,6 +111,47 @@ extension_update_state()
 	return extension_set_state(extension_current_state());
 }
 
+Oid
+extension_schema_oid(void)
+{
+	Datum		result;
+	Relation	rel;
+	SysScanDesc scandesc;
+	HeapTuple	tuple;
+	ScanKeyData entry[1];
+	bool		is_null = true;
+	Oid			schema = InvalidOid;
+
+	rel = heap_open(ExtensionRelationId, AccessShareLock);
+
+	ScanKeyInit(&entry[0],
+				Anum_pg_extension_extname,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(EXTENSION_NAME)));
+
+	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true,
+								  NULL, 1, entry);
+
+	tuple = systable_getnext(scandesc);
+
+	/* We assume that there can be at most one matching tuple */
+	if (HeapTupleIsValid(tuple))
+	{
+		result = heap_getattr(tuple, Anum_pg_extension_extnamespace, RelationGetDescr(rel), &is_null);
+
+		if (!is_null)
+			schema = DatumGetObjectId(result);
+	}
+
+	systable_endscan(scandesc);
+	heap_close(rel, AccessShareLock);
+
+	if (schema == InvalidOid)
+		elog(ERROR, "extension schema not found");
+	return schema;
+}
+
+
 /*
  *	Called upon all Relcache invalidate events.
  *	Returns whether or not to invalidate the entire extension.
