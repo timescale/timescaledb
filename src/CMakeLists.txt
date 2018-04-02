@@ -57,6 +57,7 @@ set(HEADERS
   hypertable.h
   hypertable_insert.h
   indexing.h
+  median_quickselect.h
   parse_rewrite.h
   partitioning.h
   planner_utils.h
@@ -95,6 +96,8 @@ set(SOURCES
   hypertable_insert.c
   indexing.c
   init.c
+  median.c
+  median_quickselect.c
   parse_analyze.c
   parse_rewrite.c
   partitioning.c
