@@ -377,7 +377,6 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 	path->cpath.path.pathtype = T_CustomScan;
 	path->cpath.path.rows = subpath->rows;
 	path->cpath.path.startup_cost = subpath->startup_cost;
-	path->cpath.path.total_cost = subpath->total_cost;
 	path->cpath.path.parent = subpath->parent;
 	path->cpath.path.pathkeys = subpath->pathkeys;
 	path->cpath.path.param_info = subpath->param_info;
@@ -404,14 +403,18 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 		case T_AppendPath:
 			{
 				AppendPath *append = (AppendPath *) subpath;
-
+				int subpaths_length = list_length(append->subpaths);
+				if (subpaths_length > 1)
+					subpath->total_cost /= subpaths_length;
 				append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
 				break;
 			}
 		case T_MergeAppendPath:
 			{
 				MergeAppendPath *append = (MergeAppendPath *) subpath;
-
+				int subpaths_length = list_length(append->subpaths);
+				if (subpaths_length > 1)
+					subpath->total_cost /= subpaths_length;
 				append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
 				break;
 			}
@@ -419,6 +422,8 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 			elog(ERROR, "Invalid node type %u", nodeTag(subpath));
 			break;
 	}
+
+	path->cpath.path.total_cost = subpath->total_cost;
 
 	appinfo = linitial(root->append_rel_list);
 	relid = root->simple_rte_array[appinfo->child_relid]->relid;
