@@ -420,11 +420,14 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 			break;
 	}
 
-	appinfo = linitial(root->append_rel_list);
-	relid = root->simple_rte_array[appinfo->child_relid]->relid;
+	if (list_length(root->append_rel_list) > 1)
+	{
+		appinfo = linitial(root->append_rel_list);
+		relid = root->simple_rte_array[appinfo->child_relid]->relid;
 
-	if (relid == ht->main_table_relid)
-		root->append_rel_list = list_delete_first(root->append_rel_list);
+		if (relid == ht->main_table_relid)
+			root->append_rel_list = list_delete_first(root->append_rel_list);
+	}
 
 	return &path->cpath.path;
 }

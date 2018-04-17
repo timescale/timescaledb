@@ -25,6 +25,7 @@ typedef struct DimensionVec DimensionVec;
 typedef struct Hypercube Hypercube;
 
 extern DimensionVec *dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit);
+extern DimensionVec *dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit);
 extern DimensionVec *dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit);
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
 extern DimensionSlice *dimension_slice_scan_for_existing(DimensionSlice *slice);

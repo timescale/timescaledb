@@ -51,6 +51,7 @@ typedef struct ChunkScanCtx
 	Hyperspace *space;
 	Point	   *point;
 	bool		early_abort;
+	LOCKMODE	lockmode;
 	void	   *data;
 } ChunkScanCtx;
 
@@ -66,6 +67,7 @@ extern Chunk *chunk_create(Hypertable *ht, Point *p, const char *schema, const c
 extern Chunk *chunk_create_stub(int32 id, int16 num_constraints);
 extern void chunk_free(Chunk *chunk);
 extern Chunk *chunk_find(Hyperspace *hs, Point *p);
+extern List *chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
 extern Chunk *chunk_copy(Chunk *chunk);
 extern Chunk *chunk_get_by_name(const char *schema_name, const char *table_name, int16 num_constraints, bool fail_if_not_found);
 extern Chunk *chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found);

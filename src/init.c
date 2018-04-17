@@ -36,9 +36,6 @@ extern void _process_utility_fini(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
 
-extern void _parse_analyze_init(void);
-extern void _parse_analyze_fini(void);
-
 extern void PGDLLEXPORT _PG_init(void);
 extern void PGDLLEXPORT _PG_fini(void);
 
@@ -58,7 +55,6 @@ _PG_init(void)
 	_planner_init();
 	_event_trigger_init();
 	_process_utility_init();
-	_parse_analyze_init();
 	_guc_init();
 }
 
@@ -70,7 +66,6 @@ _PG_fini(void)
 	 * document any exceptions.
 	 */
 	_guc_fini();
-	_parse_analyze_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
 	_planner_fini();

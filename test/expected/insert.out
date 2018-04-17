@@ -275,8 +275,8 @@ VALUES ('2001-02-01', 98, 'dev1'),
 SELECT * FROM date_col_test WHERE time > '2001-01-01';
     time    | temp | device 
 ------------+------+--------
- 02-01-2001 |   98 | dev1
  03-02-2001 |   98 | dev1
+ 02-01-2001 |   98 | dev1
 (2 rows)
 
 CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);

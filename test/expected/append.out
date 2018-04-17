@@ -159,7 +159,6 @@ EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_i() - interval '2 months'
 ORDER BY time;
 psql:include/append.sql:75: NOTICE:  Immutable function now_i() called!
-psql:include/append.sql:75: NOTICE:  Immutable function now_i() called!
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Sort
