@@ -621,6 +621,7 @@ chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p)
 	ctx->space = hs;
 	ctx->point = p;
 	ctx->early_abort = false;
+	ctx->lockmode = NoLock;
 }
 
 /*
@@ -762,8 +763,18 @@ chunk_is_complete(ChunkScanCtx *scanctx, Chunk *chunk)
 	if (scanctx->space->num_dimensions != chunk->constraints->num_dimension_constraints)
 		return false;
 
-	scanctx->data = chunk;
 	return true;
+}
+
+static bool
+set_complete_chunk(ChunkScanCtx *scanctx, Chunk *chunk)
+{
+	if (chunk_is_complete(scanctx, chunk))
+	{
+		scanctx->data = chunk;
+		return true;
+	}
+	return false;
 }
 
 /* Finds the first chunk that has a complete set of constraints. There should be
@@ -774,7 +785,7 @@ chunk_scan_ctx_get_chunk(ChunkScanCtx *ctx)
 {
 	ctx->data = NULL;
 
-	chunk_scan_ctx_foreach_chunk(ctx, chunk_is_complete, 1);
+	chunk_scan_ctx_foreach_chunk(ctx, set_complete_chunk, 1);
 
 	return ctx->data;
 }
@@ -835,6 +846,53 @@ chunk_find(Hyperspace *hs, Point *p)
 	}
 
 	return chunk;
+}
+
+static bool
+append_chunk_oid(ChunkScanCtx *scanctx, Chunk *chunk)
+{
+	if (!chunk_is_complete(scanctx, chunk))
+		return false;
+
+	/* Fill in the rest of the chunk's data from the chunk table */
+	chunk_fill_stub(chunk, false);
+
+	if (scanctx->lockmode != NoLock)
+		LockRelationOid(chunk->table_id, scanctx->lockmode);
+
+	scanctx->data = lappend_oid(scanctx->data, chunk->table_id);
+	return true;
+}
+
+List *
+chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode)
+{
+	List	   *oid_list = NIL;
+	ChunkScanCtx ctx;
+	ListCell   *lc;
+
+	/* The scan context will keep the state accumulated during the scan */
+	chunk_scan_ctx_init(&ctx, hs, NULL);
+
+	/* Do not abort the scan when one chunk is found */
+	ctx.early_abort = false;
+	ctx.lockmode = lockmode;
+
+	/* Scan all dimensions for slices enclosing the point */
+	foreach(lc, dimension_vecs)
+	{
+		DimensionVec *vec = lfirst(lc);
+
+		dimension_slice_and_chunk_constraint_join(&ctx, vec);
+	}
+
+	ctx.data = NIL;
+	chunk_scan_ctx_foreach_chunk(&ctx, append_chunk_oid, 0);
+	oid_list = ctx.data;
+
+	chunk_scan_ctx_destroy(&ctx);
+
+	return oid_list;
 }
 
 Chunk *

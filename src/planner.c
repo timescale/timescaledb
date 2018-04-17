@@ -8,9 +8,17 @@
 #include <catalog/namespace.h>
 #include <utils/guc.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <optimizer/var.h>
+#include <optimizer/restrictinfo.h>
+#include <utils/lsyscache.h>
 
 #include "compat-msvc-enter.h"
 #include <optimizer/cost.h>
+#include <tcop/tcopprot.h>
+#include <optimizer/plancat.h>
+#include <catalog/pg_inherits_fn.h>
+#include <nodes/nodeFuncs.h>
 #include "compat-msvc-exit.h"
 
 #include "hypertable_cache.h"
@@ -22,12 +30,18 @@
 #include "planner_utils.h"
 #include "hypertable_insert.h"
 #include "constraint_aware_append.h"
+#include "partitioning.h"
+#include "dimension_slice.h"
+#include "dimension_vector.h"
+#include "chunk.h"
+#include "plan_expand_hypertable.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
 
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
+static get_relation_info_hook_type prev_get_relation_info_hook;
 
 typedef struct ModifyTableWalkerCtx
 {
@@ -142,11 +156,82 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 	}
 }
 
+#define CTE_NAME_HYPERTABLES "hypertable_parent"
+
+static void
+mark_rte_hypertable_parent(RangeTblEntry *rte)
+{
+	rte->inh = false;
+
+	/*
+	 * CTE name is never used for regular tables so use that as a signal that
+	 * we performed the substitution.
+	 */
+	Assert(rte->ctename == NULL);
+	rte->ctename = CTE_NAME_HYPERTABLES;
+}
+
+static bool
+is_rte_hypertable(RangeTblEntry *rte)
+{
+	return rte->inh == false && rte->ctename != NULL && strcmp(rte->ctename, CTE_NAME_HYPERTABLES) == 0;
+}
+
+/* This turns off inheritance on hypertables where we will do chunk
+ * expansion ourselves. This prevents postgres from expanding the inheritance
+ * tree itself. We will expand the chunks in timescaledb_get_relation_info_hook. */
+static bool
+turn_off_inheritance_walker(Node *node, Cache *hc)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Query))
+	{
+		Query	   *query = (Query *) node;
+		ListCell   *lc;
+		int			rti = 1;
+
+		foreach(lc, query->rtable)
+		{
+			RangeTblEntry *rte = lfirst(lc);
+
+			if (rte->inh)
+			{
+				Hypertable *ht = hypertable_cache_get_entry(hc, rte->relid);
+
+				if (NULL != ht && plan_expand_hypertable_valid_hypertable(ht, query, rti, rte))
+					mark_rte_hypertable_parent(rte);
+			}
+			rti++;
+		}
+
+		return query_tree_walker(query, turn_off_inheritance_walker, hc, 0);
+	}
+
+	return expression_tree_walker(node, turn_off_inheritance_walker, hc);
+}
+
 
 static PlannedStmt *
 timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *plan_stmt = NULL;
+
+
+	if (extension_is_loaded() && !guc_disable_optimizations && parse->resultRelation == 0)
+	{
+		Cache	   *hc = hypertable_cache_pin();
+
+		/*
+		 * turn of inheritance on hypertables we will expand ourselves in
+		 * timescaledb_get_relation_info_hook
+		 */
+		turn_off_inheritance_walker((Node *) parse, hc);
+
+		cache_release(hc);
+	}
+
 
 	if (prev_planner_hook != NULL)
 	{
@@ -197,7 +282,7 @@ should_optimize_append(const Path *path)
 
 	/*
 	 * If there are clauses that have mutable functions, this path is ripe for
-	 * execution-time optimization
+	 * execution-time optimization.
 	 */
 	foreach(lc, rel->baserestrictinfo)
 	{
@@ -227,7 +312,6 @@ is_append_parent(RelOptInfo *rel, RangeTblEntry *rte)
 		rel->rtekind == RTE_RELATION &&
 		rte->relkind == RELKIND_RELATION;
 }
-
 
 static void
 timescaledb_set_rel_pathlist(PlannerInfo *root,
@@ -323,6 +407,54 @@ out_release:
 	cache_release(hcache);
 }
 
+/* This hook is meant to editorialize about the information
+ * the planner gets about a relation. We hijack it here
+ * to also expand the append relation for hypertables. */
+static void
+timescaledb_get_relation_info_hook(PlannerInfo *root,
+								   Oid relation_objectid,
+								   bool inhparent,
+								   RelOptInfo *rel)
+{
+	RangeTblEntry *rte;
+
+	if (prev_get_relation_info_hook != NULL)
+		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
+
+	if (!extension_is_loaded())
+		return;
+
+	rte = rt_fetch(rel->relid, root->parse->rtable);
+
+	/*
+	 * We expand the hypertable chunks into an append relation. Previously, in
+	 * `turn_off_inheritance_walker` we suppressed this expansion. This hook
+	 * is really the first one that's called after the initial planner setup
+	 * and so it's convenient to do the expansion here. Note that this is
+	 * after the usual expansion happens in `expand_inherited_tables` (called
+	 * in `subquery_planner`). Note also that `get_relation_info` (the
+	 * function that calls this hook at the end) is the expensive function to
+	 * run on many chunks so the expansion really cannot be called before this
+	 * hook.
+	 */
+	if (is_rte_hypertable(rte))
+	{
+
+		Cache	   *hcache = hypertable_cache_pin();
+		Hypertable *ht = hypertable_cache_get_entry(hcache, rte->relid);
+
+		Assert(ht != NULL);
+
+		plan_expand_hypertable_chunks(ht,
+									  root,
+									  relation_objectid,
+									  inhparent,
+									  rel);
+
+		cache_release(hcache);
+	}
+}
+
 void
 _planner_init(void)
 {
@@ -330,6 +462,9 @@ _planner_init(void)
 	planner_hook = timescaledb_planner;
 	prev_set_rel_pathlist_hook = set_rel_pathlist_hook;
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
+
+	prev_get_relation_info_hook = get_relation_info_hook;
+	get_relation_info_hook = timescaledb_get_relation_info_hook;
 }
 
 void
@@ -337,4 +472,5 @@ _planner_fini(void)
 {
 	planner_hook = prev_planner_hook;
 	set_rel_pathlist_hook = prev_set_rel_pathlist_hook;
+	get_relation_info_hook = prev_get_relation_info_hook;
 }

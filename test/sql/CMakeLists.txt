@@ -33,6 +33,8 @@ set(TEST_FILES
   partitioning.sql
   pg_dump.sql
   plain.sql
+  plan_expand_hypertable_optimized.sql
+  plan_expand_hypertable_results_diff.sql
   reindex.sql
   relocate_extension.sql
   reloptions.sql

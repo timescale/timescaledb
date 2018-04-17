@@ -30,15 +30,15 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
 -- Make sure constraint exclusion works on device column
 EXPLAIN (verbose, costs off)
 SELECT * FROM part_legacy WHERE device = 1;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on public.part_legacy
          Output: part_legacy."time", part_legacy.temp, part_legacy.device
-         Filter: ((part_legacy.device = 1) AND (_timescaledb_internal.get_partition_for_key(part_legacy.device) = 1516350201))
+         Filter: (part_legacy.device = 1)
    ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.temp, _hyper_1_1_chunk.device
-         Filter: ((_hyper_1_1_chunk.device = 1) AND (_timescaledb_internal.get_partition_for_key(_hyper_1_1_chunk.device) = 1516350201))
+         Filter: (_hyper_1_1_chunk.device = 1)
 (7 rows)
 
 CREATE TABLE part_new(time timestamptz, temp float, device int);
@@ -74,15 +74,15 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
 -- Make sure constraint exclusion works on device column
 EXPLAIN (verbose, costs off)
 SELECT * FROM part_new WHERE device = 1;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on public.part_new
          Output: part_new."time", part_new.temp, part_new.device
-         Filter: ((part_new.device = 1) AND (_timescaledb_internal.get_partition_hash(part_new.device) = 242423622))
+         Filter: (part_new.device = 1)
    ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
          Output: _hyper_2_3_chunk."time", _hyper_2_3_chunk.temp, _hyper_2_3_chunk.device
-         Filter: ((_hyper_2_3_chunk.device = 1) AND (_timescaledb_internal.get_partition_hash(_hyper_2_3_chunk.device) = 242423622))
+         Filter: (_hyper_2_3_chunk.device = 1)
 (7 rows)
 
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);

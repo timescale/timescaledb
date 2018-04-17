@@ -6,6 +6,9 @@
 #include <utils/rel.h>
 #include <catalog/indexing.h>
 #include <funcapi.h>
+#include <utils/lsyscache.h>
+#include <catalog/pg_opfamily.h>
+#include <catalog/pg_type.h>
 
 #include "catalog.h"
 #include "dimension_slice.h"
@@ -158,6 +161,84 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 										scankey,
 										3,
+										dimension_vec_tuple_found,
+										&slices,
+										limit,
+										AccessShareLock);
+
+	return dimension_vec_sort(&slices);
+}
+
+/*
+ * Look for all ranges where value > lower_bound and value < upper_bound
+ *
+ */
+DimensionVec *
+dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit)
+{
+	ScanKeyData scankey[3];
+	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	int			nkeys = 1;
+
+	/*
+	 * Perform an index scan for slices matching the dimension's ID and which
+	 * enclose the coordinate.
+	 */
+	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
+	if (start_strategy != InvalidStrategy)
+	{
+		Oid			opno = get_opfamily_member(INTEGER_BTREE_FAM_OID, INT8OID, INT8OID, start_strategy);
+		Oid			proc = get_opcode(opno);
+
+		Assert(OidIsValid(proc));
+
+		ScanKeyInit(&scankey[nkeys++],
+					Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+					start_strategy,
+					proc,
+					Int64GetDatum(start_value));
+	}
+	if (end_strategy != InvalidStrategy)
+	{
+		Oid			opno = get_opfamily_member(INTEGER_BTREE_FAM_OID, INT8OID, INT8OID, end_strategy);
+		Oid			proc = get_opcode(opno);
+
+		Assert(OidIsValid(proc));
+
+		/*
+		 * range_end is stored as exclusive, so add 1 to the value being
+		 * searched. Also avoid overflow
+		 */
+		if (end_value != PG_INT64_MAX)
+		{
+			end_value++;
+
+			/*
+			 * If getting as input INT64_MAX-1, need to remap the incremented
+			 * value back to INT64_MAX-1
+			 */
+			end_value = REMAP_LAST_COORDINATE(end_value);
+		}
+		else
+		{
+			/*
+			 * The point with INT64_MAX gets mapped to INT64_MAX-1 so
+			 * incrementing that gets you to INT_64MAX
+			 */
+			end_value = PG_INT64_MAX;
+		}
+
+		ScanKeyInit(&scankey[nkeys++],
+					Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+					end_strategy,
+					proc,
+					Int64GetDatum(end_value));
+	}
+
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										nkeys,
 										dimension_vec_tuple_found,
 										&slices,
 										limit,
@@ -408,6 +489,7 @@ dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 	{
 		/* Cut "before" the coordinate */
 		to_cut->fd.range_start = other->fd.range_end;
+
 		return true;
 	}
 	else if (other->fd.range_start > coord &&
@@ -415,6 +497,7 @@ dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 	{
 		/* Cut "after" the coordinate */
 		to_cut->fd.range_end = other->fd.range_start;
+
 		return true;
 	}
 
