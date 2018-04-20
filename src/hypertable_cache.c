@@ -8,7 +8,6 @@
 #include "hypertable.h"
 #include "catalog.h"
 #include "cache.h"
-#include "utils.h"
 #include "scanner.h"
 #include "dimension.h"
 #include "tablespace.h"
@@ -33,7 +32,7 @@ typedef struct
 {
 	Oid			relid;
 	Hypertable *hypertable;
-} HypertableNameCacheEntry;
+} HypertableCacheEntry;
 
 
 static Cache *
@@ -49,7 +48,7 @@ hypertable_cache_create()
 		.hctl =
 		{
 			.keysize = sizeof(Oid),
-			.entrysize = sizeof(HypertableNameCacheEntry),
+			.entrysize = sizeof(HypertableCacheEntry),
 			.hcxt = ctx,
 		},
 		.name = "hypertable_cache",
@@ -71,9 +70,9 @@ static Cache *hypertable_cache_current = NULL;
 static bool
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
-	HypertableNameCacheEntry *entry = data;
+	HypertableCacheEntry *entry = data;
 
-	entry->hypertable = hypertable_from_tuple(ti->tuple);
+	entry->hypertable = hypertable_from_tuple(ti->tuple, ti->mctx);
 	return false;
 }
 
@@ -81,7 +80,7 @@ static void *
 hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 {
 	HypertableCacheQuery *hq = (HypertableCacheQuery *) query;
-	HypertableNameCacheEntry *cache_entry = query->result;
+	HypertableCacheEntry *cache_entry = query->result;
 	int			number_found;
 
 	if (NULL == hq->schema)
@@ -90,12 +89,13 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 	if (NULL == hq->table)
 		hq->table = get_rel_name(hq->relid);
 
-	number_found = hypertable_scan(hq->schema,
-								   hq->table,
-								   hypertable_tuple_found,
-								   query->result,
-								   AccessShareLock,
-								   false);
+	number_found = hypertable_scan_with_memory_context(hq->schema,
+													   hq->table,
+													   hypertable_tuple_found,
+													   query->result,
+													   AccessShareLock,
+													   false,
+													   cache_memory_ctx(cache));
 
 	switch (number_found)
 	{
@@ -118,7 +118,6 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 void
 hypertable_cache_invalidate_callback(void)
 {
-	CACHE1_elog(WARNING, "DESTROY hypertable_cache");
 	cache_invalidate(hypertable_cache_current);
 	hypertable_cache_current = hypertable_cache_create();
 }
@@ -153,7 +152,7 @@ hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *schem
 		.schema = schema,
 		.table = table,
 	};
-	HypertableNameCacheEntry *entry = cache_fetch(cache, &query.q);
+	HypertableCacheEntry *entry = cache_fetch(cache, &query.q);
 
 	return entry->hypertable;
 }

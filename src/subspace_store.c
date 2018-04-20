@@ -1,4 +1,5 @@
 #include <postgres.h>
+#include <utils/memutils.h>
 
 #include "dimension.h"
 #include "dimension_slice.h"

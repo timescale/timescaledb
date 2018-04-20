@@ -94,7 +94,7 @@ typedef struct DimensionInfo
 	 (di)->colname != NULL &&											\
 	 ((di)->num_slices_is_set || OidIsValid((di)->interval_datum)))
 
-extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension);
+extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension, MemoryContext mctx);
 extern DimensionSlice *dimension_calculate_default_slice(Dimension *dim, int64 value);
 extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
 extern Dimension *hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
