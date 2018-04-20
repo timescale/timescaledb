@@ -172,6 +172,7 @@ scanner_scan(ScannerCtx *ctx)
 
 	ictx.tinfo.scanrel = ictx.tablerel;
 	ictx.tinfo.desc = tuple_desc;
+	ictx.tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)

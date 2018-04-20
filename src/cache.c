@@ -6,6 +6,7 @@
 /* List of pinned caches. A cache occurs once in this list for every pin
  * taken */
 static List *pinned_caches = NIL;
+
 typedef struct CachePin
 {
 	Cache	   *cache;
@@ -17,7 +18,7 @@ cache_init(Cache *cache)
 {
 	if (cache->htab != NULL)
 	{
-		elog(ERROR, "Cache %s is already initialized", cache->name);
+		elog(ERROR, "cache %s is already initialized", cache->name);
 		return;
 	}
 
@@ -144,9 +145,7 @@ cache_fetch(Cache *cache, CacheQuery *query)
 	HASHACTION	action = cache->create_entry == NULL ? HASH_FIND : HASH_ENTER;
 
 	if (cache->htab == NULL)
-	{
-		elog(ERROR, "Hash %s not initialized", cache->name);
-	}
+		elog(ERROR, "hash %s is not initialized", cache->name);
 
 	query->result = hash_search(cache->htab, cache->get_key(query), action, &found);
 
@@ -155,12 +154,7 @@ cache_fetch(Cache *cache, CacheQuery *query)
 		cache->stats.hits++;
 
 		if (cache->update_entry != NULL)
-		{
-			MemoryContext old = cache_switch_to_memory_context(cache);
-
 			query->result = cache->update_entry(cache, query);
-			MemoryContextSwitchTo(old);
-		}
 	}
 	else
 	{
@@ -168,11 +162,8 @@ cache_fetch(Cache *cache, CacheQuery *query)
 
 		if (cache->create_entry != NULL)
 		{
-			MemoryContext old = cache_switch_to_memory_context(cache);
-
-			query->result = cache->create_entry(cache, query);
-			MemoryContextSwitchTo(old);
 			cache->stats.numelements++;
+			query->result = cache->create_entry(cache, query);
 		}
 	}
 

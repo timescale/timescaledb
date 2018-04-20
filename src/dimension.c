@@ -131,6 +131,8 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 
 	if (d->type == DIMENSION_TYPE_CLOSED)
 	{
+		MemoryContext old;
+
 		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
 		memcpy(&d->fd.partitioning_func_schema,
 			   DatumGetName(values[Anum_dimension_partitioning_func_schema - 1]),
@@ -139,10 +141,12 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 			   DatumGetName(values[Anum_dimension_partitioning_func - 1]),
 			   NAMEDATALEN);
 
+		old = MemoryContextSwitchTo(ti->mctx);
 		d->partitioning = partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
 												   NameStr(d->fd.partitioning_func),
 												   NameStr(d->fd.column_name),
 												   main_table_relid);
+		MemoryContextSwitchTo(old);
 	}
 	else
 		d->fd.interval_length = DatumGetInt64(values[Anum_dimension_interval_length - 1]);
@@ -287,9 +291,9 @@ dimension_calculate_default_slice(Dimension *dim, int64 value)
 }
 
 static Hyperspace *
-hyperspace_create(int32 hypertable_id, Oid main_table_relid, uint16 num_dimensions)
+hyperspace_create(int32 hypertable_id, Oid main_table_relid, uint16 num_dimensions, MemoryContext mctx)
 {
-	Hyperspace *hs = palloc0(HYPERSPACE_SIZE(num_dimensions));
+	Hyperspace *hs = MemoryContextAllocZero(mctx, HYPERSPACE_SIZE(num_dimensions));
 
 	hs->hypertable_id = hypertable_id;
 	hs->main_table_relid = main_table_relid;
@@ -315,7 +319,8 @@ dimension_scan_internal(ScanKeyData *scankey,
 						tuple_found_func tuple_found,
 						void *data,
 						int limit,
-						LOCKMODE lockmode)
+						LOCKMODE lockmode,
+						MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
@@ -328,15 +333,16 @@ dimension_scan_internal(ScanKeyData *scankey,
 		.tuple_found = tuple_found,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
+		.result_mctx = mctx,
 	};
 
 	return scanner_scan(&scanctx);
 }
 
 Hyperspace *
-dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
+dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions, MemoryContext mctx)
 {
-	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions);
+	Hyperspace *space = hyperspace_create(hypertable_id, main_table_relid, num_dimensions, mctx);
 	ScanKeyData scankey[1];
 
 	/* Perform an index scan on hypertable_id. */
@@ -344,7 +350,7 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions)
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	dimension_scan_internal(scankey, 1, dimension_tuple_found,
-							space, num_dimensions, AccessShareLock);
+							space, num_dimensions, AccessShareLock, mctx);
 
 	/* Sort dimensions in ascending order to allow binary search lookups */
 	qsort(space->dimensions, space->num_dimensions, sizeof(Dimension), cmp_dimension_id);
@@ -412,7 +418,8 @@ dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices)
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	return dimension_scan_internal(scankey, 1, dimension_tuple_delete,
-								   &delete_slices, 0, RowExclusiveLock);
+								   &delete_slices, 0, RowExclusiveLock,
+								   CurrentMemoryContext);
 }
 
 static bool

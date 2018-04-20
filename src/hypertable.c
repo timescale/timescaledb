@@ -76,17 +76,17 @@ hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 
 
 Hypertable *
-hypertable_from_tuple(HeapTuple tuple)
+hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx)
 {
 	Hypertable *h;
 	Oid			namespace_oid;
 
-	h = palloc0(sizeof(Hypertable));
+	h = MemoryContextAllocZero(mctx, sizeof(Hypertable));
 	memcpy(&h->fd, GETSTRUCT(tuple), sizeof(FormData_hypertable));
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
-	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions);
-	h->chunk_cache = subspace_store_init(h->space, CurrentMemoryContext, guc_max_cached_chunks_per_hypertable);
+	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);
+	h->chunk_cache = subspace_store_init(h->space, mctx, guc_max_cached_chunks_per_hypertable);
 
 	return h;
 }
@@ -131,16 +131,16 @@ hypertable_id_to_relid(int32 hypertable_id)
 	return relid;
 }
 
-typedef struct ChunkCacheEntry
+typedef struct ChunkStoreEntry
 {
 	MemoryContext mcxt;
 	Chunk	   *chunk;
-} ChunkCacheEntry;
+} ChunkStoreEntry;
 
 static void
-chunk_cache_entry_free(void *cce)
+chunk_store_entry_free(void *cse)
 {
-	MemoryContextDelete(((ChunkCacheEntry *) cce)->mcxt);
+	MemoryContextDelete(((ChunkStoreEntry *) cse)->mcxt);
 }
 
 static int
@@ -151,7 +151,8 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 							   void *scandata,
 							   int limit,
 							   LOCKMODE lock,
-							   bool tuplock)
+							   bool tuplock,
+							   MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
@@ -164,6 +165,7 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 		.tuple_found = on_tuple_found,
 		.lockmode = lock,
 		.scandirection = ForwardScanDirection,
+		.result_mctx = mctx,
 		.tuplock = {
 			.waitpolicy = LockWaitBlock,
 			.lockmode = LockTupleExclusive,
@@ -212,16 +214,18 @@ hypertable_update_form(FormData_hypertable *update)
 										  update,
 										  1,
 										  RowExclusiveLock,
-										  false);
+										  false,
+										  CurrentMemoryContext);
 }
 
 int
-hypertable_scan(const char *schema,
-				const char *table,
-				tuple_found_func tuple_found,
-				void *data,
-				LOCKMODE lockmode,
-				bool tuplock)
+hypertable_scan_with_memory_context(const char *schema,
+									const char *table,
+									tuple_found_func tuple_found,
+									void *data,
+									LOCKMODE lockmode,
+									bool tuplock,
+									MemoryContext mctx)
 {
 	ScanKeyData scankey[2];
 	NameData	schema_name,
@@ -244,7 +248,8 @@ hypertable_scan(const char *schema,
 										  data,
 										  1,
 										  lockmode,
-										  tuplock);
+										  tuplock,
+										  mctx);
 }
 
 int
@@ -296,7 +301,8 @@ hypertable_delete_by_id(int32 hypertable_id)
 										  NULL,
 										  1,
 										  RowExclusiveLock,
-										  false);
+										  false,
+										  CurrentMemoryContext);
 }
 
 
@@ -320,7 +326,8 @@ hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  NULL,
 										  0,
 										  RowExclusiveLock,
-										  false);
+										  false,
+										  CurrentMemoryContext);
 }
 
 static bool
@@ -359,7 +366,8 @@ hypertable_reset_associated_schema_name(const char *associated_schema)
 										  NULL,
 										  0,
 										  RowExclusiveLock,
-										  false);
+										  false,
+										  CurrentMemoryContext);
 }
 
 static bool
@@ -525,7 +533,7 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	Hypertable **entry = data;
 
-	*entry = hypertable_from_tuple(ti->tuple);
+	*entry = hypertable_from_tuple(ti->tuple, ti->mctx);
 	return false;
 }
 
@@ -561,19 +569,40 @@ hypertable_get_by_id(int32 hypertable_id)
 								   &ht,
 								   1,
 								   AccessShareLock,
-								   false);
+								   false,
+								   CurrentMemoryContext);
 	return ht;
+}
+
+static ChunkStoreEntry *
+hypertable_chunk_store_add(Hypertable *h, Chunk *chunk)
+{
+	ChunkStoreEntry *cse;
+	MemoryContext old_mcxt,
+				chunk_mcxt;
+
+	chunk_mcxt = AllocSetContextCreate(subspace_store_mcxt(h->chunk_cache),
+									   "chunk cache entry memory context",
+									   ALLOCSET_SMALL_SIZES);
+
+	/* Add the chunk to the subspace store */
+	old_mcxt = MemoryContextSwitchTo(chunk_mcxt);
+	cse = palloc(sizeof(ChunkStoreEntry));
+	cse->mcxt = chunk_mcxt;
+	cse->chunk = chunk_copy(chunk);
+	subspace_store_add(h->chunk_cache, chunk->cube, cse, chunk_store_entry_free);
+	MemoryContextSwitchTo(old_mcxt);
+
+	return cse;
 }
 
 Chunk *
 hypertable_get_chunk(Hypertable *h, Point *point)
 {
-	ChunkCacheEntry *cce = subspace_store_get(h->chunk_cache, point);
+	ChunkStoreEntry *cse = subspace_store_get(h->chunk_cache, point);
 
-	if (NULL == cce)
+	if (NULL == cse)
 	{
-		MemoryContext old_mcxt,
-					chunk_mcxt;
 		Chunk	   *chunk;
 
 		/*
@@ -590,28 +619,15 @@ hypertable_get_chunk(Hypertable *h, Point *point)
 
 		Assert(chunk != NULL);
 
-		chunk_mcxt = AllocSetContextCreate(subspace_store_mcxt(h->chunk_cache),
-										   "chunk cache memory context",
-										   ALLOCSET_SMALL_SIZES);
-
-		old_mcxt = MemoryContextSwitchTo(chunk_mcxt);
-
-		cce = palloc(sizeof(ChunkCacheEntry));
-		cce->mcxt = chunk_mcxt;
-
-		/* Make a copy which lives in the chunk cache's memory context */
-		chunk = cce->chunk = chunk_copy(chunk);
-
-		subspace_store_add(h->chunk_cache, chunk->cube, cce, chunk_cache_entry_free);
-		MemoryContextSwitchTo(old_mcxt);
+		/* Also add the chunk to the hypertable's chunk store */
+		cse = hypertable_chunk_store_add(h, chunk);
 	}
 
-	Assert(NULL != cce);
-	Assert(NULL != cce->chunk);
-	Assert(MemoryContextContains(cce->mcxt, cce));
-	Assert(MemoryContextContains(cce->mcxt, cce->chunk));
+	Assert(NULL != cse);
+	Assert(NULL != cse->chunk);
+	Assert(MemoryContextContains(cse->mcxt, cse));
 
-	return cce->chunk;
+	return cse->chunk;
 }
 
 bool
