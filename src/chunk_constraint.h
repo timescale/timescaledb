@@ -15,6 +15,7 @@ typedef struct ChunkConstraint
 
 typedef struct ChunkConstraints
 {
+	MemoryContext mctx;
 	int16		capacity;
 	int16		num_constraints;
 	int16		num_dimension_constraints;
@@ -33,8 +34,8 @@ typedef struct DimensionSlice DimensionSlice;
 typedef struct Hypercube Hypercube;
 typedef struct ChunkScanCtx ChunkScanCtx;
 
-extern ChunkConstraints *chunk_constraints_alloc(int size_hint);
-extern ChunkConstraints *chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint);
+extern ChunkConstraints *chunk_constraints_alloc(int size_hint, MemoryContext mctx);
+extern ChunkConstraints *chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint, MemoryContext mctx);
 extern ChunkConstraints *chunk_constraints_copy(ChunkConstraints *constraints);
 extern int	chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx);
 extern int	chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs);

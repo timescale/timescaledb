@@ -21,6 +21,9 @@ extern void _chunk_dispatch_info_fini(void);
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
 
+extern void _chunk_cache_init(void);
+extern void _chunk_cache_fini(void);
+
 extern void _cache_invalidate_init(void);
 extern void _cache_invalidate_fini(void);
 
@@ -54,6 +57,7 @@ _PG_init(void)
 	_chunk_dispatch_info_init();
 	_cache_init();
 	_hypertable_cache_init();
+	_chunk_cache_init();
 	_cache_invalidate_init();
 	_planner_init();
 	_event_trigger_init();
@@ -76,6 +80,7 @@ _PG_fini(void)
 	_planner_fini();
 	_cache_invalidate_fini();
 	_hypertable_cache_fini();
+	_chunk_cache_fini();
 	_cache_fini();
 	_chunk_dispatch_info_fini();
 }

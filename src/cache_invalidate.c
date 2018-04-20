@@ -10,6 +10,7 @@
 #include "compat.h"
 #include "extension.h"
 #include "hypertable_cache.h"
+#include "chunk_cache.h"
 
 /*
  * Notes on the way cache invalidation works.
@@ -46,6 +47,7 @@ static void
 cache_invalidate_all(void)
 {
 	hypertable_cache_invalidate_callback();
+	chunk_cache_invalidate_callback();
 }
 
 /*
@@ -70,6 +72,16 @@ cache_invalidate_callback(Datum arg, Oid relid)
 
 	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
 		hypertable_cache_invalidate_callback();
+	else if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_CHUNK))
+	{
+		chunk_cache_invalidate_callback();
+
+		/*
+		 * Need to invalidate hypertable cache as well since each hypertable
+		 * keeps references to its chunks
+		 */
+		hypertable_cache_invalidate_callback();
+	}
 }
 
 TS_FUNCTION_INFO_V1(timescaledb_invalidate_cache);

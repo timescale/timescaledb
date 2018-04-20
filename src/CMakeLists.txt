@@ -37,6 +37,7 @@ set(HEADERS
   chunk_dispatch_plan.h
   chunk_dispatch_state.h
   chunk.h
+  chunk_cache.h
   chunk_index.h
   chunk_insert_state.h
   compat.h
@@ -73,6 +74,7 @@ set(SOURCES
   cache_invalidate.c
   catalog.c
   chunk.c
+  chunk_cache.c
   chunk_constraint.c
   chunk_dispatch.c
   chunk_dispatch_info.c

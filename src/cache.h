@@ -9,6 +9,14 @@ typedef struct CacheQuery
 {
 	void	   *result;
 	void	   *data;
+	/* The memory context the query was initiated on */
+	MemoryContext mctx;
+
+	/*
+	 * If entry is not found, only allocate a new slot, but do not fill it.
+	 * Defaults to false.
+	 */
+	bool		enteronly;
 } CacheQuery;
 
 typedef struct CacheStats
@@ -38,7 +46,7 @@ typedef struct Cache
 
 extern void cache_init(Cache *cache);
 extern void cache_invalidate(Cache *cache);
-extern void *cache_fetch(Cache *cache, CacheQuery *ctx);
+extern void *cache_fetch(Cache *cache, CacheQuery *query);
 extern bool cache_remove(Cache *cache, void *key);
 
 extern MemoryContext cache_memory_ctx(Cache *cache);

@@ -33,14 +33,15 @@
 	((sizeof(ChunkConstraint) * num_constraints))
 
 ChunkConstraints *
-chunk_constraints_alloc(int size_hint)
+chunk_constraints_alloc(int size_hint, MemoryContext mctx)
 {
-	ChunkConstraints *ccs = palloc(sizeof(ChunkConstraints));
+	ChunkConstraints *ccs = MemoryContextAlloc(mctx, sizeof(ChunkConstraints));
 
+	ccs->mctx = mctx;
 	ccs->capacity = size_hint + DEFAULT_EXTRA_CONSTRAINTS_SIZE;
 	ccs->num_constraints = 0;
 	ccs->num_dimension_constraints = 0;
-	ccs->constraints = palloc0(CHUNK_CONSTRAINTS_SIZE(ccs->capacity));
+	ccs->constraints = MemoryContextAllocZero(mctx, CHUNK_CONSTRAINTS_SIZE(ccs->capacity));
 
 	return ccs;
 }
@@ -60,11 +61,15 @@ chunk_constraints_copy(ChunkConstraints *ccs)
 static void
 chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 {
+	MemoryContext old;
+
 	if (new_capacity <= ccs->capacity)
 		return;
 
+	old = MemoryContextSwitchTo(ccs->mctx);
 	ccs->capacity = new_capacity;
 	ccs->constraints = repalloc(ccs->constraints, CHUNK_CONSTRAINTS_SIZE(new_capacity));
+	MemoryContextSwitchTo(old);
 }
 
 static
@@ -363,7 +368,8 @@ chunk_constraint_scan_internal(int indexid,
 							   tuple_found_func tuple_found,
 							   tuple_found_func tuple_filter,
 							   void *data,
-							   LOCKMODE lockmode)
+							   LOCKMODE lockmode,
+							   MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
@@ -376,6 +382,7 @@ chunk_constraint_scan_internal(int indexid,
 		.filter = tuple_filter,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
+		.result_mctx = mctx,
 	};
 
 	return scanner_scan(&scanctx);
@@ -389,7 +396,8 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 										   tuple_found_func tuple_found,
 										   tuple_found_func tuple_filter,
 										   void *data,
-										   LOCKMODE lockmode)
+										   LOCKMODE lockmode,
+										   MemoryContext mctx)
 {
 	ScanKeyData scankey[1];
 
@@ -405,7 +413,8 @@ chunk_constraint_scan_by_chunk_id_internal(int32 chunk_id,
 										  tuple_found,
 										  tuple_filter,
 										  data,
-										  lockmode);
+										  lockmode,
+										  mctx);
 }
 
 static int
@@ -437,7 +446,8 @@ chunk_constraint_scan_by_chunk_id_constraint_name_internal(int32 chunk_id,
 										  tuple_found,
 										  tuple_filter,
 										  data,
-										  lockmode);
+										  lockmode,
+										  CurrentMemoryContext);
 }
 
 /*
@@ -446,16 +456,17 @@ chunk_constraint_scan_by_chunk_id_constraint_name_internal(int32 chunk_id,
  * Returns a set of chunk constraints.
  */
 ChunkConstraints *
-chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint)
+chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, MemoryContext mctx)
 {
-	ChunkConstraints *constraints = chunk_constraints_alloc(num_constraints_hint);
+	ChunkConstraints *constraints = chunk_constraints_alloc(num_constraints_hint, mctx);
 	int			num_found;
 
 	num_found = chunk_constraint_scan_by_chunk_id_internal(chunk_id,
 														   chunk_constraint_tuple_found,
 														   NULL,
 														   constraints,
-														   AccessShareLock);
+														   AccessShareLock,
+														   mctx);
 
 	if (num_found != constraints->num_constraints)
 		elog(ERROR, "Unexpected number of constraints found for chunk %d", chunk_id);
@@ -523,7 +534,8 @@ scan_by_dimension_slice_id(int32 dimension_slice_id,
 										  tuple_found,
 										  chunk_constraint_for_dimension_slice,
 										  data,
-										  AccessShareLock);
+										  AccessShareLock,
+										  CurrentMemoryContext);
 }
 
 /*
@@ -704,7 +716,6 @@ chunk_constraint_delete_tuple(TupleInfo *ti, void *data)
 
 	if (info->drop_constraint && OidIsValid(constrobj.objectId))
 		performDeletion(&constrobj, DROP_RESTRICT, 0);
-
 	return true;
 }
 
@@ -742,7 +753,8 @@ chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 													  chunk_constraint_delete_tuple,
 													  hypertable_constraint_tuple_filter,
 													  &info,
-													  RowExclusiveLock);
+													  RowExclusiveLock,
+													  CurrentMemoryContext);
 }
 
 int
@@ -778,7 +790,8 @@ chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs)
 													  chunk_constraint_delete_tuple,
 													  NULL,
 													  &info,
-													  RowExclusiveLock);
+													  RowExclusiveLock,
+													  CurrentMemoryContext);
 }
 
 int
@@ -803,7 +816,8 @@ chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 										  chunk_constraint_delete_tuple,
 										  NULL,
 										  &info,
-										  RowExclusiveLock);
+										  RowExclusiveLock,
+										  CurrentMemoryContext);
 }
 
 void
@@ -864,7 +878,9 @@ chunk_constraint_rename_hypertable_tuple(TupleInfo *ti, void *data)
 	values[Anum_chunk_constraint_constraint_name - 1] = NameGetDatum(&new_chunk_constraint_name);
 	repl[Anum_chunk_constraint_constraint_name - 1] = true;
 
-	chunk_constraint_rename_on_chunk_table(chunk_id, NameStr(*old_chunk_constraint_name), NameStr(new_chunk_constraint_name));
+	chunk_constraint_rename_on_chunk_table(chunk_id,
+										   NameStr(*old_chunk_constraint_name),
+										   NameStr(new_chunk_constraint_name));
 
 	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
 	catalog_update(ti->scanrel, tuple);
@@ -887,5 +903,6 @@ chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldnam
 													  chunk_constraint_rename_hypertable_tuple,
 													  hypertable_constraint_tuple_filter,
 													  &info,
-													  RowExclusiveLock);
+													  RowExclusiveLock,
+													  CurrentMemoryContext);
 }

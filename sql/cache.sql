@@ -2,6 +2,7 @@
 -- metadata caches kept in C. Please look at cache_invalidate.c for a
 -- description of how this works.
 CREATE TABLE IF NOT EXISTS  _timescaledb_cache.cache_inval_hypertable();
+CREATE TABLE IF NOT EXISTS  _timescaledb_cache.cache_inval_chunk();
 
 -- This is pretty subtle. We create this dummy cache_inval_extension table
 -- solely for the purpose of getting a relcache invalidation event when it is

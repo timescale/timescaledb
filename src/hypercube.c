@@ -130,10 +130,15 @@ hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id)
  * Given a set of constraints, build the corresponding hypercube.
  */
 Hypercube *
-hypercube_from_constraints(ChunkConstraints *constraints)
+hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 {
-	Hypercube  *hc = hypercube_alloc(constraints->num_dimension_constraints);
+	Hypercube  *hc;
 	int			i;
+	MemoryContext old;
+
+	old = MemoryContextSwitchTo(mctx);
+	hc = hypercube_alloc(constraints->num_dimension_constraints);
+	MemoryContextSwitchTo(old);
 
 	for (i = 0; i < constraints->num_constraints; i++)
 	{
@@ -144,7 +149,7 @@ hypercube_from_constraints(ChunkConstraints *constraints)
 			DimensionSlice *slice;
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
-			slice = dimension_slice_scan_by_id(cc->fd.dimension_slice_id);
+			slice = dimension_slice_scan_by_id(cc->fd.dimension_slice_id, mctx);
 			Assert(slice != NULL);
 			hc->slices[hc->num_slices++] = slice;
 		}

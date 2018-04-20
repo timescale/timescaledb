@@ -25,7 +25,7 @@ typedef struct Hypercube
 extern Hypercube *hypercube_alloc(int16 num_dimensions);
 extern void hypercube_free(Hypercube *hc);
 extern void hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
-extern Hypercube *hypercube_from_constraints(ChunkConstraints *constraints);
+extern Hypercube *hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx);
 extern Hypercube *hypercube_calculate_from_point(Hyperspace *hs, Point *p);
 extern bool hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
 extern DimensionSlice *hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id);
