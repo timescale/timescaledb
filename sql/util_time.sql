@@ -24,6 +24,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.time_literal_sql(
     RETURNS text LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
+    ret text;
 BEGIN
     IF time_value IS NULL THEN
         RETURN format('%L', NULL);
@@ -39,6 +40,9 @@ BEGIN
         RETURN format('TIMESTAMPTZ %1$L', _timescaledb_internal.to_timestamp(time_value)); -- microseconds
       WHEN 'DATE'::regtype THEN
         RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
+      ELSE
+         EXECUTE 'SELECT format(''%L'', $1::' || column_type::text || ')' into ret using time_value;
+         RETURN ret;
     END CASE;
 END
 $BODY$;

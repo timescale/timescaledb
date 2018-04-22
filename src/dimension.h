@@ -6,6 +6,7 @@
 #include <access/htup_details.h>
 
 #include "catalog.h"
+#include "utils.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
@@ -41,7 +42,7 @@ typedef struct Dimension
 	(type == TIMESTAMPOID || type == TIMESTAMPTZOID || type == DATEOID)
 
 #define IS_VALID_OPEN_DIM_TYPE(type)					\
-	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type))
+	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || type_is_int8_binary_compatible(type))
 
 /*
  * A hyperspace defines how to partition in a N-dimensional space.
