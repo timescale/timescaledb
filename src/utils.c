@@ -19,6 +19,8 @@
 #include <utils/syscache.h>
 #include <utils/relcache.h>
 #include <utils/fmgroids.h>
+#include <catalog/pg_cast.h>
+#include <parser/parse_coerce.h>
 
 #include "utils.h"
 #include "compat.h"
@@ -195,6 +197,8 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 
 			return DatumGetInt64(res);
 		default:
+			if (type_is_int8_binary_compatible(type_oid))
+				return DatumGetInt64(time_val);
 			if (!failure_ok)
 				elog(ERROR, "unkown time type OID %d", type_oid);
 			return -1;
@@ -472,4 +476,23 @@ inheritance_parent_relid(Oid relid)
 	heap_close(catalog, AccessShareLock);
 
 	return parent;
+}
+
+
+bool
+type_is_int8_binary_compatible(Oid sourcetype)
+{
+	HeapTuple	tuple;
+	Form_pg_cast castForm;
+	bool		result;
+
+	tuple = SearchSysCache2(CASTSOURCETARGET,
+							ObjectIdGetDatum(sourcetype),
+							ObjectIdGetDatum(INT8OID));
+	if (!HeapTupleIsValid(tuple))
+		return false;			/* no cast */
+	castForm = (Form_pg_cast) GETSTRUCT(tuple);
+	result = castForm->castmethod == COERCION_METHOD_BINARY;
+	ReleaseSysCache(tuple);
+	return result;
 }

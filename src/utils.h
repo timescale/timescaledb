@@ -7,6 +7,9 @@
 #include <catalog/pg_proc.h>
 #include <utils/datetime.h>
 
+
+extern bool type_is_int8_binary_compatible(Oid sourcetype);
+
 /*
  * Convert a column value into the internal time representation.
  */
