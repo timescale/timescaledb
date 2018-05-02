@@ -285,7 +285,7 @@ CREATE TABLE location (
 CREATE OR REPLACE FUNCTION create_vehicle_trigger_fn()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
-BEGIN 
+BEGIN
     INSERT INTO vehicles VALUES(NEW.vehicle_id, NULL, NULL) ON CONFLICT DO NOTHING;
     RETURN NEW;
 END
@@ -298,14 +298,11 @@ BEGIN
     BEGIN
         INSERT INTO color VALUES(NEW.color_id, 'n/a');
     EXCEPTION WHEN unique_violation THEN
-			-- Nothing to do, just continue
-	END;
+            -- Nothing to do, just continue
+    END;
     RETURN NEW;
 END
 $BODY$;
-CREATE TRIGGER create_vehicle_trigger
-    BEFORE INSERT OR UPDATE ON location
-    FOR EACH ROW EXECUTE PROCEDURE create_vehicle_trigger_fn();
 CREATE TRIGGER create_color_trigger
     BEFORE INSERT OR UPDATE ON location
     FOR EACH ROW EXECUTE PROCEDURE create_color_trigger_fn();
@@ -322,6 +319,14 @@ SELECT create_hypertable('color', 'color_id', chunk_time_interval=>10);
  
 (1 row)
 
+-- Test that we can create and use triggers with another user
+GRANT TRIGGER, INSERT, SELECT, UPDATE ON location TO :ROLE_DEFAULT_PERM_USER_2;
+GRANT SELECT, INSERT, UPDATE ON color TO :ROLE_DEFAULT_PERM_USER_2;
+GRANT SELECT, INSERT, UPDATE ON vehicles TO :ROLE_DEFAULT_PERM_USER_2;
+\c single :ROLE_DEFAULT_PERM_USER_2;
+CREATE TRIGGER create_vehicle_trigger
+    BEFORE INSERT OR UPDATE ON location
+    FOR EACH ROW EXECUTE PROCEDURE create_vehicle_trigger_fn();
 INSERT INTO location VALUES('2017-01-01 01:02:03', 1, 1, 40.7493226,-73.9771259);
 INSERT INTO location VALUES('2017-01-01 01:02:04', 1, 20, 24.7493226,-73.9771259);
 INSERT INTO location VALUES('2017-01-01 01:02:03', 23, 1, 40.7493226,-73.9771269);
