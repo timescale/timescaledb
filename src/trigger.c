@@ -1,10 +1,12 @@
 #include <postgres.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/builtins.h>
 #include <tcop/tcopprot.h>
 #include <commands/trigger.h>
 #include <access/xact.h>
+#include <miscadmin.h>
 
 #include "trigger.h"
 #include "compat.h"
@@ -56,8 +58,16 @@ trigger_by_name(Oid relid, const char *trigname, bool missing_ok)
 	return trigger;
 }
 
-/* all creation of triggers on chunks should go through this. Strictly speaking,
- * this deparsing is not necessary in all cases, but this keeps things consistent. */
+/*
+ * Replicate a trigger on a chunk.
+ *
+ * Given a trigger OID (e.g., a Hypertable trigger), create the equivalent
+ * trigger on a chunk.
+ *
+ * Note: it is assumed that this function is called under a user that has
+ * permissions to modify the chunk since CreateTrigger() performs permissions
+ * checks.
+ */
 void
 trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name)
 {
@@ -118,7 +128,7 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 			Trigger    *trigger = &trigdesc->triggers[i];
 
 			if (!on_trigger(trigger, arg))
-				return;
+				break;
 		}
 	}
 
@@ -145,10 +155,44 @@ create_trigger_handler(Trigger *trigger, void *arg)
 	return true;
 }
 
+/*
+ * Create all hypertable triggers on a new chunk.
+ *
+ * Since chunk creation typically happens automatically on hypertable INSERT, we
+ * need to execute the trigger creation under the role of the hypertable owner.
+ * This is due to the use of CreateTrigger(), which does permissions checks. The
+ * user role inserting might have INSERT permissions, but not TRIGGER
+ * permissions (needed to create triggers on a table).
+ *
+ * We assume that the owner of the Hypertable is also the owner of the new
+ * chunk.
+ */
 void
 trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 {
+	int			sec_ctx;
+	Oid			saved_uid;
+	HeapTuple	tuple;
+	Form_pg_class form;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(ht->main_table_relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", ht->main_table_relid);
+
+	form = (Form_pg_class) GETSTRUCT(tuple);
+
+	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
+
+	if (saved_uid != form->relowner)
+		SetUserIdAndSecContext(form->relowner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+
 	for_each_trigger(ht->main_table_relid, create_trigger_handler, chunk);
+
+	if (saved_uid != form->relowner)
+		SetUserIdAndSecContext(saved_uid, sec_ctx);
+
+	ReleaseSysCache(tuple);
 }
 
 #if PG10
