@@ -48,11 +48,9 @@ static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
 static bool
 extension_loader_present()
 {
-	char	   *guc_value = GetConfigOptionByName(GUC_LOADER_PRESENT_NAME, NULL, true);
+	void	  **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
 
-	if (guc_value != NULL && strcmp(guc_value, "on") == 0)
-		return true;
-	return false;
+	return (*presentptr != NULL && *((bool *) *presentptr));
 }
 
 void

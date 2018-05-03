@@ -5,6 +5,7 @@
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include <parser/analyze.h>
+#include <access/parallel.h>
 #include "../compat-msvc-exit.h"
 #include <utils/guc.h>
 #include <utils/inval.h>
@@ -42,6 +43,7 @@ extern void PGDLLEXPORT _PG_fini(void);
 
 /* was the versioned-extension loaded*/
 static bool loaded = false;
+static bool loader_present = true;
 
 #define MAX_VERSION_LEN (NAMEDATALEN+1)
 static char soversion[MAX_VERSION_LEN];
@@ -216,7 +218,9 @@ post_analyze_hook(ParseState *pstate, Query *query)
 static void
 extension_mark_loader_present()
 {
-	SetConfigOption(GUC_LOADER_PRESENT_NAME, "on", PGC_USERSET, PGC_S_SESSION);
+	void	  **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
+
+	*presentptr = &loader_present;
 }
 
 void
@@ -315,6 +319,15 @@ do_load()
 static void inline
 extension_check()
 {
+	/*
+	 * Disable load in parallel workers since they will have the shared
+	 * libraries of the leader process loaded as part of ParallelWorkerMain().
+	 * We don't want to be in the business of preloading stuff in the workers
+	 * that's not part of the leader
+	 */
+	if (IsParallelWorker())
+		return;
+
 	if (!loaded)
 	{
 		enum ExtensionState state = extension_current_state();
