@@ -196,3 +196,12 @@ CREATE EXTENSION timescaledb VERSION 'mock-2';
 \c single :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 \dx
+
+--make sure parallel workers started after a 'DISCARD ALL' work
+CREATE TABLE test (i int, j double precision);
+INSERT INTO test SELECT x, x+0.1 FROM generate_series(1,100) AS x;
+
+DISCARD ALL;
+SET force_parallel_mode = 'on';
+SET max_parallel_workers_per_gather = 1;
+SELECT count(*) FROM test;

@@ -26,7 +26,7 @@
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
 #define MAX_SO_NAME_LEN NAMEDATALEN+NAMEDATALEN+1+1 /* extname+"-"+version */
 
-#define GUC_LOADER_PRESENT_NAME "timescaledb.loader_present"
+#define RENDEZVOUS_LOADER_PRESENT_NAME "timescaledb.loader_present"
 
 enum ExtensionState
 {

@@ -520,3 +520,22 @@ WARNING:  mock post_analyze_hook "mock-2"
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
 (2 rows)
 
+--make sure parallel workers started after a 'DISCARD ALL' work
+CREATE TABLE test (i int, j double precision);
+WARNING:  mock post_analyze_hook "mock-2"
+INSERT INTO test SELECT x, x+0.1 FROM generate_series(1,100) AS x;
+WARNING:  mock post_analyze_hook "mock-2"
+DISCARD ALL;
+WARNING:  mock post_analyze_hook "mock-2"
+SET force_parallel_mode = 'on';
+WARNING:  mock post_analyze_hook "mock-2"
+SET max_parallel_workers_per_gather = 1;
+WARNING:  mock post_analyze_hook "mock-2"
+SELECT count(*) FROM test;
+WARNING:  mock post_analyze_hook "mock-2"
+WARNING:  mock init "mock-2"
+ count 
+-------
+   100
+(1 row)
+

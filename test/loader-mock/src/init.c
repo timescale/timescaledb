@@ -7,6 +7,7 @@
 #include <utils/inval.h>
 #include <parser/analyze.h>
 #include <nodes/print.h>
+#include <access/parallel.h>
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
@@ -39,7 +40,7 @@ post_analyze_hook(ParseState *pstate, Query *query)
 {
 	if (extension_is_loaded())
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
-	if (prev_post_parse_analyze_hook != NULL)
+	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
 		elog(ERROR, "The extension called with a loader should always have a NULL prev hook");
 	if (BROKEN && !creating_extension)
 		elog(ERROR, "mock broken " STR(TIMESCALEDB_VERSION_MOD));
@@ -55,7 +56,7 @@ _PG_init(void)
 	extension_check_version(TIMESCALEDB_VERSION_MOD);
 	elog(WARNING, "mock init " STR(TIMESCALEDB_VERSION_MOD));
 	prev_post_parse_analyze_hook = post_parse_analyze_hook;
-	if (prev_post_parse_analyze_hook != NULL)
+	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
 		elog(ERROR, "The extension loaded with a loader should always have a NULL prev hook");
 	post_parse_analyze_hook = post_analyze_hook;
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
