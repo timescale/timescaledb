@@ -4,6 +4,24 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.9.2 (2018-05-04)
+
+**High-level changes**
+* Fixed handling of `DISCARD ALL` command when parallel workers are involved, which sometimes caused the extension to complain it was not preloaded
+* User permission bug fix where users locating TRIGGER permissions in a database could not insert data into a hypertable
+* Fixes for some issues with 32-bit architectures
+
+**Notable commits**
+* [256b394] Fix parsing of GrantRoleStmt
+* [b78953b] Fix datum conversion typo
+* [c7283ef] Fix bug with extension loader when DISCARD ALL is executed
+* [fe20e48] Fix chunk creation with user that lacks TRIGGER permission
+
+**Thanks**
+* @gumshoes, @manigandham, @wallies, & @cjrh for reporting a problem where sometimes the extension would appear to not be preloaded when it actually was
+* @thaxy for reporting a permissions issue when user creating a hypertable lacks TRIGGER permission
+* @bertmelis for reporting some bugs with 32-bit architectures
+
 ## 0.9.1 (2018-03-26)
 
 **High-level changes**
