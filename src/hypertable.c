@@ -861,7 +861,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 	DimensionInfo time_dim_info = {
 		.table_relid = table_relid,
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
-		.interval_datum = PG_ARGISNULL(6) ? DatumGetInt64(-1) : PG_GETARG_DATUM(6),
+		.interval_datum = PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
 		.interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
 	};
 	DimensionInfo space_dim_info = {
