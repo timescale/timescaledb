@@ -282,9 +282,12 @@ revoke_role_tuple_found(TupleInfo *ti, void *data)
 
 	foreach(lc_role, stmt->grantee_roles)
 	{
-		const char *rolename = strVal(lfirst(lc_role));
-		Oid			grantee = get_role_oid(rolename, true);
-
+		RoleSpec   *rolespec = lfirst_node(RoleSpec, lc_role);
+#if PG96
+		Oid			grantee = get_rolespec_oid((Node *) rolespec, true);
+#else
+		Oid			grantee = get_rolespec_oid(rolespec, true);
+#endif
 		/* Only interested in revokes on table owners */
 		if (grantee != relowner)
 			continue;
