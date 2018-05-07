@@ -11,6 +11,9 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE devi
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
 
+CREATE VIEW "two_Partitions_view" AS ( SELECT * FROM PUBLIC."two_Partitions");
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions_view" WHERE device_id = 'dev2';
+
 --test integer partition key
 CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
 SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);

@@ -894,7 +894,7 @@ chunk_scan_find(int indexid,
 									nkeys,
 									chunk_tuple_found,
 									chunk,
-									num_constraints,
+									0,
 									AccessShareLock);
 
 	switch (num_found)

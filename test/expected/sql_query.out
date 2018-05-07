@@ -70,14 +70,13 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE devi
  Append
    ->  Seq Scan on public."two_Partitions"
          Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-         Filter: (("two_Partitions".device_id = 'dev2'::text) AND (_timescaledb_internal.get_partition_hash("two_Partitions".device_id) = 405750566))
+         Filter: ("two_Partitions".device_id = 'dev2'::text)
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
          Recheck Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
-         Filter: (_timescaledb_internal.get_partition_hash(_hyper_1_4_chunk.device_id) = 405750566)
          ->  Bitmap Index Scan on "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
-(10 rows)
+(9 rows)
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
                                                                                         QUERY PLAN                                                                                        
@@ -85,14 +84,13 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE devi
  Append
    ->  Seq Scan on public."two_Partitions"
          Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-         Filter: (("two_Partitions".device_id = 'dev2'::text) AND (_timescaledb_internal.get_partition_hash("two_Partitions".device_id) = 405750566))
+         Filter: ("two_Partitions".device_id = 'dev2'::text)
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
          Recheck Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
-         Filter: (_timescaledb_internal.get_partition_hash(_hyper_1_4_chunk.device_id) = 405750566)
          ->  Bitmap Index Scan on "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"
                Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
-(10 rows)
+(9 rows)
 
 EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
                                                                                         QUERY PLAN                                                                                        
@@ -100,14 +98,28 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev
  Append
    ->  Seq Scan on public."two_Partitions"
          Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
-         Filter: (('dev2'::text = "two_Partitions".device_id) AND (_timescaledb_internal.get_partition_hash("two_Partitions".device_id) = 405750566))
+         Filter: ('dev2'::text = "two_Partitions".device_id)
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
          Recheck Cond: ('dev2'::text = _hyper_1_4_chunk.device_id)
-         Filter: (_timescaledb_internal.get_partition_hash(_hyper_1_4_chunk.device_id) = 405750566)
          ->  Bitmap Index Scan on "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"
                Index Cond: ('dev2'::text = _hyper_1_4_chunk.device_id)
-(10 rows)
+(9 rows)
+
+CREATE VIEW "two_Partitions_view" AS ( SELECT * FROM PUBLIC."two_Partitions");
+EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions_view" WHERE device_id = 'dev2';
+                                                                                        QUERY PLAN                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Seq Scan on public."two_Partitions"
+         Output: "two_Partitions"."timeCustom", "two_Partitions".device_id, "two_Partitions".series_0, "two_Partitions".series_1, "two_Partitions".series_2, "two_Partitions".series_bool
+         Filter: ("two_Partitions".device_id = 'dev2'::text)
+   ->  Bitmap Heap Scan on _timescaledb_internal._hyper_1_4_chunk
+         Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.series_0, _hyper_1_4_chunk.series_1, _hyper_1_4_chunk.series_2, _hyper_1_4_chunk.series_bool
+         Recheck Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
+         ->  Bitmap Index Scan on "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"
+               Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
+(9 rows)
 
 --test integer partition key
 CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
@@ -136,19 +148,18 @@ SELECT * FROM "int_part" WHERE object_id = 1;
 
 --make sure this touches only one partititon
 EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on public.int_part
          Output: int_part."time", int_part.object_id, int_part.temp
-         Filter: ((int_part.object_id = 1) AND (_timescaledb_internal.get_partition_hash(int_part.object_id) = 242423622))
+         Filter: (int_part.object_id = 1)
    ->  Bitmap Heap Scan on _timescaledb_internal._hyper_2_5_chunk
          Output: _hyper_2_5_chunk."time", _hyper_2_5_chunk.object_id, _hyper_2_5_chunk.temp
          Recheck Cond: (_hyper_2_5_chunk.object_id = 1)
-         Filter: (_timescaledb_internal.get_partition_hash(_hyper_2_5_chunk.object_id) = 242423622)
          ->  Bitmap Index Scan on _hyper_2_5_chunk_int_part_object_id_time_idx
                Index Cond: (_hyper_2_5_chunk.object_id = 1)
-(10 rows)
+(9 rows)
 
 --TODO: handle this later?
 --EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
