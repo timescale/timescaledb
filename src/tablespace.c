@@ -282,7 +282,7 @@ revoke_role_tuple_found(TupleInfo *ti, void *data)
 
 	foreach(lc_role, stmt->grantee_roles)
 	{
-		RoleSpec   *rolespec = lfirst_node(RoleSpec, lc_role);
+		RoleSpec   *rolespec = lfirst(lc_role);
 #if PG96
 		Oid			grantee = get_rolespec_oid((Node *) rolespec, true);
 #else
