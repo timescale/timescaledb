@@ -11,9 +11,12 @@
 #include <utils/inval.h>
 #include <nodes/print.h>
 
+
+
 #define EXTENSION_NAME "timescaledb"
 
 #include "../extension_utils.c"
+#include "timescale_bgw_launcher.h"
 
 #define PG96 ((PG_VERSION_NUM >= 90600) && (PG_VERSION_NUM < 100000))
 #define PG10 ((PG_VERSION_NUM >= 100000) && (PG_VERSION_NUM < 110000))
@@ -233,6 +236,7 @@ _PG_init(void)
 	extension_mark_loader_present();
 
 	elog(INFO, "timescaledb loaded");
+	register_timescale_bgw_launcher();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME, "Disable the loading of the actual extension",
