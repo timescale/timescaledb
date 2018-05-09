@@ -1,8 +1,19 @@
 set(HEADERS
+  bgw_message_queue.h
+  bgw_counter.h
+  bgw_launcher.h
+  bgw_interface.h
+  loader.h
+  ../compat.h
+  ../extension_constants.h
 )
 
 set(SOURCES
-  loader.c)
+  loader.c
+  bgw_message_queue.c
+  bgw_counter.c
+  bgw_launcher.c
+  bgw_interface.c)
 
 add_library(${PROJECT_NAME}-loader MODULE ${SOURCES} ${HEADERS})
 
