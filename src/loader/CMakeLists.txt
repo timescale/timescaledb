@@ -1,8 +1,10 @@
 set(HEADERS
+timescale_bgw_launcher.h
 )
 
 set(SOURCES
-  loader.c)
+  loader.c
+  timescale_bgw_launcher.c)
 
 add_library(${PROJECT_NAME}-loader MODULE ${SOURCES} ${HEADERS})
 
