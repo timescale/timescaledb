@@ -59,6 +59,7 @@ set(TEST_FILES
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
+    bgw_launcher.sql
     loader.sql)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
 
