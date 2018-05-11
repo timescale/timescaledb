@@ -484,6 +484,13 @@ catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 		case DIMENSION_SLICE:
 			if (operation == CMD_UPDATE || operation == CMD_DELETE)
 			{
+				relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_CHUNK);
+				CacheInvalidateRelcacheByRelid(relid);
+
+				/*
+				 * Hypertable cache entries have embedded chunk caches, so
+				 * need to invalidate the hypertable cache as well
+				 */
 				relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 				CacheInvalidateRelcacheByRelid(relid);
 			}

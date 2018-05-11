@@ -32,6 +32,7 @@
 #include "process_utility.h"
 #include "catalog.h"
 #include "chunk.h"
+#include "chunk_cache.h"
 #include "chunk_index.h"
 #include "compat.h"
 #include "copy.h"
@@ -208,7 +209,13 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 	return true;
 }
 
-typedef void (*process_chunk_t) (Hypertable *ht, Oid chunk_relid, void *arg);
+typedef struct ChunkProcessContext
+{
+	Hypertable *ht;
+	Cache	   *ccache;
+} ChunkProcessContext;
+
+typedef void (*process_chunk_t) (ChunkProcessContext *ctx, Oid chunk_relid, void *arg);
 
 /*
  * Applies a function to each chunk of a hypertable.
@@ -222,17 +229,27 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	List	   *chunks;
 	ListCell   *lc;
 	int			n = 0;
+	ChunkProcessContext ctx = {
+		.ht = ht,
+	};
 
 	if (NULL == ht)
 		return -1;
+
+	ctx.ccache = chunk_cache_pin();
+	/* Allow chunk cache to work cross-commit, for, e.g., vacuuming */
+	ctx.ccache->release_on_commit = false;
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
 	foreach(lc, chunks)
 	{
-		process_chunk(ht, lfirst_oid(lc), arg);
+		process_chunk(&ctx, lfirst_oid(lc), arg);
 		n++;
 	}
+
+	ctx.ccache->release_on_commit = true;
+	cache_release(ctx.ccache);
 
 	return n;
 }
@@ -243,18 +260,25 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 	Cache	   *hcache = hypertable_cache_pin();
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
 	int			ret;
+	ChunkProcessContext ctx = {
+		.ht = ht,
+		.ccache = chunk_cache_pin(),
+	};
 
 	if (NULL == ht)
 	{
 		cache_release(hcache);
+		cache_release(ctx.ccache);
 		return -1;
 	}
+
 
 	hcache->release_on_commit = false;
 	ret = foreach_chunk(ht, process_chunk, arg);
 	hcache->release_on_commit = true;
 
 	cache_release(hcache);
+	cache_release(ctx.ccache);
 
 	return ret;
 }
@@ -273,14 +297,15 @@ typedef struct VacuumCtx
 
 /* Vacuums a single chunk */
 static void
-vacuum_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+vacuum_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
-	VacuumCtx  *ctx = (VacuumCtx *) arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	VacuumCtx  *vctx = (VacuumCtx *) arg;
+	Chunk	   *chunk = chunk_cache_get(ctx->ccache, chunk_relid, ctx->ht->space->num_dimensions);
 
-	ctx->stmt->relation->relname = NameStr(chunk->fd.table_name);
-	ctx->stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
-	ExecVacuum(ctx->stmt, ctx->is_toplevel);
+	Assert(chunk != NULL);
+	vctx->stmt->relation->relname = NameStr(chunk->fd.table_name);
+	vctx->stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
+	ExecVacuum(vctx->stmt, vctx->is_toplevel);
 }
 
 /* Vacuums each chunk of a hypertable */
@@ -322,7 +347,7 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 }
 
 static void
-process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_truncate_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	TruncateStmt *stmt = arg;
 	ObjectAddress objaddr = {
@@ -402,7 +427,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 
 static void
-process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_drop_table_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	DropStmt   *stmt = arg;
 	ObjectAddress objaddr = {
@@ -543,10 +568,10 @@ process_drop(Node *parsetree)
 }
 
 static void
-reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+reindex_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	ReindexStmt *stmt = (ReindexStmt *) arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = chunk_cache_get(ctx->ccache, chunk_relid, ctx->ht->space->num_dimensions);
 
 	switch (stmt->kind)
 	{
@@ -667,19 +692,23 @@ process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
 		chunk_index_rename_parent(ht, relid, stmt->newname);
 	else
 	{
-		Chunk	   *chunk = chunk_get_by_relid(tablerelid, 0, false);
+		Cache	   *chunk_cache = chunk_cache_pin();
+		Chunk	   *chunk = chunk_cache_get(chunk_cache, tablerelid, 0);
 
 		if (NULL != chunk)
 			chunk_index_rename(chunk, relid, stmt->newname);
+
+		cache_release(chunk_cache);
 	}
 }
 
 static void
-rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
+rename_hypertable_constraint(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	RenameStmt *stmt = (RenameStmt *) arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = chunk_cache_get(ctx->ccache, chunk_relid, ctx->ht->space->num_dimensions);
 
+	Assert(NULL != chunk);
 	chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
 }
 
@@ -751,7 +780,7 @@ process_rename(Node *parsetree)
 }
 
 static void
-process_altertable_change_owner_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_altertable_change_owner_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	AlterTableCmd *cmd = arg;
 	Oid			roleid = get_rolespec_oid(cmd->newowner, false);
@@ -768,11 +797,12 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 }
 
 static void
-process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_add_constraint_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	Oid			hypertable_constraint_oid = *((Oid *) arg);
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = chunk_cache_get(ctx->ccache, chunk_relid, ctx->ht->space->num_dimensions);
 
+	Assert(NULL != chunk);
 	chunk_constraint_create_on_chunk(chunk, hypertable_constraint_oid);
 }
 
@@ -928,13 +958,14 @@ typedef struct CreateIndexInfo
  * "parent" index on the hypertable.
  */
 static void
-process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_index_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
 	IndexStmt  *stmt = transformIndexStmt(chunk_relid, info->stmt, NULL);
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = chunk_cache_get(ctx->ccache, chunk_relid, ctx->ht->space->num_dimensions);
 
-	chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, ht->fd.id, info->obj.objectId);
+	Assert(NULL != chunk);
+	chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, ctx->ht->fd.id, info->obj.objectId);
 }
 
 static void
@@ -1266,7 +1297,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
  * Call with foreach_chunk().
  */
 static void
-process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_altertable_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	AlterTableCmd *cmd = arg;
 
@@ -1553,10 +1584,10 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 }
 
 static void
-create_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+create_trigger_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	CreateTrigStmt *stmt = arg;
-	Oid			trigger_oid = get_trigger_oid(ht->main_table_relid, stmt->trigname, false);
+	Oid			trigger_oid = get_trigger_oid(ctx->ht->main_table_relid, stmt->trigname, false);
 	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
 	char	   *relname = get_rel_name(chunk_relid);
 
@@ -1685,10 +1716,12 @@ process_ddl_command_end(CollectedCommand *cmd)
 }
 
 static void
-process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_drop_constraint_on_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	char	   *hypertable_constraint_name = arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = chunk_cache_get(ctx->ccache, chunk_relid, ctx->ht->space->num_dimensions);
+
+	Assert(NULL != chunk);
 
 	/* drop both metadata and table; sql_drop won't be called recursively */
 	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name, true, true);
@@ -1719,12 +1752,13 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 	}
 	else
 	{
-		Chunk	   *chunk = chunk_get_by_name(constraint->schema, constraint->table, 0, false);
+		Cache	   *ccache = chunk_cache_pin();
+		Chunk	   *chunk = chunk_cache_get_by_name(ccache, constraint->schema, constraint->table, 0);
 
 		if (NULL != chunk)
-		{
 			chunk_constraint_delete_by_constraint_name(chunk->fd.id, constraint->constraint_name, true, false);
-		}
+
+		cache_release(ccache);
 	}
 }
 
@@ -1781,7 +1815,7 @@ process_drop_schema(EventTriggerDropObject *obj)
 }
 
 static void
-process_drop_trigger_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
+process_drop_trigger_on_chunk(ChunkProcessContext *ctx, Oid chunk_relid, void *arg)
 {
 	const char *trigger_name = arg;
 	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, true);

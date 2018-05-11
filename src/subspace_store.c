@@ -1,4 +1,5 @@
 #include <postgres.h>
+#include <utils/memutils.h>
 
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -66,7 +67,8 @@ subspace_store_internal_node_descendants(SubspaceStoreInternalNode *node, int in
 SubspaceStore *
 subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items)
 {
-	MemoryContext old = MemoryContextSwitchTo(mcxt);
+	MemoryContext storemctx = AllocSetContextCreate(mcxt, "chunk store memory context", ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old = MemoryContextSwitchTo(storemctx);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
 
 	/*
@@ -78,7 +80,7 @@ subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items)
 	sst->origin = subspace_store_internal_node_create(space->num_dimensions == 1);
 	sst->num_dimensions = space->num_dimensions;
 	sst->max_items = max_items;
-	sst->mcxt = mcxt;
+	sst->mcxt = storemctx;
 	MemoryContextSwitchTo(old);
 	return sst;
 }

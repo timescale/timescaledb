@@ -160,6 +160,9 @@ scanner_scan(ScannerCtx *ctx)
 		.sctx = ctx,
 	};
 
+	if (NULL == ctx->result_mctx)
+		ctx->result_mctx = CurrentMemoryContext;
+
 	if (OidIsValid(ctx->index))
 		scanner = &scanners[ScannerTypeIndex];
 	else
@@ -172,6 +175,7 @@ scanner_scan(ScannerCtx *ctx)
 
 	ictx.tinfo.scanrel = ictx.tablerel;
 	ictx.tinfo.desc = tuple_desc;
+	ictx.tinfo.mctx = ctx->result_mctx;
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)

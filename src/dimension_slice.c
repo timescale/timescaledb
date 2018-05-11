@@ -113,7 +113,8 @@ dimension_slice_scan_limit_internal(int indexid,
 									tuple_found_func on_tuple_found,
 									void *scandata,
 									int limit,
-									LOCKMODE lockmode)
+									LOCKMODE lockmode,
+									MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanCtx = {
@@ -126,6 +127,7 @@ dimension_slice_scan_limit_internal(int indexid,
 		.tuple_found = on_tuple_found,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
+		.result_mctx = mctx,
 	};
 
 	return scanner_scan(&scanCtx);
@@ -161,7 +163,8 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 										dimension_vec_tuple_found,
 										&slices,
 										limit,
-										AccessShareLock);
+										AccessShareLock,
+										CurrentMemoryContext);
 
 	return dimension_vec_sort(&slices);
 }
@@ -190,7 +193,8 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 										dimension_vec_tuple_found,
 										&slices,
 										limit,
-										AccessShareLock);
+										AccessShareLock,
+										CurrentMemoryContext);
 
 	return dimension_vec_sort(&slices);
 }
@@ -210,7 +214,8 @@ dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 										dimension_vec_tuple_found,
 										&slices,
 										limit,
-										AccessShareLock);
+										AccessShareLock,
+										CurrentMemoryContext);
 
 	return dimension_vec_sort(&slices);
 }
@@ -253,7 +258,8 @@ dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constrain
 											   dimension_slice_tuple_delete,
 											   &delete_constraints,
 											   0,
-											   RowExclusiveLock);
+											   RowExclusiveLock,
+											   CurrentMemoryContext);
 }
 
 int
@@ -273,7 +279,8 @@ dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
 											   dimension_slice_tuple_delete,
 											   &delete_constraints,
 											   1,
-											   RowExclusiveLock);
+											   RowExclusiveLock,
+											   CurrentMemoryContext);
 }
 
 static bool
@@ -302,7 +309,8 @@ dimension_slice_scan_for_existing(DimensionSlice *slice)
 				BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(slice->fd.range_end));
 
 	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
-										scankey, 3, dimension_slice_fill, &slice, 1, AccessShareLock);
+										scankey, 3, dimension_slice_fill, &slice, 1,
+										AccessShareLock, CurrentMemoryContext);
 
 	return slice;
 }
@@ -311,13 +319,15 @@ static bool
 dimension_slice_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionSlice **slice = data;
+	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
 
 	*slice = dimension_slice_from_tuple(ti->tuple);
+	MemoryContextSwitchTo(old);
 	return false;
 }
 
 DimensionSlice *
-dimension_slice_scan_by_id(int32 dimension_slice_id)
+dimension_slice_scan_by_id(int32 dimension_slice_id, MemoryContext mctx)
 {
 	DimensionSlice *slice = NULL;
 	ScanKeyData scankey[1];
@@ -331,7 +341,8 @@ dimension_slice_scan_by_id(int32 dimension_slice_id)
 										dimension_slice_tuple_found,
 										&slice,
 										1,
-										AccessShareLock);
+										AccessShareLock,
+										mctx);
 
 	return slice;
 }
@@ -408,6 +419,7 @@ dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 	{
 		/* Cut "before" the coordinate */
 		to_cut->fd.range_start = other->fd.range_end;
+
 		return true;
 	}
 	else if (other->fd.range_start > coord &&
@@ -415,6 +427,7 @@ dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 	{
 		/* Cut "after" the coordinate */
 		to_cut->fd.range_end = other->fd.range_start;
+
 		return true;
 	}
 

@@ -28,7 +28,7 @@ extern DimensionVec *dimension_slice_scan_limit(int32 dimension_id, int64 coordi
 extern DimensionVec *dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit);
 extern Hypercube *dimension_slice_point_scan(Hyperspace *space, int64 point[]);
 extern DimensionSlice *dimension_slice_scan_for_existing(DimensionSlice *slice);
-extern DimensionSlice *dimension_slice_scan_by_id(int32 dimension_slice_id);
+extern DimensionSlice *dimension_slice_scan_by_id(int32 dimension_slice_id, MemoryContext mctx);
 extern DimensionVec *dimension_slice_scan_by_dimension(int32 dimension_id, int limit);
 extern int	dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints);
 extern int	dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints);

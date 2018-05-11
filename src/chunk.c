@@ -104,22 +104,6 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 	chunk->hypertable_relid = parent_relid(chunk->table_id);
 }
 
-Chunk *
-chunk_create_from_tuple(HeapTuple tuple, int16 num_constraints)
-{
-	Chunk	   *chunk = palloc0(sizeof(Chunk));
-
-	chunk_fill(chunk, tuple);
-
-	if (num_constraints > 0)
-	{
-		chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints);
-		chunk->cube = hypercube_from_constraints(chunk->constraints);
-	}
-
-	return chunk;
-}
-
 /*-
  * Align a chunk's hypercube in 'aligned' dimensions.
  *
@@ -532,7 +516,7 @@ chunk_create_stub(int32 id, int16 num_constraints)
 	chunk->fd.id = id;
 
 	if (num_constraints > 0)
-		chunk->constraints = chunk_constraints_alloc(num_constraints);
+		chunk->constraints = chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
 
 	return chunk;
 }
@@ -590,7 +574,7 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 		elog(ERROR, "No chunk found with ID %d", chunk_stub->fd.id);
 
 	if (NULL == chunk_stub->cube)
-		chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints);
+		chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints, CurrentMemoryContext);
 	else
 
 		/*
@@ -831,7 +815,8 @@ chunk_find(Hyperspace *hs, Point *p)
 		 * constraints to also get the inherited constraints.
 		 */
 		chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id,
-															   hs->num_dimensions);
+															   hs->num_dimensions,
+															   CurrentMemoryContext);
 	}
 
 	return chunk;
@@ -861,7 +846,8 @@ chunk_scan_internal(int indexid,
 					tuple_found_func tuple_found,
 					void *data,
 					int limit,
-					LOCKMODE lockmode)
+					LOCKMODE lockmode,
+					MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	ctx = {
@@ -874,6 +860,7 @@ chunk_scan_internal(int indexid,
 		.limit = limit,
 		.lockmode = lockmode,
 		.scandirection = ForwardScanDirection,
+		.result_mctx = mctx,
 	};
 
 	return scanner_scan(&ctx);
@@ -884,9 +871,10 @@ chunk_scan_find(int indexid,
 				ScanKeyData scankey[],
 				int nkeys,
 				int16 num_constraints,
+				MemoryContext mctx,
 				bool fail_if_not_found)
 {
-	Chunk	   *chunk = palloc0(sizeof(Chunk));
+	Chunk	   *chunk = MemoryContextAllocZero(mctx, sizeof(Chunk));
 	int			num_found;
 
 	num_found = chunk_scan_internal(indexid,
@@ -895,7 +883,8 @@ chunk_scan_find(int indexid,
 									chunk_tuple_found,
 									chunk,
 									num_constraints,
-									AccessShareLock);
+									AccessShareLock,
+									mctx);
 
 	switch (num_found)
 	{
@@ -908,8 +897,8 @@ chunk_scan_find(int indexid,
 		case 1:
 			if (num_constraints > 0)
 			{
-				chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints);
-				chunk->cube = hypercube_from_constraints(chunk->constraints);
+				chunk->constraints = chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints, mctx);
+				chunk->cube = hypercube_from_constraints(chunk->constraints, mctx);
 			}
 			break;
 		default:
@@ -920,8 +909,11 @@ chunk_scan_find(int indexid,
 }
 
 Chunk *
-chunk_get_by_name(const char *schema_name, const char *table_name,
-				  int16 num_constraints, bool fail_if_not_found)
+chunk_get_by_name_with_memory_context(const char *schema_name,
+									  const char *table_name,
+									  int16 num_constraints,
+									  MemoryContext mctx,
+									  bool fail_if_not_found)
 {
 	NameData	schema,
 				table;
@@ -939,7 +931,7 @@ chunk_get_by_name(const char *schema_name, const char *table_name,
 				F_NAMEEQ, NameGetDatum(&table));
 
 	return chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
-						   num_constraints, fail_if_not_found);
+						   num_constraints, mctx, fail_if_not_found);
 }
 
 Chunk *
@@ -967,8 +959,12 @@ chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
 	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber,
 				F_INT4EQ, id);
 
-	return chunk_scan_find(CHUNK_ID_INDEX, scankey, 1,
-						   num_constraints, fail_if_not_found);
+	return chunk_scan_find(CHUNK_ID_INDEX,
+						   scankey,
+						   1,
+						   num_constraints,
+						   CurrentMemoryContext,
+						   fail_if_not_found);
 }
 
 bool
@@ -988,7 +984,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(ti->tuple);
 	CatalogSecurityContext sec_ctx;
-	ChunkConstraints *ccs = chunk_constraints_alloc(2);
+	ChunkConstraints *ccs = chunk_constraints_alloc(2, ti->mctx);
 	int			i;
 
 	chunk_constraint_delete_by_chunk_id(form->id, ccs);
@@ -1027,7 +1023,8 @@ chunk_delete_by_name(const char *schema, const char *table)
 
 	return chunk_scan_internal(CHUNK_SCHEMA_NAME_INDEX, scankey, 2,
 							   chunk_tuple_delete, NULL, 0,
-							   RowExclusiveLock);
+							   RowExclusiveLock,
+							   CurrentMemoryContext);
 }
 
 int
@@ -1049,7 +1046,8 @@ chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	return chunk_scan_internal(CHUNK_HYPERTABLE_ID_INDEX, scankey, 1,
 							   chunk_tuple_delete, NULL, 0,
-							   RowExclusiveLock);
+							   RowExclusiveLock,
+							   CurrentMemoryContext);
 }
 
 static bool

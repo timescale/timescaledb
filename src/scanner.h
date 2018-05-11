@@ -29,6 +29,12 @@ typedef struct TupleInfo
 	 */
 	HTSU_Result lockresult;
 	int			count;
+
+	/*
+	 * The memory context (optionally) set initially in the ScannerCtx. This
+	 * can be used to allocate data on in the tuple handle function.
+	 */
+	MemoryContext mctx;
 } TupleInfo;
 
 typedef bool (*tuple_found_func) (TupleInfo *ti, void *data);
@@ -45,6 +51,8 @@ typedef struct ScannerCtx
 								 * less means no limit */
 	bool		want_itup;
 	LOCKMODE	lockmode;
+	MemoryContext result_mctx;	/* The memory context to allocate the result
+								 * on */
 	struct
 	{
 		LockTupleMode lockmode;

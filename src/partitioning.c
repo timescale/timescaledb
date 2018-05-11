@@ -140,6 +140,7 @@ partitioning_info_create(const char *schema,
 						 Oid relid)
 {
 	PartitioningInfo *pinfo;
+	TypeCacheEntry *tce;
 	Oid			columntype,
 				varcollid,
 				funccollid = InvalidOid;
@@ -160,9 +161,9 @@ partitioning_info_create(const char *schema,
 
 	/* Lookup the type cache entry to access the hash function for the type */
 	columntype = get_atttype(relid, pinfo->column_attnum);
-	pinfo->typcache_entry = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
+	tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-	if (pinfo->typcache_entry->hash_proc == InvalidOid)
+	if (tce->hash_proc == InvalidOid)
 		elog(ERROR, "could not find hash function for type %u", columntype);
 
 	partitioning_func_set_func_fmgr(&pinfo->partfunc);
