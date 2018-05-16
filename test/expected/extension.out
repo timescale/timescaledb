@@ -9,8 +9,8 @@ WHERE OID IN (
     deptype = 'e' and classid = 'pg_catalog.pg_proc'::regclass
 ) AND pronamespace = 'public'::regnamespace
 ORDER BY proname;
-             proname             
----------------------------------
+             proname              
+----------------------------------
  add_dimension
  attach_tablespace
  chunk_relation_size
@@ -21,6 +21,7 @@ ORDER BY proname;
  drop_chunks
  first
  histogram
+ hypertable_approximate_row_count
  hypertable_relation_size
  hypertable_relation_size_pretty
  indexes_relation_size
@@ -30,5 +31,5 @@ ORDER BY proname;
  set_number_partitions
  show_tablespaces
  time_bucket
-(19 rows)
+(20 rows)
 
