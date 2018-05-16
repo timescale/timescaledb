@@ -416,3 +416,55 @@ BEGIN
         FROM indexes_relation_size(main_table) s;
 END;
 $BODY$;
+
+
+-- Convenience function to return approximate row count
+--
+-- main_table - hypertable to get approximate row count for; if NULL, get count
+--              for all hypertables
+--
+-- Returns:
+-- schema_name      - Schema name of the hypertable
+-- table_name       - Table name of the hypertable
+-- row_estimate     - Estimated number of rows according to catalog tables
+CREATE OR REPLACE FUNCTION hypertable_approximate_row_count(
+    main_table REGCLASS = NULL
+)
+    RETURNS TABLE (schema_name NAME,
+                   table_name NAME,
+                   row_estimate BIGINT
+                  ) LANGUAGE PLPGSQL VOLATILE
+    AS
+$BODY$
+<<main>>
+DECLARE
+        table_name       NAME;
+        schema_name      NAME;
+BEGIN
+        IF main_table IS NOT NULL THEN
+            SELECT relname, nspname
+            INTO STRICT table_name, schema_name
+            FROM pg_class c
+            INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+            WHERE c.OID = main_table;
+        END IF;
+
+-- Thanks to @fvannee on Github for providing the initial draft
+-- of this query
+        RETURN QUERY
+        SELECT h.schema_name,
+            h.table_name,
+            row_estimate.row_estimate
+        FROM _timescaledb_catalog.hypertable h
+        CROSS JOIN LATERAL (
+            SELECT sum(cl.reltuples)::BIGINT AS row_estimate
+            FROM _timescaledb_catalog.chunk c
+            JOIN pg_class cl ON cl.relname = c.table_name
+            WHERE c.hypertable_id = h.id
+            GROUP BY h.schema_name, h.table_name
+        ) row_estimate
+        WHERE (main.table_name IS NULL OR h.table_name = main.table_name)
+        AND (main.schema_name IS NULL OR h.schema_name = main.schema_name)
+        ORDER BY h.schema_name, h.table_name;
+END
+$BODY$;

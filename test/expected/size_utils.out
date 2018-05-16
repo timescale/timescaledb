@@ -139,3 +139,38 @@ SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned_2');
         8 | "_timescaledb_internal"."_hyper_3_8_chunk" | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Sat Nov 27 16:00:00 2004 PST','Mon Dec 27 16:00:00 2004 PST')","[1073741823,)"} | 8192 bytes | 32 kB      |            | 40 kB
 (2 rows)
 
+CREATE TABLE approx_count(time TIMESTAMP, value int);
+SELECT * FROM create_hypertable('approx_count', 'time');
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO approx_count VALUES('2004-01-01 10:00:01', 1);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:02', 2);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:03', 3);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:04', 4);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:05', 5);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:06', 6);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:07', 7);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:08', 8);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:09', 9);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:10', 10);
+ANALYZE approx_count;
+SELECT * FROM hypertable_approximate_row_count('approx_count');
+ schema_name |  table_name  | row_estimate 
+-------------+--------------+--------------
+ public      | approx_count |           10
+(1 row)
+
+-- all hypertables
+SELECT * FROM hypertable_approximate_row_count();
+ schema_name |       table_name        | row_estimate 
+-------------+-------------------------+--------------
+ public      | approx_count            |           10
+ public      | timestamp_partitioned   |            0
+ public      | timestamp_partitioned_2 |            0
+ public      | two_Partitions          |            0
+(4 rows)
+
