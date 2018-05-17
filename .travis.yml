@@ -6,7 +6,7 @@ services:
   - docker
 env:
   # PG_VERSION (docker) and PG_GIT_TAG (Git) should be the same
-  - PG_VERSION=9.6.5 PG_GIT_TAG=REL9_6_5
+  - PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
   - PG_VERSION=10.0 PG_GIT_TAG=REL_10_0
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL
