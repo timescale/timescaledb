@@ -133,13 +133,7 @@ extension_is_transitioning()
 	 */
 	if (creating_extension)
 	{
-		char	   *current_extension_name = get_extension_name(CurrentExtensionObject);
-
-		if (NULL == current_extension_name)
-			elog(ERROR, "current extension name is missing");
-
-		if (strcmp(EXTENSION_NAME, current_extension_name) == 0)
-			return true;
+		return get_extension_oid(EXTENSION_NAME, true) == CurrentExtensionObject;
 	}
 	return false;
 }
