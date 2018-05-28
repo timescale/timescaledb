@@ -376,7 +376,6 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 	path = (ConstraintAwareAppendPath *) newNode(sizeof(ConstraintAwareAppendPath), T_CustomPath);
 	path->cpath.path.pathtype = T_CustomScan;
 	path->cpath.path.rows = subpath->rows;
-	path->cpath.path.startup_cost = subpath->startup_cost;
 	path->cpath.path.parent = subpath->parent;
 	path->cpath.path.pathkeys = subpath->pathkeys;
 	path->cpath.path.param_info = subpath->param_info;
@@ -405,7 +404,7 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 				AppendPath *append = (AppendPath *) subpath;
 				int subpaths_length = list_length(append->subpaths);
 				if (subpaths_length > 1)
-					subpath->total_cost /= subpaths_length;
+					subpath->total_cost = subpath->startup_cost + (subpath->total_cost - subpath->startup_cost) / (subpaths_length - 1);
 				append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
 				break;
 			}
@@ -414,7 +413,12 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 				MergeAppendPath *append = (MergeAppendPath *) subpath;
 				int subpaths_length = list_length(append->subpaths);
 				if (subpaths_length > 1)
-					subpath->total_cost /= subpaths_length;
+				{
+					Cost prev_cost = subpath->startup_cost;
+					subpath->startup_cost /= subpaths_length;
+					subpath->total_cost =
+						subpath->startup_cost + (subpath->total_cost - prev_cost) / subpaths_length;
+				}
 				append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
 				break;
 			}
@@ -424,7 +428,8 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 	}
 
 	path->cpath.path.total_cost = subpath->total_cost;
-
+	path->cpath.path.startup_cost = subpath->startup_cost;
+	
 	appinfo = linitial(root->append_rel_list);
 	relid = root->simple_rte_array[appinfo->child_relid]->relid;
 
