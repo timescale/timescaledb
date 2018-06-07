@@ -63,6 +63,7 @@ SELECT test_remote_txn_persistent_record('loopback');
 -- ===================================================================
 
 --successfull transaction
+SET timescaledb.enable_2pc = false;
 BEGIN;
     SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
@@ -112,3 +113,194 @@ SELECT count(*) FROM pg_prepared_xacts;
 BEGIN;
     SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 PREPARE TRANSACTION 'test-2';
+
+
+-- ===================================================================
+-- 2 pc tests
+-- ===================================================================
+--undo changes from 1-pc tests
+DELETE FROM  "S 1"."T 1" where "C 1" >= 20000;
+SET timescaledb.enable_2pc = true;
+
+--simple commit
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10001;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--simple abort
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ROLLBACK;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 11001;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--constraint violation should fail the txn
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+
+--the next few statements inject faults before the commit. They should all fail
+--and be rolled back with no unresolved state
+BEGIN;
+	SELECT remote_node_killer_set_event('pre-prepare-transaction', 'loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10002;
+SELECT count(*) FROM pg_prepared_xacts;
+
+BEGIN;
+	SELECT remote_node_killer_set_event('waiting-prepare-transaction', 'loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10003;
+
+--during waiting-prepare-transaction the data node process could die before or after
+--executing the prepare transaction. To be safe to either case rollback using heal_server.
+SELECT true FROM _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT count(*) from _timescaledb_catalog.remote_txn;
+
+
+--the following only breaks stuff in post-commit so commit should succeed
+--but leave transaction in an unresolved state.
+BEGIN;
+	SELECT remote_node_killer_set_event('post-prepare-transaction', 'loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+--unresolved state shown here
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10004;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--this fails because heal cannot run inside txn block
+BEGIN;
+	SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+COMMIT;
+
+select count(*) from _timescaledb_catalog.remote_txn;
+
+--this resolves the previous txn
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10004;
+SELECT count(*) FROM pg_prepared_xacts;
+--cleanup also happened
+select count(*) from _timescaledb_catalog.remote_txn;
+
+BEGIN;
+	SELECT remote_node_killer_set_event('pre-commit-prepared', 'loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+--unresolved state shown here
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10006;
+SELECT count(*) FROM pg_prepared_xacts;
+--this resolves the previous txn
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10006;
+SELECT count(*) FROM pg_prepared_xacts;
+select count(*) from _timescaledb_catalog.remote_txn;
+
+BEGIN;
+	SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+--at this point the commit prepared might or might not have been executed before
+--the data node process was killed.
+--but in any case, healing the server will bring it into a known state
+SELECT true FROM _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10005;
+SELECT count(*) FROM pg_prepared_xacts;
+select count(*) from _timescaledb_catalog.remote_txn;
+
+--test prepare transactions. Note that leaked prepared stmts should be detected by `remote_txn_check_for_leaked_prepared_statements`
+--so we should be fine if we don't see any WARNINGS.
+BEGIN;
+    SELECT remote_exec('loopback', $$ PREPARE prep_1 AS SELECT 1 $$);
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+
+BEGIN;
+    SAVEPOINT save_1;
+        SELECT remote_exec('loopback', $$ PREPARE prep_1 AS SELECT 1 $$);
+        SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    ROLLBACK TO SAVEPOINT save_1;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 81;
+
+
+--Make the primary key DEFERRABLE and INITIALLY DEFERRED
+--this is a way to force errors to happen during PREPARE TRANSACTION
+--since pkey constraint violations would not occur on the INSERT command
+--but rather are deferred till PREPARE TRANSACTION happens.
+ALTER TABLE "S 1"."T 1" DROP CONSTRAINT t1_pkey,
+ADD CONSTRAINT t1_pkey PRIMARY KEY ("C 1") DEFERRABLE INITIALLY DEFERRED;
+
+--test ABORT TRANSACTION on failure in PREPARE TRANSACTION.
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--test ROLLBACK TRANSACTION
+--this has an error on the second connection. So should force conn1 to prepare transaction
+--ok and then have the txn fail on conn2. Thus conn1 would do a ROLLBACK TRANSACTION.
+--conn2 would do a ABORT TRANSACTION.
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10010,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10010;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--below will fail the abort and thus ROLLBACK TRANSACTION will never be called leaving
+--a prepared_xact that should be rolled back by heal server
+BEGIN;
+	SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10011,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 10011;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--test simple subtrans abort.
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+	SAVEPOINT save_1;
+    	SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+	ROLLBACK TO SAVEPOINT save_1;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10011;
+SELECT count(*) FROM pg_prepared_xacts;
+
+--test comm error in subtrans abort
+BEGIN;
+	SELECT remote_node_killer_set_event('subxact-abort', 'loopback');
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10017,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10018,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+	SAVEPOINT save_1;
+    	SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+	ROLLBACK TO SAVEPOINT save_1;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10019,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+    SELECT remote_exec('loopback2', $$ INSERT INTO "S 1"."T 1" VALUES (10020,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+COMMIT;
+
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" > 10016;
+SELECT count(*) FROM pg_prepared_xacts;
+
+
+--block preparing transactions on the frontend
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+PREPARE TRANSACTION 'test-1';
+
+

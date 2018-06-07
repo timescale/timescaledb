@@ -53,6 +53,7 @@ TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
 char *ts_telemetry_cloud = NULL;
+TSDLLEXPORT bool ts_guc_enable_2pc;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -185,6 +186,17 @@ _guc_init(void)
 							 "Enable group by reordering",
 							 "Enable group by clause reordering for continuous aggregates",
 							 &ts_guc_enable_cagg_reorder_groupby,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_2pc",
+							 "Enable two-phase commit",
+							 "Enable two-phase commit on distributed hypertables",
+							 &ts_guc_enable_2pc,
 							 true,
 							 PGC_USERSET,
 							 0,
