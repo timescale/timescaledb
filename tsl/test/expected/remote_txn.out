@@ -1,0 +1,192 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Timescale License,
+-- see LICENSE-TIMESCALE at the top of the tsl directory.
+-- ===================================================================
+-- create FDW objects
+-- ===================================================================
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION remote_node_killer_set_event(text, text)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_remote_node_killer_set_event'
+LANGUAGE C;
+CREATE OR REPLACE FUNCTION remote_exec(srv_name name, sql_code text)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
+LANGUAGE C;
+SELECT true FROM add_server('loopback', port=>current_setting('port')::integer);
+ bool 
+------
+ t
+(1 row)
+
+SELECT true FROM add_server('loopback2', port=>current_setting('port')::integer);
+ bool 
+------
+ t
+(1 row)
+
+-- ===================================================================
+-- create objects used through FDW loopback server
+-- ===================================================================
+CREATE SCHEMA "S 1";
+CREATE TABLE "S 1"."T 1" (
+	"C 1" int NOT NULL,
+	c2 int NOT NULL,
+	c3 text,
+	c4 timestamptz,
+	c5 timestamp,
+	c6 varchar(10),
+	c7 char(10),
+	CONSTRAINT t1_pkey PRIMARY KEY ("C 1")
+);
+ANALYZE "S 1"."T 1";
+INSERT INTO "S 1"."T 1"
+	SELECT id,
+	       id % 10,
+	       to_char(id, 'FM00000'),
+	       '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
+	       '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
+	       id % 10,
+	       id % 10
+	FROM generate_series(1, 1000) id;
+\set ON_ERROR_STOP 0
+-- ===================================================================
+-- 1 pc tests
+-- ===================================================================
+--successfull transaction
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ remote_exec 
+-------------
+ 
+(1 row)
+
+COMMIT;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20001;
+ count 
+-------
+     1
+(1 row)
+
+--aborted transaction
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ remote_exec 
+-------------
+ 
+(1 row)
+
+ROLLBACK;
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20002;
+ count 
+-------
+     0
+(1 row)
+
+--constraint violation
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ERROR:  remote connection error: duplicate key value violates unique constraint "t1_pkey"
+COMMIT;
+--the next few statements inject faults before the commit. They should all fail
+--and be rolled back with no unresolved state
+BEGIN;
+	SELECT remote_node_killer_set_event('pre-commit', 'loopback');
+ remote_node_killer_set_event 
+------------------------------
+ 
+(1 row)
+
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ remote_exec 
+-------------
+ 
+(1 row)
+
+COMMIT;
+WARNING:  kill event: pre-commit
+WARNING:  failure aborting remote transaction during local abort
+ERROR:  remote connection error: terminating connection due to administrator command
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20003;
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     0
+(1 row)
+
+BEGIN;
+	SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
+ remote_node_killer_set_event 
+------------------------------
+ 
+(1 row)
+
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ remote_exec 
+-------------
+ 
+(1 row)
+
+COMMIT;
+WARNING:  kill event: waiting-commit
+WARNING:  failure aborting remote transaction during local abort
+ERROR:  remote connection error: terminating connection due to administrator command
+--during waiting-commit the data node process could die before or after
+--executing the commit on the remote node. So the behaviour here is non-deterministic
+--this is the bad part of 1-pc transactions.
+--there are no prepared txns in either case
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     0
+(1 row)
+
+--fail the connection before the abort
+BEGIN;
+	SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+ remote_node_killer_set_event 
+------------------------------
+ 
+(1 row)
+
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ remote_exec 
+-------------
+ 
+(1 row)
+
+ROLLBACK;
+WARNING:  kill event: pre-abort
+WARNING:  remote connection error: terminating connection due to administrator command
+WARNING:  remote connection error: server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+WARNING:  failure aborting remote transaction during local abort
+SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     0
+(1 row)
+
+--block preparing transactions on the frontend
+BEGIN;
+    SELECT remote_exec('loopback', $$ INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+ remote_exec 
+-------------
+ 
+(1 row)
+
+PREPARE TRANSACTION 'test-2';
+ERROR:  cannot prepare a transaction that modified remote tables

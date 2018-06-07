@@ -34,6 +34,7 @@
 
 #if !PG96
 #include "remote/connection_cache.h"
+#include "remote/dist_txn.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -127,6 +128,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_continuous_aggs_cache_inval_init();
 #if !PG96
 	_remote_connection_cache_init();
+	_remote_dist_txn_init();
 #endif
 
 	PG_RETURN_BOOL(true);
@@ -146,6 +148,7 @@ module_shutdown(void)
 	 * document any exceptions.
 	 */
 #if !PG96
+	_remote_dist_txn_fini();
 	_remote_connection_cache_fini();
 #endif
 

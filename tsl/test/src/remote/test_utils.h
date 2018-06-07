@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef REMOTE_TEST_UTILS_H
-#define REMOTE_TEST_UTILS_H
+#ifndef TIMESCALEDB_TSL_REMOTE_TEST_UTILS_H
+#define TIMESCALEDB_TSL_REMOTE_TEST_UTILS_H
 
 #include <postgres.h>
 #include <common/username.h>
@@ -53,4 +53,4 @@ get_connection()
 	stmt;                                                                                          \
 	EXPECT_ERROR_END
 
-#endif /* REMOTE_TEST_UTILS_H */
+#endif /* TIMESCALEDB_TSL_REMOTE_TEST_UTILS_H */

@@ -591,6 +591,19 @@ async_request_set_wait_ok_result(AsyncRequestSet *set)
 }
 
 void
+async_request_set_wait_all_ok_commands(AsyncRequestSet *set)
+{
+	AsyncResponseResult *ar;
+
+	while ((ar = async_request_set_wait_ok_result(set)))
+	{
+		if (PQresultStatus(async_response_result_get_pg_result(ar)) != PGRES_COMMAND_OK)
+			elog(ERROR, "unexpected tuple recieved while expecting a command");
+		async_response_result_close(ar);
+	}
+}
+
+void
 prepared_stmt_close(PreparedStmt *stmt)
 {
 	char sql[64] = { '\0' };

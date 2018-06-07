@@ -55,6 +55,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
   list(APPEND TEST_FILES_DEBUG
     remote_connection.sql
     remote_connection_cache.sql
+    remote_txn.sql
     )
 endif ()
 
