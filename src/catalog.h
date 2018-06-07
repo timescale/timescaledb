@@ -57,6 +57,7 @@ typedef enum CatalogTable
 	HYPERTABLE_COMPRESSION,
 	COMPRESSION_CHUNK_SIZE,
 	BGW_POLICY_COMPRESS_CHUNKS,
+	REMOTE_TXN,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -1321,6 +1322,43 @@ typedef enum Anum_bgw_policy_compress_chunks_pkey
  * This needs to be bumped in case of new catalog tables that have more indexes.
  */
 #define _MAX_TABLE_INDEXES 5
+/************************************
+ *
+ * Remote txn table of 2pc commits
+ *
+ ************************************/
+
+#define REMOTE_TXN_TABLE_NAME "remote_txn"
+
+enum Anum_remote_txn
+{
+	Anum_remote_txn_server_name = 1,
+	Anum_remote_txn_remote_transaction_id,
+	_Anum_remote_txn_max,
+};
+
+#define Natts_remote_txn (_Anum_remote_txn_max - 1)
+
+typedef struct FormData_remote_txn
+{
+	NameData server_name;
+	text *remote_transaction_id;
+} FormData_remote_txn;
+
+typedef FormData_remote_txn *Form_remote_txn;
+
+enum
+{
+	REMOTE_TXN_PKEY_IDX = 0,
+	_MAX_REMOTE_TXN_INDEX,
+};
+
+enum Anum_remote_txn_pkey_idx
+{
+	Anum_remote_txn_pkey_idx_server_name = 1,
+	Anum_remote_txn_pkey_idx_remote_transaction_id,
+	_Anum_remote_txn_pkey_idx_max,
+};
 
 typedef enum CacheType
 {
@@ -1406,7 +1444,7 @@ extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc
 extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_update(Relation rel, HeapTuple tuple);
 extern void ts_catalog_delete_tid(Relation rel, ItemPointer tid);
-extern void TSDLLEXPORT ts_catalog_delete(Relation rel, HeapTuple tuple);
+extern TSDLLEXPORT void ts_catalog_delete(Relation rel, HeapTuple tuple);
 extern void ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 
 /* Delete only: do not increment command counter or invalidate caches */

@@ -118,6 +118,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CONFIG_SCHEMA_NAME,
 		.table_name = BGW_POLICY_COMPRESS_CHUNKS_TABLE_NAME,
 	},
+	[REMOTE_TXN] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = REMOTE_TXN_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -226,7 +230,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_BGW_POLICY_CHUNK_STATS_INDEX,
 		.names = (char *[]) {
 			[BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX] = "bgw_policy_chunk_stats_job_id_chunk_id_key",
-		},
+		}
 	},
 	[CONTINUOUS_AGG] = {
 		.length = _MAX_CONTINUOUS_AGG_INDEX,
@@ -281,6 +285,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[BGW_POLICY_COMPRESS_CHUNKS_HYPERTABLE_ID_KEY] = "bgw_policy_compress_chunks_hypertable_id_key",
 		},
 	},
+	[REMOTE_TXN] = {
+		.length = _MAX_REMOTE_TXN_INDEX,
+		.names = (char *[]) {
+			[REMOTE_TXN_PKEY_IDX] = "remote_txn_pkey"
+		}
+	}
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
@@ -304,6 +314,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE_COMPRESSION] = NULL,
 	[COMPRESSION_CHUNK_SIZE] = NULL,
 	[BGW_POLICY_COMPRESS_CHUNKS] = NULL,
+	[REMOTE_TXN] = NULL,
 };
 
 typedef struct InternalFunctionDef

@@ -18,6 +18,11 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION test_remote_txn_persistent_record(srv_name name)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_persistent_record'
+LANGUAGE C;
+
 SELECT true FROM add_server('loopback', port=>current_setting('port')::integer);
 SELECT true FROM add_server('loopback2', port=>current_setting('port')::integer);
 
@@ -50,6 +55,8 @@ INSERT INTO "S 1"."T 1"
 	FROM generate_series(1, 1000) id;
 
 \set ON_ERROR_STOP 0
+
+SELECT test_remote_txn_persistent_record('loopback');
 
 -- ===================================================================
 -- 1 pc tests
