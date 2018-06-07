@@ -17,6 +17,7 @@
 #include "async.h"
 #include "txn.h"
 #include "txn_store.h"
+#include "guc.h"
 
 #ifdef DEBUG
 
@@ -34,6 +35,7 @@ void (*testing_callback_call_hook)(const char *event) = NULL;
 static void dist_txn_xact_callback(XactEvent event, void *arg);
 static void dist_txn_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
 									  SubTransactionId parentSubid, void *arg);
+
 typedef struct DistTxnState
 {
 	bool sub_txn_abort_failure;
@@ -192,7 +194,7 @@ dist_txn_xact_callback_1pc_pre_commit()
 
 /* On abort on the frontend send aborts to all of the remote endpoints */
 static void
-dist_txn_xact_callback_1pc_abort()
+dist_txn_xact_callback_abort()
 {
 	RemoteTxn *remote_txn;
 
@@ -239,11 +241,190 @@ dist_txn_xact_callback_1pc(XactEvent event, void *arg)
 			break;
 		case XACT_EVENT_PARALLEL_ABORT:
 		case XACT_EVENT_ABORT:
-			dist_txn_xact_callback_1pc_abort();
+			dist_txn_xact_callback_abort();
 			break;
 	}
 	dist_txn_on_txn_end();
 }
+
+static void
+dist_txn_send_prepare_transaction()
+{
+	RemoteTxn *remote_txn;
+	AsyncRequestSet *ars = async_request_set_create();
+	AsyncResponse *error_response = NULL;
+	AsyncResponseResult *response_result;
+
+	testing_callback_call("pre-prepare-transaction");
+
+	/* send a prepare transaction to all connections */
+	remote_txn_store_foreach(state.store, remote_txn)
+	{
+		AsyncRequest *req;
+
+		remote_txn_write_persistent_record(remote_txn);
+		req = remote_txn_async_send_prepare_transaction(remote_txn);
+
+		async_request_attach_user_data(req, remote_txn);
+		async_request_set_add(ars, req);
+	}
+
+	testing_callback_call("waiting-prepare-transaction");
+
+	/*
+	 * async collect the replies. Since errors in PREPARE TRANSACTION are not
+	 * uncommon, handle them gracefully: delay throwing errors in results
+	 * until all responses collected since you need to mark
+	 * changing_xact_state correctly. So throw errors on connection errors but
+	 * not errors in results.
+	 */
+	error_response = NULL;
+	while ((response_result = async_request_set_wait_any_result(ars)))
+	{
+		RemoteTxn *response_remote_txn = async_response_result_get_user_data(response_result);
+		bool success = PQresultStatus(async_response_result_get_pg_result(response_result)) ==
+					   PGRES_COMMAND_OK;
+
+		remote_txn_report_prepare_transaction_result(response_remote_txn, success);
+
+		if (!success)
+		{
+			/* save first error, warn about subsequent errors */
+			if (error_response == NULL)
+				error_response = (AsyncResponse *) response_result;
+			else
+				async_response_report_error((AsyncResponse *) response_result, WARNING);
+		}
+	}
+	if (error_response != NULL)
+	{
+		async_response_report_error(error_response, ERROR);
+	}
+	testing_callback_call("post-prepare-transaction");
+}
+
+static void
+dist_txn_send_commit_transaction()
+{
+	RemoteTxn *remote_txn;
+	AsyncRequestSet *ars = async_request_set_create();
+	AsyncResponse *res;
+
+	/*
+	 * send a commit transaction to all connections and asynchronously collect
+	 * the replies
+	 */
+	remote_txn_store_foreach(state.store, remote_txn)
+	{
+		AsyncRequest *req;
+
+		req = remote_txn_async_send_commit_prepared(remote_txn);
+		if (req == NULL)
+		{
+			elog(WARNING, "error while performing second phase of 2-pc");
+			continue;
+		}
+		async_request_set_add(ars, req);
+	}
+
+	testing_callback_call("waiting-commit-prepared");
+
+	/* async collect the replies */
+	while ((res = async_request_set_wait_any_response(ars, WARNING)))
+	{
+		/* throw WARNINGS not ERRORS here */
+		/*
+		 * NOTE: warnings make sure that all data nodes get a commit prepared.
+		 * But, there is arguably some weirdness here in terms of RYOW if
+		 * there is an error.
+		 */
+		AsyncResponseResult *response_result;
+
+		switch (async_response_get_type(res))
+		{
+			case RESPONSE_COMMUNICATION_ERROR:
+			case RESPONSE_TIMEOUT:
+				elog(WARNING, "error while performing second phase of 2-pc");
+				continue;
+			case RESPONSE_RESULT:
+				response_result = (AsyncResponseResult *) res;
+				if (PQresultStatus(async_response_result_get_pg_result(response_result)) !=
+					PGRES_COMMAND_OK)
+					async_response_report_error(res, WARNING);
+				else
+					async_response_close(res);
+				break;
+		}
+	}
+}
+
+/*
+ * remote_dist_txn_xact_callback_2pc --- cleanup at main-transaction end.
+ * With 2 pc commits, we write a persistent record and send a remote
+ * PREPARE TRANSACTION during local pre-commit.
+ * After commit we send a remote COMMIT TRANSACTION.
+ */
+static void
+dist_txn_xact_callback_2pc(XactEvent event, void *arg)
+{
+	bool txn_end = false;
+
+	switch (event)
+	{
+		case XACT_EVENT_PARALLEL_PRE_COMMIT:
+		case XACT_EVENT_PRE_COMMIT:
+
+			/*
+			 * This is critical to make sure no txn that had an error in
+			 * subtxn abort ever gets committed. Remember that those failed
+			 * connections are no longer in the store and so this is our
+			 * fail-safe to make sure we abort such txns
+			 */
+			dist_txn_state_throw_deferred_error();
+			dist_txn_send_prepare_transaction();
+			dist_txn_deallocate_prepared_stmts_if_needed();
+			break;
+		case XACT_EVENT_PRE_PREPARE:
+		case XACT_EVENT_PREPARE:
+
+			/*
+			 * Cannot prepare stuff on the frontend.
+			 */
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot prepare a transaction that modified "
+							"remote tables")));
+			break;
+		case XACT_EVENT_PARALLEL_COMMIT:
+		case XACT_EVENT_COMMIT:
+			testing_callback_call("pre-commit-prepared");
+
+			/*
+			 * We send a commit here so that future commands on this
+			 * connection get read-your-own-writes semantics. Later, we can
+			 * optimize latency on connections by doing this in a background
+			 * process and using IPC to assure RYOW
+			 */
+			dist_txn_send_commit_transaction();
+
+			/*
+			 * NOTE: You cannot delete the remote_txn_persistent_record here
+			 * because you are out of transaction. Therefore cleanup of those
+			 * entries has to happen in a background process or manually.
+			 */
+			txn_end = true;
+			break;
+		case XACT_EVENT_PARALLEL_ABORT:
+		case XACT_EVENT_ABORT:
+			dist_txn_xact_callback_abort();
+			txn_end = true;
+			break;
+	}
+
+	if (txn_end)
+		dist_txn_on_txn_end();
+}
+
 static void
 dist_txn_xact_callback(XactEvent event, void *arg)
 {
@@ -251,7 +432,10 @@ dist_txn_xact_callback(XactEvent event, void *arg)
 	if (state.store == NULL)
 		return;
 
-	dist_txn_xact_callback_1pc(event, arg);
+	if (ts_guc_enable_2pc)
+		dist_txn_xact_callback_2pc(event, arg);
+	else
+		dist_txn_xact_callback_1pc(event, arg);
 }
 
 /*
