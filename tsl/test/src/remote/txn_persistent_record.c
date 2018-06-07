@@ -10,21 +10,23 @@
 
 #include "remote/txn_id.h"
 #include "export.h"
+#include "connection.h"
 #include "test_utils.h"
 #include "remote/txn.h"
 
 TS_FUNCTION_INFO_V1(tsl_test_remote_txn_persistent_record);
+
 static void
 test_basic_persistent_record(Oid server_oid, Oid user_mapping_oid)
 {
 	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), user_mapping_oid);
 
-	TestAssertTrue(!remote_txn_persistent_record_exists(server_oid, id));
+	TestAssertTrue(!remote_txn_persistent_record_exists(id));
 	remote_txn_persistent_record_write(server_oid, user_mapping_oid);
-	TestAssertTrue(remote_txn_persistent_record_exists(server_oid, id));
+	TestAssertTrue(remote_txn_persistent_record_exists(id));
 
 	remote_txn_persistent_record_delete_for_server(server_oid);
-	TestAssertTrue(!remote_txn_persistent_record_exists(server_oid, id));
+	TestAssertTrue(!remote_txn_persistent_record_exists(id));
 }
 
 Datum
