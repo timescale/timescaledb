@@ -41,3 +41,13 @@ CREATE TYPE rxid (
    input = _timescaledb_internal.rxid_in,
    output = _timescaledb_internal.rxid_out
 );
+
+CREATE TABLE _timescaledb_catalog.remote_txn (
+    server_name              NAME, --this is really only to allow us to cleanup stuff on a per-server basis.
+    remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
+    PRIMARY KEY (server_name, remote_transaction_id)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
+
+
+GRANT SELECT ON _timescaledb_catalog.remote_txn TO PUBLIC;

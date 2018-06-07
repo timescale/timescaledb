@@ -8,6 +8,7 @@
 #include <postgres.h>
 
 #include "connection.h"
+#include "txn_id.h"
 
 typedef struct RemoteTxn RemoteTxn;
 
@@ -35,6 +36,11 @@ extern bool remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel);
 
 /* Messages/communication */
 extern AsyncRequest *remote_txn_async_send_commit(RemoteTxn *entry);
+
+/* Persitent record */
+extern RemoteTxnId *remote_txn_persistent_record_write(Oid server_oid, Oid user_mapping_oid);
+extern bool remote_txn_persistent_record_exists(Oid server_oid, const RemoteTxnId *gid);
+extern int remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid);
 
 #if DEBUG
 /* Debugging functions used in testing */
