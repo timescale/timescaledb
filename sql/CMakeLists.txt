@@ -45,6 +45,12 @@ set(SOURCE_FILES
   timescaledb_fdw.sql
 )
 
+if (NOT ${PG_VERSION} VERSION_LESS "10")
+  list(APPEND SOURCE_FILES
+    remote_txn.sql
+  )
+endif()
+
 # These files should be pre-pended to update scripts so that they are
 # executed before anything else during updates
 set(PRE_UPDATE_FILES

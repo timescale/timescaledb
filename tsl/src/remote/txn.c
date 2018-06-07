@@ -6,6 +6,8 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <utils/builtins.h>
+#include <utils/tqual.h>
+#include <utils/snapmgr.h>
 
 #include "txn.h"
 #include "connection.h"
@@ -47,6 +49,7 @@ typedef struct RemoteTxn
 	bool have_prep_stmt;	/* have we prepared any stmts in this xact? */
 	bool have_subtxn_error; /* have any subxacts aborted in this xact? */
 	Oid server_id;
+	RemoteTxnId *remote_txn_id;
 } RemoteTxn;
 
 /*
@@ -112,6 +115,15 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	}
 }
 
+bool
+remote_txn_is_still_in_progress(TransactionId frontend_xid)
+{
+	if (TransactionIdIsCurrentTransactionId(frontend_xid))
+		elog(ERROR, "checking if a commit is still in progress on same txn");
+
+	return XidInMVCCSnapshot(frontend_xid, GetTransactionSnapshot());
+}
+
 size_t
 remote_txn_size()
 {
@@ -130,6 +142,7 @@ remote_txn_init(RemoteTxn *entry, PGconn *conn, UserMapping *user)
 	entry->have_prep_stmt = false;
 	entry->have_subtxn_error = false;
 	entry->server_id = user->serverid;
+	entry->remote_txn_id = NULL;
 
 	/* Now try to make the connection */
 	/* in connection  */
@@ -162,6 +175,13 @@ Oid
 remote_txn_get_user_mapping_oid(RemoteTxn *txn)
 {
 	return txn->user_mapping_oid;
+}
+
+void
+remote_txn_report_prepare_transaction_result(RemoteTxn *txn, bool success)
+{
+	if (!success)
+		txn->remote_txn_id = NULL;
 }
 
 /*
@@ -277,9 +297,19 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 	remote_connection_result_close(res);
 }
 #endif
+
 bool
 remote_txn_abort(RemoteTxn *entry)
 {
+	const char *abort_sql;
+
+	if (entry->remote_txn_id == NULL)
+		abort_sql = "ABORT TRANSACTION";
+	else
+		abort_sql = remote_txn_id_rollback_prepared_sql(entry->remote_txn_id);
+
+	entry->remote_txn_id = NULL;
+
 	Assert(entry->conn != NULL);
 	Assert(entry->xact_depth > 0);
 
@@ -316,7 +346,7 @@ remote_txn_abort(RemoteTxn *entry)
 			return false;
 	}
 
-	if (!exec_cleanup_command(entry->conn, "ABORT TRANSACTION"))
+	if (!exec_cleanup_command(entry->conn, abort_sql))
 		return false;
 
 	/*
@@ -388,6 +418,43 @@ remote_txn_async_send_commit(RemoteTxn *entry)
 
 	elog(DEBUG3, "committing remote transaction on connection %p", entry->conn);
 	return async_request_send(entry->conn, "COMMIT TRANSACTION");
+}
+
+void
+remote_txn_write_persistent_record(RemoteTxn *entry)
+{
+	entry->remote_txn_id =
+		remote_txn_persistent_record_write(entry->server_id, entry->user_mapping_oid);
+}
+
+AsyncRequest *
+remote_txn_async_send_prepare_transaction(RemoteTxn *entry)
+{
+	Assert(entry->conn != NULL);
+	Assert(entry->xact_depth > 0);
+	Assert(entry->remote_txn_id != NULL);
+
+	elog(DEBUG3,
+		 "2pc: preparing remote transaction on connection %p: %s",
+		 entry->conn,
+		 remote_txn_id_out(entry->remote_txn_id));
+	return async_request_send(entry->conn,
+							  remote_txn_id_prepare_transaction_sql(entry->remote_txn_id));
+}
+
+AsyncRequest *
+remote_txn_async_send_commit_prepared(RemoteTxn *entry)
+{
+	Assert(entry->conn != NULL);
+	Assert(entry->remote_txn_id != NULL);
+
+	elog(DEBUG3,
+		 "2pc: commiting remote transaction on connection %p: '%s'",
+		 entry->conn,
+		 remote_txn_id_out(entry->remote_txn_id));
+	return async_request_send_with_error(entry->conn,
+										 remote_txn_id_commit_prepared_sql(entry->remote_txn_id),
+										 WARNING);
 }
 
 bool
@@ -473,41 +540,34 @@ remote_txn_sub_txn_pre_commit(RemoteTxn *entry, int curlevel)
  */
 
 static int
-persistent_record_pkey_scan(Oid server_oid, const RemoteTxnId *id, tuple_found_func tuple_found,
-							LOCKMODE lock_mode)
+persistent_record_pkey_scan(const RemoteTxnId *id, tuple_found_func tuple_found, LOCKMODE lock_mode)
 {
 	Catalog *catalog = ts_catalog_get();
-	ScanKeyData scankey[2];
-	ScannerCtx scanCtx = {
+	ScanKeyData scankey[1];
+	ScannerCtx scanctx = {
 		.table = catalog->tables[REMOTE_TXN].id,
 		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_PKEY_IDX),
-		.nkeys = 2,
+		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
 		.lockmode = lock_mode,
 		.limit = 1,
 		.scandirection = ForwardScanDirection,
 	};
-	ForeignServer *server = GetForeignServer(server_oid);
 
 	ScanKeyInit(&scankey[0],
-				Anum_remote_txn_pkey_idx_server_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(server->servername)));
-	ScanKeyInit(&scankey[1],
 				Anum_remote_txn_pkey_idx_remote_transaction_id,
 				BTEqualStrategyNumber,
 				F_TEXTEQ,
 				CStringGetTextDatum(remote_txn_id_out(id)));
 
-	return ts_scanner_scan(&scanCtx);
+	return ts_scanner_scan(&scanctx);
 }
 
 bool
-remote_txn_persistent_record_exists(Oid server_oid, const RemoteTxnId *parsed)
+remote_txn_persistent_record_exists(const RemoteTxnId *parsed)
 {
-	return persistent_record_pkey_scan(server_oid, parsed, NULL, AccessShareLock) > 0;
+	return persistent_record_pkey_scan(parsed, NULL, AccessShareLock) > 0;
 }
 
 static ScanTupleResult
@@ -522,18 +582,18 @@ remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScanKeyData scankey[1];
-	ScannerCtx scanCtx;
+	ScannerCtx scanctx;
 	ForeignServer *server = GetForeignServer(foreign_server_oid);
 
 	ScanKeyInit(&scankey[0],
-				Anum_remote_txn_pkey_idx_server_name,
+				Anum_remote_txn_server_name_idx_server_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(server->servername)));
 
-	scanCtx = (ScannerCtx){
+	scanctx = (ScannerCtx){
 		.table = catalog->tables[REMOTE_TXN].id,
-		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_PKEY_IDX),
+		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_SERVER_NAME_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = persistent_record_tuple_delete,
@@ -541,7 +601,7 @@ remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid)
 		.scandirection = ForwardScanDirection,
 	};
 
-	return ts_scanner_scan(&scanCtx);
+	return ts_scanner_scan(&scanctx);
 }
 
 static void

@@ -1,5 +1,6 @@
 shared_preload_libraries=timescaledb
 max_worker_processes=16
+max_prepared_transactions=100 #set same as max_connections
 timescaledb.telemetry_level=off
 # when changing this, also update the one in appveyor.yml
 timescaledb.license_key='E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K'

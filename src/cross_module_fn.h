@@ -85,6 +85,7 @@ typedef struct CrossModuleFunctions
 	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
 	Datum (*remote_txn_id_in)(PG_FUNCTION_ARGS);
 	Datum (*remote_txn_id_out)(PG_FUNCTION_ARGS);
+	Datum (*remote_txn_heal_server)(PG_FUNCTION_ARGS);
 	void (*create_chunk_on_servers)(Chunk *chunk, Hypertable *ht);
 } CrossModuleFunctions;
 

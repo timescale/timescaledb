@@ -18,12 +18,12 @@ test_basic_persistent_record(Oid server_oid, Oid user_mapping_oid)
 {
 	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), user_mapping_oid);
 
-	Assert(!remote_txn_persistent_record_exists(server_oid, id));
+	Assert(!remote_txn_persistent_record_exists(id));
 	remote_txn_persistent_record_write(server_oid, user_mapping_oid);
-	Assert(remote_txn_persistent_record_exists(server_oid, id));
+	Assert(remote_txn_persistent_record_exists(id));
 
 	remote_txn_persistent_record_delete_for_server(server_oid);
-	Assert(!remote_txn_persistent_record_exists(server_oid, id));
+	Assert(!remote_txn_persistent_record_exists(id));
 }
 
 Datum

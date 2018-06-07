@@ -306,8 +306,10 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
 CREATE TABLE _timescaledb_catalog.remote_txn (
     server_name              NAME, --this is really only to allow us to cleanup stuff on a per-server basis.
     remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
-    PRIMARY KEY (server_name, remote_transaction_id)
+    PRIMARY KEY (remote_transaction_id)
 );
+CREATE INDEX IF NOT EXISTS remote_txn_server_name_idx
+ON _timescaledb_catalog.remote_txn(server_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
 -- Set table permissions

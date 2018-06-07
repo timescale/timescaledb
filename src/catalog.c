@@ -255,7 +255,8 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 	[REMOTE_TXN] = {
 		.length = _MAX_REMOTE_TXN_INDEX,
 		.names = (char *[]) {
-			[REMOTE_TXN_PKEY_IDX] = "remote_txn_pkey"
+			[REMOTE_TXN_PKEY_IDX] = "remote_txn_pkey",
+			[REMOTE_TXN_SERVER_NAME_IDX] = "remote_txn_server_name_idx"
 		}
 	}
 };

@@ -62,6 +62,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     dist_commands.sql
     deparse.sql
     deparse_fail.sql
+    remote_txn_resolve.sql
   )
 endif ()
 

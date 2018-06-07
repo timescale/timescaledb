@@ -15,9 +15,9 @@
    From the datanode perspective it has to be unique with regard to any concurrent
    prepared transactions.
 
-   From the point of view of the frontend, given such an id and the server it came from,
-   a frontend must be able to decide whether or not the corresponding distributed txn
-   is still in progress or has committed or aborted.
+   From the point of view of the frontend, given such an id, a frontend must be able to decide
+   whether or not the corresponding distributed txn is still in progress or has committed or
+   aborted. Therefore, an id issued by a frontend must be unique for each of its connections.
 
    Note: a subtle point is that given this identifier we need to tell if the
    frontend transaction is still ongoing in the resolution logic without
@@ -25,14 +25,15 @@
    remote_txn table is only populated once the txn is committed.
    Therefore this id contains the frontend's transaction_id directly.
 
-   The current format is: frontend_id;xid;user_mapping_oid
-   All three parts are necessary to guarantee uniqueness from the point of view of the data node.
-	- reserved is to give a unique prefix to the id (e.g. for a future frontend_id).
+   The current format is: version;xid;user_mapping_oid
+   Both parts are necessary to guarantee uniqueness from the point of view of the data node.
 	- xid is a unique identifier for the dist txn on the frontend. It is also critical to to make
    sure the transaction has completed on the frontend node.
 	- user_mapping_oid dedups the connections made under different user mappings as part of the same
    frontend distributed txn.
-	*/
+
+	Note: When moving to multiple frontends, we'll need to add a unique prefix for each frontend.
+*/
 
 typedef struct RemoteTxnId
 {
