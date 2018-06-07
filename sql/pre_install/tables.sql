@@ -298,6 +298,17 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
     ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 
+--This stores commit decisions for 2pc remote txns. Abort decisions are never stored.
+--If a PREPARE TRANSACTION fails for any server then the entire
+--frontend transaction will be rolled back and no rows will be stored.
+--the frontend_transaction_id represents the entire distributed transaction
+--each datanode will have a unique remote_transaction_id.
+CREATE TABLE _timescaledb_catalog.remote_txn (
+    server_name              NAME, --this is really only to allow us to cleanup stuff on a per-server basis.
+    remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
+    PRIMARY KEY (server_name, remote_transaction_id)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not

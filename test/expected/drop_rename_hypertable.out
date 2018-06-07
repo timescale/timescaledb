@@ -208,8 +208,9 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | hypertable                                       | table | super_user
  _timescaledb_catalog | hypertable_server                                | table | super_user
  _timescaledb_catalog | metadata                                         | table | super_user
+ _timescaledb_catalog | remote_txn                                       | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user
-(15 rows)
+(16 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

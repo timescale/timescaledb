@@ -106,6 +106,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME,
 	},
+	[REMOTE_TXN] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = REMOTE_TXN_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -213,7 +217,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_BGW_POLICY_CHUNK_STATS_INDEX,
 		.names = (char *[]) {
 			[BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX] = "bgw_policy_chunk_stats_job_id_chunk_id_key",
-		},
+		}
 	},
 	[CONTINUOUS_AGG] = {
 		.length = _MAX_CONTINUOUS_AGG_INDEX,
@@ -242,12 +246,18 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY] = "continuous_aggs_invalidation_threshold_pkey",
 		},
 	},
-    [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
-        .length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
-        .names = (char *[]) {
-            [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
-        },
-    },
+	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
+		.length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
+		},
+	},
+	[REMOTE_TXN] = {
+		.length = _MAX_REMOTE_TXN_INDEX,
+		.names = (char *[]) {
+			[REMOTE_TXN_PKEY_IDX] = "remote_txn_pkey"
+		}
+	}
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
@@ -268,6 +278,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
 	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
+	[REMOTE_TXN] = NULL,
 };
 
 typedef struct InternalFunctionDef

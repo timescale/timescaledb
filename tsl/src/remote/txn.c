@@ -5,9 +5,13 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <utils/builtins.h>
 
 #include "txn.h"
 #include "connection.h"
+#include "scanner.h"
+#include "catalog.h"
+#include "txn_id.h"
 
 /* This seemingly long timeout matches what postgres_fdw uses. */
 #define DEFAULT_EXEC_CLEANUP_TIMEOUT_MS 30000
@@ -462,4 +466,116 @@ remote_txn_sub_txn_pre_commit(RemoteTxn *entry, int curlevel)
 
 	Assert(entry->xact_depth > 0);
 	entry->xact_depth--;
+}
+
+/*
+ *		Persistent Record stuff
+ */
+
+static int
+persistent_record_pkey_scan(Oid server_oid, const RemoteTxnId *id, tuple_found_func tuple_found,
+							LOCKMODE lock_mode)
+{
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[2];
+	ScannerCtx scanCtx = {
+		.table = catalog->tables[REMOTE_TXN].id,
+		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_PKEY_IDX),
+		.nkeys = 2,
+		.scankey = scankey,
+		.tuple_found = tuple_found,
+		.lockmode = lock_mode,
+		.limit = 1,
+		.scandirection = ForwardScanDirection,
+	};
+	ForeignServer *server = GetForeignServer(server_oid);
+
+	ScanKeyInit(&scankey[0],
+				Anum_remote_txn_pkey_idx_server_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(server->servername)));
+	ScanKeyInit(&scankey[1],
+				Anum_remote_txn_pkey_idx_remote_transaction_id,
+				BTEqualStrategyNumber,
+				F_TEXTEQ,
+				CStringGetTextDatum(remote_txn_id_out(id)));
+
+	return ts_scanner_scan(&scanCtx);
+}
+
+bool
+remote_txn_persistent_record_exists(Oid server_oid, const RemoteTxnId *parsed)
+{
+	return persistent_record_pkey_scan(server_oid, parsed, NULL, AccessShareLock) > 0;
+}
+
+static ScanTupleResult
+persistent_record_tuple_delete(TupleInfo *ti, void *data)
+{
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+	return SCAN_CONTINUE;
+}
+
+int
+remote_txn_persistent_record_delete_for_server(Oid foreign_server_oid)
+{
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[1];
+	ScannerCtx scanCtx;
+	ForeignServer *server = GetForeignServer(foreign_server_oid);
+
+	ScanKeyInit(&scankey[0],
+				Anum_remote_txn_pkey_idx_server_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(server->servername)));
+
+	scanCtx = (ScannerCtx){
+		.table = catalog->tables[REMOTE_TXN].id,
+		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_PKEY_IDX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.tuple_found = persistent_record_tuple_delete,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	return ts_scanner_scan(&scanCtx);
+}
+
+static void
+persistent_record_insert_relation(Relation rel, Oid server_oid, RemoteTxnId *id)
+{
+	TupleDesc desc = RelationGetDescr(rel);
+	Datum values[Natts_remote_txn];
+	bool nulls[Natts_remote_txn] = { false };
+	CatalogSecurityContext sec_ctx;
+	ForeignServer *server = GetForeignServer(server_oid);
+
+	values[AttrNumberGetAttrOffset(Anum_remote_txn_server_name)] =
+		DirectFunctionCall1(namein, CStringGetDatum(server->servername));
+	values[AttrNumberGetAttrOffset(Anum_remote_txn_remote_transaction_id)] =
+		CStringGetTextDatum(remote_txn_id_out(id));
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+}
+
+/*
+ * Add a commit record to catalog.
+ */
+RemoteTxnId *
+remote_txn_persistent_record_write(Oid server_oid, Oid user_mapping_oid)
+{
+	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), user_mapping_oid);
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
+
+	rel = heap_open(catalog->tables[REMOTE_TXN].id, RowExclusiveLock);
+	persistent_record_insert_relation(rel, server_oid, id);
+	heap_close(rel, RowExclusiveLock);
+
+	return id;
 }

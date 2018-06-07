@@ -7,6 +7,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/test_utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/txn_id.c
   ${CMAKE_CURRENT_SOURCE_DIR}/dist_commands.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/txn_persistent_record.c
 )
 
 target_sources(${TSL_TESTS_LIB_NAME} PRIVATE ${SOURCES})
