@@ -94,7 +94,12 @@ echo "Testing"
 # Echo to stderr
 >&2 echo -e "\033[1m$1\033[0m: $2"
 
-# Run tests as 'postgres' user
+# Run tests as 'postgres' user.
+#
+# IGNORE some test since they fail under ASAN. At least the remote_txn
+# test seems to fail due to a PostgreSQL bug where AbortStartTime in
+# postmaster.c is not atomic but read/written across signal handlers
+# and ServerLoop.
 docker exec -i -u postgres -w /tsdb_build/timescaledb/build timescaledb-san /bin/bash <<EOF
-make -k regresscheck regresscheck-t IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'
+make -k regresscheck regresscheck-t SKIPS='remote_txn' IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'
 EOF

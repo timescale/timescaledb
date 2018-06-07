@@ -102,6 +102,8 @@ extern AsyncResponse *async_request_set_wait_any_response_deadline(AsyncRequestS
 /* Return only successful results, throwing errors otherwise */
 extern AsyncResponseResult *async_request_set_wait_ok_result(AsyncRequestSet *set);
 
+extern void async_request_set_wait_all_ok_commands(AsyncRequestSet *set);
+
 /* Return any results (success or failure), but throw errors on communication failures and timeouts
  */
 extern AsyncResponseResult *async_request_set_wait_any_result(AsyncRequestSet *set);
