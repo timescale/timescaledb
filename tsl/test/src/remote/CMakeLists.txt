@@ -1,6 +1,7 @@
 set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/node_killer.c
   ${CMAKE_CURRENT_SOURCE_DIR}/connection.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/connection_cache.c
   ${CMAKE_CURRENT_SOURCE_DIR}/async.c
 )
 

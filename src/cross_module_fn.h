@@ -113,6 +113,7 @@ typedef struct CrossModuleFunctions
 	void (*hypertable_make_distributed)(Hypertable *ht, ArrayType *servers);
 	PGFunction timescaledb_fdw_handler;
 	PGFunction timescaledb_fdw_validator;
+	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
