@@ -1,0 +1,29 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Timescale License,
+-- see LICENSE-TIMESCALE at the top of the tsl directory.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE FUNCTION _timescaledb_internal.test_remote_connection_cache()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_connection_cache'
+LANGUAGE C STRICT;
+DO $d$
+    BEGIN
+        EXECUTE $$CREATE SERVER loopback_1 FOREIGN DATA WRAPPER timescaledb_fdw
+            OPTIONS (dbname '$$||current_database()||$$',
+                     port '$$||current_setting('port')||$$'
+            )$$;
+        EXECUTE $$CREATE SERVER loopback_2 FOREIGN DATA WRAPPER timescaledb_fdw
+            OPTIONS (dbname '$$||current_database()||$$',
+                     port '$$||current_setting('port')||$$'
+            )$$;
+    END;
+$d$;
+CREATE USER MAPPING FOR CURRENT_USER SERVER loopback_1;
+CREATE USER MAPPING FOR CURRENT_USER SERVER loopback_2;
+SELECT _timescaledb_internal.test_remote_connection_cache();
+ test_remote_connection_cache 
+------------------------------
+ 
+(1 row)
+

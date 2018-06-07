@@ -99,7 +99,9 @@ endforeach(TEMPLATE_FILE)
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")
   list(APPEND TEST_FILES_DEBUG
-    remote_connection.sql)
+    remote_connection.sql
+    remote_connection_cache.sql
+    )
 endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
