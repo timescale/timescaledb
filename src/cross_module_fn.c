@@ -51,6 +51,7 @@ TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
+TS_FUNCTION_INFO_V1(ts_remote_txn_heal_server);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -146,6 +147,12 @@ Datum
 ts_remote_txn_id_out(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_out(fcinfo));
+}
+
+Datum
+ts_remote_txn_heal_server(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remote_txn_heal_server(fcinfo));
 }
 
 /*
@@ -501,6 +508,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.cache_syscache_invalidate = cache_syscache_invalidate_default,
 	.remote_txn_id_in = error_no_default_fn_pg_community,
 	.remote_txn_id_out = error_no_default_fn_pg_community,
+	.remote_txn_heal_server = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

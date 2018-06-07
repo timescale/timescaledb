@@ -107,6 +107,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     remote_connection_cache.sql
     remote_txn.sql
     remote_txn_id.sql
+    remote_txn_resolve.sql
     server.sql
   )
 endif ()

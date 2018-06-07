@@ -1350,14 +1350,20 @@ typedef FormData_remote_txn *Form_remote_txn;
 enum
 {
 	REMOTE_TXN_PKEY_IDX = 0,
+	REMOTE_TXN_SERVER_NAME_IDX,
 	_MAX_REMOTE_TXN_INDEX,
 };
 
 enum Anum_remote_txn_pkey_idx
 {
-	Anum_remote_txn_pkey_idx_server_name = 1,
-	Anum_remote_txn_pkey_idx_remote_transaction_id,
+	Anum_remote_txn_pkey_idx_remote_transaction_id = 1,
 	_Anum_remote_txn_pkey_idx_max,
+};
+
+enum Anum_remote_server_name_idx
+{
+	Anum_remote_txn_server_name_idx_server_name = 1,
+	_Anum_remote_txn_server_name_idx_max,
 };
 
 typedef enum CacheType

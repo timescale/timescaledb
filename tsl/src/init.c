@@ -47,6 +47,7 @@
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
 #include "remote/txn_id.h"
+#include "remote/txn_resolve.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -219,6 +220,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
+	.remote_txn_heal_server = remote_txn_heal_server,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
