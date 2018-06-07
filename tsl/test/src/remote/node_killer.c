@@ -14,6 +14,7 @@
 #include "node_killer.h"
 #include "guc.h"
 #include "export.h"
+#include "connection.h"
 
 typedef struct RemoteNodeKiller
 {
@@ -29,34 +30,12 @@ TS_FUNCTION_INFO_V1(ts_remote_node_killer_set_event);
 RemoteNodeKiller *
 remote_node_killer_init(PGconn *conn)
 {
-	PGresult *res;
-	char *sql = "SELECT pg_backend_pid()";
-	char *pid_string;
-	unsigned long pid_long;
-
 	rnk_event = palloc(sizeof(RemoteNodeKiller));
-
 	rnk_event->conn = conn;
+	rnk_event->pid = remote_connecton_get_remote_pid(conn);
 
-	res = PQexec(conn, sql);
-
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		/* do not throw error here to avoid recursive abort */
-		/* remote_connection_report_error(ERROR, res, conn, false, sql);  */
-		rnk_event->pid = 0;
-		return rnk_event;
-	}
-
-	Assert(1 == PQntuples(res));
-	Assert(1 == PQnfields(res));
-
-	pid_string = PQgetvalue(res, 0, 0);
-	pid_long = strtol(pid_string, NULL, 10);
-
-	rnk_event->pid = (pid_t) pid_long;
-
-	PQclear(res);
+	/* do not throw error here on pid = 0 to avoid recursive abort */
+	/* remote_connection_report_error(ERROR, res, conn, false, sql);  */
 	return rnk_event;
 }
 

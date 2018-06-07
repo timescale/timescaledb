@@ -30,6 +30,11 @@
 #include "fdw/timescaledb_fdw.h"
 #include "chunk_api.h"
 #include "hypertable.h"
+#include "compat.h"
+
+#if !PG96
+#include "remote/connection_cache.h"
+#endif
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -44,6 +49,19 @@ extern void PGDLLEXPORT _PG_init(void);
 static void module_shutdown(void);
 static bool enterprise_enabled_internal(void);
 static bool check_tsl_loaded(void);
+
+static void
+cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
+{
+	/*
+	 * Using hash_value it is possible to do more fine grained validation in
+	 * the future see `postgres_fdw` connection management for an example. For
+	 * now, invalidate the entire cache.
+	 */
+#if !PG96
+	remote_connection_cache_invalidate_callback();
+#endif
+}
 
 /*
  * Cross module function initialization.
@@ -94,6 +112,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
+	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -106,6 +125,9 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
+#if !PG96
+	_remote_connection_cache_init();
+#endif
 
 	PG_RETURN_BOOL(true);
 }
@@ -118,6 +140,15 @@ static void
 module_shutdown(void)
 {
 	_continuous_aggs_cache_inval_fini();
+
+	/*
+	 * Order of items should be strict reverse order of ts_module_init. Please
+	 * document any exceptions.
+	 */
+#if !PG96
+	_remote_connection_cache_fini();
+#endif
+
 	ts_cm_functions = &ts_cm_functions_default;
 }
 

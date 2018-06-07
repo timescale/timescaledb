@@ -37,16 +37,22 @@ typedef struct Cache
 	void *(*get_key)(struct CacheQuery *);
 	void *(*create_entry)(struct Cache *, CacheQuery *);
 	void *(*update_entry)(struct Cache *, CacheQuery *);
+
+	void (*remove_entry)(void *entry);
 	void (*pre_destroy_hook)(struct Cache *);
-	bool release_on_commit; /* This should be false if doing
-							 * cross-commit operations like CLUSTER or
-							 * VACUUM */
+
+	bool handle_txn_callbacks; /* Auto-release caches on (sub)txn
+								* aborts and commits. Should be off
+								* if cache used in txn callbacks */
+	bool release_on_commit;	/* This should be false if doing
+								* cross-commit operations like CLUSTER or
+								* VACUUM */
 } Cache;
 
-extern void ts_cache_init(Cache *cache);
-extern void ts_cache_invalidate(Cache *cache);
-extern void *ts_cache_fetch(Cache *cache, CacheQuery *query);
-extern bool ts_cache_remove(Cache *cache, void *key);
+extern TSDLLEXPORT void ts_cache_init(Cache *cache);
+extern TSDLLEXPORT void ts_cache_invalidate(Cache *cache);
+extern TSDLLEXPORT void *ts_cache_fetch(Cache *cache, CacheQuery *query);
+extern TSDLLEXPORT bool ts_cache_remove(Cache *cache, void *key);
 
 extern MemoryContext ts_cache_memory_ctx(Cache *cache);
 

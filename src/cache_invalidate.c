@@ -10,6 +10,7 @@
 #include <catalog/namespace.h>
 #include <nodes/nodes.h>
 #include <miscadmin.h>
+#include <utils/syscache.h>
 
 #include "catalog.h"
 #include "compat.h"
@@ -17,6 +18,7 @@
 #include "hypertable_cache.h"
 
 #include "bgw/scheduler.h"
+#include "cross_module_fn.h"
 
 /*
  * Notes on the way cache invalidation works.
@@ -49,10 +51,23 @@
 void _cache_invalidate_init(void);
 void _cache_invalidate_fini(void);
 
-static void
-cache_invalidate_all(void)
+static inline void
+cache_invalidate_relcache_all(void)
 {
 	ts_hypertable_cache_invalidate_callback();
+}
+
+static inline void
+cache_invalidate_syscache_all(void)
+{
+	ts_cm_functions->cache_syscache_invalidate(PointerGetDatum(NULL), 0, 0);
+}
+
+static inline void
+cache_invalidate_all()
+{
+	cache_invalidate_relcache_all();
+	cache_invalidate_syscache_all();
 }
 
 /*
@@ -66,7 +81,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 
 	if (ts_extension_invalidate(relid))
 	{
-		cache_invalidate_all();
+		cache_invalidate_relcache_all();
 		return;
 	}
 
@@ -80,6 +95,15 @@ cache_invalidate_callback(Datum arg, Oid relid)
 
 	if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
 		ts_bgw_job_cache_invalidate_callback();
+}
+
+/* Registration for given cache ids happens at  */
+static void
+cache_invalidate_syscache_callback(Datum arg, int cacheid, uint32 hashvalue)
+{
+	Assert(cacheid == FOREIGNSERVEROID || cacheid == USERMAPPINGOID);
+
+	ts_cm_functions->cache_syscache_invalidate(arg, cacheid, hashvalue);
 }
 
 TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
@@ -145,6 +169,14 @@ _cache_invalidate_init(void)
 	RegisterXactCallback(cache_invalidate_xact_end, NULL);
 	RegisterSubXactCallback(cache_invalidate_subxact_end, NULL);
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
+
+	/* Specific syscache callbacks */
+	CacheRegisterSyscacheCallback(FOREIGNSERVEROID,
+								  cache_invalidate_syscache_callback,
+								  PointerGetDatum(NULL));
+	CacheRegisterSyscacheCallback(USERMAPPINGOID,
+								  cache_invalidate_syscache_callback,
+								  PointerGetDatum(NULL));
 }
 
 void

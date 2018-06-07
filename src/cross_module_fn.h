@@ -80,6 +80,7 @@ typedef struct CrossModuleFunctions
 	void (*hypertable_make_distributed)(Hypertable *ht, ArrayType *servers);
 	Datum (*timescaledb_fdw_handler)(PG_FUNCTION_ARGS);
 	Datum (*timescaledb_fdw_validator)(PG_FUNCTION_ARGS);
+	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

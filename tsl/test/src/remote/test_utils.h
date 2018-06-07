@@ -7,6 +7,7 @@
 #define REMOTE_TEST_UTILS_H
 
 #include <postgres.h>
+#include <common/username.h>
 
 #include "remote/connection.h"
 #include <commands/dbcommands.h>
@@ -18,7 +19,11 @@ static PGconn *
 get_connection()
 {
 	return remote_connection_open("testdb",
-								  list_make2(makeDefElem("dbname",
+								  list_make3(makeDefElem("user",
+														 (Node *) makeString(
+															 GetUserNameFromId(GetUserId(), false)),
+														 -1),
+											 makeDefElem("dbname",
 														 (Node *) makeString(
 															 get_database_name(MyDatabaseId)),
 														 -1),

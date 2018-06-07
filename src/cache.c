@@ -48,6 +48,7 @@ ts_cache_init(Cache *cache)
 
 	cache->htab = hash_create(cache->name, cache->numelements, &cache->hctl, cache->flags);
 	cache->refcount = 1;
+	cache->handle_txn_callbacks = true;
 	cache->release_on_commit = true;
 }
 
@@ -94,7 +95,8 @@ ts_cache_pin(Cache *cache)
 
 	cp->cache = cache;
 	cp->subtxnid = GetCurrentSubTransactionId();
-	pinned_caches = lappend(pinned_caches, cp);
+	if (cache->handle_txn_callbacks)
+		pinned_caches = lappend(pinned_caches, cp);
 	MemoryContextSwitchTo(old);
 	cache->refcount++;
 	return cache;
@@ -131,7 +133,8 @@ cache_release_subtxn(Cache *cache, SubTransactionId subtxnid)
 	Assert(cache->refcount > 0);
 	cache->refcount--;
 
-	remove_pin(cache, subtxnid);
+	if (cache->handle_txn_callbacks)
+		remove_pin(cache, subtxnid);
 	cache_destroy(cache);
 
 	return refcount;
@@ -185,11 +188,16 @@ bool
 ts_cache_remove(Cache *cache, void *key)
 {
 	bool found;
+	void *entry;
 
-	hash_search(cache->htab, key, HASH_REMOVE, &found);
+	entry = hash_search(cache->htab, key, HASH_REMOVE, &found);
 
 	if (found)
+	{
+		if (cache->remove_entry != NULL)
+			cache->remove_entry(entry);
 		cache->stats.numelements--;
+	}
 
 	return found;
 }

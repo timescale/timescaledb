@@ -215,6 +215,12 @@ hypertable_make_distributed_default_fn(Hypertable *ht, ArrayType *servers)
 	error_no_default_fn_community();
 }
 
+static void
+cache_syscache_invalidate_default(Datum arg, int cacheid, uint32 hashvalue)
+{
+	/* The default is a no-op */
+}
+
 static Datum
 error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
 {
@@ -302,6 +308,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
 	.timescaledb_fdw_validator = empty_fn,
+	.cache_syscache_invalidate = cache_syscache_invalidate_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

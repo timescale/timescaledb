@@ -19,6 +19,7 @@
 #include <nodes/pg_list.h>
 #include <utils/guc.h>
 
+#include "connection.h"
 #include "export.h"
 #include "remote/connection.h"
 #include "test_utils.h"
@@ -147,4 +148,48 @@ tsl_test_remote_connection(PG_FUNCTION_ARGS)
 	test_params();
 
 	PG_RETURN_VOID();
+}
+
+pid_t
+remote_connecton_get_remote_pid(PGconn *conn)
+{
+	PGresult *res;
+	char *sql = "SELECT pg_backend_pid()";
+	char *pid_string;
+	unsigned long pid_long;
+
+	res = PQexec(conn, sql);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		return 0;
+
+	Assert(1 == PQntuples(res));
+	Assert(1 == PQnfields(res));
+
+	pid_string = PQgetvalue(res, 0, 0);
+	pid_long = strtol(pid_string, NULL, 10);
+
+	PQclear(res);
+	return pid_long;
+}
+
+char *
+remote_connecton_get_application_name(PGconn *conn)
+{
+	PGresult *res;
+	char *sql = "SELECT application_name from  pg_stat_activity where pid = pg_backend_pid()";
+	char *app_name;
+
+	res = PQexec(conn, sql);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		return 0;
+
+	Assert(1 == PQntuples(res));
+	Assert(1 == PQnfields(res));
+
+	app_name = pstrdup(PQgetvalue(res, 0, 0));
+
+	PQclear(res);
+	return app_name;
 }
