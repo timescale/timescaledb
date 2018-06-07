@@ -109,6 +109,8 @@ if (USE_OPENSSL)
   target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
 endif (USE_OPENSSL)
 
+target_link_libraries(${PROJECT_NAME} pq)
+
 configure_file(config.h.in config.h)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

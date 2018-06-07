@@ -15,3 +15,7 @@ add_library(${TSL_TESTS_LIB_NAME} OBJECT ${SOURCES})
 set_target_properties(${TSL_TESTS_LIB_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_compile_definitions(${TSL_TESTS_LIB_NAME} PUBLIC TS_SUBMODULE)
+
+if (NOT ${PG_VERSION} VERSION_LESS "10")
+  add_subdirectory(remote)
+endif ()

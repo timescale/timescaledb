@@ -53,6 +53,11 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
+if (NOT ${PG_VERSION} VERSION_LESS "10")
+  list(APPEND TEST_FILES
+    remote_connection.sql)
+endif ()
+
 list(SORT TEST_FILES)
 file(REMOVE ${TEST_SCHEDULE})
 
