@@ -71,6 +71,12 @@ chunk_dispatch_exec(CustomScanState *node)
 		if (NULL == dispatch->hypertable_result_rel_info)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
+		/*
+		 * Copy over the index to use in the returning list.
+		 */
+		dispatch->returning_index = state->parent->mt_whichplan;
+
+
 		/* Find or create the insert state matching the point */
 		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
@@ -82,6 +88,14 @@ chunk_dispatch_exec(CustomScanState *node)
 		 */
 		if (cis->arbiter_indexes != NIL)
 			state->parent->mt_arbiterindexes = cis->arbiter_indexes;
+
+		/* slot for the "existing" tuple in ON CONFLICT UPDATE IS chunk schema */
+		if (cis->tup_conv_map != NULL && state->parent->mt_existing != NULL)
+		{
+			TupleDesc	chunk_desc = cis->tup_conv_map->outdesc;
+
+			ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
+		}
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
@@ -141,8 +155,25 @@ chunk_dispatch_state_create(ChunkDispatchInfo *info, Plan *subplan)
 void
 chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent)
 {
+	ModifyTable *mt_plan;
+
 	state->parent = parent;
 	state->dispatch->arbiter_indexes = parent->mt_arbiterindexes;
 	state->dispatch->on_conflict = parent->mt_onconflict;
 	state->dispatch->cmd_type = parent->operation;
+
+	/*
+	 * Copy over the original expressions for projection infos. In PG 9.6 it
+	 * is not possible to get the original expressions back from the
+	 * ProjectionInfo structs
+	 */
+
+	Assert(IsA(parent->ps.plan, ModifyTable));
+	mt_plan = (ModifyTable *) parent->ps.plan;
+
+	state->dispatch->returning_lists = mt_plan->returningLists;
+	state->dispatch->on_conflict_set = mt_plan->onConflictSet;
+
+	Assert(mt_plan->onConflictWhere == NULL || IsA(mt_plan->onConflictWhere, List));
+	state->dispatch->on_conflict_where = (List *) mt_plan->onConflictWhere;
 }
