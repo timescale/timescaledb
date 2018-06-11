@@ -40,6 +40,8 @@ INSERT INTO upsert_test_multi_unique VALUES ('2017-01-20T09:00:01', 25.9, 'purpl
 SELECT * FROM upsert_test_multi_unique ORDER BY time, color DESC;
 INSERT INTO upsert_test_multi_unique VALUES ('2017-01-20T09:00:01', 25.9, 'blue') ON CONFLICT (time, temp)
 DO UPDATE SET color = 'blue';
+INSERT INTO upsert_test_multi_unique VALUES ('2017-01-20T09:00:01', 23.5, 'orange') ON CONFLICT (time, temp)
+DO UPDATE SET color = excluded.color;
 SELECT * FROM upsert_test_multi_unique ORDER BY time, color DESC;
 INSERT INTO upsert_test_multi_unique VALUES ('2017-01-21T09:00:01', 45.7, 'yellow') ON CONFLICT (time, color)
 DO UPDATE SET temp = 45.7;
@@ -48,6 +50,48 @@ SELECT * FROM upsert_test_multi_unique ORDER BY time, color DESC;
 INSERT INTO upsert_test_multi_unique VALUES ('2017-01-20T09:00:01', 23.5, 'purple') ON CONFLICT (time, color)
 DO UPDATE set temp = 23.5;
 \set ON_ERROR_STOP 1
+
+CREATE TABLE upsert_test_space(time timestamp, device_id_1 char(20), to_drop int, temp float, color text);
+--drop two columns; create one.
+ALTER TABLE upsert_test_space DROP to_drop;
+ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id char(20);
+CREATE UNIQUE INDEX time_space_idx ON upsert_test_space (time, device_id);
+SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_internal.get_partition_for_key'::regproc);
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev1', 25.9, 'yellow') RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev2', 25.9, 'yellow');
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev1', 23.5, 'orange') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color;
+
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev2', 23.5, 'orange3') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color||' (originally '|| upsert_test_space.color ||')' RETURNING *;
+
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev3', 23.5, 'orange3.1') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color||' (originally '|| upsert_test_space.color ||')' RETURNING *;
+
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev2', 23.5, 'orange4') ON CONFLICT (time, device_id)
+DO NOTHING RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev4', 23.5, 'orange5') ON CONFLICT (time, device_id)
+DO NOTHING RETURNING *;
+
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev5', 23.5, 'orange5') ON CONFLICT (time, device_id)
+DO NOTHING RETURNING *;
+
+--restore a column with the same name as a previously deleted one;
+ALTER TABLE upsert_test_space ADD device_id_1 char(20);
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_1) VALUES ('2017-01-20T09:00:01', 'dev4', 23.5, 'orange5.1', 'dev-id-1') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color||' (originally '|| upsert_test_space.color ||')' RETURNING *;
+
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev5', 23.5, 'orange6') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color WHERE upsert_test_space.temp < 20 RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev5', 23.5, 'orange7') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color WHERE excluded.temp < 20 RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev5', 3.5, 'orange7') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color, temp=excluded.temp WHERE excluded.temp < 20 RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8') ON CONFLICT (time, device_id)
+DO UPDATE SET color = excluded.color WHERE upsert_test_space.temp < 20 RETURNING *;
+
+
+SELECT * FROM upsert_test_space; 
 
 WITH CTE AS (
     INSERT INTO upsert_test_multi_unique

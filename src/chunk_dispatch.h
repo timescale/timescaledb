@@ -28,6 +28,10 @@ typedef struct ChunkDispatch
 	ResultRelInfo *hypertable_result_rel_info;
 	OnConflictAction on_conflict;
 	List	   *arbiter_indexes;
+	int			returning_index;
+	List	   *returning_lists;
+	List	   *on_conflict_set;
+	List	   *on_conflict_where;
 	CmdType		cmd_type;
 
 } ChunkDispatch;

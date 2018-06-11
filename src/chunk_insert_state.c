@@ -3,6 +3,7 @@
 #include <utils/rel.h>
 #include <utils/rls.h>
 #include <utils/lsyscache.h>
+#include <utils/builtins.h>
 #include <utils/guc.h>
 #include <nodes/plannodes.h>
 #include <nodes/relation.h>
@@ -12,6 +13,7 @@
 #include <optimizer/planner.h>
 #include <miscadmin.h>
 #include <parser/parsetree.h>
+#include <rewrite/rewriteManip.h>
 
 #include "errors.h"
 #include "chunk_insert_state.h"
@@ -204,6 +206,173 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	return rri;
 }
 
+static ProjectionInfo *
+get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_clauses, AttrNumber *map,
+									   int map_size, Index varno, Oid rowtype,
+									   TupleDesc chunk_desc)
+{
+	bool		found_whole_row;
+
+	Assert(returning_clauses != NIL);
+
+	/* map hypertable attnos -> chunk attnos */
+	returning_clauses = (List *) map_variable_attnos_compat((Node *) returning_clauses, varno, 0, map, map_size,
+															rowtype, &found_whole_row);
+
+	return ExecBuildProjectionInfoCompat(returning_clauses, orig->pi_exprContext,
+										 get_projection_info_slot_compat(orig), NULL, chunk_desc);
+}
+
+static ExprState *
+get_adjusted_onconflictupdate_where(ExprState *hyper_where_state, List *where_quals, AttrNumber *map,
+									int map_size, Index varno, Oid rowtype)
+{
+	bool		found_whole_row;
+
+	Assert(where_quals != NIL);
+	/* map hypertable attnos -> chunk attnos for the hypertable */
+	where_quals = (List *) map_variable_attnos_compat((Node *) where_quals, varno, 0, map, map_size,
+													  rowtype, &found_whole_row);
+	/* map hypertable attnos -> chunk attnos for the "excluded" table */
+	where_quals = (List *) map_variable_attnos_compat((Node *) where_quals, INNER_VAR, 0, map, map_size,
+													  rowtype, &found_whole_row);
+#if PG96
+	return ExecInitExpr((Expr *) where_quals, NULL);
+#else
+	return ExecInitQual(where_quals, NULL);
+#endif
+}
+
+static ProjectionInfo *
+get_adjusted_projection_info_onconflicupdate(ProjectionInfo *orig, List *update_tles, AttrNumber *map,
+											 int map_size, Index varno, Oid rowtype,
+											 TupleDesc chunk_desc)
+{
+	bool		found_whole_row;
+	int			i;
+	ListCell   *lc,
+			   *prev,
+			   *next;
+
+	Assert(update_tles != NIL);
+	/* map hypertable attnos -> chunk attnos for the hypertable */
+	update_tles = (List *) map_variable_attnos_compat((Node *) update_tles, varno, 0, map, map_size,
+													  rowtype, &found_whole_row);
+	/* map hypertable attnos -> chunk attnos for the "excluded" table */
+	update_tles = (List *) map_variable_attnos_compat((Node *) update_tles, INNER_VAR, 0, map, map_size,
+													  rowtype, &found_whole_row);
+
+
+	Assert(list_length(update_tles) == map_size);
+
+	/*
+	 * delete any hypertable tle entries for which there are no chunk
+	 * attributes. This can happen for dropped columns that exist on the
+	 * hyperable but not on the chunks.
+	 */
+	lc = list_head(update_tles);
+	prev = NULL;
+	for (i = 0; i < map_size; i++)
+	{
+		AttrNumber	att = map[i];
+
+		next = lnext(lc);
+
+		if (att == InvalidAttrNumber)
+			update_tles = list_delete_cell(update_tles, lc, prev);
+		else
+			prev = lc;
+		lc = next;
+	}
+
+	/*
+	 * Double-check that the TLE is in the same order as the chunk attributes
+	 * and also fix up the TLE resno after the deletes above
+	 */
+	i = 0;
+	foreach(lc, update_tles)
+	{
+		TargetEntry *t = lfirst(lc);
+		Form_pg_attribute attribute;
+
+		Assert(i < chunk_desc->natts);
+		attribute = chunk_desc->attrs[i];
+
+		if (namestrcmp(&attribute->attname, t->resname) != 0)
+			elog(ERROR, "invalid translation of on conflict update statements");
+
+		t->resno = i + 1;
+		i++;
+	}
+
+	/* set the projection result slot to the chunk schema */
+	ExecSetSlotDescriptor(get_projection_info_slot_compat(orig), chunk_desc);
+	return ExecBuildProjectionInfoCompat(update_tles, orig->pi_exprContext,
+										 get_projection_info_slot_compat(orig), NULL, chunk_desc);
+}
+
+/* Change the projections to work with chunks instead of hypertables */
+static void
+adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
+{
+	ResultRelInfo *rri = cis->result_relation_info;
+	AttrNumber *variable_attnos_map;
+	int			variable_attnos_map_size;
+	TupleDesc	chunk_desc = cis->tup_conv_map->outdesc;
+	TupleDesc	hypertable_desc = cis->tup_conv_map->indesc;
+
+	Assert(cis->tup_conv_map != NULL);
+
+	/*
+	 * we need the opposite map from cis->tup_conv_map. The map needs to have
+	 * the hypertable_desc in the out spot for map_variable_attnos to work
+	 * correctly in mapping hypertable attnos->chunk attnos
+	 */
+	variable_attnos_map = convert_tuples_by_name_map(chunk_desc,
+													 hypertable_desc,
+													 gettext_noop("could not convert row type"));
+	variable_attnos_map_size = hypertable_desc->natts;
+
+	if (rri->ri_projectReturning != NULL)
+	{
+		rri->ri_projectReturning =
+			get_adjusted_projection_info_returning(rri->ri_projectReturning,
+												   list_nth(dispatch->returning_lists, dispatch->returning_index),
+												   variable_attnos_map,
+												   variable_attnos_map_size,
+												   dispatch->hypertable_result_rel_info->ri_RangeTableIndex,
+												   rowtype,
+												   chunk_desc);
+	}
+
+	if (rri->ri_onConflictSetProj != NULL)
+	{
+		rri->ri_onConflictSetProj =
+			get_adjusted_projection_info_onconflicupdate(rri->ri_onConflictSetProj,
+														 dispatch->on_conflict_set,
+														 variable_attnos_map,
+														 variable_attnos_map_size,
+														 dispatch->hypertable_result_rel_info->ri_RangeTableIndex,
+														 rowtype,
+														 chunk_desc);
+
+		if (rri->ri_onConflictSetWhere != NULL)
+		{
+#if PG96
+			rri->ri_onConflictSetWhere = (List *)
+#else
+			rri->ri_onConflictSetWhere =
+#endif
+				get_adjusted_onconflictupdate_where((ExprState *) rri->ri_onConflictSetWhere,
+													dispatch->on_conflict_where,
+													variable_attnos_map,
+													variable_attnos_map_size,
+													dispatch->hypertable_result_rel_info->ri_RangeTableIndex,
+													rowtype);
+		}
+	}
+}
+
 /*
  * Check if tuple conversion is needed between a chunk and its parent table.
  *
@@ -304,9 +473,12 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	parent_rel = heap_open(dispatch->hypertable->main_table_relid, AccessShareLock);
 
 	if (tuple_conversion_needed(RelationGetDescr(parent_rel), RelationGetDescr(rel)))
+	{
 		state->tup_conv_map = convert_tuples_by_name(RelationGetDescr(parent_rel),
 													 RelationGetDescr(rel),
 													 gettext_noop("could not convert row type"));
+		adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
+	}
 
 	/* Need a tuple table slot to store converted tuples */
 	if (state->tup_conv_map)

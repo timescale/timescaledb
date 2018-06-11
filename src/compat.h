@@ -18,6 +18,12 @@
 	ParseFuncOrColumn(pstate, funcname, fargs, (pstate)->p_last_srf, fn, location)
 #define make_op_compat(pstate, opname, ltree, rtree, location)	\
 	make_op(pstate, opname, ltree, rtree, (pstate)->p_last_srf, location)
+#define get_projection_info_slot_compat(pinfo) \
+	(pinfo->pi_state.resultslot)
+#define map_variable_attnos_compat(returning_clauses, varno, sublevels_up, map, map_size, rowtype, found_whole_row) \
+	map_variable_attnos(returning_clauses, varno, sublevels_up, map, map_size, rowtype, found_whole_row);
+#define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc) \
+	 ExecBuildProjectionInfo(tl, exprContext, slot, parent, inputdesc)
 
 #elif PG96
 
@@ -33,6 +39,12 @@
 	ParseFuncOrColumn(pstate, funcname, fargs, fn, location)
 #define make_op_compat(pstate, opname, ltree, rtree, location)	\
 	make_op(pstate, opname, ltree, rtree, location)
+#define get_projection_info_slot_compat(pinfo) \
+	(pinfo->pi_slot)
+#define map_variable_attnos_compat(expr, varno, sublevels_up, map, map_size, rowtype, found_whole_row) \
+	map_variable_attnos(expr, varno, sublevels_up, map, map_size, found_whole_row)
+#define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc) \
+	 ExecBuildProjectionInfo((List *)ExecInitExpr((Expr *) tl, NULL), exprContext, slot, inputdesc)
 
 #else
 
