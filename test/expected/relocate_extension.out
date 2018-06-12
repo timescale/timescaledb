@@ -5,8 +5,24 @@ CREATE DATABASE single;
 CREATE SCHEMA "testSchema0";
 CREATE EXTENSION IF NOT EXISTS timescaledb SCHEMA "testSchema0";
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
-CREATE TABLE test(time timestamp, temp float8, device text);
-SELECT "testSchema0".create_hypertable('test', 'time', 'device', 2);
+CREATE TABLE test_ts(time timestamp, temp float8, device text);
+CREATE TABLE test_tz(time timestamptz, temp float8, device text);
+CREATE TABLE test_dt(time date, temp float8, device text);
+SELECT "testSchema0".create_hypertable('test_ts', 'time', 'device', 2);
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT "testSchema0".create_hypertable('test_tz', 'time', 'device', 2);
+NOTICE:  adding NOT NULL constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+SELECT "testSchema0".create_hypertable('test_dt', 'time', 'device', 2);
 NOTICE:  adding NOT NULL constraint to column "time"
  create_hypertable 
 -------------------
@@ -16,16 +32,133 @@ NOTICE:  adding NOT NULL constraint to column "time"
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions 
 ----+-------------+------------+------------------------+-------------------------+----------------
-  1 | public      | test       | _timescaledb_internal  | _hyper_1                |              2
-(1 row)
+  1 | public      | test_ts    | _timescaledb_internal  | _hyper_1                |              2
+  2 | public      | test_tz    | _timescaledb_internal  | _hyper_2                |              2
+  3 | public      | test_dt    | _timescaledb_internal  | _hyper_3                |              2
+(3 rows)
 
-INSERT INTO test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
-SELECT * FROM test;
+INSERT INTO test_ts VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
+INSERT INTO test_ts VALUES('Mon Mar 20 09:27:00.936242 2017', 22, 'dev2');
+INSERT INTO test_ts VALUES('Mon Mar 20 09:28:00.936242 2017', 21.2, 'dev1');
+INSERT INTO test_ts VALUES('Mon Mar 20 09:37:00.936242 2017', 30, 'dev3');
+SELECT * FROM test_ts ORDER BY time;
               time               | temp | device 
 ---------------------------------+------+--------
  Mon Mar 20 09:17:00.936242 2017 | 23.4 | dev1
+ Mon Mar 20 09:27:00.936242 2017 |   22 | dev2
+ Mon Mar 20 09:28:00.936242 2017 | 21.2 | dev1
+ Mon Mar 20 09:37:00.936242 2017 |   30 | dev3
+(4 rows)
+
+INSERT INTO test_tz VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
+INSERT INTO test_tz VALUES('Mon Mar 20 09:27:00.936242 2017', 22, 'dev2');
+INSERT INTO test_tz VALUES('Mon Mar 20 09:28:00.936242 2017', 21.2, 'dev1');
+INSERT INTO test_tz VALUES('Mon Mar 20 09:37:00.936242 2017', 30, 'dev3');
+SELECT * FROM test_tz ORDER BY time;
+                time                 | temp | device 
+-------------------------------------+------+--------
+ Mon Mar 20 09:17:00.936242 2017 PDT | 23.4 | dev1
+ Mon Mar 20 09:27:00.936242 2017 PDT |   22 | dev2
+ Mon Mar 20 09:28:00.936242 2017 PDT | 21.2 | dev1
+ Mon Mar 20 09:37:00.936242 2017 PDT |   30 | dev3
+(4 rows)
+
+INSERT INTO test_dt VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
+INSERT INTO test_dt VALUES('Mon Mar 21 09:27:00.936242 2017', 22, 'dev2');
+INSERT INTO test_dt VALUES('Mon Mar 22 09:28:00.936242 2017', 21.2, 'dev1');
+INSERT INTO test_dt VALUES('Mon Mar 23 09:37:00.936242 2017', 30, 'dev3');
+SELECT * FROM test_dt ORDER BY time;
+    time    | temp | device 
+------------+------+--------
+ 03-20-2017 | 23.4 | dev1
+ 03-21-2017 |   22 | dev2
+ 03-22-2017 | 21.2 | dev1
+ 03-23-2017 |   30 | dev3
+(4 rows)
+
+-- testing time_bucket START
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 minutes') AS ten_min FROM test_ts GROUP BY ten_min ORDER BY avg_tmp;
+ avg_tmp |         ten_min          
+---------+--------------------------
+    21.6 | Mon Mar 20 09:26:00 2017
+    23.4 | Mon Mar 20 09:16:00 2017
+      30 | Mon Mar 20 09:36:00 2017
+(3 rows)
+
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 minutes') AS ten_min FROM test_tz GROUP BY ten_min ORDER BY avg_tmp;
+ avg_tmp |           ten_min            
+---------+------------------------------
+    21.6 | Mon Mar 20 09:26:00 2017 PDT
+    23.4 | Mon Mar 20 09:16:00 2017 PDT
+      30 | Mon Mar 20 09:36:00 2017 PDT
+(3 rows)
+
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
+ avg_tmp |  ten_min   
+---------+------------
+    21.2 | 03-21-2017
+      22 | 03-20-2017
+    23.4 | 03-19-2017
+      30 | 03-22-2017
+(4 rows)
+
+-- testing time_bucket END
+-- testing drop_chunks START
+SELECT "testSchema0".drop_chunks(interval '2 years', 'test_ts');
+ drop_chunks 
+-------------
+ 
 (1 row)
 
+SELECT * FROM test_ts ORDER BY time;
+              time               | temp | device 
+---------------------------------+------+--------
+ Mon Mar 20 09:17:00.936242 2017 | 23.4 | dev1
+ Mon Mar 20 09:27:00.936242 2017 |   22 | dev2
+ Mon Mar 20 09:28:00.936242 2017 | 21.2 | dev1
+ Mon Mar 20 09:37:00.936242 2017 |   30 | dev3
+(4 rows)
+
+SELECT "testSchema0".drop_chunks(interval '1 minutes', 'test_tz');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+SELECT * FROM test_tz ORDER BY time;
+ time | temp | device 
+------+------+--------
+(0 rows)
+
+SELECT "testSchema0".drop_chunks(interval '1 minutes', 'test_dt');
+ drop_chunks 
+-------------
+ 
+(1 row)
+
+SELECT * FROM test_dt ORDER BY time;
+ time | temp | device 
+------+------+--------
+(0 rows)
+
+-- testing drop_chunks END
+-- testing hypertable_relation_size_pretty START
+SELECT * FROM "testSchema0".hypertable_relation_size_pretty('test_ts');
+ table_size | index_size | toast_size | total_size 
+------------+------------+------------+------------
+ 16 kB      | 64 kB      | 16 kB      | 96 kB
+(1 row)
+
+-- testing hypertable_relation_size_pretty END
+-- testing indexes_relation_size_pretty START
+SELECT * FROM "testSchema0".indexes_relation_size_pretty('test_ts') ORDER BY index_name;
+           index_name           | total_size 
+--------------------------------+------------
+ public.test_ts_device_time_idx | 32 kB
+ public.test_ts_time_idx        | 32 kB
+(2 rows)
+
+-- testing indexes_relation_size_pretty END
 CREATE SCHEMA "testSchema";
 \set ON_ERROR_STOP 0
 ALTER EXTENSION timescaledb SET SCHEMA "testSchema";

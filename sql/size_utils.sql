@@ -141,7 +141,7 @@ BEGIN
                pg_size_pretty(index_bytes) as index,
                pg_size_pretty(toast_bytes) as toast,
                pg_size_pretty(total_bytes) as total
-               FROM hypertable_relation_size(main_table);
+               FROM @extschema@.hypertable_relation_size(main_table);
 
 END;
 $BODY$;
@@ -413,7 +413,7 @@ BEGIN
         RETURN QUERY
         SELECT s.index_name,
                pg_size_pretty(s.total_bytes)
-        FROM indexes_relation_size(main_table) s;
+        FROM @extschema@.indexes_relation_size(main_table) s;
 END;
 $BODY$;
 

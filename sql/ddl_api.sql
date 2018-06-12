@@ -100,11 +100,11 @@ BEGIN
 
 
     IF time_type = 'TIMESTAMP'::regtype THEN
-        PERFORM drop_chunks((now() - older_than)::timestamp, table_name, schema_name, cascade);
+        PERFORM @extschema@.drop_chunks((now() - older_than)::timestamp, table_name, schema_name, cascade);
     ELSIF time_type = 'DATE'::regtype THEN
-        PERFORM drop_chunks((now() - older_than)::date, table_name, schema_name, cascade);
+        PERFORM @extschema@.drop_chunks((now() - older_than)::date, table_name, schema_name, cascade);
     ELSIF time_type = 'TIMESTAMPTZ'::regtype THEN
-        PERFORM drop_chunks(now() - older_than, table_name, schema_name, cascade);
+        PERFORM @extschema@.drop_chunks(now() - older_than, table_name, schema_name, cascade);
     ELSE
         RAISE 'Can only use drop_chunks with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types';
     END IF;

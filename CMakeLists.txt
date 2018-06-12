@@ -7,7 +7,8 @@ set(VERSION_REGEX "version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+))*
 if (NOT (${VERSION_CONFIG} MATCHES ${VERSION_REGEX}))
   message(FATAL_ERROR "Cannot read version from version.config")
 endif ()
-
+# a hack to avoid change of SQL extschema variable
+set(extschema "@extschema@")
 set(VERSION ${CMAKE_MATCH_1})
 set(VERSION_MOD ${CMAKE_MATCH_3})
 set(UPDATE_FROM_VERSION ${CMAKE_MATCH_4})

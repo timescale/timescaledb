@@ -15,19 +15,19 @@ CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS D
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
     RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
-    SELECT time_bucket(bucket_width, ts-"offset")+"offset";
+    SELECT @extschema@.time_bucket(bucket_width, ts-"offset")+"offset";
 $BODY$;
 
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, "offset" INTERVAL)
     RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
-    SELECT time_bucket(bucket_width, ts-"offset")+"offset";
+    SELECT @extschema@.time_bucket(bucket_width, ts-"offset")+"offset";
 $BODY$;
 
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE, "offset" INTERVAL)
     RETURNS DATE LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
-    SELECT (time_bucket(bucket_width, ts-"offset")+"offset")::date;
+    SELECT (@extschema@.time_bucket(bucket_width, ts-"offset")+"offset")::date;
 $BODY$;
 
 
