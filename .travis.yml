@@ -14,12 +14,15 @@ before_install:
   - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
   - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine
 install:
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex && mkdir -p /build/debug"
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git && mkdir -p /build/debug"
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
   # We only need to build the regress stuff
-  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --enable-debug --enable-cassert --without-readline --without-zlib && make -C /postgres/src/test/regress"
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=/postgres && make install && chown -R postgres:postgres /build/"
+  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --enable-coverage --enable-debug --enable-cassert --without-readline --without-zlib && make -C /postgres/src/test/regress"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install && chown -R postgres:postgres /build/"
 script:
   - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - ci_env=`bash <(curl -s https://codecov.io/env)`
+  - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) || echo \"Codecov did not collect coverage reports\" "
 after_failure:
   - docker exec -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regressions.diffs
 after_script:
