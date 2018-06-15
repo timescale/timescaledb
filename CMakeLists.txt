@@ -30,6 +30,29 @@ if (WIN32)
     set(CMAKE_CONFIGURATION_TYPES Release CACHE STRING "Semicolon separated list of supported configuration types, only supports Debug, Release, MinSizeRel, and RelWithDebInfo, anything else will be ignored." FORCE)
   endif ()
 endif (WIN32)
+if (ENABLE_CODECOVERAGE)
+  message(STATUS "Running code coverage")
+
+  if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(WARNING "Code coverage results with an optimised (non-Debug) build may be misleading")
+  endif (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+
+  if (NOT DEFINED CODECOV_OUTPUTFILE)
+    set(CODECOV_OUTPUTFILE cmake_coverage.output)
+  endif (NOT DEFINED CODECOV_OUTPUTFILE)
+
+  if (NOT DEFINED CODECOV_HTMLOUTPUTDIR)
+    set(CODECOV_HTMLOUTPUTDIR coverage_results)
+  endif (NOT DEFINED CODECOV_HTMLOUTPUTDIR)
+
+  find_program(CODECOV_GCOV gcov)
+  find_program(CODECOV_LCOV lcov)
+  add_definitions(-fprofile-arcs -ftest-coverage)
+  link_libraries(gcov)
+  set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} --coverage -fprofile-arcs)
+  add_custom_target(coverage_init ALL ${CODECOV_LCOV} --base-directory . --directory ${CMAKE_BINARY_DIR} --output-file ${CODECOV_OUTPUTFILE} --capture --initial)
+
+endif (ENABLE_CODECOVERAGE)
 
 project(timescaledb VERSION ${VERSION} LANGUAGES C)
 
