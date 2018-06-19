@@ -5,7 +5,6 @@
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include <parser/analyze.h>
-#include <access/parallel.h>
 #include "../compat-msvc-exit.h"
 #include <utils/guc.h>
 #include <utils/inval.h>
@@ -319,15 +318,6 @@ do_load()
 static void inline
 extension_check()
 {
-	/*
-	 * Disable load in parallel workers since they will have the shared
-	 * libraries of the leader process loaded as part of ParallelWorkerMain().
-	 * We don't want to be in the business of preloading stuff in the workers
-	 * that's not part of the leader
-	 */
-	if (IsParallelWorker())
-		return;
-
 	if (!loaded)
 	{
 		enum ExtensionState state = extension_current_state();
