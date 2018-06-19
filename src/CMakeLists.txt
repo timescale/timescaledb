@@ -16,7 +16,13 @@ elseif (WIN32)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /MANIFEST:NO")
 endif (APPLE)
 
-include_directories (${CMAKE_CURRENT_BINARY_DIR} ${PG_INCLUDEDIR} ${PG_INCLUDEDIR_SERVER})
+# Only Windows and FreeBSD need the base include/ dir instead of include/server/, and including
+# both causes problems on Ubuntu where they frequently get out of sync
+if (WIN32 OR (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD"))
+    include_directories (${CMAKE_CURRENT_BINARY_DIR} ${PG_INCLUDEDIR} ${PG_INCLUDEDIR_SERVER})
+else ()
+    include_directories (${CMAKE_CURRENT_BINARY_DIR} ${PG_INCLUDEDIR_SERVER})
+endif ()
 
 if (WIN32)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib ws2_32.lib")
