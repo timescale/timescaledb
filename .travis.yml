@@ -43,7 +43,8 @@ jobs:
     - if: type = cron
       stage: test
       script:
-        - PG_MAJOR=9.6 PG_MINOR_COMPILE=1 bash -x ./scripts/docker-run-abi-test.sh
+        # Versions <=9.6.1 is missing function `convert_tuples_by_name_map` needed by our code
+        - PG_MAJOR=9.6 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
 
     - stage: test
       env:
