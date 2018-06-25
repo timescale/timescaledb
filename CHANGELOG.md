@@ -4,6 +4,32 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.10.0 (2018-06-27)
+
+**High-level changes**
+* Planning time improvement (**up to 15x**) when a hypertable has many chunks by only expanding (and taking locks on) chunks that will actually be used in a query, rather than on all chunks (as was the default PostgreSQL behavior).
+* Smarter use of HashAggregate by teaching the planner to better estimate the number of output rows when using time-based grouping.
+* New convenience function for getting the approximate number of rows in a hypertable (`hypertable_approximate_row_count`).
+* Fixed support for installing extension into non-`public` schemas
+* Other bug fixes and refactorings.
+
+**Notable commits**
+* [12bc117] Fix static analyzer warning when checking for index attributes
+* [7d9f49b] Fix missing NULL check when creating default indexes
+* [2e1f3b9] Improve memory allocation during cache lookups
+* [ca6e5ef] Fix upserts on altered tables.
+* [2de6b02] Add optimization to use HashAggregate more often
+* [4b4211f] Fix some external functions when setting a custom schema
+* [b7257fc] Optimize planning times when hypertables have many chunks
+* [c660fcd] Add hypertable_approximate_row_count convenience function
+* [9ce1576] Fix a compilation issue on pre 9.6.3 versions
+
+**Thanks**
+* @viragkothari for suggesting the addition of `hypertable_approximate_row_count` and @fvannee for providing the initial SQL used to build that function
+* 'mintekhab' from Slack for reporting a segfault when using upserts on an altered table
+* @mmouterde for reporting an issue where the extension implicitly expected to be installed in the `public` schema
+* @mfuterko for bringing some potential bugs to our attention via static analysis
+
 ## 0.9.2 (2018-05-04)
 
 **High-level changes**
