@@ -145,7 +145,7 @@ create_default_indexes(Hypertable *ht,
 {
 	IndexElem	telem = {
 		.type = T_IndexElem,
-		.name = NameStr(time_dim->fd.column_name),
+		.name = time_dim != NULL ? NameStr(time_dim->fd.column_name) : NULL,
 		.ordering = SORTBY_DESC,
 	};
 
