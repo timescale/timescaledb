@@ -23,7 +23,7 @@ index_has_attribute(List *indexelems, const char *attrname)
 	foreach(lc, indexelems)
 	{
 		Node	   *node = lfirst(lc);
-		const char *colname;
+		const char *colname = NULL;
 
 		/*
 		 * The type of the element varies depending on whether the list is
@@ -53,7 +53,7 @@ index_has_attribute(List *indexelems, const char *attrname)
 				elog(ERROR, "unsupported index list element");
 		}
 
-		if (strncmp(colname, attrname, NAMEDATALEN) == 0)
+		if (colname != NULL && strncmp(colname, attrname, NAMEDATALEN) == 0)
 			return true;
 	}
 
