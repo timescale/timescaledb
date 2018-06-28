@@ -40,7 +40,7 @@ our [Style Guide](docs/StyleGuide.md).
 
     * Hack away. Add tests for non-trivial changes.
 
-    * Run the [test suite](https://github.com/timescale/timescaledb/blob/master/README.md#testing)
+    * Run the [test suite](#testing)
       and make sure everything passes.
 
     * When committing, be sure to write good commit messages. Stylistically,

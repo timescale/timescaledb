@@ -185,6 +185,11 @@ MSBuild.exe /p:Configuration=Release INSTALL.vcxproj
 
 ### Support
 
+- [Slack Channel](https://slack.timescale.com)
 - [Github Issues](https://github.com/timescale/timescaledb/issues)
-- [Slack Channel](https://slack-login.timescale.com)
 - [Support Email](mailto:support@timescale.com)
+
+### Contributing
+
+- [Contributor instructions](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
+- [Code style guide](https://github.com/timescale/timescaledb/blob/master/docs/StyleGuide.md)
