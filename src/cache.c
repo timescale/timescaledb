@@ -6,12 +6,27 @@
 /* List of pinned caches. A cache occurs once in this list for every pin
  * taken */
 static List *pinned_caches = NIL;
+static MemoryContext pinned_caches_mctx = NULL;
 
 typedef struct CachePin
 {
 	Cache	   *cache;
 	SubTransactionId subtxnid;
 } CachePin;
+
+
+static void
+cache_reset_pinned_caches(void)
+{
+	if (NULL != pinned_caches_mctx)
+		MemoryContextDelete(pinned_caches_mctx);
+
+	pinned_caches_mctx = AllocSetContextCreate(CacheMemoryContext,
+											   "Cache pins",
+											   ALLOCSET_DEFAULT_SIZES);
+
+	pinned_caches = NIL;
+}
 
 void
 cache_init(Cache *cache)
@@ -72,7 +87,7 @@ cache_invalidate(Cache *cache)
 extern Cache *
 cache_pin(Cache *cache)
 {
-	MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+	MemoryContext old = MemoryContextSwitchTo(pinned_caches_mctx);
 	CachePin   *cp = palloc(sizeof(CachePin));
 
 	cp->cache = cache;
@@ -96,6 +111,7 @@ remove_pin(Cache *cache, SubTransactionId subtxnid)
 		if (cp->cache == cache && cp->subtxnid == subtxnid)
 		{
 			pinned_caches = list_delete_cell(pinned_caches, lc, prev);
+			pfree(cp);
 			return;
 		}
 
@@ -200,8 +216,8 @@ release_all_pinned_caches()
 		cp->cache->refcount--;
 		cache_destroy(cp->cache);
 	}
-	list_free(pinned_caches);
-	pinned_caches = NIL;
+
+	cache_reset_pinned_caches();
 }
 
 static void
@@ -227,6 +243,8 @@ release_subtxn_pinned_caches(SubTransactionId subtxnid, bool abort)
 			cache_release_subtxn(cp->cache, subtxnid);
 		}
 	}
+
+	list_free(pinned_caches_copy);
 }
 
 /*
@@ -251,12 +269,17 @@ cache_xact_end(XactEvent event, void *arg)
 			break;
 		default:
 			{
+				/*
+				 * Make a copy of the list of pinned caches since
+				 * cache_release() can manipulate the original list.
+				 */
+				List	   *pinned_caches_copy = list_copy(pinned_caches);
 				ListCell   *lc;
 
 				/*
 				 * Only caches left should be marked as non-released
 				 */
-				foreach(lc, pinned_caches)
+				foreach(lc, pinned_caches_copy)
 				{
 					CachePin   *cp = lfirst(lc);
 
@@ -273,6 +296,8 @@ cache_xact_end(XactEvent event, void *arg)
 					if (cp->cache->release_on_commit)
 						cache_release(cp->cache);
 				}
+
+				list_free(pinned_caches_copy);
 			}
 			break;
 	}
@@ -311,6 +336,7 @@ cache_subxact_abort(SubXactEvent event, SubTransactionId subtxn_id,
 void
 _cache_init(void)
 {
+	cache_reset_pinned_caches();
 	RegisterXactCallback(cache_xact_end, NULL);
 	RegisterSubXactCallback(cache_subxact_abort, NULL);
 }
@@ -318,6 +344,9 @@ _cache_init(void)
 void
 _cache_fini(void)
 {
+	MemoryContextDelete(pinned_caches_mctx);
+	pinned_caches_mctx = NULL;
+	pinned_caches = NIL;
 	UnregisterXactCallback(cache_xact_end, NULL);
 	UnregisterSubXactCallback(cache_subxact_abort, NULL);
 }
