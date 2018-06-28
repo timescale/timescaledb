@@ -1,4 +1,4 @@
-# TimescaleDB style guide
+# TimescaleDB code style guide
 
 Source code should follow the
 [PostgreSQL coding conventions](https://www.postgresql.org/docs/current/static/source.html). This
@@ -13,6 +13,11 @@ we are aware of, apart from the general spacing and layout rules
 above. For now, try to follow the style of the surrounding code when
 making modifications. We might develop more stringent guidelines in
 the future.
+
+## Error messages
+
+Error messages in TimescaleDB should obey the PostgreSQL
+[error message style guide](https://www.postgresql.org/docs/current/static/error-style-guide.html).
 
 ## C style
 
