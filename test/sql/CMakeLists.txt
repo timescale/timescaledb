@@ -57,12 +57,16 @@ set(TEST_FILES
   vacuum.sql
   version.sql)
 
+file(STRINGS ${PG_INCLUDEDIR}/pg_config.h USE_OPENSSL REGEX "define USE_OPENSSL ")
+
+
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
     bgw_launcher.sql
     bgw_db_scheduler.sql
     loader.sql
-    symbol_conflict.sql)
+    symbol_conflict.sql
+    test_net.sql)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
 
 IF (${PG_VERSION_MAJOR} GREATER "9")
