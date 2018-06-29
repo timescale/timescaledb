@@ -9,6 +9,7 @@
 #include <utils/acl.h>
 #include <utils/snapmgr.h>
 #include <nodes/memnodes.h>
+#include <nodes/makefuncs.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
 #include <catalog/pg_constraint_fn.h>
@@ -17,6 +18,8 @@
 #include <commands/tablespace.h>
 #include <commands/dbcommands.h>
 #include <commands/schemacmds.h>
+#include <commands/tablecmds.h>
+#include <commands/trigger.h>
 #include <storage/lmgr.h>
 #include <miscadmin.h>
 
@@ -913,6 +916,176 @@ hypertable_validate_constraints(Oid relid)
 	heap_close(catalog, AccessShareLock);
 }
 
+/*
+ * Functionality to block INSERTs on the hypertable's root table.
+ *
+ * The design considered implementing this either with RULES, constraints, or
+ * triggers. An "internal" trigger was found to have the best trade-offs:
+ *
+ * - A RULE doesn't work since it rewrites the query and thus blocks INSERTs
+ *   also on the hypertable.
+ *
+ * - A constraint is not transparent, i.e., viewing the hypertable with \d+
+ *   <table> would list the constraint and that breaks the abstraction of
+ *   "hypertables being like regular tables." Further, a constraint remains on
+ *   the table after the extension is dropped, which prohibits running
+ *   create_hypertable() on the same table once the extension is created again
+ *   (you can work around this, but is messy). This issue, b.t.w., broke one
+ *   of the tests.
+ *
+ * - A trigger, especially an "internal" one, is transparent (doesn't show up
+ *	 on \d+ <table>) and is automatically removed when the extension is
+ *	 dropped (since it is part of the extension). Internal triggers aren't
+ *	 inherited by chunks either, so we need no special handling to _not_
+ *	 inherit the blocking trigger.
+ */
+#define INSERT_BLOCKER_NAME "insert_blocker"
+
+TS_FUNCTION_INFO_V1(hypertable_insert_blocker);
+
+Datum
+hypertable_insert_blocker(PG_FUNCTION_ARGS)
+{
+	TriggerData *trigdata = (TriggerData *) fcinfo->context;
+	const char *relname = get_rel_name(trigdata->tg_relation->rd_id);
+
+	if (!CALLED_AS_TRIGGER(fcinfo))
+		elog(ERROR, "insert_blocker: not called by trigger manager");
+
+	if (guc_restoring)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot INSERT into hypertable \"%s\" during restore", relname),
+				 errhint("Set 'timescaledb.restoring' to 'OFF' after the restore process has finished.")));
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid INSERT on the root table of hypertable \"%s\"", relname),
+				 errhint("Make sure the TimescaleDB extension has been preloaded.")));
+
+	PG_RETURN_NULL();
+}
+
+/*
+ * Get the insert blocker trigger on a table.
+ *
+ * Note that we cannot get the insert trigger by name since internal triggers
+ * are made unique by appending the trigger OID, which we do not
+ * know. Instead, we have to search all triggers.
+ */
+static Oid
+insert_blocker_trigger_get(Oid relid)
+{
+	Relation	tgrel;
+	ScanKeyData skey[1];
+	SysScanDesc tgscan;
+	HeapTuple	tuple;
+	Oid			tgoid = InvalidOid;
+
+	tgrel = heap_open(TriggerRelationId, AccessShareLock);
+
+	ScanKeyInit(&skey[0],
+				Anum_pg_trigger_tgrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true,
+								NULL, 1, skey);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
+	{
+		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
+
+		if (TRIGGER_TYPE_MATCHES(trig->tgtype, TRIGGER_TYPE_ROW, TRIGGER_TYPE_BEFORE, TRIGGER_TYPE_INSERT) &&
+			strncmp(INSERT_BLOCKER_NAME, NameStr(trig->tgname), strlen(INSERT_BLOCKER_NAME)) == 0 &&
+			trig->tgisinternal)
+		{
+			tgoid = HeapTupleGetOid(tuple);
+			break;
+		}
+	}
+
+	systable_endscan(tgscan);
+	heap_close(tgrel, AccessShareLock);
+
+	return tgoid;
+}
+
+/*
+ * Add an INSERT blocking trigger to a table.
+ *
+ * The blocking trigger is used to block accidental INSERTs on a hypertable's
+ * root table.
+ */
+static Oid
+insert_blocker_trigger_add(Oid relid)
+{
+	ObjectAddress objaddr;
+	char	   *relname = get_rel_name(relid);
+	Oid			schemaid = get_rel_namespace(relid);
+	char	   *schema = get_namespace_name(schemaid);
+	CreateTrigStmt stmt = {
+		.type = T_CreateTrigStmt,
+		.row = true,
+		.timing = TRIGGER_TYPE_BEFORE,
+		.trigname = INSERT_BLOCKER_NAME,	/* Note, internal triggers get the
+											 * OID appended to the name */
+		.relation = makeRangeVar(schema, relname, -1),
+		.funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(INSERT_BLOCKER_NAME)),
+		.args = NIL,
+		.events = TRIGGER_TYPE_INSERT,
+	};
+
+	objaddr.objectId = insert_blocker_trigger_get(relid);
+
+	/* Trigger already exists. Do nothing */
+	if (OidIsValid(objaddr.objectId))
+		return objaddr.objectId;
+
+	/*
+	 * Create as an internal trigger; it won't show up with \d and won't be
+	 * inherited by chunks.
+	 */
+	objaddr = CreateTrigger(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, true);
+
+	if (!OidIsValid(objaddr.objectId))
+		elog(ERROR, "could not create insert blocker trigger");
+
+	return objaddr.objectId;
+}
+
+TS_FUNCTION_INFO_V1(hypertable_insert_blocker_trigger_add);
+
+/*
+ * This function is exposed to add the blocking trigger on legacy hypertables
+ * that don't have the trigger. We can't do it from SQL code, because internal
+ * triggers cannot be added from SQL.
+ *
+ * In case the hypertable's root table has data in it, we bail out with an
+ * error instructing the user to fix the issue first.
+ */
+Datum
+hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
+{
+	Oid			relid = PG_GETARG_OID(0);
+
+	if (table_has_tuples(relid, AccessShareLock))
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("hypertable \"%s\" has data in the root table", get_rel_name(relid)),
+				 errdetail("Migrate the data from the root table to chunks before running the UPDATE again."),
+				 errhint("Data can be migrated as follows:\n"
+						 "> BEGIN;\n"
+						 "> SET timescaledb.restoring = 'OFF';\n"
+						 "> INSERT INTO \"%1$s\" SELECT * FROM ONLY \"%1$s\";\n"
+						 "> SET timescaledb.restoring = 'ON';\n"
+						 "> TRUNCATE ONLY \"%1$s\";\n"
+						 "> SET timescaledb.restoring = 'OFF';\n"
+						 "> COMMIT;", get_rel_name(relid))));
+
+	PG_RETURN_OID(insert_blocker_trigger_add(relid));
+}
+
 TS_FUNCTION_INFO_V1(hypertable_create);
 
 /*
@@ -1151,8 +1324,10 @@ hypertable_create(PG_FUNCTION_ARGS)
 				(errmsg("migrating data to chunks"),
 				 errdetail("Migration might take a while depending on the amount of data.")));
 
-		timescaledb_copy_from_table_to_chunks(ht, AccessShareLock);
+		timescaledb_move_from_table_to_chunks(ht, AccessShareLock);
 	}
+
+	insert_blocker_trigger_add(table_relid);
 
 	if (create_default_indexes)
 		indexing_create_default_indexes(ht);
