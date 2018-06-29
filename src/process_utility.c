@@ -141,7 +141,7 @@ relation_not_only(RangeVar *rv)
 				 errmsg("ONLY option not supported on hypertable operations")));
 }
 
-/* Change the schema of a hypertable */
+/* Change the schema of a hypertable or a chunk */
 static void
 process_alterobjectschema(Node *parsetree)
 {
@@ -161,7 +161,14 @@ process_alterobjectschema(Node *parsetree)
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry(hcache, relid);
 
-	if (ht != NULL)
+	if (ht == NULL)
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			chunk_set_schema(chunk, alterstmt->newschema);
+	}
+	else
 		hypertable_set_schema(ht, alterstmt->newschema);
 
 	cache_release(hcache);
@@ -626,12 +633,22 @@ process_reindex(Node *parsetree)
 	return ret;
 }
 
+/*
+ * Rename a hypertable or a chunk.
+ */
 static void
 process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
 
-	if (NULL != ht)
+	if (NULL == ht)
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			chunk_set_name(chunk, stmt->newname);
+	}
+	else
 		hypertable_set_name(ht, stmt->newname);
 }
 
@@ -642,7 +659,17 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 	Dimension  *dim;
 
 	if (NULL == ht)
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot rename column \"%s\" of hypertable chunk \"%s\"",
+							stmt->subname, get_rel_name(relid)),
+					 errhint("Rename the hypertable column instead.")));
 		return;
+	}
 
 	dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
 

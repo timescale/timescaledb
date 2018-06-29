@@ -1142,3 +1142,57 @@ chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id)
 	chunk_scan_ctx_foreach_chunk(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);
 }
+
+static bool
+chunk_tuple_update(TupleInfo *ti, void *data)
+{
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_chunk *form = (FormData_chunk *) GETSTRUCT(tuple);
+	FormData_chunk *update = data;
+	CatalogSecurityContext sec_ctx;
+
+	namecpy(&form->schema_name, &update->schema_name);
+	namecpy(&form->table_name, &update->table_name);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_update(ti->scanrel, tuple);
+	catalog_restore_user(&sec_ctx);
+
+	heap_freetuple(tuple);
+
+	return false;
+}
+
+static bool
+chunk_update_form(FormData_chunk *form)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber,
+				F_INT4EQ, form->id);
+
+	return chunk_scan_internal(CHUNK_ID_INDEX,
+							   scankey,
+							   1,
+							   chunk_tuple_update,
+							   form,
+							   0,
+							   AccessShareLock,
+							   CurrentMemoryContext) > 0;
+}
+
+bool
+chunk_set_name(Chunk *chunk, const char *newname)
+{
+	namestrcpy(&chunk->fd.table_name, newname);
+
+	return chunk_update_form(&chunk->fd);
+}
+
+bool
+chunk_set_schema(Chunk *chunk, const char *newschema)
+{
+	namestrcpy(&chunk->fd.schema_name, newschema);
+
+	return chunk_update_form(&chunk->fd);
+}

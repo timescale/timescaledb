@@ -130,3 +130,32 @@ SELECT * FROM alter_after;
  Tue Aug 22 09:19:14 2017 | 12.5 |       3 |  7
 (7 rows)
 
+-- Need superuser to ALTER chunks in _timescaledb_internal schema
+\c single :ROLE_SUPERUSER
+SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+ id | hypertable_id |      schema_name      |    table_name    
+----+---------------+-----------------------+------------------
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk
+(1 row)
+
+-- Rename chunk
+ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
+SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+ id | hypertable_id |      schema_name      |   table_name   
+----+---------------+-----------------------+----------------
+  2 |             2 | _timescaledb_internal | new_chunk_name
+(1 row)
+
+-- Set schema
+ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
+SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+ id | hypertable_id | schema_name |   table_name   
+----+---------------+-------------+----------------
+  2 |             2 | public      | new_chunk_name
+(1 row)
+
+-- Test that we cannot rename chunk columns
+\set ON_ERROR_STOP 0
+ALTER TABLE public.new_chunk_name RENAME COLUMN time TO newtime;
+ERROR:  cannot rename column "time" of hypertable chunk "new_chunk_name"
+\set ON_ERROR_STOP 1
