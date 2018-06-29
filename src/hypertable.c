@@ -11,6 +11,9 @@
 #include <nodes/memnodes.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
+#include <catalog/pg_constraint_fn.h>
+#include <catalog/pg_constraint.h>
+#include <catalog/indexing.h>
 #include <commands/tablespace.h>
 #include <commands/dbcommands.h>
 #include <commands/schemacmds.h>
@@ -849,6 +852,46 @@ hypertable_create_schema(const char *schema_name)
 		);
 }
 
+/*
+ * Check that existing table constraints are supported.
+ *
+ * Hypertables do not support some constraints. For instance, NO INHERIT
+ * constraints cannot be enforced on a hypertable since they only exist on the
+ * parent table, which will have no tuples.
+ */
+static void
+hypertable_validate_constraints(Oid relid)
+{
+	Relation	catalog;
+	SysScanDesc scan;
+	ScanKeyData scankey;
+	HeapTuple	tuple;
+
+	catalog = heap_open(ConstraintRelationId, AccessShareLock);
+
+	ScanKeyInit(&scankey, Anum_pg_constraint_conrelid, BTEqualStrategyNumber,
+				F_OIDEQ, ObjectIdGetDatum(relid));
+
+	scan = systable_beginscan(catalog, ConstraintRelidIndexId, true,
+							  NULL, 1, &scankey);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
+
+		if (form->contype == CONSTRAINT_CHECK && form->connoinherit)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
+							get_rel_name(relid)),
+					 errhint("Remove all NO INHERIT constraints from table \"%s\" before making it a hypertable.",
+							 get_rel_name(relid))));
+	}
+
+	systable_endscan(scan);
+	heap_close(catalog, AccessShareLock);
+}
+
 TS_FUNCTION_INFO_V1(hypertable_create);
 
 /*
@@ -946,6 +989,9 @@ hypertable_create(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("invalid relation type")));
 	}
+
+	/* Check that the table doesn't have any unsupported constraints */
+	hypertable_validate_constraints(table_relid);
 
 	table_has_data = table_has_tuples(table_relid, GetActiveSnapshot(), NoLock);
 

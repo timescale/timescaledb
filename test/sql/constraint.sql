@@ -398,3 +398,27 @@ CREATE TABLE hyper_ex_invalid (
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 \set ON_ERROR_STOP 1
+
+
+--- NO INHERIT constraints (not allowed) ----
+CREATE TABLE hyper_noinherit (
+    time BIGINT,
+    sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 0) NO INHERIT
+);
+
+SELECT * FROM test.show_constraints('hyper_noinherit');
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('hyper_noinherit', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set ON_ERROR_STOP 1
+
+CREATE TABLE hyper_noinherit_alter (
+    time BIGINT,
+    sensor_1 NUMERIC NULL DEFAULT 1
+);
+
+SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper_noinherit_alter ADD CONSTRAINT check_noinherit CHECK (sensor_1 > 0) NO INHERIT;
+\set ON_ERROR_STOP 1

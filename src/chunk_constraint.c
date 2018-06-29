@@ -581,13 +581,6 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 		 * of constraints (unique, primary key, and foreign key constraints)
 		 * are not inherited."
 		 */
-		if (conform->connoinherit)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
-					 errmsg("NO INHERIT option not supported on hypertables: %s", conform->conname.data)
-					 ));
-		}
 		return false;
 	}
 	return true;
