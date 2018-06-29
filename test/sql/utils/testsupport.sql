@@ -155,7 +155,7 @@ BEGIN
 END
 $BODY$;
 
-CREATE OR REPLACE FUNCTION test.show_triggers(rel regclass)
+CREATE OR REPLACE FUNCTION test.show_triggers(rel regclass, show_internal boolean = false)
 RETURNS TABLE("Trigger" name,
               "Type" smallint,
               "Function" regproc,
@@ -168,10 +168,11 @@ $BODY$
     substring(pg_get_triggerdef(t.oid) from 15)
     FROM pg_trigger t
     WHERE t.tgrelid = rel
+    AND t.tgisinternal = show_internal
     ORDER BY t.tgname;
 $BODY$;
 
-CREATE OR REPLACE FUNCTION test.show_triggersp(pattern text)
+CREATE OR REPLACE FUNCTION test.show_triggersp(pattern text, show_internal boolean = false)
 RETURNS TABLE("Table" regclass,
               "Trigger" name,
               "Type" smallint,
@@ -197,6 +198,7 @@ BEGIN
     FROM pg_class cl, pg_trigger t
     WHERE format('%I.%I', cl.relnamespace::regnamespace::name, cl.relname) LIKE format('%I.%s', schema_name, table_name)
     AND t.tgrelid = cl.oid
+    AND t.tgisinternal = show_internal
     ORDER BY t.tgrelid, t.tgname;
 END
 $BODY$;

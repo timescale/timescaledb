@@ -52,6 +52,9 @@ GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
 
+-- Check that the insert block trigger exists (cannot show name or definition since they contain OID)
+SELECT "Function" FROM test.show_triggers('test_schema.test_table', show_internal => true);
+
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 
 --test adding one more closed dimension

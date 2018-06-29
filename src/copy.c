@@ -640,7 +640,7 @@ next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext,
  * followed by a TRUNCATE on the main table.
  */
 void
-timescaledb_copy_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
+timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 {
 	Relation	rel;
 	CopyChunkState *ccstate;

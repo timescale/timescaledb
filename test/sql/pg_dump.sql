@@ -53,7 +53,21 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 ALTER DATABASE single SET timescaledb.restoring='on';
 \! pg_restore -h localhost -U :ROLE_SUPERUSER -d single dump/single.sql
 \c single
+
+-- Set to OFF for future DB sessions.
 ALTER DATABASE single SET timescaledb.restoring='off';
+
+-- Inserting with restoring ON in current session causes tuples to be
+-- inserted on main table, but this should be protected by the insert
+-- blocking trigger.
+\set ON_ERROR_STOP 0
+INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1)
+VALUES (1357894000000000000, 'dev5', 1.5, 2);
+\set ON_ERROR_STOP 1
+
+-- Now set to OFF in current session to reenable TimescaleDB. Check
+-- INSERTs below.
+SET timescaledb.restoring='off';
 
 --should be same as count above
 SELECT count(*)
@@ -83,6 +97,8 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 ALTER TABLE "test_schema"."two_Partitions" ADD COLUMN series_3 integer;
 INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1, series_3) VALUES
 (1357894000000000000, 'dev5', 1.5, 2, 4);
+
+SELECT * FROM ONLY "test_schema"."two_Partitions";
 
 --query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
 SELECT objid::regclass

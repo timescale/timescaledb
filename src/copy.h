@@ -10,6 +10,6 @@
 typedef struct Hypertable Hypertable;
 
 void		timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht);
-void		timescaledb_copy_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode);
+void		timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode);
 
 #endif							/* TIMESCALEDB_COPY_H */

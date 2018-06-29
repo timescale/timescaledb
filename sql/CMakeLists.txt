@@ -15,6 +15,7 @@ set(IMMUTABLE_API_SOURCE_FILES
 )
 # The rest of the source files defining mostly functions
 set(SOURCE_FILES
+  hypertable.sql
   chunk.sql
   ddl_internal.sql
   util_time.sql
