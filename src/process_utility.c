@@ -918,6 +918,13 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 		contype = constr->contype;
 		keys = (contype == CONSTR_EXCLUSION) ? constr->exclusions : constr->keys;
 		indexname = constr->indexname;
+
+		/* NO INHERIT constraints do not really make sense on a hypertable */
+		if (constr->is_no_inherit)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
+							get_rel_name(ht->main_table_relid))));
 	}
 	else if (IsA(constr_node, IndexStmt))
 	{
