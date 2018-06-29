@@ -77,6 +77,8 @@ extern void chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 d
 extern int	chunk_delete_by_relid(Oid chunk_oid);
 extern int	chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int	chunk_delete_by_name(const char *schema, const char *table);
+extern bool chunk_set_name(Chunk *chunk, const char *newname);
+extern bool chunk_set_schema(Chunk *chunk, const char *newschema);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found) \
 	chunk_get_by_name_with_memory_context(schema_name, table_name, num_constraints, \
