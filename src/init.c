@@ -37,6 +37,9 @@ extern void _process_utility_fini(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
 
+extern void _connection_init(void);
+extern void _connection_fini(void);
+
 extern void PGDLLEXPORT _PG_init(void);
 extern void PGDLLEXPORT _PG_fini(void);
 
@@ -58,6 +61,7 @@ _PG_init(void)
 	_event_trigger_init();
 	_process_utility_init();
 	_guc_init();
+	_connection_init();
 }
 
 void
@@ -67,6 +71,7 @@ _PG_fini(void)
 	 * Order of items should be strict reverse order of _PG_init. Please
 	 * document any exceptions.
 	 */
+	_connection_fini();
 	_guc_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
