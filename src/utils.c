@@ -196,7 +196,7 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 			return DatumGetInt64(res);
 		default:
 			if (!failure_ok)
-				elog(ERROR, "unkown time type oid '%d'", type_oid);
+				elog(ERROR, "unkown time type OID %d", type_oid);
 			return -1;
 	}
 }
@@ -231,7 +231,7 @@ create_fmgr(char *schema, char *function_name, int num_args)
 
 	if (func_list == NULL)
 	{
-		elog(ERROR, "couldn't find the function %s.%s", schema, function_name);
+		elog(ERROR, "could not find the function \"%s.%s\"", schema, function_name);
 	}
 	if (func_list->next != NULL)
 	{
@@ -395,7 +395,7 @@ get_interval_period_approx(Interval *interval)
 #define DAYS_PER_QUARTER 89
 #define YEARS_PER_DECADE 10
 #define YEARS_PER_CENTURY 100
-#define YEARS_PER_MILLENNIUM 1000 
+#define YEARS_PER_MILLENNIUM 1000
 
 /* Returns approximate period in microseconds */
 int64

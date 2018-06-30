@@ -89,7 +89,7 @@ extract_addrnames(ArrayType *arr)
 	for (i = 0; i < nelems; i++)
 	{
 		if (nulls[i])
-			elog(ERROR, "unexpected null in name list");
+			elog(ERROR, "unexpected NULL in name list");
 
 		/* TextDatumGetCString heap allocates the string */
 		list = lappend(list, TextDatumGetCString(elems[i]));

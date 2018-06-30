@@ -7,7 +7,7 @@ ALTER TABLE hyper
 DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper', 'time',  chunk_time_interval => 10);
-psql:include/plan_expand_hypertable_load.sql:8: NOTICE:  adding NOT NULL constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:8: NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -22,7 +22,7 @@ ALTER TABLE hyper_w_space
 DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper_w_space', 'time', 'device_id', 2, chunk_time_interval => 10);
-psql:include/plan_expand_hypertable_load.sql:24: NOTICE:  adding NOT NULL constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:24: NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -37,7 +37,7 @@ ALTER TABLE hyper_ts
 DROP COLUMN time_broken,
 ADD COLUMN time TIMESTAMPTZ;
 SELECT create_hypertable('hyper_ts', 'time', 'device_id', 2, chunk_time_interval => '10 seconds'::interval);
-psql:include/plan_expand_hypertable_load.sql:39: NOTICE:  adding NOT NULL constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:39: NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

@@ -155,7 +155,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			 */
 			return;
 		default:
-			elog(ERROR, "Invalid plan %d", nodeTag(subplan));
+			elog(ERROR, "invalid plan %d", nodeTag(subplan));
 	}
 
 	forboth(lc_plan, old_appendplans, lc_info, append_rel_info)
@@ -416,7 +416,7 @@ constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *sub
 				break;
 			}
 		default:
-			elog(ERROR, "Invalid node type %u", nodeTag(subpath));
+			elog(ERROR, "invalid node type %u", nodeTag(subpath));
 			break;
 	}
 

@@ -29,7 +29,7 @@ SELECT * FROM upsert_test;
 \set ON_ERROR_STOP 0
 INSERT INTO upsert_test VALUES ('2017-01-20T09:00:01', 12.3, 'yellow') ON CONFLICT ON CONSTRAINT upsert_test_pkey
 DO UPDATE SET temp = 12.3 RETURNING time, temp, color;
-ERROR:  Hypertables do not support ON CONFLICT statements that reference constraints
+ERROR:  hypertables do not support ON CONFLICT statements that reference constraints
 -- Test that update generates error on conflicts
 INSERT INTO upsert_test VALUES ('2017-01-21T09:00:01', 22.5, 'yellow') RETURNING *;
            time           | temp | color  
@@ -43,7 +43,7 @@ ERROR:  duplicate key value violates unique constraint "1_1_upsert_test_pkey"
 -- Test with UNIQUE index on multiple columns instead of PRIMARY KEY constraint
 CREATE TABLE upsert_test_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_unique', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -77,7 +77,7 @@ SELECT * FROM upsert_test_unique ORDER BY time, color DESC;
 -- Test with multiple UNIQUE indexes
 CREATE TABLE upsert_test_multi_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_multi_unique', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -130,7 +130,7 @@ ALTER TABLE upsert_test_space DROP to_drop;
 ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id char(20);
 CREATE UNIQUE INDEX time_space_idx ON upsert_test_space (time, device_id);
 SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_internal.get_partition_for_key'::regproc);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

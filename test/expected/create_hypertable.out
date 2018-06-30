@@ -6,7 +6,7 @@ create table test_schema.test_table(time BIGINT, temp float8, device_id text, de
 \set ON_ERROR_STOP 0
 -- get_create_command should fail since hypertable isn't made yet
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
-ERROR:  hypertable test_table not found
+ERROR:  hypertable "test_table" not found
 \set ON_ERROR_STOP 1
 \dt "test_schema".*
                   List of relations
@@ -33,7 +33,7 @@ RESET ROLE;
 GRANT :ROLE_DEFAULT_PERM_USER TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -41,7 +41,7 @@ NOTICE:  adding NOT NULL constraint to column "time"
 
 \set ON_ERROR_STOP 0
 insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
-ERROR:  null value in column "time" violates not-null constraint
+ERROR:  NULL value in column "time" violates not-null constraint
 \set ON_ERROR_STOP 1
 insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
 RESET ROLE;
@@ -56,7 +56,7 @@ RESET ROLE;
 GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -132,7 +132,7 @@ ERROR:  get_create_command only supports hypertables with up to 2 dimensions
 \set ON_ERROR_STOP 1
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
-NOTICE:  adding NOT NULL constraint to column "id"
+NOTICE:  adding not-null constraint to column "id"
  add_dimension 
 ---------------
  
@@ -158,14 +158,14 @@ select * from _timescaledb_catalog.dimension;
 -- Test add_dimension: can use interval types for TIMESTAMPTZ columns
 CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
 (1 row)
 
 SELECT add_dimension('dim_test_time', 'time2', chunk_time_interval => INTERVAL '1 day');
-NOTICE:  adding NOT NULL constraint to column "time2"
+NOTICE:  adding not-null constraint to column "time2"
  add_dimension 
 ---------------
  
@@ -180,7 +180,7 @@ SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 'foo'::TEX
 ERROR:  invalid interval: must be an interval or integer type
 \set ON_ERROR_STOP 1
 SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 500);
-NOTICE:  adding NOT NULL constraint to column "time3"
+NOTICE:  adding not-null constraint to column "time3"
  add_dimension 
 ---------------
  
@@ -189,7 +189,7 @@ NOTICE:  adding NOT NULL constraint to column "time3"
 -- Test add_dimension: integrals should work on TIMESTAMPTZ columns
 CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time2', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -197,7 +197,7 @@ NOTICE:  adding NOT NULL constraint to column "time"
 
 SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500);
 WARNING:  unexpected interval: smaller than one second
-NOTICE:  adding NOT NULL constraint to column "time2"
+NOTICE:  adding not-null constraint to column "time2"
  add_dimension 
 ---------------
  
@@ -252,7 +252,7 @@ NOTICE:  column "location" is already a dimension, skipping
 --test partitioning in only time dimension
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -315,7 +315,7 @@ select create_hypertable('test_schema.test_migrate', 'time');
 ERROR:  table "test_migrate" is not empty
 \set ON_ERROR_STOP 1
 select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
  create_hypertable 
 -------------------
@@ -366,7 +366,7 @@ select * from only _timescaledb_internal._hyper_6_5_chunk;
 
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

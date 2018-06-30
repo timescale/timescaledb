@@ -152,7 +152,7 @@ initialize_custom_estimate_func_info()
 		}
 
 		if (!function_found)
-			elog(ERROR, "cache lookup failed for function %s with %d args",
+			elog(ERROR, "cache lookup failed for function \"%s\" with %d args",
 				 def.function_name, def.nargs);
 
 		custom_estimate_func_info[i].function_oid = funclist->oid;

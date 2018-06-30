@@ -46,7 +46,7 @@ INFO:  index "_hyper_1_5_chunk_reindex_test_time_unique_idx" was reindexed
 -- this one currently doesn't recurse to chunks and instead gives an
 -- error
 REINDEX (VERBOSE) INDEX reindex_test_time_unique_idx;
-ERROR:  Reindexing of a specific index on a hypertable is currently unsupported.
+ERROR:  reindexing of a specific index on a hypertable is unsupported
 \set ON_ERROR_STOP 1
 -- show reindexing on a normal table
 CREATE TABLE reindex_norm(time timestamp, temp float);

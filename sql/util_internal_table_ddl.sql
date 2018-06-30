@@ -61,7 +61,7 @@ BEGIN
         --TODO: only works with time for now
         IF _timescaledb_internal.time_literal_sql(dimension_slice_row.range_start, dimension_row.column_type) =
            _timescaledb_internal.time_literal_sql(dimension_slice_row.range_end, dimension_row.column_type) THEN
-            RAISE 'Time based constraints have the same start and end values for column "%": %',
+            RAISE 'time-based constraints have the same start and end values for column "%": %',
                     dimension_row.column_name,
                     _timescaledb_internal.time_literal_sql(dimension_slice_row.range_end, dimension_row.column_type);
         END IF;
@@ -119,7 +119,7 @@ BEGIN
     INTO h_id, schema_name;
 
     IF h_id IS NULL THEN
-        RAISE EXCEPTION 'hypertable % not found', table_name
+        RAISE EXCEPTION 'hypertable "%" not found', table_name
         USING ERRCODE = 'IO101';
     END IF;
 

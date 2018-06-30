@@ -2,7 +2,7 @@
 CREATE TABLE alter_before(id serial, time timestamp, temp float, colorid integer);
 ALTER TABLE alter_before DROP COLUMN id;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -36,7 +36,7 @@ ORDER BY c.relname, a.attnum;
 -- DROP a table's column after making it a hypertable and having data
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

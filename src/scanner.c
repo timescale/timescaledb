@@ -244,7 +244,7 @@ scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
 		case 1:
 			return true;
 		default:
-			elog(ERROR, "More than one %s found.", item_type);
+			elog(ERROR, "more than one %s found", item_type);
 			return false;
 	}
 }

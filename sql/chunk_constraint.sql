@@ -27,7 +27,7 @@ BEGIN
               conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
         def := pg_get_constraintdef(constraint_oid);
     ELSE
-        RAISE 'Unknown constraint type';
+        RAISE 'unknown constraint type';
     END IF;
 
     IF def IS NOT NULL THEN

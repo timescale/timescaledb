@@ -31,5 +31,5 @@ ERROR:  table "Hypertable_1" is already a hypertable
 INSERT INTO "Hypertable_1" VALUES (0, 1, 0);
 \set ON_ERROR_STOP 0
 ALTER TABLE _timescaledb_internal._hyper_1_1_chunk ALTER COLUMN temp_c DROP NOT NULL;
-ERROR:  Operation not supported on chunk tables.
+ERROR:  operation not supported on chunk tables
 \set ON_ERROR_STOP 1

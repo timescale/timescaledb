@@ -108,7 +108,7 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 			Assert(strncmp(cache_entry->hypertable->fd.table_name.data, hq->table, NAMEDATALEN) == 0);
 			break;
 		default:
-			elog(ERROR, "Got an unexpected number of records: %d", number_found);
+			elog(ERROR, "got an unexpected number of records: %d", number_found);
 			break;
 	}
 

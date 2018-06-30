@@ -299,7 +299,7 @@ get_adjusted_projection_info_onconflicupdate(ProjectionInfo *orig, List *update_
 		attribute = chunk_desc->attrs[i];
 
 		if (namestrcmp(&attribute->attname, t->resname) != 0)
-			elog(ERROR, "invalid translation of on conflict update statements");
+			elog(ERROR, "invalid translation of ON CONFLICT update statements");
 
 		t->resno = i + 1;
 		i++;
@@ -429,7 +429,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Hypertables don't support row-level security")));
+				 errmsg("hypertables do not support row-level security")));
 
 	/*
 	 * We must allocate the range table entry on the executor's per-query
@@ -462,7 +462,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		if (resrelinfo->ri_TrigDesc->trig_insert_instead_row ||
 			resrelinfo->ri_TrigDesc->trig_insert_after_statement ||
 			resrelinfo->ri_TrigDesc->trig_insert_before_statement)
-			elog(ERROR, "Insert trigger on chunk table not supported");
+			elog(ERROR, "insert trigger on chunk table not supported");
 	}
 
 	/* Set the chunk's arbiter indexes for ON CONFLICT statements */
