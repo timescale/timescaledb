@@ -10,7 +10,7 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 --assigning a tablespace via the main table should work
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
 SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -106,7 +106,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 SELECT create_hypertable('tspace_1dim', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -330,7 +330,7 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 -- hypertable
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 SELECT create_hypertable('tspace_1dim', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

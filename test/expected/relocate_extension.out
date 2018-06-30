@@ -9,21 +9,21 @@ CREATE TABLE test_ts(time timestamp, temp float8, device text);
 CREATE TABLE test_tz(time timestamptz, temp float8, device text);
 CREATE TABLE test_dt(time date, temp float8, device text);
 SELECT "testSchema0".create_hypertable('test_ts', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
 (1 row)
 
 SELECT "testSchema0".create_hypertable('test_tz', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
 (1 row)
 
 SELECT "testSchema0".create_hypertable('test_dt', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

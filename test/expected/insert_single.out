@@ -201,7 +201,7 @@ SELECT create_hypertable('"1dim_usec_interval"', 'time', chunk_time_interval=> 1
 INSERT INTO "1dim_usec_interval" VALUES('1969-12-01T19:00:00', 21.2);
 CREATE TABLE "1dim_neg"(time INTEGER, temp float);
 SELECT create_hypertable('"1dim_neg"', 'time', chunk_time_interval=>10);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -276,7 +276,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
 -- Create a three-dimensional table
 CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
 SELECT create_hypertable('"3dim"', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -407,7 +407,7 @@ SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>3276
 --make sure date inserts work even when the timezone changes the
 CREATE TABLE hyper_date(time date, temp float);
 SELECT create_hypertable('"hyper_date"', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

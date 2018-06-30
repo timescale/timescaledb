@@ -1,7 +1,7 @@
 CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
 -- create hypertable with two chunks
 SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -70,7 +70,7 @@ ALTER TABLE alter_test RENAME COLUMN color TO colorname;
 -- Changing types on hash-partitioned columns is not safe for some
 -- types and is therefore blocked.
 ALTER TABLE alter_test ALTER COLUMN colorname TYPE text;
-ERROR:  Cannot change the type of a hash-partitioned column
+ERROR:  cannot change the type of a hash-partitioned column
 \set ON_ERROR_STOP 1
 SELECT * FROM test.show_columns('alter_test');
   Column   |            Type             | Nullable 
@@ -119,7 +119,7 @@ SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
 \set ON_ERROR_STOP 0
 -- verify that we cannot change the column type to something incompatible
 ALTER TABLE alter_test ALTER COLUMN colorname TYPE varchar(3);
-ERROR:  Cannot change the type of a hash-partitioned column
+ERROR:  cannot change the type of a hash-partitioned column
 -- conversion that messes up partitioning fails
 ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamptz USING time_us::timestamptz+INTERVAL '1 year';
 ERROR:  check constraint "constraint_1" is violated by some row

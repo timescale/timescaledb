@@ -18,7 +18,7 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, NULL, 11);
 ERROR:  null value in column "device_id" violates not-null constraint
 ALTER TABLE hyper ALTER COLUMN time DROP NOT NULL;
-ERROR:  Cannot Drop NOT NULL constraint from a time-partitioned column
+ERROR:  cannot drop not-null constraint from a time-partitioned column
 ALTER TABLE ONLY hyper ALTER COLUMN sensor_1 SET NOT NULL;
 ERROR:  ONLY option not supported on hypertable operations
 ALTER TABLE ONLY hyper ALTER COLUMN device_id DROP NOT NULL;
@@ -189,7 +189,7 @@ ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE
 USING INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
 NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx" to "hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key"
-ERROR:  Hypertables currently do not support adding a constraint using an existing index.
+ERROR:  hypertables do not support adding a constraint using an existing index
 \set ON_ERROR_STOP 1
 DROP INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
 --now can create
@@ -265,7 +265,7 @@ RENAME CONSTRAINT new_name2 TO new_name;
 ERROR:  ONLY option not supported on hypertable operations
 ALTER TABLE _timescaledb_internal._hyper_2_4_chunk
 RENAME CONSTRAINT "4_10_new_name2" TO new_name;
-ERROR:  Renaming constraints on chunks is not supported
+ERROR:  renaming constraints on chunks is not supported
 \set ON_ERROR_STOP 1
 ----------------------- PRIMARY KEY  ------------------
 CREATE TABLE hyper_pk (
@@ -472,7 +472,7 @@ SELECT * FROM create_hypertable('hyper_for_ref', 'time', chunk_time_interval => 
 CREATE TABLE referrer (
     time BIGINT NOT NULL REFERENCES hyper_for_ref(time)
 );
-ERROR:  Foreign keys to hypertables are not supported.
+ERROR:  foreign keys to hypertables are not supported
 \set ON_ERROR_STOP 1
 CREATE TABLE referrer2 (
    time BIGINT NOT NULL
@@ -480,7 +480,7 @@ CREATE TABLE referrer2 (
 \set ON_ERROR_STOP 0
 ALTER TABLE referrer2 ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (time) REFERENCES  hyper_for_ref(time);
-ERROR:  Foreign keys to hypertables are not supported.
+ERROR:  foreign keys to hypertables are not supported
 \set ON_ERROR_STOP 1
 ----------------------- EXCLUSION CONSTRAINT  ------------------
 CREATE TABLE hyper_ex (
@@ -493,7 +493,7 @@ CREATE TABLE hyper_ex (
     ) WHERE (not canceled)
 );
 SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -542,6 +542,6 @@ CREATE TABLE hyper_ex_invalid (
 );
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1

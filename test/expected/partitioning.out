@@ -1,6 +1,6 @@
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -43,7 +43,7 @@ SELECT * FROM part_legacy WHERE device = 1;
 
 CREATE TABLE part_new(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_new', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -87,7 +87,7 @@ SELECT * FROM part_new WHERE device = 1;
 
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
 SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -97,7 +97,7 @@ INSERT INTO part_new_convert1 VALUES ('2017-03-22T09:18:23', 1.0, 2);
 \set ON_ERROR_STOP 0
 -- Changing the type of a hash-partitioned column should not be supported
 ALTER TABLE part_new_convert1 ALTER COLUMN temp TYPE numeric;
-ERROR:  Cannot change the type of a hash-partitioned column
+ERROR:  cannot change the type of a hash-partitioned column
 \set ON_ERROR_STOP 1
 -- Should be able to change if not hash partitioned though
 ALTER TABLE part_new_convert1 ALTER COLUMN time TYPE timestamp;
@@ -111,7 +111,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_3_%_chunk');
 
 CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
 SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -157,7 +157,7 @@ END
 $BODY$;
 CREATE TABLE part_custom_func(time timestamptz, temp float8, device text);
 SELECT create_hypertable('part_custom_func', 'time', 'device', 2, partitioning_func => 'custom_partfunc');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

@@ -30,7 +30,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	if (NULL == ht)
 	{
 		cache_release(hypertable_cache);
-		elog(ERROR, "No hypertable for relid %d", state->hypertable_relid);
+		elog(ERROR, "no hypertable for relid %d", state->hypertable_relid);
 	}
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;

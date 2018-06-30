@@ -128,13 +128,13 @@ chunk_adjust_expr_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relatio
 			Name		attname = find_attname_by_attno(htrel->rd_att, var->varattno);
 
 			if (NULL == attname)
-				elog(ERROR, "Index expression var %u not found in chunk", var->varattno);
+				elog(ERROR, "index expression var %u not found in chunk", var->varattno);
 
 			/* Adjust the Var's attno to match the chunk's attno */
 			var->varattno = find_attno_by_attname(chunkrel->rd_att, attname);
 
 			if (var->varattno == InvalidAttrNumber)
-				elog(ERROR, "Index attribute %s not found in chunk", NameStr(*attname));
+				elog(ERROR, "index attribute %s not found in chunk", NameStr(*attname));
 		}
 	}
 }
@@ -153,7 +153,7 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 		AttrNumber	attno = find_attno_by_attname(chunkrel->rd_att, &idxattr->attname);
 
 		if (attno == InvalidAttrNumber)
-			elog(ERROR, "Index attribute %s not found in chunk",
+			elog(ERROR, "index attribute %s not found in chunk",
 				 NameStr(idxattr->attname));
 
 		ii->ii_KeyAttrNumbers[i] = attno;

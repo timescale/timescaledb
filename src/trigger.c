@@ -37,7 +37,7 @@ trigger_by_name_relation(Relation rel, const char *trigname, bool missing_ok)
 	}
 
 	if (!missing_ok && NULL == trigger)
-		elog(ERROR, "No trigger %s for relation %s",
+		elog(ERROR, "no trigger \"%s\" for relation \"%s\"",
 			 trigname, get_rel_name(rel->rd_id));
 
 	return trigger;
@@ -145,7 +145,7 @@ create_trigger_handler(Trigger *trigger, void *arg)
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Hypertables do not support transition tables in triggers.")));
+				 errmsg("hypertables do not support transition tables in triggers")));
 #endif
 	if (trigger_is_chunk_trigger(trigger))
 		trigger_create_on_chunk(trigger->tgoid,
@@ -178,7 +178,7 @@ trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(ht->main_table_relid));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", ht->main_table_relid);
+		elog(ERROR, "cache lookup failed for relation ID %u", ht->main_table_relid);
 
 	form = (Form_pg_class) GETSTRUCT(tuple);
 

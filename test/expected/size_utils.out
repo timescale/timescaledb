@@ -93,7 +93,7 @@ SELECT * FROM indexes_relation_size_pretty('"public"."two_Partitions"');
 
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -117,7 +117,7 @@ SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned');
 
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
 SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -141,7 +141,7 @@ SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned_2');
 
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

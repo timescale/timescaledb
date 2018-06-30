@@ -162,7 +162,7 @@ catalog_get(void)
 	int			i;
 
 	if (!OidIsValid(MyDatabaseId))
-		elog(ERROR, "Invalid database ID");
+		elog(ERROR, "invalid database ID");
 
 	if (MyDatabaseId == catalog.database_id)
 		return &catalog;
@@ -177,7 +177,7 @@ catalog_get(void)
 	catalog.owner_uid = catalog_owner();
 
 	if (catalog.schema_id == InvalidOid)
-		elog(ERROR, "Oid lookup failed for schema %s", CATALOG_SCHEMA_NAME);
+		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
 
 	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
 	{
@@ -189,7 +189,7 @@ catalog_get(void)
 		id = get_relname_relid(catalog_table_names[i], catalog.schema_id);
 
 		if (id == InvalidOid)
-			elog(ERROR, "Oid lookup failed for table %s", catalog_table_names[i]);
+			elog(ERROR, "OID lookup failed for table \"%s\"", catalog_table_names[i]);
 
 		catalog.tables[i].id = id;
 
@@ -202,7 +202,7 @@ catalog_get(void)
 								   catalog.schema_id);
 
 			if (id == InvalidOid)
-				elog(ERROR, "Oid lookup failed for table index %s",
+				elog(ERROR, "OID lookup failed for table index \"%s\"",
 					 catalog_table_index_definitions[i].names[j]);
 
 			catalog.tables[i].index_ids[j] = id;
@@ -239,7 +239,7 @@ catalog_get(void)
 							  def.args, NULL, false, false, false);
 
 		if (funclist == NULL || funclist->next)
-			elog(ERROR, "Oid lookup failed for the function %s with %d args", def.name, def.args);
+			elog(ERROR, "OID lookup failed for the function \"%s\" with %d args", def.name, def.args);
 
 		catalog.functions[i].function_id = funclist->oid;
 	}
@@ -366,7 +366,7 @@ catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 	Oid			relid = catalog->tables[table].serial_relid;
 
 	if (!OidIsValid(relid))
-		elog(ERROR, "No serial id column for table %s", catalog_table_names[table]);
+		elog(ERROR, "no serial ID column for table \"%s\"", catalog_table_names[table]);
 
 	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }

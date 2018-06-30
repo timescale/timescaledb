@@ -464,7 +464,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	chunk->table_id = chunk_create_table(chunk, ht);
 
 	if (!OidIsValid(chunk->table_id))
-		elog(ERROR, "Could not create chunk table");
+		elog(ERROR, "could not create chunk table");
 
 	/* Create the chunk's constraints, triggers, and indexes */
 	chunk_constraints_create(chunk->constraints,
@@ -571,7 +571,7 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	num_found = scanner_scan(&ctx);
 
 	if (num_found != 1)
-		elog(ERROR, "No chunk found with ID %d", chunk_stub->fd.id);
+		elog(ERROR, "no chunk found with ID %d", chunk_stub->fd.id);
 
 	if (NULL == chunk_stub->cube)
 		chunk_stub->cube = hypercube_from_constraints(chunk_stub->constraints, CurrentMemoryContext);

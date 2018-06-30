@@ -146,7 +146,7 @@ modifytable_plan_walker(Plan **planptr, void *pctx)
 						ctx->parse->onConflict->constraint != InvalidOid)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("Hypertables do not support ON CONFLICT statements that reference constraints"),
+								 errmsg("hypertables do not support ON CONFLICT statements that reference constraints"),
 								 errhint("Use column names to infer indexes instead.")));
 
 					/*

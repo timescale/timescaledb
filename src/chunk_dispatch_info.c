@@ -46,7 +46,7 @@ chunk_dispatch_info_read(struct ExtensibleNode *node)
 	token = pg_strtok(&length);
 
 	if (token == NULL)
-		elog(ERROR, "Missing hypertable relation ID");
+		elog(ERROR, "missing hypertable relation ID");
 
 	info->hypertable_relid = strtol(token, NULL, 10);
 
@@ -54,7 +54,7 @@ chunk_dispatch_info_read(struct ExtensibleNode *node)
 	token = pg_strtok(&length);
 
 	if (token == NULL)
-		elog(ERROR, "Missing Query node");
+		elog(ERROR, "missing query node");
 }
 
 static ExtensibleNodeMethods chunk_dispatch_info_methods = {
