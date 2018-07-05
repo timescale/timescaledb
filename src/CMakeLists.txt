@@ -153,14 +153,14 @@ else ()
 endif (PGINDENT)
 
 # Configuration for running pgindent
-if (OBJDUMP AND PGINDENT)
+if (PGINDENT)
   add_custom_command(OUTPUT typedefs.list
     DEPENDS ${PROJECT_NAME}
     COMMAND sh ${CMAKE_BINARY_DIR}/scripts/generate_typedefs.sh > typedefs.list)
   add_custom_target(pgindent
     COMMAND ${PGINDENT} -typedefs typedefs.list -code-base ${CMAKE_SOURCE_DIR}/src
     DEPENDS typedefs.list)
-endif (OBJDUMP AND PGINDENT)
+endif (PGINDENT)
 
 add_library(${PROJECT_NAME} MODULE ${SOURCES} ${HEADERS} ${GITCOMMIT_H})
 
