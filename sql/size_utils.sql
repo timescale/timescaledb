@@ -9,8 +9,8 @@
 --
 -- Returns:
 -- table_bytes        - Disk space used by main_table (like pg_relation_size(main_table))
--- index_bytes        - Disc space used by indexes
--- toast_bytes        - Disc space of toast tables
+-- index_bytes        - Disk space used by indexes
+-- toast_bytes        - Disk space of toast tables
 -- total_bytes        - Total disk space used by the specified table, including all indexes and TOAST data
 
 CREATE OR REPLACE FUNCTION hypertable_relation_size(
@@ -162,7 +162,7 @@ $BODY$;
 -- ranges                        - Partition ranges for each dimension of the chunk
 -- table_bytes                   - Disk space used by main_table
 -- index_bytes                   - Disk space used by indexes
--- toast_bytes                   - Disc space of toast tables
+-- toast_bytes                   - Disk space of toast tables
 -- total_bytes                   - Disk space used in total
 
 CREATE OR REPLACE FUNCTION chunk_relation_size(
@@ -227,9 +227,9 @@ BEGIN
                pg_namespace pns
                WHERE h.schema_name = %L
                      AND h.table_name = %L
-                     AND pgc.relname = h.table_name
+                     AND pgc.relname = c.table_name
                      AND pns.oid = pgc.relnamespace
-                     AND pns.nspname = h.schema_name
+                     AND pns.nspname = c.schema_name
                      AND relkind = 'r'
                      AND c.hypertable_id = h.id
                      AND c.id = cc.chunk_id
@@ -328,9 +328,9 @@ BEGIN
                pg_namespace pns
                WHERE h.schema_name = %L
                      AND h.table_name = %L
-                     AND pgc.relname = h.table_name
+                     AND pgc.relname = c.table_name
                      AND pns.oid = pgc.relnamespace
-                     AND pns.nspname = h.schema_name
+                     AND pns.nspname = c.schema_name
                      AND relkind = 'r'
                      AND c.hypertable_id = h.id
                      AND c.id = cc.chunk_id
