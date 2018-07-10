@@ -1491,6 +1491,19 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			Assert(IsA(cmd->def, ColumnDef));
 			process_alter_column_type_end(ht, cmd);
 			break;
+		case AT_EnableTrig:
+		case AT_EnableAlwaysTrig:
+		case AT_EnableReplicaTrig:
+		case AT_DisableTrig:
+		case AT_EnableTrigAll:
+		case AT_DisableTrigAll:
+		case AT_EnableTrigUser:
+		case AT_DisableTrigUser:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support  "
+							"enabling or disabling triggers.")));
+			break;
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
 		case AT_ReplaceRelOptions:
@@ -1814,10 +1827,13 @@ static void
 process_drop_trigger_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	const char *trigger_name = arg;
-	Oid			trigger_oid = get_trigger_oid(chunk_relid, trigger_name, true);
+	ObjectAddress objaddr = {
+		.classId = TriggerRelationId,
+		.objectId = get_trigger_oid(chunk_relid, trigger_name, true),
+	};
 
-	if (OidIsValid(trigger_oid))
-		RemoveTriggerById(trigger_oid);
+	if (OidIsValid(objaddr.objectId))
+		performDeletion(&objaddr, DROP_RESTRICT, 0);
 }
 
 static void
