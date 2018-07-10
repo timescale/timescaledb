@@ -28,7 +28,7 @@ TS_FUNCTION_INFO_V1(bookend_deserializefunc);
 /* A  PolyDatum represents a polymorphic datum */
 typedef struct PolyDatum
 {
-	Oid			type;
+	Oid			type_oid;
 	bool		is_null;
 	Datum		datum;
 } PolyDatum;
@@ -37,7 +37,7 @@ typedef struct PolyDatum
 /* PolyDatumIOState is internal state used by  polydatum_serialize and	polydatum_deserialize  */
 typedef struct PolyDatumIOState
 {
-	Oid			type;
+	Oid			type_oid;
 	FmgrInfo	proc;
 	Oid			typeioparam;
 } PolyDatumIOState;
@@ -47,7 +47,7 @@ polydatum_from_arg(int argno, FunctionCallInfo fcinfo)
 {
 	PolyDatum	value;
 
-	value.type = get_fn_expr_argtype(fcinfo->flinfo, argno);
+	value.type_oid = get_fn_expr_argtype(fcinfo->flinfo, argno);
 	value.is_null = PG_ARGISNULL(argno);
 	if (!value.is_null)
 	{
@@ -66,7 +66,7 @@ polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, Func
 {
 	bytea	   *outputbytes;
 
-	pq_sendint(buf, pd->type, sizeof(Oid));
+	pq_sendint(buf, pd->type_oid, sizeof(Oid));
 
 	if (pd->is_null)
 	{
@@ -75,17 +75,17 @@ polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, Func
 		return;
 	}
 
-	if (state->type != pd->type)
+	if (state->type_oid != pd->type_oid)
 	{
 		Oid			func;
 		bool		is_varlena;
 
-		getTypeBinaryOutputInfo(pd->type,
+		getTypeBinaryOutputInfo(pd->type_oid,
 								&func,
 								&is_varlena);
 		fmgr_info_cxt(func, &state->proc,
 					  fcinfo->flinfo->fn_mcxt);
-		state->type = pd->type;
+		state->type_oid = pd->type_oid;
 	}
 	outputbytes = SendFunctionCall(&state->proc, pd->datum);
 	pq_sendint(buf, VARSIZE(outputbytes) - VARHDRSZ, 4);
@@ -110,7 +110,7 @@ polydatum_deserialize(PolyDatum *result, StringInfo buf, PolyDatumIOState *state
 		result = palloc(sizeof(PolyDatum));
 	}
 
-	result->type = pq_getmsgint(buf, sizeof(Oid));
+	result->type_oid = pq_getmsgint(buf, sizeof(Oid));
 
 	/* Following is copied/adapted from record_recv in core postgres */
 
@@ -151,16 +151,16 @@ polydatum_deserialize(PolyDatum *result, StringInfo buf, PolyDatumIOState *state
 	}
 
 	/* Now call the column's receiveproc */
-	if (state->type != result->type)
+	if (state->type_oid != result->type_oid)
 	{
 		Oid			func;
 
-		getTypeBinaryInputInfo(result->type,
+		getTypeBinaryInputInfo(result->type_oid,
 							   &func,
 							   &state->typeioparam);
 		fmgr_info_cxt(func, &state->proc,
 					  fcinfo->flinfo->fn_mcxt);
-		state->type = result->type;
+		state->type_oid = result->type_oid;
 	}
 
 	result->datum = ReceiveFunctionCall(&state->proc,
@@ -197,7 +197,7 @@ typedef struct InternalCmpAggStoreIOState
 
 typedef struct TypeInfoCache
 {
-	Oid			type;
+	Oid			type_oid;
 	int16		typelen;
 	bool		typebyval;
 } TypeInfoCache;
@@ -205,16 +205,16 @@ typedef struct TypeInfoCache
 inline static void
 typeinfocache_init(TypeInfoCache *tic)
 {
-	tic->type = InvalidOid;
+	tic->type_oid = InvalidOid;
 }
 
 inline static void
 typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *output)
 {
-	if (tic->type != input.type)
+	if (tic->type_oid != input.type_oid)
 	{
-		tic->type = input.type;
-		get_typlenbyval(tic->type, &tic->typelen, &tic->typebyval);
+		tic->type_oid = input.type_oid;
+		get_typlenbyval(tic->type_oid, &tic->typelen, &tic->typebyval);
 	}
 	*output = input;
 	if (!input.is_null)
@@ -239,22 +239,22 @@ cmpfunccache_init(CmpFuncCache *cache)
 inline static bool
 cmpfunccache_cmp(CmpFuncCache *cache, FunctionCallInfo fcinfo, char *opname, PolyDatum left, PolyDatum right)
 {
-	Assert(left.type == right.type);
+	Assert(left.type_oid == right.type_oid);
 	Assert(opname[1] == '\0');
 
-	if (cache->cmp_type != left.type || cache->op != opname[0])
+	if (cache->cmp_type != left.type_oid || cache->op != opname[0])
 	{
 		Oid			cmp_op,
 					cmp_regproc;
 
-		if (!OidIsValid(left.type))
+		if (!OidIsValid(left.type_oid))
 			elog(ERROR, "could not determine the type of the comparison_element");
-		cmp_op = OpernameGetOprid(list_make1(makeString(opname)), left.type, left.type);
+		cmp_op = OpernameGetOprid(list_make1(makeString(opname)), left.type_oid, left.type_oid);
 		if (!OidIsValid(cmp_op))
-			elog(ERROR, "could not find a %s operator for type %d", opname, left.type);
+			elog(ERROR, "could not find a %s operator for type %d", opname, left.type_oid);
 		cmp_regproc = get_opcode(cmp_op);
 		if (!OidIsValid(cmp_regproc))
-			elog(ERROR, "could not find the procedure for the %s operator for type %d", opname, left.type);
+			elog(ERROR, "could not find the procedure for the %s operator for type %d", opname, left.type_oid);
 		fmgr_info_cxt(cmp_regproc, &cache->proc,
 					  fcinfo->flinfo->fn_mcxt);
 	}
