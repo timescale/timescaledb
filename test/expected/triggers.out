@@ -357,3 +357,22 @@ SELECT * FROM color;
        20 | n/a
 (2 rows)
 
+-- switch back to default user to run some dropping tests
+--TODO: currently default user is postgres, who is a superuser, potentially we should change that?
+\c single :ROLE_SUPERUSER; 
+\set ON_ERROR_STOP 0
+-- test that disable trigger is disallowed 
+ALTER TABLE location DISABLE TRIGGER create_vehicle_trigger;
+ERROR:  hypertables do not support  enabling or disabling triggers.
+\set ON_ERROR_STOP 1
+-- test that drop trigger works 
+DROP TRIGGER create_color_trigger ON location;
+DROP TRIGGER create_vehicle_trigger ON location;
+-- test that drop trigger doesn't cause leftovers that mean that dropping chunks or hypertables no longer works
+SELECT count(1) FROM pg_depend d WHERE d.classid = 'pg_trigger'::regclass AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE oid = d.objid);
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE location;

@@ -272,3 +272,21 @@ UPDATE location SET vehicle_id = 52 WHERE vehicle_id = 53;
 SELECT * FROM location;
 SELECT * FROM vehicles;
 SELECT * FROM color;
+
+-- switch back to default user to run some dropping tests
+--TODO: currently default user is postgres, who is a superuser, potentially we should change that?
+\c single :ROLE_SUPERUSER; 
+
+\set ON_ERROR_STOP 0
+-- test that disable trigger is disallowed 
+ALTER TABLE location DISABLE TRIGGER create_vehicle_trigger;
+\set ON_ERROR_STOP 1
+
+-- test that drop trigger works 
+DROP TRIGGER create_color_trigger ON location;
+DROP TRIGGER create_vehicle_trigger ON location;
+
+-- test that drop trigger doesn't cause leftovers that mean that dropping chunks or hypertables no longer works
+SELECT count(1) FROM pg_depend d WHERE d.classid = 'pg_trigger'::regclass AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE oid = d.objid);
+DROP TABLE location;
+
