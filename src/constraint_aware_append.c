@@ -67,6 +67,36 @@ excluded_by_constraint(RangeTblEntry *rte, AppendRelInfo *appinfo, List *restric
 	return relation_excluded_by_constraints(&root, &rel, rte);
 }
 
+static Plan *
+get_plans_for_exclusion(Plan *plan)
+{
+	/* Optimization: If we want to be able to prune */
+	/* when the node is a T_Result, then we need to peek */
+	/* into the subplans of this Result node. */
+	if (IsA(plan, Result))
+	{
+		Result	   *res = (Result *) plan;
+
+		if (res->plan.lefttree != NULL && res->plan.righttree == NULL)
+			return res->plan.lefttree;
+		if (res->plan.righttree != NULL && res->plan.lefttree == NULL)
+			return res->plan.righttree;
+	}
+	return plan;
+}
+
+static bool
+can_exclude_chunk(Scan *scan, AppendRelInfo *appinfo, EState *estate,
+				  List *restrictinfos)
+{
+	RangeTblEntry *rte = rt_fetch(scan->scanrelid, estate->es_range_table);
+
+	return rte->rtekind == RTE_RELATION &&
+		rte->relkind == RELKIND_RELATION &&
+		!rte->inh &&
+		excluded_by_constraint(rte, appinfo, restrictinfos);
+}
+
 /*
  * Convert restriction clauses to constants expressions (i.e., if there are
  * mutable functions, they need to be evaluated to constants).  For instance,
@@ -160,11 +190,10 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	forboth(lc_plan, old_appendplans, lc_info, append_rel_info)
 	{
-		Scan	   *scan = lfirst(lc_plan);
-		AppendRelInfo *appinfo = lfirst(lc_info);
-		RangeTblEntry *rte = rt_fetch(scan->scanrelid, estate->es_range_table);
+		Plan	   *plan = get_plans_for_exclusion(lfirst(lc_plan));
 
-		switch (nodeTag(scan))
+
+		switch (nodeTag(plan))
 		{
 			case T_SeqScan:
 			case T_SampleScan:
@@ -180,18 +209,17 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			case T_WorkTableScan:
 			case T_ForeignScan:
 			case T_CustomScan:
-
-				/*
-				 * If this is a base rel (chunk), check if it can be excluded
-				 * from the scan. Otherwise, fall through.
-				 */
-				if (rte->rtekind == RTE_RELATION &&
-					rte->relkind == RELKIND_RELATION &&
-					!rte->inh &&
-					excluded_by_constraint(rte, appinfo, restrictinfos))
-					break;
+				{
+					/*
+					 * If this is a base rel (chunk), check if it can be
+					 * excluded from the scan. Otherwise, fall through.
+					 */
+					if (can_exclude_chunk((Scan *) plan, lfirst(lc_info), estate,
+										  restrictinfos))
+						break;
+				}
 			default:
-				*appendplans = lappend(*appendplans, scan);
+				*appendplans = lappend(*appendplans, plan);
 		}
 	}
 

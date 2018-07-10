@@ -1,0 +1,96 @@
+CREATE TABLE regular_table(name text, junk text);
+CREATE TABLE ht(time timestamptz NOT NULL, location text);
+SELECT create_hypertable('ht', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO ht(time) select timestamp 'epoch' + (i * interval '1 second') from generate_series(1, 100) as T(i);
+INSERT INTO regular_table values('name', 'junk');
+SELECT * FROM regular_table ik LEFT JOIN LATERAL (select max(time::timestamptz) from ht s where ik.name='name' and s.time < now()) s on true;
+ name | junk |             max              
+------+------+------------------------------
+ name | junk | Thu Jan 01 00:01:40 1970 PST
+(1 row)
+
+select * from regular_table ik LEFT JOIN LATERAL (select max(time::timestamptz) from ht s where ik.name='name' and s.time > now()) s on true;
+ name | junk | max 
+------+------+-----
+ name | junk | 
+(1 row)
+
+DROP TABLE regular_table;
+DROP TABLE ht;
+CREATE TABLE orders(id int, user_id int, time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('orders', 'time');
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO orders values(1,1,timestamp 'epoch' + '1 second');
+INSERT INTO orders values(2,1,timestamp 'epoch' + '2 second');
+INSERT INTO orders values(3,1,timestamp 'epoch' + '3 second');
+INSERT INTO orders values(4,2,timestamp 'epoch' + '4 second');
+INSERT INTO orders values(5,1,timestamp 'epoch' + '5 second');
+INSERT INTO orders values(6,3,timestamp 'epoch' + '6 second');
+INSERT INTO orders values(7,1,timestamp 'epoch' + '7 second');
+INSERT INTO orders values(8,4,timestamp 'epoch' + '8 second');
+INSERT INTO orders values(9,2,timestamp 'epoch' + '9 second');
+-- Need a LATERAL query with a reference to the upper-level table and
+-- with a restriction on time
+-- Upper-level table constraint should be a constant in order to trigger
+-- creation of a one-time filter in the planner
+SELECT user_id, first_order_time, max_time FROM
+(SELECT user_id, min(time) AS first_order_time FROM orders GROUP BY user_id) o1
+LEFT JOIN LATERAL
+(SELECT max(time) AS max_time FROM orders WHERE o1.user_id = '2' AND time > now()) o2 ON true
+ORDER BY user_id, first_order_time, max_time;
+ user_id |       first_order_time       | max_time 
+---------+------------------------------+----------
+       1 | Thu Jan 01 00:00:01 1970 PST | 
+       2 | Thu Jan 01 00:00:04 1970 PST | 
+       3 | Thu Jan 01 00:00:06 1970 PST | 
+       4 | Thu Jan 01 00:00:08 1970 PST | 
+(4 rows)
+
+SELECT user_id, first_order_time, max_time FROM
+(SELECT user_id, min(time) AS first_order_time FROM orders GROUP BY user_id) o1
+LEFT JOIN LATERAL
+(SELECT max(time) AS max_time FROM orders WHERE o1.user_id = '2' AND time < now()) o2 ON true
+ORDER BY user_id, first_order_time, max_time;
+ user_id |       first_order_time       |           max_time           
+---------+------------------------------+------------------------------
+       1 | Thu Jan 01 00:00:01 1970 PST | 
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:09 1970 PST
+       3 | Thu Jan 01 00:00:06 1970 PST | 
+       4 | Thu Jan 01 00:00:08 1970 PST | 
+(4 rows)
+
+-- Nested LATERALs
+SELECT user_id, first_order_time, time1, min_time FROM
+(SELECT user_id, min(time) AS first_order_time FROM orders GROUP BY user_id) o1
+LEFT JOIN LATERAL
+(SELECT user_id as o2user_id, time AS time1 FROM orders WHERE o1.user_id = '2' AND time < now()) o2 ON true
+LEFT JOIN LATERAL
+(SELECT min(time) as min_time FROM orders WHERE o2.o2user_id = '1' AND time < now()) o3 ON true
+ORDER BY user_id, first_order_time, time1, min_time;
+ user_id |       first_order_time       |            time1             |           min_time           
+---------+------------------------------+------------------------------+------------------------------
+       1 | Thu Jan 01 00:00:01 1970 PST |                              | 
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:01 1970 PST | Thu Jan 01 00:00:01 1970 PST
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:02 1970 PST | Thu Jan 01 00:00:01 1970 PST
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:03 1970 PST | Thu Jan 01 00:00:01 1970 PST
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:04 1970 PST | 
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:05 1970 PST | Thu Jan 01 00:00:01 1970 PST
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:06 1970 PST | 
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:07 1970 PST | Thu Jan 01 00:00:01 1970 PST
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:08 1970 PST | 
+       2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:09 1970 PST | 
+       3 | Thu Jan 01 00:00:06 1970 PST |                              | 
+       4 | Thu Jan 01 00:00:08 1970 PST |                              | 
+(12 rows)
+
+-- Cleanup
+DROP TABLE orders;
