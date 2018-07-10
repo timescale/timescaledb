@@ -1,8 +1,12 @@
 #ifndef TIMESCALEDB_COMPAT_H
 #define TIMESCALEDB_COMPAT_H
 
-#define PG96 ((PG_VERSION_NUM >= 90600) && (PG_VERSION_NUM < 100000))
-#define PG10 ((PG_VERSION_NUM >= 100000) && (PG_VERSION_NUM < 110000))
+#define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))
+#define is_supported_pg_version_10(version) ((version >= 100002) && (version < 110000))
+#define is_supported_pg_version(version) (is_supported_pg_version_96(version) || is_supported_pg_version_10(version))
+
+#define PG96 is_supported_pg_version_96(PG_VERSION_NUM)
+#define PG10 is_supported_pg_version_10(PG_VERSION_NUM)
 
 #if PG10
 

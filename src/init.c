@@ -47,6 +47,7 @@ _PG_init(void)
 	 * functions defined on the wrong extension version
 	 */
 	extension_check_version(TIMESCALEDB_VERSION_MOD);
+	extension_check_server_version();
 
 	_chunk_dispatch_info_init();
 	_cache_init();

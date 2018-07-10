@@ -23,6 +23,7 @@
 #include "guc.h"
 #include "version.h"
 #include "extension_utils.c"
+#include "compat.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
@@ -74,6 +75,26 @@ extension_check_version(const char *so_version)
 	if (!process_shared_preload_libraries_in_progress && !extension_loader_present())
 	{
 		extension_load_without_preload();
+	}
+}
+
+void
+extension_check_server_version()
+{
+	/*
+	 * This is a load-time check for the correct server version since the
+	 * extension may be distributed as a binary
+	 */
+	char	   *server_version_num_guc = GetConfigOptionByName("server_version_num", NULL, false);
+	long		server_version_num = strtol(server_version_num_guc, NULL, 10);
+
+	if (!is_supported_pg_version(server_version_num))
+	{
+		char	   *server_version_guc = GetConfigOptionByName("server_version", NULL, false);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("extension \"%s\" does not support postgres version %s", EXTENSION_NAME, server_version_guc)));
 	}
 }
 
