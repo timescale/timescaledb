@@ -30,6 +30,7 @@ set(TEST_FILES
   index.sql
   insert_single.sql
   insert.sql
+  lateral.sql
   partitioning.sql
   pg_dump.sql
   plain.sql
