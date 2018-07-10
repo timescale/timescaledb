@@ -167,9 +167,10 @@ time_to_internal(PG_FUNCTION_ARGS)
 int64
 time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 {
-	Datum res, tz;
+	Datum		res,
+				tz;
 
-	switch(type_oid)
+	switch (type_oid)
 	{
 		case INT8OID:
 			return DatumGetInt64(time_val);
@@ -178,10 +179,11 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 		case INT2OID:
 			return (int64) DatumGetInt16(time_val);
 		case TIMESTAMPOID:
+
 			/*
-			* for timestamps, ignore timezones, make believe the timestamp is at
-			* UTC
-			*/
+			 * for timestamps, ignore timezones, make believe the timestamp is
+			 * at UTC
+			 */
 			res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, time_val);
 
 			return DatumGetInt64(res);
@@ -425,7 +427,7 @@ date_trunc_interval_period_approx(text *units)
 		case DTK_YEAR:
 			return 1 * DAYS_PER_YEAR * USECS_PER_DAY;
 		case DTK_QUARTER:
-			return  DAYS_PER_QUARTER * USECS_PER_DAY;
+			return DAYS_PER_QUARTER * USECS_PER_DAY;
 		case DTK_MONTH:
 			return DAYS_PER_MONTH * USECS_PER_DAY;
 		case DTK_DAY:

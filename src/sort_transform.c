@@ -284,7 +284,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 		if (transformed_expr != ec_mem->em_expr)
 		{
 			EquivalenceMember *em;
-			Oid			type = exprType((Node *) transformed_expr);
+			Oid			type_oid = exprType((Node *) transformed_expr);
 			List	   *opfamilies = list_copy(orig->ec_opfamilies);
 
 			/*
@@ -293,7 +293,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 			 */
 			EquivalenceClass *exist =
 			get_eclass_for_sort_expr(root, transformed_expr, ec_mem->em_nullable_relids,
-									 opfamilies, type,
+									 opfamilies, type_oid,
 									 orig->ec_collation, orig->ec_sortref,
 									 ec_mem->em_relids, false);
 
@@ -309,7 +309,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 			em->em_nullable_relids = bms_copy(ec_mem->em_nullable_relids);
 			em->em_is_const = ec_mem->em_is_const;
 			em->em_is_child = ec_mem->em_is_child;
-			em->em_datatype = type;
+			em->em_datatype = type_oid;
 
 			if (newec == NULL)
 			{
