@@ -4,6 +4,32 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.10.1 (2018-07-12)
+
+**High-level changes**
+* Improved memory management for long-lived connections.
+* Fixed handling of dropping triggers that would lead to orphaned references in pg_depend.
+* Fixed pruning in CustomScan when the subplan is not a Scan type that caused a crash with LATERALs.
+* Corrected size reporting that was not accurately counting TOAST size
+* Updated error messages that more closely conform to PG style.
+* Corrected handling of table and schema name changes to chunks; TimescaleDB metadata catalogs are now properly updated
+
+**Notable commits**
+* [8b58500] Fix bug where dropping triggers caused dangling references in pg_depend, disallow disabling triggers on hypertables
+* [745b8ab] Fixing CustomScan pruning whenever the subplan is NOT of a Scan type.
+* [67a8a41] Make chunk identifiers formatting safe using format
+* [41af6ff] Fix misreported toast_size in chunk_relation_size funcs
+* [4f2f1a6] Update the error messages to conform with the style guide; Fix tests
+* [3c28f65] Release cache pin memory
+* [abe76fc] Add support for changing chunk schema and name
+
+**Thanks**
+* @mfuterko for updating our error messages to conform with PG error message style
+* @fvannee for reporting a crash when using certain LATERAL joins with aggregates
+* @linba708 for reporting a memory leak with long lived connections
+* @phlsmk for reporting an issue where dropping triggers prevented drop_chunks from working due to orphaned dependencies
+
+
 ## 0.10.0 (2018-06-27)
 
 **High-level changes**
