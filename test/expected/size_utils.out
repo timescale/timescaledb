@@ -50,50 +50,50 @@ SELECT * FROM hypertable_relation_size_pretty('"public"."two_Partitions"');
 (1 row)
 
 SELECT * FROM chunk_relation_size('"public"."two_Partitions"');
- chunk_id |                chunk_table                 |  partitioning_columns  | partitioning_column_types |           partitioning_hash_functions           |                                      ranges                                       | table_bytes | index_bytes | toast_bytes | total_bytes 
-----------+--------------------------------------------+------------------------+---------------------------+-------------------------------------------------+-----------------------------------------------------------------------------------+-------------+-------------+-------------+-------------
-        1 | "_timescaledb_internal"."_hyper_1_1_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257892416000000000,1257895008000000000)","[1073741823,9223372036854775807)"}  |        8192 |      114688 |        8192 |      131072
-        2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257897600000000000,1257900192000000000)","[1073741823,9223372036854775807)"}  |        8192 |      106496 |        8192 |      122880
-        3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257985728000000000,1257988320000000000)","[1073741823,9223372036854775807)"}  |        8192 |       98304 |        8192 |      114688
-        4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257892416000000000,1257895008000000000)","[-9223372036854775808,1073741823)"} |        8192 |       98304 |        8192 |      114688
+ chunk_id |              chunk_table               |  partitioning_columns  | partitioning_column_types |           partitioning_hash_functions           |                                      ranges                                       | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+----------------------------------------+------------------------+---------------------------+-------------------------------------------------+-----------------------------------------------------------------------------------+-------------+-------------+-------------+-------------
+        1 | _timescaledb_internal._hyper_1_1_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257892416000000000,1257895008000000000)","[1073741823,9223372036854775807)"}  |        8192 |      114688 |        8192 |      131072
+        2 | _timescaledb_internal._hyper_1_2_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257897600000000000,1257900192000000000)","[1073741823,9223372036854775807)"}  |        8192 |      106496 |        8192 |      122880
+        3 | _timescaledb_internal._hyper_1_3_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257985728000000000,1257988320000000000)","[1073741823,9223372036854775807)"}  |        8192 |       98304 |        8192 |      114688
+        4 | _timescaledb_internal._hyper_1_4_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"[1257892416000000000,1257895008000000000)","[-9223372036854775808,1073741823)"} |        8192 |       98304 |        8192 |      114688
 (4 rows)
 
 SELECT * FROM chunk_relation_size_pretty('"public"."two_Partitions"');
- chunk_id |                chunk_table                 |  partitioning_columns  | partitioning_column_types |           partitioning_hash_functions           |                              ranges                               | table_size | index_size | toast_size | total_size 
-----------+--------------------------------------------+------------------------+---------------------------+-------------------------------------------------+-------------------------------------------------------------------+------------+------------+------------+------------
-        1 | "_timescaledb_internal"."_hyper_1_1_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[1073741823,)"} | 8192 bytes | 112 kB     | 8192 bytes | 128 kB
-        2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257897600000000000','1257900192000000000')","[1073741823,)"} | 8192 bytes | 104 kB     | 8192 bytes | 120 kB
-        3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257985728000000000','1257988320000000000')","[1073741823,)"} | 8192 bytes | 96 kB      | 8192 bytes | 112 kB
-        4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[,1073741823)"} | 8192 bytes | 96 kB      | 8192 bytes | 112 kB
+ chunk_id |              chunk_table               |  partitioning_columns  | partitioning_column_types |           partitioning_hash_functions           |                              ranges                               | table_size | index_size | toast_size | total_size 
+----------+----------------------------------------+------------------------+---------------------------+-------------------------------------------------+-------------------------------------------------------------------+------------+------------+------------+------------
+        1 | _timescaledb_internal._hyper_1_1_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[1073741823,)"} | 8192 bytes | 112 kB     | 8192 bytes | 128 kB
+        2 | _timescaledb_internal._hyper_1_2_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257897600000000000','1257900192000000000')","[1073741823,)"} | 8192 bytes | 104 kB     | 8192 bytes | 120 kB
+        3 | _timescaledb_internal._hyper_1_3_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257985728000000000','1257988320000000000')","[1073741823,)"} | 8192 bytes | 96 kB      | 8192 bytes | 112 kB
+        4 | _timescaledb_internal._hyper_1_4_chunk | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_internal.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[,1073741823)"} | 8192 bytes | 96 kB      | 8192 bytes | 112 kB
 (4 rows)
 
 SELECT * FROM indexes_relation_size('"public"."two_Partitions"');
-                    index_name                    | total_bytes 
---------------------------------------------------+-------------
- public.two_Partitions_device_id_timeCustom_idx   |       65536
- public.two_Partitions_timeCustom_device_id_idx   |       65536
- public.two_Partitions_timeCustom_idx             |       65536
- public.two_Partitions_timeCustom_series_0_idx    |       65536
- public.two_Partitions_timeCustom_series_1_idx    |       65536
- public.two_Partitions_timeCustom_series_2_idx    |       40960
- public.two_Partitions_timeCustom_series_bool_idx |       49152
+                     index_name                     | total_bytes 
+----------------------------------------------------+-------------
+ public."two_Partitions_device_id_timeCustom_idx"   |       65536
+ public."two_Partitions_timeCustom_device_id_idx"   |       65536
+ public."two_Partitions_timeCustom_idx"             |       65536
+ public."two_Partitions_timeCustom_series_0_idx"    |       65536
+ public."two_Partitions_timeCustom_series_1_idx"    |       65536
+ public."two_Partitions_timeCustom_series_2_idx"    |       40960
+ public."two_Partitions_timeCustom_series_bool_idx" |       49152
 (7 rows)
 
 SELECT * FROM indexes_relation_size_pretty('"public"."two_Partitions"');
-                    index_name                    | total_size 
---------------------------------------------------+------------
- public.two_Partitions_device_id_timeCustom_idx   | 64 kB
- public.two_Partitions_timeCustom_device_id_idx   | 64 kB
- public.two_Partitions_timeCustom_idx             | 64 kB
- public.two_Partitions_timeCustom_series_0_idx    | 64 kB
- public.two_Partitions_timeCustom_series_1_idx    | 64 kB
- public.two_Partitions_timeCustom_series_2_idx    | 40 kB
- public.two_Partitions_timeCustom_series_bool_idx | 48 kB
+                     index_name                     | total_size 
+----------------------------------------------------+------------
+ public."two_Partitions_device_id_timeCustom_idx"   | 64 kB
+ public."two_Partitions_timeCustom_device_id_idx"   | 64 kB
+ public."two_Partitions_timeCustom_idx"             | 64 kB
+ public."two_Partitions_timeCustom_series_0_idx"    | 64 kB
+ public."two_Partitions_timeCustom_series_1_idx"    | 64 kB
+ public."two_Partitions_timeCustom_series_2_idx"    | 40 kB
+ public."two_Partitions_timeCustom_series_bool_idx" | 48 kB
 (7 rows)
 
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -102,22 +102,22 @@ NOTICE:  adding NOT NULL constraint to column "time"
 INSERT INTO timestamp_partitioned VALUES('2004-10-19 10:23:54', '10');
 INSERT INTO timestamp_partitioned VALUES('2004-12-19 10:23:54', '30');
 SELECT * FROM chunk_relation_size('timestamp_partitioned');
- chunk_id |                chunk_table                 | partitioning_columns |      partitioning_column_types       |           partitioning_hash_functions           |                                   ranges                                   | table_bytes | index_bytes | toast_bytes | total_bytes 
-----------+--------------------------------------------+----------------------+--------------------------------------+-------------------------------------------------+----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
-        5 | "_timescaledb_internal"."_hyper_2_5_chunk" | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1096416000000000,1099008000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |        8192 |       49152
-        6 | "_timescaledb_internal"."_hyper_2_6_chunk" | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1101600000000000,1104192000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |        8192 |       49152
+ chunk_id |              chunk_table               | partitioning_columns |      partitioning_column_types       |           partitioning_hash_functions           |                                   ranges                                   | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+----------------------------------------+----------------------+--------------------------------------+-------------------------------------------------+----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
+        5 | _timescaledb_internal._hyper_2_5_chunk | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1096416000000000,1099008000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |        8192 |       49152
+        6 | _timescaledb_internal._hyper_2_6_chunk | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1101600000000000,1104192000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |        8192 |       49152
 (2 rows)
 
 SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned');
- chunk_id |                chunk_table                 | partitioning_columns |      partitioning_column_types       |           partitioning_hash_functions           |                                       ranges                                        | table_size | index_size | toast_size | total_size 
-----------+--------------------------------------------+----------------------+--------------------------------------+-------------------------------------------------+-------------------------------------------------------------------------------------+------------+------------+------------+------------
-        5 | "_timescaledb_internal"."_hyper_2_5_chunk" | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Tue Sep 28 17:00:00 2004 PDT','Thu Oct 28 17:00:00 2004 PDT')","[1073741823,)"} | 8192 bytes | 32 kB      | 8192 bytes | 48 kB
-        6 | "_timescaledb_internal"."_hyper_2_6_chunk" | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Sat Nov 27 16:00:00 2004 PST','Mon Dec 27 16:00:00 2004 PST')","[1073741823,)"} | 8192 bytes | 32 kB      | 8192 bytes | 48 kB
+ chunk_id |              chunk_table               | partitioning_columns |      partitioning_column_types       |           partitioning_hash_functions           |                                       ranges                                        | table_size | index_size | toast_size | total_size 
+----------+----------------------------------------+----------------------+--------------------------------------+-------------------------------------------------+-------------------------------------------------------------------------------------+------------+------------+------------+------------
+        5 | _timescaledb_internal._hyper_2_5_chunk | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Tue Sep 28 17:00:00 2004 PDT','Thu Oct 28 17:00:00 2004 PDT')","[1073741823,)"} | 8192 bytes | 32 kB      | 8192 bytes | 48 kB
+        6 | _timescaledb_internal._hyper_2_6_chunk | {time,value}         | {"timestamp without time zone",text} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Sat Nov 27 16:00:00 2004 PST','Mon Dec 27 16:00:00 2004 PST')","[1073741823,)"} | 8192 bytes | 32 kB      | 8192 bytes | 48 kB
 (2 rows)
 
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
 SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -126,22 +126,48 @@ NOTICE:  adding NOT NULL constraint to column "time"
 INSERT INTO timestamp_partitioned_2 VALUES('2004-10-19 10:23:54', '10');
 INSERT INTO timestamp_partitioned_2 VALUES('2004-12-19 10:23:54', '30');
 SELECT * FROM chunk_relation_size('timestamp_partitioned_2');
- chunk_id |                chunk_table                 | partitioning_columns |         partitioning_column_types         |           partitioning_hash_functions           |                                   ranges                                   | table_bytes | index_bytes | toast_bytes | total_bytes 
-----------+--------------------------------------------+----------------------+-------------------------------------------+-------------------------------------------------+----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
-        7 | "_timescaledb_internal"."_hyper_3_7_chunk" | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1096416000000000,1099008000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |             |       40960
-        8 | "_timescaledb_internal"."_hyper_3_8_chunk" | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1101600000000000,1104192000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |             |       40960
+ chunk_id |              chunk_table               | partitioning_columns |         partitioning_column_types         |           partitioning_hash_functions           |                                   ranges                                   | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+----------------------------------------+----------------------+-------------------------------------------+-------------------------------------------------+----------------------------------------------------------------------------+-------------+-------------+-------------+-------------
+        7 | _timescaledb_internal._hyper_3_7_chunk | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1096416000000000,1099008000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |             |       40960
+        8 | _timescaledb_internal._hyper_3_8_chunk | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"[1101600000000000,1104192000000000)","[1073741823,9223372036854775807)"} |        8192 |       32768 |             |       40960
 (2 rows)
 
 SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned_2');
- chunk_id |                chunk_table                 | partitioning_columns |         partitioning_column_types         |           partitioning_hash_functions           |                                       ranges                                        | table_size | index_size | toast_size | total_size 
-----------+--------------------------------------------+----------------------+-------------------------------------------+-------------------------------------------------+-------------------------------------------------------------------------------------+------------+------------+------------+------------
-        7 | "_timescaledb_internal"."_hyper_3_7_chunk" | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Tue Sep 28 17:00:00 2004 PDT','Thu Oct 28 17:00:00 2004 PDT')","[1073741823,)"} | 8192 bytes | 32 kB      |            | 40 kB
-        8 | "_timescaledb_internal"."_hyper_3_8_chunk" | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Sat Nov 27 16:00:00 2004 PST','Mon Dec 27 16:00:00 2004 PST')","[1073741823,)"} | 8192 bytes | 32 kB      |            | 40 kB
+ chunk_id |              chunk_table               | partitioning_columns |         partitioning_column_types         |           partitioning_hash_functions           |                                       ranges                                        | table_size | index_size | toast_size | total_size 
+----------+----------------------------------------+----------------------+-------------------------------------------+-------------------------------------------------+-------------------------------------------------------------------------------------+------------+------------+------------+------------
+        7 | _timescaledb_internal._hyper_3_7_chunk | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Tue Sep 28 17:00:00 2004 PDT','Thu Oct 28 17:00:00 2004 PDT')","[1073741823,)"} | 8192 bytes | 32 kB      |            | 40 kB
+        8 | _timescaledb_internal._hyper_3_8_chunk | {time,value}         | {"timestamp without time zone",character} | {NULL,_timescaledb_internal.get_partition_hash} | {"['Sat Nov 27 16:00:00 2004 PST','Mon Dec 27 16:00:00 2004 PST')","[1073741823,)"} | 8192 bytes | 32 kB      |            | 40 kB
 (2 rows)
+
+CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
+-- Set storage type to EXTERNAL to prevent PostgreSQL from compressing my
+-- easily compressable string and instead store it with TOAST
+ALTER TABLE toast_test ALTER COLUMN value SET STORAGE EXTERNAL;
+SELECT * FROM create_hypertable('toast_test', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO toast_test VALUES('2004-10-19 10:23:54', $$
+this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k.
+$$);
+SELECT * FROM chunk_relation_size('toast_test');
+ chunk_id |              chunk_table               | partitioning_columns |    partitioning_column_types    | partitioning_hash_functions |                 ranges                  | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+----------------------------------------+----------------------+---------------------------------+-----------------------------+-----------------------------------------+-------------+-------------+-------------+-------------
+        9 | _timescaledb_internal._hyper_4_9_chunk | {time}               | {"timestamp without time zone"} | {NULL}                      | {"[1096416000000000,1099008000000000)"} |        8192 |       16384 |       24576 |       49152
+(1 row)
+
+SELECT * FROM chunk_relation_size_pretty('toast_test');
+ chunk_id |              chunk_table               | partitioning_columns |    partitioning_column_types    | partitioning_hash_functions |                               ranges                                | table_size | index_size | toast_size | total_size 
+----------+----------------------------------------+----------------------+---------------------------------+-----------------------------+---------------------------------------------------------------------+------------+------------+------------+------------
+        9 | _timescaledb_internal._hyper_4_9_chunk | {time}               | {"timestamp without time zone"} | {NULL}                      | {"['Tue Sep 28 17:00:00 2004 PDT','Thu Oct 28 17:00:00 2004 PDT')"} | 8192 bytes | 16 kB      | 24 kB      | 48 kB
+(1 row)
 
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -171,6 +197,7 @@ SELECT * FROM hypertable_approximate_row_count();
  public      | approx_count            |           10
  public      | timestamp_partitioned   |            0
  public      | timestamp_partitioned_2 |            0
+ public      | toast_test              |            0
  public      | two_Partitions          |            0
-(4 rows)
+(5 rows)
 

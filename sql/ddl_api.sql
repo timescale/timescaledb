@@ -60,7 +60,7 @@ DECLARE
     older_than_internal BIGINT;
 BEGIN
     IF older_than IS NULL THEN
-        RAISE 'The timestamp provided to drop_chunks cannot be null';
+        RAISE 'the timestamp provided to drop_chunks cannot be NULL';
     END IF;
 
     PERFORM  _timescaledb_internal.drop_chunks_type_check(pg_typeof(older_than), table_name, schema_name);
@@ -93,9 +93,9 @@ BEGIN
         FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
-            RAISE EXCEPTION 'No hypertables found';
+            RAISE EXCEPTION 'no hypertables found';
         WHEN TOO_MANY_ROWS THEN
-            RAISE EXCEPTION 'Cannot use drop_chunks on multiple tables with different time types';
+            RAISE EXCEPTION 'cannot use drop_chunks on multiple tables with different time types';
     END;
 
 
@@ -106,7 +106,7 @@ BEGIN
     ELSIF time_type = 'TIMESTAMPTZ'::regtype THEN
         PERFORM @extschema@.drop_chunks(now() - older_than, table_name, schema_name, cascade);
     ELSE
-        RAISE 'Can only use drop_chunks with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types';
+        RAISE 'can only use drop_chunks with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types';
     END IF;
 END
 $BODY$;

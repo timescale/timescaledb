@@ -123,7 +123,7 @@ check_chunk_operation_allowed(Oid relid)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Operation not supported on chunk tables.")));
+				 errmsg("operation not supported on chunk tables")));
 	}
 }
 
@@ -141,7 +141,7 @@ relation_not_only(RangeVar *rv)
 				 errmsg("ONLY option not supported on hypertable operations")));
 }
 
-/* Change the schema of a hypertable */
+/* Change the schema of a hypertable or a chunk */
 static void
 process_alterobjectschema(Node *parsetree)
 {
@@ -161,7 +161,14 @@ process_alterobjectschema(Node *parsetree)
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry(hcache, relid);
 
-	if (ht != NULL)
+	if (ht == NULL)
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			chunk_set_schema(chunk, alterstmt->newschema);
+	}
+	else
 		hypertable_set_schema(ht, alterstmt->newschema);
 
 	cache_release(hcache);
@@ -444,7 +451,7 @@ process_drop_hypertable_chunks(DropStmt *stmt)
 			if (NULL != ht)
 			{
 				if (list_length(stmt->objects) != 1)
-					elog(ERROR, "Cannot drop a hypertable along with other objects");
+					elog(ERROR, "cannot drop a hypertable along with other objects");
 
 				/* Drop each chunk table */
 				foreach_chunk(ht, process_drop_table_chunk, stmt);
@@ -612,7 +619,7 @@ process_reindex(Node *parsetree)
 				 */
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("Reindexing of a specific index on a hypertable is currently unsupported."),
+						 errmsg("reindexing of a specific index on a hypertable is unsupported"),
 						 errhint("As a workaround, it is possible to run REINDEX TABLE to reindex all "
 								 "indexes on a hypertable, including all indexes on chunks.")));
 			}
@@ -626,12 +633,22 @@ process_reindex(Node *parsetree)
 	return ret;
 }
 
+/*
+ * Rename a hypertable or a chunk.
+ */
 static void
 process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
 
-	if (NULL != ht)
+	if (NULL == ht)
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			chunk_set_name(chunk, stmt->newname);
+	}
+	else
 		hypertable_set_name(ht, stmt->newname);
 }
 
@@ -642,7 +659,17 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 	Dimension  *dim;
 
 	if (NULL == ht)
+	{
+		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+
+		if (NULL != chunk)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot rename column \"%s\" of hypertable chunk \"%s\"",
+							stmt->subname, get_rel_name(relid)),
+					 errhint("Rename the hypertable column instead.")));
 		return;
+	}
 
 	dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
 
@@ -703,7 +730,7 @@ process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
 		if (NULL != chunk)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Renaming constraints on chunks is not supported")));
+					 errmsg("renaming constraints on chunks is not supported")));
 
 	}
 }
@@ -799,7 +826,7 @@ process_altertable_drop_not_null(Hypertable *ht, AlterTableCmd *cmd)
 			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
-					 errmsg("Cannot Drop NOT NULL constraint from a time-partitioned column")));
+					 errmsg("cannot drop not-null constraint from a time-partitioned column")));
 	}
 }
 
@@ -823,7 +850,7 @@ verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
 			if (NULL != ht)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("Foreign keys to hypertables are not supported.")));
+						 errmsg("foreign keys to hypertables are not supported")));
 			break;
 		default:
 			break;
@@ -860,7 +887,7 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 	}
 	else
 	{
-		elog(ERROR, "Unexpected constraint type");
+		elog(ERROR, "unexpected constraint type");
 		return;
 	}
 
@@ -955,8 +982,8 @@ process_index_start(Node *parsetree)
 		if (stmt->concurrent)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Hypertables currently do not support concurrent "
-							"index creation.")));
+					 errmsg("hypertables do not support concurrent "
+							"index creation")));
 
 		indexing_verify_index(ht->space, stmt);
 	}
@@ -990,9 +1017,11 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 				info.obj = cmd->d.simple.address;
 				break;
 			default:
-				elog(ERROR,
-					 "%s:%d Operation not yet supported on hypertables: parsetree %s, type %d",
-					 __FILE__, __LINE__, nodeToString(parsetree), cmd->type);
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables do not support this operation: "
+								"parsetree %s, type %d",
+								nodeToString(parsetree), cmd->type)));
 				break;
 		}
 
@@ -1240,7 +1269,7 @@ process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
 			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
-					 errmsg("Cannot change the type of a hash-partitioned column")));
+					 errmsg("cannot change the type of a hash-partitioned column")));
 	}
 }
 
@@ -1379,7 +1408,8 @@ process_altertable_start_table(Node *parsetree)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("Hypertables do not support native postgres partitioning")));
+								 errmsg("hypertables do not support native "
+										"postgres partitioning")));
 					}
 				}
 #endif
@@ -1421,8 +1451,8 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AddIndexConstraint:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Hypertables currently do not support adding "
-							"a constraint using an existing index.")));
+					 errmsg("hypertables do not support adding a constraint "
+							"using an existing index")));
 			break;
 		case AT_AddIndex:
 			{
@@ -1578,7 +1608,7 @@ process_create_trigger_start(Node *parsetree)
 	if (stmt->transitionRels != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("Hypertables do not support transition tables in triggers.")));
+				 errmsg("hypertables do not support transition tables in triggers")));
 #endif
 }
 

@@ -57,7 +57,7 @@ chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 		new_chunk = hypertable_get_chunk(dispatch->hypertable, point);
 
 		if (NULL == new_chunk)
-			elog(ERROR, "No chunk found or created");
+			elog(ERROR, "no chunk found or created");
 
 		cis = chunk_insert_state_create(new_chunk, dispatch);
 		subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);

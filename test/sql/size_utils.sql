@@ -24,6 +24,18 @@ INSERT INTO timestamp_partitioned_2 VALUES('2004-12-19 10:23:54', '30');
 SELECT * FROM chunk_relation_size('timestamp_partitioned_2');
 SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned_2');
 
+CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
+-- Set storage type to EXTERNAL to prevent PostgreSQL from compressing my
+-- easily compressable string and instead store it with TOAST
+ALTER TABLE toast_test ALTER COLUMN value SET STORAGE EXTERNAL;
+SELECT * FROM create_hypertable('toast_test', 'time');
+
+INSERT INTO toast_test VALUES('2004-10-19 10:23:54', $$
+this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k.
+$$);
+SELECT * FROM chunk_relation_size('toast_test');
+SELECT * FROM chunk_relation_size_pretty('toast_test');
+
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
 INSERT INTO approx_count VALUES('2004-01-01 10:00:01', 1);

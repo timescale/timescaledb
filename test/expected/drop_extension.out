@@ -1,6 +1,6 @@
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

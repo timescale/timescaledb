@@ -24,7 +24,7 @@
 --
 CREATE TABLE chunk_test(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test', 'time', 'tag', 2, chunk_time_interval => 3);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -119,7 +119,7 @@ ORDER BY c.id, d.id;
 --test the edges of an open partition -- INT_64_MAX and INT_64_MIN.
 CREATE TABLE chunk_test_ends(time bigint, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test_ends', 'time', chunk_time_interval => 5);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -149,7 +149,7 @@ SELECT * FROM chunk_test_ends ORDER BY time asc;
 CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test2', 'time', 'tag', 2, chunk_time_interval => 3);
 WARNING:  unexpected interval: smaller than one second
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

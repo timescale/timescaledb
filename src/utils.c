@@ -167,9 +167,10 @@ time_to_internal(PG_FUNCTION_ARGS)
 int64
 time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 {
-	Datum res, tz;
+	Datum		res,
+				tz;
 
-	switch(type_oid)
+	switch (type_oid)
 	{
 		case INT8OID:
 			return DatumGetInt64(time_val);
@@ -178,10 +179,11 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 		case INT2OID:
 			return (int64) DatumGetInt16(time_val);
 		case TIMESTAMPOID:
+
 			/*
-			* for timestamps, ignore timezones, make believe the timestamp is at
-			* UTC
-			*/
+			 * for timestamps, ignore timezones, make believe the timestamp is
+			 * at UTC
+			 */
 			res = DirectFunctionCall1(pg_timestamp_to_unix_microseconds, time_val);
 
 			return DatumGetInt64(res);
@@ -196,7 +198,7 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 			return DatumGetInt64(res);
 		default:
 			if (!failure_ok)
-				elog(ERROR, "unkown time type oid '%d'", type_oid);
+				elog(ERROR, "unkown time type OID %d", type_oid);
 			return -1;
 	}
 }
@@ -231,7 +233,7 @@ create_fmgr(char *schema, char *function_name, int num_args)
 
 	if (func_list == NULL)
 	{
-		elog(ERROR, "couldn't find the function %s.%s", schema, function_name);
+		elog(ERROR, "could not find the function \"%s.%s\"", schema, function_name);
 	}
 	if (func_list->next != NULL)
 	{
@@ -395,7 +397,7 @@ get_interval_period_approx(Interval *interval)
 #define DAYS_PER_QUARTER 89
 #define YEARS_PER_DECADE 10
 #define YEARS_PER_CENTURY 100
-#define YEARS_PER_MILLENNIUM 1000 
+#define YEARS_PER_MILLENNIUM 1000
 
 /* Returns approximate period in microseconds */
 int64
@@ -425,7 +427,7 @@ date_trunc_interval_period_approx(text *units)
 		case DTK_YEAR:
 			return 1 * DAYS_PER_YEAR * USECS_PER_DAY;
 		case DTK_QUARTER:
-			return  DAYS_PER_QUARTER * USECS_PER_DAY;
+			return DAYS_PER_QUARTER * USECS_PER_DAY;
 		case DTK_MONTH:
 			return DAYS_PER_MONTH * USECS_PER_DAY;
 		case DTK_DAY:

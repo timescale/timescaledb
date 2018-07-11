@@ -56,3 +56,20 @@ AND a.attnum > 0
 ORDER BY c.relname, a.attnum;
 
 SELECT * FROM alter_after;
+
+-- Need superuser to ALTER chunks in _timescaledb_internal schema
+\c single :ROLE_SUPERUSER
+SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+
+-- Rename chunk
+ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
+SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+
+-- Set schema
+ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
+SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
+
+-- Test that we cannot rename chunk columns
+\set ON_ERROR_STOP 0
+ALTER TABLE public.new_chunk_name RENAME COLUMN time TO newtime;
+\set ON_ERROR_STOP 1

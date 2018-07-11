@@ -4,7 +4,7 @@ GRANT ALL ON SCHEMA hypertable_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE hypertable_schema.default_perm_user (time timestamptz, temp float, location int);
 SELECT create_hypertable('hypertable_schema.default_perm_user', 'time', 'location', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
@@ -14,7 +14,7 @@ INSERT INTO hypertable_schema.default_perm_user VALUES ('2001-01-01 01:01:01', 2
 RESET ROLE;
 CREATE TABLE hypertable_schema.superuser (time timestamptz, temp float, location int);
 SELECT create_hypertable('hypertable_schema.superuser', 'time', 'location', 2);
-NOTICE:  adding NOT NULL constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

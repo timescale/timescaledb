@@ -469,7 +469,7 @@ chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, Mem
 														   mctx);
 
 	if (num_found != constraints->num_constraints)
-		elog(ERROR, "Unexpected number of constraints found for chunk %d", chunk_id);
+		elog(ERROR, "unexpected number of constraints found for chunk ID %d", chunk_id);
 
 	return constraints;
 }

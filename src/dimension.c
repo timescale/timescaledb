@@ -163,7 +163,7 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 	HeapTuple	tuple;
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		elog(ERROR, "Function returning record called in context that cannot accept type record");
+		elog(ERROR, "function returning record called in context that cannot accept type record");
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
@@ -241,7 +241,7 @@ calculate_closed_range_default(Dimension *dim, int64 value)
 	int64		last_start = interval * (dim->fd.num_slices - 1);
 
 	if (value < 0)
-		elog(ERROR, "Invalid value " INT64_FORMAT " for closed dimension", value);
+		elog(ERROR, "invalid value " INT64_FORMAT " for closed dimension", value);
 
 	if (value >= last_start)
 	{
@@ -560,9 +560,9 @@ hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 			if (isnull)
 				ereport(ERROR,
 						(errcode(ERRCODE_NOT_NULL_VIOLATION),
-						 errmsg("null value in column \"%s\" violates not-null constraint",
+						 errmsg("NULL value in column \"%s\" violates not-null constraint",
 								NameStr(d->fd.column_name)),
-						 errhint("Columns used for time partitioning can not be NULL")));
+						 errhint("Columns used for time partitioning cannot be NULL")));
 
 			p->coordinates[p->num_coords++] = time_value_to_internal(datum, d->fd.column_type, false);
 		}
@@ -699,7 +699,7 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 	};
 
 	ereport(NOTICE,
-			(errmsg("adding NOT NULL constraint to column \"%s\"", colname),
+			(errmsg("adding not-null constraint to column \"%s\"", colname),
 			 errdetail("Time dimensions cannot have NULL values")));
 
 	AlterTableInternal(table_relid, list_make1(&cmd), false);

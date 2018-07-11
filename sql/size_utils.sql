@@ -9,8 +9,8 @@
 --
 -- Returns:
 -- table_bytes        - Disk space used by main_table (like pg_relation_size(main_table))
--- index_bytes        - Disc space used by indexes
--- toast_bytes        - Disc space of toast tables
+-- index_bytes        - Disk space used by indexes
+-- toast_bytes        - Disk space of toast tables
 -- total_bytes        - Total disk space used by the specified table, including all indexes and TOAST data
 
 CREATE OR REPLACE FUNCTION hypertable_relation_size(
@@ -42,8 +42,8 @@ BEGIN
                FROM (
                SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes FROM (
                       SELECT
-                      sum(pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"'))::bigint as total_bytes,
-                      sum(pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"'))::bigint AS index_bytes,
+                      sum(pg_total_relation_size(format('%%I.%%I', c.schema_name, c.table_name)))::bigint as total_bytes,
+                      sum(pg_indexes_size(format('%%I.%%I', c.schema_name, c.table_name)))::bigint AS index_bytes,
                       sum(pg_total_relation_size(reltoastrelid))::bigint AS toast_bytes
                       FROM
                       _timescaledb_catalog.hypertable h,
@@ -104,8 +104,7 @@ BEGIN
         IF d.partitioning_func IS NULL THEN
            RETURN d.column_name;
         ELSE
-           RETURN d.partitioning_func_schema || '.' || d.partitioning_func
-                  || '(' || d.column_name || ')';
+           RETURN format('%I.%I(%I)', d.partitioning_func_schema, d.partitioning_func, d.column_name);
         END IF;
 END
 $BODY$;
@@ -162,7 +161,7 @@ $BODY$;
 -- ranges                        - Partition ranges for each dimension of the chunk
 -- table_bytes                   - Disk space used by main_table
 -- index_bytes                   - Disk space used by indexes
--- toast_bytes                   - Disc space of toast tables
+-- toast_bytes                   - Disk space of toast tables
 -- total_bytes                   - Disk space used in total
 
 CREATE OR REPLACE FUNCTION chunk_relation_size(
@@ -209,9 +208,9 @@ BEGIN
               total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes
               FROM (
                SELECT c.id as chunk_id,
-               '"' || c.schema_name || '"."' || c.table_name || '"' as chunk_table,
-               pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"') AS total_bytes,
-               pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"') AS index_bytes,
+               format('%%I.%%I', c.schema_name, c.table_name) as chunk_table,
+               pg_total_relation_size(format('%%I.%%I', c.schema_name, c.table_name)) AS total_bytes,
+               pg_indexes_size(format('%%I.%%I', c.schema_name, c.table_name)) AS index_bytes,
                pg_total_relation_size(reltoastrelid) AS toast_bytes,
                array_agg(d.column_name ORDER BY d.interval_length, d.column_name ASC) as partitioning_columns,
                array_agg(d.column_type ORDER BY d.interval_length, d.column_name ASC) as partitioning_column_types,
@@ -227,9 +226,9 @@ BEGIN
                pg_namespace pns
                WHERE h.schema_name = %L
                      AND h.table_name = %L
-                     AND pgc.relname = h.table_name
+                     AND pgc.relname = c.table_name
                      AND pns.oid = pgc.relnamespace
-                     AND pns.nspname = h.schema_name
+                     AND pns.nspname = c.schema_name
                      AND relkind = 'r'
                      AND c.hypertable_id = h.id
                      AND c.id = cc.chunk_id
@@ -308,9 +307,9 @@ BEGIN
               total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes
               FROM (
                SELECT c.id as chunk_id,
-               '"' || c.schema_name || '"."' || c.table_name || '"' as chunk_table,
-               pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"') AS total_bytes,
-               pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"') AS index_bytes,
+               format('%%I.%%I', c.schema_name, c.table_name) as chunk_table,
+               pg_total_relation_size(format('%%I.%%I', c.schema_name, c.table_name)) AS total_bytes,
+               pg_indexes_size(format('%%I.%%I', c.schema_name, c.table_name)) AS index_bytes,
                pg_total_relation_size(reltoastrelid) AS toast_bytes,
                array_agg(d.column_name ORDER BY d.interval_length, d.column_name ASC) as partitioning_columns,
                array_agg(d.column_type ORDER BY d.interval_length, d.column_name ASC) as partitioning_column_types,
@@ -328,9 +327,9 @@ BEGIN
                pg_namespace pns
                WHERE h.schema_name = %L
                      AND h.table_name = %L
-                     AND pgc.relname = h.table_name
+                     AND pgc.relname = c.table_name
                      AND pns.oid = pgc.relnamespace
-                     AND pns.nspname = h.schema_name
+                     AND pns.nspname = c.schema_name
                      AND relkind = 'r'
                      AND c.hypertable_id = h.id
                      AND c.id = cc.chunk_id
@@ -374,7 +373,7 @@ BEGIN
         WHERE c.OID = main_table;
 
         RETURN QUERY
-        SELECT h.schema_name || '.' || ci.hypertable_index_name,
+        SELECT format('%I.%I', h.schema_name, ci.hypertable_index_name),
                sum(pg_relation_size(c.oid))::bigint
         FROM
         pg_class c,

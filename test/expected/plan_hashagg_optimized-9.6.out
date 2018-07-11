@@ -5,7 +5,7 @@ CREATE TABLE metric (id SERIAL PRIMARY KEY, value INT);
 CREATE TABLE hyper(time TIMESTAMP, time_int BIGINT, time_broken DATE, metricid int REFERENCES metric(id), VALUE double precision);
 CREATE TABLE regular(time TIMESTAMP, time_int BIGINT, time_date DATE, metricid int REFERENCES metric(id), VALUE double precision);
 SELECT create_hypertable('hyper', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE);
-psql:include/plan_hashagg_load.sql:5: NOTICE:  adding NOT NULL constraint to column "time"
+psql:include/plan_hashagg_load.sql:5: NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  

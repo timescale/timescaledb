@@ -27,7 +27,7 @@ DECLARE
     exist_count INT = 0;
 BEGIN
     IF older_than_time IS NULL AND table_name IS NULL AND schema_name IS NULL THEN
-        RAISE 'Cannot have all 3 arguments to drop_chunks_older_than be NULL';
+        RAISE 'cannot have all 3 arguments to drop_chunks_older_than be NULL';
     END IF;
 
     IF cascade THEN
@@ -42,7 +42,7 @@ BEGIN
         INTO STRICT exist_count;
 
         IF exist_count = 0 THEN
-            RAISE 'hypertable % does not exist', drop_chunks_impl.table_name
+            RAISE 'hypertable "%" does not exist', drop_chunks_impl.table_name
             USING ERRCODE = 'IO001';
         END IF;
     END IF;
@@ -96,9 +96,9 @@ BEGIN
         FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
-            RAISE EXCEPTION 'No hypertables found';
+            RAISE EXCEPTION 'no hypertables found';
         WHEN TOO_MANY_ROWS THEN
-            RAISE EXCEPTION 'Cannot use drop_chunks on multiple tables with different time types';
+            RAISE EXCEPTION 'cannot use drop_chunks on multiple tables with different time types';
     END;
 
     IF given_type IN ('int'::regtype, 'smallint'::regtype, 'bigint'::regtype ) THEN
@@ -107,7 +107,7 @@ BEGIN
         END IF;
     END IF;
     IF actual_type != given_type THEN
-        RAISE EXCEPTION 'Cannot call drop_chunks with a % on hypertables with a time type of: %', given_type, actual_type;
+        RAISE EXCEPTION 'cannot call drop_chunks with a % on hypertables with a time type of: %', given_type, actual_type;
     END IF;
 END
 $BODY$;

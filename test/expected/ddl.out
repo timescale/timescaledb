@@ -85,7 +85,7 @@ DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
 CREATE TABLE my_ht (time BIGINT, val integer);
 SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-psql:include/ddl_ops_1.sql:62: NOTICE:  adding NOT NULL constraint to column "time"
+psql:include/ddl_ops_1.sql:62: NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  
