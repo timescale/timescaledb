@@ -30,21 +30,21 @@ after_script:
 
 jobs:
   include:
-    - stage: test
-      script:
-        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_all.sh
+    # - stage: test
+    #   script:
+    #     - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_all.sh
 
-    - if: type = cron
-      stage: test
-      script:
-        # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
-        - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
+    # - if: type = cron
+    #   stage: test
+    #   script:
+    #     # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
+    #     - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
 
-    - if: type = cron
-      stage: test
-      script:
-        # Versions <=9.6.1 is missing function `convert_tuples_by_name_map` needed by our code
-        - PG_MAJOR=9.6 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
+    # - if: type = cron
+    #   stage: test
+    #   script:
+    #     # Versions <=9.6.1 is missing function `convert_tuples_by_name_map` needed by our code
+    #     - PG_MAJOR=9.6 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
 
     # - if: type = cron
     - stage: test
@@ -58,21 +58,21 @@ jobs:
       script:
         - cd ./tsdb-dev-tools/; bash -x ./test_valgrind.sh
 
-    - stage: test
-      env:
-        - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
-      before_install:
-        - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
-        - sudo apt-get install -y postgresql-9.6 postgresql-client-9.6 postgresql-contrib-9.6 postgresql-server-dev-9.6 cmake3
-      install: echo "Success"
-      script: echo "Success"
-      addons:
-        postgresql: "9.6"
-        coverity_scan:
-          project:
-            name: "timescale/timescaledb"
-            description: "TimescaledDB an open-source time-series DB"
-          notification_email: ci@timescale.com
-          build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug && cd build"
-          build_command: "make"
-          branch_pattern: coverity_scan
+    # - stage: test
+    #   env:
+    #     - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
+    #   before_install:
+    #     - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+    #     - sudo apt-get install -y postgresql-9.6 postgresql-client-9.6 postgresql-contrib-9.6 postgresql-server-dev-9.6 cmake3
+    #   install: echo "Success"
+    #   script: echo "Success"
+    #   addons:
+    #     postgresql: "9.6"
+    #     coverity_scan:
+    #       project:
+    #         name: "timescale/timescaledb"
+    #         description: "TimescaledDB an open-source time-series DB"
+    #       notification_email: ci@timescale.com
+    #       build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug && cd build"
+    #       build_command: "make"
+    #       branch_pattern: coverity_scan
