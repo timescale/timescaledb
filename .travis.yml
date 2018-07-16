@@ -54,6 +54,7 @@ jobs:
         - secure: "BTEfIO+Zmfxl8NtnXkPaBOTSNPhkCYGGHJW40iMsKl10na6hUAoxdcN9VYhO35449Sk7nLFYy+m9WZNNaeceU0LX8DvfXZf2QHeaCJOpiEKB8TZR5658n8gJrQyXGSTnCsNBf5kN893w/Wo6j4CQXv3H9XCW4ytsKajHazsFUB91UlWpGsuh+OreoNyeZAwGlhhgxnZZCL5u61Y//N5CekHK6s0dMOp4dd2iSyDn49AEtJs02DjZ/EzWU/F8sg6df4hYEOr+8nMZ97c6O6ktYuzKbkzfCUt4UW5eB4M9xq2QNfFU9G3q6ya5ja90vvYg0cTjLuc1JMjByN9oEbYNjQJMlrEG4cHn3MC2xcELORMYrI4hdfGDUIr7u+qFfAlWOYDnYwpmkDIfnUCFFoH8vNqgtdLiLNch3U7j014wAE8ismtOJFSzPBM/Q4FaVcUO7BSpUsh1lx0gGm94cUeu3ZHP3POD+8knB6Hcv8AsJyPVxQGzzLqTEPlHq+YmLt4s79VpUoCBj/5NuRczVjP9tfrTXHCxnoEGIfyv+ExztVbyeP060PxfTJh7Wv8O/l/+ceWCWohtrziMWihi9LeozoAjgvh1wZQMa6hp+ts/cyBuWHv8oLfZx5BHLVOoiy4w3+To5lZwoNt80jJ4RsvuqImy0RvVcbiHScR0q/YrlZA="
       before_script:
         # clone valgrind test script
+        - echo $USR
         - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git
       script:
         - cd ./tsdb-dev-tools/; bash -x ./test_valgrind.sh
