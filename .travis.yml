@@ -46,6 +46,44 @@ jobs:
         # Version >= 9.6.3 is required by TimescaleDB
         - PG_MAJOR=9.6 PG_MINOR_COMPILE=3 bash -x ./scripts/docker-run-abi-test.sh
 
+    # Valgrind test #1 : first 42 tests ~50 mins
+    # - if: type = cron
+    - stage: test
+      env:
+        - PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+        # bitbucket username
+        - secure: "dYMbM4W3hM8tHkun/pxwIpVUa/SeB5Su8yfmEArQ+VoA/KLn3uFuQ3a3/0E+ioy40KQO0K6Sij7nAE7k1C6JjT/dist6qf3V5W9f9uOWeK0FMgwlloDVF6TTOB8sEew9opNrn8FUh5miFSs13VaJDPwQy9sJt+jHjpYdX+6JQHCxVx5L6r8QJ/n6BoMTg3CY5jMa0rs7hOFZSmkOhMFVp3+BYTPICDNVuQO84IbRJOrOTl6FMe06LbdaTJzZZFqNucLI2QV47qd/5Mtw0LpTpJRK+xJHsDnqvp+7rsXqmtn15GDtYKCpn99P9V9OjlZxOE/kW4NE25zPHvSD6DEJ6A1W/0u4VAj/0mk1PYJNisLmTjlKRPCF/JbxzQYd2ByITs8J4rQKaSO/GjoIBSDSbnJHqVjtjz+qFdEpl6Hw1/02lIbYfPlOgSQn28Uft12szPgHlcGftuKQwWiC640eKfDbAKWnvGJhHPbhelP6UbkadvwaNJJxTwIYt1C9tGya/jBFlPWCESLg40hyMgSfJkHS6x9pd5PDQg0Pkzh0mka6Ei6VhNE7jYNp3DG1Y7HI8PEHZKTONRFSSjy7KUBxuddZcPtxKtunSsEqgAHfBNN9GouITxGCGBP3UQF2wg6IdllAZq2MWAocXabpJUXuusGbR3u+EnBLbGB7eC+nPyc="
+        # bitbucket password
+        - secure: "PO2uy/l7WzY4Uoq8xsY63UaM9dZsC0nq0od3wdSfhGxxZlqxiCC+7Q7DGkVKHnxk/IJiw6aI4TYSVp1mIQR2JeZVpYXAi1CjR1+klsXVZMBueRoAr2LRQbkRboTU6kCpyhKbtUukU3An9pVLTMim8mzqWpjRljC2ohJLpzgTp9J6haGUIFgCeXqfp4+duNaXBmfV6Nv79cIK88/Dh5QNginnS1pzsEmDRNclenW0p4xOeVhvNq1fWi3Semz1A/vcomC4tapAnESj6oF9PaXunmIkAtEzwwX271JOoUBom0IjdodfgXVs1ZlHDmQBUMWL30t735F49UPJGSH2n0z7kfjGhNfqRHkOHb2NoSmdWVJY6s9LB0+xYXGJ260qLaRhxhBiPlOdAegma54r2EObcVYl3NU9Ll+oXHRST8nFAVwy1/ODitw6vP2Tt7weU0uvG1ZyjhAJvHB2dLoJQpP0w8tNf2oJ1Fb7mpZKSwgVjsIMmL1S4Efnbfs79PK87zsxpsIAexnHfd327LTHQOwgv7eLg2v/XkQ15SjXt5uv3Qipvso4Mid5yI1ielXmSrl6wE5q9sv7qTQ+EO6jNRy4pk9iiEwtbFt8CopatCOtMbjJmNnzUkv35gU7H+S6dbKly4lvABGnNqJgSZXR3kHfUG14VQ7QJmw0w+kyBxR69us="
+      before_script:
+        # clone valgrind test script
+        - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
+        - bash -c 'while true; do echo -e "keepalive\n"; sleep 60; done' & # print line every 60 minutes to avoid Travis timeout
+      script:
+        # TEST_MAX specifies the maximum test # to go up to
+        - cd /tmp/tsdb-dev-tools/; TIMESCALE_DIR=$TRAVIS_BUILD_DIR TEST_MAX=42 bash -x ./test_valgrind.sh
+      after_script:
+        - kill $(jobs -p) # kill job that prints repeatedly
+
+    # Valgrind test #2 : other tests ~ 50 mins
+    # - if: type = cron
+    - stage: test
+      env:
+        - PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+        # bitbucket username
+        - secure: "dYMbM4W3hM8tHkun/pxwIpVUa/SeB5Su8yfmEArQ+VoA/KLn3uFuQ3a3/0E+ioy40KQO0K6Sij7nAE7k1C6JjT/dist6qf3V5W9f9uOWeK0FMgwlloDVF6TTOB8sEew9opNrn8FUh5miFSs13VaJDPwQy9sJt+jHjpYdX+6JQHCxVx5L6r8QJ/n6BoMTg3CY5jMa0rs7hOFZSmkOhMFVp3+BYTPICDNVuQO84IbRJOrOTl6FMe06LbdaTJzZZFqNucLI2QV47qd/5Mtw0LpTpJRK+xJHsDnqvp+7rsXqmtn15GDtYKCpn99P9V9OjlZxOE/kW4NE25zPHvSD6DEJ6A1W/0u4VAj/0mk1PYJNisLmTjlKRPCF/JbxzQYd2ByITs8J4rQKaSO/GjoIBSDSbnJHqVjtjz+qFdEpl6Hw1/02lIbYfPlOgSQn28Uft12szPgHlcGftuKQwWiC640eKfDbAKWnvGJhHPbhelP6UbkadvwaNJJxTwIYt1C9tGya/jBFlPWCESLg40hyMgSfJkHS6x9pd5PDQg0Pkzh0mka6Ei6VhNE7jYNp3DG1Y7HI8PEHZKTONRFSSjy7KUBxuddZcPtxKtunSsEqgAHfBNN9GouITxGCGBP3UQF2wg6IdllAZq2MWAocXabpJUXuusGbR3u+EnBLbGB7eC+nPyc="
+        # bitbucket password
+        - secure: "PO2uy/l7WzY4Uoq8xsY63UaM9dZsC0nq0od3wdSfhGxxZlqxiCC+7Q7DGkVKHnxk/IJiw6aI4TYSVp1mIQR2JeZVpYXAi1CjR1+klsXVZMBueRoAr2LRQbkRboTU6kCpyhKbtUukU3An9pVLTMim8mzqWpjRljC2ohJLpzgTp9J6haGUIFgCeXqfp4+duNaXBmfV6Nv79cIK88/Dh5QNginnS1pzsEmDRNclenW0p4xOeVhvNq1fWi3Semz1A/vcomC4tapAnESj6oF9PaXunmIkAtEzwwX271JOoUBom0IjdodfgXVs1ZlHDmQBUMWL30t735F49UPJGSH2n0z7kfjGhNfqRHkOHb2NoSmdWVJY6s9LB0+xYXGJ260qLaRhxhBiPlOdAegma54r2EObcVYl3NU9Ll+oXHRST8nFAVwy1/ODitw6vP2Tt7weU0uvG1ZyjhAJvHB2dLoJQpP0w8tNf2oJ1Fb7mpZKSwgVjsIMmL1S4Efnbfs79PK87zsxpsIAexnHfd327LTHQOwgv7eLg2v/XkQ15SjXt5uv3Qipvso4Mid5yI1ielXmSrl6wE5q9sv7qTQ+EO6jNRy4pk9iiEwtbFt8CopatCOtMbjJmNnzUkv35gU7H+S6dbKly4lvABGnNqJgSZXR3kHfUG14VQ7QJmw0w+kyBxR69us="
+      before_script:
+        # clone valgrind test script
+        - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
+        - bash -c 'while true; do echo -e "keepalive\n"; sleep 60; done' & # print line every 60 minutes to avoid Travis timeout
+      script:
+        # TEST_MIN specifies the minimum test # to go start from
+        - cd /tmp/tsdb-dev-tools/; TIMESCALE_DIR=$TRAVIS_BUILD_DIR TEST_MIN=43 bash -x ./test_valgrind.sh
+      after_script:
+        - kill $(jobs -p) # kill job that prints repeatedly
+
     - stage: test
       env:
         - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
