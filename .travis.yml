@@ -48,6 +48,16 @@ jobs:
 
     - stage: test
       env:
+        - PG_VERSION=10.0 PG_GIT_TAG=REL_10_0
+        - secure: "uGX2k6j4U6rIIw/+/8Nj2CfVMN6nc0mMhvFK2w1ADRm93Cr3rYo29vfCJYpDGn4W/UIpdl3r15KDJuC/8xF6waHTc9qFpXmUi/VeDLsnsEvBjf3cbK/rKfuzAYZsrRldbwCm+jHUN/aV8q43eGTcrffCFfuhe2gr+sOACCqs/ZxrZlvH2vfPj7pH+FY2xY/J6NvMvmZJljc8rbDJHvuBOu/IIEnhzXNRgOehc7INcaSZM34rx6ktlArJhFWuKnWLfpwXg6v/7So01kGSC0tB9gmL23eXCDrNbIqFrsFn130EfiVUQVClA+j6PGc1N7w+0QWm4h7TlGwwNgthBRnHxlskq4Fkal9hAwqup9Lp43567iaPM4SBJJbksw8y10tucgxWYpRcJU41FAGSc6BJwty82nzbOQLA3i8M95Xyp7ppa5KK4t2ay6818v3zZtID6oX8jVvodDQVHF3QbbhIuKXi+mhTK1RlsCOZ/SBc7ABtPKYxBcsclZHW17qkGbhXZyaHjwtWtzScHNXBg4jLzT/W89vvS654/sp9OpmXkO0g1XGAPAk525JQPrre08gQvkiSi2D56JDsu8XvRkZd7utrzEbpx+3oBW5W07eGykcWd6vD6n15tJZD5o2AUcHr8SjmiVdxvg1iajNzDuoznMUMl/5pgl+m+IHbdNxO4lQ="
+        - secure: "JDfr4sXA3aXUdWvLDdhvVAOixsE/guF7KYFfGDeDEcmEH/DGfbDJW9agLJ3GDYqZVEsmghno1UDuP+urhveprKRW/dirvMegPSkO6Vw7tYdZ2kU5Fp5O/6a9EPjrrvZ38hNPK9Nq1tr54mG4PvNxYeh9RHLIxYuOrq3V7yJrhm8VmHL633s5AbMezOHcxi0Aoi4ylPvTSNpwEDJUoprh9PXJauPNjJKsm0eBfkcpZntVlHZq034CvACtS1yxfj9Gyj9g9H4eqfuQWWFIAigA0Mv6mNwxwxEvfDbTQN96qMMDWgwh/I4JaboQOz4Aak/n/2XsqShsx6QmXoOU6ikP/yObFHoAWroKTu+F2Q2i9St4XiR1w/b8M02RGtUS2yWi9FSQV2MR1kIXsnSHbM1FaR1EvatfDiSevsbqY8mybxAP21e/4E4BJR2vY9dfN+X7jw9WkgZyeszz9vNy/Ggj+e3jeNd0F52HD/tGWliK76XwKVtmElyhXlBuScY1lNWPevT3lFl6FKyYAf1GOYlBovsyr3o2vGNz7FJ7ssQD1pC3x97ncZTI6QarNwk3sKI8HzJg7QesKDxHPcsZhEir9v3EDdCRmQ2efsHZ+bC+Y2vAKVDtQRB86BQwKd5/rkztN5/q4DgbQHW1L9rIpcuiT0dhwG1+Mib9QsMcpiVSbMI="
+      before_script:
+        - git clone --progress --verbose https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
+      script:
+        - python $TRAVIS_BUILD_DIR/scripts/test_memory_spikes.py &; cd /tmp/tsdb-dev-tools/; psql -U postgres -d postgres -h localhost -v ECHO=all -X -f sql/out_of_order_random_direct.sql
+
+    - stage: test
+      env:
         - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
       before_install:
         - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
