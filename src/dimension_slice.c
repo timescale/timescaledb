@@ -110,14 +110,15 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 }
 
 static int
-dimension_slice_scan_limit_internal(int indexid,
-									ScanKeyData *scankey,
-									int nkeys,
-									tuple_found_func on_tuple_found,
-									void *scandata,
-									int limit,
-									LOCKMODE lockmode,
-									MemoryContext mctx)
+dimension_slice_scan_limit_direction_internal(int indexid,
+											  ScanKeyData *scankey,
+											  int nkeys,
+											  tuple_found_func on_tuple_found,
+											  void *scandata,
+											  int limit,
+											  ScanDirection scandir,
+											  LOCKMODE lockmode,
+											  MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
@@ -129,11 +130,33 @@ dimension_slice_scan_limit_internal(int indexid,
 		.limit = limit,
 		.tuple_found = on_tuple_found,
 		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
+		.scandirection = scandir,
 		.result_mctx = mctx,
 	};
 
 	return scanner_scan(&scanctx);
+}
+
+
+static int
+dimension_slice_scan_limit_internal(int indexid,
+									ScanKeyData *scankey,
+									int nkeys,
+									tuple_found_func on_tuple_found,
+									void *scandata,
+									int limit,
+									LOCKMODE lockmode,
+									MemoryContext mctx)
+{
+	return dimension_slice_scan_limit_direction_internal(indexid,
+														 scankey,
+														 nkeys,
+														 on_tuple_found,
+														 scandata,
+														 limit,
+														 ForwardScanDirection,
+														 lockmode,
+														 mctx);
 }
 
 /*
@@ -309,7 +332,7 @@ dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
  * the returned dimension vector is allocated on the current memory context.
  */
 DimensionVec *
-dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, int limit, MemoryContext mctx)
+dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, int limit, ScanDirection scandir, MemoryContext mctx)
 {
 	ScanKeyData scankey[3];
 	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
@@ -321,14 +344,15 @@ dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, 
 	ScanKeyInit(&scankey[2], Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
 				BTLessStrategyNumber, F_INT8LT, Int64GetDatum(point));
 
-	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
-										scankey,
-										3,
-										dimension_vec_tuple_found,
-										&slices,
-										limit,
-										AccessShareLock,
-										mctx);
+	dimension_slice_scan_limit_direction_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+												  scankey,
+												  3,
+												  dimension_vec_tuple_found,
+												  &slices,
+												  limit,
+												  scandir,
+												  AccessShareLock,
+												  mctx);
 
 	return dimension_vec_sort(&slices);
 }
