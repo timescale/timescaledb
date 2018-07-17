@@ -43,8 +43,8 @@ jobs:
     - if: type = cron
       stage: test
       script:
-        # Versions <=9.6.1 is missing function `convert_tuples_by_name_map` needed by our code
-        - PG_MAJOR=9.6 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
+        # Version >= 9.6.3 is required by TimescaleDB
+        - PG_MAJOR=9.6 PG_MINOR_COMPILE=3 bash -x ./scripts/docker-run-abi-test.sh
 
     - stage: test
       env:
