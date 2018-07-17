@@ -1073,7 +1073,7 @@ List *
 chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx)
 {
 	List	   *chunks = NIL;
-	DimensionVec *dimvec = dimension_slice_scan_by_dimension_before_point(dimension_id, point, count, mctx);
+	DimensionVec *dimvec = dimension_slice_scan_by_dimension_before_point(dimension_id, point, count, BackwardScanDirection, mctx);
 	int			i;
 
 	for (i = 0; i < dimvec->num_slices; i++)
