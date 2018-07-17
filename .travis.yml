@@ -52,6 +52,17 @@ jobs:
         # Version >= 9.6.3 is required by TimescaleDB
         - PG_MAJOR=9.6 PG_MINOR_COMPILE=3 bash -x ./scripts/docker-run-abi-test.sh
 
+    - if: type = cron
+      stage: test
+      env:
+        - PG_VERSION=10.0 PG_GIT_TAG=REL_10_0
+        - secure: "TurskgAodG44RKCUPfoUb4JlT+UZwaPjUN73MS4+2ED2ayf46iUpcMODovDf7CPQRriMAvii/5xQ9UWTGYZejJy/Si3aE0fQeSKHIOPmuHqmmBkC3jgK9A5vOMpaAwljSNvIAMfwhIjVsq87nyvxHYWReDWl5SrdxTvh91RJvOiMRNdqwBbnj2j1cC30783ICGZUazrUyhDDnXispyBJYFxlHJmQJpfs6428dTRNJY/X8nVDXFwQkRjlIXarquTsrifCfzdq40Ykb8/1CS0295R8/kdKamQqXM0aS7iIkw3JFmZIz08OHKc7wcJuv6KSnCfNSftJqy2+nb1gkyIqkr3mrpYUa+2tKVwpA6OfET2S2kC5B3bOTcyBgihhnivAOS9zG8PTouLSUzqZzo+H893xdaMlX4kX3oOrOqzbj8YvTw6Dgw8PWERfnOngpKmKJFb8yboXPmGY7luSVxOplnPnYO0jaAXPU4ESsFYL3EBG5Zo4rVIuA5g7aJ0Ex+e5GQWiHDM1ubUo2vcuVVlurs/Aj8eSpNhqo0S5MjI05Jcz82X+9+asFcP+QV81UrueiXTlQ/7buAyMyVtKOgOhZwR4ImA1zzWkJjNNbZMJqeO9tPEgU7IxrqLhMgIpBB/pn0gzJZ8LN7C2oyznMYGzS5lrYaavojFUViv8vFyAQ24="
+        - secure: "S8WfPsrVGg21vZPxjrmy1X19T7zpHNgaSAoqYGzJdDZcNYuZbI87+tP3VQZo4MxjP3Ag46zTI5K+6aMjCqYqFGKufZdEaSpPSLmppFbXALgSp/rOkzp1M9HhGj0QVP7QcoPbva5Bjnj3zVi9CMAo6MwtnGAvzqBLOsdtnXTxEmKYyeNgwUVbQi2nzO38GeLgabaFL4XD3f3bmHE5jG6QAwZ/L7+jajsD1biH4sOiRLCRshtvermtYxh3SK6rML2kiwATABxTd1xDdMVRO/llmDBN373tHK6mufJyIhrwG9oTprSSDDIJlEbSPCkH0uvJBGcDvOAWf9tr4TGs/beawx3ELcXqR/4EisFqvMiVL4Vpt1gMBg9gue4Y0wpHZYoBOOef2gFtuyL7PjYe9koYJAJxg9DJ29DMxIjuCLTnbHN6yLa9425pdvxcuNEJ2K2zD0ZWoLSVueL0MxLhOZJsqlMkmmrFyI7y5cj1XvJF3vcsa5yK3S7sXroKUzeLu6QMh8hO3jD/2IvdQJ7Huy5uiJk2a+KUceLzruxLbwPF4b8SEoTquJ9NFGtagCG77lbIbLltLs2fUf+JnM8ipdpoMibVRFBOahP8NZwpL/NFzG3WLH3tDncj/c3fneMiNv3FUHLf6ufOVOayQiAEidszcMct2R20qIxggXKymrjZA3k="
+      before_script:
+        - git clone --progress --verbose https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
+      script:
+        - bash ./scripts/docker-run-memory-test.sh
+
     - stage: test
       env:
         - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
