@@ -1,0 +1,6 @@
+SELECT _timescaledb_internal.test_conn();
+ test_conn 
+-----------
+ 
+(1 row)
+
