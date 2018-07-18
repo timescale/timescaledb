@@ -23,6 +23,7 @@ set(SOURCE_FILES
   size_utils.sql
   histogram.sql
   cache.sql
+  test_conn.sql
 )
 
 # These files should be pre-pended to update scripts so that they are

@@ -1,4 +1,10 @@
 set(CMAKE_C_FLAGS_DEBUG "-DUSE_ASSERT_CHECKING=1")
+INCLUDE (FindOpenSSL)
+file(STRINGS ${PG_INCLUDEDIR}/pg_config.h USE_OPENSSL REGEX "define USE_OPENSSL ")
+
+if (OPENSSL_FOUND AND USE_OPENSSL)
+	include_directories ( ${OPENSSL_INCLUDE_DIR} )
+endif (OPENSSL_FOUND AND USE_OPENSSL)
 
 if (UNIX)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
@@ -49,6 +55,7 @@ set(HEADERS
   compat-endian.h
   compat-msvc-enter.h
   compat-msvc-exit.h
+  conn.h
   constraint_aware_append.h
   copy.h
   dimension.h
@@ -89,6 +96,7 @@ set(SOURCES
   chunk_dispatch_state.c
   chunk_index.c
   chunk_insert_state.c
+  conn.c
   constraint_aware_append.c
   copy.c
   dimension.c
@@ -116,6 +124,7 @@ set(SOURCES
   sort_transform.c
   subspace_store.c
   tablespace.c
+  test_conn.c
   trigger.c
   utils.c
   version.c)
@@ -163,6 +172,10 @@ if (PGINDENT)
 endif (PGINDENT)
 
 add_library(${PROJECT_NAME} MODULE ${SOURCES} ${HEADERS} ${GITCOMMIT_H})
+
+if (OPENSSL_FOUND AND USE_OPENSSL)
+	target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
+endif (OPENSSL_FOUND AND USE_OPENSSL)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME ${PROJECT_NAME}-${PROJECT_VERSION_MOD}

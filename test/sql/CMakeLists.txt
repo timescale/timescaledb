@@ -46,6 +46,7 @@ set(TEST_FILES
   sql_query_results_x_diff.sql
   sql_query.sql
   tablespace.sql
+  test_conn.sql
   timestamp.sql
   triggers.sql
   truncate.sql
