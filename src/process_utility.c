@@ -295,9 +295,10 @@ static bool
 process_vacuum(Node *parsetree, ProcessUtilityContext context)
 {
 	VacuumStmt *stmt = (VacuumStmt *) parsetree;
+	bool		is_toplevel = (context == PROCESS_UTILITY_TOPLEVEL);
 	VacuumCtx	ctx = {
 		.stmt = stmt,
-		.is_toplevel = (context == PROCESS_UTILITY_TOPLEVEL),
+		.is_toplevel = is_toplevel,
 	};
 	Oid			hypertable_oid;
 	Cache	   *hcache;
@@ -324,6 +325,21 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 	hcache->release_on_commit = true;
 
 	cache_release(hcache);
+
+	/*
+	 * You still want the parent to be vacuumed in order to update statistics
+	 * if necessary
+	 *
+	 * Note that in the VERBOSE output this will appear to re-analyze the
+	 * child tables. However, this actually just re-acquires the sample from
+	 * the child table to use this statistics in the parent table. It will
+	 * /not/ write the appropriate statistics in pg_stats for the child table,
+	 * so both the per-chunk analyze above and this parent-table vacuum run is
+	 * necessary. Later, we can optimize this further, if necessary.
+	 */
+	stmt->relation->relname = NameStr(ht->fd.table_name);
+	stmt->relation->schemaname = NameStr(ht->fd.schema_name);
+	ExecVacuum(stmt, is_toplevel);
 
 	return true;
 }
