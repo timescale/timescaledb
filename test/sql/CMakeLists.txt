@@ -60,6 +60,11 @@ IF(CMAKE_BUILD_TYPE MATCHES Debug)
     loader.sql)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
 
+IF (${PG_VERSION_MAJOR} GREATER "9")
+  list(APPEND TEST_FILES
+    generated_as_identity.sql)
+ENDIF()
+
 set(TEST_TEMPLATES
   parallel.sql.in
   partitioning.sql.in
