@@ -30,9 +30,15 @@ after_script:
 
 jobs:
   include:
+    # this tests the ability to upgrade to the latest version from versions without constraint support
     - stage: test
       script:
-        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_all.sh
+        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_no_constraints.sh
+
+    # This tests the ability to upgrade to the latest version from versions with constraint support
+    - stage: test
+      script:
+        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_with_constraints.sh
 
     - if: type = cron
       stage: test
