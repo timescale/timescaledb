@@ -3,6 +3,7 @@
 #include <catalog/pg_trigger.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/toasting.h>
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
 #include <tcop/tcopprot.h>
@@ -353,6 +354,92 @@ get_reloptions(Oid relid)
 	return options;
 }
 
+/* applies the attributes and statistics target for columns on the hypertable
+   to columns on the chunk */
+static void
+set_attoptions(Relation ht_rel, Oid chunk_oid)
+{
+	TupleDesc	tupleDesc = RelationGetDescr(ht_rel);
+	int			natts = tupleDesc->natts;
+	int			attno;
+
+	for (attno = 1; attno <= natts; attno++)
+	{
+		Form_pg_attribute attribute = tupleDesc->attrs[attno - 1];
+		char	   *attributeName = NameStr(attribute->attname);
+		HeapTuple	tuple;
+		Datum		options;
+		bool		isnull;
+
+		/* Ignore dropped */
+		if (attribute->attisdropped)
+			continue;
+
+		tuple = SearchSysCacheAttName(RelationGetRelid(ht_rel), attributeName);
+
+		Assert(tuple != NULL);
+
+		/*
+		 * Pass down the attribute options (ALTER TABLE ALTER COLUMN SET
+		 * attribute_option)
+		 */
+		options = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attoptions,
+								  &isnull);
+
+		if (!isnull)
+		{
+			AlterTableCmd *cmd = makeNode(AlterTableCmd);
+
+			cmd->subtype = AT_SetOptions;
+			cmd->name = attributeName;
+			cmd->def = (Node *) untransformRelOptions(options);
+			AlterTableInternal(chunk_oid, list_make1(cmd), false);
+		}
+
+		/*
+		 * Pass down the attribute options (ALTER TABLE ALTER COLUMN SET
+		 * STATISTICS)
+		 */
+		options = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attstattarget,
+								  &isnull);
+		if (!isnull)
+		{
+			int32		target = DatumGetInt32(options);
+
+			/* Don't do anything if it's set to the default */
+			if (target != -1)
+			{
+				AlterTableCmd *cmd = makeNode(AlterTableCmd);
+
+				cmd->subtype = AT_SetStatistics;
+				cmd->name = attributeName;
+				cmd->def = (Node *) makeInteger(target);
+				AlterTableInternal(chunk_oid, list_make1(cmd), false);
+
+			}
+		}
+
+		ReleaseSysCache(tuple);
+	}
+}
+
+static void
+create_toast_table(CreateStmt *stmt, Oid chunk_oid)
+{
+	/* similar to tcop/utility.c */
+	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	Datum		toast_options = transformRelOptions((Datum) 0,
+													stmt->options,
+													"toast",
+													validnsps,
+													true,
+													false);
+
+	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
+
+	NewRelationCreateToastTable(chunk_oid, toast_options);
+}
+
 /*
  * Create a chunk's table.
  *
@@ -416,8 +503,17 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 #endif
 		);
 
+	/*
+	 * need to create a toast table explicitly for some of the option setting
+	 * to work
+	 */
+	create_toast_table(&stmt, objaddr.objectId);
+
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
+
+
+	set_attoptions(rel, objaddr.objectId);
 
 	heap_close(rel, AccessShareLock);
 

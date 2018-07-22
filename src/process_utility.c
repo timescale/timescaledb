@@ -114,16 +114,40 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 }
 
 static void
-check_chunk_operation_allowed(Oid relid)
+check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 {
 	if (expect_chunk_modification)
 		return;
 
 	if (chunk_exists_relid(relid))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on chunk tables")));
+		bool		all_allowed = true;
+		ListCell   *lc;
+
+		/* only allow if all commands are allowed */
+		foreach(lc, stmt->cmds)
+		{
+			AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+			switch (cmd->subtype)
+			{
+				case AT_SetOptions:
+				case AT_ResetOptions:
+				case AT_SetStatistics:
+				case AT_SetStorage:
+					/* allowed on chunks */
+					break;
+				default:
+					/* disable by default */
+					all_allowed = false;
+					break;
+			}
+		}
+
+		if (!all_allowed)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on chunk tables")));
 	}
 }
 
@@ -1368,7 +1392,7 @@ process_altertable_start_table(Node *parsetree)
 	if (!OidIsValid(relid))
 		return;
 
-	check_chunk_operation_allowed(relid);
+	check_chunk_alter_table_operation_allowed(relid, stmt);
 
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry(hcache, relid);
@@ -1525,7 +1549,12 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ReplaceRelOptions:
 		case AT_AddOids:
 		case AT_DropOids:
+		case AT_SetOptions:
+		case AT_ResetOptions:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
+			break;
+		case AT_SetStatistics:
+			/* handled by default recursion */
 			break;
 		default:
 			break;

@@ -1,6 +1,11 @@
 -- DROP a table's column before making it a hypertable
-CREATE TABLE alter_before(id serial, time timestamp, temp float, colorid integer);
+CREATE TABLE alter_before(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 ALTER TABLE alter_before DROP COLUMN id;
+ALTER TABLE alter_before ALTER COLUMN temp SET (n_distinct = 10);
+ALTER TABLE alter_before ALTER COLUMN colorid SET (n_distinct = 11);
+ALTER TABLE alter_before ALTER COLUMN colorid RESET (n_distinct);
+ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
+ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
@@ -10,31 +15,35 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
 SELECT * FROM alter_before;
-           time           | temp | colorid 
---------------------------+------+---------
- Wed Mar 22 09:18:22 2017 | 23.5 |       1
+           time           | temp | colorid | notes | notes_2 
+--------------------------+------+---------+-------+---------
+ Wed Mar 22 09:18:22 2017 | 23.5 |       1 |       | 
 (1 row)
 
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
-SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, a.attoptions, a.attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0
 ORDER BY c.relname, a.attnum;
-     relname      |           attname            | attnum 
-------------------+------------------------------+--------
- _hyper_1_1_chunk | time                         |      1
- _hyper_1_1_chunk | temp                         |      2
- _hyper_1_1_chunk | colorid                      |      3
- alter_before     | ........pg.dropped.1........ |      1
- alter_before     | time                         |      2
- alter_before     | temp                         |      3
- alter_before     | colorid                      |      4
-(7 rows)
+     relname      |           attname            | attnum |   attoptions    | attstattarget | attstorage 
+------------------+------------------------------+--------+-----------------+---------------+------------
+ _hyper_1_1_chunk | time                         |      1 |                 |            -1 | p
+ _hyper_1_1_chunk | temp                         |      2 | {n_distinct=10} |           100 | p
+ _hyper_1_1_chunk | colorid                      |      3 |                 |            -1 | p
+ _hyper_1_1_chunk | notes                        |      4 |                 |            -1 | e
+ _hyper_1_1_chunk | notes_2                      |      5 |                 |            -1 | x
+ alter_before     | ........pg.dropped.1........ |      1 |                 |             0 | p
+ alter_before     | time                         |      2 |                 |            -1 | p
+ alter_before     | temp                         |      3 | {n_distinct=10} |           100 | p
+ alter_before     | colorid                      |      4 |                 |            -1 | p
+ alter_before     | notes                        |      5 |                 |            -1 | e
+ alter_before     | notes_2                      |      6 |                 |            -1 | x
+(11 rows)
 
 -- DROP a table's column after making it a hypertable and having data
-CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer);
+CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
@@ -45,6 +54,11 @@ NOTICE:  adding not-null constraint to column "time"
 -- Create first chunk
 INSERT INTO alter_after (time, temp, colorid) VALUES ('2017-03-22T09:18:22', 23.5, 1);
 ALTER TABLE alter_after DROP COLUMN id;
+ALTER TABLE alter_after ALTER COLUMN temp SET (n_distinct = 10);
+ALTER TABLE alter_after ALTER COLUMN colorid SET (n_distinct = 11);
+ALTER TABLE alter_after ALTER COLUMN colorid RESET (n_distinct);
+ALTER TABLE alter_after ALTER COLUMN colorid SET STATISTICS 101;
+ALTER TABLE alter_after ALTER COLUMN notes_2 SET STORAGE EXTERNAL;
 -- Creating new chunks after dropping a column should work just fine
 INSERT INTO alter_after VALUES ('2017-03-22T09:18:23', 21.5, 1),
                                ('2017-05-22T09:18:22', 36.2, 2),
@@ -53,14 +67,14 @@ INSERT INTO alter_after VALUES ('2017-03-22T09:18:23', 21.5, 1),
 \COPY alter_after FROM 'data/alter.tsv' NULL AS '';
 -- Data should look OK
 SELECT * FROM alter_after;
-           time           | temp | colorid 
---------------------------+------+---------
- Wed Mar 22 09:18:22 2017 | 23.5 |       1
- Wed Mar 22 09:18:23 2017 | 21.5 |       1
- Mon May 22 09:18:22 2017 | 36.2 |       2
- Mon May 22 09:18:23 2017 | 15.2 |       2
- Tue Aug 22 09:19:22 2017 | 21.4 |       3
- Wed Aug 23 09:20:17 2017 | 31.5 |       2
+           time           | temp | colorid | notes | notes_2 
+--------------------------+------+---------+-------+---------
+ Wed Mar 22 09:18:22 2017 | 23.5 |       1 |       | 
+ Wed Mar 22 09:18:23 2017 | 21.5 |       1 |       | 
+ Mon May 22 09:18:22 2017 | 36.2 |       2 |       | 
+ Mon May 22 09:18:23 2017 | 15.2 |       2 |       | 
+ Tue Aug 22 09:19:22 2017 | 21.4 |       3 | nr1   | n2r1
+ Wed Aug 23 09:20:17 2017 | 31.5 |       2 | nr2   | n2r2
 (6 rows)
 
 -- Show that attnums are different for chunks created after DROP
@@ -76,58 +90,79 @@ ORDER BY c.relname, a.attnum;
  _hyper_2_2_chunk | time                         |      2
  _hyper_2_2_chunk | temp                         |      3
  _hyper_2_2_chunk | colorid                      |      4
+ _hyper_2_2_chunk | notes                        |      5
+ _hyper_2_2_chunk | notes_2                      |      6
  _hyper_2_3_chunk | time                         |      1
  _hyper_2_3_chunk | temp                         |      2
  _hyper_2_3_chunk | colorid                      |      3
+ _hyper_2_3_chunk | notes                        |      4
+ _hyper_2_3_chunk | notes_2                      |      5
  _hyper_2_4_chunk | time                         |      1
  _hyper_2_4_chunk | temp                         |      2
  _hyper_2_4_chunk | colorid                      |      3
+ _hyper_2_4_chunk | notes                        |      4
+ _hyper_2_4_chunk | notes_2                      |      5
  alter_after      | ........pg.dropped.1........ |      1
  alter_after      | time                         |      2
  alter_after      | temp                         |      3
  alter_after      | colorid                      |      4
-(14 rows)
+ alter_after      | notes                        |      5
+ alter_after      | notes_2                      |      6
+(22 rows)
 
 -- Add an ID column again
 ALTER TABLE alter_after ADD COLUMN id serial;
 INSERT INTO alter_after (time, temp, colorid) VALUES ('2017-08-22T09:19:14', 12.5, 3);
-SELECT c.relname, a.attname, a.attnum FROM pg_attribute a, pg_class c
+--test thing that we are allowed to do on chunks
+ALTER TABLE  _timescaledb_internal._hyper_2_3_chunk ALTER COLUMN temp RESET (n_distinct);
+ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET (n_distinct = 20);
+ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET STATISTICS 201;
+ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN notes SET STORAGE EXTERNAL;
+SELECT c.relname, a.attname, a.attnum, a.attoptions, a.attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0
 ORDER BY c.relname, a.attnum;
-     relname      |           attname            | attnum 
-------------------+------------------------------+--------
- _hyper_2_2_chunk | ........pg.dropped.1........ |      1
- _hyper_2_2_chunk | time                         |      2
- _hyper_2_2_chunk | temp                         |      3
- _hyper_2_2_chunk | colorid                      |      4
- _hyper_2_2_chunk | id                           |      5
- _hyper_2_3_chunk | time                         |      1
- _hyper_2_3_chunk | temp                         |      2
- _hyper_2_3_chunk | colorid                      |      3
- _hyper_2_3_chunk | id                           |      4
- _hyper_2_4_chunk | time                         |      1
- _hyper_2_4_chunk | temp                         |      2
- _hyper_2_4_chunk | colorid                      |      3
- _hyper_2_4_chunk | id                           |      4
- alter_after      | ........pg.dropped.1........ |      1
- alter_after      | time                         |      2
- alter_after      | temp                         |      3
- alter_after      | colorid                      |      4
- alter_after      | id                           |      5
-(18 rows)
+     relname      |           attname            | attnum |   attoptions    | attstattarget | attstorage 
+------------------+------------------------------+--------+-----------------+---------------+------------
+ _hyper_2_2_chunk | ........pg.dropped.1........ |      1 |                 |             0 | p
+ _hyper_2_2_chunk | time                         |      2 |                 |            -1 | p
+ _hyper_2_2_chunk | temp                         |      3 | {n_distinct=10} |            -1 | p
+ _hyper_2_2_chunk | colorid                      |      4 |                 |           101 | p
+ _hyper_2_2_chunk | notes                        |      5 |                 |            -1 | x
+ _hyper_2_2_chunk | notes_2                      |      6 |                 |            -1 | e
+ _hyper_2_2_chunk | id                           |      7 |                 |            -1 | p
+ _hyper_2_3_chunk | time                         |      1 |                 |            -1 | p
+ _hyper_2_3_chunk | temp                         |      2 |                 |            -1 | p
+ _hyper_2_3_chunk | colorid                      |      3 |                 |           101 | p
+ _hyper_2_3_chunk | notes                        |      4 |                 |            -1 | x
+ _hyper_2_3_chunk | notes_2                      |      5 |                 |            -1 | e
+ _hyper_2_3_chunk | id                           |      6 |                 |            -1 | p
+ _hyper_2_4_chunk | time                         |      1 |                 |            -1 | p
+ _hyper_2_4_chunk | temp                         |      2 | {n_distinct=20} |           201 | p
+ _hyper_2_4_chunk | colorid                      |      3 |                 |           101 | p
+ _hyper_2_4_chunk | notes                        |      4 |                 |            -1 | e
+ _hyper_2_4_chunk | notes_2                      |      5 |                 |            -1 | e
+ _hyper_2_4_chunk | id                           |      6 |                 |            -1 | p
+ alter_after      | ........pg.dropped.1........ |      1 |                 |             0 | p
+ alter_after      | time                         |      2 |                 |            -1 | p
+ alter_after      | temp                         |      3 | {n_distinct=10} |            -1 | p
+ alter_after      | colorid                      |      4 |                 |           101 | p
+ alter_after      | notes                        |      5 |                 |            -1 | x
+ alter_after      | notes_2                      |      6 |                 |            -1 | e
+ alter_after      | id                           |      7 |                 |            -1 | p
+(26 rows)
 
 SELECT * FROM alter_after;
-           time           | temp | colorid | id 
---------------------------+------+---------+----
- Wed Mar 22 09:18:22 2017 | 23.5 |       1 |  1
- Wed Mar 22 09:18:23 2017 | 21.5 |       1 |  2
- Mon May 22 09:18:22 2017 | 36.2 |       2 |  3
- Mon May 22 09:18:23 2017 | 15.2 |       2 |  4
- Tue Aug 22 09:19:22 2017 | 21.4 |       3 |  5
- Wed Aug 23 09:20:17 2017 | 31.5 |       2 |  6
- Tue Aug 22 09:19:14 2017 | 12.5 |       3 |  7
+           time           | temp | colorid | notes | notes_2 | id 
+--------------------------+------+---------+-------+---------+----
+ Wed Mar 22 09:18:22 2017 | 23.5 |       1 |       |         |  1
+ Wed Mar 22 09:18:23 2017 | 21.5 |       1 |       |         |  2
+ Mon May 22 09:18:22 2017 | 36.2 |       2 |       |         |  3
+ Mon May 22 09:18:23 2017 | 15.2 |       2 |       |         |  4
+ Tue Aug 22 09:19:22 2017 | 21.4 |       3 | nr1   | n2r1    |  5
+ Wed Aug 23 09:20:17 2017 | 31.5 |       2 | nr2   | n2r2    |  6
+ Tue Aug 22 09:19:14 2017 | 12.5 |       3 |       |         |  7
 (7 rows)
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
