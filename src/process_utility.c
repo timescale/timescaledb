@@ -135,6 +135,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_ResetOptions:
 				case AT_SetStatistics:
 				case AT_SetStorage:
+				case AT_DropCluster:
+				case AT_ClusterOn:
 					/* allowed on chunks */
 					break;
 				default:
@@ -1329,6 +1331,21 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 	process_utility_set_expect_chunk_modification(false);
 }
 
+static void
+process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
+{
+	Oid			index_relid = get_relname_relid(cmd->name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+	List	   *chunk_indexes = chunk_index_get_mappings(ht, index_relid);
+	ListCell   *lc;
+
+	foreach(lc, chunk_indexes)
+	{
+		ChunkIndexMapping *cim = lfirst(lc);
+
+		chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+	}
+}
+
 /*
  * Generic function to recurse ALTER TABLE commands to chunks.
  *
@@ -1544,6 +1561,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 					 errmsg("hypertables do not support  "
 							"enabling or disabling triggers.")));
 			break;
+		case AT_ClusterOn:
+			process_altertable_clusteron_end(ht, cmd);
+			break;
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
 		case AT_ReplaceRelOptions:
@@ -1551,6 +1571,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropOids:
 		case AT_SetOptions:
 		case AT_ResetOptions:
+		case AT_DropCluster:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		case AT_SetStatistics:

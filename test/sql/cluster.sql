@@ -40,3 +40,44 @@ CLUSTER VERBOSE cluster_test using cluster_test_time_location_idx;
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
 WHERE indisclustered = true;
+
+--check the setting of cluster indexes on hypertables and chunks
+ALTER TABLE cluster_test CLUSTER ON cluster_test_time_idx;
+
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+
+CLUSTER VERBOSE cluster_test;
+
+ALTER TABLE cluster_test SET WITHOUT CLUSTER;
+
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+
+\set ON_ERROR_STOP 0
+CLUSTER VERBOSE cluster_test;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE _timescaledb_internal._hyper_1_1_chunk CLUSTER ON _hyper_1_1_chunk_cluster_test_time_idx;
+
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+
+CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
+
+ALTER TABLE _timescaledb_internal._hyper_1_1_chunk SET WITHOUT CLUSTER;
+
+SELECT indexrelid::regclass, indisclustered
+FROM pg_index
+WHERE indisclustered = true
+ORDER BY 1,2;
+
+\set ON_ERROR_STOP 0
+CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
+\set ON_ERROR_STOP 1
