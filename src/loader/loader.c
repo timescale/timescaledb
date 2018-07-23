@@ -293,6 +293,14 @@ do_load()
 	loaded = true;
 
 	/*
+	 * Set the config option to let versions 0.9.0 and 0.9.1 know that the
+	 * loader was preloaded, newer versions use rendezvous variables instead.
+	 */
+	if (strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0)
+		SetConfigOption("timescaledb.loader_present", "on", PGC_USERSET, PGC_S_SESSION);
+
+
+	/*
 	 * we need to capture the loaded extension's post analyze hook, giving it
 	 * a NULL as previous
 	 */
