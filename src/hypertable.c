@@ -839,6 +839,12 @@ table_has_replica_identity(Relation rel)
 	return rel->rd_rel->relreplident != REPLICA_IDENTITY_DEFAULT;
 }
 
+static bool inline
+table_has_rules(Relation rel)
+{
+	return rel->rd_rules != NULL;
+}
+
 
 bool
 hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
@@ -1236,6 +1242,13 @@ hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" has replica identity set", get_rel_name(table_relid)),
 				 errdetail("Logical replication is not supported on hypertables.")));
+
+	if (table_has_rules(rel))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("hypertables do not support rules"),
+				 errdetail("Table \"%s\" has attached rules, which do not work on hypertables.", get_rel_name(table_relid)),
+				 errhint("Remove the rules before calling create_hypertable")));
 
 	/*
 	 * Create the associated schema where chunks are stored, or, check
