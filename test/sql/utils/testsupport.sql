@@ -112,13 +112,19 @@ RETURNS TABLE("Constraint" name,
               "Type" "char",
               "Columns" name[],
               "Index" regclass,
-              "Expr" text) LANGUAGE SQL STABLE AS
+              "Expr" text,
+              "Deferrable" bool,
+              "Deferred" bool,
+              "Validated" bool) LANGUAGE SQL STABLE AS
 $BODY$
     SELECT c.conname,
     c.contype,
     array(SELECT attname FROM pg_attribute a, unnest(conkey) k WHERE a.attrelid = rel AND k = a.attnum),
     c.conindid::regclass,
-    c.consrc
+    c.consrc,
+    c.condeferrable,
+    c.condeferred,
+    c.convalidated
     FROM pg_constraint c
     WHERE c.conrelid = rel
     ORDER BY c.conname;
@@ -130,7 +136,10 @@ RETURNS TABLE("Table" regclass,
               "Type" "char",
               "Columns" name[],
               "Index" regclass,
-              "Expr" text) LANGUAGE PLPGSQL STABLE AS
+              "Expr" text,
+              "Deferrable" bool,
+              "Deferred" bool,
+              "Validated" bool) LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
     schema_name name = split_part(pattern, '.', 1);
@@ -147,7 +156,10 @@ BEGIN
     c.contype,
     array(SELECT attname FROM pg_attribute a, unnest(conkey) k WHERE a.attrelid = cl.oid AND k = a.attnum),
     c.conindid::regclass,
-    c.consrc
+    c.consrc,
+    c.condeferrable,
+    c.condeferred,
+    c.convalidated
     FROM pg_class cl, pg_constraint c
     WHERE format('%I.%I', cl.relnamespace::regnamespace::name, cl.relname) LIKE format('%I.%s', schema_name, table_name)
     AND c.conrelid = cl.oid
