@@ -1575,6 +1575,10 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("logging cannot be turned off for hypertables")));
+		case AT_ReplicaIdentity:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support logical replication")));
 			break;
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
