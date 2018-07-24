@@ -86,3 +86,28 @@ ALTER TABLE "Hypertable_1_replica_ident" REPLICA IDENTITY FULL;
 SELECT * FROM create_hypertable('"public"."Hypertable_1_replica_ident"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 ALTER TABLE "Hypertable_1" REPLICA IDENTITY FULL;
 \set ON_ERROR_STOP 1
+
+
+CREATE TABLE PUBLIC."Hypertable_1_rule" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1
+);
+CREATE RULE notify_me AS ON UPDATE TO "Hypertable_1_rule" DO ALSO NOTIFY "Hypertable_1_rule";
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set ON_ERROR_STOP 1
+
+ALTER TABLE "Hypertable_1_rule" DISABLE RULE notify_me;
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set ON_ERROR_STOP 1
+
+DROP RULE notify_me ON "Hypertable_1_rule";
+SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+
+\set ON_ERROR_STOP 0
+CREATE RULE notify_me AS ON UPDATE TO "Hypertable_1_rule" DO ALSO NOTIFY "Hypertable_1_rule";
+\set ON_ERROR_STOP 0

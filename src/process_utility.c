@@ -1618,6 +1618,14 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support logical replication")));
+		case AT_EnableRule:
+		case AT_EnableAlwaysRule:
+		case AT_EnableReplicaRule:
+		case AT_DisableRule:
+			/* should never actually get here but just in case */
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support rules")));
 			break;
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
@@ -1753,6 +1761,20 @@ process_create_trigger_start(Node *parsetree)
 }
 
 static void
+process_create_rule_start(Node *parsetree)
+{
+	RuleStmt   *stmt = (RuleStmt *) parsetree;
+
+	if (hypertable_relid(stmt->relation) == InvalidOid)
+		return;
+
+
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("hypertables do not support rules")));
+}
+
+static void
 process_create_trigger_end(Node *parsetree)
 {
 	CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
@@ -1790,6 +1812,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_CreateTrigStmt:
 			process_create_trigger_start(args->parsetree);
+			break;
+		case T_RuleStmt:
+			process_create_rule_start(args->parsetree);
 			break;
 		case T_DropStmt:
 
