@@ -830,6 +830,13 @@ table_is_logged(Oid table_relid)
 	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
 }
 
+static bool
+table_has_replica_identity(Relation rel)
+{
+	return rel->rd_rel->relreplident != REPLICA_IDENTITY_DEFAULT;
+}
+
+
 bool
 hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 {
@@ -1050,6 +1057,12 @@ hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
 				 errdetail("It is not possible to turn temporary or unlogged tables into hypertables.")));
+
+	if (table_has_replica_identity(rel))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("table \"%s\" has replica identity set", get_rel_name(table_relid)),
+				 errdetail("Logical replication is not supported on hypertables.")));
 
 	/*
 	 * Create the associated schema where chunks are stored, or, check
