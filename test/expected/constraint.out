@@ -72,25 +72,25 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 (3 rows)
 
 SELECT * FROM test.show_constraints('hyper');
-      Constraint      | Type |  Columns   | Index |            Expr            
-----------------------+------+------------+-------+----------------------------
- hyper_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+      Constraint      | Type |  Columns   | Index |            Expr            | Deferrable | Deferred | Validated 
+----------------------+------+------------+-------+----------------------------+------------+----------+-----------
+ hyper_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric) | f          | f        | t
 (1 row)
 
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
-                           Constraint                            | Type |  Columns   |                              Index                              |            Expr            
------------------------------------------------------------------+------+------------+-----------------------------------------------------------------+----------------------------
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                               | (sensor_1 > (10)::numeric)
- hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key | u    | {time}     | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key | 
+                           Constraint                            | Type |  Columns   |                              Index                              |            Expr            | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-----------------------------------------------------------------+----------------------------+------------+----------+-----------
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                               | (sensor_1 > (10)::numeric) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key | u    | {time}     | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key |                            | f          | f        | t
 (2 rows)
 
 --should have unique constraint not just unique index
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
-                           Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           
------------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------
- 4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" | 
- constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)
+                           Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" |                                                                                          | f          | f        | t
+ constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
 
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
@@ -111,10 +111,10 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
-                           Constraint                            | Type |  Columns   | Index |                                           Expr                                           
------------------------------------------------------------------+------+------------+-------+------------------------------------------------------------------------------------------
- constraint_4                                                    | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+                           Constraint                            | Type |  Columns   | Index |                                           Expr                                           | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_4                                                    | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (2 rows)
 
 --uniqueness not enforced
@@ -141,20 +141,20 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 (5 rows)
 
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
-                           Constraint                            | Type |  Columns   |                              Index                              |            Expr            
------------------------------------------------------------------+------+------------+-----------------------------------------------------------------+----------------------------
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                               | (sensor_1 > (10)::numeric)
- hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check | c    | {time}     | -                                                               | ("time" > 0)
- hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key | u    | {time}     | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key | 
+                           Constraint                            | Type |  Columns   |                              Index                              |            Expr            | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-----------------------------------------------------------------+----------------------------+------------+----------+-----------
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                               | (sensor_1 > (10)::numeric) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check | c    | {time}     | -                                                               | ("time" > 0)               | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key | u    | {time}     | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key |                            | f          | f        | t
 (3 rows)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
-                           Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           
------------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------
- 4_4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" | 
- constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)
- hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check | c    | {time}     | -                                                                                       | ("time" > 0)
+                           Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 4_4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" |                                                                                          | f          | f        | t
+ constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check | c    | {time}     | -                                                                                       | ("time" > 0)                                                                             | f          | f        | t
 (4 rows)
 
 ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
@@ -169,16 +169,16 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 (3 rows)
 
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
-                           Constraint                            | Type |  Columns   | Index |            Expr            
------------------------------------------------------------------+------+------------+-------+----------------------------
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+                           Constraint                            | Type |  Columns   | Index |            Expr            | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-------+----------------------------+------------+----------+-----------
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric) | f          | f        | t
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
-                           Constraint                            | Type |  Columns   | Index |                                           Expr                                           
------------------------------------------------------------------+------+------------+-------+------------------------------------------------------------------------------------------
- constraint_4                                                    | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+                           Constraint                            | Type |  Columns   | Index |                                           Expr                                           | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_4                                                    | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (2 rows)
 
 CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx
@@ -196,11 +196,11 @@ DROP INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
 ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE (time);
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
-                           Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           
------------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------
- 4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" | 
- constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)
+                           Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           | Deferrable | Deferred | Validated 
+-----------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" |                                                                                          | f          | f        | t
+ constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
 
 --test adding constraint with same name to different table -- should fail
@@ -236,18 +236,18 @@ RENAME CONSTRAINT new_name TO new_name2;
 ALTER TABLE IF EXISTS hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 RENAME CONSTRAINT  hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check TO check_2;
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
- Constraint | Type |  Columns   |   Index   |            Expr            
-------------+------+------------+-----------+----------------------------
- check_2    | c    | {sensor_1} | -         | (sensor_1 > (10)::numeric)
- new_name2  | u    | {time}     | new_name2 | 
+ Constraint | Type |  Columns   |   Index   |            Expr            | Deferrable | Deferred | Validated 
+------------+------+------------+-----------+----------------------------+------------+----------+-----------
+ check_2    | c    | {sensor_1} | -         | (sensor_1 > (10)::numeric) | f          | f        | t
+ new_name2  | u    | {time}     | new_name2 |                            | f          | f        | t
 (2 rows)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
-   Constraint   | Type |  Columns   |                 Index                  |                                           Expr                                           
-----------------+------+------------+----------------------------------------+------------------------------------------------------------------------------------------
- 4_10_new_name2 | u    | {time}     | _timescaledb_internal."4_10_new_name2" | 
- check_2        | c    | {sensor_1} | -                                      | (sensor_1 > (10)::numeric)
- constraint_4   | c    | {time}     | -                                      | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
+   Constraint   | Type |  Columns   |                 Index                  |                                           Expr                                           | Deferrable | Deferred | Validated 
+----------------+------+------------+----------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 4_10_new_name2 | u    | {time}     | _timescaledb_internal."4_10_new_name2" |                                                                                          | f          | f        | t
+ check_2        | c    | {sensor_1} | -                                      | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
+ constraint_4   | c    | {time}     | -                                      | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
@@ -295,19 +295,19 @@ ERROR:  duplicate key value violates unique constraint "6_14_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 --should have unique constraint not just unique index
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
-       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           
--------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------
- 6_14_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_14_hyper_pk_pkey" | 
- constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)
+       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
+-------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 6_14_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_14_hyper_pk_pkey" |                                                                                          | f          | f        | t
+ constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
 
 ALTER TABLE hyper_pk DROP CONSTRAINT hyper_pk_pkey;
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
-       Constraint        | Type |  Columns   | Index |                                           Expr                                           
--------------------------+------+------------+-------+------------------------------------------------------------------------------------------
- constraint_6            | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_pk_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)
+       Constraint        | Type |  Columns   | Index |                                           Expr                                           | Deferrable | Deferred | Validated 
+-------------------------+------+------------+-------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_6            | c    | {time}     | -     | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -     | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (2 rows)
 
 --uniqueness not enforced
@@ -330,11 +330,11 @@ ERROR:  cannot create a unique index without the column "time" (used in partitio
 --now can create
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
-       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           
--------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------
- 6_16_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_16_hyper_pk_pkey" | 
- constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)
+       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
+-------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 6_16_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_16_hyper_pk_pkey" |                                                                                          | f          | f        | t
+ constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
 
 --test adding constraint with same name to different table -- should fail
@@ -397,12 +397,12 @@ INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_22_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
-          Constraint          | Type |   Columns   |                   Index                    |                                           Expr                                           
-------------------------------+------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------
- 8_20_hyper_fk_pkey           | p    | {time}      | _timescaledb_internal."8_20_hyper_fk_pkey" | 
- 8_22_hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                               | 
- constraint_8                 | c    | {time}      | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_fk_sensor_1_check      | c    | {sensor_1}  | -                                          | (sensor_1 > (10)::numeric)
+          Constraint          | Type |   Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
+------------------------------+------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 8_20_hyper_fk_pkey           | p    | {time}      | _timescaledb_internal."8_20_hyper_fk_pkey" |                                                                                          | f          | f        | t
+ 8_22_hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                               |                                                                                          | f          | f        | t
+ constraint_8                 | c    | {time}      | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_fk_sensor_1_check      | c    | {sensor_1}  | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (4 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
@@ -424,11 +424,11 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 DROP TABLE devices CASCADE;
 NOTICE:  drop cascades to 2 other objects
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
-       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           
--------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------
- 8_20_hyper_fk_pkey      | p    | {time}     | _timescaledb_internal."8_20_hyper_fk_pkey" | 
- constraint_8            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint))
- hyper_fk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)
+       Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
+-------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 8_20_hyper_fk_pkey      | p    | {time}     | _timescaledb_internal."8_20_hyper_fk_pkey" |                                                                                          | f          | f        | t
+ constraint_8            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_fk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
