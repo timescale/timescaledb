@@ -45,7 +45,22 @@ SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
 ALTER TABLE alter_test ALTER COLUMN colorname TYPE varchar(3);
 -- conversion that messes up partitioning fails
 ALTER TABLE alter_test ALTER COLUMN time_us TYPE timestamptz USING time_us::timestamptz+INTERVAL '1 year';
+-- dropping column that messes up partiitoning fails
+ALTER TABLE alter_test DROP COLUMN colorname;
 --ONLY blocked
 ALTER TABLE ONLY alter_test RENAME COLUMN colorname TO colorname2;
 ALTER TABLE ONLY alter_test ALTER COLUMN colorname TYPE varchar(10);
+\set ON_ERROR_STOP 1
+
+CREATE TABLE alter_test_bigint(time bigint, temp float);
+SELECT create_hypertable('alter_test_bigint', 'time', chunk_time_interval => 2628000000000);
+
+\set ON_ERROR_STOP 0
+-- Changing type of time dimension to a non-supported type
+-- shall not be allowed
+ALTER TABLE alter_test_bigint
+ALTER COLUMN time TYPE TEXT;
+-- dropping open time dimension shall not be allowed.
+ALTER TABLE alter_test_bigint
+DROP COLUMN time;
 \set ON_ERROR_STOP 1

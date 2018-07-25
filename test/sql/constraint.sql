@@ -131,6 +131,13 @@ VALUES (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
+
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+ADD COLUMN new_device_id int UNIQUE;
+
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+DROP COLUMN device_id,
+ADD COLUMN new_device_id int UNIQUE;
 \set ON_ERROR_STOP 1
 
 ----------------------- RENAME CONSTRAINT  ------------------
@@ -193,6 +200,9 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 --shouldn't be able to create pk
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
+
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+ADD COLUMN new_device_id int PRIMARY KEY;
 \set ON_ERROR_STOP 1
 
 DELETE FROM hyper_pk WHERE device_id = 'dev3';

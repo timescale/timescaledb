@@ -220,6 +220,13 @@ ERROR:  duplicate key value violates unique constraint "4_6_hyper_unique_with_lo
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_invalid UNIQUE (device_id);
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+ADD COLUMN new_device_id int UNIQUE;
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+DROP COLUMN device_id,
+ADD COLUMN new_device_id int UNIQUE;
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
 ----------------------- RENAME CONSTRAINT  ------------------
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
@@ -310,6 +317,9 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
 ERROR:  could not create unique index "6_15_hyper_pk_pkey"
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+ADD COLUMN new_device_id int PRIMARY KEY;
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_pk WHERE device_id = 'dev3';
 --cannot create pk constraint on non-partition column
