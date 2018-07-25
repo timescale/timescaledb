@@ -1574,6 +1574,11 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropCluster:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
+		case AT_AddInherit:
+		case AT_DropInherit:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support inheritance")));
 		case AT_SetStatistics:
 			/* handled by default recursion */
 			break;

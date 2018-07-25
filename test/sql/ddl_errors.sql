@@ -29,3 +29,22 @@ INSERT INTO "Hypertable_1" VALUES (0, 1, 0);
 \set ON_ERROR_STOP 0
 ALTER TABLE _timescaledb_internal._hyper_1_1_chunk ALTER COLUMN temp_c DROP NOT NULL;
 \set ON_ERROR_STOP 1
+
+CREATE TABLE PUBLIC."Parent" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1
+);
+
+\set ON_ERROR_STOP 0
+ALTER TABLE "Hypertable_1" INHERIT "Parent";
+ALTER TABLE _timescaledb_internal._hyper_1_1_chunk INHERIT "Parent";
+ALTER TABLE _timescaledb_internal._hyper_1_1_chunk NO INHERIT "Parent";
+\set ON_ERROR_STOP 1
+
+CREATE TABLE PUBLIC."Child" () INHERITS ("Parent");
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."Parent"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+SELECT * FROM create_hypertable('"public"."Child"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set ON_ERROR_STOP 1

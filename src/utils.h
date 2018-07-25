@@ -27,6 +27,17 @@ extern int64 get_interval_period_approx(Interval *interval);
 extern FmgrInfo *create_fmgr(char *schema, char *function_name, int num_args);
 extern RangeVar *makeRangeVarFromRelid(Oid relid);
 extern int	int_cmp(const void *a, const void *b);
+extern Oid	inheritance_parent_relid(Oid relid);
+
+/* note PG10 has_superclass but PG96 does not so use this */
+#define is_inheritance_child(relid) \
+	(inheritance_parent_relid(relid) != InvalidOid)
+
+#define is_inheritance_parent(relid) \
+	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
+
+#define is_inheritance_table(relid) \
+    (is_inheritance_child(relid) || is_inheritance_parent(relid))
 
 #define DATUM_GET(values, attno) \
 	values[attno-1]

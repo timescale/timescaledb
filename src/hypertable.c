@@ -33,6 +33,7 @@
 #include "guc.h"
 #include "errors.h"
 #include "copy.h"
+#include "utils.h"
 
 Oid
 rel_get_owner(Oid relid)
@@ -954,7 +955,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is not empty", get_rel_name(table_relid)),
 				 errhint("You can migrate data by specifying 'migrate_data => true' when calling this function.")));
 
-	if (find_inheritance_children(table_relid, AccessShareLock) != NIL)
+	if (is_inheritance_table(table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),

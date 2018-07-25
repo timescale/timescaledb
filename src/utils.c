@@ -3,7 +3,12 @@
 #include <catalog/pg_type.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_inherits.h>
+#include <catalog/indexing.h>
+#include <access/htup.h>
 #include <access/htup_details.h>
+#include <access/heapam.h>
+#include <access/genam.h>
 #include <nodes/nodes.h>
 #include <nodes/makefuncs.h>
 #include <parser/scansup.h>
@@ -12,6 +17,8 @@
 #include <utils/datetime.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+#include <utils/relcache.h>
+#include <utils/fmgroids.h>
 
 #include "utils.h"
 #include "compat.h"
@@ -449,4 +456,29 @@ date_trunc_interval_period_approx(text *units)
 							lowunits)));
 	}
 	return -1;
+}
+
+Oid
+inheritance_parent_relid(Oid relid)
+{
+	Relation	catalog;
+	SysScanDesc scan;
+	ScanKeyData skey;
+	Oid			parent = InvalidOid;
+	HeapTuple	tuple;
+
+	catalog = heap_open(InheritsRelationId, AccessShareLock);
+	ScanKeyInit(&skey, Anum_pg_inherits_inhrelid, BTEqualStrategyNumber,
+				F_OIDEQ, ObjectIdGetDatum(relid));
+	scan = systable_beginscan(catalog, InheritsRelidSeqnoIndexId, true,
+							  NULL, 1, &skey);
+	tuple = systable_getnext(scan);
+
+	if (HeapTupleIsValid(tuple))
+		parent = ((Form_pg_inherits) GETSTRUCT(tuple))->inhparent;
+
+	systable_endscan(scan);
+	heap_close(catalog, AccessShareLock);
+
+	return parent;
 }
