@@ -34,6 +34,16 @@ ALTER TABLE hyper ALTER COLUMN device_id DROP NOT NULL;
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, NULL, 11);
 
+--make sure validate works
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper ADD CONSTRAINT bad_check_const CHECK (sensor_1 > 100);
+\set ON_ERROR_STOP 1
+
+ALTER TABLE hyper ADD CONSTRAINT bad_check_const CHECK (sensor_1 > 100) NOT VALID;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper VALIDATE CONSTRAINT bad_check_const;
+\set ON_ERROR_STOP 1
 ----------------------- UNIQUE CONSTRAINTS ------------------
 
 CREATE TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name (
@@ -85,7 +95,16 @@ DELETE FROM hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name WHER
 -- Try multi-alter table statement with a constraint without a name
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
       ADD CHECK (time > 0),
-      ADD UNIQUE (time);
+      ADD UNIQUE (time) DEFERRABLE INITIALLY DEFERRED;
+
+\set ON_ERROR_STOP 0
+BEGIN;
+--testing deferred checking. The following row has an error, which will not appear until the commit
+INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1) VALUES
+(1257987700000000000, 'dev3', 11);
+SELECT 1;
+COMMIT;
+\set ON_ERROR_STOP 1
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
@@ -213,7 +232,7 @@ ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_invalid PRIMARY KEY (device_id);
 \set ON_ERROR_STOP 1
 
 --now can create
-ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
+ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time) DEFERRABLE INITIALLY DEFERRED;
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
 
 --test adding constraint with same name to different table -- should fail
@@ -223,8 +242,12 @@ ALTER TABLE hyper ADD CONSTRAINT hyper_pk_pkey UNIQUE (time);
 
 --uniquness violation fails
 \set ON_ERROR_STOP 0
-INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
-(1257987700000000000, 'dev2', 11);
+BEGIN;
+  --error here deferred until commit
+  INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
+  (1257987700000000000, 'dev2', 11);
+  SELECT 1;
+COMMIT;
 \set ON_ERROR_STOP 1
 
 
@@ -272,6 +295,17 @@ ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (device_id) REFERENCES devices(device_id);
 \set ON_ERROR_STOP 1
 
+--but can add a NOT VALID one
+ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
+FOREIGN KEY (device_id) REFERENCES devices(device_id) NOT VALID;
+
+--which will fail when validated
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper_fk VALIDATE CONSTRAINT hyper_fk_device_id_fkey;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE hyper_fk DROP CONSTRAINT hyper_fk_device_id_fkey;
+
 DELETE FROM hyper_fk WHERE device_id = 'dev3';
 
 ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
@@ -303,11 +337,26 @@ CREATE TABLE devices(
 INSERT INTO devices VALUES ('dev2'), ('dev3');
 
 ALTER TABLE hyper_fk ADD CONSTRAINT hyper_fk_device_id_fkey
-FOREIGN KEY (device_id) REFERENCES devices(device_id);
+FOREIGN KEY (device_id) REFERENCES devices(device_id) DEFERRABLE INITIALLY DEFERRED;
 
 \set ON_ERROR_STOP 0
-INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
-(1257987700000000003, 'dev4', 11);
+BEGIN;
+  --error deferred until commmit
+  INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
+  (1257987700000000003, 'dev4', 11);
+  SELECT 1;
+COMMIT;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE hyper_fk ALTER CONSTRAINT hyper_fk_device_id_fkey NOT DEFERRABLE;
+
+\set ON_ERROR_STOP 0
+BEGIN;
+  --error detected right away
+  INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
+  (1257987700000000003, 'dev4', 11);
+  SELECT 1;
+COMMIT;
 \set ON_ERROR_STOP 1
 
 --this tests that there are no extra chunk_constraints left on hyper_fk
@@ -385,12 +434,16 @@ DELETE FROM hyper_ex WHERE sensor_1 = 12;
 ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
     EXCLUDE USING btree (
         time WITH =, device_id WITH =
-    ) WHERE (not canceled)
+    ) WHERE (not canceled) DEFERRABLE INITIALLY DEFERRED
 ;
 
 \set ON_ERROR_STOP 0
-INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
-(1257987700000000000, 'dev2', 12);
+BEGIN;
+  --error deferred til commit
+  INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
+  (1257987700000000000, 'dev2', 12);
+  SELECT 1;
+COMMIT;
 \set ON_ERROR_STOP 1
 
 
@@ -431,4 +484,80 @@ SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_inte
 
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_noinherit_alter ADD CONSTRAINT check_noinherit CHECK (sensor_1 > 0) NO INHERIT;
+--  CREATE TABLE WITH DEFERRED CONSTRAINTS --
+
+CREATE TABLE hyper_unique_deferred (
+  time BIGINT UNIQUE DEFERRABLE INITIALLY DEFERRED,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+
+SELECT * FROM create_hypertable('hyper_unique_deferred', 'time', chunk_time_interval => 10);
+
+INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
+
+\set ON_ERROR_STOP 0
+BEGIN;
+  --error here deferred until commit
+  INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
+  SELECT 1;
+COMMIT;
+\set ON_ERROR_STOP 1
+
+--test deferred on create table
+CREATE TABLE hyper_pk_deferred (
+  time BIGINT NOT NULL PRIMARY KEY DEFERRABLE INITIALLY DEFERRED,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+
+SELECT * FROM create_hypertable('hyper_pk_deferred', 'time', chunk_time_interval => 10);
+
+INSERT INTO hyper_pk_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
+
+\set ON_ERROR_STOP 0
+BEGIN;
+  --error here deferred until commit
+  INSERT INTO hyper_pk_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
+  SELECT 1;
+COMMIT;
+\set ON_ERROR_STOP 1
+
+--test that deferred works on create table too
+CREATE TABLE hyper_fk_deferred (
+  time BIGINT NOT NULL PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) DEFERRABLE INITIALLY DEFERRED,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+
+SELECT * FROM create_hypertable('hyper_fk_deferred', 'time', chunk_time_interval => 10);
+
+\set ON_ERROR_STOP 0
+BEGIN;
+  --error deferred until commmit
+  INSERT INTO hyper_fk_deferred(time, device_id,sensor_1) VALUES (1257987700000000003, 'dev4', 11);
+  SELECT 1;
+COMMIT;
+\set ON_ERROR_STOP 1
+
+CREATE TABLE hyper_ex_deferred (
+    time BIGINT,
+    device_id TEXT NOT NULL REFERENCES devices(device_id),
+    sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10),
+    canceled boolean DEFAULT false,
+    EXCLUDE USING btree (
+        time WITH =, device_id WITH =
+    ) WHERE (not canceled) DEFERRABLE INITIALLY DEFERRED
+);
+
+SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+
+INSERT INTO hyper_ex_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 12);
+
+\set ON_ERROR_STOP 0
+BEGIN;
+  --error deferred til commit
+  INSERT INTO hyper_ex_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 12);
+  SELECT 1;
+COMMIT;
 \set ON_ERROR_STOP 1

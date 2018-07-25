@@ -752,6 +752,37 @@ rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
 }
 
+static void
+alter_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = (AlterTableCmd *) arg;
+	Constraint *cmd_constraint;
+	char	   *hypertable_constraint_name;
+
+	Assert(IsA(cmd->def, Constraint));
+	cmd_constraint = (Constraint *) cmd->def;
+	hypertable_constraint_name = cmd_constraint->conname;
+
+	cmd_constraint->conname = chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, hypertable_constraint_name);
+
+	AlterTableInternal(chunk_relid, list_make1(cmd), false);
+
+	/* Restore for next iteration */
+	cmd_constraint->conname = hypertable_constraint_name;
+}
+
+static void
+validate_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = (AlterTableCmd *) arg;
+	AlterTableCmd *chunk_cmd = copyObject(cmd);
+
+	chunk_cmd->name = chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, cmd->name);
+
+	/* do not pass down the VALIDATE RECURSE subtype */
+	chunk_cmd->subtype = AT_ValidateConstraint;
+	AlterTableInternal(chunk_relid, list_make1(chunk_cmd), false);
+}
 
 static void
 process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
@@ -853,6 +884,18 @@ process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
 	Assert(constraint_name != NULL);
 
 	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
+}
+
+static void
+process_altertable_alter_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
+{
+	foreach_chunk(ht, alter_hypertable_constraint, cmd);
+}
+
+static void
+process_altertable_validate_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
+{
+	foreach_chunk(ht, validate_hypertable_constraint, cmd);
 }
 
 static void
@@ -1614,6 +1657,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("logging cannot be turned off for hypertables")));
+			break;
 		case AT_ReplicaIdentity:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1626,6 +1670,13 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support rules")));
+			break;
+		case AT_AlterConstraint:
+			process_altertable_alter_constraint_end(ht, cmd);
+			break;
+		case AT_ValidateConstraint:
+		case AT_ValidateConstraintRecurse:
+			process_altertable_validate_constraint_end(ht, cmd);
 			break;
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:

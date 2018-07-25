@@ -667,6 +667,14 @@ typedef struct RenameHypertableConstraintInfo
 	const char *newname;
 } RenameHypertableConstraintInfo;
 
+typedef struct GetNameFromHypertableConstraintInfo
+{
+	ConstraintInfo base;
+
+	Name		chunk_constraint_name;
+} GetNameFromHypertableConstraintInfo;
+
+
 
 /*
  * Delete a chunk constraint tuple.
@@ -898,4 +906,39 @@ chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *oldnam
 													  &info,
 													  RowExclusiveLock,
 													  CurrentMemoryContext);
+}
+
+static bool
+chunk_constraint_get_name_from_hypertable_tuple(TupleInfo *ti, void *data)
+{
+	GetNameFromHypertableConstraintInfo *info = data;
+
+	bool		nulls[Natts_chunk_constraint];
+	Datum		values[Natts_chunk_constraint];
+
+
+	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	info->chunk_constraint_name = DatumGetName(values[Anum_chunk_constraint_constraint_name - 1]);
+
+	return false;
+}
+
+char *
+chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid, const char *hypertable_constraint_name)
+{
+	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, 0, true);
+	GetNameFromHypertableConstraintInfo info = {
+		.base = {
+			.hypertable_constraint_name = hypertable_constraint_name,
+		},
+		.chunk_constraint_name = NULL,
+	};
+
+	chunk_constraint_scan_by_chunk_id_internal(chunk->fd.id,
+											   chunk_constraint_get_name_from_hypertable_tuple,
+											   hypertable_constraint_tuple_filter,
+											   &info,
+											   RowExclusiveLock,
+											   CurrentMemoryContext);
+	return NameStr(*info.chunk_constraint_name);
 }
