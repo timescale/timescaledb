@@ -32,6 +32,7 @@
 #include "process_utility.h"
 #include "trigger.h"
 #include "compat.h"
+#include "utils.h"
 
 typedef bool (*on_chunk_func) (ChunkScanCtx *ctx, Chunk *chunk);
 
@@ -39,31 +40,6 @@ static void chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube);
 static int	chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 limit);
-
-static Oid
-parent_relid(Oid relationId)
-{
-	Relation	catalog;
-	SysScanDesc scan;
-	ScanKeyData skey;
-	Oid			parent = InvalidOid;
-	HeapTuple	tuple;
-
-	catalog = heap_open(InheritsRelationId, AccessShareLock);
-	ScanKeyInit(&skey, Anum_pg_inherits_inhrelid, BTEqualStrategyNumber,
-				F_OIDEQ, ObjectIdGetDatum(relationId));
-	scan = systable_beginscan(catalog, InheritsRelidSeqnoIndexId, true,
-							  NULL, 1, &skey);
-	tuple = systable_getnext(scan);
-	if (HeapTupleIsValid(tuple))
-	{
-		parent = ((Form_pg_inherits) GETSTRUCT(tuple))->inhparent;
-	}
-	systable_endscan(scan);
-	heap_close(catalog, AccessShareLock);
-
-	return parent;
-}
 
 
 static void
@@ -102,7 +78,7 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
-	chunk->hypertable_relid = parent_relid(chunk->table_id);
+	chunk->hypertable_relid = inheritance_parent_relid(chunk->table_id);
 }
 
 /*-
