@@ -824,6 +824,12 @@ table_has_tuples(Oid table_relid, LOCKMODE lockmode)
 	return hastuples;
 }
 
+static bool
+table_is_logged(Oid table_relid)
+{
+	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
+}
+
 bool
 hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 {
@@ -1038,6 +1044,12 @@ hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
 				 errdetail("It is not possible to turn tables that use inheritance into hypertables.")));
+
+	if (!table_is_logged(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
+				 errdetail("It is not possible to turn temporary or unlogged tables into hypertables.")));
 
 	/*
 	 * Create the associated schema where chunks are stored, or, check

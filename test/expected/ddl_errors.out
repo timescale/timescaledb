@@ -53,3 +53,31 @@ ERROR:  table "Parent" is already partitioned
 SELECT * FROM create_hypertable('"public"."Child"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 ERROR:  table "Child" is already partitioned
 \set ON_ERROR_STOP 1
+CREATE UNLOGGED TABLE PUBLIC."Hypertable_unlogged" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1
+);
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ERROR:  table "Hypertable_unlogged" has to be logged
+\set ON_ERROR_STOP 1
+ALTER TABLE PUBLIC."Hypertable_unlogged" SET LOGGED;
+SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+CREATE TEMP TABLE "Hypertable_temp" (
+  time BIGINT NOT NULL,
+  "Device_id" TEXT NOT NULL,
+  temp_c int NOT NULL DEFAULT -1
+);
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('"Hypertable_temp"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+ERROR:  table "Hypertable_temp" has to be logged
+ALTER TABLE "Hypertable_1" SET UNLOGGED;
+ERROR:  logging cannot be turned off for hypertables
+\set ON_ERROR_STOP 1
+ALTER TABLE "Hypertable_1" SET LOGGED;
