@@ -805,13 +805,21 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 }
 
 static bool
-table_has_tuples(Oid table_relid, Snapshot snapshot, LOCKMODE lockmode)
+relation_has_tuples(Relation rel)
 {
-	Relation	rel = heap_open(table_relid, lockmode);
-	HeapScanDesc scandesc = heap_beginscan(rel, snapshot, 0, NULL);
+	HeapScanDesc scandesc = heap_beginscan(rel, GetActiveSnapshot(), 0, NULL);
 	bool		hastuples = HeapTupleIsValid(heap_getnext(scandesc, ForwardScanDirection));
 
 	heap_endscan(scandesc);
+	return hastuples;
+}
+
+static bool
+table_has_tuples(Oid table_relid, LOCKMODE lockmode)
+{
+	Relation	rel = heap_open(table_relid, lockmode);
+	bool		hastuples = relation_has_tuples(rel);
+
 	heap_close(rel, lockmode);
 	return hastuples;
 }
@@ -827,7 +835,7 @@ hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 		Oid			chunk_relid = lfirst_oid(lc);
 
 		/* Chunks already locked by find_inheritance_children() */
-		if (table_has_tuples(chunk_relid, GetActiveSnapshot(), NoLock))
+		if (table_has_tuples(chunk_relid, NoLock))
 			return true;
 	}
 
@@ -940,23 +948,47 @@ hypertable_create(PG_FUNCTION_ARGS)
 	NameData	schema_name,
 				table_name,
 				default_associated_schema_name;
+	Relation	rel;
+
+	/* quick exit in the easy if-not-exists case to avoid all locking */
+	if (if_not_exists && is_hypertable(table_relid))
+	{
+		ereport(NOTICE,
+				(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
+				 errmsg("table \"%s\" is already a hypertable, skipping",
+						get_rel_name(table_relid))));
+
+		PG_RETURN_VOID();
+	}
 
 	/*
 	 * Serialize hypertable creation to avoid having multiple transactions
 	 * creating the same hypertable simultaneously. The lock should conflict
 	 * with itself and RowExclusive, to prevent simultaneous inserts on the
-	 * table. Hold until transaction end.
+	 * table. Also since TRUNCATE (part of data migrationt) takes an
+	 * AccessExclusiveLock take that lock level here to so that we don't have
+	 * lock upgrades, which are suceptible to deadlocks. If we aren't
+	 * migrating data, then shouldn't have much contention on the table thus
+	 * not worth optimizing.
 	 */
-	LockRelationOid(table_relid, ShareRowExclusiveLock);
+	rel = heap_open(table_relid, AccessExclusiveLock);
 
+	/* recheck after getting lock */
 	if (is_hypertable(table_relid))
 	{
+		/*
+		 * Unlock and return. Note that unlocking is analagous to what PG does
+		 * for ALTER TABLE ADD COLUMN IF NOT EXIST
+		 */
+		heap_close(rel, AccessExclusiveLock);
+
 		if (if_not_exists)
 		{
 			ereport(NOTICE,
 					(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
 					 errmsg("table \"%s\" is already a hypertable, skipping",
 							get_rel_name(table_relid))));
+
 			PG_RETURN_VOID();
 		}
 
@@ -993,7 +1025,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 	/* Check that the table doesn't have any unsupported constraints */
 	hypertable_validate_constraints(table_relid);
 
-	table_has_data = table_has_tuples(table_relid, GetActiveSnapshot(), NoLock);
+	table_has_data = relation_has_tuples(rel);
 
 	if (!migrate_data && table_has_data)
 		ereport(ERROR,
@@ -1080,7 +1112,14 @@ hypertable_create(PG_FUNCTION_ARGS)
 		tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
 
-	/* Migrate data from the main table to chunks */
+	/*
+	 * Migrate data from the main table to chunks
+	 *
+	 * Note: we do not unlock here. We wait till the end of the txn instead.
+	 * Must close the relation before migrating data.
+	 */
+	heap_close(rel, NoLock);
+
 	if (table_has_data)
 	{
 		ereport(NOTICE,
@@ -1094,6 +1133,5 @@ hypertable_create(PG_FUNCTION_ARGS)
 		indexing_create_default_indexes(ht);
 
 	cache_release(hcache);
-
 	PG_RETURN_VOID();
 }
