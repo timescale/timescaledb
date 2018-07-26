@@ -17,7 +17,6 @@
 #include <miscadmin.h>
 #include <commands/dbcommands.h>
 #include <commands/sequence.h>
-#include <access/xact.h>
 
 #include "compat.h"
 #include "catalog.h"

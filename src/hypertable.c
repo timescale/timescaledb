@@ -214,6 +214,34 @@ number_of_hypertables()
 }
 
 static ScanTupleResult
+hypertable_tuple_append(TupleInfo *ti, void *data)
+{
+	List	  **hypertables = data;
+
+	*hypertables = lappend(*hypertables, hypertable_from_tuple(ti->tuple, ti->mctx));
+
+	return SCAN_CONTINUE;
+}
+
+List *
+hypertable_get_all(void)
+{
+	List	   *result = NIL;
+
+	hypertable_scan_limit_internal(NULL,
+								   0,
+								   InvalidOid,
+								   hypertable_tuple_append,
+								   &result,
+								   -1,
+								   LockTupleKeyShare,
+								   false,
+								   CurrentMemoryContext);
+
+	return result;
+}
+
+static ScanTupleResult
 hypertable_tuple_update(TupleInfo *ti, void *data)
 {
 	Hypertable *ht = data;

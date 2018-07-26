@@ -764,6 +764,54 @@ ts_dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(dimension_interval_to_internal("testcol", coltype, valuetype, value, false));
 }
 
+/* A utility function to check that the argument type passed to be
+ * used/compared with a hypertable time column is valid
+ * The argument is valid if
+ * 	-	it is an INTEGER type and time column of hypertable is also INTEGER
+ * 	-	it is an INTERVAL and time column of hypertable is time or date
+ * 	-	it is the same as time column of hypertable
+ */
+void
+dimension_open_typecheck(Oid arg_type, Oid time_column_type, char *caller_name)
+{
+	AssertArg(arg_type != InvalidOid);
+	AssertArg(IS_VALID_OPEN_DIM_TYPE(time_column_type));
+
+	if (IS_INTEGER_TYPE(time_column_type) && IS_INTEGER_TYPE(arg_type))
+		return;
+
+	if (arg_type == INTERVALOID)
+	{
+		if (IS_INTEGER_TYPE(time_column_type))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("can only use \"%s\" with an INTERVAL"
+							" for TIMESTAMP, TIMESTAMPTZ, and DATE types",
+							caller_name)
+					 ));
+		return;
+	}
+
+	if (!IS_VALID_OPEN_DIM_TYPE(arg_type))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("time constraint arguments of \"%s\" should "
+						"have one of acceptable time column types: "
+						"SMALLINT, INT, BIGINT, TIMESTAMP, TIMESTAMPTZ, DATE",
+						caller_name)
+				 ));
+	}
+
+	if (arg_type != time_column_type)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("time constraint arguments of \"%s\" should "
+						"have same type as time column of the hypertable",
+						caller_name)
+				 ));
+}
+
 static void
 dimension_add_not_null_on_column(Oid table_relid, char *colname)
 {
@@ -1115,11 +1163,17 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(info.table_relid))));
 
-	if ((!info.num_slices_is_set && !OidIsValid(info.interval_type)) ||
-		(info.num_slices_is_set && OidIsValid(info.interval_type)))
+	if (info.num_slices_is_set && OidIsValid(info.interval_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot specify both the number of partitions and an interval")));
+				 errmsg("cannot specify both the number of partitions and an interval")
+				 ));
+
+	if (!info.num_slices_is_set && !OidIsValid(info.interval_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot omit both the number of partitions and the interval")
+				 ));
 
 	dimension_validate_info(&info);
 

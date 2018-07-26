@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       INTEGER = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    chunk_time_interval     anyelement = NULL::bigint,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
     partitioning_func       REGPROC = NULL,
@@ -64,69 +64,43 @@ CREATE OR REPLACE FUNCTION  set_number_partitions(
     dimension_name          NAME = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_num_slices' LANGUAGE C VOLATILE;
 
--- Drop chunks that are older than a timestamp.
+-- Drop chunks that are older than a timestamp or newer than a timestamp.
 CREATE OR REPLACE FUNCTION drop_chunks(
-    older_than anyelement,
+    older_than ANYELEMENT = NULL,
     table_name  NAME = NULL,
     schema_name NAME = NULL,
-    cascade  BOOLEAN = FALSE
+    cascade  BOOLEAN = FALSE,
+    newer_than ANYELEMENT = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
     older_than_internal BIGINT;
+    newer_than_internal BIGINT;
 BEGIN
-    IF older_than IS NULL THEN
-        RAISE 'the timestamp provided to drop_chunks cannot be NULL';
+    IF older_than IS NULL AND newer_than IS NULL THEN
+        RAISE 'older_than and newer_than timestamps provided to drop_chunks cannot both be NULL';
     END IF;
-
-    PERFORM  _timescaledb_internal.drop_chunks_type_check(pg_typeof(older_than), table_name, schema_name);
-    SELECT _timescaledb_internal.time_to_internal(older_than) INTO older_than_internal;
-    PERFORM _timescaledb_internal.drop_chunks_impl(older_than_internal, table_name, schema_name, cascade);
+    PERFORM _timescaledb_internal.drop_chunks_impl(older_than, table_name, schema_name, cascade,
+    newer_than_time => newer_than);
 END
 $BODY$;
 
--- Drop chunks older than an interval.
-CREATE OR REPLACE FUNCTION drop_chunks(
-    older_than  INTERVAL,
-    table_name  NAME = NULL,
-    schema_name NAME = NULL,
-    cascade BOOLEAN = false
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    time_type REGTYPE;
-BEGIN
-
-    BEGIN
-        WITH hypertable_ids AS (
-            SELECT id
-            FROM _timescaledb_catalog.hypertable h
-            WHERE (drop_chunks.schema_name IS NULL OR h.schema_name = drop_chunks.schema_name) AND
-            (drop_chunks.table_name IS NULL OR h.table_name = drop_chunks.table_name)
-        )
-        SELECT DISTINCT time_dim.column_type INTO STRICT time_type
-        FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RAISE EXCEPTION 'no hypertables found';
-        WHEN TOO_MANY_ROWS THEN
-            RAISE EXCEPTION 'cannot use drop_chunks on multiple tables with different time types';
-    END;
-
-
-    IF time_type = 'TIMESTAMP'::regtype THEN
-        PERFORM @extschema@.drop_chunks((now() - older_than)::timestamp, table_name, schema_name, cascade);
-    ELSIF time_type = 'DATE'::regtype THEN
-        PERFORM @extschema@.drop_chunks((now() - older_than)::date, table_name, schema_name, cascade);
-    ELSIF time_type = 'TIMESTAMPTZ'::regtype THEN
-        PERFORM @extschema@.drop_chunks(now() - older_than, table_name, schema_name, cascade);
-    ELSE
-        RAISE 'can only use drop_chunks with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types';
-    END IF;
-END
-$BODY$;
+-- show chunks older than or newer than a specific time.
+-- `hypertable` argument can be a valid hypertable or NULL.
+-- In the latter case the function will try to list all
+-- the chunks from all of the hypertables in the database.
+-- older_than or newer_than or both can be NULL.
+-- if `hypertable` argument is null but a time constraint is specified
+-- through older_than or newer_than, the call will succeed
+-- if and only if all the hypertables in the database
+-- have the same type as the given time constraint argument
+CREATE OR REPLACE FUNCTION show_chunks(
+    hypertable  REGCLASS = NULL,
+    older_than "any" = NULL,
+    newer_than "any" = NULL
+) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
+LANGUAGE C STABLE PARALLEL SAFE;
 
 -- Add a dimension (of partitioning) to a hypertable
 --

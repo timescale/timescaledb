@@ -22,7 +22,6 @@
 #include <utils/lsyscache.h>
 #include <executor/nodeAgg.h>
 #include <utils/timestamp.h>
-#include <utils/lsyscache.h>
 #include <utils/selfuncs.h>
 
 #include "compat-msvc-enter.h"

@@ -6,6 +6,7 @@ set(TEST_FILES
   append_unoptimized.sql
   append_x_diff.sql
   chunk_adaptive.sql
+  chunk_utils.sql
   chunks.sql
   cluster.sql
   constraint.sql
@@ -21,7 +22,6 @@ set(TEST_FILES
   delete.sql
   drop_schema.sql
   drop_owned.sql
-  drop_chunks.sql
   drop_extension.sql
   drop_hypertable.sql
   drop_rename_hypertable.sql

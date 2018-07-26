@@ -20,7 +20,6 @@
 
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
-typedef struct HeapTupleData *HeapTuple;
 
 typedef struct Hypertable
 {
@@ -47,6 +46,7 @@ enum Anum_create_hypertable
 extern int	number_of_hypertables(void);
 
 extern Oid	rel_get_owner(Oid relid);
+extern List *hypertable_get_all(void);
 extern Hypertable *hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *hypertable_get_by_name(char *schema, char *name);
 extern bool hypertable_has_privs_of(Oid hypertable_oid, Oid userid);

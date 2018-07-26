@@ -71,6 +71,9 @@
 	 ExecBuildProjectionInfo((List *)ExecInitExpr((Expr *) tl, NULL), exprContext, slot, inputdesc)
 #define WaitLatchCompat(latch, wakeEvents, timeout) \
 	WaitLatch(latch, wakeEvents, timeout)
+
+extern int	oid_cmp(const void *p1, const void *p2);
+
 #else
 
 #error "Unsupported PostgreSQL version"
