@@ -23,7 +23,10 @@
 #include <catalog/pg_cast.h>
 #include <parser/parse_coerce.h>
 #include <fmgr.h>
+#include <access/xact.h>
+#include <funcapi.h>
 
+#include "chunk.h"
 #include "utils.h"
 #include "compat.h"
 
@@ -165,7 +168,8 @@ ts_time_to_internal(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(time_value_to_internal(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 0), false));
 }
 
-/*	*/
+
+/* Convert valid timescale time column type to internal representation */
 int64
 time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 {
@@ -202,8 +206,81 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 			if (type_is_int8_binary_compatible(type_oid))
 				return DatumGetInt64(time_val);
 			if (!failure_ok)
-				elog(ERROR, "unkown time type OID %d", type_oid);
+				elog(ERROR, "unknown time type OID %d", type_oid);
 			return -1;
+	}
+}
+
+/*
+ * Convert the difference of interval and current timestamp to internal representation
+ * This function interprets the interval as distance in time dimension to the past.
+ * Depending on the type of hypertable type column, the function applied the
+ * necessary granularity to now() - interval and converts the resulting
+ * time to internal int64 representation
+ */
+int64
+interval_from_now_to_internal(Datum interval, Oid type_oid)
+{
+	TimestampTz now;
+	Datum		res;
+
+	/*
+	 * This is really confusing but looks like it is how postgres works. Event
+	 * though there is a function called Datum now() that calls
+	 * GetCurrentTransactionStartTimestamp and returns TimestampTz, that is
+	 * not the same as now() function in SQL and even though return type is
+	 * Timestamp WITH TIMEZONE, GetCurrentTransactionStartTimestamp does not
+	 * incorporate current session timezone infromation in the returned value.
+	 * In order to take this timezone value set by the user into account, I
+	 * convert timestamp to POSIX time structure using timestamp2tm *which has
+	 * access to current timezone* setting through session_timezone variable
+	 * and incorporates it in the returned structure. I then convert it back
+	 * to TimestampTz through a similar function which takes this timezone
+	 * information int account.
+	 */
+	int			tzoff;
+	struct pg_tm tm;
+	fsec_t		fsec;
+	const char *tzn;
+
+	timestamp2tm(GetCurrentTransactionStartTimestamp(),
+				 &tzoff, &tm, &fsec, &tzn, NULL);
+	tm2timestamp(&tm, fsec, NULL, &now);
+
+	switch (type_oid)
+	{
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			res = TimestampTzGetDatum(now);
+			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
+
+			return time_value_to_internal(res, type_oid, false);
+		case DATEOID:
+			res = TimestampTzGetDatum(now);
+
+			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
+			res = DirectFunctionCall1(timestamp_date, res);
+
+			return time_value_to_internal(res, type_oid, false);
+		case INT8OID:
+		case INT4OID:
+		case INT2OID:
+
+			/*
+			 * should never get here as the case is handled by
+			 * time_dim_typecheck
+			 */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("can only use this with an INTERVAL for "
+							"TIMESTAMP, TIMESTAMPTZ, and DATE types")
+					 ));
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unknown time type OID %d", type_oid)
+					 ));
+
 	}
 }
 

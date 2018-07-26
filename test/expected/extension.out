@@ -37,7 +37,8 @@ ORDER BY proname;
  set_adaptive_chunking
  set_chunk_time_interval
  set_number_partitions
+ show_chunks
  show_tablespaces
  time_bucket
-(24 rows)
+(25 rows)
 

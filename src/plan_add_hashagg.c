@@ -35,7 +35,6 @@
 #include "hypertable_insert.h"
 #include "constraint_aware_append.h"
 #include "compat.h"
-#include "extension.h"
 
 #define INVALID_ESTIMATE (-1)
 #define IS_VALID_ESTIMATE(est) ((est) >= 0)

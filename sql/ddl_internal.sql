@@ -3,37 +3,35 @@
 -- This file is licensed under the Apache License, see LICENSE-APACHE
 -- at the top level directory of the TimescaleDB distribution.
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_get_time(
-    hypertable_id INT
-)
-    RETURNS _timescaledb_catalog.dimension LANGUAGE SQL STABLE AS
-$BODY$
-    SELECT *
-    FROM _timescaledb_catalog.dimension d
-    WHERE d.hypertable_id = dimension_get_time.hypertable_id AND
-          d.interval_length IS NOT NULL
-$BODY$;
+-- show_chunks for internal use only. The only difference
+-- from user-facing API is that this one takes a 4th argument
+-- specifying the caller name. This makes it easier to taylor
+-- error messages to the caller function context.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.show_chunks_impl(
+    hypertable  REGCLASS = NULL,
+    older_than "any" = NULL,
+    newer_than "any" = NULL,
+    caller_name NAME = NULL
+) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
+LANGUAGE C STABLE PARALLEL SAFE;
 
 -- Drop chunks older than the given timestamp. If a hypertable name is given,
 -- drop only chunks associated with this table. Any of the first three arguments
 -- can be NULL meaning "all values".
 CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunks_impl(
-    older_than_time  BIGINT,
+    older_than_time  ANYELEMENT = NULL,
     table_name  NAME = NULL,
     schema_name NAME = NULL,
     cascade  BOOLEAN = FALSE,
-    truncate_before  BOOLEAN = FALSE
+    newer_than_time ANYELEMENT = NULL
 )
     RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
 $BODY$
 DECLARE
-    chunk_row _timescaledb_catalog.chunk;
+    chunk_row REGCLASS;
     cascade_mod TEXT = '';
     exist_count INT = 0;
 BEGIN
-    IF older_than_time IS NULL AND table_name IS NULL AND schema_name IS NULL THEN
-        RAISE 'cannot have all 3 arguments to drop_chunks_older_than be NULL';
-    END IF;
 
     IF cascade THEN
         cascade_mod = 'CASCADE';
@@ -52,68 +50,22 @@ BEGIN
         END IF;
     END IF;
 
-    FOR chunk_row IN SELECT *
-        FROM _timescaledb_catalog.chunk c
-        INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = c.hypertable_id)
-        INNER JOIN _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(true)
-        INNER JOIN _timescaledb_catalog.dimension_slice ds
-            ON (ds.dimension_id = time_dimension.id)
-        INNER JOIN _timescaledb_catalog.chunk_constraint cc
-            ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-        WHERE (older_than_time IS NULL OR ds.range_end <= older_than_time)
-        AND (drop_chunks_impl.schema_name IS NULL OR h.schema_name = drop_chunks_impl.schema_name)
-        AND (drop_chunks_impl.table_name IS NULL OR h.table_name = drop_chunks_impl.table_name)
+    FOR schema_name, table_name IN
+        SELECT hyper.schema_name, hyper.table_name
+        FROM _timescaledb_catalog.hypertable hyper
+        WHERE
+            (drop_chunks_impl.schema_name IS NULL OR hyper.schema_name = drop_chunks_impl.schema_name) AND
+            (drop_chunks_impl.table_name IS NULL OR hyper.table_name = drop_chunks_impl.table_name)
     LOOP
-        IF truncate_before THEN
+        FOR chunk_row IN SELECT _timescaledb_internal.show_chunks_impl(schema_name || '.' || table_name, older_than_time, newer_than_time, 'drop_chunks')
+        LOOP
             EXECUTE format(
-                $$
-                TRUNCATE %I.%I %s
-                $$, chunk_row.schema_name, chunk_row.table_name, cascade_mod
+                    $$
+                    DROP TABLE %s %s
+                    $$, chunk_row, cascade_mod
             );
-        END IF;
-        EXECUTE format(
-                $$
-                DROP TABLE %I.%I %s
-                $$, chunk_row.schema_name, chunk_row.table_name, cascade_mod
-        );
+        END LOOP;
     END LOOP;
-END
-$BODY$;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_chunks_type_check(
-    given_type REGTYPE,
-    table_name  NAME,
-    schema_name NAME
-)
-    RETURNS VOID LANGUAGE PLPGSQL STABLE AS
-$BODY$
-DECLARE
-    actual_type regtype;
-BEGIN
-    BEGIN
-        WITH hypertable_ids AS (
-            SELECT id
-            FROM _timescaledb_catalog.hypertable h
-            WHERE (drop_chunks_type_check.schema_name IS NULL OR h.schema_name = drop_chunks_type_check.schema_name) AND
-            (drop_chunks_type_check.table_name IS NULL OR h.table_name = drop_chunks_type_check.table_name)
-        )
-        SELECT DISTINCT time_dim.column_type INTO STRICT actual_type
-        FROM hypertable_ids INNER JOIN LATERAL _timescaledb_internal.dimension_get_time(hypertable_ids.id) time_dim ON (true);
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RAISE EXCEPTION 'no hypertables found';
-        WHEN TOO_MANY_ROWS THEN
-            RAISE EXCEPTION 'cannot use drop_chunks on multiple tables with different time types';
-    END;
-
-    IF given_type IN ('int'::regtype, 'smallint'::regtype, 'bigint'::regtype ) THEN
-        IF actual_type IN ('int'::regtype, 'smallint'::regtype, 'bigint'::regtype ) THEN
-            RETURN;
-        END IF;
-    END IF;
-    IF actual_type != given_type THEN
-        RAISE EXCEPTION 'cannot call drop_chunks with a % on hypertables with a time type of: %', given_type, actual_type;
-    END IF;
 END
 $BODY$;
 

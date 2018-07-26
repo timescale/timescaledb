@@ -202,7 +202,7 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 }
 
 /*
- * Look for all ranges where value > lower_bound and value < upper_bound
+ * Look for all dimension slices where (lower_bound, upper_bound) of the dimension_slice contains the given (start_value, end_value) range
  *
  */
 DimensionVec *
