@@ -177,6 +177,33 @@ select * from only _timescaledb_internal._hyper_6_5_chunk;
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
 
+CREATE TYPE test_type AS (time timestamp, temp float);
+CREATE TABLE test_table_of_type OF test_type;
+SELECT create_hypertable('test_table_of_type', 'time');
+INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
+
+\set ON_ERROR_STOP 0
+DROP TYPE test_type;
+\set ON_ERROR_STOP 1
+DROP TYPE test_type CASCADE;
+
+CREATE TABLE test_table_of_type (time timestamp, temp float);
+SELECT create_hypertable('test_table_of_type', 'time');
+INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
+CREATE TYPE test_type AS (time timestamp, temp float);
+ALTER TABLE test_table_of_type OF test_type;
+
+\set ON_ERROR_STOP 0
+DROP TYPE test_type;
+\set ON_ERROR_STOP 1
+BEGIN;
+DROP TYPE test_type CASCADE;
+ROLLBACK;
+
+ALTER TABLE test_table_of_type NOT OF;
+DROP TYPE test_type;
+
+
 -- Reset GRANTS
 \c single :ROLE_SUPERUSER
 REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;
