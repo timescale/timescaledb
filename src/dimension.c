@@ -17,6 +17,7 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "hypertable.h"
+#include "indexing.h"
 #include "hypertable_cache.h"
 #include "partitioning.h"
 #include "scanner.h"
@@ -1004,6 +1005,16 @@ dimension_add(PG_FUNCTION_ARGS)
 		 */
 		hypertable_set_num_dimensions(info.ht, info.ht->space->num_dimensions + 1);
 		dimension_add_from_info(&info);
+
+		/* Verify that existing indexes are compatible with a hypertable */
+
+		/*
+		 * Need to get a fresh copy of hypertable from the database as cache
+		 * does not reflect the changes in the previous 2 lines which add a
+		 * new dimenison
+		 */
+		info.ht = hypertable_get_by_id(info.ht->fd.id);
+		indexing_verify_indexes(info.ht);
 	}
 
 	cache_release(hcache);
