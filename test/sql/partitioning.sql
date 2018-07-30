@@ -83,3 +83,46 @@ INSERT INTO part_custom_func VALUES ('2017-03-22T09:18:23', 23.4, 'dev1'),
                                     ('2017-03-22T09:18:23', 23.4, 'dev7');
 
 SELECT * FROM test.show_subtables('part_custom_func');
+-- Test that index creation is handled correctly.
+CREATE TABLE hyper_with_index(time timestamptz, temp float, device int);
+CREATE UNIQUE INDEX temp_index ON hyper_with_index(temp);
+
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('hyper_with_index', 'time');
+SELECT create_hypertable('hyper_with_index', 'time', 'device', 2);
+SELECT create_hypertable('hyper_with_index', 'time', 'temp', 2);
+\set ON_ERROR_STOP 1
+
+DROP INDEX temp_index;
+CREATE UNIQUE INDEX time_index ON hyper_with_index(time);
+
+\set ON_ERROR_STOP 0
+-- should error because device not in index
+SELECT create_hypertable('hyper_with_index', 'time', 'device', 4);
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('hyper_with_index', 'time');
+-- make sure user created index is used.
+-- not using \d or \d+ because output syntax differs
+-- between postgres 9 and postgres 10.
+SELECT indexname FROM pg_indexes WHERE tablename = 'hyper_with_index';
+\set ON_ERROR_STOP 0
+SELECT add_dimension('hyper_with_index', 'device', 4);
+\set ON_ERROR_STOP 1
+
+DROP INDEX time_index;
+CREATE UNIQUE INDEX time_space_index ON hyper_with_index(time, device);
+SELECT add_dimension('hyper_with_index', 'device', 4);
+
+
+CREATE TABLE hyper_with_primary(time TIMESTAMPTZ PRIMARY KEY, temp float, device int);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('hyper_with_primary', 'time', 'device', 4);
+\set ON_ERROR_STOP 1
+
+SELECT create_hypertable('hyper_with_primary', 'time');
+\set ON_ERROR_STOP 0
+SELECT add_dimension('hyper_with_primary', 'device', 4);
+\set ON_ERROR_STOP 1
+
+-- NON-unique indexes can still be created
+CREATE INDEX temp_index ON hyper_with_index(temp);
