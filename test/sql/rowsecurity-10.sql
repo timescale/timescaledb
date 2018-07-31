@@ -78,6 +78,9 @@ CREATE TABLE document (
     dtitle      text
 );
 GRANT ALL ON document TO public;
+
+SELECT public.create_hypertable('document', 'did', chunk_time_interval=>2);
+
 INSERT INTO document VALUES
     ( 1, 11, 1, 'regress_rls_bob', 'my first novel'),
     ( 2, 11, 2, 'regress_rls_bob', 'my second novel'),
@@ -313,30 +316,23 @@ SELECT * FROM t1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
 
 --
--- Partitioned Tables
+-- Hyper Tables
 --
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 
-CREATE TABLE part_document (
+CREATE TABLE hyper_document (
     did         int,
     cid         int,
     dlevel      int not null,
     dauthor     name,
     dtitle      text
-) PARTITION BY RANGE (cid);
-GRANT ALL ON part_document TO public;
+);
+GRANT ALL ON hyper_document TO public;
 
--- Create partitions for document categories
-CREATE TABLE part_document_fiction PARTITION OF part_document FOR VALUES FROM (11) to (12);
-CREATE TABLE part_document_satire PARTITION OF part_document FOR VALUES FROM (55) to (56);
-CREATE TABLE part_document_nonfiction PARTITION OF part_document FOR VALUES FROM (99) to (100);
+SELECT public.create_hypertable('hyper_document', 'did', chunk_time_interval=>2);
 
-GRANT ALL ON part_document_fiction TO public;
-GRANT ALL ON part_document_satire TO public;
-GRANT ALL ON part_document_nonfiction TO public;
-
-INSERT INTO part_document VALUES
+INSERT INTO hyper_document VALUES
     ( 1, 11, 1, 'regress_rls_bob', 'my first novel'),
     ( 2, 11, 2, 'regress_rls_bob', 'my second novel'),
     ( 3, 99, 2, 'regress_rls_bob', 'my science textbook'),
@@ -348,128 +344,133 @@ INSERT INTO part_document VALUES
     ( 9, 11, 1, 'regress_rls_dave', 'awesome science fiction'),
     (10, 99, 2, 'regress_rls_dave', 'awesome technology book');
 
-ALTER TABLE part_document ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hyper_document ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON _timescaledb_internal._hyper_2_9_chunk TO public;
 
 -- Create policy on parent
 -- user's security level must be higher than or equal to document's
-CREATE POLICY pp1 ON part_document AS PERMISSIVE
+CREATE POLICY pp1 ON hyper_document AS PERMISSIVE
     USING (dlevel <= (SELECT seclv FROM uaccount WHERE pguser = current_user));
 
 -- Dave is only allowed to see cid < 55
-CREATE POLICY pp1r ON part_document AS RESTRICTIVE TO regress_rls_dave
+CREATE POLICY pp1r ON hyper_document AS RESTRICTIVE TO regress_rls_dave
     USING (cid < 55);
 
-\d+ part_document
-SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename like '%part_document%' ORDER BY policyname;
+\d+ hyper_document
+SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename like '%hyper_document%' ORDER BY policyname;
 
 -- viewpoint from regress_rls_bob
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- pp1 ERROR
-INSERT INTO part_document VALUES (100, 11, 5, 'regress_rls_dave', 'testing pp1'); -- fail
+INSERT INTO hyper_document VALUES (1, 11, 5, 'regress_rls_dave', 'testing pp1'); -- fail
 -- pp1r ERROR
-INSERT INTO part_document VALUES (100, 99, 1, 'regress_rls_dave', 'testing pp1r'); -- fail
+INSERT INTO hyper_document VALUES (1, 99, 1, 'regress_rls_dave', 'testing pp1r'); -- fail
 
 -- Show that RLS policy does not apply for direct inserts to children
 -- This should fail with RLS POLICY pp1r violation.
-INSERT INTO part_document VALUES (100, 55, 1, 'regress_rls_dave', 'testing RLS with partitions'); -- fail
+INSERT INTO hyper_document VALUES (1, 55, 1, 'regress_rls_dave', 'testing RLS with hypertables'); -- fail
 -- But this should succeed.
-INSERT INTO part_document_satire VALUES (100, 55, 1, 'regress_rls_dave', 'testing RLS with partitions'); -- success
+INSERT INTO _timescaledb_internal._hyper_2_9_chunk VALUES (1, 55, 1, 'regress_rls_dave', 'testing RLS with hypertables'); -- success
 -- We still cannot see the row using the parent
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 -- But we can if we look directly
-SELECT * FROM part_document_satire WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk WHERE f_leak(dtitle) ORDER BY did;
 
 -- Turn on RLS and create policy on child to show RLS is checked before constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
-ALTER TABLE part_document_satire ENABLE ROW LEVEL SECURITY;
-CREATE POLICY pp3 ON part_document_satire AS RESTRICTIVE
+ALTER TABLE _timescaledb_internal._hyper_2_9_chunk ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pp3 ON _timescaledb_internal._hyper_2_9_chunk AS RESTRICTIVE
     USING (cid < 55);
 -- This should fail with RLS violation now.
 SET SESSION AUTHORIZATION regress_rls_dave;
-INSERT INTO part_document_satire VALUES (101, 55, 1, 'regress_rls_dave', 'testing RLS with partitions'); -- fail
+INSERT INTO _timescaledb_internal._hyper_2_9_chunk VALUES (1, 55, 1, 'regress_rls_dave', 'testing RLS with hypertables - round 2'); -- fail
 -- And now we cannot see directly into the partition either, due to RLS
-SELECT * FROM part_document_satire WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk WHERE f_leak(dtitle) ORDER BY did;
 -- The parent looks same as before
 -- viewpoint from regress_rls_dave
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- only owner can change policies
-ALTER POLICY pp1 ON part_document USING (true);    --fail
-DROP POLICY pp1 ON part_document;                  --fail
+ALTER POLICY pp1 ON hyper_document USING (true);    --fail
+DROP POLICY pp1 ON hyper_document;                  --fail
 
 SET SESSION AUTHORIZATION regress_rls_alice;
-ALTER POLICY pp1 ON part_document USING (dauthor = current_user);
+ALTER POLICY pp1 ON hyper_document USING (dauthor = current_user);
 
 -- viewpoint from regress_rls_bob again
 SET SESSION AUTHORIZATION regress_rls_bob;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 
 -- viewpoint from rls_regres_carol again
 SET SESSION AUTHORIZATION regress_rls_carol;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- database superuser does bypass RLS policy when enabled
 RESET SESSION AUTHORIZATION;
 SET row_security TO ON;
-SELECT * FROM part_document ORDER BY did;
-SELECT * FROM part_document_satire ORDER by did;
+SELECT * FROM hyper_document ORDER BY did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
 
 -- database non-superuser with bypass privilege can bypass RLS policy when disabled
 SET SESSION AUTHORIZATION regress_rls_exempt_user;
 SET row_security TO OFF;
-SELECT * FROM part_document ORDER BY did;
-SELECT * FROM part_document_satire ORDER by did;
+SELECT * FROM hyper_document ORDER BY did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
 
 -- RLS policy does not apply to table owner when RLS enabled.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security TO ON;
-SELECT * FROM part_document ORDER by did;
-SELECT * FROM part_document_satire ORDER by did;
+SELECT * FROM hyper_document ORDER by did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
 
 -- When RLS disabled, other users get ERROR.
 SET SESSION AUTHORIZATION regress_rls_dave;
 SET row_security TO OFF;
-SELECT * FROM part_document ORDER by did;
-SELECT * FROM part_document_satire ORDER by did;
+SELECT * FROM hyper_document ORDER by did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
 
 -- Check behavior with a policy that uses a SubPlan not an InitPlan.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security TO ON;
-CREATE POLICY pp3 ON part_document AS RESTRICTIVE
+CREATE POLICY pp3 ON hyper_document AS RESTRICTIVE
     USING ((SELECT dlevel <= seclv FROM uaccount WHERE pguser = current_user));
 
 SET SESSION AUTHORIZATION regress_rls_carol;
-INSERT INTO part_document VALUES (100, 11, 5, 'regress_rls_carol', 'testing pp3'); -- fail
+INSERT INTO hyper_document VALUES (100, 11, 5, 'regress_rls_carol', 'testing pp3'); -- fail
 
 ----- Dependencies -----
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security TO ON;
 
 CREATE TABLE dependee (x integer, y integer);
+SELECT public.create_hypertable('dependee', 'x', chunk_time_interval=>2);
 
 CREATE TABLE dependent (x integer, y integer);
+SELECT public.create_hypertable('dependent', 'x', chunk_time_interval=>2);
+
 CREATE POLICY d1 ON dependent FOR ALL
     TO PUBLIC
     USING (x = (SELECT d.x FROM dependee d WHERE d.y = y));
@@ -487,6 +488,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualifie
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE rec1 (x integer, y integer);
+SELECT public.create_hypertable('rec1', 'x', chunk_time_interval=>2);
 CREATE POLICY r1 ON rec1 USING (x = (SELECT r.x FROM rec1 r WHERE y = r.y));
 ALTER TABLE rec1 ENABLE ROW LEVEL SECURITY;
 SET SESSION AUTHORIZATION regress_rls_bob;
@@ -497,6 +499,7 @@ SELECT * FROM rec1; -- fail, direct recursion
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE rec2 (a integer, b integer);
+SELECT public.create_hypertable('rec2', 'x', chunk_time_interval=>2);
 ALTER POLICY r1 ON rec1 USING (x = (SELECT a FROM rec2 WHERE b = y));
 CREATE POLICY r2 ON rec2 USING (a = (SELECT x FROM rec1 WHERE y = b));
 ALTER TABLE rec2 ENABLE ROW LEVEL SECURITY;
@@ -540,9 +543,11 @@ SELECT * FROM rec1;    -- fail, mutual recursion via s.b. views
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE s1 (a int, b text);
+SELECT public.create_hypertable('s1', 'a', chunk_time_interval=>2);
 INSERT INTO s1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
 
 CREATE TABLE s2 (x int, y text);
+SELECT public.create_hypertable('s2', 'x', chunk_time_interval=>2);
 INSERT INTO s2 (SELECT x, md5(x::text) FROM generate_series(-6,6) x);
 
 GRANT SELECT ON s1, s2 TO regress_rls_bob;
@@ -675,6 +680,7 @@ DELETE FROM t1 WHERE f_leak(b) RETURNING oid, *, t1;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE b1 (a int, b text);
+SELECT public.create_hypertable('b1', 'a', chunk_time_interval=>2);
 INSERT INTO b1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
 
 CREATE POLICY p1 ON b1 USING (a % 2 = 0);
@@ -821,7 +827,9 @@ INSERT INTO document VALUES (1, (SELECT cid from category WHERE cname = 'novel')
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE z1 (a int, b text);
+SELECT public.create_hypertable('z1', 'a', chunk_time_interval=>2);
 CREATE TABLE z2 (a int, b text);
+SELECT public.create_hypertable('z2', 'a', chunk_time_interval=>2);
 
 GRANT SELECT ON z1,z2 TO regress_rls_group1, regress_rls_group2,
     regress_rls_bob, regress_rls_carol;
@@ -930,6 +938,7 @@ DROP VIEW rls_view;
 SET SESSION AUTHORIZATION regress_rls_alice;
 
 CREATE TABLE x1 (a int, b text, c text);
+SELECT public.create_hypertable('x1', 'a', chunk_time_interval=>2);
 GRANT ALL ON x1 TO PUBLIC;
 
 INSERT INTO x1 VALUES
@@ -964,7 +973,10 @@ DELETE FROM x1 WHERE f_leak(b) RETURNING *;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE y1 (a int, b text);
+SELECT public.create_hypertable('y1', 'a', chunk_time_interval=>2);
+INSERT INTO y1 VALUES(1,2);
 CREATE TABLE y2 (a int, b text);
+SELECT public.create_hypertable('y2', 'a', chunk_time_interval=>2);
 
 GRANT ALL ON y1, y2 TO regress_rls_bob;
 
@@ -1035,6 +1047,7 @@ DROP TABLE t1 CASCADE;
 \set VERBOSITY default
 
 CREATE TABLE t1 (a integer);
+SELECT public.create_hypertable('t1', 'a', chunk_time_interval=>2);
 
 GRANT SELECT ON t1 TO regress_rls_bob, regress_rls_carol;
 
@@ -1065,6 +1078,7 @@ EXPLAIN (COSTS OFF) EXECUTE role_inval;
 RESET SESSION AUTHORIZATION;
 DROP TABLE t1 CASCADE;
 CREATE TABLE t1 (a integer, b text);
+SELECT public.create_hypertable('t1', 'a', chunk_time_interval=>2);
 CREATE POLICY p1 ON t1 USING (a % 2 = 0);
 
 ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
@@ -1107,11 +1121,13 @@ SELECT polname, relname
 --
 SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE TABLE t2 (a integer, b text);
+SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
 SELECT * FROM t2;
 EXPLAIN (COSTS OFF) SELECT * FROM t2;
 CREATE TABLE t3 AS SELECT * FROM t1;
+SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 SELECT * FROM t3;
 SELECT * INTO t4 FROM t1;
 SELECT * FROM t4;
@@ -1121,7 +1137,9 @@ SELECT * FROM t4;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE blog (id integer, author text, post text);
+SELECT public.create_hypertable('blog', 'id', chunk_time_interval=>2);
 CREATE TABLE comment (blog_id integer, message text);
+SELECT public.create_hypertable('comment', 'blog_id', chunk_time_interval=>2);
 
 GRANT ALL ON blog, comment TO regress_rls_bob;
 
@@ -1161,7 +1179,8 @@ SELECT id, author, message FROM blog JOIN comment ON id = blog_id;
 SELECT id, author, message FROM comment JOIN blog ON id = blog_id;
 
 SET SESSION AUTHORIZATION regress_rls_alice;
-DROP TABLE blog, comment;
+DROP TABLE blog;
+DROP TABLE comment;
 
 --
 -- Default Deny Policy
@@ -1196,6 +1215,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM t1;
 RESET SESSION AUTHORIZATION;
 DROP TABLE copy_t CASCADE;
 CREATE TABLE copy_t (a integer, b text);
+SELECT public.create_hypertable('copy_t', 'a', chunk_time_interval=>2);
 CREATE POLICY p1 ON copy_t USING (a % 2 = 0);
 
 ALTER TABLE copy_t ENABLE ROW LEVEL SECURITY;
@@ -1236,6 +1256,7 @@ COPY (SELECT * FROM copy_t ORDER BY a ASC) TO STDOUT WITH DELIMITER ','; --fail 
 RESET SESSION AUTHORIZATION;
 SET row_security TO ON;
 CREATE TABLE copy_rel_to (a integer, b text);
+SELECT public.create_hypertable('copy_rel_to', 'a', chunk_time_interval=>2);
 CREATE POLICY p1 ON copy_rel_to USING (a % 2 = 0);
 
 ALTER TABLE copy_rel_to ENABLE ROW LEVEL SECURITY;
@@ -1247,30 +1268,30 @@ INSERT INTO copy_rel_to VALUES (1, md5('1'));
 -- Check COPY TO as Superuser/owner.
 RESET SESSION AUTHORIZATION;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ',';
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ',';
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ',';
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ',';
 
 -- Check COPY TO as user with permissions.
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --ok
 
 -- Check COPY TO as user with permissions and BYPASSRLS
 SET SESSION AUTHORIZATION regress_rls_exempt_user;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --ok
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --ok
 
 -- Check COPY TO as user without permissions. SET row_security TO OFF;
 SET SESSION AUTHORIZATION regress_rls_carol;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --fail - permission denied
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --fail - permission denied
 
 -- Check COPY FROM as Superuser/owner.
 RESET SESSION AUTHORIZATION;
@@ -1321,6 +1342,7 @@ DROP TABLE copy_rel_to CASCADE;
 SET SESSION AUTHORIZATION regress_rls_alice;
 
 CREATE TABLE current_check (currentid int, payload text, rlsuser text);
+SELECT public.create_hypertable('current_check', 'currentid', chunk_time_interval=>10);
 GRANT ALL ON current_check TO PUBLIC;
 
 INSERT INTO current_check VALUES
@@ -1447,6 +1469,7 @@ ROLLBACK; -- cleanup
 --
 BEGIN;
 CREATE TABLE t (c int);
+SELECT public.create_hypertable('t', 'c', chunk_time_interval=>2);
 CREATE POLICY p ON t USING (c % 2 = 1);
 ALTER TABLE t ENABLE ROW LEVEL SECURITY;
 
@@ -1479,7 +1502,9 @@ ROLLBACK;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE r1 (a int);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
 CREATE TABLE r2 (a int);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 
@@ -1520,6 +1545,7 @@ DROP TABLE r2;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
 INSERT INTO r1 VALUES (10), (20);
 
 CREATE POLICY p1 ON r1 USING (false);
@@ -1554,7 +1580,9 @@ DROP TABLE r1;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int PRIMARY KEY);
+-- r1 is not a hypertable since r1.a is referenced by r2
 CREATE TABLE r2 (a int REFERENCES r1);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 
@@ -1592,7 +1620,9 @@ DROP TABLE r1;
 
 -- Ensure cascaded DELETE works
 CREATE TABLE r1 (a int PRIMARY KEY);
+-- r1 is not a hypertable since r1.a is referenced by r2
 CREATE TABLE r2 (a int REFERENCES r1 ON DELETE CASCADE);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 
@@ -1618,7 +1648,9 @@ DROP TABLE r1;
 
 -- Ensure cascaded UPDATE works
 CREATE TABLE r1 (a int PRIMARY KEY);
+-- r1 is not a hypertable since r1.a is referenced by r2
 CREATE TABLE r2 (a int REFERENCES r1 ON UPDATE CASCADE);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 
@@ -1649,6 +1681,7 @@ DROP TABLE r1;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
 
 CREATE POLICY p1 ON r1 FOR SELECT USING (false);
 CREATE POLICY p2 ON r1 FOR INSERT WITH CHECK (true);
@@ -1679,6 +1712,7 @@ DROP TABLE r1;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int PRIMARY KEY);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>100);
 
 CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
 CREATE POLICY p2 ON r1 FOR UPDATE USING (a < 20) WITH CHECK (true);
@@ -1712,6 +1746,8 @@ INSERT INTO r1 VALUES (10)
 -- SELECT permissions)
 INSERT INTO r1 VALUES (10)
     ON CONFLICT (a) DO UPDATE SET a = 30;
+--will error out because of constraint names not supported on hypertables.
+--leaving this in since we still want this to error when/if this gets fixed for hypertables.
 INSERT INTO r1 VALUES (10)
     ON CONFLICT ON CONSTRAINT r1_pkey DO UPDATE SET a = 30;
 
@@ -1720,7 +1756,9 @@ DROP TABLE r1;
 -- Check dependency handling
 RESET SESSION AUTHORIZATION;
 CREATE TABLE dep1 (c1 int);
+SELECT public.create_hypertable('dep1', 'c1', chunk_time_interval=>2);
 CREATE TABLE dep2 (c1 int);
+SELECT public.create_hypertable('dep2', 'c1', chunk_time_interval=>2);
 
 CREATE POLICY dep_p1 ON dep1 TO regress_rls_bob USING (c1 > (select max(dep2.c1) from dep2));
 ALTER POLICY dep_p1 ON dep1 TO regress_rls_bob,regress_rls_carol;
@@ -1754,6 +1792,7 @@ CREATE ROLE regress_rls_dob_role1;
 CREATE ROLE regress_rls_dob_role2;
 
 CREATE TABLE dob_t1 (c1 int);
+SELECT public.create_hypertable('dob_t1', 'c1', chunk_time_interval=>2);
 CREATE TABLE dob_t2 (c1 int) PARTITION BY RANGE (c1);
 
 CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1 USING (true);
@@ -1792,6 +1831,7 @@ DROP ROLE regress_rls_group2;
 -- pg_dump/pg_restore
 CREATE SCHEMA regress_rls_schema;
 CREATE TABLE rls_tbl (c1 int);
+SELECT public.create_hypertable('rls_tbl', 'c1', chunk_time_interval=>2);
 ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
 CREATE POLICY p1 ON rls_tbl USING (c1 > 5);
 CREATE POLICY p2 ON rls_tbl FOR SELECT USING (c1 <= 3);
@@ -1799,6 +1839,7 @@ CREATE POLICY p3 ON rls_tbl FOR UPDATE USING (c1 <= 3) WITH CHECK (c1 > 5);
 CREATE POLICY p4 ON rls_tbl FOR DELETE USING (c1 <= 3);
 
 CREATE TABLE rls_tbl_force (c1 int);
+SELECT public.create_hypertable('rls_tbl_force', 'c1', chunk_time_interval=>2);
 ALTER TABLE rls_tbl_force ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rls_tbl_force FORCE ROW LEVEL SECURITY;
 CREATE POLICY p1 ON rls_tbl_force USING (c1 = 5) WITH CHECK (c1 < 5);
