@@ -137,6 +137,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_SetStorage:
 				case AT_DropCluster:
 				case AT_ClusterOn:
+				case AT_EnableRowSecurity:
+				case AT_DisableRowSecurity:
 					/* allowed on chunks */
 					break;
 				default:

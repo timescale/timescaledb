@@ -64,6 +64,12 @@ CREATE TABLE document (
     dtitle      text
 );
 GRANT ALL ON document TO public;
+SELECT public.create_hypertable('document', 'did', chunk_time_interval=>2);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO document VALUES
     ( 1, 11, 1, 'regress_rls_bob', 'my first novel'),
     ( 2, 11, 2, 'regress_rls_bob', 'my second novel'),
@@ -139,6 +145,9 @@ Policies:
     POLICY "p2r" AS RESTRICTIVE
       TO regress_rls_dave
       USING (((cid <> 44) AND (cid < 50)))
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON document FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+Number of child tables: 6 (Use \d+ to list them.)
 
 SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename = 'document' ORDER BY policyname;
      schemaname     | tablename | policyname | permissive  |       roles        | cmd |                    qual                    | with_check 
@@ -186,17 +195,9 @@ NOTICE:  f_leak => awesome science fiction
 -- try a sampled version
 SELECT * FROM document TABLESAMPLE BERNOULLI(50) REPEATABLE(0)
   WHERE f_leak(dtitle) ORDER BY did;
-NOTICE:  f_leak => my first manga
-NOTICE:  f_leak => great science fiction
-NOTICE:  f_leak => great manga
-NOTICE:  f_leak => awesome science fiction
- did | cid | dlevel |      dauthor      |         dtitle          
------+-----+--------+-------------------+-------------------------
-   4 |  44 |      1 | regress_rls_bob   | my first manga
-   6 |  22 |      1 | regress_rls_carol | great science fiction
-   8 |  44 |      1 | regress_rls_carol | great manga
-   9 |  22 |      1 | regress_rls_dave  | awesome science fiction
-(4 rows)
+ did | cid | dlevel | dauthor | dtitle 
+-----+-----+--------+---------+--------
+(0 rows)
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -253,43 +254,61 @@ NOTICE:  f_leak => awesome technology book
 -- try a sampled version
 SELECT * FROM document TABLESAMPLE BERNOULLI(50) REPEATABLE(0)
   WHERE f_leak(dtitle) ORDER BY did;
-NOTICE:  f_leak => my first manga
-NOTICE:  f_leak => my second manga
-NOTICE:  f_leak => great science fiction
-NOTICE:  f_leak => great manga
-NOTICE:  f_leak => awesome science fiction
- did | cid | dlevel |      dauthor      |         dtitle          
------+-----+--------+-------------------+-------------------------
-   4 |  44 |      1 | regress_rls_bob   | my first manga
-   5 |  44 |      2 | regress_rls_bob   | my second manga
-   6 |  22 |      1 | regress_rls_carol | great science fiction
-   8 |  44 |      1 | regress_rls_carol | great manga
-   9 |  22 |      1 | regress_rls_dave  | awesome science fiction
-(5 rows)
+ did | cid | dlevel | dauthor | dtitle 
+-----+-----+--------+---------+--------
+(0 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                     QUERY PLAN                     
-----------------------------------------------------
- Seq Scan on document
-   Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   InitPlan 1 (returns $0)
-     ->  Index Scan using uaccount_pkey on uaccount
-           Index Cond: (pguser = CURRENT_USER)
-(5 rows)
-
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
                         QUERY PLAN                         
 -----------------------------------------------------------
- Hash Join
-   Hash Cond: (category.cid = document.cid)
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Seq Scan on category
-   ->  Hash
-         ->  Seq Scan on document
+   ->  Append
+         ->  Seq Scan on _hyper_1_1_chunk
                Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(9 rows)
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_4_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_5_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_6_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
+
+EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Hash Join
+   Hash Cond: (document.cid = category.cid)
+   InitPlan 1 (returns $0)
+     ->  Index Scan using uaccount_pkey on uaccount
+           Index Cond: (pguser = CURRENT_USER)
+   ->  Custom Scan (ConstraintAwareAppend)
+         Hypertable: document
+         Chunks left after exclusion: 6
+         ->  Append
+               ->  Seq Scan on _hyper_1_1_chunk
+                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_2_chunk
+                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_4_chunk
+                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_5_chunk
+                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: ((dlevel <= $0) AND f_leak(dtitle))
+   ->  Hash
+         ->  Seq Scan on category
+(23 rows)
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
@@ -332,18 +351,32 @@ NOTICE:  f_leak => awesome technology book
 (7 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
- Seq Scan on document
-   Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-(5 rows)
+   ->  Append
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_4_chunk
+               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_5_chunk
+               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_6_chunk
+               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Hash Join
    Hash Cond: (category.cid = document.cid)
    InitPlan 1 (returns $0)
@@ -351,9 +384,23 @@ EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dt
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on category
    ->  Hash
-         ->  Seq Scan on document
-               Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
-(9 rows)
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: document
+               Chunks left after exclusion: 6
+               ->  Append
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_2_chunk
+                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_3_chunk
+                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_4_chunk
+                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_5_chunk
+                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_6_chunk
+                           Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+(23 rows)
 
 -- 44 would technically fail for both p2r and p1r, but we should get an error
 -- back from p1r for this because it sorts first
@@ -426,21 +473,50 @@ NOTICE:  f_leak => great manga
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                       QUERY PLAN                        
----------------------------------------------------------
- Seq Scan on document
-   Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-(2 rows)
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: document
+   Chunks left after exclusion: 6
+   ->  Append
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_4_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_5_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_1_6_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+(16 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                          QUERY PLAN                           
----------------------------------------------------------------
- Nested Loop
-   ->  Seq Scan on document
-         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-   ->  Index Scan using category_pkey on category
-         Index Cond: (cid = document.cid)
-(5 rows)
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Hash Join
+   Hash Cond: (category.cid = document.cid)
+   ->  Seq Scan on category
+   ->  Hash
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: document
+               Chunks left after exclusion: 6
+               ->  Append
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_2_chunk
+                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_3_chunk
+                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_4_chunk
+                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_5_chunk
+                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+                     ->  Seq Scan on _hyper_1_6_chunk
+                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+(20 rows)
 
 -- interaction of FK/PK constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -463,8 +539,8 @@ SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.
 (6 rows)
 
 DELETE FROM category WHERE cid = 33;    -- fails with FK violation
-ERROR:  update or delete on table "category" violates foreign key constraint "document_cid_fkey" on table "document"
-DETAIL:  Key is still referenced from table "document".
+ERROR:  update or delete on table "category" violates foreign key constraint "4_7_document_cid_fkey" on table "_hyper_1_4_chunk"
+DETAIL:  Key is still referenced from table "_hyper_1_4_chunk".
 -- can insert FK referencing invisible PK
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.did, c.cid;
@@ -479,7 +555,7 @@ INSERT INTO document VALUES (11, 33, 1, current_user, 'hoge');
 -- UNIQUE or PRIMARY KEY constraint violation DOES reveal presence of row
 SET SESSION AUTHORIZATION regress_rls_bob;
 INSERT INTO document VALUES (8, 44, 1, 'regress_rls_bob', 'my third manga'); -- Must fail with unique violation, revealing presence of did we can't see
-ERROR:  duplicate key value violates unique constraint "document_pkey"
+ERROR:  duplicate key value violates unique constraint "5_10_document_pkey"
 SELECT * FROM document WHERE did = 8; -- and confirm we can't see it
  did | cid | dlevel | dauthor | dtitle 
 -----+-----+--------+---------+--------
@@ -903,25 +979,26 @@ EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
 (7 rows)
 
 --
--- Partitioned Tables
+-- Hyper Tables
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
-CREATE TABLE part_document (
+CREATE TABLE hyper_document (
     did         int,
     cid         int,
     dlevel      int not null,
     dauthor     name,
     dtitle      text
-) PARTITION BY RANGE (cid);
-GRANT ALL ON part_document TO public;
--- Create partitions for document categories
-CREATE TABLE part_document_fiction PARTITION OF part_document FOR VALUES FROM (11) to (12);
-CREATE TABLE part_document_satire PARTITION OF part_document FOR VALUES FROM (55) to (56);
-CREATE TABLE part_document_nonfiction PARTITION OF part_document FOR VALUES FROM (99) to (100);
-GRANT ALL ON part_document_fiction TO public;
-GRANT ALL ON part_document_satire TO public;
-GRANT ALL ON part_document_nonfiction TO public;
-INSERT INTO part_document VALUES
+);
+GRANT ALL ON hyper_document TO public;
+SELECT public.create_hypertable('hyper_document', 'did', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "did"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO hyper_document VALUES
     ( 1, 11, 1, 'regress_rls_bob', 'my first novel'),
     ( 2, 11, 2, 'regress_rls_bob', 'my second novel'),
     ( 3, 99, 2, 'regress_rls_bob', 'my science textbook'),
@@ -932,24 +1009,26 @@ INSERT INTO part_document VALUES
     ( 8, 55, 2, 'regress_rls_carol', 'great satire'),
     ( 9, 11, 1, 'regress_rls_dave', 'awesome science fiction'),
     (10, 99, 2, 'regress_rls_dave', 'awesome technology book');
-ALTER TABLE part_document ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hyper_document ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON _timescaledb_internal._hyper_2_9_chunk TO public;
 -- Create policy on parent
 -- user's security level must be higher than or equal to document's
-CREATE POLICY pp1 ON part_document AS PERMISSIVE
+CREATE POLICY pp1 ON hyper_document AS PERMISSIVE
     USING (dlevel <= (SELECT seclv FROM uaccount WHERE pguser = current_user));
 -- Dave is only allowed to see cid < 55
-CREATE POLICY pp1r ON part_document AS RESTRICTIVE TO regress_rls_dave
+CREATE POLICY pp1r ON hyper_document AS RESTRICTIVE TO regress_rls_dave
     USING (cid < 55);
-\d+ part_document
-                          Table "regress_rls_schema.part_document"
+\d+ hyper_document
+                         Table "regress_rls_schema.hyper_document"
  Column  |  Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
 ---------+---------+-----------+----------+---------+----------+--------------+-------------
- did     | integer |           |          |         | plain    |              | 
+ did     | integer |           | not null |         | plain    |              | 
  cid     | integer |           |          |         | plain    |              | 
  dlevel  | integer |           | not null |         | plain    |              | 
  dauthor | name    |           |          |         | plain    |              | 
  dtitle  | text    |           |          |         | extended |              | 
-Partition key: RANGE (cid)
+Indexes:
+    "hyper_document_did_idx" btree (did DESC)
 Policies:
     POLICY "pp1"
       USING ((dlevel <= ( SELECT uaccount.seclv
@@ -958,27 +1037,32 @@ Policies:
     POLICY "pp1r" AS RESTRICTIVE
       TO regress_rls_dave
       USING ((cid < 55))
-Partitions: part_document_fiction FOR VALUES FROM (11) TO (12),
-            part_document_nonfiction FOR VALUES FROM (99) TO (100),
-            part_document_satire FOR VALUES FROM (55) TO (56)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON hyper_document FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+Child tables: _timescaledb_internal._hyper_2_10_chunk,
+              _timescaledb_internal._hyper_2_11_chunk,
+              _timescaledb_internal._hyper_2_12_chunk,
+              _timescaledb_internal._hyper_2_13_chunk,
+              _timescaledb_internal._hyper_2_14_chunk,
+              _timescaledb_internal._hyper_2_9_chunk
 
-SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename like '%part_document%' ORDER BY policyname;
-     schemaname     |   tablename   | policyname | permissive  |       roles        | cmd |                    qual                    | with_check 
---------------------+---------------+------------+-------------+--------------------+-----+--------------------------------------------+------------
- regress_rls_schema | part_document | pp1        | PERMISSIVE  | {public}           | ALL | (dlevel <= ( SELECT uaccount.seclv        +| 
-                    |               |            |             |                    |     |    FROM uaccount                          +| 
-                    |               |            |             |                    |     |   WHERE (uaccount.pguser = CURRENT_USER))) | 
- regress_rls_schema | part_document | pp1r       | RESTRICTIVE | {regress_rls_dave} | ALL | (cid < 55)                                 | 
+SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename like '%hyper_document%' ORDER BY policyname;
+     schemaname     |   tablename    | policyname | permissive  |       roles        | cmd |                    qual                    | with_check 
+--------------------+----------------+------------+-------------+--------------------+-----+--------------------------------------------+------------
+ regress_rls_schema | hyper_document | pp1        | PERMISSIVE  | {public}           | ALL | (dlevel <= ( SELECT uaccount.seclv        +| 
+                    |                |            |             |                    |     |    FROM uaccount                          +| 
+                    |                |            |             |                    |     |   WHERE (uaccount.pguser = CURRENT_USER))) | 
+ regress_rls_schema | hyper_document | pp1r       | RESTRICTIVE | {regress_rls_dave} | ALL | (cid < 55)                                 | 
 (2 rows)
 
 -- viewpoint from regress_rls_bob
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
+NOTICE:  f_leak => my first satire
 NOTICE:  f_leak => great science fiction
 NOTICE:  f_leak => awesome science fiction
-NOTICE:  f_leak => my first satire
  did | cid | dlevel |      dauthor      |         dtitle          
 -----+-----+--------+-------------------+-------------------------
    1 |  11 |      1 | regress_rls_bob   | my first novel
@@ -987,33 +1071,42 @@ NOTICE:  f_leak => my first satire
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
-                     QUERY PLAN                      
------------------------------------------------------
- Append
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: hyper_document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Seq Scan on part_document_fiction
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_satire
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_nonfiction
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(10 rows)
+   ->  Append
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_13_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_14_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
 NOTICE:  f_leak => my second novel
-NOTICE:  f_leak => great science fiction
-NOTICE:  f_leak => awesome science fiction
-NOTICE:  f_leak => my first satire
-NOTICE:  f_leak => great satire
 NOTICE:  f_leak => my science textbook
+NOTICE:  f_leak => my first satire
 NOTICE:  f_leak => my history book
+NOTICE:  f_leak => great science fiction
 NOTICE:  f_leak => great technology book
+NOTICE:  f_leak => great satire
+NOTICE:  f_leak => awesome science fiction
 NOTICE:  f_leak => awesome technology book
  did | cid | dlevel |      dauthor      |         dtitle          
 -----+-----+--------+-------------------+-------------------------
@@ -1029,24 +1122,33 @@ NOTICE:  f_leak => awesome technology book
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
 (10 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
-                     QUERY PLAN                      
------------------------------------------------------
- Append
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: hyper_document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Seq Scan on part_document_fiction
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_satire
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_nonfiction
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(10 rows)
+   ->  Append
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_13_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_14_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
 NOTICE:  f_leak => my second novel
 NOTICE:  f_leak => great science fiction
@@ -1059,31 +1161,44 @@ NOTICE:  f_leak => awesome science fiction
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
-                             QUERY PLAN                             
---------------------------------------------------------------------
- Append
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: hyper_document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Seq Scan on part_document_fiction
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-(6 rows)
+   ->  Append
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_13_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_14_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
 
 -- pp1 ERROR
-INSERT INTO part_document VALUES (100, 11, 5, 'regress_rls_dave', 'testing pp1'); -- fail
-ERROR:  new row violates row-level security policy for table "part_document"
+INSERT INTO hyper_document VALUES (1, 11, 5, 'regress_rls_dave', 'testing pp1'); -- fail
+ERROR:  new row violates row-level security policy for table "hyper_document"
 -- pp1r ERROR
-INSERT INTO part_document VALUES (100, 99, 1, 'regress_rls_dave', 'testing pp1r'); -- fail
-ERROR:  new row violates row-level security policy "pp1r" for table "part_document"
+INSERT INTO hyper_document VALUES (1, 99, 1, 'regress_rls_dave', 'testing pp1r'); -- fail
+ERROR:  new row violates row-level security policy "pp1r" for table "hyper_document"
 -- Show that RLS policy does not apply for direct inserts to children
 -- This should fail with RLS POLICY pp1r violation.
-INSERT INTO part_document VALUES (100, 55, 1, 'regress_rls_dave', 'testing RLS with partitions'); -- fail
-ERROR:  new row violates row-level security policy "pp1r" for table "part_document"
+INSERT INTO hyper_document VALUES (1, 55, 1, 'regress_rls_dave', 'testing RLS with hypertables'); -- fail
+ERROR:  new row violates row-level security policy "pp1r" for table "hyper_document"
 -- But this should succeed.
-INSERT INTO part_document_satire VALUES (100, 55, 1, 'regress_rls_dave', 'testing RLS with partitions'); -- success
+INSERT INTO _timescaledb_internal._hyper_2_9_chunk VALUES (1, 55, 1, 'regress_rls_dave', 'testing RLS with hypertables'); -- success
 -- We still cannot see the row using the parent
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
 NOTICE:  f_leak => my second novel
 NOTICE:  f_leak => great science fiction
@@ -1097,35 +1212,33 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 -- But we can if we look directly
-SELECT * FROM part_document_satire WHERE f_leak(dtitle) ORDER BY did;
-NOTICE:  f_leak => my first satire
-NOTICE:  f_leak => great satire
-NOTICE:  f_leak => testing RLS with partitions
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
-   4 |  55 |      1 | regress_rls_bob   | my first satire
-   8 |  55 |      2 | regress_rls_carol | great satire
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
-(3 rows)
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk WHERE f_leak(dtitle) ORDER BY did;
+NOTICE:  f_leak => my first novel
+NOTICE:  f_leak => testing RLS with hypertables
+ did | cid | dlevel |     dauthor      |            dtitle            
+-----+-----+--------+------------------+------------------------------
+   1 |  11 |      1 | regress_rls_bob  | my first novel
+   1 |  55 |      1 | regress_rls_dave | testing RLS with hypertables
+(2 rows)
 
 -- Turn on RLS and create policy on child to show RLS is checked before constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
-ALTER TABLE part_document_satire ENABLE ROW LEVEL SECURITY;
-CREATE POLICY pp3 ON part_document_satire AS RESTRICTIVE
+ALTER TABLE _timescaledb_internal._hyper_2_9_chunk ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pp3 ON _timescaledb_internal._hyper_2_9_chunk AS RESTRICTIVE
     USING (cid < 55);
 -- This should fail with RLS violation now.
 SET SESSION AUTHORIZATION regress_rls_dave;
-INSERT INTO part_document_satire VALUES (101, 55, 1, 'regress_rls_dave', 'testing RLS with partitions'); -- fail
-ERROR:  new row violates row-level security policy for table "part_document_satire"
+INSERT INTO _timescaledb_internal._hyper_2_9_chunk VALUES (1, 55, 1, 'regress_rls_dave', 'testing RLS with hypertables - round 2'); -- fail
+ERROR:  new row violates row-level security policy for table "_hyper_2_9_chunk"
 -- And now we cannot see directly into the partition either, due to RLS
-SELECT * FROM part_document_satire WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk WHERE f_leak(dtitle) ORDER BY did;
  did | cid | dlevel | dauthor | dtitle 
 -----+-----+--------+---------+--------
 (0 rows)
 
 -- The parent looks same as before
 -- viewpoint from regress_rls_dave
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
 NOTICE:  f_leak => my second novel
 NOTICE:  f_leak => great science fiction
@@ -1138,34 +1251,48 @@ NOTICE:  f_leak => awesome science fiction
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
-                             QUERY PLAN                             
---------------------------------------------------------------------
- Append
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: hyper_document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Seq Scan on part_document_fiction
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
-(6 rows)
+   ->  Append
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_13_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_14_chunk
+               Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
+NOTICE:  f_leak => testing RLS with hypertables
 NOTICE:  f_leak => my second novel
-NOTICE:  f_leak => great science fiction
-NOTICE:  f_leak => awesome science fiction
-NOTICE:  f_leak => my first satire
-NOTICE:  f_leak => great satire
-NOTICE:  f_leak => testing RLS with partitions
 NOTICE:  f_leak => my science textbook
+NOTICE:  f_leak => my first satire
 NOTICE:  f_leak => my history book
+NOTICE:  f_leak => great science fiction
 NOTICE:  f_leak => great technology book
+NOTICE:  f_leak => great satire
+NOTICE:  f_leak => awesome science fiction
 NOTICE:  f_leak => awesome technology book
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
+ did | cid | dlevel |      dauthor      |            dtitle            
+-----+-----+--------+-------------------+------------------------------
    1 |  11 |      1 | regress_rls_bob   | my first novel
+   1 |  55 |      1 | regress_rls_dave  | testing RLS with hypertables
    2 |  11 |      2 | regress_rls_bob   | my second novel
    3 |  99 |      2 | regress_rls_bob   | my science textbook
    4 |  55 |      1 | regress_rls_bob   | my first satire
@@ -1175,38 +1302,46 @@ NOTICE:  f_leak => awesome technology book
    8 |  55 |      2 | regress_rls_carol | great satire
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
 (11 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
-                     QUERY PLAN                      
------------------------------------------------------
- Append
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: hyper_document
+   Chunks left after exclusion: 6
    InitPlan 1 (returns $0)
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
-   ->  Seq Scan on part_document_fiction
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_satire
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_nonfiction
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
-(10 rows)
+   ->  Append
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_13_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_14_chunk
+               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+(19 rows)
 
 -- only owner can change policies
-ALTER POLICY pp1 ON part_document USING (true);    --fail
-ERROR:  must be owner of relation part_document
-DROP POLICY pp1 ON part_document;                  --fail
-ERROR:  must be owner of relation part_document
+ALTER POLICY pp1 ON hyper_document USING (true);    --fail
+ERROR:  must be owner of relation hyper_document
+DROP POLICY pp1 ON hyper_document;                  --fail
+ERROR:  must be owner of relation hyper_document
 SET SESSION AUTHORIZATION regress_rls_alice;
-ALTER POLICY pp1 ON part_document USING (dauthor = current_user);
+ALTER POLICY pp1 ON hyper_document USING (dauthor = current_user);
 -- viewpoint from regress_rls_bob again
 SET SESSION AUTHORIZATION regress_rls_bob;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => my first novel
 NOTICE:  f_leak => my second novel
-NOTICE:  f_leak => my first satire
 NOTICE:  f_leak => my science textbook
+NOTICE:  f_leak => my first satire
 NOTICE:  f_leak => my history book
  did | cid | dlevel |     dauthor     |       dtitle        
 -----+-----+--------+-----------------+---------------------
@@ -1219,10 +1354,10 @@ NOTICE:  f_leak => my history book
 
 -- viewpoint from rls_regres_carol again
 SET SESSION AUTHORIZATION regress_rls_carol;
-SELECT * FROM part_document WHERE f_leak(dtitle) ORDER BY did;
+SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
 NOTICE:  f_leak => great science fiction
-NOTICE:  f_leak => great satire
 NOTICE:  f_leak => great technology book
+NOTICE:  f_leak => great satire
  did | cid | dlevel |      dauthor      |        dtitle         
 -----+-----+--------+-------------------+-----------------------
    6 |  11 |      1 | regress_rls_carol | great science fiction
@@ -1230,25 +1365,35 @@ NOTICE:  f_leak => great technology book
    8 |  55 |      2 | regress_rls_carol | great satire
 (3 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM part_document WHERE f_leak(dtitle);
-                          QUERY PLAN                           
----------------------------------------------------------------
- Append
-   ->  Seq Scan on part_document_fiction
-         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_satire
-         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-   ->  Seq Scan on part_document_nonfiction
-         Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-(7 rows)
+EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: hyper_document
+   Chunks left after exclusion: 6
+   ->  Append
+         ->  Seq Scan on _hyper_2_9_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_10_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_11_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_12_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_13_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+         ->  Seq Scan on _hyper_2_14_chunk
+               Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+(16 rows)
 
 -- database superuser does bypass RLS policy when enabled
 RESET SESSION AUTHORIZATION;
 SET row_security TO ON;
-SELECT * FROM part_document ORDER BY did;
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
+SELECT * FROM hyper_document ORDER BY did;
+ did | cid | dlevel |      dauthor      |            dtitle            
+-----+-----+--------+-------------------+------------------------------
    1 |  11 |      1 | regress_rls_bob   | my first novel
+   1 |  55 |      1 | regress_rls_dave  | testing RLS with hypertables
    2 |  11 |      2 | regress_rls_bob   | my second novel
    3 |  99 |      2 | regress_rls_bob   | my science textbook
    4 |  55 |      1 | regress_rls_bob   | my first satire
@@ -1258,24 +1403,23 @@ SELECT * FROM part_document ORDER BY did;
    8 |  55 |      2 | regress_rls_carol | great satire
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
 (11 rows)
 
-SELECT * FROM part_document_satire ORDER by did;
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
-   4 |  55 |      1 | regress_rls_bob   | my first satire
-   8 |  55 |      2 | regress_rls_carol | great satire
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
-(3 rows)
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
+ did | cid | dlevel |     dauthor      |            dtitle            
+-----+-----+--------+------------------+------------------------------
+   1 |  11 |      1 | regress_rls_bob  | my first novel
+   1 |  55 |      1 | regress_rls_dave | testing RLS with hypertables
+(2 rows)
 
 -- database non-superuser with bypass privilege can bypass RLS policy when disabled
 SET SESSION AUTHORIZATION regress_rls_exempt_user;
 SET row_security TO OFF;
-SELECT * FROM part_document ORDER BY did;
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
+SELECT * FROM hyper_document ORDER BY did;
+ did | cid | dlevel |      dauthor      |            dtitle            
+-----+-----+--------+-------------------+------------------------------
    1 |  11 |      1 | regress_rls_bob   | my first novel
+   1 |  55 |      1 | regress_rls_dave  | testing RLS with hypertables
    2 |  11 |      2 | regress_rls_bob   | my second novel
    3 |  99 |      2 | regress_rls_bob   | my science textbook
    4 |  55 |      1 | regress_rls_bob   | my first satire
@@ -1285,24 +1429,23 @@ SELECT * FROM part_document ORDER BY did;
    8 |  55 |      2 | regress_rls_carol | great satire
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
 (11 rows)
 
-SELECT * FROM part_document_satire ORDER by did;
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
-   4 |  55 |      1 | regress_rls_bob   | my first satire
-   8 |  55 |      2 | regress_rls_carol | great satire
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
-(3 rows)
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
+ did | cid | dlevel |     dauthor      |            dtitle            
+-----+-----+--------+------------------+------------------------------
+   1 |  11 |      1 | regress_rls_bob  | my first novel
+   1 |  55 |      1 | regress_rls_dave | testing RLS with hypertables
+(2 rows)
 
 -- RLS policy does not apply to table owner when RLS enabled.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security TO ON;
-SELECT * FROM part_document ORDER by did;
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
+SELECT * FROM hyper_document ORDER by did;
+ did | cid | dlevel |      dauthor      |            dtitle            
+-----+-----+--------+-------------------+------------------------------
    1 |  11 |      1 | regress_rls_bob   | my first novel
+   1 |  55 |      1 | regress_rls_dave  | testing RLS with hypertables
    2 |  11 |      2 | regress_rls_bob   | my second novel
    3 |  99 |      2 | regress_rls_bob   | my science textbook
    4 |  55 |      1 | regress_rls_bob   | my first satire
@@ -1312,37 +1455,51 @@ SELECT * FROM part_document ORDER by did;
    8 |  55 |      2 | regress_rls_carol | great satire
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
 (11 rows)
 
-SELECT * FROM part_document_satire ORDER by did;
- did | cid | dlevel |      dauthor      |           dtitle            
------+-----+--------+-------------------+-----------------------------
-   4 |  55 |      1 | regress_rls_bob   | my first satire
-   8 |  55 |      2 | regress_rls_carol | great satire
- 100 |  55 |      1 | regress_rls_dave  | testing RLS with partitions
-(3 rows)
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
+ did | cid | dlevel |     dauthor      |            dtitle            
+-----+-----+--------+------------------+------------------------------
+   1 |  11 |      1 | regress_rls_bob  | my first novel
+   1 |  55 |      1 | regress_rls_dave | testing RLS with hypertables
+(2 rows)
 
 -- When RLS disabled, other users get ERROR.
 SET SESSION AUTHORIZATION regress_rls_dave;
 SET row_security TO OFF;
-SELECT * FROM part_document ORDER by did;
-ERROR:  query would be affected by row-level security policy for table "part_document"
-SELECT * FROM part_document_satire ORDER by did;
-ERROR:  query would be affected by row-level security policy for table "part_document_satire"
+SELECT * FROM hyper_document ORDER by did;
+ERROR:  query would be affected by row-level security policy for table "hyper_document"
+SELECT * FROM _timescaledb_internal._hyper_2_9_chunk ORDER by did;
+ERROR:  query would be affected by row-level security policy for table "_hyper_2_9_chunk"
 -- Check behavior with a policy that uses a SubPlan not an InitPlan.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security TO ON;
-CREATE POLICY pp3 ON part_document AS RESTRICTIVE
+CREATE POLICY pp3 ON hyper_document AS RESTRICTIVE
     USING ((SELECT dlevel <= seclv FROM uaccount WHERE pguser = current_user));
 SET SESSION AUTHORIZATION regress_rls_carol;
-INSERT INTO part_document VALUES (100, 11, 5, 'regress_rls_carol', 'testing pp3'); -- fail
-ERROR:  new row violates row-level security policy "pp3" for table "part_document"
+INSERT INTO hyper_document VALUES (100, 11, 5, 'regress_rls_carol', 'testing pp3'); -- fail
+ERROR:  new row violates row-level security policy "pp3" for table "hyper_document"
 ----- Dependencies -----
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security TO ON;
 CREATE TABLE dependee (x integer, y integer);
+SELECT public.create_hypertable('dependee', 'x', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "x"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE TABLE dependent (x integer, y integer);
+SELECT public.create_hypertable('dependent', 'x', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "x"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY d1 ON dependent FOR ALL
     TO PUBLIC
     USING (x = (SELECT d.x FROM dependee d WHERE d.y = y));
@@ -1353,10 +1510,11 @@ HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP TABLE dependee CASCADE;
 NOTICE:  drop cascades to policy d1 on table dependent
 EXPLAIN (COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
-      QUERY PLAN       
------------------------
- Seq Scan on dependent
-(1 row)
+         QUERY PLAN          
+-----------------------------
+ Append
+   ->  Seq Scan on dependent
+(2 rows)
 
 -----   RECURSION    ----
 --
@@ -1364,6 +1522,14 @@ EXPLAIN (COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualifie
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE rec1 (x integer, y integer);
+SELECT public.create_hypertable('rec1', 'x', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "x"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY r1 ON rec1 USING (x = (SELECT r.x FROM rec1 r WHERE y = r.y));
 ALTER TABLE rec1 ENABLE ROW LEVEL SECURITY;
 SET SESSION AUTHORIZATION regress_rls_bob;
@@ -1374,6 +1540,8 @@ ERROR:  infinite recursion detected in policy for relation "rec1"
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE rec2 (a integer, b integer);
+SELECT public.create_hypertable('rec2', 'x', chunk_time_interval=>2);
+ERROR:  column "x" does not exist
 ALTER POLICY r1 ON rec1 USING (x = (SELECT a FROM rec2 WHERE b = y));
 CREATE POLICY r2 ON rec2 USING (a = (SELECT x FROM rec1 WHERE y = b));
 ALTER TABLE rec2 ENABLE ROW LEVEL SECURITY;
@@ -1413,8 +1581,24 @@ ERROR:  infinite recursion detected in policy for relation "rec1"
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE s1 (a int, b text);
+SELECT public.create_hypertable('s1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO s1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
 CREATE TABLE s2 (x int, y text);
+SELECT public.create_hypertable('s2', 'x', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "x"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO s2 (SELECT x, md5(x::text) FROM generate_series(-6,6) x);
 GRANT SELECT ON s1, s2 TO regress_rls_bob;
 CREATE POLICY p1 ON s1 USING (a in (select x from s2 where y like '%2f%'));
@@ -1442,14 +1626,29 @@ NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
-                        QUERY PLAN                         
------------------------------------------------------------
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Seq Scan on s1
    Filter: ((hashed SubPlan 1) AND f_leak(b))
    SubPlan 1
-     ->  Seq Scan on s2
-           Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-(5 rows)
+     ->  Append
+           ->  Seq Scan on s2
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_27_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_28_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_29_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_30_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_31_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_32_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+           ->  Seq Scan on _hyper_7_33_chunk
+                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+(20 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p1 ON s1 USING (a in (select x from v2)); -- using VIEW in RLS policy
@@ -1464,14 +1663,53 @@ NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
-                        QUERY PLAN                         
------------------------------------------------------------
- Seq Scan on s1
-   Filter: ((hashed SubPlan 1) AND f_leak(b))
-   SubPlan 1
-     ->  Seq Scan on s2
-           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-(5 rows)
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: s1
+   Chunks left after exclusion: 11
+   ->  Append
+         ->  Seq Scan on _hyper_6_16_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+               SubPlan 1
+                 ->  Append
+                       ->  Seq Scan on s2
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_27_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_28_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_29_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_30_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_31_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_32_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_7_33_chunk
+                             Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+         ->  Seq Scan on _hyper_6_17_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_18_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_19_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_20_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_21_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_22_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_23_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_24_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_25_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_6_26_chunk
+               Filter: ((hashed SubPlan 1) AND f_leak(b))
+(44 rows)
 
 SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
  xx | x  |                y                 
@@ -1482,18 +1720,73 @@ SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
 (3 rows)
 
 EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Seq Scan on s2
-   Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Result
+   ->  Append
+         ->  Seq Scan on s2
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_27_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_28_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_29_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_30_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_31_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_32_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
+         ->  Seq Scan on _hyper_7_33_chunk
+               Filter: (((x % 2) = 0) AND (y ~~ '%28%'::text))
    SubPlan 2
      ->  Limit
-           ->  Seq Scan on s1
-                 Filter: (hashed SubPlan 1)
-                 SubPlan 1
-                   ->  Seq Scan on s2 s2_1
-                         Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
-(9 rows)
+           ->  Result
+                 ->  Append
+                       ->  Seq Scan on s1
+                             Filter: (hashed SubPlan 1)
+                             SubPlan 1
+                               ->  Append
+                                     ->  Seq Scan on s2 s2_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_27_chunk _hyper_7_27_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_28_chunk _hyper_7_28_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_29_chunk _hyper_7_29_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_30_chunk _hyper_7_30_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_31_chunk _hyper_7_31_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_32_chunk _hyper_7_32_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                                     ->  Seq Scan on _hyper_7_33_chunk _hyper_7_33_chunk_1
+                                           Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
+                       ->  Seq Scan on _hyper_6_16_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_17_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_18_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_19_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_20_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_21_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_22_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_23_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_24_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_25_chunk
+                             Filter: (hashed SubPlan 1)
+                       ->  Seq Scan on _hyper_6_26_chunk
+                             Filter: (hashed SubPlan 1)
+(64 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p2 ON s2 USING (x in (select a from s1 where b like '%d2%'));
@@ -1924,6 +2217,14 @@ NOTICE:  f_leak => yyyyyy
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE b1 (a int, b text);
+SELECT public.create_hypertable('b1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO b1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
 CREATE POLICY p1 ON b1 USING (a % 2 = 0);
 ALTER TABLE b1 ENABLE ROW LEVEL SECURITY;
@@ -1933,26 +2234,57 @@ CREATE VIEW bv1 WITH (security_barrier) AS SELECT * FROM b1 WHERE a > 0 WITH CHE
 GRANT ALL ON bv1 TO regress_rls_carol;
 SET SESSION AUTHORIZATION regress_rls_carol;
 EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
-                 QUERY PLAN                  
----------------------------------------------
+                            QUERY PLAN                             
+-------------------------------------------------------------------
  Subquery Scan on bv1
    Filter: f_leak(bv1.b)
-   ->  Seq Scan on b1
-         Filter: ((a > 0) AND ((a % 2) = 0))
-(4 rows)
+   ->  Append
+         ->  Seq Scan on b1
+               Filter: ((a > 0) AND ((a % 2) = 0))
+         ->  Bitmap Heap Scan on _hyper_8_43_chunk
+               Recheck Cond: (a > 0)
+               Filter: ((a % 2) = 0)
+               ->  Bitmap Index Scan on _hyper_8_43_chunk_b1_a_idx
+                     Index Cond: (a > 0)
+         ->  Bitmap Heap Scan on _hyper_8_42_chunk
+               Recheck Cond: (a > 0)
+               Filter: ((a % 2) = 0)
+               ->  Bitmap Index Scan on _hyper_8_42_chunk_b1_a_idx
+                     Index Cond: (a > 0)
+         ->  Bitmap Heap Scan on _hyper_8_39_chunk
+               Recheck Cond: (a > 0)
+               Filter: ((a % 2) = 0)
+               ->  Bitmap Index Scan on _hyper_8_39_chunk_b1_a_idx
+                     Index Cond: (a > 0)
+         ->  Bitmap Heap Scan on _hyper_8_40_chunk
+               Recheck Cond: (a > 0)
+               Filter: ((a % 2) = 0)
+               ->  Bitmap Index Scan on _hyper_8_40_chunk_b1_a_idx
+                     Index Cond: (a > 0)
+         ->  Bitmap Heap Scan on _hyper_8_41_chunk
+               Recheck Cond: (a > 0)
+               Filter: ((a % 2) = 0)
+               ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
+                     Index Cond: (a > 0)
+         ->  Bitmap Heap Scan on _hyper_8_44_chunk
+               Recheck Cond: (a > 0)
+               Filter: ((a % 2) = 0)
+               ->  Bitmap Index Scan on _hyper_8_44_chunk_b1_a_idx
+                     Index Cond: (a > 0)
+(35 rows)
 
 SELECT * FROM bv1 WHERE f_leak(b);
+NOTICE:  f_leak => c9f0f895fb98ab9159f51fd0297e236d
+NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
 NOTICE:  f_leak => c81e728d9d4c2f636f067f89cc14862c
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
-NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
-NOTICE:  f_leak => c9f0f895fb98ab9159f51fd0297e236d
 NOTICE:  f_leak => d3d9446802a44259755d38e6d163e820
  a  |                b                 
 ----+----------------------------------
+  8 | c9f0f895fb98ab9159f51fd0297e236d
+  6 | 1679091c5a880faf6fb5e6087eb1b2dc
   2 | c81e728d9d4c2f636f067f89cc14862c
   4 | a87ff679a2f3e71d9181a67b7542122c
-  6 | 1679091c5a880faf6fb5e6087eb1b2dc
-  8 | c9f0f895fb98ab9159f51fd0297e236d
  10 | d3d9446802a44259755d38e6d163e820
 (5 rows)
 
@@ -1965,9 +2297,16 @@ EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Update on b1
+   Update on b1
+   Update on _hyper_8_41_chunk
    ->  Seq Scan on b1
          Filter: ((a > 0) AND (a = 4) AND ((a % 2) = 0) AND f_leak(b))
-(3 rows)
+   ->  Bitmap Heap Scan on _hyper_8_41_chunk
+         Recheck Cond: ((a > 0) AND (a = 4))
+         Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
+               Index Cond: ((a > 0) AND (a = 4))
+(10 rows)
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
@@ -1975,9 +2314,16 @@ EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Delete on b1
+   Delete on b1
+   Delete on _hyper_8_42_chunk
    ->  Seq Scan on b1
          Filter: ((a > 0) AND (a = 6) AND ((a % 2) = 0) AND f_leak(b))
-(3 rows)
+   ->  Bitmap Heap Scan on _hyper_8_42_chunk
+         Recheck Cond: ((a > 0) AND (a = 6))
+         Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Bitmap Index Scan on _hyper_8_42_chunk_b1_a_idx
+               Index Cond: ((a > 0) AND (a = 6))
+(10 rows)
 
 DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
 NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
@@ -2000,12 +2346,12 @@ SELECT * FROM b1;
    2 | c81e728d9d4c2f636f067f89cc14862c
    3 | eccbc87e4b5ce2fe28308fd9f2a7baf3
    5 | e4da3b7fbbce2345d7772b0674a318d5
+   4 | yyy
    7 | 8f14e45fceea167a5a36dedd4bea2543
    8 | c9f0f895fb98ab9159f51fd0297e236d
    9 | 45c48cce2e2d7fbdea1afc51c7c6ad26
   10 | d3d9446802a44259755d38e6d163e820
   12 | xxx
-   4 | yyy
 (21 rows)
 
 --
@@ -2146,7 +2492,23 @@ ERROR:  new row violates row-level security policy for table "document"
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE z1 (a int, b text);
+SELECT public.create_hypertable('z1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE TABLE z2 (a int, b text);
+SELECT public.create_hypertable('z2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 GRANT SELECT ON z1,z2 TO regress_rls_group1, regress_rls_group2,
     regress_rls_bob, regress_rls_carol;
 INSERT INTO z1 VALUES
@@ -2168,45 +2530,79 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
 
 PREPARE plancache_test AS SELECT * FROM z1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
 
 PREPARE plancache_test2 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                   QUERY PLAN                    
--------------------------------------------------
+                         QUERY PLAN                          
+-------------------------------------------------------------
  Nested Loop
    CTE q
-     ->  Seq Scan on z1
-           Filter: (((a % 2) = 0) AND f_leak(b))
+     ->  Custom Scan (ConstraintAwareAppend)
+           Hypertable: z1
+           Chunks left after exclusion: 3
+           ->  Append
+                 ->  Seq Scan on _hyper_9_49_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_50_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_51_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
    ->  CTE Scan on q
    ->  Materialize
-         ->  Seq Scan on z2
-(7 rows)
+         ->  Append
+               ->  Seq Scan on z2
+(16 rows)
 
 PREPARE plancache_test3 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                     QUERY PLAN                      
------------------------------------------------------
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Append
+           ->  Seq Scan on z2
    ->  CTE Scan on q
    ->  Materialize
-         ->  Seq Scan on z1
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(7 rows)
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: z1
+               Chunks left after exclusion: 3
+               ->  Append
+                     ->  Seq Scan on _hyper_9_49_chunk
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_50_chunk
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_51_chunk
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+(16 rows)
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2219,42 +2615,76 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                   QUERY PLAN                    
--------------------------------------------------
- Nested Loop
-   CTE q
-     ->  Seq Scan on z1
-           Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
-(7 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                      QUERY PLAN                      
 -----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+                         QUERY PLAN                          
+-------------------------------------------------------------
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Custom Scan (ConstraintAwareAppend)
+           Hypertable: z1
+           Chunks left after exclusion: 3
+           ->  Append
+                 ->  Seq Scan on _hyper_9_49_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_50_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_51_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
    ->  CTE Scan on q
    ->  Materialize
-         ->  Seq Scan on z1
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(7 rows)
+         ->  Append
+               ->  Seq Scan on z2
+(16 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Append
+           ->  Seq Scan on z2
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: z1
+               Chunks left after exclusion: 3
+               ->  Append
+                     ->  Seq Scan on _hyper_9_49_chunk
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_50_chunk
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_51_chunk
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+(16 rows)
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2267,42 +2697,76 @@ NOTICE:  f_leak => ccc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 1) AND f_leak(b))
-(2 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 1) AND f_leak(b))
-(2 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                   QUERY PLAN                    
--------------------------------------------------
- Nested Loop
-   CTE q
-     ->  Seq Scan on z1
-           Filter: (((a % 2) = 1) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
-(7 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                      QUERY PLAN                      
 -----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+(10 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+(10 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+                         QUERY PLAN                          
+-------------------------------------------------------------
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Custom Scan (ConstraintAwareAppend)
+           Hypertable: z1
+           Chunks left after exclusion: 3
+           ->  Append
+                 ->  Seq Scan on _hyper_9_49_chunk
+                       Filter: (((a % 2) = 1) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_50_chunk
+                       Filter: (((a % 2) = 1) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_51_chunk
+                       Filter: (((a % 2) = 1) AND f_leak(b))
    ->  CTE Scan on q
    ->  Materialize
-         ->  Seq Scan on z1
-               Filter: (((a % 2) = 1) AND f_leak(b))
-(7 rows)
+         ->  Append
+               ->  Seq Scan on z2
+(16 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Append
+           ->  Seq Scan on z2
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: z1
+               Chunks left after exclusion: 3
+               ->  Append
+                     ->  Seq Scan on _hyper_9_49_chunk
+                           Filter: (((a % 2) = 1) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_50_chunk
+                           Filter: (((a % 2) = 1) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_51_chunk
+                           Filter: (((a % 2) = 1) AND f_leak(b))
+(16 rows)
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2315,42 +2779,76 @@ NOTICE:  f_leak => ccc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 1) AND f_leak(b))
-(2 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 1) AND f_leak(b))
-(2 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-                   QUERY PLAN                    
--------------------------------------------------
- Nested Loop
-   CTE q
-     ->  Seq Scan on z1
-           Filter: (((a % 2) = 1) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
-(7 rows)
-
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                      QUERY PLAN                      
 -----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+(10 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 1) AND f_leak(b))
+(10 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+                         QUERY PLAN                          
+-------------------------------------------------------------
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Custom Scan (ConstraintAwareAppend)
+           Hypertable: z1
+           Chunks left after exclusion: 3
+           ->  Append
+                 ->  Seq Scan on _hyper_9_49_chunk
+                       Filter: (((a % 2) = 1) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_50_chunk
+                       Filter: (((a % 2) = 1) AND f_leak(b))
+                 ->  Seq Scan on _hyper_9_51_chunk
+                       Filter: (((a % 2) = 1) AND f_leak(b))
    ->  CTE Scan on q
    ->  Materialize
-         ->  Seq Scan on z1
-               Filter: (((a % 2) = 1) AND f_leak(b))
-(7 rows)
+         ->  Append
+               ->  Seq Scan on z2
+(16 rows)
+
+EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Nested Loop
+   CTE q
+     ->  Append
+           ->  Seq Scan on z2
+   ->  CTE Scan on q
+   ->  Materialize
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: z1
+               Chunks left after exclusion: 3
+               ->  Append
+                     ->  Seq Scan on _hyper_9_49_chunk
+                           Filter: (((a % 2) = 1) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_50_chunk
+                           Filter: (((a % 2) = 1) AND f_leak(b))
+                     ->  Seq Scan on _hyper_9_51_chunk
+                           Filter: (((a % 2) = 1) AND f_leak(b))
+(16 rows)
 
 --
 -- Views should follow policy for view owner.
@@ -2375,11 +2873,19 @@ NOTICE:  f_leak => dad
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-     QUERY PLAN      
----------------------
- Seq Scan on z1
-   Filter: f_leak(b)
-(2 rows)
+                QUERY PLAN                 
+-------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: f_leak(b)
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: f_leak(b)
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: f_leak(b)
+(10 rows)
 
 -- Query as view/table owner.  Should return all records.
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -2397,11 +2903,19 @@ NOTICE:  f_leak => dad
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-     QUERY PLAN      
----------------------
- Seq Scan on z1
-   Filter: f_leak(b)
-(2 rows)
+                QUERY PLAN                 
+-------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: f_leak(b)
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: f_leak(b)
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: f_leak(b)
+(10 rows)
 
 DROP VIEW rls_view;
 -- View and Table owners are different.
@@ -2421,11 +2935,19 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
 
 -- Query as role that is not owner of table but is owner of view.
 -- Should return records based on view owner policies.
@@ -2440,11 +2962,19 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
 
 -- Query as role that is not the owner of the table or view without permissions.
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -2465,11 +2995,19 @@ NOTICE:  f_leak => dad
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
-               QUERY PLAN                
------------------------------------------
- Seq Scan on z1
-   Filter: (((a % 2) = 0) AND f_leak(b))
-(2 rows)
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: z1
+   Chunks left after exclusion: 3
+   ->  Append
+         ->  Seq Scan on _hyper_9_49_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk
+               Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 DROP VIEW rls_view;
@@ -2478,6 +3016,14 @@ DROP VIEW rls_view;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE x1 (a int, b text, c text);
+SELECT public.create_hypertable('x1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 GRANT ALL ON x1 TO PUBLIC;
 INSERT INTO x1 VALUES
     (1, 'abc', 'regress_rls_bob'),
@@ -2532,9 +3078,9 @@ NOTICE:  f_leak => fgh
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM x1 WHERE f_leak(b) ORDER BY a ASC;
 NOTICE:  f_leak => cde
-NOTICE:  f_leak => fgh
 NOTICE:  f_leak => bcd_updt
 NOTICE:  f_leak => def_updt
+NOTICE:  f_leak => fgh
 NOTICE:  f_leak => fgh_updt
 NOTICE:  f_leak => fgh_updt
  a |    b     |         c         
@@ -2549,34 +3095,34 @@ NOTICE:  f_leak => fgh_updt
 
 UPDATE x1 SET b = b || '_updt' WHERE f_leak(b) RETURNING *;
 NOTICE:  f_leak => cde
-NOTICE:  f_leak => fgh
 NOTICE:  f_leak => bcd_updt
 NOTICE:  f_leak => def_updt
+NOTICE:  f_leak => fgh
 NOTICE:  f_leak => fgh_updt
 NOTICE:  f_leak => fgh_updt
  a |       b       |         c         
 ---+---------------+-------------------
  3 | cde_updt      | regress_rls_carol
- 7 | fgh_updt      | regress_rls_carol
  2 | bcd_updt_updt | regress_rls_bob
  4 | def_updt_updt | regress_rls_carol
+ 7 | fgh_updt      | regress_rls_carol
  6 | fgh_updt_updt | regress_rls_bob
  8 | fgh_updt_updt | regress_rls_carol
 (6 rows)
 
 DELETE FROM x1 WHERE f_leak(b) RETURNING *;
 NOTICE:  f_leak => cde_updt
-NOTICE:  f_leak => fgh_updt
 NOTICE:  f_leak => bcd_updt_updt
 NOTICE:  f_leak => def_updt_updt
+NOTICE:  f_leak => fgh_updt
 NOTICE:  f_leak => fgh_updt_updt
 NOTICE:  f_leak => fgh_updt_updt
  a |       b       |         c         
 ---+---------------+-------------------
  3 | cde_updt      | regress_rls_carol
- 7 | fgh_updt      | regress_rls_carol
  2 | bcd_updt_updt | regress_rls_bob
  4 | def_updt_updt | regress_rls_carol
+ 7 | fgh_updt      | regress_rls_carol
  6 | fgh_updt_updt | regress_rls_bob
  8 | fgh_updt_updt | regress_rls_carol
 (6 rows)
@@ -2586,7 +3132,24 @@ NOTICE:  f_leak => fgh_updt_updt
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE y1 (a int, b text);
+SELECT public.create_hypertable('y1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
+INSERT INTO y1 VALUES(1,2);
 CREATE TABLE y2 (a int, b text);
+SELECT public.create_hypertable('y2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 GRANT ALL ON y1, y2 TO regress_rls_bob;
 CREATE POLICY p1 ON y1 FOR ALL USING (a % 2 = 0);
 CREATE POLICY p2 ON y1 FOR SELECT USING (a > 2);
@@ -2603,11 +3166,18 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-            QUERY PLAN             
------------------------------------
- Seq Scan on y1
-   Filter: (f_leak(b) AND (a = 1))
-(2 rows)
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: y1
+   Chunks left after exclusion: 1
+   ->  Append
+         ->  Bitmap Heap Scan on _hyper_12_57_chunk
+               Recheck Cond: (a = 1)
+               Filter: f_leak(b)
+               ->  Bitmap Index Scan on _hyper_12_57_chunk_y1_a_idx
+                     Index Cond: (a = 1)
+(9 rows)
 
 DROP VIEW rls_sbv;
 -- Create view as role that does not own table.  RLS should be applied.
@@ -2615,11 +3185,18 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                            QUERY PLAN                            
-------------------------------------------------------------------
- Seq Scan on y1
-   Filter: ((a = 1) AND ((a > 2) OR ((a % 2) = 0)) AND f_leak(b))
-(2 rows)
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: y1
+   Chunks left after exclusion: 1
+   ->  Append
+         ->  Bitmap Heap Scan on _hyper_12_57_chunk
+               Recheck Cond: (a = 1)
+               Filter: (((a > 2) OR ((a % 2) = 0)) AND f_leak(b))
+               ->  Bitmap Index Scan on _hyper_12_57_chunk_y1_a_idx
+                     Index Cond: (a = 1)
+(9 rows)
 
 DROP VIEW rls_sbv;
 --
@@ -2664,11 +3241,35 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 (14 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Seq Scan on y2
-   Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-(2 rows)
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: y2
+   Chunks left after exclusion: 11
+   ->  Append
+         ->  Seq Scan on _hyper_13_58_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_59_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_60_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_61_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_62_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_63_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_64_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_65_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_66_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_67_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+         ->  Seq Scan on _hyper_13_68_chunk
+               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+(26 rows)
 
 --
 -- Qual push-down of leaky functions, when not referring to table
@@ -2714,11 +3315,35 @@ NOTICE:  f_leak => abc
 (14 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
- Seq Scan on y2
-   Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
-(2 rows)
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: y2
+   Chunks left after exclusion: 11
+   ->  Append
+         ->  Seq Scan on _hyper_13_58_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_59_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_60_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_61_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_62_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_63_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_64_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_65_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_66_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_67_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+         ->  Seq Scan on _hyper_13_68_chunk
+               Filter: (f_leak('abc'::text) AND (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)))
+(26 rows)
 
 CREATE TABLE test_qual_pushdown (
     abc text
@@ -2735,13 +3360,36 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE 
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Hash Join
-   Hash Cond: (test_qual_pushdown.abc = y2.b)
-   ->  Seq Scan on test_qual_pushdown
-         Filter: f_leak(abc)
-   ->  Hash
+   Hash Cond: (y2.b = test_qual_pushdown.abc)
+   ->  Append
          ->  Seq Scan on y2
                Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
-(7 rows)
+         ->  Seq Scan on _hyper_13_58_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_59_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_60_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_61_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_62_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_63_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_64_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_65_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_66_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_67_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+         ->  Seq Scan on _hyper_13_68_chunk
+               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
+   ->  Hash
+         ->  Seq Scan on test_qual_pushdown
+               Filter: f_leak(abc)
+(30 rows)
 
 SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
 NOTICE:  f_leak => cfcd208495d565ef66e7dff9f98764da
@@ -2763,15 +3411,39 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 (0 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Hash Join
    Hash Cond: (test_qual_pushdown.abc = y2.b)
    ->  Seq Scan on test_qual_pushdown
    ->  Hash
-         ->  Seq Scan on y2
-               Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
-(6 rows)
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: y2
+               Chunks left after exclusion: 11
+               ->  Append
+                     ->  Seq Scan on _hyper_13_58_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_59_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_60_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_61_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_62_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_63_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_64_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_65_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_66_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_67_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+                     ->  Seq Scan on _hyper_13_68_chunk
+                           Filter: ((((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0)) AND f_leak(b))
+(30 rows)
 
 DROP TABLE test_qual_pushdown;
 --
@@ -2783,6 +3455,14 @@ DROP TABLE t1 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 \set VERBOSITY default
 CREATE TABLE t1 (a integer);
+SELECT public.create_hypertable('t1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 GRANT SELECT ON t1 TO regress_rls_bob, regress_rls_carol;
 CREATE POLICY p1 ON t1 TO regress_rls_bob USING ((a % 2) = 0);
 CREATE POLICY p2 ON t1 TO regress_rls_carol USING ((a % 4) = 0);
@@ -2792,31 +3472,34 @@ SET ROLE regress_rls_bob;
 PREPARE role_inval AS SELECT * FROM t1;
 -- Check plan
 EXPLAIN (COSTS OFF) EXECUTE role_inval;
-       QUERY PLAN        
--------------------------
- Seq Scan on t1
-   Filter: ((a % 2) = 0)
-(2 rows)
+          QUERY PLAN           
+-------------------------------
+ Append
+   ->  Seq Scan on t1
+         Filter: ((a % 2) = 0)
+(3 rows)
 
 -- Change to regress_rls_carol
 SET ROLE regress_rls_carol;
 -- Check plan- should be different
 EXPLAIN (COSTS OFF) EXECUTE role_inval;
-       QUERY PLAN        
--------------------------
- Seq Scan on t1
-   Filter: ((a % 4) = 0)
-(2 rows)
+          QUERY PLAN           
+-------------------------------
+ Append
+   ->  Seq Scan on t1
+         Filter: ((a % 4) = 0)
+(3 rows)
 
 -- Change back to regress_rls_bob
 SET ROLE regress_rls_bob;
 -- Check plan- should be back to original
 EXPLAIN (COSTS OFF) EXECUTE role_inval;
-       QUERY PLAN        
--------------------------
- Seq Scan on t1
-   Filter: ((a % 2) = 0)
-(2 rows)
+          QUERY PLAN           
+-------------------------------
+ Append
+   ->  Seq Scan on t1
+         Filter: ((a % 2) = 0)
+(3 rows)
 
 --
 -- CTE and RLS
@@ -2824,6 +3507,14 @@ EXPLAIN (COSTS OFF) EXECUTE role_inval;
 RESET SESSION AUTHORIZATION;
 DROP TABLE t1 CASCADE;
 CREATE TABLE t1 (a integer, b text);
+SELECT public.create_hypertable('t1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY p1 ON t1 USING (a % 2 = 0);
 ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON t1 TO regress_rls_bob;
@@ -2857,13 +3548,37 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 (11 rows)
 
 EXPLAIN (COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
-                   QUERY PLAN                    
--------------------------------------------------
+                         QUERY PLAN                          
+-------------------------------------------------------------
  CTE Scan on cte1
    CTE cte1
-     ->  Seq Scan on t1
-           Filter: (((a % 2) = 0) AND f_leak(b))
-(4 rows)
+     ->  Custom Scan (ConstraintAwareAppend)
+           Hypertable: t1
+           Chunks left after exclusion: 11
+           ->  Append
+                 ->  Seq Scan on _hyper_15_69_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_70_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_71_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_72_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_73_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_74_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_75_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_76_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_77_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_78_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+                 ->  Seq Scan on _hyper_15_79_chunk
+                       Filter: (((a % 2) = 0) AND f_leak(b))
+(28 rows)
 
 WITH cte1 AS (UPDATE t1 SET a = a + 1 RETURNING *) SELECT * FROM cte1; --fail
 ERROR:  new row violates row-level security policy for table "t1"
@@ -2921,14 +3636,47 @@ SELECT polname, relname
 --
 SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE TABLE t2 (a integer, b text);
+SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
-          QUERY PLAN           
--------------------------------
- Insert on t2
-   ->  Seq Scan on t1
-         Filter: ((a % 2) = 0)
-(3 rows)
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Custom Scan (HypertableInsert)
+   ->  Insert on t2
+         ->  Custom Scan (ChunkDispatch)
+               ->  Append
+                     ->  Seq Scan on t1
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_69_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_70_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_71_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_72_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_73_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_74_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_75_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_76_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_77_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_78_chunk
+                           Filter: ((a % 2) = 0)
+                     ->  Seq Scan on _hyper_15_79_chunk
+                           Filter: ((a % 2) = 0)
+(28 rows)
 
 SELECT * FROM t2;
  a  |                b                 
@@ -2948,12 +3696,26 @@ SELECT * FROM t2;
 (12 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM t2;
-   QUERY PLAN   
-----------------
- Seq Scan on t2
-(1 row)
+              QUERY PLAN              
+--------------------------------------
+ Append
+   ->  Seq Scan on t2
+   ->  Seq Scan on _hyper_16_80_chunk
+   ->  Seq Scan on _hyper_16_81_chunk
+   ->  Seq Scan on _hyper_16_82_chunk
+   ->  Seq Scan on _hyper_16_83_chunk
+   ->  Seq Scan on _hyper_16_84_chunk
+   ->  Seq Scan on _hyper_16_85_chunk
+   ->  Seq Scan on _hyper_16_86_chunk
+   ->  Seq Scan on _hyper_16_87_chunk
+   ->  Seq Scan on _hyper_16_88_chunk
+   ->  Seq Scan on _hyper_16_89_chunk
+   ->  Seq Scan on _hyper_16_90_chunk
+(13 rows)
 
 CREATE TABLE t3 AS SELECT * FROM t1;
+SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
+ERROR:  table "t2" is already a hypertable
 SELECT * FROM t3;
  a  |                b                 
 ----+----------------------------------
@@ -2994,7 +3756,23 @@ SELECT * FROM t4;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE blog (id integer, author text, post text);
+SELECT public.create_hypertable('blog', 'id', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "id"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE TABLE comment (blog_id integer, message text);
+SELECT public.create_hypertable('comment', 'blog_id', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "blog_id"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 GRANT ALL ON blog, comment TO regress_rls_bob;
 CREATE POLICY blog_1 ON blog USING (id % 2 = 0);
 ALTER TABLE blog ENABLE ROW LEVEL SECURITY;
@@ -3016,16 +3794,16 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT id, author, message FROM blog JOIN comment ON id = blog_id;
  id | author |   message   
 ----+--------+-------------
-  4 | alice  | insane!
   2 | bob    | who did it?
+  4 | alice  | insane!
 (2 rows)
 
 -- Check Non-RLS JOIN with RLS.
 SELECT id, author, message FROM comment JOIN blog ON id = blog_id;
  id | author |   message   
 ----+--------+-------------
-  4 | alice  | insane!
   2 | bob    | who did it?
+  4 | alice  | insane!
 (2 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -3046,7 +3824,8 @@ SELECT id, author, message FROM comment JOIN blog ON id = blog_id;
 (1 row)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
-DROP TABLE blog, comment;
+DROP TABLE blog;
+DROP TABLE comment;
 --
 -- Default Deny Policy
 --
@@ -3059,34 +3838,46 @@ SELECT * FROM t1;
  a  |                b                 
 ----+----------------------------------
   1 | c4ca4238a0b923820dcc509a6f75849b
-  3 | eccbc87e4b5ce2fe28308fd9f2a7baf3
-  5 | e4da3b7fbbce2345d7772b0674a318d5
-  7 | 8f14e45fceea167a5a36dedd4bea2543
-  9 | 45c48cce2e2d7fbdea1afc51c7c6ad26
- 11 | 6512bd43d9caa6e02c990b0a82652dca
- 13 | c51ce410c124a10e0db5e4b97fc2af39
- 15 | 9bf31c7ff062936a96d3c8bd1f8f2ff3
- 17 | 70efdf2ec9b086079795c442636b55fb
- 19 | 1f0e3dad99908345f7439f8ffabdffc4
   0 | cfcd208495d565ef66e7dff9f98764da
+  3 | eccbc87e4b5ce2fe28308fd9f2a7baf3
   2 | c81e728d9d4c2f636f067f89cc14862c
+  5 | e4da3b7fbbce2345d7772b0674a318d5
   4 | a87ff679a2f3e71d9181a67b7542122c
+  7 | 8f14e45fceea167a5a36dedd4bea2543
   6 | 1679091c5a880faf6fb5e6087eb1b2dc
+  9 | 45c48cce2e2d7fbdea1afc51c7c6ad26
   8 | c9f0f895fb98ab9159f51fd0297e236d
+ 11 | 6512bd43d9caa6e02c990b0a82652dca
  10 | d3d9446802a44259755d38e6d163e820
+ 13 | c51ce410c124a10e0db5e4b97fc2af39
  12 | c20ad4d76fe97759aa27a0c99bff6710
+ 15 | 9bf31c7ff062936a96d3c8bd1f8f2ff3
  14 | aab3238922bcc25a6f606eb525ffdc56
+ 17 | 70efdf2ec9b086079795c442636b55fb
  16 | c74d97b01eae257e44aa9d5bade97baf
+ 19 | 1f0e3dad99908345f7439f8ffabdffc4
  18 | 6f4922f45568161a8cdf4ad2299f6d23
  20 | 98f13708210194c475687be6106a3b84
  20 | Success
 (22 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM t1;
-   QUERY PLAN   
-----------------
- Seq Scan on t1
-(1 row)
+              QUERY PLAN              
+--------------------------------------
+ Append
+   ->  Seq Scan on t1
+   ->  Seq Scan on _hyper_15_69_chunk
+   ->  Seq Scan on _hyper_15_70_chunk
+   ->  Seq Scan on _hyper_15_71_chunk
+   ->  Seq Scan on _hyper_15_72_chunk
+   ->  Seq Scan on _hyper_15_73_chunk
+   ->  Seq Scan on _hyper_15_74_chunk
+   ->  Seq Scan on _hyper_15_75_chunk
+   ->  Seq Scan on _hyper_15_76_chunk
+   ->  Seq Scan on _hyper_15_77_chunk
+   ->  Seq Scan on _hyper_15_78_chunk
+   ->  Seq Scan on _hyper_15_79_chunk
+(13 rows)
 
 -- Check that default deny does not apply to table owner.
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -3094,34 +3885,46 @@ SELECT * FROM t1;
  a  |                b                 
 ----+----------------------------------
   1 | c4ca4238a0b923820dcc509a6f75849b
-  3 | eccbc87e4b5ce2fe28308fd9f2a7baf3
-  5 | e4da3b7fbbce2345d7772b0674a318d5
-  7 | 8f14e45fceea167a5a36dedd4bea2543
-  9 | 45c48cce2e2d7fbdea1afc51c7c6ad26
- 11 | 6512bd43d9caa6e02c990b0a82652dca
- 13 | c51ce410c124a10e0db5e4b97fc2af39
- 15 | 9bf31c7ff062936a96d3c8bd1f8f2ff3
- 17 | 70efdf2ec9b086079795c442636b55fb
- 19 | 1f0e3dad99908345f7439f8ffabdffc4
   0 | cfcd208495d565ef66e7dff9f98764da
+  3 | eccbc87e4b5ce2fe28308fd9f2a7baf3
   2 | c81e728d9d4c2f636f067f89cc14862c
+  5 | e4da3b7fbbce2345d7772b0674a318d5
   4 | a87ff679a2f3e71d9181a67b7542122c
+  7 | 8f14e45fceea167a5a36dedd4bea2543
   6 | 1679091c5a880faf6fb5e6087eb1b2dc
+  9 | 45c48cce2e2d7fbdea1afc51c7c6ad26
   8 | c9f0f895fb98ab9159f51fd0297e236d
+ 11 | 6512bd43d9caa6e02c990b0a82652dca
  10 | d3d9446802a44259755d38e6d163e820
+ 13 | c51ce410c124a10e0db5e4b97fc2af39
  12 | c20ad4d76fe97759aa27a0c99bff6710
+ 15 | 9bf31c7ff062936a96d3c8bd1f8f2ff3
  14 | aab3238922bcc25a6f606eb525ffdc56
+ 17 | 70efdf2ec9b086079795c442636b55fb
  16 | c74d97b01eae257e44aa9d5bade97baf
+ 19 | 1f0e3dad99908345f7439f8ffabdffc4
  18 | 6f4922f45568161a8cdf4ad2299f6d23
  20 | 98f13708210194c475687be6106a3b84
  20 | Success
 (22 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM t1;
-   QUERY PLAN   
-----------------
- Seq Scan on t1
-(1 row)
+              QUERY PLAN              
+--------------------------------------
+ Append
+   ->  Seq Scan on t1
+   ->  Seq Scan on _hyper_15_69_chunk
+   ->  Seq Scan on _hyper_15_70_chunk
+   ->  Seq Scan on _hyper_15_71_chunk
+   ->  Seq Scan on _hyper_15_72_chunk
+   ->  Seq Scan on _hyper_15_73_chunk
+   ->  Seq Scan on _hyper_15_74_chunk
+   ->  Seq Scan on _hyper_15_75_chunk
+   ->  Seq Scan on _hyper_15_76_chunk
+   ->  Seq Scan on _hyper_15_77_chunk
+   ->  Seq Scan on _hyper_15_78_chunk
+   ->  Seq Scan on _hyper_15_79_chunk
+(13 rows)
 
 -- Check that default deny applies to non-owner/non-superuser when RLS on.
 SET SESSION AUTHORIZATION regress_rls_bob;
@@ -3158,6 +3961,14 @@ RESET SESSION AUTHORIZATION;
 DROP TABLE copy_t CASCADE;
 ERROR:  table "copy_t" does not exist
 CREATE TABLE copy_t (a integer, b text);
+SELECT public.create_hypertable('copy_t', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY p1 ON copy_t USING (a % 2 = 0);
 ALTER TABLE copy_t ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON copy_t TO regress_rls_bob, regress_rls_exempt_user;
@@ -3243,6 +4054,14 @@ ERROR:  permission denied for relation copy_t
 RESET SESSION AUTHORIZATION;
 SET row_security TO ON;
 CREATE TABLE copy_rel_to (a integer, b text);
+SELECT public.create_hypertable('copy_rel_to', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY p1 ON copy_rel_to USING (a % 2 = 0);
 ALTER TABLE copy_rel_to ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON copy_rel_to TO regress_rls_bob, regress_rls_exempt_user;
@@ -3250,33 +4069,33 @@ INSERT INTO copy_rel_to VALUES (1, md5('1'));
 -- Check COPY TO as Superuser/owner.
 RESET SESSION AUTHORIZATION;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ',';
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ',';
 1,c4ca4238a0b923820dcc509a6f75849b
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ',';
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ',';
 1,c4ca4238a0b923820dcc509a6f75849b
 -- Check COPY TO as user with permissions.
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
 ERROR:  query would be affected by row-level security policy for table "copy_rel_to"
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --ok
 -- Check COPY TO as user with permissions and BYPASSRLS
 SET SESSION AUTHORIZATION regress_rls_exempt_user;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --ok
 1,c4ca4238a0b923820dcc509a6f75849b
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --ok
 1,c4ca4238a0b923820dcc509a6f75849b
 -- Check COPY TO as user without permissions. SET row_security TO OFF;
 SET SESSION AUTHORIZATION regress_rls_carol;
 SET row_security TO OFF;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
-ERROR:  permission denied for relation copy_rel_to
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --fail - permission denied
+ERROR:  query would be affected by row-level security policy for table "copy_rel_to"
 SET row_security TO ON;
-COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - permission denied
+COPY (SELECT * FROM copy_rel_to) TO STDOUT WITH DELIMITER ','; --fail - permission denied
 ERROR:  permission denied for relation copy_rel_to
 -- Check COPY FROM as Superuser/owner.
 RESET SESSION AUTHORIZATION;
@@ -3311,6 +4130,14 @@ DROP TABLE copy_rel_to CASCADE;
 -- Check WHERE CURRENT OF
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE current_check (currentid int, payload text, rlsuser text);
+SELECT public.create_hypertable('current_check', 'currentid', chunk_time_interval=>10);
+NOTICE:  adding not-null constraint to column "currentid"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 GRANT ALL ON current_check TO PUBLIC;
 INSERT INTO current_check VALUES
     (1, 'abc', 'regress_rls_bob'),
@@ -3377,10 +4204,15 @@ EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF 
                          QUERY PLAN                          
 -------------------------------------------------------------
  Update on current_check
+   Update on current_check
+   Update on _hyper_21_104_chunk
    ->  Tid Scan on current_check
          TID Cond: CURRENT OF current_check_cursor
          Filter: ((currentid = 4) AND ((currentid % 2) = 0))
-(4 rows)
+   ->  Tid Scan on _hyper_21_104_chunk
+         TID Cond: CURRENT OF current_check_cursor
+         Filter: ((currentid = 4) AND ((currentid % 2) = 0))
+(9 rows)
 
 -- Similarly can only delete row 4
 FETCH ABSOLUTE 1 FROM current_check_cursor;
@@ -3533,22 +4365,31 @@ ROLLBACK; -- cleanup
 --
 BEGIN;
 CREATE TABLE t (c int);
+SELECT public.create_hypertable('t', 'c', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "c"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY p ON t USING (c % 2 = 1);
 ALTER TABLE t ENABLE ROW LEVEL SECURITY;
 SAVEPOINT q;
 CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
   SELECT * FROM generate_series(1,5) t0(c); -- fails due to row level security enabled
-ERROR:  could not convert table "t" to a view because it has row security enabled
+ERROR:  hypertables do not support rules
 ROLLBACK TO q;
 ALTER TABLE t DISABLE ROW LEVEL SECURITY;
 SAVEPOINT q;
 CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
   SELECT * FROM generate_series(1,5) t0(c); -- fails due to policy p on t
-ERROR:  could not convert table "t" to a view because it has row security policies
+ERROR:  hypertables do not support rules
 ROLLBACK TO q;
 DROP POLICY p ON t;
 CREATE RULE "_RETURN" AS ON SELECT TO t DO INSTEAD
   SELECT * FROM generate_series(1,5) t0(c); -- succeeds
+ERROR:  hypertables do not support rules
 ROLLBACK;
 --
 -- Policy expression handling
@@ -3563,7 +4404,23 @@ ROLLBACK;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE TABLE r1 (a int);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE TABLE r2 (a int);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 GRANT ALL ON r1, r2 TO regress_rls_bob;
@@ -3593,13 +4450,11 @@ SELECT * FROM r2;
 INSERT INTO r2 VALUES (2); -- Not allowed
 ERROR:  new row violates row-level security policy for table "r2"
 UPDATE r2 SET a = 2 RETURNING *; -- Updates nothing
- a 
----
+--
 (0 rows)
 
 DELETE FROM r2 RETURNING *; -- Deletes nothing
- a 
----
+--
 (0 rows)
 
 -- r2 can be used as a non-target relation in DML
@@ -3611,25 +4466,21 @@ INSERT INTO r1 SELECT a + 1 FROM r2 RETURNING *; -- OK
 (2 rows)
 
 UPDATE r1 SET a = r2.a + 2 FROM r2 WHERE r1.a = r2.a RETURNING *; -- OK
- a  | a  
-----+----
- 12 | 10
- 22 | 20
-(2 rows)
-
+ERROR:  new row for relation "_hyper_23_105_chunk" violates check constraint "constraint_105"
+DETAIL:  Failing row contains (a) = (12).
 DELETE FROM r1 USING r2 WHERE r1.a = r2.a + 2 RETURNING *; -- OK
- a  | a  
-----+----
- 12 | 10
- 22 | 20
-(2 rows)
+ a | a 
+---+---
+(0 rows)
 
 SELECT * FROM r1;
  a  
 ----
+ 10
  11
+ 20
  21
-(2 rows)
+(4 rows)
 
 SELECT * FROM r2;
  a  
@@ -3647,6 +4498,14 @@ DROP TABLE r2;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO r1 VALUES (10), (20);
 CREATE POLICY p1 ON r1 USING (false);
 ALTER TABLE r1 ENABLE ROW LEVEL SECURITY;
@@ -3692,7 +4551,16 @@ DROP TABLE r1;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int PRIMARY KEY);
+-- r1 is not a hypertable since r1.a is referenced by r2
 CREATE TABLE r2 (a int REFERENCES r1);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 -- Create policies on r2 which prevent the
@@ -3703,8 +4571,8 @@ ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 -- Errors due to rows in r2
 DELETE FROM r1;
-ERROR:  update or delete on table "r1" violates foreign key constraint "r2_a_fkey" on table "r2"
-DETAIL:  Key (a)=(10) is still referenced from table "r2".
+ERROR:  update or delete on table "r1" violates foreign key constraint "113_23_r2_a_fkey" on table "_hyper_26_113_chunk"
+DETAIL:  Key (a)=(10) is still referenced from table "_hyper_26_113_chunk".
 -- Reset r2 to no-RLS
 DROP POLICY p1 ON r2;
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
@@ -3727,7 +4595,16 @@ DROP TABLE r2;
 DROP TABLE r1;
 -- Ensure cascaded DELETE works
 CREATE TABLE r1 (a int PRIMARY KEY);
+-- r1 is not a hypertable since r1.a is referenced by r2
 CREATE TABLE r2 (a int REFERENCES r1 ON DELETE CASCADE);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 -- Create policies on r2 which prevent the
@@ -3751,7 +4628,16 @@ DROP TABLE r2;
 DROP TABLE r1;
 -- Ensure cascaded UPDATE works
 CREATE TABLE r1 (a int PRIMARY KEY);
+-- r1 is not a hypertable since r1.a is referenced by r2
 CREATE TABLE r2 (a int REFERENCES r1 ON UPDATE CASCADE);
+SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 INSERT INTO r1 VALUES (10), (20);
 INSERT INTO r2 VALUES (10), (20);
 -- Create policies on r2 which prevent the
@@ -3762,6 +4648,9 @@ ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 -- Updates records in both
 UPDATE r1 SET a = a+5;
+ERROR:  new row for relation "_hyper_28_117_chunk" violates check constraint "constraint_117"
+DETAIL:  Failing row contains (15).
+CONTEXT:  SQL statement "UPDATE ONLY "_timescaledb_internal"."_hyper_28_117_chunk" SET "a" = $1 WHERE $2 OPERATOR(pg_catalog.=) "a""
 -- Remove FORCE from r2
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
 -- As owner, we now bypass RLS
@@ -3769,8 +4658,8 @@ ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
 TABLE r2;
  a  
 ----
- 15
- 25
+ 10
+ 20
 (2 rows)
 
 DROP TABLE r2;
@@ -3782,6 +4671,14 @@ DROP TABLE r1;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY p1 ON r1 FOR SELECT USING (false);
 CREATE POLICY p2 ON r1 FOR INSERT WITH CHECK (true);
 ALTER TABLE r1 ENABLE ROW LEVEL SECURITY;
@@ -3811,6 +4708,12 @@ DROP TABLE r1;
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int PRIMARY KEY);
+SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>100);
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
 CREATE POLICY p2 ON r1 FOR UPDATE USING (a < 20) WITH CHECK (true);
 CREATE POLICY p3 ON r1 FOR INSERT WITH CHECK (true);
@@ -3849,14 +4752,33 @@ ERROR:  new row violates row-level security policy for table "r1"
 INSERT INTO r1 VALUES (10)
     ON CONFLICT (a) DO UPDATE SET a = 30;
 ERROR:  new row violates row-level security policy for table "r1"
+--will error out because of constraint names not supported on hypertables.
+--leaving this in since we still want this to error when/if this gets fixed for hypertables.
 INSERT INTO r1 VALUES (10)
     ON CONFLICT ON CONSTRAINT r1_pkey DO UPDATE SET a = 30;
-ERROR:  new row violates row-level security policy for table "r1"
+ERROR:  hypertables do not support ON CONFLICT statements that reference constraints
+HINT:  Use column names to infer indexes instead.
 DROP TABLE r1;
 -- Check dependency handling
 RESET SESSION AUTHORIZATION;
 CREATE TABLE dep1 (c1 int);
+SELECT public.create_hypertable('dep1', 'c1', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "c1"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE TABLE dep2 (c1 int);
+SELECT public.create_hypertable('dep2', 'c1', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "c1"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE POLICY dep_p1 ON dep1 TO regress_rls_bob USING (c1 > (select max(dep2.c1) from dep2));
 ALTER POLICY dep_p1 ON dep1 TO regress_rls_bob,regress_rls_carol;
 -- Should return one
@@ -3901,6 +4823,14 @@ RESET SESSION AUTHORIZATION;
 CREATE ROLE regress_rls_dob_role1;
 CREATE ROLE regress_rls_dob_role2;
 CREATE TABLE dob_t1 (c1 int);
+SELECT public.create_hypertable('dob_t1', 'c1', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "c1"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 CREATE TABLE dob_t2 (c1 int) PARTITION BY RANGE (c1);
 CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1 USING (true);
 DROP OWNED BY regress_rls_dob_role1;
@@ -3920,7 +4850,7 @@ DROP USER regress_rls_dob_role2;
 RESET SESSION AUTHORIZATION;
 \set VERBOSITY terse \\ -- suppress cascade details
 DROP SCHEMA regress_rls_schema CASCADE;
-NOTICE:  drop cascades to 29 other objects
+NOTICE:  drop cascades to 116 other objects
 \set VERBOSITY default
 DROP USER regress_rls_alice;
 DROP USER regress_rls_bob;
@@ -3933,12 +4863,28 @@ DROP ROLE regress_rls_group2;
 -- pg_dump/pg_restore
 CREATE SCHEMA regress_rls_schema;
 CREATE TABLE rls_tbl (c1 int);
+SELECT public.create_hypertable('rls_tbl', 'c1', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "c1"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
 CREATE POLICY p1 ON rls_tbl USING (c1 > 5);
 CREATE POLICY p2 ON rls_tbl FOR SELECT USING (c1 <= 3);
 CREATE POLICY p3 ON rls_tbl FOR UPDATE USING (c1 <= 3) WITH CHECK (c1 > 5);
 CREATE POLICY p4 ON rls_tbl FOR DELETE USING (c1 <= 3);
 CREATE TABLE rls_tbl_force (c1 int);
+SELECT public.create_hypertable('rls_tbl_force', 'c1', chunk_time_interval=>2);
+NOTICE:  adding not-null constraint to column "c1"
+DETAIL:  Time dimensions cannot have NULL values
+ create_hypertable 
+-------------------
+ 
+(1 row)
+
 ALTER TABLE rls_tbl_force ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rls_tbl_force FORCE ROW LEVEL SECURITY;
 CREATE POLICY p1 ON rls_tbl_force USING (c1 = 5) WITH CHECK (c1 < 5);

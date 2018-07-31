@@ -73,6 +73,11 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   endif (USE_OPENSSL)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
+if (${PG_VERSION_MAJOR} EQUAL "10")
+  list(APPEND TEST_FILES
+    rowsecurity-10.sql)
+endif ()
+
 set(TEST_TEMPLATES
   parallel.sql.in
   partitioning.sql.in
