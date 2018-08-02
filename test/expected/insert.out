@@ -119,36 +119,36 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
 (76 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal.%');
-                 Table                  |                                       Index                                        |                            Columns                            | Unique | Primary | Exclusion | Tablespace 
-----------------------------------------+------------------------------------------------------------------------------------+---------------------------------------------------------------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_idx"             | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_idx"             | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
- _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_idx"             | {timeCustom,device_id,series_0,series_1,series_2,series_bool} | f      | f       | f         | 
+                 Table                  |                                       Index                                        |         Columns          | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------------------------------+--------------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
 (28 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;

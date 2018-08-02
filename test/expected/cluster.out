@@ -8,9 +8,9 @@ NOTICE:  adding not-null constraint to column "time"
 
 -- Show default indexes
 SELECT * FROM test.show_indexes('cluster_test');
-         Index         | Columns | Unique | Primary | Exclusion | Tablespace 
------------------------+---------+--------+---------+-----------+------------
- cluster_test_time_idx | {time}  | f      | f       | f         | 
+         Index         | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+-----------------------+---------+------+--------+---------+-----------+------------
+ cluster_test_time_idx | {time}  |      | f      | f       | f         | 
 (1 row)
 
 -- Create two chunks

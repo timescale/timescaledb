@@ -94,12 +94,12 @@ SELECT * FROM test.show_subtables('tspace_2dim');
 
 --indexes should inherit the tablespace of their chunk
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-                 Table                  |                               Index                                |      Columns       | Unique | Primary | Exclusion | Tablespace  
-----------------------------------------+--------------------------------------------------------------------+--------------------+--------+---------+-----------+-------------
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_device_time_idx | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_device_time_idx | {time,temp,device} | f      | f       | f         | tablespace1
+                 Table                  |                               Index                                |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
+----------------------------------------+--------------------------------------------------------------------+---------------+------+--------+---------+-----------+-------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_time_idx        | {time}        |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_device_time_idx | {device,time} |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_time_idx        | {time}        |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_device_time_idx | {device,time} |      | f      | f       | f         | tablespace1
 (4 rows)
 
 --
@@ -167,14 +167,14 @@ SELECT * FROM test.show_subtablesp('tspace_%');
 --created with a tablespace, because then default indexes will be
 --created in that tablespace too.
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-                 Table                  |                               Index                                |      Columns       | Unique | Primary | Exclusion | Tablespace  
-----------------------------------------+--------------------------------------------------------------------+--------------------+--------+---------+-----------+-------------
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_device_time_idx | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_device_time_idx | {time,temp,device} | f      | f       | f         | tablespace1
- _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_tspace_1dim_time_idx        | {time,temp,device} | f      | f       | f         | tablespace2
- _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_tspace_1dim_time_idx        | {time,temp,device} | f      | f       | f         | tablespace1
+                 Table                  |                               Index                                |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
+----------------------------------------+--------------------------------------------------------------------+---------------+------+--------+---------+-----------+-------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_time_idx        | {time}        |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_tspace_2dim_device_time_idx | {device,time} |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_time_idx        | {time}        |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_tspace_2dim_device_time_idx | {device,time} |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_tspace_1dim_time_idx        | {time}        |      | f      | f       | f         | tablespace2
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_tspace_1dim_time_idx        | {time}        |      | f      | f       | f         | tablespace1
 (6 rows)
 
 --detach tablespace1 from tspace_2dim should fail due to lack of permissions
