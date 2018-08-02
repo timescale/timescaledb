@@ -79,29 +79,29 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 (6 rows)
 
 SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
-                          Index                          |             Columns             | Unique | Primary | Exclusion | Tablespace 
----------------------------------------------------------+---------------------------------+--------+---------+-----------+------------
- test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
- test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} | t      | f       | f         | 
+                          Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
+ test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
-                                       Index                                        |             Columns             | Unique | Primary | Exclusion | Tablespace 
-------------------------------------------------------------------------------------+---------------------------------+--------+---------+-----------+------------
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} | t      | f       | f         | 
+                                       Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
+ _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
@@ -266,29 +266,29 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 (6 rows)
 
 SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
-                          Index                          |             Columns             | Unique | Primary | Exclusion | Tablespace 
----------------------------------------------------------+---------------------------------+--------+---------+-----------+------------
- test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
- test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} | t      | f       | f         | 
+                          Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
+ test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
-                                       Index                                        |             Columns             | Unique | Primary | Exclusion | Tablespace 
-------------------------------------------------------------------------------------+---------------------------------+--------+---------+-----------+------------
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    | f      | f       | f         | 
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} | t      | f       | f         | 
+                                       Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
+ _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');

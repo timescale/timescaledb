@@ -54,13 +54,15 @@ $BODY$;
 CREATE OR REPLACE FUNCTION test.show_indexes(rel regclass)
 RETURNS TABLE("Index" regclass,
               "Columns" name[],
+              "Expr" text,
               "Unique" boolean,
               "Primary" boolean,
               "Exclusion" boolean,
               "Tablespace" name) LANGUAGE SQL STABLE AS
 $BODY$
     SELECT c.oid::regclass,
-    array(SELECT "Column" FROM test.show_columns(c.oid)),
+    array(SELECT "Column" FROM test.show_columns(i.indexrelid)),
+    pg_get_expr(i.indexprs, c.oid, true),
     i.indisunique,
     i.indisprimary,
     i.indisexclusion,
@@ -74,6 +76,7 @@ CREATE OR REPLACE FUNCTION test.show_indexesp(pattern text)
 RETURNS TABLE("Table" regclass,
               "Index" regclass,
               "Columns" name[],
+              "Expr" text,
               "Unique" boolean,
               "Primary" boolean,
               "Exclusion" boolean,
@@ -91,7 +94,8 @@ BEGIN
     RETURN QUERY
     SELECT c.oid::regclass,
     i.indexrelid::regclass,
-    array(SELECT "Column" FROM test.show_columns(c.oid)),
+    array(SELECT "Column" FROM test.show_columns(i.indexrelid)),
+    pg_get_expr(i.indexprs, c.oid, true),
     i.indisunique,
     i.indisprimary,
     i.indisexclusion,

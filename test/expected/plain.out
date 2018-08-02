@@ -17,9 +17,9 @@ SELECT * FROM test.show_columns('regular_table');
 (4 rows)
 
 SELECT * FROM test.show_indexes('regular_table');
-      Index      |   Columns    | Unique | Primary | Exclusion | Tablespace 
------------------+--------------+--------+---------+-----------+------------
- time_color_idx2 | {time,color} | f      | f       | f         | 
+      Index      |   Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
+-----------------+--------------+------+--------+---------+-----------+------------
+ time_color_idx2 | {time,color} |      | f      | f       | f         | 
 (1 row)
 
 -- Renaming types should work
