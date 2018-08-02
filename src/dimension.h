@@ -139,11 +139,13 @@ extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
 extern int	ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern int	ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int	ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
+extern Datum ts_dimension_transform_value(Dimension *dim, Datum value, Oid *restype);
 extern int	ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
-extern void ts_dimension_validate_info(DimensionInfo *info);
 extern void ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type, char *caller_name);
+extern void ts_dimension_info_validate(DimensionInfo *info);
 extern void ts_dimension_add_from_info(DimensionInfo *info);
 extern void ts_dimensions_rename_schema_name(char *oldname, char *newname);
+
 
 #define hyperspace_get_open_dimension(space, i)				\
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

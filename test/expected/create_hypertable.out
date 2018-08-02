@@ -310,6 +310,63 @@ NOTICE:  table "test_1dim" is already a hypertable, skipping
 select create_hypertable('test_schema.test_1dim', 'time');
 ERROR:  table "test_1dim" is already a hypertable
 \set ON_ERROR_STOP 1
+-- Test partitioning functions
+CREATE OR REPLACE FUNCTION invalid_partfunc(source integer)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN NULL;
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION time_partfunc(source text)
+    RETURNS TIMESTAMPTZ LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN timezone('UTC', to_timestamp(source));
+END
+$BODY$;
+CREATE TABLE test_schema.test_invalid_func(time timestamptz, temp float8, device text);
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT create_hypertable('test_schema.test_invalid_func', 'time', 'device', 2, partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+SELECT create_hypertable('test_schema.test_invalid_func', 'time');
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable          
+-------------------------------------
+ (6,test_schema,test_invalid_func,t)
+(1 row)
+
+-- should also fail due to invalid signature
+SELECT add_dimension('test_schema.test_invalid_func', 'device', 2, partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+-- Test open-dimension function
+CREATE TABLE test_schema.open_dim_part_func(time text, temp float8, device text, event_time text);
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'time_partfunc');
+NOTICE:  adding not-null constraint to column "time"
+          create_hypertable           
+--------------------------------------
+ (7,test_schema,open_dim_part_func,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'time_partfunc');
+NOTICE:  adding not-null constraint to column "event_time"
+                  add_dimension                   
+--------------------------------------------------
+ (15,test_schema,open_dim_part_func,event_time,t)
+(1 row)
+
 --test data migration
 create table test_schema.test_migrate(time timestamp, temp float);
 insert into test_schema.test_migrate VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
@@ -330,14 +387,14 @@ NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
        create_hypertable        
 --------------------------------
- (6,test_schema,test_migrate,t)
+ (8,test_schema,test_migrate,t)
 (1 row)
 
 --there should be two new chunks
 select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
  id | schema_name |  table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ----+-------------+--------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  6 | test_schema | test_migrate | _timescaledb_internal  | _hyper_6                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
+  8 | test_schema | test_migrate | _timescaledb_internal  | _hyper_8                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0
 (1 row)
 
 select * from _timescaledb_catalog.chunk;
@@ -346,8 +403,8 @@ select * from _timescaledb_catalog.chunk;
   1 |             1 | _timescaledb_internal | _hyper_1_1_chunk
   2 |             2 | chunk_schema          | _hyper_2_2_chunk
   3 |             5 | _timescaledb_internal | _hyper_5_3_chunk
-  4 |             6 | _timescaledb_internal | _hyper_6_4_chunk
-  5 |             6 | _timescaledb_internal | _hyper_6_5_chunk
+  4 |             8 | _timescaledb_internal | _hyper_8_4_chunk
+  5 |             8 | _timescaledb_internal | _hyper_8_5_chunk
 (5 rows)
 
 select * from test_schema.test_migrate;
@@ -363,13 +420,13 @@ select * from only test_schema.test_migrate;
 ------+------
 (0 rows)
 
-select * from only _timescaledb_internal._hyper_6_4_chunk;
+select * from only _timescaledb_internal._hyper_8_4_chunk;
            time           | temp 
 --------------------------+------
  Tue Oct 19 10:23:54 2004 |    1
 (1 row)
 
-select * from only _timescaledb_internal._hyper_6_5_chunk;
+select * from only _timescaledb_internal._hyper_8_5_chunk;
            time           | temp 
 --------------------------+------
  Sun Dec 19 10:23:54 2004 |    2
@@ -380,16 +437,16 @@ select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data 
 NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
- (7,test_schema,test_migrate_empty,t)
+ (9,test_schema,test_migrate_empty,t)
 (1 row)
 
 CREATE TYPE test_type AS (time timestamp, temp float);
 CREATE TABLE test_table_of_type OF test_type;
 SELECT create_hypertable('test_table_of_type', 'time');
 NOTICE:  adding not-null constraint to column "time"
-        create_hypertable        
----------------------------------
- (8,public,test_table_of_type,t)
+        create_hypertable         
+----------------------------------
+ (10,public,test_table_of_type,t)
 (1 row)
 
 INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
@@ -402,9 +459,9 @@ NOTICE:  drop cascades to 3 other objects
 CREATE TABLE test_table_of_type (time timestamp, temp float);
 SELECT create_hypertable('test_table_of_type', 'time');
 NOTICE:  adding not-null constraint to column "time"
-        create_hypertable        
----------------------------------
- (9,public,test_table_of_type,t)
+        create_hypertable         
+----------------------------------
+ (11,public,test_table_of_type,t)
 (1 row)
 
 INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
@@ -476,7 +533,7 @@ select create_hypertable('test_schema.test_partfunc', 'time');
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
- (10,test_schema,test_partfunc,t)
+ (12,test_schema,test_partfunc,t)
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -493,6 +550,6 @@ ERROR:  invalid partitioning function
 select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');
               add_dimension              
 -----------------------------------------
- (18,test_schema,test_partfunc,device,t)
+ (21,test_schema,test_partfunc,device,t)
 (1 row)
 

@@ -86,19 +86,20 @@ dimension_restrict_info_create(Dimension *d)
 }
 
 static bool
-dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy, DimensionValues *dimValues)
+dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy, DimensionValues *dimvalues)
 {
 	ListCell   *item;
 	bool		restriction_added = false;
 
 	/* can't handle IN/ANY with multiple values */
-	if (dimValues->use_or && list_length(dimValues->values) > 1)
+	if (dimvalues->use_or && list_length(dimvalues->values) > 1)
 		return false;
 
-	foreach(item, dimValues->values)
+	foreach(item, dimvalues->values)
 	{
-		Datum		datum = PointerGetDatum(lfirst(item));
-		int64		value = ts_time_value_to_internal(datum, dimValues->type, false);
+		Oid			restype;
+		Datum		datum = ts_dimension_transform_value(dri->base.dimension, PointerGetDatum(lfirst(item)), &restype);
+		int64		value = ts_time_value_to_internal(datum, restype, false);
 
 		switch (strategy)
 		{
@@ -144,16 +145,16 @@ dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, List *v
 
 	foreach(item, values)
 	{
-		Datum		datum = PointerGetDatum(lfirst(item));
-		int32		partition = ts_partitioning_func_apply(dri->base.dimension->partitioning, datum);
+		Datum		value = ts_dimension_transform_value(dri->base.dimension, PointerGetDatum(lfirst(item)), NULL);
 
-		partitions = list_append_unique_int(partitions, partition);
+		partitions = list_append_unique_int(partitions, DatumGetInt32(value));
 	}
+
 	return partitions;
 }
 
 static bool
-dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNumber strategy, DimensionValues *dimValues)
+dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNumber strategy, DimensionValues *dimvalues)
 {
 	List	   *partitions;
 	bool		restriction_added = false;
@@ -163,10 +164,10 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 		return false;
 	}
 
-	partitions = dimension_restrict_info_get_partitions(dri, dimValues->values);
+	partitions = dimension_restrict_info_get_partitions(dri, dimvalues->values);
 
 	/* the intersection is empty when using ALL operator (ANDing values)  */
-	if (list_length(partitions) > 1 && !dimValues->use_or)
+	if (list_length(partitions) > 1 && !dimvalues->use_or)
 	{
 		dri->strategy = strategy;
 		dri->partitions = NIL;
@@ -327,7 +328,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	int			strategy;
 	Oid			lefttype,
 				righttype;
-	DimensionValues *dimValues;
+	DimensionValues *dimvalues;
 
 	if (list_length(expr_args) != 2)
 		return false;
@@ -381,21 +382,21 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 							   &lefttype,
 							   &righttype);
 
-	dimValues = func_get_dim_values(c, use_or);
-	return dimension_restrict_info_add(dri, strategy, dimValues);
+	dimvalues = func_get_dim_values(c, use_or);
+	return dimension_restrict_info_add(dri, strategy, dimvalues);
 }
 
 static DimensionValues *
 dimension_values_create(List *values, Oid type, bool use_or)
 {
-	DimensionValues *dimValues;
+	DimensionValues *dimvalues;
 
-	dimValues = palloc(sizeof(DimensionValues));
-	dimValues->values = values;
-	dimValues->use_or = use_or;
-	dimValues->type = type;
+	dimvalues = palloc(sizeof(DimensionValues));
+	dimvalues->values = values;
+	dimvalues->use_or = use_or;
+	dimvalues->type = type;
 
-	return dimValues;
+	return dimvalues;
 }
 
 static DimensionValues *
@@ -514,5 +515,6 @@ ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertab
 	}
 
 	Assert(list_length(dimension_vecs) == ht->space->num_dimensions);
+
 	return ts_chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
 }

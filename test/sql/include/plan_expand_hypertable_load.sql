@@ -49,7 +49,17 @@ INSERT INTO hyper_ts (time, device_id, tag_id, value) SELECT to_timestamp(g), 'd
 --one in the future
 INSERT INTO hyper_ts (time, device_id, tag_id, value)  VALUES ('2100-01-01 02:03:04 PST', 'dev101', 1, 0);
 
+--time partitioning function
+CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE PARALLEL SAFE STRICT AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+CREATE TABLE hyper_timefunc ("time" float8 NOT NULL, "device_id" text, "value" integer);
 
+SELECT create_hypertable('hyper_timefunc', 'time', 'device_id', 4, chunk_time_interval => 10, time_partitioning_func => 'unix_to_timestamp');
+
+INSERT INTO hyper_timefunc (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
 
 SET client_min_messages = 'error';
 ANALYZE;

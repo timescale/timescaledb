@@ -73,6 +73,21 @@ ORDER BY MetricMinuteTs DESC;
                                        Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
 (14 rows)
 
+-- Test partitioning function on an open (time) dimension
+CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+CREATE TABLE hyper_timefunc(time float8, metricid int REFERENCES metric(id), VALUE double precision, time_date DATE);
+SELECT create_hypertable('hyper_timefunc', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE, time_partitioning_func => 'unix_to_timestamp');
+psql:include/plan_hashagg_load.sql:43: NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (2,public,hyper_timefunc,t)
+(1 row)
+
+INSERT INTO hyper_timefunc SELECT time_int, metricid, VALUE, time_date FROM hyper;
 SET client_min_messages = 'error';
 ANALYZE;
 RESET client_min_messages;
@@ -363,4 +378,24 @@ ORDER BY MetricMinuteTs DESC, metric.id;
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
                ->  Seq Scan on metric
 (9 rows)
+
+-- Try with time partitioning function. Currently not optimized for hash aggregates
+:PREFIX SELECT time_bucket('1 minute', unix_to_timestamp(time)) AS MetricMinuteTs, AVG(value) as avg
+FROM hyper_timefunc
+WHERE unix_to_timestamp(time) >= '2001-01-04T00:00:00' AND unix_to_timestamp(time) <= '2001-01-05T01:00:00'
+GROUP BY MetricMinuteTs
+ORDER BY MetricMinuteTs DESC;
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Group Key: (time_bucket('@ 1 min'::interval, to_timestamp(hyper_timefunc."time")))
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 min'::interval, to_timestamp(hyper_timefunc."time"))) DESC
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on hyper_timefunc
+                           Filter: ((to_timestamp("time") >= 'Thu Jan 04 00:00:00 2001 PST'::timestamp with time zone) AND (to_timestamp("time") <= 'Fri Jan 05 01:00:00 2001 PST'::timestamp with time zone))
+                     ->  Seq Scan on _hyper_2_2_chunk
+                           Filter: ((to_timestamp("time") >= 'Thu Jan 04 00:00:00 2001 PST'::timestamp with time zone) AND (to_timestamp("time") <= 'Fri Jan 05 01:00:00 2001 PST'::timestamp with time zone))
+(10 rows)
 

@@ -106,10 +106,15 @@ hyperspace_get_num_dimensions_by_type(Hyperspace *hs, DimensionType type)
 static inline DimensionType
 dimension_type(HeapTuple tuple)
 {
-	/* If there is no partitioning func set we assume open dimension */
-	if (heap_attisnull(tuple, Anum_dimension_partitioning_func))
+	if (heap_attisnull(tuple, Anum_dimension_interval_length) &&
+		!heap_attisnull(tuple, Anum_dimension_num_slices))
+		return DIMENSION_TYPE_CLOSED;
+
+	if (!heap_attisnull(tuple, Anum_dimension_interval_length) &&
+		heap_attisnull(tuple, Anum_dimension_num_slices))
 		return DIMENSION_TYPE_OPEN;
-	return DIMENSION_TYPE_CLOSED;
+
+	elog(ERROR, "invalid partitioning dimension");
 }
 
 static void
@@ -133,11 +138,13 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]),
 		   NAMEDATALEN);
 
-	if (d->type == DIMENSION_TYPE_CLOSED)
+	if (!isnull[Anum_dimension_partitioning_func_schema - 1] &&
+		!isnull[Anum_dimension_partitioning_func - 1])
 	{
 		MemoryContext old;
 
 		d->fd.num_slices = DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
+
 		memcpy(&d->fd.partitioning_func_schema,
 			   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]),
 			   NAMEDATALEN);
@@ -149,9 +156,14 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		d->partitioning = ts_partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
 													  NameStr(d->fd.partitioning_func),
 													  NameStr(d->fd.column_name),
+													  d->type,
 													  main_table_relid);
 		MemoryContextSwitchTo(old);
+
 	}
+
+	if (d->type == DIMENSION_TYPE_CLOSED)
+		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
 	else
 		d->fd.interval_length = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
 
@@ -486,6 +498,9 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
+	Assert((dim->fd.num_slices <= 0 && dim->fd.interval_length > 0) ||
+		   (dim->fd.num_slices > 0 && dim->fd.interval_length <= 0));
+
 	values[AttrNumberGetAttrOffset(Anum_dimension_column_name)] = NameGetDatum(&dim->fd.column_name);
 	values[AttrNumberGetAttrOffset(Anum_dimension_column_type)] = ObjectIdGetDatum(dim->fd.column_type);
 	values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(dim->fd.num_slices);
@@ -532,17 +547,28 @@ dimension_insert_relation(Relation rel, int32 hypertable_id,
 			DirectFunctionCall1(namein, CStringGetDatum(get_func_name(partitioning_func)));
 		values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] =
 			DirectFunctionCall1(namein, CStringGetDatum(get_namespace_name(pronamespace)));
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] = true;
+	}
+
+	if (num_slices > 0)
+	{
+		/* Closed (hash) dimension */
+		Assert(num_slices > 0 && interval_length <= 0);
 		values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(num_slices);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(false);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
 	}
 	else
 	{
+		/* Open (time) dimension */
+		Assert(num_slices <= 0 && interval_length > 0);
 		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = Int64GetDatum(interval_length);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = true;
-		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)] = true;
-		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] = true;
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -608,6 +634,28 @@ ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval)
 	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }
 
+/*
+ * Apply any dimension-specific transformations on a value, i.e., apply
+ * partitioning function. Optionally get the type of the resulting value via
+ * the restype parameter.
+ */
+Datum
+ts_dimension_transform_value(Dimension *dim, Datum value, Oid *restype)
+{
+	if (NULL != dim->partitioning)
+		value = ts_partitioning_func_apply(dim->partitioning, value);
+
+	if (NULL != restype)
+	{
+		if (NULL != dim->partitioning)
+			*restype = dim->partitioning->partfunc.rettype;
+		else
+			*restype = dim->fd.column_type;
+	}
+
+	return value;
+}
+
 static Point *
 point_create(int16 num_dimensions)
 {
@@ -628,27 +676,36 @@ ts_hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc
 	for (i = 0; i < hs->num_dimensions; i++)
 	{
 		Dimension  *d = &hs->dimensions[i];
+		Datum		datum;
+		bool		isnull;
+		Oid			dimtype;
 
-		if (IS_OPEN_DIMENSION(d))
-		{
-			Datum		datum;
-			bool		isnull;
-
+		if (NULL != d->partitioning)
+			datum = ts_partitioning_func_apply_tuple(d->partitioning, tuple, tupdesc, &isnull);
+		else
 			datum = heap_getattr(tuple, d->column_attno, tupdesc, &isnull);
 
-			if (isnull)
-				ereport(ERROR,
-						(errcode(ERRCODE_NOT_NULL_VIOLATION),
-						 errmsg("NULL value in column \"%s\" violates not-null constraint",
-								NameStr(d->fd.column_name)),
-						 errhint("Columns used for time partitioning cannot be NULL")));
-
-			p->coordinates[p->num_coords++] = ts_time_value_to_internal(datum, d->fd.column_type, false);
-		}
-		else
+		switch (d->type)
 		{
-			p->coordinates[p->num_coords++] =
-				ts_partitioning_func_apply_tuple(d->partitioning, tuple, tupdesc);
+			case DIMENSION_TYPE_OPEN:
+				dimtype = (d->partitioning == NULL) ?
+					d->fd.column_type : d->partitioning->partfunc.rettype;
+
+				if (isnull)
+					ereport(ERROR,
+							(errcode(ERRCODE_NOT_NULL_VIOLATION),
+							 errmsg("NULL value in column \"%s\" violates not-null constraint",
+									NameStr(d->fd.column_name)),
+							 errhint("Columns used for time partitioning cannot be NULL")));
+
+				p->coordinates[p->num_coords++] = ts_time_value_to_internal(datum, dimtype, false);
+				break;
+			case DIMENSION_TYPE_CLOSED:
+				p->coordinates[p->num_coords++] = (int64) DatumGetInt32(datum);
+				break;
+			case DIMENSION_TYPE_ANY:
+				elog(ERROR, "invalid dimension type when inserting tuple");
+				break;
 		}
 	}
 
@@ -670,15 +727,15 @@ interval_to_usec(Interval *interval)
 	((num_slices) >= 1 && (num_slices) <= PG_INT16_MAX)
 
 static int64
-get_validated_integer_interval(Oid coltype, int64 value)
+get_validated_integer_interval(Oid dimtype, int64 value)
 {
-	if (value < 1 || value > INT_TYPE_MAX(coltype))
+	if (value < 1 || value > INT_TYPE_MAX(dimtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid interval: must be between 1 and " INT64_FORMAT,
-						INT_TYPE_MAX(coltype))));
+						INT_TYPE_MAX(dimtype))));
 
-	if (IS_TIMESTAMP_TYPE(coltype) && value < USECS_PER_SEC)
+	if (IS_TIMESTAMP_TYPE(dimtype) && value < USECS_PER_SEC)
 		ereport(WARNING,
 				(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
 				 errmsg("unexpected interval: smaller than one second"),
@@ -689,14 +746,14 @@ get_validated_integer_interval(Oid coltype, int64 value)
 
 static int64
 dimension_interval_to_internal(const char *colname,
-							   Oid coltype,
+							   Oid dimtype,
 							   Oid valuetype,
 							   Datum value,
 							   bool adaptive_chunking)
 {
 	int64		interval;
 
-	if (!IS_VALID_OPEN_DIM_TYPE(coltype))
+	if (!IS_VALID_OPEN_DIM_TYPE(dimtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("invalid dimension type: \"%s\" must be an integer, date or timestamp",
@@ -704,7 +761,7 @@ dimension_interval_to_internal(const char *colname,
 
 	if (!OidIsValid(valuetype))
 	{
-		if (IS_INTEGER_TYPE(coltype))
+		if (IS_INTEGER_TYPE(dimtype))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("integer dimensions require an explicit interval")));
@@ -718,16 +775,16 @@ dimension_interval_to_internal(const char *colname,
 	switch (valuetype)
 	{
 		case INT2OID:
-			interval = get_validated_integer_interval(coltype, DatumGetInt16(value));
+			interval = get_validated_integer_interval(dimtype, DatumGetInt16(value));
 			break;
 		case INT4OID:
-			interval = get_validated_integer_interval(coltype, DatumGetInt32(value));
+			interval = get_validated_integer_interval(dimtype, DatumGetInt32(value));
 			break;
 		case INT8OID:
-			interval = get_validated_integer_interval(coltype, DatumGetInt64(value));
+			interval = get_validated_integer_interval(dimtype, DatumGetInt64(value));
 			break;
 		case INTERVALOID:
-			if (IS_INTEGER_TYPE(coltype))
+			if (IS_INTEGER_TYPE(dimtype))
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid interval: must be an integer type for integer dimensions")));
@@ -740,7 +797,7 @@ dimension_interval_to_internal(const char *colname,
 					 errmsg("invalid interval: must be an interval or integer type")));
 	}
 
-	if (coltype == DATEOID &&
+	if (dimtype == DATEOID &&
 		(interval <= 0 || interval % USECS_PER_DAY != 0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -757,19 +814,19 @@ TS_FUNCTION_INFO_V1(ts_dimension_interval_to_internal_test);
 Datum
 ts_dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 {
-	Oid			coltype = PG_GETARG_OID(0);
+	Oid			dimtype = PG_GETARG_OID(0);
 	Datum		value = PG_GETARG_DATUM(1);
 	Oid			valuetype = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 
-	PG_RETURN_INT64(dimension_interval_to_internal("testcol", coltype, valuetype, value, false));
+	PG_RETURN_INT64(dimension_interval_to_internal("testcol", dimtype, valuetype, value, false));
 }
 
 /* A utility function to check that the argument type passed to be
  * used/compared with a hypertable time column is valid
  * The argument is valid if
- * 	-	it is an INTEGER type and time column of hypertable is also INTEGER
- * 	-	it is an INTERVAL and time column of hypertable is time or date
- * 	-	it is the same as time column of hypertable
+ *	-	it is an INTEGER type and time column of hypertable is also INTEGER
+ *	-	it is an INTERVAL and time column of hypertable is time or date
+ *	-	it is the same as time column of hypertable
  */
 void
 ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type, char *caller_name)
@@ -880,9 +937,10 @@ dimension_update(FunctionCallInfo fcinfo,
 	if (NULL != interval)
 	{
 		Oid			intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		Oid			dimtype = dim->partitioning != NULL ? dim->partitioning->dimtype : dim->fd.column_type;
 
 		dim->fd.interval_length = dimension_interval_to_internal(NameStr(dim->fd.column_name),
-																 dim->fd.column_type,
+																 dimtype,
 																 intervaltype,
 																 *interval,
 																 hypertable_adaptive_chunking_enabled(ht));
@@ -969,7 +1027,7 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 }
 
 void
-ts_dimension_validate_info(DimensionInfo *info)
+ts_dimension_info_validate(DimensionInfo *info)
 {
 	Dimension  *dim;
 	HeapTuple	tuple;
@@ -981,6 +1039,11 @@ ts_dimension_validate_info(DimensionInfo *info)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid dimension info")));
+
+	if (info->num_slices_is_set && OidIsValid(info->interval_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot specify both the number of partitions and an interval")));
 
 	/* Check that the column exists and get its NOT NULL status */
 	tuple = SearchSysCacheAttName(info->table_relid, NameStr(*info->colname));
@@ -1040,8 +1103,8 @@ ts_dimension_validate_info(DimensionInfo *info)
 		info->type = DIMENSION_TYPE_CLOSED;
 
 		if (!OidIsValid(info->partitioning_func))
-			info->partitioning_func = ts_partitioning_func_get_default();
-		else if (!ts_partitioning_func_is_valid(info->partitioning_func))
+			info->partitioning_func = ts_partitioning_func_get_closed_default();
+		else if (!ts_partitioning_func_is_valid(info->partitioning_func, info->type, info->coltype))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
 					 errmsg("invalid partitioning function"),
@@ -1056,10 +1119,25 @@ ts_dimension_validate_info(DimensionInfo *info)
 	else
 	{
 		/* Open ("time") dimension */
+		Oid			dimtype = info->coltype;
+
 		info->type = DIMENSION_TYPE_OPEN;
 		info->set_not_null = !not_null_is_set;
+
+		if (OidIsValid(info->partitioning_func))
+		{
+			if (!ts_partitioning_func_is_valid(info->partitioning_func, info->type, info->coltype))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
+						 errmsg("invalid partitioning function"),
+						 errhint("A valid partitioning function for open (time) dimensions must be IMMUTABLE, "
+								 "take the column type as input, and return an integer or timestamp type.")));
+
+			dimtype = get_func_rettype(info->partitioning_func);
+		}
+
 		info->interval = dimension_interval_to_internal(NameStr(*info->colname),
-														info->coltype,
+														dimtype,
 														info->interval_type,
 														info->interval_datum,
 														info->adaptive_chunking);
@@ -1140,6 +1218,11 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid main_table: cannot be NULL")));
 
+	if (!info.num_slices_is_set && !OidIsValid(info.interval_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("must specify either the number of partitions or an interval")));
+
 	ts_hypertable_permissions_check(info.table_relid, GetUserId());
 
 	/*
@@ -1175,7 +1258,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 				 errmsg("cannot omit both the number of partitions and the interval")
 				 ));
 
-	ts_dimension_validate_info(&info);
+	ts_dimension_info_validate(&info);
 
 	if (!info.skip)
 	{

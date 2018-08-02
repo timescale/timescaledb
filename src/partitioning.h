@@ -16,6 +16,7 @@
 #include <fmgr.h>
 
 #include "catalog.h"
+#include "dimension.h"
 
 #define OPEN_START_TIME -1
 #define OPEN_END_TIME PG_INT64_MAX
@@ -27,6 +28,7 @@ typedef struct PartitioningFunc
 {
 	char		schema[NAMEDATALEN];
 	char		name[NAMEDATALEN];
+	Oid			rettype;
 
 	/*
 	 * Function manager info to call the partitioning function on the
@@ -40,20 +42,21 @@ typedef struct PartitioningInfo
 {
 	char		column[NAMEDATALEN];
 	AttrNumber	column_attnum;
+	DimensionType dimtype;
 	PartitioningFunc partfunc;
 } PartitioningInfo;
 
 
-extern Oid	ts_partitioning_func_get_default(void);
-extern bool ts_partitioning_func_is_default(const char *schema, const char *funcname);
-extern bool ts_partitioning_func_is_valid(regproc funcoid);
+extern Oid	ts_partitioning_func_get_closed_default(void);
+extern bool ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtype);
 
 extern PartitioningInfo *ts_partitioning_info_create(const char *schema,
 							const char *partfunc,
 							const char *partcol,
+							DimensionType dimtype,
 							Oid relid);
 extern List *ts_partitioning_func_qualified_name(PartitioningFunc *pf);
-extern int32 ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
-extern int32 ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
+extern Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+extern Datum ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc, bool *isnull);
 
 #endif							/* TIMESCALEDB_PARTITIONING_H */

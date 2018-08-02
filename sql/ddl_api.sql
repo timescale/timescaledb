@@ -20,6 +20,7 @@
 -- migrate_data - (Optional) Set to true to migrate any existing data in the table to chunks
 -- chunk_target_size - (Optional) The target size for chunks (e.g., '1000MB', 'estimate', or 'off')
 -- chunk_sizing_func - (Optional) A function to calculate the chunk time interval for new chunks
+-- time_partitioning_func - (Optional) The partitioning function to use for "time" partitioning
 CREATE OR REPLACE FUNCTION  create_hypertable(
     main_table              REGCLASS,
     time_column_name        NAME,
@@ -33,7 +34,8 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     partitioning_func       REGPROC = NULL,
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.

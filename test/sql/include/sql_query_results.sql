@@ -12,6 +12,7 @@ CREATE TABLE PUBLIC.hyper_1 (
 
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
 SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
+
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 
@@ -64,6 +65,27 @@ CREATE INDEX "time_plain_plain_table" ON PUBLIC.plain_table (time DESC, series_0
 INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
 INSERT INTO plain_table SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
 
+-- Table with a time partitioning function
+CREATE TABLE PUBLIC.hyper_timefunc (
+  time float8 NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL
+);
+
+CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+
+CREATE INDEX "time_plain_timefunc" ON PUBLIC.hyper_timefunc (to_timestamp(time) DESC, series_0);
+SELECT * FROM create_hypertable('"public"."hyper_timefunc"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false, time_partitioning_func => 'unix_to_timestamp');
+
+INSERT INTO hyper_timefunc SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
+INSERT INTO hyper_timefunc SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(10001,20000) ser;
+
+
 SET client_min_messages = 'error';
 --avoid warning polluting output
 ANALYZE;
@@ -75,7 +97,10 @@ RESET client_min_messages;
 EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
 SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
 
---aggregates use MergeAppend only in optimized
+EXPLAIN (costs off) SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;
+SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;
+
+--Aggregates use MergeAppend only in optimized
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
 
 EXPLAIN (costs off) SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
@@ -98,6 +123,25 @@ LIMIT 2;
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1
 WHERE time < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
+LIMIT 2;
+
+--test on table with time partitioning function. Currently not
+--optimized to use index for ordering since the index is an expression
+--on time (e.g., timefunc(time)), and we currently don't handle that
+--case.
+EXPLAIN (costs off)
+SELECT date_trunc('minute', to_timestamp(time)) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_timefunc
+WHERE to_timestamp(time) < to_timestamp(900)
+GROUP BY t
+ORDER BY t DESC
+LIMIT 2;
+
+SELECT date_trunc('minute', to_timestamp(time)) t, avg(series_0), min(series_1), avg(series_2)
+FROM hyper_timefunc
+WHERE to_timestamp(time) < to_timestamp(900)
 GROUP BY t
 ORDER BY t DESC
 LIMIT 2;

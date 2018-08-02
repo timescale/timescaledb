@@ -213,3 +213,87 @@ INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
 ALTER SCHEMA my_partitioning_schema RENAME TO new_partitioning_schema;
 -- Inserts should work even after we rename the schema
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (3,4));
+
+-- Test partitioning function on an open (time) dimension
+CREATE OR REPLACE FUNCTION time_partfunc(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+DECLARE
+    retval TIMESTAMPTZ;
+BEGIN
+
+    retval := to_timestamp(unixtime);
+    RAISE NOTICE 'time value for % is %', unixtime, timezone('UTC', retval);
+    RETURN retval;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION time_partfunc_bad_parameters(unixtime float8, extra text)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+
+CREATE OR REPLACE FUNCTION time_partfunc_bad_return_type(unixtime float8)
+    RETURNS FLOAT8 LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT unixtime;
+$BODY$;
+
+CREATE TABLE part_time_func(time float8, temp float8, device text);
+\set ON_ERROR_STOP 0
+-- Should fail due to invalid time column
+SELECT create_hypertable('part_time_func', 'time');
+
+-- Should fail due to bad signature of time partitioning function
+SELECT create_hypertable('part_time_func', 'time', time_partitioning_func => 'time_partfunc_bad_parameters');
+SELECT create_hypertable('part_time_func', 'time', time_partitioning_func => 'time_partfunc_bad_return_type');
+\set ON_ERROR_STOP 1
+
+-- Should work with time partitioning function that returns a valid time type
+SELECT create_hypertable('part_time_func', 'time', time_partitioning_func => 'time_partfunc');
+
+INSERT INTO part_time_func VALUES (1530214157.134, 23.4, 'dev1'),
+                                  (1533214157.8734, 22.3, 'dev7');
+
+SELECT time, temp, device FROM part_time_func;
+SELECT time_partfunc(time) at time zone 'UTC', temp, device FROM part_time_func;
+SELECT * FROM test.show_subtables('part_time_func');
+SELECT (test.show_constraints("Child")).*
+FROM test.show_subtables('part_time_func');
+SELECT (test.show_indexes("Child")).*
+FROM test.show_subtables('part_time_func');
+
+-- Check that constraint exclusion works with time partitioning
+-- function (scan only one chunk)
+
+-- No exclusion
+EXPLAIN (verbose, costs off)
+SELECT * FROM part_time_func;
+
+-- Exclude using the function on time
+EXPLAIN (verbose, costs off)
+SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
+
+-- Exclude using the same date but as a UNIX timestamp. Won't do an
+-- index scan since the index is on the time function expression
+EXPLAIN (verbose, costs off)
+SELECT * FROM part_time_func WHERE time < 1530403200.0;
+
+-- Check that inserts will fail if we use a time partitioning function
+-- that returns NULL
+CREATE OR REPLACE FUNCTION time_partfunc_null_ret(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN NULL;
+END
+$BODY$;
+
+CREATE TABLE part_time_func_null_ret(time float8, temp float8, device text);
+SELECT create_hypertable('part_time_func_null_ret', 'time', time_partitioning_func => 'time_partfunc_null_ret');
+
+\set ON_ERROR_STOP 0
+INSERT INTO part_time_func_null_ret VALUES (1530214157.134, 23.4, 'dev1'),
+                                           (1533214157.8734, 22.3, 'dev7');
+\set ON_ERROR_STOP 1
