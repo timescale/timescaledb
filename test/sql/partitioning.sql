@@ -61,7 +61,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
 -- that our native partitioning function handles function expressions
 -- as argument
 CREATE OR REPLACE FUNCTION custom_partfunc(source anyelement)
-    RETURNS INTEGER LANGUAGE PLPGSQL AS
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 DECLARE
     retval INTEGER;

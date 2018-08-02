@@ -897,7 +897,9 @@ dimension_validate_info(DimensionInfo *info)
 		else if (!partitioning_func_is_valid(info->partitioning_func))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
-					 errmsg("invalid partitioning function: must have the signature (anyelement) -> integer")));
+					 errmsg("invalid partitioning function"),
+					 errhint("A valid partitioning function for closed (space) dimensions must be IMMUTABLE "
+							 "and have the signature (anyelement) -> integer.")));
 
 		if (!IS_VALID_NUM_SLICES(info->num_slices))
 			ereport(ERROR,
