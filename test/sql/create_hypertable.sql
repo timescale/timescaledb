@@ -180,3 +180,70 @@ select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data 
 -- Reset GRANTS
 \c single :ROLE_SUPERUSER
 REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;
+
+-- Test custom partitioning functions
+CREATE OR REPLACE FUNCTION partfunc_not_immutable(source anyelement)
+    RETURNS INTEGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_internal.get_partition_hash(source);
+END
+$BODY$;
+
+
+CREATE OR REPLACE FUNCTION partfunc_bad_return_type(source anyelement)
+    RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_internal.get_partition_hash(source);
+END
+$BODY$;
+
+
+CREATE OR REPLACE FUNCTION partfunc_bad_arg_type(source text)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_internal.get_partition_hash(source);
+END
+$BODY$;
+
+
+CREATE OR REPLACE FUNCTION partfunc_bad_multi_arg(source anyelement, extra_arg integer)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_internal.get_partition_hash(source);
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION partfunc_valid(source anyelement)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_internal.get_partition_hash(source);
+END
+$BODY$;
+
+create table test_schema.test_partfunc(time timestamptz, temp float, device int);
+
+-- Test that create_hypertable fails due to invalid partitioning function
+\set ON_ERROR_STOP 0
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_not_immutable');
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_bad_return_type');
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_bad_arg_type');
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_bad_multi_arg');
+\set ON_ERROR_STOP 1
+
+-- Test that add_dimension fails due to invalid partitioning function
+select create_hypertable('test_schema.test_partfunc', 'time');
+
+\set ON_ERROR_STOP 0
+select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_not_immutable');
+select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_bad_return_type');
+select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_bad_arg_type');
+select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_bad_multi_arg');
+\set ON_ERROR_STOP 1
+
+-- A valid function should work:
+select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');

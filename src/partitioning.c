@@ -28,6 +28,7 @@
 
 #define IS_VALID_PARTITIONING_FUNC(proform)							\
 	((proform)->prorettype == INT4OID &&							\
+	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&			\
 	 (proform)->pronargs == 1 &&									\
 	 (proform)->proargtypes.values[0] == ANYELEMENTOID)
 /*
@@ -101,7 +102,9 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 
 	if (!OidIsValid(funcoid))
 		ereport(ERROR,
-				(errmsg("invalid partitioning function: must have the signature (anyelement) -> integer")));
+				(errmsg("invalid partitioning function"),
+				 errhint("A partitioning function for a closed (space) dimension "
+						 "must be IMMUTABLE and have the signature (anyelement) -> integer")));
 
 	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
 }
