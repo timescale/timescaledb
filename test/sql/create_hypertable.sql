@@ -163,6 +163,52 @@ select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true)
 select create_hypertable('test_schema.test_1dim', 'time');
 \set ON_ERROR_STOP 1
 
+-- Test partitioning functions
+CREATE OR REPLACE FUNCTION invalid_partfunc(source integer)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN NULL;
+END
+$BODY$;
+
+CREATE OR REPLACE FUNCTION time_partfunc(source text)
+    RETURNS TIMESTAMPTZ LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN timezone('UTC', to_timestamp(source));
+END
+$BODY$;
+
+CREATE TABLE test_schema.test_invalid_func(time timestamptz, temp float8, device text);
+
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT create_hypertable('test_schema.test_invalid_func', 'time', 'device', 2, partitioning_func => 'invalid_partfunc');
+
+SELECT create_hypertable('test_schema.test_invalid_func', 'time');
+-- should also fail due to invalid signature
+SELECT add_dimension('test_schema.test_invalid_func', 'device', 2, partitioning_func => 'invalid_partfunc');
+\set ON_ERROR_STOP 1
+
+
+-- Test open-dimension function
+CREATE TABLE test_schema.open_dim_part_func(time text, temp float8, device text, event_time text);
+
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'invalid_partfunc');
+\set ON_ERROR_STOP 1
+
+SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'time_partfunc');
+
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'invalid_partfunc');
+\set ON_ERROR_STOP 1
+
+SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'time_partfunc');
+
 --test data migration
 create table test_schema.test_migrate(time timestamp, temp float);
 insert into test_schema.test_migrate VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
@@ -179,8 +225,8 @@ select * from _timescaledb_catalog.chunk;
 select * from test_schema.test_migrate;
 --main table should now be empty
 select * from only test_schema.test_migrate;
-select * from only _timescaledb_internal._hyper_6_4_chunk;
-select * from only _timescaledb_internal._hyper_6_5_chunk;
+select * from only _timescaledb_internal._hyper_8_4_chunk;
+select * from only _timescaledb_internal._hyper_8_5_chunk;
 
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
@@ -282,4 +328,3 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
 
 -- A valid function should work:
 select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');
-

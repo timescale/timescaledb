@@ -55,6 +55,21 @@ INSERT INTO tag(name) SELECT 'tag'||g FROM generate_series(0,10) g;
 INSERT INTO hyper_ts (time, device_id, tag_id, value) SELECT to_timestamp(g), 'dev' || g, (random() /10)+1, g FROM generate_series(0,30) g;
 --one in the future
 INSERT INTO hyper_ts (time, device_id, tag_id, value)  VALUES ('2100-01-01 02:03:04 PST', 'dev101', 1, 0);
+--time partitioning function
+CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE PARALLEL SAFE STRICT AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+CREATE TABLE hyper_timefunc ("time" float8 NOT NULL, "device_id" text, "value" integer);
+SELECT create_hypertable('hyper_timefunc', 'time', 'device_id', 4, chunk_time_interval => 10, time_partitioning_func => 'unix_to_timestamp');
+psql:include/plan_expand_hypertable_load.sql:60: WARNING:  unexpected interval: smaller than one second
+      create_hypertable      
+-----------------------------
+ (4,public,hyper_timefunc,t)
+(1 row)
+
+INSERT INTO hyper_timefunc (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
 SET client_min_messages = 'error';
 ANALYZE;
 RESET client_min_messages;
@@ -975,4 +990,98 @@ SELECT * FROM cte ORDER BY value;
                ->  Seq Scan on _hyper_3_116_chunk
                      Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
 (11 rows)
+
+--exclude chunks based on time column with partitioning function. This
+--transparently applies the time partitioning function on the time
+--value to be able to exclude chunks (similar to a closed dimension).
+:PREFIX SELECT * FROM hyper_timefunc WHERE time < 4 ORDER BY value;
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Sort
+   Sort Key: hyper_timefunc.value
+   ->  Append
+         ->  Seq Scan on hyper_timefunc
+               Filter: ("time" < '4'::double precision)
+         ->  Seq Scan on _hyper_4_125_chunk
+               Filter: ("time" < '4'::double precision)
+         ->  Seq Scan on _hyper_4_126_chunk
+               Filter: ("time" < '4'::double precision)
+         ->  Seq Scan on _hyper_4_127_chunk
+               Filter: ("time" < '4'::double precision)
+         ->  Seq Scan on _hyper_4_124_chunk
+               Filter: ("time" < '4'::double precision)
+(13 rows)
+
+--excluding based on time expression is currently unoptimized
+:PREFIX SELECT * FROM hyper_timefunc WHERE unix_to_timestamp(time) < 'Wed Dec 31 16:00:04 1969 PST' ORDER BY value;
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: hyper_timefunc.value
+   ->  Append
+         ->  Seq Scan on hyper_timefunc
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_124_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_125_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_126_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_127_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_128_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_129_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_130_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_131_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_132_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_133_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_134_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_135_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_136_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_137_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_138_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_139_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_140_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_141_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_142_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_143_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_144_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_145_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_146_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_147_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_148_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_149_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_150_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_151_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_152_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_153_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_4_154_chunk
+               Filter: (to_timestamp("time") < 'Wed Dec 31 16:00:04 1969 PST'::timestamp with time zone)
+(67 rows)
 

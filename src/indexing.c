@@ -20,6 +20,7 @@
 #include "dimension.h"
 #include "errors.h"
 #include "hypertable_cache.h"
+#include "partitioning.h"
 
 static bool
 index_has_attribute(List *indexelems, const char *attrname)
@@ -142,6 +143,24 @@ create_default_index(Hypertable *ht, List *indexelems)
 				true);			/* quiet */
 }
 
+static Node *
+get_open_dim_expr(Dimension *dim)
+{
+	if (dim == NULL || dim->partitioning == NULL)
+		return NULL;
+
+	return dim->partitioning->partfunc.func_fmgr.fn_expr;
+}
+
+static char *
+get_open_dim_name(Dimension *dim)
+{
+	if (dim == NULL || dim->partitioning != NULL)
+		return NULL;
+
+	return NameStr(dim->fd.column_name);
+}
+
 static void
 create_default_indexes(Hypertable *ht,
 					   Dimension *time_dim,
@@ -151,8 +170,9 @@ create_default_indexes(Hypertable *ht,
 {
 	IndexElem	telem = {
 		.type = T_IndexElem,
-		.name = time_dim != NULL ? NameStr(time_dim->fd.column_name) : NULL,
+		.name = get_open_dim_name(time_dim),
 		.ordering = SORTBY_DESC,
+		.expr = get_open_dim_expr(time_dim),
 	};
 
 	/* In case we'd allow tables that are only space partitioned */

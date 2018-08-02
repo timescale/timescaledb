@@ -32,6 +32,17 @@ WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
 
+-- Test partitioning function on an open (time) dimension
+CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
+    RETURNS TIMESTAMPTZ LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT to_timestamp(unixtime);
+$BODY$;
+CREATE TABLE hyper_timefunc(time float8, metricid int REFERENCES metric(id), VALUE double precision, time_date DATE);
+
+SELECT create_hypertable('hyper_timefunc', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE, time_partitioning_func => 'unix_to_timestamp');
+INSERT INTO hyper_timefunc SELECT time_int, metricid, VALUE, time_date FROM hyper;
+
 SET client_min_messages = 'error';
 ANALYZE;
 RESET client_min_messages;

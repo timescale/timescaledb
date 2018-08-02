@@ -84,4 +84,9 @@ WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs, metric.id
 ORDER BY MetricMinuteTs DESC, metric.id;
 
-
+-- Try with time partitioning function. Currently not optimized for hash aggregates
+:PREFIX SELECT time_bucket('1 minute', unix_to_timestamp(time)) AS MetricMinuteTs, AVG(value) as avg
+FROM hyper_timefunc
+WHERE unix_to_timestamp(time) >= '2001-01-04T00:00:00' AND unix_to_timestamp(time) <= '2001-01-05T01:00:00'
+GROUP BY MetricMinuteTs
+ORDER BY MetricMinuteTs DESC;

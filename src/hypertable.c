@@ -1245,6 +1245,7 @@ TS_FUNCTION_INFO_V1(ts_hypertable_create);
  * migrate_data            BOOLEAN = FALSE
  * chunk_sizing_func       OID = NULL
  * chunk_target_size       TEXT = NULL
+ * time_partitioning_func  REGPROC = NULL
  */
 Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
@@ -1260,6 +1261,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
 		.interval_datum = PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6),
 		.interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
+		.partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13),
 	};
 	DimensionInfo space_dim_info = {
 		.table_relid = table_relid,
@@ -1458,10 +1460,10 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	}
 
 	/* Validate that the dimensions are OK */
-	ts_dimension_validate_info(&time_dim_info);
+	ts_dimension_info_validate(&time_dim_info);
 
 	if (DIMENSION_INFO_IS_SET(&space_dim_info))
-		ts_dimension_validate_info(&space_dim_info);
+		ts_dimension_info_validate(&space_dim_info);
 
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));

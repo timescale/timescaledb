@@ -140,3 +140,9 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 
+--exclude chunks based on time column with partitioning function. This
+--transparently applies the time partitioning function on the time
+--value to be able to exclude chunks (similar to a closed dimension).
+:PREFIX SELECT * FROM hyper_timefunc WHERE time < 4 ORDER BY value;
+--excluding based on time expression is currently unoptimized
+:PREFIX SELECT * FROM hyper_timefunc WHERE unix_to_timestamp(time) < 'Wed Dec 31 16:00:04 1969 PST' ORDER BY value;

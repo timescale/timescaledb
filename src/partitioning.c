@@ -32,28 +32,51 @@
 #include "catalog.h"
 #include "utils.h"
 
-#define IS_VALID_PARTITIONING_FUNC(proform)							\
-	((proform)->prorettype == INT4OID &&							\
+#define IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype)				\
+	((proform)->prorettype == INT4OID &&								\
+	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&				\
+	 (proform)->pronargs == 1 &&										\
+	 ((proform)->proargtypes.values[0] == argtype ||					\
+	  (proform)->proargtypes.values[0] == ANYELEMENTOID))
+
+#define IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype)			\
+	(IS_VALID_OPEN_DIM_TYPE((proform)->prorettype) &&				\
 	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&			\
 	 (proform)->pronargs == 1 &&									\
-	 (proform)->proargtypes.values[0] == ANYELEMENTOID)
+	 ((proform)->proargtypes.values[0] == argtype ||				\
+	  (proform)->proargtypes.values[0] == ANYELEMENTOID))
+
+#define IS_VALID_PARTITIONING_FUNC(proform, dimtype, argtype) \
+	((dimtype == DIMENSION_TYPE_OPEN) ?						  \
+	 IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype) :	  \
+	 IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype))
+
+typedef bool (*proc_filter) (Form_pg_proc form, void *arg);
+
 /*
- * Get the OID of the partitioning function given a qualified name.
+ * Find a partitioning function with a given schema and name.
  *
- * Only functions that match the supported function signature will be returned.
+ * The caller can optionally pass a filter function and a type of the argument
+ * that the partitioning function should take.
  */
 static regproc
-partitioning_func_get(const char *schema, const char *funcname)
+lookup_proc_filtered(const char *schema,
+					 const char *funcname,
+					 Oid *rettype,
+					 proc_filter filter,
+					 void *filter_arg)
 {
 	Oid			namespace_oid = LookupExplicitNamespace(schema, false);
 	regproc		func = InvalidOid;
 	CatCList   *catlist;
-	NameData	proname;
 	int			i;
 
-	namestrcpy(&proname, funcname);
-
-	catlist = SearchSysCacheList1(PROCNAMEARGSNSP, NameGetDatum(&proname));
+	/*
+	 * We could use SearchSysCache3 to get by (name, args, namespace), but
+	 * that would not allow us to check for functions that take either
+	 * ANYELEMENTOID or a dimension-specific in the same search.
+	 */
+	catlist = SearchSysCacheList1(PROCNAMEARGSNSP, CStringGetDatum(funcname));
 
 	for (i = 0; i < catlist->n_members; i++)
 	{
@@ -61,8 +84,11 @@ partitioning_func_get(const char *schema, const char *funcname)
 		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
 
 		if (procform->pronamespace == namespace_oid &&
-			IS_VALID_PARTITIONING_FUNC(procform))
+			(filter == NULL || filter(procform, filter_arg)))
 		{
+			if (rettype)
+				*rettype = procform->prorettype;
+
 			func = HeapTupleGetOid(proctup);
 			break;
 		}
@@ -73,8 +99,24 @@ partitioning_func_get(const char *schema, const char *funcname)
 	return func;
 }
 
+static bool
+closed_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
+{
+	Oid		   *argtype = arg;
+
+	return IS_VALID_CLOSED_PARTITIONING_FUNC(form, *argtype);
+}
+
+static bool
+open_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
+{
+	Oid		   *argtype = arg;
+
+	return IS_VALID_OPEN_PARTITIONING_FUNC(form, *argtype);
+}
+
 bool
-ts_partitioning_func_is_valid(regproc funcoid)
+ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtype)
 {
 	HeapTuple	tuple;
 	bool		isvalid;
@@ -84,7 +126,7 @@ ts_partitioning_func_is_valid(regproc funcoid)
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for function %u", funcoid);
 
-	isvalid = IS_VALID_PARTITIONING_FUNC((Form_pg_proc) GETSTRUCT(tuple));
+	isvalid = IS_VALID_PARTITIONING_FUNC((Form_pg_proc) GETSTRUCT(tuple), dimtype, argtype);
 
 	ReleaseSysCache(tuple);
 
@@ -92,14 +134,19 @@ ts_partitioning_func_is_valid(regproc funcoid)
 }
 
 Oid
-ts_partitioning_func_get_default(void)
+ts_partitioning_func_get_closed_default(void)
 {
-	return partitioning_func_get(DEFAULT_PARTITIONING_FUNC_SCHEMA,
-								 DEFAULT_PARTITIONING_FUNC_NAME);
+	Oid			argtype = ANYELEMENTOID;
+
+	return lookup_proc_filtered(DEFAULT_PARTITIONING_FUNC_SCHEMA,
+								DEFAULT_PARTITIONING_FUNC_NAME,
+								NULL,
+								closed_dim_partitioning_func_filter,
+								&argtype);
 }
 
-bool
-ts_partitioning_func_is_default(const char *schema, const char *funcname)
+static bool
+ts_partitioning_func_is_closed_default(const char *schema, const char *funcname)
 {
 	Assert(schema != NULL && funcname != NULL);
 
@@ -111,15 +158,31 @@ ts_partitioning_func_is_default(const char *schema, const char *funcname)
  * Resolve the partitioning function set for a hypertable.
  */
 static void
-partitioning_func_set_func_fmgr(PartitioningFunc *pf)
+partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType dimtype)
 {
-	Oid			funcoid = partitioning_func_get(pf->schema, pf->name);
+	Oid			funcoid;
+	proc_filter filter = dimtype == DIMENSION_TYPE_CLOSED ?
+	closed_dim_partitioning_func_filter :
+	open_dim_partitioning_func_filter;
+
+	if (dimtype != DIMENSION_TYPE_CLOSED && dimtype != DIMENSION_TYPE_OPEN)
+		elog(ERROR, "invalid dimension type %u", dimtype);
+
+	funcoid = lookup_proc_filtered(pf->schema, pf->name, &pf->rettype, filter, &argtype);
 
 	if (!OidIsValid(funcoid))
-		ereport(ERROR,
-				(errmsg("invalid partitioning function"),
-				 errhint("A partitioning function for a closed (space) dimension "
-						 "must be IMMUTABLE and have the signature (anyelement) -> integer")));
+	{
+		if (dimtype == DIMENSION_TYPE_CLOSED)
+			ereport(ERROR,
+					(errmsg("invalid partitioning function"),
+					 errhint("A partitioning function for a closed (space) dimension "
+							 "must be IMMUTABLE and have the signature (anyelement) -> integer")));
+		else
+			ereport(ERROR,
+					(errmsg("invalid partitioning function"),
+					 errhint("A partitioning function for a open (time) dimension "
+							 "must be IMMUTABLE, take one argument, and return a supported time type")));
+	}
 
 	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
 }
@@ -155,10 +218,10 @@ PartitioningInfo *
 ts_partitioning_info_create(const char *schema,
 							const char *partfunc,
 							const char *partcol,
+							DimensionType dimtype,
 							Oid relid)
 {
 	PartitioningInfo *pinfo;
-	TypeCacheEntry *tce;
 	Oid			columntype,
 				varcollid,
 				funccollid = InvalidOid;
@@ -174,6 +237,7 @@ ts_partitioning_info_create(const char *schema,
 	StrNCpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
 	StrNCpy(pinfo->column, partcol, NAMEDATALEN);
 	pinfo->column_attnum = get_attnum(relid, pinfo->column);
+	pinfo->dimtype = dimtype;
 
 	/* handle the case that the attribute has been dropped */
 	if (pinfo->column_attnum == InvalidAttrNumber)
@@ -184,12 +248,16 @@ ts_partitioning_info_create(const char *schema,
 
 	/* Lookup the type cache entry to access the hash function for the type */
 	columntype = get_atttype(relid, pinfo->column_attnum);
-	tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-	if (tce->hash_proc == InvalidOid && ts_partitioning_func_is_default(schema, partfunc))
-		elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
+	if (dimtype == DIMENSION_TYPE_CLOSED)
+	{
+		TypeCacheEntry *tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-	partitioning_func_set_func_fmgr(&pinfo->partfunc);
+		if (tce->hash_proc == InvalidOid && ts_partitioning_func_is_closed_default(schema, partfunc))
+			elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
+	}
+
+	partitioning_func_set_func_fmgr(&pinfo->partfunc, columntype, dimtype);
 
 	/*
 	 * Prepare a function expression for this function. The partition hash
@@ -205,8 +273,12 @@ ts_partitioning_info_create(const char *schema,
 				  varcollid,
 				  0);
 
-	expr = makeFuncExpr(pinfo->partfunc.func_fmgr.fn_oid, INT4OID, list_make1(var),
-						funccollid, varcollid, COERCE_EXPLICIT_CALL);
+	expr = makeFuncExpr(pinfo->partfunc.func_fmgr.fn_oid,
+						pinfo->partfunc.rettype,
+						list_make1(var),
+						funccollid,
+						varcollid,
+						COERCE_EXPLICIT_CALL);
 
 	fmgr_info_set_expr((Node *) expr, &pinfo->partfunc.func_fmgr);
 
@@ -214,25 +286,43 @@ ts_partitioning_info_create(const char *schema,
 }
 
 /*
- * Apply the partitioning function of a hypertable to a value.
+ * Apply a dimension's partitioning function to a value.
  *
- * We support partitioning functions with the signature (anyelement) -> int.
+ * We need to avoid FunctionCall1(), because we'd like to customize the error
+ * message in case of NULL return values.
  */
-int32
+Datum
 ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
-	return DatumGetInt32(FunctionCall1(&pinfo->partfunc.func_fmgr, value));
+	FunctionCallInfoData fcinfo;
+	Datum		result;
+
+	InitFunctionCallInfoData(fcinfo, &pinfo->partfunc.func_fmgr, 1, InvalidOid, NULL, NULL);
+
+	fcinfo.arg[0] = value;
+	fcinfo.argnull[0] = false;
+
+	result = FunctionCallInvoke(&fcinfo);
+
+	if (fcinfo.isnull)
+		elog(ERROR, "partitioning function \"%s.%s\" returned NULL",
+			 pinfo->partfunc.schema, pinfo->partfunc.name);
+
+	return result;
 }
 
-int32
-ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc)
+Datum
+ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc, bool *isnull)
 {
 	Datum		value;
-	bool		isnull;
+	bool		null;
 
-	value = heap_getattr(tuple, pinfo->column_attnum, desc, &isnull);
+	value = heap_getattr(tuple, pinfo->column_attnum, desc, &null);
 
-	if (isnull)
+	if (NULL != isnull)
+		*isnull = null;
+
+	if (null)
 		return 0;
 
 	return ts_partitioning_func_apply(pinfo, value);
