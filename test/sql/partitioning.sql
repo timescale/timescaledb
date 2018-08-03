@@ -83,6 +83,7 @@ INSERT INTO part_custom_func VALUES ('2017-03-22T09:18:23', 23.4, 'dev1'),
                                     ('2017-03-22T09:18:23', 23.4, 'dev7');
 
 SELECT * FROM test.show_subtables('part_custom_func');
+
 -- Test that index creation is handled correctly.
 CREATE TABLE hyper_with_index(time timestamptz, temp float, device int);
 CREATE UNIQUE INDEX temp_index ON hyper_with_index(temp);
@@ -126,3 +127,25 @@ SELECT add_dimension('hyper_with_primary', 'device', 4);
 
 -- NON-unique indexes can still be created
 CREATE INDEX temp_index ON hyper_with_index(temp);
+
+-- Make sure custom composite types are supported as dimensions
+CREATE TYPE TUPLE as (val1 int4, val2 int4);
+CREATE FUNCTION tuple_hash(value ANYELEMENT) RETURNS INT4
+LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RAISE NOTICE 'custom hash value is: %', value.val1+value.val2;
+    RETURN value.val1+value.val2;
+END
+$BODY$;
+
+CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
+
+\set ON_ERROR_STOP 0
+-- should fail because no partitioning function supplied and the given custom type
+-- has no default hash function
+SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'tuple_hash');
+
+INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
