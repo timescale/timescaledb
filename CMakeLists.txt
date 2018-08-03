@@ -19,6 +19,9 @@ else ()
   set(PROJECT_VERSION_MOD ${VERSION})
 endif ()
 
+set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform this binary
+is built for")
+
 if (NOT CMAKE_BUILD_TYPE)
   # Default to Release builds
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
