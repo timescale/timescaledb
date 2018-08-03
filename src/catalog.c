@@ -64,6 +64,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.table_name = BGW_JOB_STAT_TABLE_NAME,
 	},
+	[INSTALLATION_METADATA] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = INSTALLATION_METADATA_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -130,13 +134,19 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 	[BGW_JOB] = {
 		.length = _MAX_BGW_JOB_INDEX,
 		.names = (char *[]) {
-			[BGW_JOB_PKEY_IDX] = "bgw_job_pkey"
+			[BGW_JOB_PKEY_IDX] = "bgw_job_pkey",
 		}
 	},
 	[BGW_JOB_STAT] = {
 		.length = _MAX_BGW_JOB_STAT_INDEX,
 		.names = (char *[]) {
-			[BGW_JOB_STAT_PKEY_IDX] = "bgw_job_stat_pkey"
+			[BGW_JOB_STAT_PKEY_IDX] = "bgw_job_stat_pkey",
+		}
+	},
+	[INSTALLATION_METADATA] = {
+		.length = _MAX_INSTALLATION_METADATA_INDEX,
+		.names = (char *[]) {
+			[INSTALLATION_METADATA_PKEY_IDX] = "installation_metadata_pkey",
 		}
 	}
 };

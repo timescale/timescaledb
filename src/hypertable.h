@@ -25,6 +25,8 @@ typedef struct Hypertable
 	SubspaceStore *chunk_cache;
 } Hypertable;
 
+extern int	number_of_hypertables(void);
+
 extern Oid	rel_get_owner(Oid relid);
 extern Hypertable *hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *hypertable_get_by_name(char *schema, char *name);

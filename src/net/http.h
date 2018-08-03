@@ -1,5 +1,5 @@
-#ifndef TIMESCALEDB_HTTP_H
-#define TIMESCALEDB_HTTP_H
+#ifndef TIMESCALEDB_NET_HTTP_H
+#define TIMESCALEDB_NET_HTTP_H
 
 #include <unistd.h>
 #include <stdbool.h>
