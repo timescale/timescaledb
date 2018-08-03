@@ -176,8 +176,14 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
 
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.installation_metadata (
+    key     NAME NOT NULL PRIMARY KEY,
+    value   TEXT NOT NULL
+);
+SELECT
+pg_catalog.pg_extension_config_dump('_timescaledb_catalog.installation_metadata', $$WHERE key='exported_uuid'$$);
+
 -- Set table permissions
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
 GRANT SELECT ON _timescaledb_internal.bgw_job_stat TO PUBLIC;
-
