@@ -1,3 +1,6 @@
+#ifndef TIMESCALEDB_NET_CONN_H
+#define TIMESCALEDB_NET_CONN_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pg_config.h>
@@ -29,3 +32,5 @@ extern void connection_destroy(Connection *conn);
 /*  Called in init.c */
 extern void _connection_init(void);
 extern void _connection_fini(void);
+
+#endif /* TIMESCALEDB_NET_CONN_H */

@@ -87,7 +87,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   104
+   106
 (1 row)
 
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
@@ -261,6 +261,24 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 \! createdb -h localhost -U super_user single
 ALTER DATABASE single SET timescaledb.restoring='on';
 \! pg_restore -h localhost -U super_user -d single dump/single.sql
+pg_restore: WARNING:  
+WELCOME TO
+ _____ _                               _     ____________  
+|_   _(_)                             | |    |  _  \ ___ \ 
+  | |  _ _ __ ___   ___  ___  ___ __ _| | ___| | | | |_/ / 
+  | | | |  _ ` _ \ / _ \/ __|/ __/ _` | |/ _ \ | | | ___ \ 
+  | | | | | | | | |  __/\__ \ (_| (_| | |  __/ |/ /| |_/ /
+  |_| |_|_| |_| |_|\___||___/\___\__,_|_|\___|___/ \____/
+               Running version 0.11.1-dev
+For more information on TimescaleDB, please visit the following links:
+
+ 1. Getting started: https://docs.timescale.com/getting-started
+ 2. API reference documentation: https://docs.timescale.com/api
+ 3. How TimescaleDB is designed: https://docs.timescale.com/introduction/architecture
+
+Note: TimescaleDB collects anonymous reports to better understand and assist our users.
+For more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.
+
 \c single
 -- Set to OFF for future DB sessions.
 ALTER DATABASE single SET timescaledb.restoring='off';
@@ -282,7 +300,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   104
+   106
 (1 row)
 
 --main table and chunk schemas should be the same
