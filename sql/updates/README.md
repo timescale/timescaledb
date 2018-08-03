@@ -28,7 +28,7 @@ to consider.
    commands that change or remove objects. In some cases,
    modifications of metadata are also necessary.
 2. `DROP FUNCTION` needs to be idempotent. In most cases that means
-   commands should have an `IF NOT EXISTS` clause. The reason is that
+   commands should have an `IF EXISTS` clause. The reason is that
    some modfiles might try to, e.g., `DROP` functions that aren't
    present because they only exist in an intermediate version of the
    database, which is skipped over.
@@ -39,6 +39,11 @@ to consider.
 4. The creation of new metadata tables need to be part of modfiles,
    similar to `ALTER`s of such tables. Otherwise, later modfiles
    cannot rely on those tables being present.
+5. When creating a new aggregate, the `CREATE` statement should be
+   added to both aggregate.sql AND an update file. aggregate.sql is
+   run once when TimescaleDB is installed so adding a definition in
+   an update file is the only way to ensure that upgrading users get
+   the new function.
 
 Note that modfiles that contain no changes need not exist as a
 file. Transition modfiles must, however, be listed in the
