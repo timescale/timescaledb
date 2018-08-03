@@ -201,6 +201,11 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 	return scanner_scan(&scanctx);
 }
 
+int
+number_of_hypertables()
+{
+	return hypertable_scan_limit_internal(NULL, 0, HYPERTABLE_ID_INDEX, NULL, NULL, -1, AccessShareLock, false, CurrentMemoryContext);
+}
 
 static bool
 hypertable_tuple_update(TupleInfo *ti, void *data)

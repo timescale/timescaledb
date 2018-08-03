@@ -15,7 +15,9 @@ SELECT * FROM drop_test;
 
 \c single :ROLE_SUPERUSER
 -- Recreate the extension
+SET client_min_messages=error;
 CREATE EXTENSION timescaledb;
+RESET client_min_messages;
 
 -- Test that calling twice generates proper error
 \set ON_ERROR_STOP 0

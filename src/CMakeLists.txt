@@ -83,6 +83,7 @@ set(HEADERS
   hypertable_insert.h
   hypertable_restrict_info.h
   indexing.h
+  installation_metadata.h
   partitioning.h
   planner_utils.h
   planner_import.h
@@ -125,6 +126,7 @@ set(SOURCES
   hypertable_restrict_info.c
   indexing.c
   init.c
+  installation_metadata.c
   partitioning.c
   planner.c
   plan_expand_hypertable.c
@@ -175,6 +177,7 @@ endif (OPENSSL_FOUND AND USE_OPENSSL)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory(bgw)
 add_subdirectory(net)
+add_subdirectory(telemetry)
 
 if (OPENSSL_FOUND AND USE_OPENSSL)
   target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
@@ -192,7 +195,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   # This define generates extension-specific code for symbol conflict testing
   target_compile_definitions(${PROJECT_NAME} PRIVATE MODULE_NAME=${PROJECT_NAME})
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
-
 
 install(
   TARGETS ${PROJECT_NAME}

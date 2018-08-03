@@ -60,21 +60,21 @@ END
 $BODY$;
 SELECT * FROM set_adaptive_chunking('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
-        chunk_sizing_func        | chunk_target_size 
+        chunk_sizing_func        | chunk_target_size
 ---------------------------------+-------------------
  custom_calculate_chunk_interval |           1048576
 (1 row)
 
 -- Chunk sizing func set
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size 
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size
 ----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+---------------------------------+-------------------
   1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | public                   | custom_calculate_chunk_interval |           1048576
 (1 row)
 
 SELECT proname, pronamespace, pronargs
 FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
-             proname             | pronamespace | pronargs 
+             proname             | pronamespace | pronargs
 ---------------------------------+--------------+----------
  custom_calculate_chunk_interval |         2200 |        3
 (1 row)
@@ -85,13 +85,13 @@ SELECT count(*)
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
- count 
+ count
 -------
-   104
+   105
 (1 row)
 
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
-   Column    |       Type       | Nullable 
+   Column    |       Type       | Nullable
 -------------+------------------+----------
  timeCustom  | bigint           | t
  device_id   | text             | t
@@ -102,7 +102,7 @@ SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
 (6 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
-   Column    |       Type       | Nullable 
+   Column    |       Type       | Nullable
 -------------+------------------+----------
  timeCustom  | bigint           | t
  device_id   | text             | t
@@ -113,39 +113,39 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 (6 rows)
 
 SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
-                          Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+                          Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace
 ---------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
- test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
- test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
+ test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         |
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         |
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
-                                       Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+                                       Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace
 ------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         |
+ _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         |
 (8 rows)
 
 SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
-            Constraint             | Type |             Columns             |                     Index                     | Expr | Deferrable | Deferred | Validated 
+            Constraint             | Type |             Columns             |                     Index                     | Expr | Deferrable | Deferred | Validated
 -----------------------------------+------+---------------------------------+-----------------------------------------------+------+------------+----------+-----------
  timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | test_schema.timecustom_device_id_series_2_key |      | f          | f        | t
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-              Constraint               | Type |             Columns             |                             Index                             |                                                 Expr                                                 | Deferrable | Deferred | Validated 
+              Constraint               | Type |             Columns             |                             Index                             |                                                 Expr                                                 | Deferrable | Deferred | Validated
 ---------------------------------------+------+---------------------------------+---------------------------------------------------------------+------------------------------------------------------------------------------------------------------+------------+----------+-----------
  1_1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_1_timecustom_device_id_series_2_key" |                                                                                                      | f          | f        | t
  constraint_1                          | c    | {timeCustom}                    | -                                                             | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint)) | f          | f        | t
@@ -153,55 +153,55 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-     Trigger     | Type |   Function   |                                                  Definition                                                  
+     Trigger     | Type |   Function   |                                                  Definition
 -----------------+------+--------------+--------------------------------------------------------------------------------------------------------------
  restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
-     Trigger     | Type |   Function   |                                                       Definition                                                       
+     Trigger     | Type |   Function   |                                                       Definition
 -----------------+------+--------------+------------------------------------------------------------------------------------------------------------------------
  restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
 SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
- 1257894000000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev2      |      1.5 |        2 |          | 
- 1257894000000000000 | dev2      |      1.5 |        1 |          | 
- 1257894000000001000 | dev1      |      2.5 |        3 |          | 
- 1257894001000000000 | dev1      |      3.5 |        4 |          | 
- 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894000000000000 | dev1      |      1.5 |        2 |          |
+ 1257894000000000000 | dev2      |      1.5 |        2 |          |
+ 1257894000000000000 | dev2      |      1.5 |        1 |          |
+ 1257894000000001000 | dev1      |      2.5 |        3 |          |
+ 1257894001000000000 | dev1      |      3.5 |        4 |          |
+ 1257894002000000000 | dev1      |      2.5 |        3 |          |
  1257894002000000000 | dev1      |      5.5 |        6 |          | t
  1257894002000000000 | dev1      |      5.5 |        7 |          | f
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
- 1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          |
+ 1257987600000000000 | dev1      |      1.5 |        1 |          |
 (12 rows)
 
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
- 1257894000000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000001000 | dev1      |      2.5 |        3 |          | 
- 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894000000000000 | dev1      |      1.5 |        2 |          |
+ 1257894000000001000 | dev1      |      2.5 |        3 |          |
+ 1257894001000000000 | dev1      |      3.5 |        4 |          |
  1257894002000000000 | dev1      |      5.5 |        6 |          | t
  1257894002000000000 | dev1      |      5.5 |        7 |          | f
- 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          |
 (7 rows)
 
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool
 ---------------------+-----------+----------+----------+----------+-------------
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
 
 -- Show all index mappings
 SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
+ chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name
 ----------+------------------------------------------------------------+---------------+-------------------------------------------
         1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
         1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
@@ -238,16 +238,16 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 (32 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
+ chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name
 ----------+--------------------+---------------------------------------+-----------------------------------
-        1 |                  1 | constraint_1                          | 
-        1 |                  2 | constraint_2                          | 
-        2 |                  3 | constraint_3                          | 
-        2 |                  2 | constraint_2                          | 
-        3 |                  4 | constraint_4                          | 
-        3 |                  2 | constraint_2                          | 
-        4 |                  1 | constraint_1                          | 
-        4 |                  5 | constraint_5                          | 
+        1 |                  1 | constraint_1                          |
+        1 |                  2 | constraint_2                          |
+        2 |                  3 | constraint_3                          |
+        2 |                  2 | constraint_2                          |
+        3 |                  4 | constraint_4                          |
+        3 |                  2 | constraint_2                          |
+        4 |                  1 | constraint_1                          |
+        4 |                  5 | constraint_5                          |
         1 |                    | 1_1_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
         2 |                    | 2_2_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
         3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
@@ -283,14 +283,14 @@ SELECT count(*)
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
- count 
+ count
 -------
-   104
+   105
 (1 row)
 
 --main table and chunk schemas should be the same
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
-   Column    |       Type       | Nullable 
+   Column    |       Type       | Nullable
 -------------+------------------+----------
  timeCustom  | bigint           | t
  device_id   | text             | t
@@ -301,7 +301,7 @@ SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
 (6 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
-   Column    |       Type       | Nullable 
+   Column    |       Type       | Nullable
 -------------+------------------+----------
  timeCustom  | bigint           | t
  device_id   | text             | t
@@ -312,39 +312,39 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 (6 rows)
 
 SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
-                          Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+                          Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace
 ---------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
- test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
- test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
+ test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         |
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         |
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         |
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
-                                       Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
+                                       Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace
 ------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         |
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         |
+ _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         |
 (8 rows)
 
 SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
-            Constraint             | Type |             Columns             |                     Index                     | Expr | Deferrable | Deferred | Validated 
+            Constraint             | Type |             Columns             |                     Index                     | Expr | Deferrable | Deferred | Validated
 -----------------------------------+------+---------------------------------+-----------------------------------------------+------+------------+----------+-----------
  timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | test_schema.timecustom_device_id_series_2_key |      | f          | f        | t
 (1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-              Constraint               | Type |             Columns             |                             Index                             |                                                 Expr                                                 | Deferrable | Deferred | Validated 
+              Constraint               | Type |             Columns             |                             Index                             |                                                 Expr                                                 | Deferrable | Deferred | Validated
 ---------------------------------------+------+---------------------------------+---------------------------------------------------------------+------------------------------------------------------------------------------------------------------+------------+----------+-----------
  1_1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_1_timecustom_device_id_series_2_key" |                                                                                                      | f          | f        | t
  constraint_1                          | c    | {timeCustom}                    | -                                                             | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint)) | f          | f        | t
@@ -352,55 +352,55 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-     Trigger     | Type |   Function   |                                                  Definition                                                  
+     Trigger     | Type |   Function   |                                                  Definition
 -----------------+------+--------------+--------------------------------------------------------------------------------------------------------------
  restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
-     Trigger     | Type |   Function   |                                                       Definition                                                       
+     Trigger     | Type |   Function   |                                                       Definition
 -----------------+------+--------------+------------------------------------------------------------------------------------------------------------------------
  restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON _timescaledb_internal._hyper_1_1_chunk FOR EACH ROW EXECUTE PROCEDURE test_trigger()
 (1 row)
 
 --data should be the same
 SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
- 1257894000000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000000000 | dev2      |      1.5 |        2 |          | 
- 1257894000000000000 | dev2      |      1.5 |        1 |          | 
- 1257894000000001000 | dev1      |      2.5 |        3 |          | 
- 1257894001000000000 | dev1      |      3.5 |        4 |          | 
- 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894000000000000 | dev1      |      1.5 |        2 |          |
+ 1257894000000000000 | dev2      |      1.5 |        2 |          |
+ 1257894000000000000 | dev2      |      1.5 |        1 |          |
+ 1257894000000001000 | dev1      |      2.5 |        3 |          |
+ 1257894001000000000 | dev1      |      3.5 |        4 |          |
+ 1257894002000000000 | dev1      |      2.5 |        3 |          |
  1257894002000000000 | dev1      |      5.5 |        6 |          | t
  1257894002000000000 | dev1      |      5.5 |        7 |          | f
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
- 1257987600000000000 | dev1      |      1.5 |        2 |          | 
- 1257987600000000000 | dev1      |      1.5 |        1 |          | 
+ 1257987600000000000 | dev1      |      1.5 |        2 |          |
+ 1257987600000000000 | dev1      |      1.5 |        1 |          |
 (12 rows)
 
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
- 1257894000000000000 | dev1      |      1.5 |        2 |          | 
- 1257894000000001000 | dev1      |      2.5 |        3 |          | 
- 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894000000000000 | dev1      |      1.5 |        2 |          |
+ 1257894000000001000 | dev1      |      2.5 |        3 |          |
+ 1257894001000000000 | dev1      |      3.5 |        4 |          |
  1257894002000000000 | dev1      |      5.5 |        6 |          | t
  1257894002000000000 | dev1      |      5.5 |        7 |          | f
- 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          |
 (7 rows)
 
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id;
-     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool
 ---------------------+-----------+----------+----------+----------+-------------
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
+ chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name
 ----------+------------------------------------------------------------+---------------+-------------------------------------------
         1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
         1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
@@ -437,16 +437,16 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 (32 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
+ chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name
 ----------+--------------------+---------------------------------------+-----------------------------------
-        1 |                  1 | constraint_1                          | 
-        1 |                  2 | constraint_2                          | 
-        2 |                  3 | constraint_3                          | 
-        2 |                  2 | constraint_2                          | 
-        3 |                  4 | constraint_4                          | 
-        3 |                  2 | constraint_2                          | 
-        4 |                  1 | constraint_1                          | 
-        4 |                  5 | constraint_5                          | 
+        1 |                  1 | constraint_1                          |
+        1 |                  2 | constraint_2                          |
+        2 |                  3 | constraint_3                          |
+        2 |                  2 | constraint_2                          |
+        3 |                  4 | constraint_4                          |
+        3 |                  2 | constraint_2                          |
+        4 |                  1 | constraint_1                          |
+        4 |                  5 | constraint_5                          |
         1 |                    | 1_1_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
         2 |                    | 2_2_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
         3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
@@ -455,14 +455,14 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 --Chunk sizing function should have been restored
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size 
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size
 ----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+---------------------------------+-------------------
   1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | public                   | custom_calculate_chunk_interval |           1048576
 (1 row)
 
 SELECT proname, pronamespace, pronargs
 FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
-             proname             | pronamespace | pronargs 
+             proname             | pronamespace | pronargs
 ---------------------------------+--------------+----------
  custom_calculate_chunk_interval |         2200 |        3
 (1 row)
@@ -472,7 +472,7 @@ ALTER TABLE "test_schema"."two_Partitions" ADD COLUMN series_3 integer;
 INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1, series_3) VALUES
 (1357894000000000000, 'dev5', 1.5, 2, 4);
 SELECT * FROM ONLY "test_schema"."two_Partitions";
- timeCustom | device_id | series_0 | series_1 | series_2 | series_bool | series_3 
+ timeCustom | device_id | series_0 | series_1 | series_2 | series_bool | series_3
 ------------+-----------+----------+----------+----------+-------------+----------
 (0 rows)
 
@@ -484,9 +484,8 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
-                 objid                  
+                 objid
 ----------------------------------------
  _timescaledb_internal.bgw_job_stat
  _timescaledb_catalog.tablespace_id_seq
 (2 rows)
-

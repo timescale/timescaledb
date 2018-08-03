@@ -186,17 +186,18 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (0 rows)
 
 \dt  "_timescaledb_catalog".*
-                      List of relations
-        Schema        |       Name       | Type  |   Owner    
-----------------------+------------------+-------+------------
- _timescaledb_catalog | chunk            | table | super_user
- _timescaledb_catalog | chunk_constraint | table | super_user
- _timescaledb_catalog | chunk_index      | table | super_user
- _timescaledb_catalog | dimension        | table | super_user
- _timescaledb_catalog | dimension_slice  | table | super_user
- _timescaledb_catalog | hypertable       | table | super_user
- _timescaledb_catalog | tablespace       | table | super_user
-(7 rows)
+                         List of relations
+        Schema        |         Name          | Type  |   Owner    
+----------------------+-----------------------+-------+------------
+ _timescaledb_catalog | chunk                 | table | super_user
+ _timescaledb_catalog | chunk_constraint      | table | super_user
+ _timescaledb_catalog | chunk_index           | table | super_user
+ _timescaledb_catalog | dimension             | table | super_user
+ _timescaledb_catalog | dimension_slice       | table | super_user
+ _timescaledb_catalog | hypertable            | table | super_user
+ _timescaledb_catalog | installation_metadata | table | super_user
+ _timescaledb_catalog | tablespace            | table | super_user
+(8 rows)
 
 \dt+ "_timescaledb_internal".*
                                  List of relations
