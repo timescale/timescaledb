@@ -246,3 +246,42 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.drop_trigger_on_all_chunks(INTEGER
 DROP FUNCTION IF EXISTS _timescaledb_internal.get_general_trigger_definition(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_internal.get_trigger_definition_for_table(INTEGER, text);
 DROP FUNCTION IF EXISTS _timescaledb_internal.need_chunk_trigger(int, oid);
+
+-- Adding this in the update script because aggregates.sql is not rerun in case of an update
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_sfunc (state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
+RETURNS INTERNAL
+AS '@MODULE_PATHNAME@', 'hist_sfunc'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_combinefunc(state1 INTERNAL, state2 INTERNAL)
+RETURNS INTERNAL
+AS '@MODULE_PATHNAME@', 'hist_combinefunc'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_serializefunc(INTERNAL)
+RETURNS bytea
+AS '@MODULE_PATHNAME@', 'hist_serializefunc'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_deserializefunc(bytea, INTERNAL)
+RETURNS INTERNAL
+AS '@MODULE_PATHNAME@', 'hist_deserializefunc'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, val DOUBLE PRECISION, MIN DOUBLE PRECISION, MAX DOUBLE PRECISION, nbuckets INTEGER)
+RETURNS INTEGER[]
+AS '@MODULE_PATHNAME@', 'hist_finalfunc'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+-- This aggregate partitions the dataset into a specified number of buckets (nbuckets) ranging
+-- from the inputted min to max values.
+CREATE AGGREGATE histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER) (
+    SFUNC = _timescaledb_internal.hist_sfunc,
+    STYPE = INTERNAL,
+    COMBINEFUNC = _timescaledb_internal.hist_combinefunc,
+    SERIALFUNC = _timescaledb_internal.hist_serializefunc,
+    DESERIALFUNC = _timescaledb_internal.hist_deserializefunc,
+    PARALLEL = SAFE,
+    FINALFUNC = _timescaledb_internal.hist_finalfunc,
+    FINALFUNC_EXTRA
+);

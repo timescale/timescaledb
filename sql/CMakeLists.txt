@@ -6,6 +6,13 @@ set(CATALOG_SOURCE_FILES
   tables.sql
 )
 
+# Things like aggregate functions cannot be REPLACEd and really
+# need to be created just once(like CATALOG_SOURCE_FILES)
+# but unlike CATALOG_SOURCE_FILES these have to be loaded
+# after everything else is loaded.
+set(IMMUTABLE_API_SOURCE_FILES
+  aggregates.sql
+)
 # The rest of the source files defining mostly functions
 set(SOURCE_FILES
   chunk.sql
@@ -78,6 +85,7 @@ endfunction()
 # directory of all our source files
 version_files("${PRE_UPDATE_FILES}" PRE_UPDATE_FILES_VERSIONED)
 version_files("${CATALOG_SOURCE_FILES}" CATALOG_SOURCE_FILES_VERSIONED)
+version_files("${IMMUTABLE_API_SOURCE_FILES}" IMMUTABLE_API_SOURCE_FILES_VERSIONED)
 version_files("${SOURCE_FILES}" SOURCE_FILES_VERSIONED)
 version_files("${MOD_FILES}" MOD_FILES_VERSIONED)
 
@@ -106,7 +114,10 @@ function(cat_files SRC_FILE_LIST OUTPUT_FILE)
 endfunction()
 
 # Generate the extension file used with CREATE EXTENSION
-cat_files("${CATALOG_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED}" ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
+cat_files(
+  "${CATALOG_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED};${IMMUTABLE_API_SOURCE_FILES_VERSIONED}"
+  ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
+)
 add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
 
 # Generate the update files used with ALTER EXTENSION <name> UPDATE

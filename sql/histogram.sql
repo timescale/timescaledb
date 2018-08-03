@@ -22,16 +22,3 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.hist_finalfunc(state INTERNAL, 
 RETURNS INTEGER[]
 AS '@MODULE_PATHNAME@', 'hist_finalfunc'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
-
--- Tell Postgres how to use the new function
-DROP AGGREGATE IF EXISTS histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER);
-CREATE AGGREGATE histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER) (
-    SFUNC = _timescaledb_internal.hist_sfunc,
-    STYPE = INTERNAL,
-    COMBINEFUNC = _timescaledb_internal.hist_combinefunc,
-    SERIALFUNC = _timescaledb_internal.hist_serializefunc,
-    DESERIALFUNC = _timescaledb_internal.hist_deserializefunc,
-    PARALLEL = SAFE,
-    FINALFUNC = _timescaledb_internal.hist_finalfunc,
-    FINALFUNC_EXTRA
-);
