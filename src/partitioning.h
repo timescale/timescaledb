@@ -39,6 +39,7 @@ typedef struct PartitioningInfo
 
 
 extern Oid	partitioning_func_get_default(void);
+extern bool partitioning_func_is_default(const char *schema, const char *funcname);
 extern bool partitioning_func_is_valid(regproc funcoid);
 
 extern PartitioningInfo *partitioning_info_create(const char *schema,

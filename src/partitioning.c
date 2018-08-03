@@ -92,6 +92,13 @@ partitioning_func_get_default(void)
 								 DEFAULT_PARTITIONING_FUNC_NAME);
 }
 
+bool
+partitioning_func_is_default(const char *schema, const char *funcname)
+{
+	return strcmp(DEFAULT_PARTITIONING_FUNC_SCHEMA, schema) == 0 &&
+		strcmp(DEFAULT_PARTITIONING_FUNC_NAME, funcname) == 0;
+}
+
 /*
  * Resolve the partitioning function set for a hypertable.
  */
@@ -166,8 +173,8 @@ partitioning_info_create(const char *schema,
 	columntype = get_atttype(relid, pinfo->column_attnum);
 	tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-	if (tce->hash_proc == InvalidOid)
-		elog(ERROR, "could not find hash function for type %u", columntype);
+	if (tce->hash_proc == InvalidOid && partitioning_func_is_default(schema, partfunc))
+		elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
 
 	partitioning_func_set_func_fmgr(&pinfo->partfunc);
 
