@@ -4,7 +4,9 @@ CREATE DATABASE single;
 
 \c single
 CREATE SCHEMA "testSchema0";
+SET client_min_messages=error;
 CREATE EXTENSION IF NOT EXISTS timescaledb SCHEMA "testSchema0";
+RESET client_min_messages;
 SET timescaledb.disable_optimizations = :DISABLE_OPTIMIZATIONS;
 
 

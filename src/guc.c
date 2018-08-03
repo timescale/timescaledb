@@ -5,12 +5,27 @@
 #include "guc.h"
 #include "hypertable_cache.h"
 
+bool
+telemetry_on()
+{
+	return guc_telemetry_level == TELEMETRY_BASIC;
+}
+
+static const struct config_enum_entry telemetry_level_options[] =
+{
+	{"off", TELEMETRY_OFF, false},
+	{"basic", TELEMETRY_BASIC, false},
+	{NULL, 0, false}
+};
+
 bool		guc_disable_optimizations = false;
 bool		guc_optimize_non_hypertables = false;
 bool		guc_restoring = false;
 bool		guc_constraint_aware_append = true;
 int			guc_max_open_chunks_per_insert = 10;
 int			guc_max_cached_chunks_per_hypertable = 10;
+char	   *guc_telemetry_endpoint = "https://telemetry.timescale.com";
+int			guc_telemetry_level = TELEMETRY_BASIC;
 
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
@@ -94,6 +109,27 @@ _guc_init(void)
 							NULL,
 							assign_max_cached_chunks_per_hypertable_hook,
 							NULL);
+	DefineCustomStringVariable("timescaledb.telemetry_endpoint",
+							   "URI for telemetry endpoint",
+							   "URI for telemetry endpoint",
+							   &guc_telemetry_endpoint,
+							   "https://telemetry.timescale.com",
+							   PGC_INTERNAL,
+							   0,
+							   NULL,
+							   NULL,
+							   NULL);
+	DefineCustomEnumVariable("timescaledb.telemetry_level",
+							 "Telemetry settings level",
+							 "Level used to determine which telemetry to send",
+							 &guc_telemetry_level,
+							 TELEMETRY_BASIC,
+							 telemetry_level_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 }
 
 void

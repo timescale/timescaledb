@@ -2,12 +2,22 @@
 #define TIMESCALEDB_GUC_H
 #include <postgres.h>
 
+typedef enum TelemetryLevel
+{
+	TELEMETRY_OFF,
+	TELEMETRY_BASIC,
+} TelemetryLevel;
+
+extern bool telemetry_on(void);
+
 extern bool guc_disable_optimizations;
 extern bool guc_optimize_non_hypertables;
 extern bool guc_constraint_aware_append;
 extern bool guc_restoring;
 extern int	guc_max_open_chunks_per_insert;
 extern int	guc_max_cached_chunks_per_hypertable;
+extern char *guc_telemetry_endpoint;
+extern int	guc_telemetry_level;
 
 void		_guc_init(void);
 void		_guc_fini(void);
