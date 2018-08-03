@@ -60,6 +60,13 @@ set(TEST_FILES
 file(STRINGS ${PG_INCLUDEDIR}/pg_config.h USE_OPENSSL REGEX "define USE_OPENSSL ")
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
+  IF (USE_OPENSSL)
+    list(APPEND TEST_FILES
+      telemetry_ssl.sql privacy.sql)
+  ELSE ()
+    list(APPEND TEST_FILES
+      telemetry_nossl.sql)
+  ENDIF(USE_OPENSSL)
   list(APPEND TEST_FILES
     bgw_launcher.sql
     bgw_db_scheduler.sql
@@ -67,11 +74,6 @@ IF(CMAKE_BUILD_TYPE MATCHES Debug)
     symbol_conflict.sql
     net.sql)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
-
-IF (${PG_VERSION_MAJOR} GREATER "9")
-  list(APPEND TEST_FILES
-    generated_as_identity.sql)
-ENDIF()
 
 set(TEST_TEMPLATES
   parallel.sql.in

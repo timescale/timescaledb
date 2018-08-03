@@ -20,6 +20,7 @@ ORDER BY proname;
  detach_tablespaces
  drop_chunks
  first
+ get_report
  histogram
  hypertable_approximate_row_count
  hypertable_relation_size
@@ -32,5 +33,5 @@ ORDER BY proname;
  set_number_partitions
  show_tablespaces
  time_bucket
-(21 rows)
+(22 rows)
 
