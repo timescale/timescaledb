@@ -1,7 +1,7 @@
 \ir include/insert_two_partitions.sql
 
-SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
-SELECT * FROM test.show_indexesp('_timescaledb_internal.%');
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
 SELECT * FROM _timescaledb_catalog.chunk;
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id;
