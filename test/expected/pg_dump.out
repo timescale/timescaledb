@@ -87,7 +87,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   100
+   104
 (1 row)
 
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
@@ -285,7 +285,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
  count 
 -------
-   100
+   104
 (1 row)
 
 --main table and chunk schemas should be the same
@@ -486,6 +486,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
                  objid                  
 ----------------------------------------
+ _timescaledb_internal.bgw_job_stat
  _timescaledb_catalog.tablespace_id_seq
-(1 row)
+(2 rows)
 
