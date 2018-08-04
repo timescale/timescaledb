@@ -37,7 +37,7 @@ INSERT INTO reindex_norm VALUES ('2017-01-20T09:00:01', 17.5),
 REINDEX (VERBOSE) TABLE reindex_norm;
 REINDEX (VERBOSE) INDEX reindex_norm_time_unique_idx;
 
-SELECT * FROM test.show_constraintsp('_timescaledb_internal.%');
+SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper%');
 SELECT * FROM reindex_norm;
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');

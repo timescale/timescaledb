@@ -40,13 +40,14 @@ set(PG_REGRESS_OPTS_INOUT
 set(PG_REGRESS_OPTS_TEMP_INSTANCE
   --port=${TEST_PGPORT_TEMP_INSTANCE}
   --temp-instance=${TEST_CLUSTER}
-  --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf)
+  --temp-config=${TEST_INPUT_DIR}/postgresql.conf)
 
 set(PG_REGRESS_OPTS_LOCAL_INSTANCE
   --port=${TEST_PGPORT_LOCAL})
 
 set(PG_REGRESS_ENV
   TEST_PGUSER=${TEST_PGUSER}
+
   TEST_ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER}
   TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER}
   TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2}
@@ -55,8 +56,6 @@ set(PG_REGRESS_ENV
   TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR}
   TEST_SCHEDULE=${TEST_SCHEDULE}
   PG_REGRESS=${PG_REGRESS})
-
-file(WRITE ${TEST_OUTPUT_DIR}/postgresql.conf "shared_preload_libraries=timescaledb")
 
 # installcheck starts up new temporary instances for testing code
 add_custom_target(installcheck
