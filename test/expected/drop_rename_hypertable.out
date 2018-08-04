@@ -29,7 +29,7 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 \set QUIET on
 \o
-SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
                                       Relation                                      | Kind |   Column    |   Column type    | Nullable 
 ------------------------------------------------------------------------------------+------+-------------+------------------+----------
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | timeCustom  | bigint           | t
@@ -199,10 +199,11 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (7 rows)
 
 \dt+ "_timescaledb_internal".*
-                 List of relations
- Schema | Name | Type | Owner | Size | Description 
---------+------+------+-------+------+-------------
-(0 rows)
+                                 List of relations
+        Schema         |     Name     | Type  |   Owner    |  Size   | Description 
+-----------------------+--------------+-------+------------+---------+-------------
+ _timescaledb_internal | bgw_job_stat | table | super_user | 0 bytes | 
+(1 row)
 
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);
