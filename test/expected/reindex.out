@@ -61,7 +61,7 @@ REINDEX (VERBOSE) TABLE reindex_norm;
 INFO:  index "reindex_norm_time_unique_idx" was reindexed
 REINDEX (VERBOSE) INDEX reindex_norm_time_unique_idx;
 INFO:  index "reindex_norm_time_unique_idx" was reindexed
-SELECT * FROM test.show_constraintsp('_timescaledb_internal.%');
+SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper%');
                  Table                  |      Constraint       | Type |   Columns   |                     Index                     |                                                                     Expr                                                                     | Deferrable | Deferred | Validated 
 ----------------------------------------+-----------------------+------+-------------+-----------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  _timescaledb_internal._hyper_1_1_chunk | 1_1_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."1_1_reindex_test_pkey" |                                                                                                                                              | f          | f        | t

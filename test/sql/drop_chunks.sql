@@ -19,7 +19,7 @@ INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_d
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
 
-\dt "_timescaledb_internal".*
+\dt "_timescaledb_internal"._hyper*
 
 SELECT  _timescaledb_internal.get_partition_for_key('dev1'::text);
 SELECT  _timescaledb_internal.get_partition_for_key('dev7'::varchar(5));
@@ -52,7 +52,7 @@ INNER JOIN  _timescaledb_internal.dimension_get_time(h.id) time_dimension ON(tru
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
-\dt "_timescaledb_internal".*
+\dt "_timescaledb_internal"._hyper*
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chunk;
 
@@ -98,7 +98,7 @@ INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_d
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
 
-\dt "_timescaledb_internal".*
+\dt "_timescaledb_internal"._hyper*
 
 SELECT drop_chunks(3, 'drop_chunk_test1');
 
@@ -123,7 +123,7 @@ INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_d
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3');
 
-\dt "_timescaledb_internal".*
+\dt "_timescaledb_internal"._hyper*
 
 -- should error because no hypertable
 \set ON_ERROR_STOP 0
@@ -140,7 +140,7 @@ INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_d
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
 
-\dt "_timescaledb_internal".*
+\dt "_timescaledb_internal"._hyper*
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);

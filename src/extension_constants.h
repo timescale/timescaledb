@@ -10,6 +10,7 @@
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 #define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
+#define CONFIG_SCHEMA_NAME "_timescaledb_config"
 
 
 #endif							/* TIMESCALEDB_EXTENSION_CONSTANTS_H */
