@@ -2,7 +2,7 @@
 \ir include/insert_two_partitions.sql
 \o
 
-SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
 
 -- Test that renaming hypertable works
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');

@@ -21,15 +21,53 @@
 #include <utils/regproc.h>
 #endif
 
-static const char *catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
-	[HYPERTABLE] = HYPERTABLE_TABLE_NAME,
-	[DIMENSION] = DIMENSION_TABLE_NAME,
-	[DIMENSION_SLICE] = DIMENSION_SLICE_TABLE_NAME,
-	[CHUNK] = CHUNK_TABLE_NAME,
-	[CHUNK_CONSTRAINT] = CHUNK_CONSTRAINT_TABLE_NAME,
-	[CHUNK_INDEX] = CHUNK_INDEX_TABLE_NAME,
-	[TABLESPACE] = TABLESPACE_TABLE_NAME,
-	[_MAX_CATALOG_TABLES] = "invalid table",
+typedef struct
+{
+	const char *schema_name;
+	const char *table_name;
+} TableInfoDef;
+
+static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
+	[HYPERTABLE] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = HYPERTABLE_TABLE_NAME,
+	},
+	[DIMENSION] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = DIMENSION_TABLE_NAME,
+	},
+	[DIMENSION_SLICE] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = DIMENSION_SLICE_TABLE_NAME,
+	},
+	[CHUNK] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CHUNK_TABLE_NAME,
+	},
+	[CHUNK_CONSTRAINT] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CHUNK_CONSTRAINT_TABLE_NAME,
+	},
+	[CHUNK_INDEX] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CHUNK_INDEX_TABLE_NAME,
+	},
+	[TABLESPACE] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = TABLESPACE_TABLE_NAME,
+	},
+	[BGW_JOB] = {
+		.schema_name = CONFIG_SCHEMA_NAME,
+		.table_name = BGW_JOB_TABLE_NAME,
+	},
+	[BGW_JOB_STAT] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.table_name = BGW_JOB_STAT_TABLE_NAME,
+	},
+	[_MAX_CATALOG_TABLES] = {
+		.schema_name = "invalid schema",
+		.table_name = "invalid table",
+	},
 };
 
 typedef struct TableIndexDef
@@ -88,6 +126,18 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[TABLESPACE_PKEY_IDX] = "tablespace_pkey",
 			[TABLESPACE_HYPERTABLE_ID_TABLESPACE_NAME_IDX] = "tablespace_hypertable_id_tablespace_name_key",
 		}
+	},
+	[BGW_JOB] = {
+		.length = _MAX_BGW_JOB_INDEX,
+		.names = (char *[]) {
+			[BGW_JOB_PKEY_IDX] = "bgw_job_pkey"
+		}
+	},
+	[BGW_JOB_STAT] = {
+		.length = _MAX_BGW_JOB_STAT_INDEX,
+		.names = (char *[]) {
+			[BGW_JOB_STAT_PKEY_IDX] = "bgw_job_stat_pkey"
+		}
 	}
 };
 
@@ -99,6 +149,8 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
 	[CHUNK_INDEX] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
+	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
+	[BGW_JOB_STAT] = NULL,
 };
 
 typedef struct InternalFunctionDef
@@ -181,15 +233,17 @@ catalog_get(void)
 
 	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
 	{
+		Oid			schema_oid;
 		Oid			id;
 		const char *sequence_name;
 		Size		number_indexes,
 					j;
 
-		id = get_relname_relid(catalog_table_names[i], catalog.schema_id);
+		schema_oid = get_namespace_oid(catalog_table_names[i].schema_name, false);
+		id = get_relname_relid(catalog_table_name(i), schema_oid);
 
 		if (id == InvalidOid)
-			elog(ERROR, "OID lookup failed for table \"%s\"", catalog_table_names[i]);
+			elog(ERROR, "OID lookup failed for table \"%s.%s\"", catalog_table_names[i].schema_name, catalog_table_name(i));
 
 		catalog.tables[i].id = id;
 
@@ -199,7 +253,7 @@ catalog_get(void)
 		for (j = 0; j < number_indexes; j++)
 		{
 			id = get_relname_relid(catalog_table_index_definitions[i].names[j],
-								   catalog.schema_id);
+								   schema_oid);
 
 			if (id == InvalidOid)
 				elog(ERROR, "OID lookup failed for table index \"%s\"",
@@ -208,7 +262,8 @@ catalog_get(void)
 			catalog.tables[i].index_ids[j] = id;
 		}
 
-		catalog.tables[i].name = catalog_table_names[i];
+		catalog.tables[i].name = catalog_table_name(i);
+		catalog.tables[i].schema_name = catalog_table_names[i].schema_name;
 		sequence_name = catalog_table_serial_id_names[i];
 
 		if (NULL != sequence_name)
@@ -335,10 +390,12 @@ catalog_table_get(Catalog *catalog, Oid relid)
 
 	if (!catalog_is_valid(catalog))
 	{
+		const char *schema_name = get_namespace_name(get_rel_namespace(relid));
 		const char *relname = get_rel_name(relid);
 
 		for (i = 0; i < _MAX_CATALOG_TABLES; i++)
-			if (strcmp(catalog_table_names[i], relname) == 0)
+			if (strcmp(catalog_table_names[i].schema_name, schema_name) == 0
+				&& strcmp(catalog_table_name(i), relname) == 0)
 				return (CatalogTable) i;
 
 		return INVALID_CATALOG_TABLE;
@@ -354,7 +411,7 @@ catalog_table_get(Catalog *catalog, Oid relid)
 const char *
 catalog_table_name(CatalogTable table)
 {
-	return catalog_table_names[table];
+	return catalog_table_names[table].table_name;
 }
 
 /*
@@ -366,7 +423,7 @@ catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 	Oid			relid = catalog->tables[table].serial_relid;
 
 	if (!OidIsValid(relid))
-		elog(ERROR, "no serial ID column for table \"%s\"", catalog_table_names[table]);
+		elog(ERROR, "no serial ID column for table \"%s.%s\"", catalog_table_names[table].schema_name, catalog_table_name(table));
 
 	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }

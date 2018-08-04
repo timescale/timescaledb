@@ -9,5 +9,6 @@ void		extension_check_version(const char *so_version);
 void		extension_check_server_version(void);
 Oid			extension_schema_oid(void);
 
+char	   *extension_get_so_name(void);
 
 #endif							/* TIMESCALEDB_EXTENSION_H */

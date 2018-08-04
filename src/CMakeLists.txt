@@ -35,8 +35,6 @@ endif (MSVC)
 endif (WIN32)
 
 set(HEADERS
-  bgw_launcher_interface.h
-  bgw_scheduler.h
   cache.h
   catalog.h
   chunk.h
@@ -82,8 +80,6 @@ set(HEADERS
 
 set(SOURCES
   agg_bookend.c
-  bgw_launcher_interface.c
-  bgw_scheduler.c
   cache.c
   cache_invalidate.c
   catalog.c
@@ -165,11 +161,18 @@ if (PGINDENT)
     DEPENDS ${PROJECT_NAME}
     COMMAND sh ${CMAKE_BINARY_DIR}/scripts/generate_typedefs.sh > typedefs.list)
   add_custom_target(pgindent
-    COMMAND ${PGINDENT} -typedefs typedefs.list -code-base ${CMAKE_SOURCE_DIR}/src
+    COMMAND ${PGINDENT} -typedefs typedefs.list -code-base ${CMAKE_SOURCE_DIR}/src/
+    COMMAND ${PGINDENT} -typedefs typedefs.list -code-base ${CMAKE_SOURCE_DIR}/test/src/
     DEPENDS typedefs.list)
 endif (PGINDENT)
 
 add_library(${PROJECT_NAME} MODULE ${SOURCES} ${HEADERS} ${GITCOMMIT_H})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(bgw)
+
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+	add_subdirectory(../test/src/bgw/ "${CMAKE_CURRENT_BINARY_DIR}/test/src/bgw")
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME ${PROJECT_NAME}-${PROJECT_VERSION_MOD}

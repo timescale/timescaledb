@@ -37,7 +37,7 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 INSERT 0 1
 \set QUIET on
-SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
+SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
                                       Relation                                      | Kind |   Column    |   Column type    | Nullable 
 ------------------------------------------------------------------------------------+------+-------------+------------------+----------
  _timescaledb_internal._hyper_1_1_chunk                                             | r    | timeCustom  | bigint           | t
@@ -118,7 +118,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%');
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" | i    | series_bool | boolean          | f
 (76 rows)
 
-SELECT * FROM test.show_indexesp('_timescaledb_internal.%');
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
                  Table                  |                                       Index                                        |         Columns          | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------------------+------------------------------------------------------------------------------------+--------------------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 

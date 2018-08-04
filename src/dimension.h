@@ -74,7 +74,7 @@ typedef struct Point
 #define POINT_SIZE(cardinality)							\
 	(sizeof(Point) + (sizeof(int64) * (cardinality)))
 
-#define DEFAULT_CHUNK_TIME_INTERVAL (USECS_PER_DAY * 7)	/* 7 days w/o adaptive */
+#define DEFAULT_CHUNK_TIME_INTERVAL (USECS_PER_DAY * 7) /* 7 days w/o adaptive */
 #define DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE (USECS_PER_DAY)	/* 1 day with adaptive
 																 * chunking enabled */
 
