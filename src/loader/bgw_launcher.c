@@ -32,7 +32,7 @@
 #include "bgw_message_queue.h"
 #include "bgw_launcher.h"
 
-#define BGW_DB_SCHEDULER_FUNCNAME "bgw_db_scheduler_main"
+#define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
 #define BGW_ENTRYPOINT_FUNCNAME "bgw_db_scheduler_entrypoint"
 
 #define ACK_SUCCESS true

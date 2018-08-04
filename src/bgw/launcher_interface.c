@@ -3,7 +3,7 @@
 #include <fmgr.h>
 
 #include "extension.h"
-#include "bgw_launcher_interface.h"
+#include "launcher_interface.h"
 
 
 extern bool
