@@ -1055,15 +1055,33 @@ chunk_scan_internal(int indexid,
 	return scanner_scan(&ctx);
 }
 
-#define DEFAULT_CHUNKS_PER_INTERVAL 4
-
 /*
  * Get a window of chunks that "preceed" the given dimensional point.
  *
  * For instance, if the dimension is "time", then given a point in time the
  * function returns the recent chunks that come before the chunk that includes
  * that point. The count parameter determines the number or slices the window
- * should include in the given dimension.
+ * should include in the given dimension. Note, that with multi-dimensional
+ * partitioning, there might be multiple chunks in each dimensional slice that
+ * all preceed the given point. For instance, the example below shows two
+ * different situations that each go "back" two slices (count = 2) in the
+ * x-dimension, but returns two vs. eight chunks due to different
+ * partitioning.
+ *
+ * '_____________
+ * '|   |   | * |
+ * '|___|___|___|
+ * '
+ * '
+ * '____ ________
+ * '|   |   | * |
+ * '|___|___|___|
+ * '|   |   |   |
+ * '|___|___|___|
+ * '|   |   |   |
+ * '|___|___|___|
+ * '|   |   |   |
+ * '|___|___|___|
  *
  * Note that the returned chunks will be allocated on the given memory
  * context, inlcuding the list itself. So, beware of not leaking the list if
@@ -1073,17 +1091,30 @@ List *
 chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx)
 {
 	List	   *chunks = NIL;
-	DimensionVec *dimvec = dimension_slice_scan_by_dimension_before_point(dimension_id, point, count, BackwardScanDirection, mctx);
+	DimensionVec *dimvec;
 	int			i;
 
+	/* Scan for "count" slices that preceeds the point in the given dimension */
+	dimvec = dimension_slice_scan_by_dimension_before_point(dimension_id,
+															point,
+															count,
+															BackwardScanDirection,
+															mctx);
+
+	/*
+	 * For each slice, join with any constraints that reference the slice.
+	 * There might be multiple constraints for each slice in case of
+	 * multi-dimensional partitioning.
+	 */
 	for (i = 0; i < dimvec->num_slices; i++)
 	{
 		DimensionSlice *slice = dimvec->slices[i];
-		ChunkConstraints *ccs = chunk_constraints_alloc(DEFAULT_CHUNKS_PER_INTERVAL, mctx);
+		ChunkConstraints *ccs = chunk_constraints_alloc(1, mctx);
 		int			j;
 
 		chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, ccs, mctx);
 
+		/* For each constraint, find the corresponding chunk */
 		for (j = 0; j < ccs->num_constraints; j++)
 		{
 			ChunkConstraint *cc = &ccs->constraints[j];

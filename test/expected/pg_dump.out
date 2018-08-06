@@ -58,7 +58,8 @@ BEGIN
     RETURN -1;
 END
 $BODY$;
-SELECT * FROM set_adaptive_chunk_sizing('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
+SELECT * FROM set_adaptive_chunking('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
         chunk_sizing_func        | chunk_target_size 
 ---------------------------------+-------------------
  custom_calculate_chunk_interval |           1048576

@@ -105,7 +105,9 @@ set_effective_memory_cache_size(PG_FUNCTION_ARGS)
  * of the system, while a common recommended setting for shared_buffers is 1/4
  * of system memory. In case shared_buffers is set higher than
  * effective_cache_size, we use the max of the two (a larger shared_buffers is a
- * strange setting though). Ultimately we are limited by system memory.
+ * strange setting though). Ultimately we are limited by system memory. Thus,
+ * this functions returns a value effective_memory_cache which is:
+ * shared_buffers >= effective_memory_cache <= system_mem / 2.
  *
  * Note that this relies on the user setting a good value for
  * effective_cache_size, or otherwise our estimate will be off. Alternatively,
@@ -160,9 +162,9 @@ estimate_effective_memory_cache_size(void)
 	return memory_bytes;
 }
 
-/* The default concurrency factor, i.e., the number of chunks we expect to fit
- * in memory at the same time */
-#define DEFAULT_CONCURRENT_CHUNK_USAGE 4
+/* The default the number of chunks we expect to be able to have in cache
+ * memory at the same time */
+#define DEFAULT_NUM_CHUNKS_TO_FIT_IN_CACHE_MEM 4
 
 static inline int64
 calculate_initial_chunk_target_size(void)
@@ -175,23 +177,28 @@ calculate_initial_chunk_target_size(void)
 	 * hypertables in all schemas and databases, and might not be a good
 	 * estimate in case of many "old" (unused) hypertables.
 	 */
-	return estimate_effective_memory_cache_size() / DEFAULT_CONCURRENT_CHUNK_USAGE;
+	return estimate_effective_memory_cache_size() / DEFAULT_NUM_CHUNKS_TO_FIT_IN_CACHE_MEM;
 }
+
+typedef enum MinMaxResult
+{
+	MINMAX_NO_INDEX,
+	MINMAX_NO_TUPLES,
+	MINMAX_FOUND,
+} MinMaxResult;
 
 /*
  * Use a heap scan to find the min and max of a given column of a chunk. This
  * could be a rather costly operation. Should figure out how to keep min-max
  * stats cached.
- *
- * Returns true iff min and max is found.
  */
-static bool
+static MinMaxResult
 minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 {
 	HeapScanDesc scan;
 	HeapTuple	tuple;
 	TypeCacheEntry *tce;
-	bool		minmaxnull[2] = {true};
+	bool		nulls[2] = {true};
 
 	/* Lookup the tuple comparison function from the type cache */
 	tce = lookup_type_cache(atttype, TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO);
@@ -206,53 +213,106 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 		bool		isnull;
 		Datum		value = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
 
+		if (isnull)
+			continue;
+
 		/* Check for new min */
-		if (minmaxnull[0] || DatumGetInt32(FunctionCall2(&tce->cmp_proc_finfo, value, minmax[0])) < 0)
+		if (nulls[0] || DatumGetInt32(FunctionCall2(&tce->cmp_proc_finfo, value, minmax[0])) < 0)
 		{
-			minmaxnull[0] = false;
+			nulls[0] = false;
 			minmax[0] = value;
 		}
 
 		/* Check for new max */
-		if (minmaxnull[1] || DatumGetInt32(FunctionCall2(&tce->cmp_proc_finfo, value, minmax[1])) > 0)
+		if (nulls[1] || DatumGetInt32(FunctionCall2(&tce->cmp_proc_finfo, value, minmax[1])) > 0)
 		{
-			minmaxnull[1] = false;
+			nulls[1] = false;
 			minmax[1] = value;
 		}
 	}
 
 	heap_endscan(scan);
 
-	return !minmaxnull[0] && !minmaxnull[1];
+	return (nulls[0] || nulls[1]) ? MINMAX_NO_TUPLES : MINMAX_FOUND;
 }
 
 /*
  * Use an index scan to find the min and max of a given column of a chunk.
- *
- * Returns true iff min and max is found.
  */
-static bool
+static MinMaxResult
 minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[2])
 {
 	IndexScanDesc scan = index_beginscan(rel, idxrel, GetTransactionSnapshot(), 0, 0);
 	HeapTuple	tuple;
 	bool		isnull;
+	bool		nulls[2] = {true};
 	int			n = 0;
+
+	nulls[0] = nulls[1] = true;
 
 	tuple = index_getnext(scan, BackwardScanDirection);
 
 	if (HeapTupleIsValid(tuple))
-		minmax[n++] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
+	{
+		minmax[n] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
+		nulls[n++] = false;
+	}
 
 	index_rescan(scan, NULL, 0, NULL, 0);
 	tuple = index_getnext(scan, ForwardScanDirection);
 
 	if (HeapTupleIsValid(tuple))
-		minmax[n++] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
+	{
+		minmax[n] = heap_getattr(tuple, attnum, RelationGetDescr(rel), &isnull);
+		nulls[n++] = false;
+	}
 
 	index_endscan(scan);
 
-	return n == 2;
+	return (nulls[0] || nulls[1]) ? MINMAX_NO_TUPLES : MINMAX_FOUND;
+}
+
+/*
+ * Do a scan for min and max using and index on the given column.
+ */
+static MinMaxResult
+relation_minmax_indexscan(Relation rel,
+						  Oid atttype,
+						  AttrNumber attnum,
+						  Datum minmax[2])
+{
+	List	   *indexlist = RelationGetIndexList(rel);
+	ListCell   *lc;
+	MinMaxResult res = MINMAX_NO_INDEX;
+
+	foreach(lc, indexlist)
+	{
+		Relation	idxrel;
+
+		idxrel = index_open(lfirst_oid(lc), AccessShareLock);
+
+		if (idxrel->rd_att->attrs[0]->attnum == attnum)
+			res = minmax_indexscan(rel, idxrel, attnum, minmax);
+
+		index_close(idxrel, AccessShareLock);
+
+		if (res == MINMAX_FOUND)
+			break;
+	}
+
+	return res;
+}
+
+static bool
+table_has_minmax_index(Oid relid, Oid atttype, AttrNumber attnum)
+{
+	Datum		minmax[2];
+	Relation	rel = heap_open(relid, AccessShareLock);
+	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attnum, minmax);
+
+	heap_close(rel, AccessShareLock);
+
+	return res != MINMAX_NO_INDEX;
 }
 
 /*
@@ -264,31 +324,29 @@ static bool
 chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 {
 	Relation	rel = heap_open(relid, AccessShareLock);
-	List	   *indexlist = RelationGetIndexList(rel);
-	ListCell   *lc;
-	bool		found = false;
+	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attnum, minmax);
 
-	foreach(lc, indexlist)
+	if (res == MINMAX_NO_INDEX)
 	{
-		Relation	idxrel;
+		ereport(WARNING,
+				(errmsg("no index on \"%s\" found for adaptive chunking on chunk \"%s\"",
+						get_attname(relid, attnum), get_rel_name(relid)),
+				 errdetail("Adaptive chunking works best with an index on the dimension being adapted.")));
 
-		idxrel = index_open(lfirst_oid(lc), AccessShareLock);
-
-		if (idxrel->rd_att->attrs[0]->attnum == attnum)
-			found = minmax_indexscan(rel, idxrel, attnum, minmax);
-
-		index_close(idxrel, AccessShareLock);
-
-		if (found)
-			break;
+		res = minmax_heapscan(rel, atttype, attnum, minmax);
 	}
-
-	if (!found)
-		found = minmax_heapscan(rel, atttype, attnum, minmax);
 
 	heap_close(rel, AccessShareLock);
 
-	return found;
+	return res == MINMAX_FOUND;
+}
+
+static AttrNumber
+chunk_get_attno(Oid hypertable_relid, Oid chunk_relid, AttrNumber hypertable_attnum)
+{
+	const char *attname = get_attname(hypertable_relid, hypertable_attnum);
+
+	return get_attnum(chunk_relid, attname);
 }
 
 #define CHUNK_SIZING_FUNC_NARGS 3
@@ -427,6 +485,7 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 		int64		chunk_size,
 					slice_interval;
 		Datum		minmax[2];
+		AttrNumber	attno = chunk_get_attno(ht->main_table_relid, chunk->table_id, dim->column_attno);
 
 		Assert(NULL != slice);
 
@@ -435,7 +494,8 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 
 		slice_interval = slice->fd.range_end - slice->fd.range_start;
 
-		if (chunk_get_minmax(chunk->table_id, dim->fd.column_type, dim->column_attno, minmax))
+
+		if (chunk_get_minmax(chunk->table_id, dim->fd.column_type, attno, minmax))
 		{
 			int64		min = time_value_to_internal(minmax[0], dim->fd.column_type, false);
 			int64		max = time_value_to_internal(minmax[1], dim->fd.column_type, false);
@@ -559,7 +619,7 @@ chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info)
 		ReleaseSysCache(tuple);
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
-				 errmsg("invalid number of function arguments"),
+				 errmsg("invalid function signature"),
 				 errhint("A chunk sizing function's signature should be (int, bigint, bigint) -> bigint")));
 	}
 
@@ -583,37 +643,85 @@ chunk_target_size_in_bytes(const text *target_size_text)
 		pg_strcasecmp(target_size, "disable") == 0)
 		return 0;
 
-	if (pg_strcasecmp(target_size, "estimate") != 0)
+	if (pg_strcasecmp(target_size, "estimate") == 0)
+		target_size_bytes = calculate_initial_chunk_target_size();
+	else
 		target_size_bytes = convert_text_memory_amount_to_bytes(target_size);
 
+	/* Disable if target size is zero or less */
 	if (target_size_bytes <= 0)
-		target_size_bytes = calculate_initial_chunk_target_size();
+		target_size_bytes = 0;
 
 	return target_size_bytes;
 }
 
+#define MB (1024*1024)
+
 void
-chunk_adaptive_validate_sizing_info(ChunkSizingInfo *info)
+chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 {
+	AttrNumber	attnum;
+	Oid			atttype;
+
+	if (!OidIsValid(info->table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("table does not exist")));
+
+	if (NULL == info->colname)
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
+				 errmsg("no open dimension found for adaptive chunking")));
+
+	attnum = get_attnum(info->table_relid, info->colname);
+	atttype = get_atttype(info->table_relid, attnum);
+
+	if (!OidIsValid(atttype))
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
+				 errmsg("no open dimension found for adaptive chunking")));
+
 	chunk_sizing_func_validate(info->func, info);
 
-	if (NULL != info->target_size)
-		info->target_size_bytes = chunk_target_size_in_bytes(info->target_size);
-	else
+	if (NULL == info->target_size)
 		info->target_size_bytes = 0;
+	else
+		info->target_size_bytes = chunk_target_size_in_bytes(info->target_size);
+
+	/* Don't validate further if disabled */
+	if (info->target_size_bytes <= 0 || !OidIsValid(info->func))
+		return;
+
+	/* Warn of small target sizes */
+	if (info->target_size_bytes > 0 &&
+		info->target_size_bytes < (10 * MB))
+		elog(WARNING, "target chunk size for adaptive chunking is less than 10 MB");
+
+	if (info->check_for_index &&
+		!table_has_minmax_index(info->table_relid, atttype, attnum))
+		ereport(WARNING,
+				(errmsg("no index on \"%s\" found for adaptive chunking on hypertable \"%s\"",
+						info->colname, get_rel_name(info->table_relid)),
+				 errdetail("Adaptive chunking works best with an index on the dimension being adapted.")));
 }
 
-TS_FUNCTION_INFO_V1(chunk_adaptive_set_chunk_sizing);
+TS_FUNCTION_INFO_V1(chunk_adaptive_set);
 
+/*
+ * Change the settings for adaptive chunking.
+ */
 Datum
-chunk_adaptive_set_chunk_sizing(PG_FUNCTION_ARGS)
+chunk_adaptive_set(PG_FUNCTION_ARGS)
 {
-	Oid			relid = PG_GETARG_OID(0);
 	ChunkSizingInfo info = {
-		.func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2),
+		.table_relid = PG_GETARG_OID(0),
 		.target_size = PG_ARGISNULL(1) ? NULL : PG_GETARG_TEXT_P(1),
+		.func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2),
+		.colname = NULL,
+		.check_for_index = true,
 	};
 	Hypertable *ht;
+	Dimension  *dim;
 	Cache	   *hcache;
 	HeapTuple	tuple;
 	TupleDesc	tupdesc;
@@ -621,24 +729,31 @@ chunk_adaptive_set_chunk_sizing(PG_FUNCTION_ARGS)
 	Datum		values[2];
 	bool		nulls[2] = {false, false};
 
-	if (!OidIsValid(relid))
+	if (!OidIsValid(info.table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("table does not exist")));
 
 	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
+	ht = hypertable_cache_get_entry(hcache, info.table_relid);
 
 	if (NULL == ht)
 		ereport(ERROR,
 				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable",
-						get_rel_name(relid))));
+						get_rel_name(info.table_relid))));
 
-	chunk_adaptive_validate_sizing_info(&info);
+	/* Get the first open dimension that we will adapt on */
+	dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 
-	if (NULL != info.target_size)
-		info.target_size_bytes = chunk_target_size_in_bytes(info.target_size);
+	if (NULL == dim)
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
+				 errmsg("no open dimension found for adaptive chunking")));
+
+	info.colname = NameStr(dim->fd.column_name);
+
+	chunk_adaptive_sizing_info_validate(&info);
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "function returning record called in context that cannot accept type record");
