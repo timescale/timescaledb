@@ -224,11 +224,14 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 
 	if (OidIsValid(ht->chunk_sizing_func))
 	{
+		Dimension  *dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 		ChunkSizingInfo info = {
+			.table_relid = ht->main_table_relid,
+			.colname = dim == NULL ? NULL : NameStr(dim->fd.column_name),
 			.func = ht->chunk_sizing_func,
 		};
 
-		chunk_adaptive_validate_sizing_info(&info);
+		chunk_adaptive_sizing_info_validate(&info);
 
 		namestrcpy(&ht->fd.chunk_sizing_func_schema, NameStr(info.func_schema));
 		namestrcpy(&ht->fd.chunk_sizing_func_name, NameStr(info.func_name));
@@ -1210,8 +1213,11 @@ hypertable_create(PG_FUNCTION_ARGS)
 		.partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9),
 	};
 	ChunkSizingInfo chunk_sizing_info = {
+		.table_relid = table_relid,
 		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
 		.func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12),
+		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1),
+		.check_for_index = !create_default_indexes,
 	};
 	Cache	   *hcache;
 	Hypertable *ht;
@@ -1370,7 +1376,7 @@ hypertable_create(PG_FUNCTION_ARGS)
 
 	/* Validate and set chunk sizing information */
 	if (OidIsValid(chunk_sizing_info.func))
-		chunk_adaptive_validate_sizing_info(&chunk_sizing_info);
+		chunk_adaptive_sizing_info_validate(&chunk_sizing_info);
 
 	hypertable_insert(&schema_name,
 					  &table_name,

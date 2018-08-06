@@ -34,7 +34,7 @@ BEGIN
 END
 $BODY$;
 
-SELECT * FROM set_adaptive_chunk_sizing('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
+SELECT * FROM set_adaptive_chunking('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
 
 -- Chunk sizing func set
 SELECT * FROM _timescaledb_catalog.hypertable;

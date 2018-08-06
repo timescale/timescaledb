@@ -36,12 +36,13 @@ CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
 SELECT create_hypertable('test_adaptive', 'time',
                          chunk_target_size => '1MB',
                          chunk_sizing_func => 'bad_calculate_chunk_interval');
-ERROR:  invalid number of function arguments
+ERROR:  invalid function signature
 \set ON_ERROR_STOP 1
 -- Setting sizing func with correct signature should work
 SELECT create_hypertable('test_adaptive', 'time',
                          chunk_target_size => '1MB',
                          chunk_sizing_func => 'calculate_chunk_interval');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
@@ -54,6 +55,7 @@ CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
 SELECT create_hypertable('test_adaptive', 'time',
                          chunk_target_size => '1MB',
                          create_default_indexes => true);
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
@@ -68,7 +70,8 @@ FROM _timescaledb_catalog.hypertable;
 (1 row)
 
 -- Change the target size
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '2MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |           2097152
@@ -83,11 +86,11 @@ FROM _timescaledb_catalog.hypertable;
 
 \set ON_ERROR_STOP 0
 -- Setting NULL func should fail
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB', NULL);
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB', NULL);
 ERROR:  invalid chunk sizing function
 \set ON_ERROR_STOP 1
 -- Setting NULL size disables adaptive chunking
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', NULL);
+SELECT * FROM set_adaptive_chunking('test_adaptive', NULL);
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |                 0
@@ -100,14 +103,15 @@ FROM _timescaledb_catalog.hypertable;
  test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
 (1 row)
 
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |           1048576
 (1 row)
 
 -- Setting size to 'off' should also disable
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', 'off');
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'off');
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |                 0
@@ -120,28 +124,36 @@ FROM _timescaledb_catalog.hypertable;
  test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
 (1 row)
 
--- Setting 0 size should do an estimate.
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '0MB');
+-- Setting 0 size should also disable
+SELECT * FROM set_adaptive_chunking('test_adaptive', '0MB');
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |         536870912
+ _timescaledb_internal.calculate_chunk_interval |                 0
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |         536870912
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
 (1 row)
 
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |           1048576
 (1 row)
 
+-- No warning about small target size if > 10MB
+SELECT * FROM set_adaptive_chunking('test_adaptive', '11MB');
+               chunk_sizing_func                | chunk_target_size 
+------------------------------------------------+-------------------
+ _timescaledb_internal.calculate_chunk_interval |          11534336
+(1 row)
+
 -- Setting size to 'estimate' should also estimate size
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', 'estimate');
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |         536870912
@@ -161,7 +173,7 @@ SELECT * FROM test.set_effective_memory_cache_size('512MB');
                        536870912
 (1 row)
 
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', 'estimate');
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |         134217728
@@ -182,7 +194,8 @@ SELECT * FROM test.set_effective_memory_cache_size('2GB');
 (1 row)
 
 -- Set a reasonable test value
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
  _timescaledb_internal.calculate_chunk_interval |           1048576
@@ -223,9 +236,12 @@ SELECT * FROM chunk_relation_size('test_adaptive');
 -- both the calculation of fill-factor of the chunk and its size
 CREATE TABLE test_adaptive_no_index(time timestamptz, temp float, location int);
 -- Size but no explicit func should use default func
+-- No default indexes should warn and use heap scan for min and max
 SELECT create_hypertable('test_adaptive_no_index', 'time',
                          chunk_target_size => '1MB',
                          create_default_indexes => false);
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
+WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_no_index"
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
@@ -244,6 +260,21 @@ SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
 generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_12_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_12_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_13_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_12_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_13_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_14_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_13_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_14_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_15_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_14_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_15_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_16_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_15_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_16_chunk"
+WARNING:  no index on "time" found for adaptive chunking on chunk "_hyper_3_17_chunk"
 SELECT * FROM chunk_relation_size('test_adaptive_no_index');
  chunk_id |               chunk_table               | partitioning_columns |  partitioning_column_types   | partitioning_hash_functions |                 ranges                  | table_bytes | index_bytes | toast_bytes | total_bytes 
 ----------+-----------------------------------------+----------------------+------------------------------+-----------------------------+-----------------------------------------+-------------+-------------+-------------+-------------
@@ -263,6 +294,7 @@ CREATE TABLE test_adaptive_space(time timestamptz, temp float, location int);
 SELECT create_hypertable('test_adaptive_space', 'time', 'location', 2,
                          chunk_target_size => '1MB',
                          create_default_indexes => true);
+WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------

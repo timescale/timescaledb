@@ -54,42 +54,45 @@ SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_targe
 FROM _timescaledb_catalog.hypertable;
 
 -- Change the target size
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '2MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
 \set ON_ERROR_STOP 0
 -- Setting NULL func should fail
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB', NULL);
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB', NULL);
 \set ON_ERROR_STOP 1
 
 -- Setting NULL size disables adaptive chunking
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', NULL);
+SELECT * FROM set_adaptive_chunking('test_adaptive', NULL);
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
 
 -- Setting size to 'off' should also disable
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', 'off');
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'off');
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
--- Setting 0 size should do an estimate.
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '0MB');
+-- Setting 0 size should also disable
+SELECT * FROM set_adaptive_chunking('test_adaptive', '0MB');
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
+
+-- No warning about small target size if > 10MB
+SELECT * FROM set_adaptive_chunking('test_adaptive', '11MB');
 
 -- Setting size to 'estimate' should also estimate size
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', 'estimate');
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
 -- Use a lower memory setting to test that the calculated chunk_target_size is reduced
 SELECT * FROM test.set_effective_memory_cache_size('512MB');
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', 'estimate');
+SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
@@ -97,7 +100,7 @@ FROM _timescaledb_catalog.hypertable;
 SELECT * FROM test.set_effective_memory_cache_size('2GB');
 
 -- Set a reasonable test value
-SELECT * FROM set_adaptive_chunk_sizing('test_adaptive', '1MB');
+SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
 
 -- Show the interval length before and after adaptation
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
@@ -118,6 +121,7 @@ SELECT * FROM chunk_relation_size('test_adaptive');
 CREATE TABLE test_adaptive_no_index(time timestamptz, temp float, location int);
 
 -- Size but no explicit func should use default func
+-- No default indexes should warn and use heap scan for min and max
 SELECT create_hypertable('test_adaptive_no_index', 'time',
                          chunk_target_size => '1MB',
                          create_default_indexes => false);
