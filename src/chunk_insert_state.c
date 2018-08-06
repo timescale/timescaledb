@@ -27,55 +27,61 @@
  * the assumption that the data will live throughout the expression context. As
  * a compromise we store a transaction-local cache of the created constraints.
  */
-static __thread HTAB	   *constraint_cache = NULL;
-static __thread MemoryContext	   constraint_cache_context = NULL;
+static __thread HTAB *constraint_cache = NULL;
+static __thread MemoryContext constraint_cache_context = NULL;
 
 
 #ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
 
-static uint64 __thread constraints, constraint_cache_hits;
+static uint64 __thread constraints,
+			constraint_cache_hits;
 
-#endif /* TIMESCALE_CONSTRAINT_CACHE_STATS */
+#endif							/* TIMESCALE_CONSTRAINT_CACHE_STATS */
 
-typedef struct ConstraintCacheEntry {
-	char *key;
+typedef struct ConstraintCacheEntry
+{
+	char	   *key;
 	ExprState  *val;
 } ConstraintCacheEntry;
 
 static uint32
 cache_hash(const void *key, Size keysize)
 {
-	Size        s_len = strlen((const char *) key);
+	Size		s_len = strlen((const char *) key);
+
 	return DatumGetUInt32(hash_any((const unsigned char *) key, (int) s_len));
 }
 
 static int
 cache_match(const void *key1, const void *key2, Size keysize)
 {
-	return strcmp(*(const char **)key1, key2);
+	return strcmp(*(const char **) key1, key2);
 }
 
 static void *
 cache_keycopy(void *dst, const void *src, Size keysize)
 {
-	char *data = MemoryContextStrdup(constraint_cache_context, src);
-	*(char **)dst = data;
+	char	   *data = MemoryContextStrdup(constraint_cache_context, src);
+
+	*(char **) dst = data;
 	return data;
 }
 
 
 #ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
 
-void __attribute__ ((noinline)) print_constraint_cache_stats(void);
+void		__attribute__((noinline)) print_constraint_cache_stats(void);
 
-void __attribute__ ((noinline))
+void
+__attribute__((noinline))
 print_constraint_cache_stats()
 {
-	double hit_rate = ((double)constraint_cache_hits) / ((double)constraints);
+	double		hit_rate = ((double) constraint_cache_hits) / ((double) constraints);
+
 	elog(LOG, "contraints %lu, hits: %lu, %.3f", constraints, constraint_cache_hits, hit_rate);
 }
 
-#endif /* TIMESCALE_CONSTRAINT_CACHE_STATS */
+#endif							/* TIMESCALE_CONSTRAINT_CACHE_STATS */
 
 /*
  * Clear the constraint cache variable (for use in MemoryContextCallback).
@@ -84,10 +90,8 @@ print_constraint_cache_stats()
  * `constraint_cache` variable in a MemoryContextCallback
  */
 static void
-clear_constraint_cache(void * null)
+clear_constraint_cache(void *null)
 {
-	print_constraint_cache_stats();
-	MemoryContextStats(TopMemoryContext);
 	constraint_cache = NULL;
 }
 
@@ -201,8 +205,9 @@ prepare_constr_expr(Expr *node)
 static inline void
 create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 {
-	MemoryContext				old_ctx;
-	int							ncheck, i;
+	MemoryContext old_ctx;
+	int			ncheck,
+				i;
 	ConstrCheck *check;
 
 	Assert(rel->rd_att->constr != NULL &&
@@ -211,17 +216,20 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
 
-	if(constraint_cache == NULL)
+	if (constraint_cache == NULL)
 	{
-		//TODO TopTransactionContext is higher up the stack then we probably need
-		//     (we only need expr context) but it's easy to find
-		MemoryContextCallback	*cache_clear_callback =
-			MemoryContextAllocZero(TopTransactionContext, sizeof(*cache_clear_callback));
+		/*
+		 * TODO TopTransactionContext is higher up the stack then we probably
+		 * need
+		 */
+		/* (we only need expr context) but it's easy to find */
+		MemoryContextCallback *cache_clear_callback =
+		MemoryContextAllocZero(TopTransactionContext, sizeof(*cache_clear_callback));
 
 		constraint_cache_context = AllocSetContextCreate(TopTransactionContext,
-				"constraint cache memory context",
-				ALLOCSET_DEFAULT_SIZES);
-		HASHCTL ctl = {
+														 "constraint cache memory context",
+														 ALLOCSET_DEFAULT_SIZES);
+		HASHCTL		ctl = {
 			.hcxt = constraint_cache_context,
 			.entrysize = sizeof(ConstraintCacheEntry),
 			.keysize = sizeof(char *),
@@ -229,8 +237,9 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 			.match = cache_match,
 			.keycopy = cache_keycopy,
 		};
+
 		constraint_cache = hash_create(
-			"constraint cache", 10, &ctl, HASH_FUNCTION | HASH_CONTEXT | HASH_ELEM | HASH_COMPARE | HASH_KEYCOPY);
+									   "constraint cache", 10, &ctl, HASH_FUNCTION | HASH_CONTEXT | HASH_ELEM | HASH_COMPARE | HASH_KEYCOPY);
 
 		cache_clear_callback->func = clear_constraint_cache;
 		MemoryContextRegisterResetCallback(constraint_cache_context, cache_clear_callback);
@@ -243,21 +252,21 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 	for (i = 0; i < ncheck; i++)
 	{
-		bool 		expr_found = false;
+		bool		expr_found = false;
 		Expr	   *checkconstr;
 		ConstraintCacheEntry *cached = hash_search(
-			constraint_cache, check[i].ccbin, HASH_ENTER, &expr_found);
+												   constraint_cache, check[i].ccbin, HASH_ENTER, &expr_found);
 
-		#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
+#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
 		constraints += 1;
-		#endif
+#endif
 
-		if(expr_found)
+		if (expr_found)
 		{
 
-			#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
+#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
 			constraint_cache_hits += 1;
-			#endif
+#endif
 			rri->ri_ConstraintExprs[i] = cached->val;
 			continue;
 		}
@@ -278,18 +287,18 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	{
 
 		ConstraintCacheEntry *cached = hash_search(
-			constraint_cache, check[i].ccbin, HASH_ENTER, &expr_found);
+												   constraint_cache, check[i].ccbin, HASH_ENTER, &expr_found);
 
-		#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
+#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
 		constraints += 1;
-		#endif
+#endif
 
-		if(expr_found)
+		if (expr_found)
 		{
 
-			#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
+#ifdef TIMESCALE_CONSTRAINT_CACHE_STATS
 			constraint_cache_hits += 1;
-			#endif
+#endif
 			rri->ri_ConstraintExprs[i] = cached->val;
 			continue;
 		}
@@ -300,7 +309,7 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 		cached->val = prepare_constr_expr((Expr *) qual);
 
-		rri->ri_ConstraintExprs[i] = (List *)cached->val;
+		rri->ri_ConstraintExprs[i] = (List *) cached->val;
 	}
 #endif
 }
