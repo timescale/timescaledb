@@ -112,62 +112,6 @@ chunk_insert_state_convert_tuple(ChunkInsertState *state,
 	return tuple;
 }
 
-/* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
-static inline ExprState *
-prepare_constr_expr(Expr *node)
-{
-	ExprState  *result;
-
-	node = expression_planner(node);
-	result = ExecInitExpr(node, NULL);
-
-	return result;
-}
-
-/*
- * Create the constraint exprs inside the current memory context. If this
- * is not done here, then ExecRelCheck will do it for you but put it into
- * the query memory context, which will cause a memory leak.
- */
-static inline void
-create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
-{
-	int			ncheck,
-				i;
-	ConstrCheck *check;
-
-	Assert(rel->rd_att->constr != NULL &&
-		   rri->ri_ConstraintExprs == NULL);
-
-	ncheck = rel->rd_att->constr->num_check;
-	check = rel->rd_att->constr->check;
-
-#if PG10
-	rri->ri_ConstraintExprs =
-		(ExprState **) palloc(ncheck * sizeof(ExprState *));
-
-	for (i = 0; i < ncheck; i++)
-	{
-		Expr	   *checkconstr = stringToNode(check[i].ccbin);
-
-		rri->ri_ConstraintExprs[i] =
-			prepare_constr_expr(checkconstr);
-	}
-#elif PG96
-	rri->ri_ConstraintExprs =
-		(List **) palloc(ncheck * sizeof(List *));
-
-	for (i = 0; i < ncheck; i++)
-	{
-		/* ExecQual wants implicit-AND form */
-		List	   *qual = make_ands_implicit(stringToNode(check[i].ccbin));
-
-		rri->ri_ConstraintExprs[i] = (List *)
-			prepare_constr_expr((Expr *) qual);
-	}
-#endif
-}
-
 /*
  * Create a new ResultRelInfo for a chunk.
  *
@@ -201,7 +145,15 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	rri->ri_onConflictSetProj = rri_orig->ri_onConflictSetProj;
 	rri->ri_onConflictSetWhere = rri_orig->ri_onConflictSetWhere;
 
-	create_chunk_rri_constraint_expr(rri, rel);
+	/*
+	 * We do not create the actual constraint exprs here, leaving it for
+	 * ExecRelCheck to create them in the query memory context. While it might
+	 * be more memory efficient to create them in the chunk insert memory
+	 * context, postgres expects these expr to live for the entire duration of
+	 * the SQL expression we are running, and will happily store pointers into
+	 * it for later; this has caused segfualts in the past. Additionally, memory
+	 * savings for shorter allocation seems minimal.
+	 */
 
 	return rri;
 }
