@@ -95,6 +95,8 @@ partitioning_func_get_default(void)
 bool
 partitioning_func_is_default(const char *schema, const char *funcname)
 {
+	Assert(schema != NULL && funcname != NULL);
+
 	return strcmp(DEFAULT_PARTITIONING_FUNC_SCHEMA, schema) == 0 &&
 		strcmp(DEFAULT_PARTITIONING_FUNC_NAME, funcname) == 0;
 }
@@ -157,6 +159,11 @@ partitioning_info_create(const char *schema,
 	Var		   *var;
 	FuncExpr   *expr;
 
+	if (schema == NULL || partfunc == NULL || partcol == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+				 errmsg("partitioning function information cannot be null")));
+
 	pinfo = palloc0(sizeof(PartitioningInfo));
 	StrNCpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
 	StrNCpy(pinfo->column, partcol, NAMEDATALEN);
@@ -166,8 +173,8 @@ partitioning_info_create(const char *schema,
 	if (pinfo->column_attnum == InvalidAttrNumber)
 		return NULL;
 
-	if (schema != NULL)
-		StrNCpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
+
+	StrNCpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
 
 	/* Lookup the type cache entry to access the hash function for the type */
 	columntype = get_atttype(relid, pinfo->column_attnum);
