@@ -68,6 +68,19 @@ SELECT time_bucket('1 minute', time) AS period, avg(temp), device
 FROM many_partitions_test
 GROUP BY period, device;
 
+-- Out-of-order insertion regression test.
+-- this used to trip an assert in subspace_store.c checking that
+-- max_open_chunks_per_insert was obeyed
+set timescaledb.max_open_chunks_per_insert=1;
+
+CREATE TABLE chunk_assert_fail(i bigint, j bigint);
+SELECT create_hypertable('chunk_assert_fail', 'i', 'j', 1000, chunk_time_interval=>1);
+insert into chunk_assert_fail values (1, 1), (1, 2), (2,1);
+select * from chunk_assert_fail;
+
+set timescaledb.max_open_chunks_per_insert=default;
+
+
 SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
 
 CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);

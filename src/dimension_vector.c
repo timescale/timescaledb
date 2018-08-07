@@ -86,7 +86,7 @@ dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 	DimensionVec *vec = *vecptr;
 
 	dimension_slice_free(vec->slices[index]);
-	memcpy(vec->slices + index, vec->slices + (index + 1), sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
+	memmove(vec->slices + index, vec->slices + (index + 1), sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
 	vec->num_slices--;
 }
 

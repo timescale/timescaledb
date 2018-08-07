@@ -78,6 +78,7 @@ subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items)
 
 	sst->origin = subspace_store_internal_node_create(space->num_dimensions == 1);
 	sst->num_dimensions = space->num_dimensions;
+	/* max_items = 0 is treated as unlimited */
 	sst->max_items = max_items;
 	sst->mcxt = mcxt;
 	MemoryContextSwitchTo(old);
@@ -104,49 +105,78 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 
 		if (node == NULL)
 		{
+			/*
+			 * We should have one internal node per dimension in the
+			 * hypertable. If we don't have one for the current dimension,
+			 * create one now. (There will always be one for time)
+			 */
 			Assert(last != NULL);
-			last->storage = subspace_store_internal_node_create(i == hc->num_slices - 1);
+			last->storage = subspace_store_internal_node_create(i == (hc->num_slices - 1));
 			last->storage_free = subspace_store_internal_node_free;
 			node = last->storage;
 		}
 
+		Assert(store->max_items == 0 || node->descendants <= (size_t)store->max_items);
+
+		/*
+		 * We only call this function on a cache miss, so number of leaves
+		 * will definitely increase see `Assert(last != NULL && last->storage
+		 * == NULL);` at bottom.
+		 */
 		node->descendants += 1;
 
 		Assert(0 == node->vector->num_slices ||
 			   node->vector->slices[0]->fd.dimension_id == target->fd.dimension_id);
 
+		/* Do we have enough space to store the object? */
+		if (store->max_items > 0 && node->descendants > store->max_items)
+		{
+			/*
+			 * Always delete the slice corresponding to the earliest time
+			 * range. In the normal case that inserts are performed in
+			 * time-order this is the one least likely to be reused. (Note
+			 * that we made sure that the first dimension is a time dimension
+			 * when creating the subspace_store). If out-of-order inserts are
+			 * become significant we may wish to change this to something more
+			 * sophisticated like LRU.
+			 */
+			size_t		items_removed = subspace_store_internal_node_descendants(node, i);
+
+			/*
+			 * descendants at the root is inclusive of the descendants at the
+			 * children, so if we have an overflow it must be in the time dim
+			 */
+			Assert(i == 0);
+
+			Assert(store->max_items + 1 == node->descendants);
+
+			dimension_vec_remove_slice(&node->vector, i);
+
+			/*
+			 * Note we would have to do this to ancestors if this was not the
+			 * root.
+			 */
+			node->descendants -= items_removed;
+		}
+
 		match = dimension_vec_find_slice(node->vector, target->fd.range_start);
 
+		/* Do we have a slot in this vector for the new object? */
 		if (match == NULL)
 		{
 			DimensionSlice *copy;
 
-			if (store->max_items > 0 && i == 0 && node->descendants > store->max_items)
-			{
-				/*
-				 * At dimension 0 only keep store->max_slices_first_dimension
-				 * slices. This is to prevent this store from growing too
-				 * large. Always delete the oldest. Note that we made sure
-				 * that the first dimension is a time dimension when creating
-				 * the subspace_store.
-				 */
-				size_t		items_removed = subspace_store_internal_node_descendants(node, 0);
-
-				Assert(store->max_items + 1 == node->descendants);
-
-				dimension_vec_remove_slice(&node->vector, 0);
-
-				/*
-				 * Note we would have to do this to ancestors if this was not
-				 * the root.
-				 */
-				node->descendants -= items_removed;
-			}
+			/*
+			 * create a new copy of the range this slice covers, to store the
+			 * object in
+			 */
 			copy = dimension_slice_copy(target);
 
 			dimension_vec_add_slice_sort(&node->vector, copy);
 			match = copy;
 		}
+
+		Assert(store->max_items == 0 || node->descendants <= (size_t)store->max_items);
 
 		last = match;
 		/* internal slices point to the next SubspaceStoreInternalNode */
