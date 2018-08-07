@@ -128,6 +128,9 @@ prepare_constr_expr(Expr *node)
  * Create the constraint exprs inside the current memory context. If this
  * is not done here, then ExecRelCheck will do it for you but put it into
  * the query memory context, which will cause a memory leak.
+ *
+ * See the comment in `chunk_insert_state_destroy` for more information
+ * on the implications of this.
  */
 static inline void
 create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
@@ -452,6 +455,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = resrelinfo;
+	state->estate = dispatch->estate;
 
 	if (resrelinfo->ri_RelationDesc->rd_rel->relhasindex &&
 		resrelinfo->ri_IndexRelationDescs == NULL)
@@ -499,6 +503,38 @@ chunk_insert_state_destroy(ChunkInsertState *state)
 
 	ExecCloseIndices(state->result_relation_info);
 	heap_close(state->rel, NoLock);
+
+	/*
+	 * Postgres stores cached row types from `get_cached_rowtype` in the
+	 * contraint expression and tries to free this type via a callback from
+	 * the `per_tuple_exprcontext`. Since we create constraint expressions
+	 * within the chunk insert state memory context, this leads to a series of
+	 * pointers strutured like: `per_tuple_exprcontext -> constraint expr (in
+	 * chunk insert state) -> cached row type` if we try to free the the chunk
+	 * insert state MemoryContext while the `es_per_tuple_exprcontext` is
+	 * live, postgres tries to dereference a dangling pointer in one of
+	 * `es_per_tuple_exprcontext`'s callbacks. Normally postgres allocates the
+	 * constraint expressions in a parent context of per_tuple_exprcontext so
+	 * there is no issue, however we've run into excessive memory ussage due
+	 * to too many constraints, and want to allocate them for a shorter
+	 * lifetime. To ensure this doesn't create dangling pointers, we free the
+	 * `per_tuple_exprcontext`, and call all its callbacks, here, before the
+	 * chunk insert state memory context.
+	 *
+	 * This may not be entirely safe. Right now it appears that in the case
+	 * where the chunk insert both the `es_per_tuple_exprcontext` and chunk
+	 * insert state exist they are freed at approximately the same time.
+	 * However, postgres does not guarantee this (and indeed does not know
+	 * anything about `chunk_insert_state`) so this may not hold true in the
+	 * future. A better fix may be to tie the `chunk_insert_state` lifetime to
+	 * the lifetime of a known postgres memory context (possibly
+	 * tuple_exprcontext's?) and handle cases where the insert state is freed
+	 * early.
+	 */
+	if (state->estate->es_per_tuple_exprcontext != NULL)
+		FreeExprContext(state->estate->es_per_tuple_exprcontext, true);
+
+	state->estate->es_per_tuple_exprcontext = NULL;
 
 	if (NULL != state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
