@@ -1,6 +1,7 @@
 #ifndef TIMESCALEDB_CHUNK_INSERT_STATE_H
 #define TIMESCALEDB_CHUNK_INSERT_STATE_H
 
+#include <nodes/execnodes.h>
 #include <postgres.h>
 #include <funcapi.h>
 #include <access/tupconvert.h>
@@ -18,6 +19,8 @@ typedef struct ChunkInsertState
 	TupleConversionMap *tup_conv_map;
 	TupleTableSlot *slot;
 	MemoryContext mctx;
+
+	EState	   *estate;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

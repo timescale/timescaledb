@@ -84,6 +84,42 @@ INSERT INTO part_custom_func VALUES ('2017-03-22T09:18:23', 23.4, 'dev1'),
 
 SELECT * FROM test.show_subtables('part_custom_func');
 
+-- This first test is slightly trivial, but segfaulted in old versions
+CREATE TYPE simpl AS (val1 int4);
+
+CREATE OR REPLACE FUNCTION simpl_type_hash(ANYELEMENT) RETURNS int4 AS $$
+    SELECT $1.val1;
+$$ LANGUAGE SQL IMMUTABLE;
+
+CREATE TABLE simpl_partition ("timestamp" TIMESTAMPTZ, object simpl);
+
+SELECT create_hypertable(
+    'simpl_partition',
+    'timestamp',
+    'object',
+    1000,
+    chunk_time_interval => interval '1 day',
+    partitioning_func=>'simpl_type_hash');
+
+INSERT INTO simpl_partition VALUES ('2017-03-22T09:18:23', ROW(1)::simpl);
+
+SELECT * from simpl_partition;
+
+-- Also test that the fix works when we have more chunks than allowed at once
+SET timescaledb.max_open_chunks_per_insert=1;
+
+INSERT INTO simpl_partition VALUES
+    ('2017-03-22T10:18:23', ROW(0)::simpl),
+    ('2017-03-22T10:18:23', ROW(1)::simpl),
+    ('2017-03-22T10:18:23', ROW(2)::simpl),
+    ('2017-03-22T10:18:23', ROW(3)::simpl),
+    ('2017-03-22T10:18:23', ROW(4)::simpl),
+    ('2017-03-22T10:18:23', ROW(5)::simpl);
+
+SET timescaledb.max_open_chunks_per_insert=default;
+
+SELECT * from simpl_partition;
+
 -- Test that index creation is handled correctly.
 CREATE TABLE hyper_with_index(time timestamptz, temp float, device int);
 CREATE UNIQUE INDEX temp_index ON hyper_with_index(temp);
