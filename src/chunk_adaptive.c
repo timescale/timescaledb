@@ -678,8 +678,9 @@ chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 
 	if (!OidIsValid(atttype))
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
-				 errmsg("no open dimension found for adaptive chunking")));
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist",
+						info->colname)));
 
 	chunk_sizing_func_validate(info->func, info);
 

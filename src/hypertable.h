@@ -53,4 +53,7 @@ extern bool hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock) \
 	hypertable_scan_with_memory_context(schema, table, tuple_found, data, lockmode, tuplock, CurrentMemoryContext)
 
+#define hypertable_adaptive_chunking_enabled(ht)						\
+	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
+
 #endif							/* TIMESCALEDB_HYPERTABLE_H */

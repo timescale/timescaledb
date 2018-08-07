@@ -74,6 +74,8 @@ typedef struct Point
 	(sizeof(Point) + (sizeof(int64) * (cardinality)))
 
 #define DEFAULT_CHUNK_TIME_INTERVAL (USECS_PER_DAY * 30)	/* 1 month */
+#define DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE (USECS_PER_DAY)	/* 1 day with adaptive
+																 * chunking enabled */
 
 typedef struct Hypertable Hypertable;
 
@@ -95,6 +97,7 @@ typedef struct DimensionInfo
 	bool		skip;
 	bool		set_not_null;
 	bool		num_slices_is_set;
+	bool		adaptive_chunking;	/* True if adaptive chunking is enabled */
 	Hypertable *ht;
 } DimensionInfo;
 

@@ -661,7 +661,11 @@ get_validated_integer_interval(Oid coltype, int64 value)
 }
 
 static int64
-dimension_interval_to_internal(const char *colname, Oid coltype, Oid valuetype, Datum value)
+dimension_interval_to_internal(const char *colname,
+							   Oid coltype,
+							   Oid valuetype,
+							   Datum value,
+							   bool adaptive_chunking)
 {
 	int64		interval;
 
@@ -678,7 +682,9 @@ dimension_interval_to_internal(const char *colname, Oid coltype, Oid valuetype, 
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("integer dimensions require an explicit interval")));
 
-		value = Int64GetDatum(DEFAULT_CHUNK_TIME_INTERVAL);
+		value = Int64GetDatum(adaptive_chunking ?
+							  DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE :
+							  DEFAULT_CHUNK_TIME_INTERVAL);
 		valuetype = INT8OID;
 	}
 
@@ -728,7 +734,7 @@ dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 	Datum		value = PG_GETARG_DATUM(1);
 	Oid			valuetype = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 
-	PG_RETURN_INT64(dimension_interval_to_internal("testcol", coltype, valuetype, value));
+	PG_RETURN_INT64(dimension_interval_to_internal("testcol", coltype, valuetype, value, false));
 }
 
 static void
@@ -803,7 +809,8 @@ dimension_update(FunctionCallInfo fcinfo,
 		dim->fd.interval_length = dimension_interval_to_internal(NameStr(dim->fd.column_name),
 																 dim->fd.column_type,
 																 intervaltype,
-																 *interval);
+																 *interval,
+																 hypertable_adaptive_chunking_enabled(ht));
 	}
 
 	if (NULL != num_slices)
@@ -957,7 +964,8 @@ dimension_validate_info(DimensionInfo *info)
 		info->interval = dimension_interval_to_internal(NameStr(*info->colname),
 														info->coltype,
 														info->interval_type,
-														info->interval_datum);
+														info->interval_datum,
+														info->adaptive_chunking);
 	}
 }
 

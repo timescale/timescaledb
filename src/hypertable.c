@@ -1364,6 +1364,15 @@ hypertable_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support transition tables in triggers")));
 
+	/* Validate and set chunk sizing information */
+	if (OidIsValid(chunk_sizing_info.func))
+	{
+		chunk_adaptive_sizing_info_validate(&chunk_sizing_info);
+
+		if (chunk_sizing_info.target_size_bytes > 0)
+			time_dim_info.adaptive_chunking = true;
+	}
+
 	/* Validate that the dimensions are OK */
 	dimension_validate_info(&time_dim_info);
 
@@ -1373,10 +1382,6 @@ hypertable_create(PG_FUNCTION_ARGS)
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
 	namestrcpy(&table_name, get_rel_name(table_relid));
-
-	/* Validate and set chunk sizing information */
-	if (OidIsValid(chunk_sizing_info.func))
-		chunk_adaptive_sizing_info_validate(&chunk_sizing_info);
 
 	hypertable_insert(&schema_name,
 					  &table_name,
