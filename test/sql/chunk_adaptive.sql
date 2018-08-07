@@ -35,7 +35,6 @@ CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
 SELECT create_hypertable('test_adaptive', 'time',
                          chunk_target_size => '1MB',
                          chunk_sizing_func => 'bad_calculate_chunk_interval');
-
 \set ON_ERROR_STOP 1
 
 -- Setting sizing func with correct signature should work
@@ -52,6 +51,10 @@ SELECT create_hypertable('test_adaptive', 'time',
                          create_default_indexes => true);
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
+
+-- Check that adaptive chunking sets a 1 day default chunk time
+-- interval => 86400000000 microseconds
+SELECT * FROM _timescaledb_catalog.dimension;
 
 -- Change the target size
 SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
