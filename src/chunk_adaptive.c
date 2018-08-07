@@ -428,11 +428,31 @@ TS_FUNCTION_INFO_V1(calculate_chunk_interval);
  * Chunk (3) is probably a common real world scenario. We don't do anything
  * special to handle this case.
  *
- * Finally, we use a number of thresholds to avoid changing intervals
+ * We use a number of thresholds to avoid changing intervals
  * unnecessarily. I.e., if we are close to the target interval, we avoid
  * changing the interval since there might be a natural variance in the
  * fillfactor across chunks. This is intended to avoid flip-flopping or unstable
  * behavior.
+ *
+ * Additionally, two other thresholds govern much of the algorithm's behavior.
+ * First is the SIZE_FILLFACTOR_THRESH, which is the minimum percentage of
+ * the extrapolated size a chunk should fill to be used in computing a new
+ * target size. We want a minimum so as to not overreact to a chunk that is too
+ * small to get an accurate extrapolation from. For example, a chunk that is
+ * only a percentage point or two of the extrapolated size (or less!) may not
+ * contain enough data to give a true sense of the data rate, i.e., if it was
+ * made in a particularly bursty or slow period.
+ *
+ * However, in the event that an initial chunk size was set
+ * way too small, the algorithm will never adjust because
+ * _all_ the chunks fall below this threshold. Therefore we have another
+ * threshold -- NUM_UNDERSIZED_INTERVALS -- that helps our algorithm make
+ * progress to the correct estimate. If there are _no_ chunks that
+ * meet SIZE_FILLFACTOR_THRESH, and at least NUM_UNDERSIZED_INTERVALS chunks
+ * we are sufficiently full, we use those chunks to adjust the target chunk
+ * size so that the next chunks created at least meet SIZE_FILLFACTOR_THRESH.
+ * This will then allow the algorithm to work in the normal way to adjust
+ * further if needed.
  */
 Datum
 calculate_chunk_interval(PG_FUNCTION_ARGS)
@@ -442,6 +462,7 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 	int64		chunk_target_size_bytes = PG_GETARG_INT64(2);
 	int64		chunk_interval = 0;
 	int64		undersized_intervals = 0;
+	int64		current_interval;
 	int32		hypertable_id;
 	Hypertable *ht;
 	Dimension  *dim;
@@ -471,6 +492,8 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 	dim = hyperspace_get_dimension_by_id(ht->space, dimension_id);
 
 	Assert(dim != NULL);
+
+	current_interval = dim->fd.interval_length;
 
 	/* Get a window of recent chunks */
 	chunks = chunk_get_window(hypertable_id,
@@ -528,12 +551,23 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 				 size_fillfactor);
 
 
+			/*
+			 * If the chunk is sufficiently filled with data and its
+			 * extrapolated size is large enough to make a good estimate, use
+			 * it
+			 */
 			if (interval_fillfactor > INTERVAL_FILLFACTOR_THRESH &&
 				size_fillfactor > SIZE_FILLFACTOR_THRESH)
 			{
 				chunk_interval += (slice_interval / size_fillfactor);
 				num_intervals++;
 			}
+
+			/*
+			 * If the chunk is sufficiently filled with data but its
+			 * extrapolated size is too small, track it and maybe use it if it
+			 * is all we have
+			 */
 			else if (interval_fillfactor > INTERVAL_FILLFACTOR_THRESH)
 			{
 				elog(DEBUG2, "[adaptive] chunk sufficiently full, "
@@ -545,10 +579,18 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 		}
 	}
 
-	elog(DEBUG1, "[adaptive] current interval is " UINT64_FORMAT, dim->fd.interval_length);
-	elog(DEBUG1, "[adaptive] num_intervals %d num_undersized_intervals %d", num_intervals, num_undersized_intervals);
+	elog(DEBUG1, "[adaptive] current interval=" UINT64_FORMAT
+		 " num_intervals=%d num_undersized_intervals=%d",
+		 current_interval,
+		 num_intervals,
+		 num_undersized_intervals);
 
-	/* No full sized intervals, but enough undersized intervals to probe */
+	/*
+	 * No full sized intervals, but enough undersized intervals to adjust
+	 * higher. We only want to do this if there are no sufficiently sized
+	 * intervals to use for a normal adjustment. This keeps us from getting
+	 * stuck with a really small interval size.
+	 */
 	if (num_intervals == 0 && num_undersized_intervals > NUM_UNDERSIZED_INTERVALS)
 	{
 		double		avg_fillfactor = undersized_fillfactor / num_undersized_intervals;
@@ -566,25 +608,31 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 		elog(DEBUG1, "[adaptive] no sufficiently large intervals found, "
 			 "nor enough undersized chunks to estimate. "
 			 "use previous size of " UINT64_FORMAT,
-			 dim->fd.interval_length);
-		PG_RETURN_INT64(dim->fd.interval_length);
+			 current_interval);
+		PG_RETURN_INT64(current_interval);
 	}
 	else
 		chunk_interval /= num_intervals;
-
-	elog(DEBUG1, "[adaptive] calculated chunk interval is " UINT64_FORMAT "", chunk_interval);
 
 	/*
 	 * If the interval hasn't really changed much from before, we keep the old
 	 * interval to ensure we do not have fluctuating behavior around the
 	 * target size.
 	 */
-	interval_diff = fabs(1.0 - ((double) chunk_interval / dim->fd.interval_length));
+	interval_diff = fabs(1.0 - ((double) chunk_interval / current_interval));
 
 	if (interval_diff <= INTERVAL_MIN_CHANGE_THRESH)
 	{
-		chunk_interval = dim->fd.interval_length;
-		elog(DEBUG1, "[adaptive] change in chunk interval is below threshold, keeping old interval");
+		elog(DEBUG1, "[adaptive] calculated chunk interval=" UINT64_FORMAT
+			 ", but is below change threshold, keeping old interval",
+			 chunk_interval);
+		chunk_interval = current_interval;
+	}
+	else
+	{
+		elog(LOG, "[adaptive] calculated chunk interval=" UINT64_FORMAT
+			 " for hypertable %d, making change",
+			 chunk_interval, hypertable_id);
 	}
 
 	PG_RETURN_INT64(chunk_interval);
