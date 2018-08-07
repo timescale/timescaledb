@@ -13,6 +13,7 @@ set(TEST_FILES
   create_chunks.sql
   create_hypertable.sql
   create_table.sql
+  custom_type.sql
   ddl_alter_column.sql
   ddl_errors.sql
   ddl_single.sql
