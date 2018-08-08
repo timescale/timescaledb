@@ -12,12 +12,6 @@
 #include <funcapi.h>
 #include <math.h>
 
-#if defined(WIN32)
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
 #include "hypertable_cache.h"
 #include "errors.h"
 #include "compat.h"
@@ -27,34 +21,9 @@
 #include "utils.h"
 
 /* This can be set to a positive number (and non-zero) value from tests to
- * simulate effective memory cache size. This makes it possible to run tests
+ * simulate memory cache size. This makes it possible to run tests
  * deterministically. */
-static int64 fixed_effective_memory_cache_size = -1;
-
-/*
- * Get the available system memory.
- */
-static int64
-system_memory_bytes(void)
-{
-	int64		bytes;
-
-#if defined(WIN32)
-	MEMORYSTATUSEX status;
-
-	status.dwLength = sizeof(status);
-	GlobalMemoryStatusEx(&status);
-	bytes = status.ullTotalPhys;
-
-#elif defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
-
-	bytes = sysconf(_SC_PHYS_PAGES);
-	bytes *= sysconf(_SC_PAGESIZE);
-#else
-#error "Unsupported platform"
-#endif
-	return bytes;
-}
+static int64 fixed_memory_cache_size = -1;
 
 static int64
 convert_text_memory_amount_to_bytes(const char *memory_amount)
@@ -78,56 +47,37 @@ convert_text_memory_amount_to_bytes(const char *memory_amount)
 	return bytes;
 }
 
-TS_FUNCTION_INFO_V1(set_effective_memory_cache_size);
+/*
+ * Exposed for testing purposes to be able to simulate a different memory
+ * cache size in tests.
+ */
+TS_FUNCTION_INFO_V1(set_memory_cache_size);
 
 Datum
-set_effective_memory_cache_size(PG_FUNCTION_ARGS)
+set_memory_cache_size(PG_FUNCTION_ARGS)
 {
 	const char *memory_amount = text_to_cstring(PG_GETARG_TEXT_P(0));
 
-	fixed_effective_memory_cache_size = convert_text_memory_amount_to_bytes(memory_amount);
+	fixed_memory_cache_size = convert_text_memory_amount_to_bytes(memory_amount);
 
-	PG_RETURN_INT64(fixed_effective_memory_cache_size);
+	PG_RETURN_INT64(fixed_memory_cache_size);
 }
 
 /*
- * Estimate the effective memory available for caching. PostgreSQL generally
- * relies on both its own shared buffer cache and the OS file system cache. Thus
- * the cache memory available is the combination of these two caches. The
- * 'effective_cache_size' setting in PostgreSQL is supposed to give an estimate
- * of this combined memory cache and is probably the best value to use if
- * accurately set by the user (defaults to '4GB'). Note that
- * effective_cache_size is only used to inform the planner on how to plan
- * queries and does not affect the actual available cache memory (this is
- * limited by the free memory on the system, typically free+cached in top).
+ * Get the amount of cache memory for chunks.
  *
- * A conservative setting for effective_cache_size is typically 1/2 the memory
- * of the system, while a common recommended setting for shared_buffers is 1/4
- * of system memory. In case shared_buffers is set higher than
- * effective_cache_size, we use the max of the two (a larger shared_buffers is a
- * strange setting though). Ultimately we are limited by system memory. Thus,
- * this functions returns a value effective_memory_cache which is:
- * shared_buffers >= effective_memory_cache <= system_mem / 2.
- *
- * Note that this relies on the user setting a good value for
- * effective_cache_size, or otherwise our estimate will be off. Alternatively,
- * we could just read to free memory on the system, but this won't account for
- * future concurrent usage by other processes.
+ * We use shared_buffers converted to bytes.
  */
 static int64
-estimate_effective_memory_cache_size(void)
+get_memory_cache_size(void)
 {
 	const char *val;
 	const char *hintmsg;
-	int			shared_buffers,
-				effective_cache_size;
+	int			shared_buffers;
 	int64		memory_bytes;
 
-	/* Use half of system memory as an upper bound */
-	int64		sysmem_bound_bytes = system_memory_bytes() / 2;
-
-	if (fixed_effective_memory_cache_size > 0)
-		return fixed_effective_memory_cache_size;
+	if (fixed_memory_cache_size > 0)
+		return fixed_memory_cache_size;
 
 	val = GetConfigOption("shared_buffers", false, false);
 
@@ -137,47 +87,25 @@ estimate_effective_memory_cache_size(void)
 	if (!parse_int(val, &shared_buffers, GUC_UNIT_BLOCKS, &hintmsg))
 		elog(ERROR, "could not parse 'shared_buffers' setting: %s", hintmsg);
 
-	val = GetConfigOption("effective_cache_size", false, false);
+	memory_bytes = shared_buffers;
 
-	if (NULL == val)
-		elog(ERROR, "missing configuration for 'effective_cache_size'");
-
-	if (!parse_int(val, &effective_cache_size, GUC_UNIT_BLOCKS, &hintmsg))
-		ereport(ERROR,
-				(errmsg("could not parse 'effective_cache_size' setting"),
-				 errhint("%s", hintmsg)));
-
-	memory_bytes = Max((int64) shared_buffers, (int64) effective_cache_size);
-
-	/* Both values are in blocks, so convert to bytes */
+	/* Value is in blocks, so convert to bytes */
 	memory_bytes *= BLCKSZ;
-
-	/*
-	 * Upper bound on system memory in case of weird settings for
-	 * effective_cache_size or shared_buffers
-	 */
-	if (memory_bytes > sysmem_bound_bytes)
-		memory_bytes = sysmem_bound_bytes;
 
 	return memory_bytes;
 }
 
-/* The default the number of chunks we expect to be able to have in cache
- * memory at the same time */
-#define DEFAULT_NUM_CHUNKS_TO_FIT_IN_CACHE_MEM 4
+/*
+ * For chunk sizing, we don't want to set chunk size exactly the same as the
+ * available cache memory, since chunk sizes won't be exact. We therefore give
+ * some slack here.
+ */
+#define DEFAULT_CACHE_MEMORY_SLACK 0.9
 
 static inline int64
 calculate_initial_chunk_target_size(void)
 {
-	/*
-	 * Simply use a quarter of estimated memory to account for keeping
-	 * simultaneous chunks in memory. Alternatively, we could use a better
-	 * estimate of, e.g., concurrent chunk usage, such as the number of
-	 * hypertables in the database. However, that requires scanning for
-	 * hypertables in all schemas and databases, and might not be a good
-	 * estimate in case of many "old" (unused) hypertables.
-	 */
-	return estimate_effective_memory_cache_size() / DEFAULT_NUM_CHUNKS_TO_FIT_IN_CACHE_MEM;
+	return (int64) ((double) get_memory_cache_size() * DEFAULT_CACHE_MEMORY_SLACK);
 }
 
 typedef enum MinMaxResult

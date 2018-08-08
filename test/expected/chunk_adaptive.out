@@ -22,12 +22,12 @@ BEGIN
     RETURN -1;
 END
 $BODY$;
--- Set a fixed effective memory cache size to make tests determinstic
+-- Set a fixed memory cache size to make tests determinstic
 -- (independent of available machine memory)
-SELECT * FROM test.set_effective_memory_cache_size('2GB');
- set_effective_memory_cache_size 
----------------------------------
-                      2147483648
+SELECT * FROM test.set_memory_cache_size('2GB');
+ set_memory_cache_size 
+-----------------------
+            2147483648
 (1 row)
 
 CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
@@ -164,41 +164,41 @@ SELECT * FROM set_adaptive_chunking('test_adaptive', '11MB');
 SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |         536870912
+ _timescaledb_internal.calculate_chunk_interval |        1932735283
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |         536870912
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |        1932735283
 (1 row)
 
 -- Use a lower memory setting to test that the calculated chunk_target_size is reduced
-SELECT * FROM test.set_effective_memory_cache_size('512MB');
- set_effective_memory_cache_size 
----------------------------------
-                       536870912
+SELECT * FROM test.set_memory_cache_size('512MB');
+ set_memory_cache_size 
+-----------------------
+             536870912
 (1 row)
 
 SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
                chunk_sizing_func                | chunk_target_size 
 ------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |         134217728
+ _timescaledb_internal.calculate_chunk_interval |         483183820
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |         134217728
+ test_adaptive | _timescaledb_internal    | calculate_chunk_interval |         483183820
 (1 row)
 
 -- Reset memory settings
-SELECT * FROM test.set_effective_memory_cache_size('2GB');
- set_effective_memory_cache_size 
----------------------------------
-                      2147483648
+SELECT * FROM test.set_memory_cache_size('2GB');
+ set_memory_cache_size 
+-----------------------
+            2147483648
 (1 row)
 
 -- Set a reasonable test value
