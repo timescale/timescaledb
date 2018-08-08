@@ -256,5 +256,5 @@ END
 $BODY$;
 
 -- Used to set a deterministic memory setting during tests
-CREATE OR REPLACE FUNCTION test.set_effective_memory_cache_size(memory_amount text)
-RETURNS BIGINT AS :MODULE_PATHNAME, 'set_effective_memory_cache_size' LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE FUNCTION test.set_memory_cache_size(memory_amount text)
+RETURNS BIGINT AS :MODULE_PATHNAME, 'set_memory_cache_size' LANGUAGE C VOLATILE STRICT;

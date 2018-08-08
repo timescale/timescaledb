@@ -24,9 +24,9 @@ BEGIN
 END
 $BODY$;
 
--- Set a fixed effective memory cache size to make tests determinstic
+-- Set a fixed memory cache size to make tests determinstic
 -- (independent of available machine memory)
-SELECT * FROM test.set_effective_memory_cache_size('2GB');
+SELECT * FROM test.set_memory_cache_size('2GB');
 
 CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
 
@@ -94,13 +94,13 @@ SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_targe
 FROM _timescaledb_catalog.hypertable;
 
 -- Use a lower memory setting to test that the calculated chunk_target_size is reduced
-SELECT * FROM test.set_effective_memory_cache_size('512MB');
+SELECT * FROM test.set_memory_cache_size('512MB');
 SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
 
 -- Reset memory settings
-SELECT * FROM test.set_effective_memory_cache_size('2GB');
+SELECT * FROM test.set_memory_cache_size('2GB');
 
 -- Set a reasonable test value
 SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
