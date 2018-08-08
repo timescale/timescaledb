@@ -626,7 +626,7 @@ HINT:  The interval is specified in microseconds
 SELECT test.interval_to_internal('TIMESTAMP'::regtype);
  interval_to_internal 
 ----------------------
-        2592000000000
+         604800000000
 (1 row)
 
 SELECT test.interval_to_internal('BIGINT'::regtype, 2147483649::bigint);
