@@ -4,6 +4,53 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.11.0 (2018-08-08)
+
+**High-level changes**
+
+* **Adaptive chunking**: This feature, currently in beta, allows the database to automatically adapt a chunk's time interval, so that users do not need to manually set (and possibly manually change) this interval size. In this release, users can specify either a target chunk data size (in terms of MB or GB), and the chunk's time intervals will be automatically adapted. Alternatively, users can ask the database to just estimate a target size itself based on the platform's available memory and other parameters, and the system will adapt accordingly. This type of automation can simplify initial database test and operations. This feature is default off. Note: The default time interval for non-adaptive chunking has also been changed from 1 month to 1 week.
+* **Continued hardening**: This release addresses a number of less frequently used schema modifications, functions, or constraints. Unsupported functions are safely blocked, while we have added support for a number of new types of table alterations. This release also adds additional test coverage.
+* Support for additional types of time columns, if they are binary compatible (thanks @fvannee!).
+
+**Notable commits**
+
+* [9ba2e81] Fix segfault with custom partition types
+* [7e9bf25] Change default chunk size to one week
+* [506fa18] Add tests for custom types
+* [1d9ade7] add support for other types as timescale column
+* [570f2f8] Validate parameters when creating partition info
+* [148f2da] Use shared_buffers as the available cache memory
+* [e0a15c1] Add additional comments to explain algorithm
+* [d81dccb] Set the default chunk_time_interval to 1 day with adaptive chunking enabled
+* [2e7b32c] Add WARNING when doing min-max heap scan for adaptive chunking
+* [6b452a8] Update adaptive chunk algorithm to handle very small chunks.
+* [9c9cdca] Add support for adaptive chunk sizing
+* [7f8d17d] Handle DEFERRED and VALID options for constraints
+* [0c5c21b] Block using rules with hypertables
+* [37142e9] Block INSERTs on a hypertable's root table
+* [4daf087] Fix some ALTER TABLE corner case bugs on hypertables
+* [122f5f1] Block replica identity usage with hypertables
+* [8bf552e] Block unlogged tables from being used as hypertables
+* [a8c637e] Create aggregate functions only once to avoid dependency issues
+* [a97f2af] Add support for custom hypertable dimension types
+* [dfe026c] Refactor create_hypertable rel access.
+* [ed379c3] Validate existing indexes before adding a new dimension
+* [1f2d276] Fix and improve show_indexes test support function
+* [77b0035] Enforce IMMUTABLE partitioning functions
+* [cbc5e60] Block NO INHERIT constraints on hypertables
+* [e362e9c] Block mixing hypertables with postgres inheritance
+* [011f12b] Add support for CLUSTER ON and SET WITHOUT CLUSTER
+* [e947c6b] Improve handling of column settings
+* [fc4957b] Update statistics on parent table when doing ANALYZE
+* [82942bf] Enable backwards compatibility for loader for 0.9.0 and 0.9.1
+
+**Thanks**
+
+* @Ngalstyan4 and @hjsuh18, our interns, for all of the PRs this summer
+* @fvannee for a PR adding support for binary compatible custom types as a time column
+* @fmacelw for reporting a bug where first() and last() hold reference across extension update
+* @soccerdroid for reporting a corner case bug in ALTER TABLE
+
 ## 0.10.1 (2018-07-12)
 
 **High-level changes**
