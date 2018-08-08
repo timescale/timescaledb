@@ -266,9 +266,9 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
-                                                        get_create_command                                                         
------------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_1dim', '"time"', chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
+                                                        get_create_command                                                        
+----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_1dim', '"time"', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
 (1 row)
 
 \dt "test_schema".*

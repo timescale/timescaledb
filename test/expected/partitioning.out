@@ -10,7 +10,7 @@ NOTICE:  adding not-null constraint to column "time"
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
 ----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |   2592000000000
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000
   2 |             1 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
 (2 rows)
 
@@ -21,9 +21,9 @@ VACUUM part_legacy;
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
                  Table                  |  Constraint  | Type | Columns  | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 ----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- _timescaledb_internal._hyper_1_1_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_1_1_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
  _timescaledb_internal._hyper_1_1_chunk | constraint_2 | c    | {device} | -     | (_timescaledb_internal.get_partition_for_key(device) >= 1073741823)                                                                            | f          | f        | t
- _timescaledb_internal._hyper_1_2_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_1_2_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
  _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {device} | -     | (_timescaledb_internal.get_partition_for_key(device) < 1073741823)                                                                             | f          | f        | t
 (4 rows)
 
@@ -52,9 +52,9 @@ NOTICE:  adding not-null constraint to column "time"
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
 ----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |   2592000000000
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000
   2 |             1 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
-  3 |             2 | time        | timestamp with time zone | t       |            |                          |                       |   2592000000000
+  3 |             2 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000
   4 |             2 | device      | integer                  | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
 (4 rows)
 
@@ -65,9 +65,9 @@ VACUUM part_new;
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
                  Table                  |  Constraint  | Type | Columns  | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 ----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- _timescaledb_internal._hyper_2_3_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_2_3_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
  _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {device} | -     | (_timescaledb_internal.get_partition_hash(device) < 1073741823)                                                                                | f          | f        | t
- _timescaledb_internal._hyper_2_4_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Feb 22 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Fri Mar 24 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_2_4_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
  _timescaledb_internal._hyper_2_4_chunk | constraint_6 | c    | {device} | -     | (_timescaledb_internal.get_partition_hash(device) >= 1073741823)                                                                               | f          | f        | t
 (4 rows)
 
@@ -130,13 +130,13 @@ SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_times
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
 ----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------
-  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                       |   2592000000000
+  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000
   2 |             1 | device      | integer                     | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
-  3 |             2 | time        | timestamp with time zone    | t       |            |                          |                       |   2592000000000
+  3 |             2 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000
   4 |             2 | device      | integer                     | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
   6 |             3 | temp        | double precision            | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
-  5 |             3 | time        | timestamp without time zone | t       |            |                          |                       |   2592000000000
-  7 |             4 | time        | timestamp with time zone    | t       |            |                          |                       |   2592000000000
+  5 |             3 | time        | timestamp without time zone | t       |            |                          |                       |    604800000000
+  7 |             4 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000
   8 |             4 | temp        | double precision            | f       |          2 | _timescaledb_internal    | get_partition_hash    |                
   9 |             4 | location    | integer                     | f       |          2 | _timescaledb_internal    | get_partition_for_key |                
 (9 rows)
