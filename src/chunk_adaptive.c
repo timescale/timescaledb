@@ -126,7 +126,7 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	HeapScanDesc scan;
 	HeapTuple	tuple;
 	TypeCacheEntry *tce;
-	bool		nulls[2] = {true};
+	bool		nulls[2] = {true, true};
 
 	/* Lookup the tuple comparison function from the type cache */
 	tce = lookup_type_cache(atttype, TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO);
@@ -173,10 +173,8 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 	IndexScanDesc scan = index_beginscan(rel, idxrel, GetTransactionSnapshot(), 0, 0);
 	HeapTuple	tuple;
 	bool		isnull;
-	bool		nulls[2] = {true};
+	bool		nulls[2] = {true, true};
 	int			n = 0;
-
-	nulls[0] = nulls[1] = true;
 
 	tuple = index_getnext(scan, BackwardScanDirection);
 
