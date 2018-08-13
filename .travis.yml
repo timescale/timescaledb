@@ -67,7 +67,7 @@ jobs:
         - bash ./scripts/docker-run-memory-test.sh
 
     # Valgrind test #1 : first 40 excluding plan_hashagg_optimized* and plan_hashagg_results*
-    - if: (type = cron) OR (branch = prerelease_test)
+    - if: (branch = prerelease_test)
       stage: test
       before_script:
         # clone valgrind test script
@@ -80,7 +80,7 @@ jobs:
         - kill $(jobs -p) # kill job that prints repeatedly
 
     # Valgrind test #2: tests matching plan_hashagg_optimized*
-    - if: (type = cron) OR (branch = prerelease_test)
+    - if: (branch = prerelease_test)
       stage: test
       before_script:
         # clone valgrind test script
@@ -93,7 +93,7 @@ jobs:
         - kill $(jobs -p) # kill job that prints repeatedly
 
     # Valgrind test #3: tests matching plan_hashagg_results*
-    - if: (type = cron) OR (branch = prerelease_test)
+    - if: (branch = prerelease_test)
       stage: test
       before_script:
         # clone valgrind test script
@@ -106,7 +106,7 @@ jobs:
         - kill $(jobs -p) # kill job that prints repeatedly
 
     # Valgrind test #4 : tests from #41 to end excluding plan_hashagg_optimized* and plan_hashagg_results*
-    - if: (type = cron) OR (branch = prerelease_test)
+    - if: (branch = prerelease_test)
       stage: test
       before_script:
         # clone valgrind test script
