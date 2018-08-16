@@ -1,10 +1,10 @@
 set(SOURCES
-  init.c 
-  ../../../src/extension.c
-  ../../../src/guc.c
-  )
+  init.c
+  ${PROJECT_SOURCE_DIR}/src/extension.c
+  ${PROJECT_SOURCE_DIR}/src/guc.c
+)
 
-include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 
 add_library(${PROJECT_NAME}-mock-1 MODULE ${SOURCES} version.h)
 add_library(${PROJECT_NAME}-mock-2 MODULE ${SOURCES} version.h)
@@ -34,5 +34,3 @@ foreach(MOCK_VERSION mock-1 mock-2 mock-3 mock-4 mock-broken mock-5 mock-6)
     TARGETS ${PROJECT_NAME}-${MOCK_VERSION}
     DESTINATION ${PG_PKGLIBDIR} OPTIONAL)
 endforeach(MOCK_VERSION)
-
-

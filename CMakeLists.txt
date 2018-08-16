@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.4)
+include(CheckCCompilerFlag)
 
 configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
@@ -19,6 +20,12 @@ else ()
   set(PROJECT_VERSION_MOD ${VERSION})
 endif ()
 
+# Set project name, version, and language. Language needs to be set for compiler checks
+project(timescaledb VERSION ${VERSION} LANGUAGES C)
+
+message(STATUS "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}")
+message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
+
 set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform this binary
 is built for")
 
@@ -27,12 +34,32 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif ()
 
+set(SUPPORTED_COMPILERS "GNU" "Clang" "AppleClang" "MSVC")
+
+# Check for a supported compiler
+if (NOT CMAKE_C_COMPILER_ID IN_LIST SUPPORTED_COMPILERS)
+   message(FATAL_ERROR "Unsupported compiler ${CMAKE_C_COMPILER_ID}. Supported compilers are: ${SUPPORTED_COMPILERS}")
+endif ()
+
+# Check for supported platforms and compiler flags
 if (WIN32)
   if (NOT CMAKE_CONFIGURATION_TYPES)
     # Default to only include Release builds so MSBuild.exe 'just works'
     set(CMAKE_CONFIGURATION_TYPES Release CACHE STRING "Semicolon separated list of supported configuration types, only supports Debug, Release, MinSizeRel, and RelWithDebInfo, anything else will be ignored." FORCE)
   endif ()
-endif (WIN32)
+elseif (UNIX)
+  # On UNIX, the compiler needs to support -fvisibility=hidden to hide symbols by default
+  check_c_compiler_flag(-fvisibility=hidden CC_SUPPORTS_VISIBILITY_HIDDEN)
+
+  if (NOT CC_SUPPORTS_VISIBILITY_HIDDEN)
+    message(FATAL_ERROR "The compiler ${CMAKE_C_COMPILER_ID} does not support -fvisibility=hidden")
+  endif (NOT CC_SUPPORTS_VISIBILITY_HIDDEN)
+else ()
+  message(FATAL_ERROR "Unsupported platform")
+endif ()
+
+message(STATUS "Using compiler ${CMAKE_C_COMPILER_ID}")
+
 if (ENABLE_CODECOVERAGE)
   message(STATUS "Running code coverage")
 
@@ -56,11 +83,6 @@ if (ENABLE_CODECOVERAGE)
   add_custom_target(coverage_init ALL ${CODECOV_LCOV} --base-directory . --directory ${CMAKE_BINARY_DIR} --output-file ${CODECOV_OUTPUTFILE} --capture --initial)
 
 endif (ENABLE_CODECOVERAGE)
-
-project(timescaledb VERSION ${VERSION} LANGUAGES C)
-
-message(STATUS "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}")
-message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
 # Search paths for Postgres binaries
 if (WIN32)

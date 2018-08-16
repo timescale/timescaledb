@@ -9,12 +9,10 @@
 #include <nodes/print.h>
 #include <access/parallel.h>
 
+#include "export.h"
+
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
-
-#define TS_FUNCTION_INFO_V1(fn) \
-	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS); \
-	PG_FUNCTION_INFO_V1(fn)
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;

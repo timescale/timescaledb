@@ -1,6 +1,8 @@
 #ifndef TIMESCALEDB_COMPAT_H
 #define TIMESCALEDB_COMPAT_H
 
+#include "export.h"
+
 #define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))
 #define is_supported_pg_version_10(version) ((version >= 100002) && (version < 110000))
 #define is_supported_pg_version(version) (is_supported_pg_version_96(version) || is_supported_pg_version_10(version))
@@ -55,9 +57,5 @@
 #error "Unsupported PostgreSQL version"
 
 #endif							/* PG_VERSION_NUM */
-
-#define TS_FUNCTION_INFO_V1(fn) \
-	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS); \
-	PG_FUNCTION_INFO_V1(fn)
 
 #endif							/* TIMESCALEDB_COMPAT_H */

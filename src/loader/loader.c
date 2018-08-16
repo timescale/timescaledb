@@ -13,6 +13,7 @@
 #define EXTENSION_NAME "timescaledb"
 
 #include "../extension_utils.c"
+#include "../export.h"
 
 #define PG96 ((PG_VERSION_NUM >= 90600) && (PG_VERSION_NUM < 100000))
 #define PG10 ((PG_VERSION_NUM >= 100000) && (PG_VERSION_NUM < 110000))

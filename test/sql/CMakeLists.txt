@@ -59,7 +59,7 @@ set(TEST_FILES
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
-    loader.sql)
+    loader.sql symbol_conflict.sql)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
 
 IF (${PG_VERSION_MAJOR} GREATER "9")
