@@ -3,7 +3,7 @@ set(CMAKE_C_FLAGS_DEBUG "-DUSE_ASSERT_CHECKING=1")
 if (UNIX)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L${PG_LIBDIR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PG_CFLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PG_CFLAGS} -fvisibility=hidden")
   set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS} ${PG_CPPFLAGS}")
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g")
 endif (UNIX)
@@ -58,6 +58,7 @@ set(HEADERS
   errors.h
   event_trigger.h
   extension.h
+  export.h
   guc.h
   hypercube.h
   hypertable_cache.h
@@ -125,6 +126,11 @@ set(SOURCES
 configure_file(version.h.in version.h)
 set(GITCOMMIT_H ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
 
+# Add test source code in Debug builds
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  set(TEST_SOURCES ../test/src/symbol_conflict.c)
+endif (CMAKE_BUILD_TYPE MATCHES Debug)
+
 if (WIN32)
   add_custom_command(
     OUTPUT ${GITCOMMIT_H}
@@ -164,11 +170,17 @@ if (PGINDENT)
     DEPENDS typedefs.list)
 endif (PGINDENT)
 
-add_library(${PROJECT_NAME} MODULE ${SOURCES} ${HEADERS} ${GITCOMMIT_H})
+add_library(${PROJECT_NAME} MODULE ${SOURCES} ${TEST_SOURCES} ${HEADERS} ${GITCOMMIT_H})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME ${PROJECT_NAME}-${PROJECT_VERSION_MOD}
     PREFIX "")
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  # This define generates extension-specific code for symbol conflict testing
+  target_compile_definitions(${PROJECT_NAME} PRIVATE MODULE_NAME=${PROJECT_NAME})
+endif (CMAKE_BUILD_TYPE MATCHES Debug)
+
 
 install(
   TARGETS ${PROJECT_NAME}
