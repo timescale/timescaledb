@@ -121,7 +121,7 @@ $BODY$
     c.contype,
     array(SELECT attname FROM pg_attribute a, unnest(conkey) k WHERE a.attrelid = rel AND k = a.attnum),
     c.conindid::regclass,
-    c.consrc,
+    pg_get_expr(c.conbin, c.conrelid),
     c.condeferrable,
     c.condeferred,
     c.convalidated
@@ -156,7 +156,7 @@ BEGIN
     c.contype,
     array(SELECT attname FROM pg_attribute a, unnest(conkey) k WHERE a.attrelid = cl.oid AND k = a.attnum),
     c.conindid::regclass,
-    c.consrc,
+    pg_get_expr(c.conbin, c.conrelid),
     c.condeferrable,
     c.condeferred,
     c.convalidated

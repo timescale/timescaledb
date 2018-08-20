@@ -153,10 +153,11 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-     Trigger     | Type |   Function   |                                                  Definition                                                  
------------------+------+--------------+--------------------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
-(1 row)
+      Trigger      | Type |               Function               |                                                               Definition                                                               
+-------------------+------+--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------
+ restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
      Trigger     | Type |   Function   |                                                       Definition                                                       
@@ -255,15 +256,11 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 (12 rows)
 
 \c postgres :ROLE_SUPERUSER
-\! pg_dump -h localhost -U :ROLE_SUPERUSER -Fc single > dump/single.sql
-pg_dump: [archiver (db)] connection to database "single" failed: FATAL:  role ":ROLE_SUPERUSER" does not exist
-\! dropdb -h localhost -U :ROLE_SUPERUSER single
-dropdb: could not connect to database template1: FATAL:  role ":ROLE_SUPERUSER" does not exist
-\! createdb -h localhost -U :ROLE_SUPERUSER single
-createdb: could not connect to database template1: FATAL:  role ":ROLE_SUPERUSER" does not exist
+\! pg_dump -h localhost -U super_user -Fc single > dump/single.sql
+\! dropdb -h localhost -U super_user single
+\! createdb -h localhost -U super_user single
 ALTER DATABASE single SET timescaledb.restoring='on';
-\! pg_restore -h localhost -U :ROLE_SUPERUSER -d single dump/single.sql
-pg_restore: [archiver] input file is too short (read 0, expected 5)
+\! pg_restore -h localhost -U super_user -d single dump/single.sql
 \c single
 -- Set to OFF for future DB sessions.
 ALTER DATABASE single SET timescaledb.restoring='off';
@@ -314,27 +311,27 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
                           Index                          |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
 ---------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
+ test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
  test_schema."two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
+ test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
  test_schema."two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
  test_schema."two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
  test_schema."two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
  test_schema."two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
- test_schema."two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
- test_schema.timecustom_device_id_series_2_key           | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
                                        Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
+ _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    | {timeCustom,series_0}           |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    | {timeCustom,series_1}           |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    | {timeCustom,series_2}           |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" | {timeCustom,series_bool}        |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
- _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
 (8 rows)
 
 SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
@@ -352,10 +349,11 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 (3 rows)
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-     Trigger     | Type |   Function   |                                                  Definition                                                  
------------------+------+--------------+--------------------------------------------------------------------------------------------------------------
- restore_trigger |    7 | test_trigger |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
-(1 row)
+      Trigger      | Type |               Function               |                                                               Definition                                                               
+-------------------+------+--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------
+ restore_trigger   |    7 | test_trigger                         |  restore_trigger BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON test_schema."two_Partitions" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(2 rows)
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
      Trigger     | Type |   Function   |                                                       Definition                                                       
