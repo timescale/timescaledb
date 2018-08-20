@@ -69,11 +69,11 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 \c postgres :ROLE_SUPERUSER
 
-\! pg_dump -h localhost -U :ROLE_SUPERUSER -Fc single > dump/single.sql
-\! dropdb -h localhost -U :ROLE_SUPERUSER single
-\! createdb -h localhost -U :ROLE_SUPERUSER single
+\! pg_dump -h localhost -U super_user -Fc single > dump/single.sql
+\! dropdb -h localhost -U super_user single
+\! createdb -h localhost -U super_user single
 ALTER DATABASE single SET timescaledb.restoring='on';
-\! pg_restore -h localhost -U :ROLE_SUPERUSER -d single dump/single.sql
+\! pg_restore -h localhost -U super_user -d single dump/single.sql
 \c single
 
 -- Set to OFF for future DB sessions.

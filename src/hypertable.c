@@ -1004,7 +1004,7 @@ hypertable_validate_constraints(Oid relid)
  * Functionality to block INSERTs on the hypertable's root table.
  *
  * The design considered implementing this either with RULES, constraints, or
- * triggers. An "internal" trigger was found to have the best trade-offs:
+ * triggers. A visible trigger was found to have the best trade-offs:
  *
  * - A RULE doesn't work since it rewrites the query and thus blocks INSERTs
  *   also on the hypertable.
@@ -1017,14 +1017,19 @@ hypertable_validate_constraints(Oid relid)
  *   (you can work around this, but is messy). This issue, b.t.w., broke one
  *   of the tests.
  *
- * - A trigger, especially an "internal" one, is transparent (doesn't show up
+ * - An internal trigger is transparent (doesn't show up
  *	 on \d+ <table>) and is automatically removed when the extension is
  *	 dropped (since it is part of the extension). Internal triggers aren't
  *	 inherited by chunks either, so we need no special handling to _not_
- *	 inherit the blocking trigger.
+ *	 inherit the blocking trigger. However, internal triggers are not exported
+ *   via pg_dump. Because a critical use case for this trigger is to ensure
+ *   no rows are inserted into hypertables by accident when a user forgets to
+ *   turn restoring off, having this trigger exported in pg_dump is essential.
+ *
+ * - A visible trigger unfortunately shows up in \d+ <table>, but is
+ *   included in a pg_dump. We also add logic to make sure this trigger is not
+ *   propagated to chunks.
  */
-#define INSERT_BLOCKER_NAME "insert_blocker"
-
 TS_FUNCTION_INFO_V1(hypertable_insert_blocker);
 
 Datum
@@ -1051,14 +1056,14 @@ hypertable_insert_blocker(PG_FUNCTION_ARGS)
 }
 
 /*
- * Get the insert blocker trigger on a table.
+ * Get the legacy insert blocker trigger on a table.
  *
- * Note that we cannot get the insert trigger by name since internal triggers
+ * Note that we cannot get the old insert trigger by name since internal triggers
  * are made unique by appending the trigger OID, which we do not
  * know. Instead, we have to search all triggers.
  */
 static Oid
-insert_blocker_trigger_get(Oid relid)
+old_insert_blocker_trigger_get(Oid relid)
 {
 	Relation	tgrel;
 	ScanKeyData skey[1];
@@ -1081,8 +1086,7 @@ insert_blocker_trigger_get(Oid relid)
 		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
 
 		if (TRIGGER_TYPE_MATCHES(trig->tgtype, TRIGGER_TYPE_ROW, TRIGGER_TYPE_BEFORE, TRIGGER_TYPE_INSERT) &&
-			strncmp(INSERT_BLOCKER_NAME, NameStr(trig->tgname), strlen(INSERT_BLOCKER_NAME)) == 0 &&
-			trig->tgisinternal)
+			strncmp(OLD_INSERT_BLOCKER_NAME, NameStr(trig->tgname), strlen(OLD_INSERT_BLOCKER_NAME)) == 0  && trig->tgisinternal)
 		{
 			tgoid = HeapTupleGetOid(tuple);
 			break;
@@ -1112,25 +1116,19 @@ insert_blocker_trigger_add(Oid relid)
 		.type = T_CreateTrigStmt,
 		.row = true,
 		.timing = TRIGGER_TYPE_BEFORE,
-		.trigname = INSERT_BLOCKER_NAME,	/* Note, internal triggers get the
-											 * OID appended to the name */
+		.trigname = INSERT_BLOCKER_NAME,
 		.relation = makeRangeVar(schema, relname, -1),
-		.funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(INSERT_BLOCKER_NAME)),
+		.funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
 		.args = NIL,
 		.events = TRIGGER_TYPE_INSERT,
 	};
 
-	objaddr.objectId = insert_blocker_trigger_get(relid);
-
-	/* Trigger already exists. Do nothing */
-	if (OidIsValid(objaddr.objectId))
-		return objaddr.objectId;
-
 	/*
-	 * Create as an internal trigger; it won't show up with \d and won't be
-	 * inherited by chunks.
+	 * We create a user-visible trigger, so that it will get pg_dump'd with
+	 * the hypertable. This call will error out if a trigger with the same name already exists.
+     * (This is the desired behavior.)
 	 */
-	objaddr = CreateTrigger(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, true);
+	objaddr = CreateTrigger(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
 
 	if (!OidIsValid(objaddr.objectId))
 		elog(ERROR, "could not create insert blocker trigger");
@@ -1141,9 +1139,9 @@ insert_blocker_trigger_add(Oid relid)
 TS_FUNCTION_INFO_V1(hypertable_insert_blocker_trigger_add);
 
 /*
- * This function is exposed to add the blocking trigger on legacy hypertables
- * that don't have the trigger. We can't do it from SQL code, because internal
- * triggers cannot be added from SQL.
+ * This function is exposed to drop the old blocking trigger on legacy hypertables.
+ * We can't do it from SQL code, because internal triggers cannot be dropped from SQL.
+ * After the legacy internal trigger is dropped, we add the new, visible trigger.
  *
  * In case the hypertable's root table has data in it, we bail out with an
  * error instructing the user to fix the issue first.
@@ -1152,6 +1150,7 @@ Datum
 hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 {
 	Oid			relid = PG_GETARG_OID(0);
+	Oid			old_trigger;
 
 	if (table_has_tuples(relid, AccessShareLock))
 		ereport(ERROR,
@@ -1167,6 +1166,19 @@ hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 						 "> SET timescaledb.restoring = 'OFF';\n"
 						 "> COMMIT;", get_rel_name(relid))));
 
+	/* Now drop the old trigger */
+	old_trigger = old_insert_blocker_trigger_get(relid);
+	if (OidIsValid(old_trigger))
+	{
+		ObjectAddress objaddr = {
+			.classId = TriggerRelationId,
+			.objectId = old_trigger
+		};
+
+		performDeletion(&objaddr, DROP_RESTRICT, 0);
+	}
+
+	/* Add the new trigger */
 	PG_RETURN_OID(insert_blocker_trigger_add(relid));
 }
 
