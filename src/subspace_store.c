@@ -116,7 +116,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 			node = last->storage;
 		}
 
-		Assert(store->max_items == 0 || node->descendants <= (size_t)store->max_items);
+		Assert(store->max_items == 0 || node->descendants <= (size_t) store->max_items);
 
 		/*
 		 * We only call this function on a cache miss, so number of leaves
@@ -176,7 +176,7 @@ subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 			match = copy;
 		}
 
-		Assert(store->max_items == 0 || node->descendants <= (size_t)store->max_items);
+		Assert(store->max_items == 0 || node->descendants <= (size_t) store->max_items);
 
 		last = match;
 		/* internal slices point to the next SubspaceStoreInternalNode */
