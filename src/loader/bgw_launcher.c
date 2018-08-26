@@ -33,7 +33,7 @@
 #include "bgw_launcher.h"
 
 #define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
-#define BGW_ENTRYPOINT_FUNCNAME "bgw_db_scheduler_entrypoint"
+#define BGW_ENTRYPOINT_FUNCNAME "ts_bgw_db_scheduler_entrypoint"
 
 #define ACK_SUCCESS true
 #define ACK_FAILURE false
@@ -58,6 +58,9 @@
  * exist, nor which databases TimescaleDB is installed in (if any) at
  * shared_preload_libraries time.
  */
+
+TS_FUNCTION_INFO_V1(ts_bgw_cluster_launcher_main);
+TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_entrypoint);
 typedef struct DbHashEntry
 {
 	Oid			db_oid;			/* key for the hash table, must be first */
@@ -66,18 +69,6 @@ typedef struct DbHashEntry
 } DbHashEntry;
 
 
-/*
- * Aliasing a few things in bgWorker.h so that we exit correctly on postmaster
- * death so we don't have to duplicate code basically telling it we shouldn't
- * call exit hooks cause we want to bail out quickly - similar to how the
- * quickdie function works when we receive a sigquit. This should work
- * similarly because postmaster death is a similar severity of issue.
- * Additionally, we're wrapping these calls to make sure we never have a NULL
- * handle, if we have a null handle, we return normal things.  I have left the
- * capitalization in their format to make clear the relationship to the
- * functions in bgworker.h and that these are just passthroughs and should
- * maintain the same behavior unless BGWH_POSTMASTER_DIED is returned.
- */
 static void
 bgw_on_postmaster_death(void)
 {
@@ -93,7 +84,7 @@ report_bgw_limit_exceeded(void)
 {
 	ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
 				  errmsg("TimescaleDB background worker limit of %d exceeded", guc_max_background_workers),
-				  errhint("Consider increasing timescaledb.max_background_workers")));
+				  errhint("Consider increasing timescaledb.max_background_workers.")));
 }
 
 /*
@@ -105,12 +96,21 @@ report_bgw_limit_exceeded(void)
 static void
 report_error_on_worker_register_failure(void)
 {
-	ereport(ERROR, (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
-					errmsg("No available background worker slots."),
-					errhint("TimescaleDB background worker launcher shutting down. It will be restarted by the postmaster.")));
+	ereport(LOG, (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+				  errmsg("no available background worker slots"),
+				  errhint("Consider increasing max_worker_processes in tandem with timescaledb.max_background_workers.")));
 
 }
 
+/*
+ * Aliasing a few things in bgworker.h so that we exit correctly on postmaster
+ * death so we don't have to duplicate code basically telling it we shouldn't
+ * call exit hooks cause we want to bail out quickly - similar to how the
+ * quickdie function works when we receive a sigquit. This should work
+ * similarly because postmaster death is a similar severity of issue.
+ * Additionally, we're wrapping these calls to make sure we never have a NULL
+ * handle, if we have a null handle, we return normal things.
+ */
 static BgwHandleStatus
 get_background_worker_pid(BackgroundWorkerHandle *handle, pid_t *pidp)
 {
@@ -124,7 +124,6 @@ get_background_worker_pid(BackgroundWorkerHandle *handle, pid_t *pidp)
 	if (status == BGWH_POSTMASTER_DIED)
 		bgw_on_postmaster_death();
 	return status;
-
 }
 
 static void
@@ -198,10 +197,9 @@ bgw_cluster_launcher_register(void)
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_notify_pid = 0;
 	snprintf(worker.bgw_library_name, BGW_MAXLEN, EXTENSION_NAME);
-	snprintf(worker.bgw_function_name, BGW_MAXLEN, "bgw_cluster_launcher_main");
+	snprintf(worker.bgw_function_name, BGW_MAXLEN, "ts_bgw_cluster_launcher_main");
 	RegisterBackgroundWorker(&worker);
 }
-
 
 /*
  * Register a background worker that calls the main TimescaleDB background
@@ -223,11 +221,10 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 	snprintf(worker.bgw_library_name, BGW_MAXLEN, EXTENSION_NAME);
 	snprintf(worker.bgw_function_name, BGW_MAXLEN, BGW_ENTRYPOINT_FUNCNAME);
 	worker.bgw_notify_pid = MyProcPid;
-	worker.bgw_main_arg = db_id;
+	worker.bgw_main_arg = ObjectIdGetDatum(db_id);
 	memcpy(worker.bgw_extra, &vxid, sizeof(VirtualTransactionId));
 
 	return RegisterDynamicBackgroundWorker(&worker, handle);
-
 }
 
 
@@ -292,8 +289,6 @@ populate_database_htab(void)
 	return db_htab;
 }
 
-
-
 /*
  * We want to avoid the race condition where we have enough workers allocated to start schedulers
  * for all databases, but before we could get all of them started, the (say) first scheduler has
@@ -306,8 +301,22 @@ start_db_schedulers(HTAB *db_htab)
 {
 	HASH_SEQ_STATUS hash_seq;
 	DbHashEntry *current_entry;
+	int			nstarted = 0;
+	int			ndatabases = hash_get_num_entries(db_htab);
 
-	/* now scan our hash table of dbs and register a worker for each */
+	/*
+	 * Increment our workers all at once so that schedulers don't start
+	 * workers stealing other schedulers' spots
+	 */
+	if (!bgw_total_workers_increment_by(ndatabases))
+	{
+		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					  errmsg("total databases = %ld TimescaleDB background worker limit %d", hash_get_num_entries(db_htab), guc_max_background_workers),
+					  errhint("You may start background workers manually by using the  _timescaledb_internal.start_background_workers() function in each database you would like to have a scheduler worker in.")));
+		return;
+	}
+
+	/* Now scan our hash table of dbs and register a worker for each */
 	hash_seq_init(&hash_seq, db_htab);
 
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
@@ -321,13 +330,25 @@ start_db_schedulers(HTAB *db_htab)
 
 		worker_registered = register_entrypoint_for_db(current_entry->db_oid, vxid, &current_entry->db_scheduler_handle);
 		if (!worker_registered)
-			report_error_on_worker_register_failure();
+		{
+			hash_seq_term(&hash_seq);
+			ereport(LOG, (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+						  errmsg("TimescaleDB background worker scheduler for at least one database unable to start"),
+						  errhint("%d schedulers have been started, %d databases remain without scheduler. Increase max_worker_processes and restart the server.", nstarted, (ndatabases - nstarted))));
 
+			/*
+			 * We incremented total workers until we had enough workers for
+			 * all databases, decrement by number we started
+			 */
+			bgw_total_workers_decrement_by(ndatabases - nstarted);
+			break;
+		}
 		wait_for_background_worker_startup(current_entry->db_scheduler_handle, &worker_pid);
+		nstarted++;
 	}
 }
 
-/* this is called when we're going to shut down so we don't leave things messy*/
+/* This is called when we're going to shut down so we don't leave things messy*/
 static void
 launcher_pre_shmem_cleanup(int code, Datum arg)
 {
@@ -345,9 +366,8 @@ launcher_pre_shmem_cleanup(int code, Datum arg)
 		terminate_background_worker(current_entry->db_scheduler_handle);
 
 	hash_destroy(db_htab);
-	/* Must reinitialize shared memory structs if we want to restart */
+	/* Reset our pid in the queue so that others know we've died and don't wait forever */
 	bgw_message_queue_shmem_cleanup();
-	bgw_counter_shmem_cleanup();
 }
 
 /*Garbage collector cleaning up any stopped schedulers*/
@@ -372,7 +392,6 @@ stopped_db_schedulers_cleanup(HTAB *db_htab)
 }
 
 /* Actions for message types we could receive off of the bgw_message_queue*/
-
 static void
 message_start_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
 {
@@ -403,8 +422,15 @@ message_start_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vx
 	{
 		worker_registered = register_entrypoint_for_db(db_he->db_oid, vxid, &db_he->db_scheduler_handle);
 		if (!worker_registered)
+		{
 			report_error_on_worker_register_failure();
+			bgw_total_workers_decrement();	/* couldn't register the worker,
+											 * decrement and return false */
+			hash_search(db_htab, &message->db_oid, HASH_REMOVE, &found);
+			bgw_message_send_ack(message, ACK_FAILURE);
+			return;
 
+		}
 		wait_for_background_worker_startup(db_he->db_scheduler_handle, &worker_pid);
 	}
 
@@ -460,7 +486,7 @@ message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId 
 	worker_registered = register_entrypoint_for_db(db_he->db_oid, vxid, &db_he->db_scheduler_handle);
 	if (!worker_registered)
 	{
-		ereport(LOG, (errmsg("TimescaleDB background worker could not be started")));
+		report_error_on_worker_register_failure();
 		bgw_total_workers_decrement();	/* couldn't register the worker,
 										 * decrement and return false */
 		hash_search(db_htab, &message->db_oid, HASH_REMOVE, &found);
@@ -471,7 +497,6 @@ message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId 
 	bgw_message_send_ack(message, ACK_SUCCESS);
 	return;
 }
-
 
 /*
  * Handle 1 message.
@@ -511,7 +536,6 @@ launcher_handle_message(HTAB *db_htab)
 	return true;
 }
 
-
 static void
 bgw_sigterm(SIGNAL_ARGS)
 {
@@ -525,18 +549,19 @@ bgw_sigint(SIGNAL_ARGS)
 	ereport(ERROR, (errmsg("TimescaleDB background worker launcher canceled by administrator command. Launcher will restart after exiting")));
 }
 
-extern void
-bgw_cluster_launcher_main(void)
+extern Datum
+ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 {
 
-	int			n;
 	HTAB	   *db_htab;
-	int			num_unreserved_workers;
 
 	pqsignal(SIGTERM, bgw_sigterm);
 	pqsignal(SIGINT, bgw_sigint);
 	BackgroundWorkerUnblockSignals();
+	ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher started")));
 
+	/*set counter back to zero on restart*/
+	bgw_counter_reinit();
 	if (!bgw_total_workers_increment())
 	{
 		/*
@@ -551,23 +576,13 @@ bgw_cluster_launcher_main(void)
 	/* Connect to the db, no db name yet, so can only access shared catalogs */
 	BackgroundWorkerInitializeConnection(NULL, NULL);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
-	ereport(LOG, (errmsg("TimescaleDB background worker launcher started")));
+	ereport(LOG, (errmsg("TimescaleDB background worker launcher connected to shared catalogs")));
 
 	bgw_message_queue_set_reader();
 	db_htab = populate_database_htab();
 	before_shmem_exit(launcher_pre_shmem_cleanup, PointerGetDatum(db_htab));
 
-	num_unreserved_workers = guc_max_background_workers - bgw_total_workers_get();
-	if (num_unreserved_workers < hash_get_num_entries(db_htab))
-		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					  errmsg("total databases = %ld TimescaleDB background worker limit %d", hash_get_num_entries(db_htab), guc_max_background_workers),
-					  errhint("You may start background workers manually by using the  _timescaledb_internal.start_background_workers() function in each database you would like to have a scheduler worker in")));
-	else
-	{
-		for (n = 1; n <= hash_get_num_entries(db_htab); n++)
-			bgw_total_workers_increment();
-		start_db_schedulers(db_htab);
-	}
+	start_db_schedulers(db_htab);
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -589,7 +604,7 @@ bgw_cluster_launcher_main(void)
 			bgw_on_postmaster_death();
 		CHECK_FOR_INTERRUPTS();
 	}
-
+	PG_RETURN_VOID();
 }
 
 
@@ -598,17 +613,16 @@ bgw_cluster_launcher_main(void)
  * in the first case, we have no vxid that we're waiting on. In the second case, we do, because we have to wait so that we see the effects of said txn.
  * So we wait for it to finish, then we  morph into the new db_scheduler worker using whatever version is now installed (or exit gracefully if no version is now installed).
  */
-extern void
-bgw_db_scheduler_entrypoint(Oid db_id)
+extern Datum
+ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 {
+	Oid			db_id = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	bool		ts_installed = false;
 	char		version[MAX_VERSION_LEN];
 	VirtualTransactionId vxid;
 
-
 	/* unblock signals and use default signal handlers */
 	BackgroundWorkerUnblockSignals();
-
 	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 
@@ -629,7 +643,6 @@ bgw_db_scheduler_entrypoint(Oid db_id)
 	 * now we can start our transaction and get the version currently
 	 * installed
 	 */
-
 	StartTransactionCommand();
 	(void) GetTransactionSnapshot();
 	ts_installed = loader_extension_exists();
@@ -650,8 +663,6 @@ bgw_db_scheduler_entrypoint(Oid db_id)
 		else					/* essentially we morph into the versioned
 								 * worker here */
 			DirectFunctionCall1(versioned_scheduler_main, InvalidOid);
-
 	}
-	proc_exit(0);
-
+	PG_RETURN_VOID();
 }
