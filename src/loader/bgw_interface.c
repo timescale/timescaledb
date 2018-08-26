@@ -18,20 +18,20 @@ TS_FUNCTION_INFO_V1(ts_bgw_db_workers_stop);
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_restart);
 
 Datum
-bgw_worker_reserve(PG_FUNCTION_ARGS)
+ts_bgw_worker_reserve(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(bgw_total_workers_increment());
 }
 
 Datum
-bgw_worker_release(PG_FUNCTION_ARGS)
+ts_bgw_worker_release(PG_FUNCTION_ARGS)
 {
 	bgw_total_workers_decrement();
 	PG_RETURN_VOID();
 }
 
 Datum
-bgw_num_unreserved(PG_FUNCTION_ARGS)
+ts_bgw_num_unreserved(PG_FUNCTION_ARGS)
 {
 	int			unreserved_workers;
 

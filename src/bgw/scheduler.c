@@ -140,6 +140,10 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			/* reload updated value */
 			job_stat = bgw_job_stat_find(sjob->job.fd.id);
 		}
+		else
+		{
+			sjob->may_need_mark_end = false;
+		}
 	}
 }
 
