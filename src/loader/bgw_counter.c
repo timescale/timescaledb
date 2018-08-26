@@ -28,7 +28,7 @@ typedef struct CounterState
 {
 	/*
 	 * Using an slock because we're only taking it for very brief periods to
-	 * read a single value so no need for an lw_lock
+	 * read a single value so no need for an lwlock
 	 */
 	slock_t		mutex;			/* controls modification of total_workers */
 	int			total_workers;
@@ -43,11 +43,13 @@ bgw_counter_state_init()
 	bool		found;
 
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
-	/* We don't actually care about found, we always init */
 	ct = ShmemInitStruct(BGW_COUNTER_STATE_NAME, sizeof(CounterState), &found);
-	memset(ct, 0, sizeof(CounterState));
-	SpinLockInit(&ct->mutex);
-	ct->total_workers = 0;
+	if (!found)
+	{
+		memset(ct, 0, sizeof(CounterState));
+		SpinLockInit(&ct->mutex);
+		ct->total_workers = 0;
+	}
 	LWLockRelease(AddinShmemInitLock);
 }
 
@@ -55,13 +57,14 @@ extern void
 bgw_counter_setup_gucs(void)
 {
 
-	DefineCustomIntVariable("timescaledb.max_bgw_processes",
+	DefineCustomIntVariable("timescaledb.max_background_workers",
 							"Maximum background worker processes allocated to TimescaleDB",
 							"Max background worker processes allocated to TimescaleDB - set to at least 1 + number of databases in Postgres instance to use background workers ",
 							&guc_max_background_workers,
 							guc_max_background_workers,
 							0,
-							max_worker_processes,
+							1000,	/* no reasonable way to have more than
+									 * 1000 background workers */
 							PGC_POSTMASTER,
 							0,
 							NULL,
@@ -86,9 +89,12 @@ bgw_counter_shmem_startup(void)
 }
 
 extern void
-bgw_counter_shmem_cleanup(void)
+bgw_counter_reinit(void)
 {
-	bgw_counter_state_init();
+	/*set counter back to zero on startup*/
+	SpinLockAcquire(&ct->mutex);
+	ct->total_workers = 0;
+	SpinLockRelease(&ct->mutex);
 }
 
 extern bool
@@ -98,8 +104,7 @@ bgw_total_workers_increment()
 	int			max_workers = guc_max_background_workers;
 
 	SpinLockAcquire(&ct->mutex);
-	if (ct->total_workers < max_workers)	/* result can be <= max_workers,
-											 * so we test for less than */
+	if (ct->total_workers < max_workers)
 	{
 		ct->total_workers++;
 		incremented = true;
@@ -111,11 +116,51 @@ bgw_total_workers_increment()
 extern void
 bgw_total_workers_decrement()
 {
+	/*
+	 * Launcher is 1 worker, and when it dies we reinitialize, so we should
+	 * never be below 1
+	 */
 	SpinLockAcquire(&ct->mutex);
-	ct->total_workers--;
+	if (ct->total_workers > 1)
+		ct->total_workers--;
+	else
+		ereport(ERROR, (errmsg("TimescaleDB background worker internal error: cannot decrement workers below 1"),
+						errhint("The background worker scheduler is in an invalid state, please submit a bug report.")));
 	SpinLockRelease(&ct->mutex);
 }
 
+extern bool
+bgw_total_workers_increment_by(int increment_by)
+{
+	bool		incremented = false;
+	int			max_workers = guc_max_background_workers;
+
+	SpinLockAcquire(&ct->mutex);
+	if (ct->total_workers + increment_by <= max_workers)
+	{
+		ct->total_workers += increment_by;
+		incremented = true;
+	}
+	SpinLockRelease(&ct->mutex);
+	return incremented;
+}
+
+extern void
+bgw_total_workers_decrement_by(int decrement_by)
+{
+	SpinLockAcquire(&ct->mutex);
+
+	/*
+	 * Launcher is 1 worker, and when it dies we reinitialize, so we should
+	 * never be below 1
+	 */
+	if (ct->total_workers - decrement_by >= 1)
+		ct->total_workers -= decrement_by;
+	else
+		ereport(ERROR, (errmsg("TimescaleDB background worker internal error: cannot decrement workers below 1"),
+						errhint("The background worker scheduler is in an invalid state, please submit a bug report.")));
+	SpinLockRelease(&ct->mutex);
+}
 extern int
 bgw_total_workers_get()
 {
