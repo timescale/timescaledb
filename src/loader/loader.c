@@ -330,7 +330,6 @@ _PG_init(void)
 	 * cannot check for extension here since not inside a transaction yet. Nor
 	 * do we even have an assigned database yet
 	 */
-
 	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
 
 	/*
@@ -340,7 +339,6 @@ _PG_init(void)
 	prev_post_parse_analyze_hook = post_parse_analyze_hook;
 	/* register shmem startup hook for the background worker stuff */
 	prev_shmem_startup_hook = shmem_startup_hook;
-
 
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescale_shmem_startup_hook;

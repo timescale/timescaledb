@@ -234,9 +234,14 @@ TS_FUNCTION_INFO_V1(ts_bgw_params_destroy);
 Datum
 ts_bgw_params_destroy(PG_FUNCTION_ARGS)
 {
-/* no way to unpin in 9.6 so forget it, should only affect tests anyway */
-#if PG10
-	dsm_unpin_segment(params_get_dsm_handle());
-#endif
+/* no way to unpin in 9.6 and can fail in EXEC_BACKEND cases so forget it, should only affect tests anyway */
+
+/*
+ * Removing for now because the EXEC_BACKEND compile-time flag is not correctly passed down.
+ * TODO: Fix once we fix this compile-script issue (Or make work on EXEC_BACKEND boxes)
+ * #if PG10 && !defined(EXEC_BACKEND)
+ *	dsm_unpin_segment(params_get_dsm_handle());
+ * #endif
+ */
 	PG_RETURN_VOID();
 }
