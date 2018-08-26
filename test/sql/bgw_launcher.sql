@@ -181,36 +181,3 @@ BEGIN;
 DROP EXTENSION timescaledb;
 COMMIT;
 SELECT wait_worker_counts(1,0,0);
-
-/* Make sure terminating the launcher causes it to shut down permanently */
-
-SELECT coalesce(
-  (SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher'), 
-  (SELECT current_setting('server_version_num')::int < 100000));
-
-SELECT 
-  CASE WHEN (current_setting('server_version_num')::int < 100000) 
-		THEN  wait_worker_counts(1,0,0)
-		ELSE  wait_worker_counts(0,0,0)
-  END;
-
-CREATE FUNCTION wait_no_change(launcher_ct INTEGER, scheduler1_ct INTEGER, scheduler2_ct INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-r INTEGER;
-BEGIN
-FOR i in 1..10
-LOOP
-SELECT COUNT(*) from worker_counts where launcher = launcher_ct AND single_scheduler = scheduler1_ct AND single_2_scheduler = scheduler2_ct into r;
-if(r = 1) THEN
-  PERFORM pg_sleep(0.1);
-  PERFORM pg_stat_clear_snapshot();
-ELSE
-  RETURN FALSE;
-END IF;
-END LOOP;
-RETURN TRUE;
-END
-$BODY$;
-SELECT wait_no_change(0,0,0);
-
