@@ -19,3 +19,7 @@ typedef.list
 **/GRTAGS
 **/GSYMS
 /.vs
+/test/sql/parallel-*.sql
+/test/sql/plan_hashagg_optimized-*.sql
+/compile_commands.json
+/.DS_Store

@@ -6,6 +6,7 @@
 #include <utils/rel.h>
 #include <nodes/nodes.h>
 #include <access/heapam.h>
+#include "extension_constants.h"
 /*
  * TimescaleDB catalog.
  *
@@ -54,9 +55,7 @@ typedef enum InternalFunction
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
 
-#define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
-#define CACHE_SCHEMA_NAME "_timescaledb_cache"
-#define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
+
 
 /******************************
  *
