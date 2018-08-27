@@ -59,7 +59,9 @@ set(TEST_FILES
 
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
-    loader.sql symbol_conflict.sql)
+    bgw_launcher.sql
+    loader.sql
+    symbol_conflict.sql)
 ENDIF(CMAKE_BUILD_TYPE MATCHES Debug)
 
 IF (${PG_VERSION_MAJOR} GREATER "9")
