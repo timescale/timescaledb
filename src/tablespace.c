@@ -321,9 +321,9 @@ tablespace_insert_relation(Relation rel, int32 hypertable_id, const char *tspcna
 
 	memset(values, 0, sizeof(values));
 	id = catalog_table_next_seq_id(catalog_get(), TABLESPACE);
-	values[Anum_tablespace_id - 1] = Int32GetDatum(id);
-	values[Anum_tablespace_hypertable_id - 1] = Int32GetDatum(hypertable_id);
-	values[Anum_tablespace_tablespace_name - 1] =
+	values[AttrNumberGetAttrOffset(Anum_tablespace_id)] = Int32GetDatum(id);
+	values[AttrNumberGetAttrOffset(Anum_tablespace_hypertable_id)] = Int32GetDatum(hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_tablespace_tablespace_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(tspcname));
 
 	catalog_insert_values(rel, desc, values, nulls);

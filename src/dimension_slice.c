@@ -594,10 +594,10 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
 	slice->fd.id = catalog_table_next_seq_id(catalog_get(), DIMENSION_SLICE);
-	values[Anum_dimension_slice_id - 1] = Int32GetDatum(slice->fd.id);
-	values[Anum_dimension_slice_dimension_id - 1] = Int32GetDatum(slice->fd.dimension_id);
-	values[Anum_dimension_slice_range_start - 1] = Int64GetDatum(slice->fd.range_start);
-	values[Anum_dimension_slice_range_end - 1] = Int64GetDatum(slice->fd.range_end);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(slice->fd.id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)] = Int32GetDatum(slice->fd.dimension_id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] = Int64GetDatum(slice->fd.range_start);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)] = Int64GetDatum(slice->fd.range_end);
 
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);

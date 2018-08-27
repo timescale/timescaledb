@@ -122,24 +122,24 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
 
 	d->type = dimension_type(ti->tuple);
-	d->fd.id = DatumGetInt32(values[Anum_dimension_id - 1]);
-	d->fd.hypertable_id = DatumGetInt32(values[Anum_dimension_hypertable_id - 1]);
-	d->fd.aligned = DatumGetBool(values[Anum_dimension_aligned - 1]);
-	d->fd.column_type = DatumGetObjectId(values[Anum_dimension_column_type - 1]);
+	d->fd.id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_id)]);
+	d->fd.hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_hypertable_id)]);
+	d->fd.aligned = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_dimension_aligned)]);
+	d->fd.column_type = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_dimension_column_type)]);
 	memcpy(&d->fd.column_name,
-		   DatumGetName(values[Anum_dimension_column_name - 1]),
+		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]),
 		   NAMEDATALEN);
 
 	if (d->type == DIMENSION_TYPE_CLOSED)
 	{
 		MemoryContext old;
 
-		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
+		d->fd.num_slices = DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 		memcpy(&d->fd.partitioning_func_schema,
-			   DatumGetName(values[Anum_dimension_partitioning_func_schema - 1]),
+			   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]),
 			   NAMEDATALEN);
 		memcpy(&d->fd.partitioning_func,
-			   DatumGetName(values[Anum_dimension_partitioning_func - 1]),
+			   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)]),
 			   NAMEDATALEN);
 
 		old = MemoryContextSwitchTo(ti->mctx);
@@ -150,7 +150,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		MemoryContextSwitchTo(old);
 	}
 	else
-		d->fd.interval_length = DatumGetInt64(values[Anum_dimension_interval_length - 1]);
+		d->fd.interval_length = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
 }
@@ -465,19 +465,19 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
-	values[Anum_dimension_column_name - 1] = NameGetDatum(&dim->fd.column_name);
-	values[Anum_dimension_column_type - 1] = ObjectIdGetDatum(dim->fd.column_type);
-	values[Anum_dimension_num_slices - 1] = Int16GetDatum(dim->fd.num_slices);
+	values[AttrNumberGetAttrOffset(Anum_dimension_column_name)] = NameGetDatum(&dim->fd.column_name);
+	values[AttrNumberGetAttrOffset(Anum_dimension_column_type)] = ObjectIdGetDatum(dim->fd.column_type);
+	values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(dim->fd.num_slices);
 
-	if (!nulls[Anum_dimension_partitioning_func - 1] &&
-		!nulls[Anum_dimension_partitioning_func_schema - 1])
+	if (!nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)] &&
+		!nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)])
 	{
-		values[Anum_dimension_partitioning_func - 1] = NameGetDatum(&dim->fd.partitioning_func);
-		values[Anum_dimension_partitioning_func_schema - 1] = NameGetDatum(&dim->fd.partitioning_func_schema);
+		values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)] = NameGetDatum(&dim->fd.partitioning_func);
+		values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] = NameGetDatum(&dim->fd.partitioning_func_schema);
 	}
 
-	if (!nulls[Anum_dimension_interval_length - 1])
-		values[Anum_dimension_interval_length - 1] = Int64GetDatum(dim->fd.interval_length);
+	if (!nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)])
+		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = Int64GetDatum(dim->fd.interval_length);
 
 	tuple = heap_form_tuple(ti->desc, values, nulls);
 
@@ -498,33 +498,33 @@ dimension_insert_relation(Relation rel, int32 hypertable_id,
 	bool		nulls[Natts_dimension] = {false};
 	CatalogSecurityContext sec_ctx;
 
-	values[Anum_dimension_hypertable_id - 1] = Int32GetDatum(hypertable_id);
-	values[Anum_dimension_column_name - 1] = NameGetDatum(colname);
-	values[Anum_dimension_column_type - 1] = ObjectIdGetDatum(coltype);
+	values[AttrNumberGetAttrOffset(Anum_dimension_hypertable_id)] = Int32GetDatum(hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_column_name)] = NameGetDatum(colname);
+	values[AttrNumberGetAttrOffset(Anum_dimension_column_type)] = ObjectIdGetDatum(coltype);
 
 	if (OidIsValid(partitioning_func))
 	{
 		Oid			pronamespace = get_func_namespace(partitioning_func);
 
-		values[Anum_dimension_partitioning_func - 1] =
+		values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)] =
 			DirectFunctionCall1(namein, CStringGetDatum(get_func_name(partitioning_func)));
-		values[Anum_dimension_partitioning_func_schema - 1] =
+		values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] =
 			DirectFunctionCall1(namein, CStringGetDatum(get_namespace_name(pronamespace)));
-		values[Anum_dimension_num_slices - 1] = Int16GetDatum(num_slices);
-		values[Anum_dimension_aligned - 1] = BoolGetDatum(false);
-		nulls[Anum_dimension_interval_length - 1] = true;
+		values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(num_slices);
+		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(false);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
 	}
 	else
 	{
-		values[Anum_dimension_interval_length - 1] = Int64GetDatum(interval_length);
-		values[Anum_dimension_aligned - 1] = BoolGetDatum(true);
-		nulls[Anum_dimension_num_slices - 1] = true;
-		nulls[Anum_dimension_partitioning_func - 1] = true;
-		nulls[Anum_dimension_partitioning_func_schema - 1] = true;
+		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = Int64GetDatum(interval_length);
+		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] = true;
 	}
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
-	values[Anum_dimension_id - 1] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), DIMENSION));
+	values[AttrNumberGetAttrOffset(Anum_dimension_id)] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), DIMENSION));
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);
 }
