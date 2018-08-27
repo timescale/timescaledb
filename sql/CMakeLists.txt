@@ -1,14 +1,14 @@
 set(INSTALL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
 
 # Source files that define the schemas and tables for our metadata
-set(CATALOG_SOURCE_FILES
-  schemas.sql # Must be first
-  tables.sql
+set(PRE_INSTALL_SOURCE_FILES
+  pre_install/schemas.sql # Must be first
+  pre_install/tables.sql
 )
 
 # Things like aggregate functions cannot be REPLACEd and really
-# need to be created just once(like CATALOG_SOURCE_FILES)
-# but unlike CATALOG_SOURCE_FILES these have to be loaded
+# need to be created just once(like PRE_INSTALL_SOURCE_FILES)
+# but unlike PRE_INSTALL_SOURCE_FILES these have to be loaded
 # after everything else is loaded.
 set(IMMUTABLE_API_SOURCE_FILES
   aggregates.sql
@@ -31,12 +31,13 @@ set(SOURCE_FILES
   size_utils.sql
   histogram.sql
   cache.sql
+  bgw_scheduler.sql
 )
 
 # These files should be pre-pended to update scripts so that they are
 # executed before anything else during updates
 set(PRE_UPDATE_FILES
-  updates/pre-global.sql
+  updates/pre-update.sql
 )
 
 # These files represent the modifications that happen in each version,
@@ -68,6 +69,7 @@ set(MOD_FILES
 )
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
+set(LOADER_PATHNAME "$libdir/timescaledb")
 
 # Function to replace @MODULE_PATHNAME@ in source files, producing an
 # output file in the build dir
@@ -86,7 +88,7 @@ endfunction()
 # Create versioned files (replacing MODULE_PATHNAME) in the build
 # directory of all our source files
 version_files("${PRE_UPDATE_FILES}" PRE_UPDATE_FILES_VERSIONED)
-version_files("${CATALOG_SOURCE_FILES}" CATALOG_SOURCE_FILES_VERSIONED)
+version_files("${PRE_INSTALL_SOURCE_FILES}" PRE_INSTALL_SOURCE_FILES_VERSIONED)
 version_files("${IMMUTABLE_API_SOURCE_FILES}" IMMUTABLE_API_SOURCE_FILES_VERSIONED)
 version_files("${SOURCE_FILES}" SOURCE_FILES_VERSIONED)
 version_files("${MOD_FILES}" MOD_FILES_VERSIONED)
@@ -117,7 +119,7 @@ endfunction()
 
 # Generate the extension file used with CREATE EXTENSION
 cat_files(
-  "${CATALOG_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED};${IMMUTABLE_API_SOURCE_FILES_VERSIONED}"
+  "${PRE_INSTALL_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED};${IMMUTABLE_API_SOURCE_FILES_VERSIONED}"
   ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
 )
 add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})

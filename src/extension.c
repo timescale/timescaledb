@@ -25,7 +25,6 @@
 #include "extension_utils.c"
 #include "compat.h"
 
-#define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
 static Oid	extension_proxy_oid = InvalidOid;
 

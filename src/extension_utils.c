@@ -20,11 +20,9 @@
 #include <utils/guc.h>
 #include <catalog/indexing.h>
 
-#include "extension.h"
+#include "extension_constants.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
-#define CACHE_SCHEMA_NAME "_timescaledb_cache"
-#define MAX_SO_NAME_LEN NAMEDATALEN+NAMEDATALEN+1+1 /* extname+"-"+version */
 
 #define RENDEZVOUS_LOADER_PRESENT_NAME "timescaledb.loader_present"
 
