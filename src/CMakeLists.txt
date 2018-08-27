@@ -1,4 +1,4 @@
-set(CMAKE_C_FLAGS_DEBUG "-DUSE_ASSERT_CHECKING=1")
+set(CMAKE_C_FLAGS_DEBUG "-DUSE_ASSERT_CHECKING=1 -DDEBUG=1")
 
 if (UNIX)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
@@ -35,6 +35,8 @@ endif (MSVC)
 endif (WIN32)
 
 set(HEADERS
+  bgw_launcher_interface.h
+  bgw_scheduler.h
   cache.h
   catalog.h
   chunk.h
@@ -59,6 +61,7 @@ set(HEADERS
   event_trigger.h
   extension.h
   export.h
+  extension_constants.h
   guc.h
   hypercube.h
   hypertable_cache.h
@@ -80,6 +83,8 @@ set(HEADERS
 
 set(SOURCES
   agg_bookend.c
+  bgw_launcher_interface.c
+  bgw_scheduler.c
   cache.c
   cache_invalidate.c
   catalog.c
