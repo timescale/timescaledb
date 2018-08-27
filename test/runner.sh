@@ -27,9 +27,18 @@ TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2:-default_perm_user
 
 shift
 
+# Keep original args around to use in cleanup
+ORIG_ARGS=("$@")
+
 function cleanup {
     rm -rf ${TEST_TABLESPACE1_PATH}
     rm -rf ${TEST_TABLESPACE2_PATH}
+    # When testing remotely, the secondary database does not get removed, so
+    # remove it directly because it causes problems when trying to drop super
+    # user roles on next run (i.e., the db is a dependency of the role).
+    # Problem is not noticed when using `make installcheck` because it makes a
+    # new instance each time.
+    ${PSQL} ${ORIG_ARGS} -U ${USER} -d postgres -v ECHO=none -c "DROP DATABASE IF EXISTS ${TEST_DBNAME2};" > /dev/null 2>&1 || :
 }
 
 trap cleanup EXIT
