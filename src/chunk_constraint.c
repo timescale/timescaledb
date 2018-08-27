@@ -148,16 +148,16 @@ chunk_constraint_fill_tuple_values(ChunkConstraint *cc,
 								   bool nulls[Natts_chunk_constraint])
 {
 	memset(values, 0, sizeof(Datum) * Natts_chunk_constraint);
-	values[Anum_chunk_constraint_chunk_id - 1] = Int32GetDatum(cc->fd.chunk_id);
-	values[Anum_chunk_constraint_dimension_slice_id - 1] = Int32GetDatum(cc->fd.dimension_slice_id);
-	values[Anum_chunk_constraint_constraint_name - 1] = NameGetDatum(&cc->fd.constraint_name);
-	values[Anum_chunk_constraint_hypertable_constraint_name - 1] =
+	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)] = Int32GetDatum(cc->fd.chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = Int32GetDatum(cc->fd.dimension_slice_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = NameGetDatum(&cc->fd.constraint_name);
+	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 		NameGetDatum(&cc->fd.hypertable_constraint_name);
 
 	if (is_dimension_constraint(cc))
-		nulls[Anum_chunk_constraint_hypertable_constraint_name - 1] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
 	else
-		nulls[Anum_chunk_constraint_dimension_slice_id - 1] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
 }
 
 static void
@@ -223,21 +223,21 @@ chunk_constraints_add_from_tuple(ChunkConstraints *ccs, TupleInfo *ti)
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
-	constraint_name = DatumGetName(values[Anum_chunk_constraint_constraint_name - 1]);
+	constraint_name = DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
 
-	if (nulls[Anum_chunk_constraint_dimension_slice_id - 1])
+	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)])
 	{
 		dimension_slice_id = 0;
-		hypertable_constraint_name = DatumGetName(values[Anum_chunk_constraint_hypertable_constraint_name - 1]);
+		hypertable_constraint_name = DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]);
 	}
 	else
 	{
-		dimension_slice_id = DatumGetInt32(values[Anum_chunk_constraint_dimension_slice_id - 1]);
+		dimension_slice_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)]);
 		hypertable_constraint_name = DatumGetName(DirectFunctionCall1(namein, CStringGetDatum("")));
 	}
 
 	return chunk_constraints_add(ccs,
-								 DatumGetInt32(values[Anum_chunk_constraint_chunk_id - 1]),
+								 DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]),
 								 dimension_slice_id,
 								 NameStr(*constraint_name),
 								 NameStr(*hypertable_constraint_name));
@@ -733,10 +733,10 @@ hypertable_constraint_tuple_filter(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
-	if (nulls[Anum_chunk_constraint_hypertable_constraint_name - 1])
+	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)])
 		return false;
 
-	constrname = NameStr(*DatumGetName(values[Anum_chunk_constraint_hypertable_constraint_name - 1]));
+	constrname = NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]));
 
 	return NULL != info->hypertable_constraint_name &&
 		strcmp(info->hypertable_constraint_name, constrname) == 0;
@@ -868,7 +868,7 @@ chunk_constraint_rename_hypertable_tuple(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
-	chunk_id = DatumGetInt32(values[Anum_chunk_constraint_chunk_id - 1]);
+	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
 	namestrcpy(&new_hypertable_constraint_name, info->newname);
 	chunk_constraint_choose_name(&new_chunk_constraint_name,
 								 false,
@@ -876,11 +876,11 @@ chunk_constraint_rename_hypertable_tuple(TupleInfo *ti, void *data)
 								 info->newname,
 								 chunk_id);
 
-	values[Anum_chunk_constraint_hypertable_constraint_name - 1] = NameGetDatum(&new_hypertable_constraint_name);
-	repl[Anum_chunk_constraint_hypertable_constraint_name - 1] = true;
-	old_chunk_constraint_name = DatumGetName(values[Anum_chunk_constraint_constraint_name - 1]);
-	values[Anum_chunk_constraint_constraint_name - 1] = NameGetDatum(&new_chunk_constraint_name);
-	repl[Anum_chunk_constraint_constraint_name - 1] = true;
+	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = NameGetDatum(&new_hypertable_constraint_name);
+	repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
+	old_chunk_constraint_name = DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
+	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = NameGetDatum(&new_chunk_constraint_name);
+	repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
 
 	chunk_constraint_rename_on_chunk_table(chunk_id,
 										   NameStr(*old_chunk_constraint_name),
@@ -921,7 +921,7 @@ chunk_constraint_get_name_from_hypertable_tuple(TupleInfo *ti, void *data)
 
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
-	info->chunk_constraint_name = DatumGetName(values[Anum_chunk_constraint_constraint_name - 1]);
+	info->chunk_constraint_name = DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
 
 	return false;
 }

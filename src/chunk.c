@@ -51,10 +51,10 @@ chunk_insert_relation(Relation rel, Chunk *chunk)
 	CatalogSecurityContext sec_ctx;
 
 	memset(values, 0, sizeof(values));
-	values[Anum_chunk_id - 1] = Int32GetDatum(chunk->fd.id);
-	values[Anum_chunk_hypertable_id - 1] = Int32GetDatum(chunk->fd.hypertable_id);
-	values[Anum_chunk_schema_name - 1] = NameGetDatum(&chunk->fd.schema_name);
-	values[Anum_chunk_table_name - 1] = NameGetDatum(&chunk->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_chunk_id)] = Int32GetDatum(chunk->fd.id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)] = Int32GetDatum(chunk->fd.hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&chunk->fd.schema_name);
+	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&chunk->fd.table_name);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_insert_values(rel, desc, values, nulls);

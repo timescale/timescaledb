@@ -213,12 +213,12 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
-	values[Anum_hypertable_schema_name - 1] = NameGetDatum(&ht->fd.schema_name);
-	values[Anum_hypertable_table_name - 1] = NameGetDatum(&ht->fd.table_name);
-	values[Anum_hypertable_associated_schema_name - 1] = NameGetDatum(&ht->fd.associated_schema_name);
-	values[Anum_hypertable_associated_table_prefix - 1] = NameGetDatum(&ht->fd.associated_table_prefix);
-	values[Anum_hypertable_num_dimensions - 1] = Int16GetDatum(ht->fd.num_dimensions);
-	values[Anum_hypertable_chunk_target_size - 1] = Int64GetDatum(ht->fd.chunk_target_size);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] = NameGetDatum(&ht->fd.schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(&ht->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] = NameGetDatum(&ht->fd.associated_schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] = NameGetDatum(&ht->fd.associated_table_prefix);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] = Int16GetDatum(ht->fd.num_dimensions);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] = Int64GetDatum(ht->fd.chunk_target_size);
 
 	memset(nulls, 0, sizeof(nulls));
 
@@ -236,15 +236,15 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 		namestrcpy(&ht->fd.chunk_sizing_func_schema, NameStr(info.func_schema));
 		namestrcpy(&ht->fd.chunk_sizing_func_name, NameStr(info.func_name));
 
-		values[Anum_hypertable_chunk_sizing_func_schema - 1] =
+		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
 			NameGetDatum(&ht->fd.chunk_sizing_func_schema);
-		values[Anum_hypertable_chunk_sizing_func_name - 1] =
+		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
 			NameGetDatum(&ht->fd.chunk_sizing_func_name);
 	}
 	else
 	{
-		nulls[Anum_hypertable_chunk_sizing_func_schema - 1] = true;
-		nulls[Anum_hypertable_chunk_sizing_func_name - 1] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] = true;
 	}
 
 	copy = heap_form_tuple(ti->desc, values, nulls);
@@ -546,40 +546,40 @@ hypertable_insert_relation(Relation rel,
 	NameData	default_associated_table_prefix;
 	CatalogSecurityContext sec_ctx;
 
-	values[Anum_hypertable_schema_name - 1] = NameGetDatum(schema_name);
-	values[Anum_hypertable_table_name - 1] = NameGetDatum(table_name);
-	values[Anum_hypertable_associated_schema_name - 1] = NameGetDatum(associated_schema_name);
-	values[Anum_hypertable_num_dimensions - 1] = Int16GetDatum(num_dimensions);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] = NameGetDatum(schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(table_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] = NameGetDatum(associated_schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] = Int16GetDatum(num_dimensions);
 
 	if (NULL != chunk_sizing_func_schema && NULL != chunk_sizing_func_name)
 	{
-		values[Anum_hypertable_chunk_sizing_func_schema - 1] = NameGetDatum(chunk_sizing_func_schema);
-		values[Anum_hypertable_chunk_sizing_func_name - 1] = NameGetDatum(chunk_sizing_func_name);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] = NameGetDatum(chunk_sizing_func_schema);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] = NameGetDatum(chunk_sizing_func_name);
 	}
 	else
 	{
-		nulls[Anum_hypertable_chunk_sizing_func_schema - 1] = true;
-		nulls[Anum_hypertable_chunk_sizing_func_name - 1] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] = true;
 	}
 
 	if (chunk_target_size < 0)
 		chunk_target_size = 0;
 
-	values[Anum_hypertable_chunk_target_size - 1] = Int64GetDatum(chunk_target_size);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] = Int64GetDatum(chunk_target_size);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
-	values[Anum_hypertable_id - 1] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), HYPERTABLE));
+	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), HYPERTABLE));
 
 	if (NULL != associated_table_prefix)
-		values[Anum_hypertable_associated_table_prefix - 1] = NameGetDatum(associated_table_prefix);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] = NameGetDatum(associated_table_prefix);
 	else
 	{
 		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
 		snprintf(NameStr(default_associated_table_prefix),
 				 NAMEDATALEN,
 				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
-				 DatumGetInt32(values[Anum_hypertable_id - 1]));
-		values[Anum_hypertable_associated_table_prefix - 1] =
+				 DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_id)]));
+		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
 			NameGetDatum(&default_associated_table_prefix);
 	}
 

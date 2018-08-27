@@ -318,11 +318,11 @@ chunk_index_insert_relation(Relation rel,
 	bool		nulls[Natts_chunk_index] = {false};
 	CatalogSecurityContext sec_ctx;
 
-	values[Anum_chunk_index_chunk_id - 1] = Int32GetDatum(chunk_id);
-	values[Anum_chunk_index_index_name - 1] =
+	values[AttrNumberGetAttrOffset(Anum_chunk_index_chunk_id)] = Int32GetDatum(chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(chunk_index));
-	values[Anum_chunk_index_hypertable_id - 1] = Int32GetDatum(hypertable_id);
-	values[Anum_chunk_index_hypertable_index_name - 1] =
+	values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_id)] = Int32GetDatum(hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(parent_index));
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
