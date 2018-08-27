@@ -5,18 +5,29 @@
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include <parser/analyze.h>
+#include <storage/ipc.h>
 #include "../compat-msvc-exit.h"
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <nodes/print.h>
+#include <commands/dbcommands.h>
 
-#define EXTENSION_NAME "timescaledb"
+
+
+
+/* for setting our wait event during waitlatch*/
+#include <pgstat.h>
 
 #include "../extension_utils.c"
 #include "../export.h"
+#include "../compat.h"
+#include "../extension_constants.h"
 
-#define PG96 ((PG_VERSION_NUM >= 90600) && (PG_VERSION_NUM < 100000))
-#define PG10 ((PG_VERSION_NUM >= 100000) && (PG_VERSION_NUM < 110000))
+#include "loader.h"
+#include "bgw_counter.h"
+#include "bgw_launcher.h"
+#include "bgw_message_queue.h"
+
 /*
  * Some notes on design:
  *
@@ -29,6 +40,8 @@
  *	  a) We are upgrading the extension.
  *	  b) We set the guc timescaledb.disable_load.
  *
+ * 3) We include a section for the bgw launcher and some workers below the rest, separated with its own notes,
+ *   some function definitions are included as they are referenced by other loader functions.
  *
  */
 
@@ -45,7 +58,7 @@ extern void PGDLLEXPORT _PG_fini(void);
 static bool loaded = false;
 static bool loader_present = true;
 
-#define MAX_VERSION_LEN (NAMEDATALEN+1)
+
 static char soversion[MAX_VERSION_LEN];
 
 /* GUC to disable the load */
@@ -53,6 +66,7 @@ static bool guc_disable_load = false;
 
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
+static shmem_startup_hook_type prev_shmem_startup_hook;
 
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
@@ -62,6 +76,20 @@ static void call_extension_post_parse_analyze_hook(ParseState *pstate,
 									   Query *query);
 
 
+
+
+extern char *
+loader_extension_version(void)
+{
+	return extension_version();
+}
+
+extern bool
+loader_extension_exists(void)
+{
+	return extension_exists();
+}
+
 static void
 inval_cache_callback(Datum arg, Oid relid)
 {
@@ -69,7 +97,6 @@ inval_cache_callback(Datum arg, Oid relid)
 		return;
 	extension_check();
 }
-
 
 static bool
 drop_statement_drops_extension(DropStmt *stmt)
@@ -193,8 +220,49 @@ load_utility_cmd(Node *utility_stmt)
 }
 
 static void
+stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
+{
+	Oid			dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
+
+	if (dropped_db_oid != InvalidOid)
+	{
+		ereport(LOG, (errmsg("TimescaleDB background worker scheduler for database %u will be stopped", dropped_db_oid)));
+		bgw_message_send_and_wait(STOP, dropped_db_oid);
+	}
+	return;
+}
+
+static void
 post_analyze_hook(ParseState *pstate, Query *query)
 {
+
+	if (query->commandType == CMD_UTILITY)
+	{
+		/*
+		 * If we drop a database, we need to intercept and stop any of our
+		 * schedulers that might be connected to said db.
+		 */
+		switch (nodeTag(query->utilityStmt))
+		{
+			case T_DropdbStmt:
+				stop_workers_on_db_drop((DropdbStmt *) query->utilityStmt);
+				break;
+			case T_DropStmt:
+				if (drop_statement_drops_extension((DropStmt *) query->utilityStmt))
+
+					/*
+					 * if we drop the extension we should restart (in case of
+					 * a rollback) the scheduler
+					 */
+				{
+					bgw_message_send_and_wait(RESTART, MyDatabaseId);
+				}
+				break;
+			default:
+
+				break;
+		}
+	}
 	if (!guc_disable_load &&
 		(query->commandType != CMD_UTILITY || load_utility_cmd(query->utilityStmt)))
 		extension_check();
@@ -216,6 +284,15 @@ post_analyze_hook(ParseState *pstate, Query *query)
 }
 
 static void
+timescale_shmem_startup_hook(void)
+{
+	if (prev_shmem_startup_hook)
+		prev_shmem_startup_hook();
+	bgw_counter_shmem_startup();
+	bgw_message_queue_shmem_startup();
+}
+
+static void
 extension_mark_loader_present()
 {
 	void	  **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
@@ -233,6 +310,11 @@ _PG_init(void)
 	extension_mark_loader_present();
 
 	elog(INFO, "timescaledb loaded");
+
+	bgw_counter_shmem_alloc();
+	bgw_message_queue_alloc();
+	bgw_cluster_launcher_register();
+	bgw_counter_setup_gucs();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME, "Disable the loading of the actual extension",
@@ -257,13 +339,19 @@ _PG_init(void)
 	 * hook
 	 */
 	prev_post_parse_analyze_hook = post_parse_analyze_hook;
+	/* register shmem startup hook for the background worker stuff */
+	prev_shmem_startup_hook = shmem_startup_hook;
+
+
 	post_parse_analyze_hook = post_analyze_hook;
+	shmem_startup_hook = timescale_shmem_startup_hook;
 }
 
 void
 _PG_fini(void)
 {
 	post_parse_analyze_hook = prev_post_parse_analyze_hook;
+	shmem_startup_hook = prev_shmem_startup_hook;
 	/* No way to unregister relcache callback */
 }
 
@@ -349,6 +437,12 @@ extension_check()
 				return;
 		}
 	}
+}
+
+extern void
+loader_extension_check(void)
+{
+	extension_check();
 }
 
 static void
