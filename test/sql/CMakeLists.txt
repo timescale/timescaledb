@@ -76,7 +76,9 @@ set(TEST_TEMPLATES
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
-# be in the same directory.
+# be in the same directory. These files are updated when the template
+# is edited, but not when the output file is deleted. If the output is
+# deleted either recreate it manually, or rerun cmake on the root dir.
 if (${PG_VERSION_MAJOR} EQUAL "10")
     set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
 else ()
