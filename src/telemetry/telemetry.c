@@ -209,16 +209,18 @@ build_version_body(void)
 	JsonbValue *result;
 	Jsonb	   *jb;
 	StringInfo	jtext;
-	JsonbParseState *parseState = NULL;
 	VersionOSInfo osinfo;
+	JsonbParseState *parseState = NULL;
 
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
+
 	jsonb_add_pair(parseState, REQ_DB_UUID,
 				   DatumGetCString(DirectFunctionCall1(uuid_out, metadata_get_uuid())));
 	jsonb_add_pair(parseState, REQ_EXPORTED_DB_UUID,
 				   DatumGetCString(DirectFunctionCall1(uuid_out, metadata_get_exported_uuid())));
 	jsonb_add_pair(parseState, REQ_INSTALL_TIME,
 				   DatumGetCString(DirectFunctionCall1(timestamptz_out, metadata_get_install_timestamp())));
+
 	jsonb_add_pair(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
 	if (version_get_os_info(&osinfo))
@@ -310,9 +312,16 @@ telemetry_main()
 	Connection *conn;
 	HttpRequest *req;
 	HttpResponseState *rsp;
+	bool		started = false;
 
 	if (!telemetry_on())
 		return;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+	}
 
 	conn = telemetry_connect();
 
@@ -339,6 +348,10 @@ telemetry_main()
 	process_response(http_response_state_body_start(rsp));
 
 	http_response_state_destroy(rsp);
+
+	if (started)
+		CommitTransactionCommand();
+	return;
 }
 
 TS_FUNCTION_INFO_V1(ts_get_telemetry_report);

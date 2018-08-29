@@ -41,7 +41,7 @@ uuid_create(void)
 	{
 		TimestampTz ts = GetCurrentTimestamp();
 
-		memcpy(&gen_uuid[9], &ts, sizeof(TimestampTz));
+		memcpy(&gen_uuid[8], &ts, sizeof(TimestampTz));
 	}
 
 	gen_uuid[6] = (gen_uuid[6] & 0x0f) | 0x40;	/* "version" field */

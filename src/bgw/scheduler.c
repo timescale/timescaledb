@@ -129,6 +129,8 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 	{
 		BgwJobStat *job_stat = bgw_job_stat_find(sjob->job.fd.id);
 
+		Assert(job_stat != NULL);
+
 		if (!bgw_job_stat_end_was_marked(job_stat))
 		{
 			/*
@@ -385,8 +387,13 @@ terminate_all_jobs_and_release_workers()
 	{
 		ScheduledBgwJob *sjob = lfirst(lc);
 
-		if (sjob->state == JOB_STATE_STARTED)
-			scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_TERMINATING);
+		/*
+		 * Clean up the background workers. Don't worry about state of the
+		 * sjobs, because this callback might have interrupted a state
+		 * transition.
+		 */
+		if (sjob->handle != NULL)
+			TerminateBackgroundWorker(sjob->handle);
 
 		if (sjob->reserved_worker)
 		{
