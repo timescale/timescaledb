@@ -239,3 +239,24 @@ configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
   DESTINATION "${PG_SHAREDIR}/extension")
+
+find_program(PGINDENT pgindent
+  HINTS ${PG_SOURCE_DIR}
+  PATH_SUFFIXES src/tools/pgindent
+  DOC "Format C code according to PostgreSQL standards")
+
+# Configuration for running pgindent
+if (PGINDENT)
+  message(STATUS "Using pgindent ${PGINDENT}")
+  file(WRITE ${CMAKE_BINARY_DIR}/pgindent_excludes "\\..*/\n")
+
+  add_custom_command(OUTPUT typedefs.list
+    DEPENDS ${PROJECT_NAME}
+    COMMAND sh ${PROJECT_BINARY_DIR}/scripts/generate_typedefs.sh > ${PROJECT_BINARY_DIR}/typedefs.list)
+  add_custom_target(pgindent
+    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/src
+    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/test/src
+    DEPENDS ${PROJECT_BINARY_DIR}/typedefs.list)
+else ()
+  message(STATUS "Install pgindent to be able to format C code: https://github.com/postgres/postgres/tree/master/src/tools/pgindent")
+endif (PGINDENT)

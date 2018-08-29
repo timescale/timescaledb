@@ -33,14 +33,14 @@ test_conn(PG_FUNCTION_ARGS)
 	/* connectivity on the server running this test? */
 	Assert(connection_connect(conn, host, port) >= 0);
 
-	//should timeout
+	/* should timeout */
 	PG_TRY();
 	{
 		connection_read(conn, response, 1);
 	}
 	PG_CATCH();
 	{
-		should_fail = true;	
+		should_fail = true;
 	}
 	PG_END_TRY();
 	Assert(should_fail);
@@ -59,11 +59,11 @@ test_conn(PG_FUNCTION_ARGS)
 	}
 	PG_CATCH();
 	{
-		should_fail = true;	
+		should_fail = true;
 	}
 	PG_END_TRY();
 	Assert(should_fail);
-	
+
 	connection_close(conn);
 	connection_destroy(conn);
 
