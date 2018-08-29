@@ -1,11 +1,20 @@
 set(CMAKE_C_FLAGS_DEBUG "-DUSE_ASSERT_CHECKING=1 -DDEBUG=1")
 
-INCLUDE (FindOpenSSL)
-file(STRINGS ${PG_INCLUDEDIR}/pg_config.h USE_OPENSSL REGEX "define USE_OPENSSL ")
+# Check if PostgreSQL has OpenSSL enabled
+file(STRINGS ${PG_INCLUDEDIR}/pg_config.h PG_USE_OPENSSL REGEX "#define USE_OPENSSL [01]")
+string(REGEX REPLACE "#define USE_OPENSSL ([01])" "\\1" USE_OPENSSL ${PG_USE_OPENSSL})
 
-if (OPENSSL_FOUND AND USE_OPENSSL)
-    include_directories ( ${OPENSSL_INCLUDE_DIR} )
-endif (OPENSSL_FOUND AND USE_OPENSSL)
+# If OpenSSL couldn't be found, we need to disable usage of OpenSSL
+if (USE_OPENSSL)
+  # Try to find a local OpenSSL installation
+  include(FindOpenSSL)
+
+  if (NOT OPENSSL_FOUND)
+    message(FATAL_ERROR "PostgreSQL was compiled with SSL support, but OpenSSL was not found")
+  endif (NOT OPENSSL_FOUND)
+
+  include_directories(${OPENSSL_INCLUDE_DIR})
+endif (USE_OPENSSL)
 
 if (UNIX)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
@@ -131,10 +140,6 @@ set(SOURCES
   utils.c
   version.c)
 
-if (NOT PROJECT_INSTALL_METHOD)
-  set(PROJECT_INSTALL_METHOD source)
-endif (NOT PROJECT_INSTALL_METHOD)
-
 configure_file(version.h.in version.h)
 set(GITCOMMIT_H ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
 
@@ -161,29 +166,11 @@ else ()
     VERBATIM)
 endif (WIN32)
 
-find_program(PGINDENT pgindent
-  HINTS ${PG_SOURCE_DIR}
-  PATH_SUFFIXES src/tools/pgindent
-  DOC "Format C code according to PostgreSQL standards")
-
-if (PGINDENT)
-  message(STATUS "Using pgindent ${PGINDENT}")
-else ()
-  message(STATUS "Install pgindent to be able to format C code: https://github.com/postgres/postgres/tree/master/src/tools/pgindent")
-endif (PGINDENT)
-
-# Configuration for running pgindent
-if (PGINDENT)
-  add_custom_command(OUTPUT typedefs.list
-    DEPENDS ${PROJECT_NAME}
-    COMMAND sh ${CMAKE_BINARY_DIR}/scripts/generate_typedefs.sh > typedefs.list)
-  add_custom_target(pgindent
-    COMMAND ${PGINDENT} -typedefs typedefs.list -code-base ${CMAKE_SOURCE_DIR}/src/
-    COMMAND ${PGINDENT} -typedefs typedefs.list -code-base ${CMAKE_SOURCE_DIR}/test/src/
-    DEPENDS typedefs.list)
-endif (PGINDENT)
-
 add_library(${PROJECT_NAME} MODULE ${SOURCES} ${TEST_SOURCES} ${HEADERS} ${GITCOMMIT_H})
+
+if (OPENSSL_FOUND AND USE_OPENSSL)
+    target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
+endif (OPENSSL_FOUND AND USE_OPENSSL)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory(bgw)
