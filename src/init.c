@@ -10,6 +10,7 @@
 #include "catalog.h"
 #include "version.h"
 #include "compat.h"
+#include "config.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;

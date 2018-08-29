@@ -145,6 +145,7 @@ See the Releases tab for the latest release.
 **Prerequisites**:
 
 - A standard [PostgreSQL 9.6 or 10 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
+- OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git
 - Make sure all relevant binaries are in your PATH: `pg_config`, `cmake`, `MSBuild`
@@ -163,16 +164,17 @@ cd timescaledb
 git checkout 0.8.0
 
 # Bootstrap the build system
-./bootstrap.bat
+bootstrap.bat
 
 # To build the extension from command line
-cd build
-MSBuild.exe timescaledb.sln
+cmake --build ./build --config Release
 
 # To install
-MSBuild.exe /p:Configuration=Release INSTALL.vcxproj
+cmake --build ./build --config Release --target install
 
-# Alternatively, open build/timescaledb.sln in Visual Studio and build
+
+# Alternatively, build in Visual Studio via its built-in support for CMake or by
+# opening the generated build/timescaledb.sln solution file.
 ```
 
 ### Additional documentation

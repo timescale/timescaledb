@@ -4,11 +4,23 @@
 
 #include "guc.h"
 #include "hypertable_cache.h"
+#include "telemetry/telemetry.h"
+
+typedef enum TelemetryLevel
+{
+	TELEMETRY_OFF,
+	TELEMETRY_BASIC,
+} TelemetryLevel;
+
+/* Define which level means on. We use this object to have at least one object
+ * of type TelemetryLevel in the code, otherwise pgindent won't work for the
+ * type */
+static const TelemetryLevel on_level = TELEMETRY_BASIC;
 
 bool
 telemetry_on()
 {
-	return guc_telemetry_level == TELEMETRY_BASIC;
+	return guc_telemetry_level == on_level;
 }
 
 static const struct config_enum_entry telemetry_level_options[] =
@@ -24,7 +36,7 @@ bool		guc_restoring = false;
 bool		guc_constraint_aware_append = true;
 int			guc_max_open_chunks_per_insert = 10;
 int			guc_max_cached_chunks_per_hypertable = 10;
-char	   *guc_telemetry_endpoint = "https://telemetry.timescale.com";
+char	   *guc_telemetry_endpoint = TELEMETRY_ENDPOINT;
 int			guc_telemetry_level = TELEMETRY_BASIC;
 
 static void
@@ -113,7 +125,7 @@ _guc_init(void)
 							   "URI for telemetry endpoint",
 							   "URI for telemetry endpoint",
 							   &guc_telemetry_endpoint,
-							   "https://telemetry.timescale.com",
+							   guc_telemetry_endpoint,
 							   PGC_INTERNAL,
 							   0,
 							   NULL,

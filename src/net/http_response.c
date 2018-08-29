@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <postgres.h>
 #include <lib/stringinfo.h>
 #include <utils/memutils.h>
@@ -104,7 +101,6 @@ http_response_state_buffer_remaining(HttpResponseState *state)
 	return MAX_RAW_BUFFER_SIZE - state->offset;
 }
 
-
 char *
 http_response_state_next_buffer(HttpResponseState *state)
 {
@@ -143,19 +139,13 @@ http_response_state_headers(HttpResponseState *state)
 static bool
 http_parse_version(HttpResponseState *state)
 {
-	float		version;
-
-	if (sscanf(state->version, "HTTP/%f", &version) == 1)
-		if (version == 1.0f || version == 1.1f)
-			return true;
-
-	return false;
+	return http_version_from_string(state->version) != HTTP_VERSION_INVALID;
 }
 
 static void
 http_parse_status(HttpResponseState *state, const char next)
 {
-	char		raw_buf[state->parse_offset + 1];
+	char	   *raw_buf = palloc(state->parse_offset + 1);
 
 	switch (next)
 	{
@@ -172,7 +162,8 @@ http_parse_status(HttpResponseState *state, const char next)
 			state->state = HTTP_STATE_ERROR;
 			memset(state->version, '\0', sizeof(state->version));
 
-			if (sscanf(raw_buf, "%127s %d %*s", state->version, &state->status_code) == 2)
+			if (sscanf(raw_buf, "%127s%*[ ]%d%*[ ]%*s",
+					   state->version, &state->status_code) == 2)
 			{
 				if (http_parse_version(state))
 					state->state = HTTP_STATE_INTERM;
@@ -187,6 +178,8 @@ http_parse_status(HttpResponseState *state, const char next)
 			/* Don't try to parse Status line until we see '\r' */
 			break;
 	}
+
+	pfree(raw_buf);
 }
 
 static void

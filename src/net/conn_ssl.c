@@ -1,8 +1,6 @@
 #include <postgres.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include <pg_config.h>
@@ -59,12 +57,12 @@ ssl_setup(SSLConnection *conn)
 }
 
 static int
-ssl_connect(Connection *conn, const char *host, int port)
+ssl_connect(Connection *conn, const char *host, const char *servname, int port)
 {
 	int			ret;
 
 	/* First do the base connection setup */
-	ret = plain_connect(conn, host, port);
+	ret = plain_connect(conn, host, servname, port);
 
 	if (ret < 0)
 		return ret;

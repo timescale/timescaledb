@@ -1,80 +1,59 @@
 #include <postgres.h>
-#include <access/heapam.h>
-#include <access/htup_details.h>
-#include <access/htup.h>
-#include <utils/builtins.h>
-#include <utils/fmgroids.h>
-#include <utils/snapmgr.h>
-#include <utils/backend_random.h>
 #include <utils/timestamp.h>
+#include <utils/uuid.h>
 
 #include "compat.h"
-#include "catalog.h"
-#include "installation_metadata.h"
-#include "uuid.h"
+#include "telemetry/uuid.h"
 
-TS_FUNCTION_INFO_V1(generate_uuid_external);
+#if PG10
+#include <utils/backend_random.h>
+#endif
 
-/* Generates a v4 UUID. Based on function pg_random_uuid() in the pgcyrpto contrib module. */
-static pg_uuid_t *
-generate_uuid()
+/*
+ * Generates a v4 UUID. Based on function pg_random_uuid() in the pgcrypto contrib module.
+ *
+ * Note that clib on Mac has a uuid_generate() function, so we call this uuid_create().
+ */
+pg_uuid_t *
+uuid_create(void)
 {
-	int64 ts;
-	pg_uuid_t	*gen_uuid = (pg_uuid_t *) palloc(sizeof(pg_uuid_t));
-	bool rand_success = pg_backend_random((char *) gen_uuid->data, UUID_LEN);
+	/*
+	 * PG9.6 doesn't expose the internals of pg_uuid_t, so we just treat it as
+	 * a byte array
+	 */
+	unsigned char *gen_uuid = palloc(UUID_LEN);
+	bool		rand_success = false;
+
+#if PG10
+	rand_success = pg_backend_random((char *) gen_uuid, UUID_LEN);
+#endif
 
 	/*
-	 * If pg_backend_random cannot find sources of randomness, then we use the current
-     * timestamp as a "random source". Timestamps are 8 bytes, so we copy this into bytes 9-16 of the UUID.
-	 * If we see all 0s in bytes 0-8 (other than version + variant), we know that there is
-     * something wrong with the RNG on this node.
+	 * If pg_backend_random() cannot find sources of randomness, then we use
+	 * the current timestamp as a "random source". Note that
+	 * pg_backend_random() was added in PG10, so we always use the current
+	 * timestamp on PG9.6. Timestamps are 8 bytes, so we copy this into bytes
+	 * 9-16 of the UUID. If we see all 0s in bytes 0-8 (other than version +
+	 * variant), we know that there is something wrong with the RNG on this
+	 * instance.
 	 */
-	if (!rand_success) {
-		ts = GetCurrentTimestamp();
-		memcpy((void *)gen_uuid->data[9], &ts, 8);
+	if (!rand_success)
+	{
+		TimestampTz ts = GetCurrentTimestamp();
+
+		memcpy(&gen_uuid[9], &ts, sizeof(TimestampTz));
 	}
 
-	gen_uuid->data[6] = (gen_uuid->data[6] & 0x0f) | 0x40;	/* "version" field */
-	gen_uuid->data[8] = (gen_uuid->data[8] & 0x3f) | 0x80;	/* "variant" field */
-	return gen_uuid;
+	gen_uuid[6] = (gen_uuid[6] & 0x0f) | 0x40;	/* "version" field */
+	gen_uuid[8] = (gen_uuid[8] & 0x3f) | 0x80;	/* "variant" field */
+
+	return (pg_uuid_t *) gen_uuid;
 }
+
+TS_FUNCTION_INFO_V1(ts_uuid_generate);
 
 Datum
-generate_uuid_external(PG_FUNCTION_ARGS) {
-	return CStringGetTextDatum(DirectFunctionCall1(uuid_out, UUIDPGetDatum(generate_uuid())));
-}
-
-
-pg_uuid_t *
-get_uuid()
+ts_uuid_generate(PG_FUNCTION_ARGS)
 {
-	const char	   *uuid = installation_metadata_get_value(INSTALLATION_METADATA_UUID_KEY_NAME);
-
-	if (!uuid)
-		uuid = installation_metadata_insert(INSTALLATION_METADATA_UUID_KEY_NAME, DatumGetCString(DirectFunctionCall1(uuid_out, UUIDPGetDatum(generate_uuid()))));
-
-	return DatumGetUUIDP(DirectFunctionCall1(uuid_in, CStringGetDatum(uuid)));
-}
-
-pg_uuid_t *
-get_exported_uuid()
-{
-	const char	   *exported_uuid = installation_metadata_get_value(INSTALLATION_METADATA_EXPORTED_UUID_KEY_NAME);
-	if (!exported_uuid)
-		exported_uuid = installation_metadata_insert(INSTALLATION_METADATA_EXPORTED_UUID_KEY_NAME, DatumGetCString(DirectFunctionCall1(uuid_out, UUIDPGetDatum(generate_uuid()))));
-	return DatumGetUUIDP(DirectFunctionCall1(uuid_in, CStringGetDatum(exported_uuid)));
-}
-
-const char *
-get_install_timestamp()
-{
-	const char	   *timestamp = installation_metadata_get_value(INSTALLATION_METADATA_TIMESTAMP_KEY_NAME);
-
-	if (timestamp == NULL)
-	{
-		timestamp = DatumGetCString(DirectFunctionCall1(timestamptz_out,
-														TimestampTzGetDatum(GetCurrentTimestamp())));
-		timestamp = installation_metadata_insert(INSTALLATION_METADATA_TIMESTAMP_KEY_NAME, timestamp);
-	}
-	return timestamp;
+	return UUIDPGetDatum(uuid_create());
 }

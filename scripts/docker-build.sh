@@ -25,7 +25,7 @@ else
     docker run -d --name ${BUILD_CONTAINER_NAME} -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
 
     # Install build dependencies
-    docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps gdb git coreutils dpkg-dev gcc libc-dev make cmake util-linux-dev diffutils && mkdir -p /build/debug"
+    docker exec -u root -it ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps gdb git coreutils dpkg-dev gcc libc-dev make cmake util-linux-dev diffutils openssl-dev && mkdir -p /build/debug"
 
     docker commit -a $USER -m "TimescaleDB build base image version $PG_IMAGE_TAG" ${BUILD_CONTAINER_NAME} ${BUILD_IMAGE_NAME}:${PG_IMAGE_TAG}
 fi
