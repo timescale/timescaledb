@@ -1,7 +1,9 @@
 #ifndef TIMESCALEDB_INSTALLATION_METADATA_H
 #define TIMESCALEDB_INSTALLATION_METADATA_H
 
-const char	   *installation_metadata_get_value(const char *metadata_key);
-const char	   *installation_metadata_insert(const char *metadata_key, const char *metadata_value);
+#include <postgres.h>
+
+extern Datum installation_metadata_get_value(Datum metadata_key, Oid key_type, Oid value_type, bool *isnull);
+extern Datum installation_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid value_type);
 
 #endif							/* TIMESCALEDB_INSTALLATION_METADATA_H */

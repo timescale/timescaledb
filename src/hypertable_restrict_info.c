@@ -66,6 +66,7 @@ dimension_restrict_info_create(Dimension *d)
 			return &dimension_restrict_info_closed_create(d)->base;
 		default:
 			elog(ERROR, "unknown dimension type");
+			return NULL;
 	}
 }
 
@@ -131,6 +132,7 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Const *c)
 			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri, strategy, c);
 		default:
 			elog(ERROR, "unknown dimension type");
+			return false;
 	}
 }
 
@@ -172,6 +174,7 @@ dimension_restrict_info_slices(DimensionRestrictInfo *dri)
 			return dimension_restrict_info_closed_slices((DimensionRestrictInfoClosed *) dri);
 		default:
 			elog(ERROR, "unknown dimension type");
+			return NULL;
 	}
 }
 

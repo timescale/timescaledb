@@ -1,5 +1,5 @@
-#ifndef TIMESCALEDB_VERSION_H
-#define TIMESCALEDB_VERSION_H
+#ifndef TIMESCALEDB_CONFIG_H
+#define TIMESCALEDB_CONFIG_H
 
 #define TIMESCALEDB_VERSION "@PROJECT_VERSION@"
 #define TIMESCALEDB_VERSION_MOD "@PROJECT_VERSION_MOD@"
@@ -10,8 +10,28 @@
 #define BUILD_OS_NAME "@CMAKE_SYSTEM_NAME@"
 #define BUILD_OS_VERSION "@CMAKE_SYSTEM_VERSION@"
 #define PG_VERSION "@PG_VERSION@"
-// Value should be set in package release scripts. Otherwise
-// defaults to "source"
+/*
+ * Value should be set in package release scripts. Otherwise
+ * defaults to "source"
+ */
 #define TIMESCALEDB_INSTALL_METHOD "@PROJECT_INSTALL_METHOD@"
 
-#endif /* TIMESCALEDB_VERSION_H */
+/* Platform */
+#ifndef WIN32
+#cmakedefine WIN32
+#endif
+#ifndef MSVC
+#cmakedefine MSVC
+#endif
+#ifndef UNIX
+#cmakedefine UNIX
+#endif
+#ifndef APPLE
+#cmakedefine APPLE
+#endif
+
+#ifndef DEBUG
+#cmakedefine DEBUG
+#endif
+
+#endif /* TIMESCALEDB_CONFIG_H */

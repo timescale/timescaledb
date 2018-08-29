@@ -54,8 +54,11 @@ BEGIN
 users. For more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.\n';
 END;
 $$;
-CREATE FUNCTION _timescaledb_internal.generate_uuid_external() RETURNS TEXT
-AS '@MODULE_PATHNAME@', 'generate_uuid_external' LANGUAGE C VOLATILE STRICT;
-INSERT INTO _timescaledb_catalog.installation_metadata SELECT 'uuid', _timescaledb_internal.generate_uuid_external();
-INSERT INTO _timescaledb_catalog.installation_metadata SELECT 'install_timestamp', GetCurrentTimestamp();
-DROP FUNCTION _timescaledb_internal.generate_uuid_external();
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.installation_metadata (
+    key     NAME NOT NULL PRIMARY KEY,
+    value   TEXT NOT NULL
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.installation_metadata', $$WHERE key='exported_uuid'$$);
+
+INSERT INTO _timescaledb_catalog.installation_metadata SELECT 'install_timestamp', to_timestamp(0);

@@ -1,5 +1,3 @@
-set(CMAKE_C_FLAGS_DEBUG "-DUSE_ASSERT_CHECKING=1 -DDEBUG=1")
-
 # Check if PostgreSQL has OpenSSL enabled
 file(STRINGS ${PG_INCLUDEDIR}/pg_config.h PG_USE_OPENSSL REGEX "#define USE_OPENSSL [01]")
 string(REGEX REPLACE "#define USE_OPENSSL ([01])" "\\1" USE_OPENSSL ${PG_USE_OPENSSL})
@@ -41,7 +39,7 @@ else ()
 endif ()
 
 if (WIN32)
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib ws2_32.lib")
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib ws2_32.lib Version.lib")
   set(CMAKE_C_FLAGS "-D_CRT_SECURE_NO_WARNINGS")
   include_directories(${PG_INCLUDEDIR_SERVER}/port/win32)
 
@@ -94,7 +92,8 @@ set(HEADERS
   subspace_store.h
   tablespace.h
   trigger.h
-  utils.h)
+  utils.h
+  version.h)
 
 set(SOURCES
   agg_bookend.c
@@ -142,7 +141,6 @@ set(SOURCES
   utils.c
   version.c)
 
-configure_file(version.h.in version.h)
 set(GITCOMMIT_H ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
 
 # Add test source code in Debug builds
@@ -168,22 +166,18 @@ else ()
     VERBATIM)
 endif (WIN32)
 
-add_library(${PROJECT_NAME} MODULE ${SOURCES} ${TEST_SOURCES} ${HEADERS} ${GITCOMMIT_H})
+add_library(${PROJECT_NAME} MODULE ${SOURCES} ${TEST_SOURCES} ${GITCOMMIT_H})
 
 if (OPENSSL_FOUND AND USE_OPENSSL)
     target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
 endif (OPENSSL_FOUND AND USE_OPENSSL)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-add_subdirectory(bgw)
-add_subdirectory(net)
-add_subdirectory(telemetry)
 
 if (OPENSSL_FOUND AND USE_OPENSSL)
   target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
 endif (OPENSSL_FOUND AND USE_OPENSSL)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
+  set(DEBUG 1)
   add_subdirectory(../test/src "${CMAKE_CURRENT_BINARY_DIR}/test/src")
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
@@ -200,4 +194,10 @@ install(
   TARGETS ${PROJECT_NAME}
   DESTINATION ${PG_PKGLIBDIR})
 
+configure_file(config.h.in config.h)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(bgw)
+add_subdirectory(net)
+add_subdirectory(telemetry)
 add_subdirectory(loader)
