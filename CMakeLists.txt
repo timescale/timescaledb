@@ -34,6 +34,15 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif ()
 
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of CMAKE_C_FLAGS_DEBUG is
+  # determined at build time by running cmake --build . --config Debug (at least on Windows).
+  # Therefore, we only set these flags if the configuration-time CMAKE_BUILD_TYPE is set to
+  # Debug. Then Debug enabled builds will only happen on Windows if both the configuration-
+  # and build-time settings are Debug.
+  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DUSE_ASSERT_CHECKING=1 -DDEBUG=1")
+endif (CMAKE_BUILD_TYPE MATCHES Debug)
+
 set(SUPPORTED_COMPILERS "GNU" "Clang" "AppleClang" "MSVC")
 
 # Check for a supported compiler

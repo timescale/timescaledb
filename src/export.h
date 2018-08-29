@@ -3,6 +3,8 @@
 
 #include <postgres.h>
 
+#include "config.h"
+
 /* Definitions for symbol exports */
 
 #define TS_CAT(x,y) x ## y

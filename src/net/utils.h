@@ -9,4 +9,4 @@
 
 char	   *send_and_recv_http(Connection *conn, HttpRequest *req);
 
-#endif /* TIMESCALEDB_NET_UTILS_H */
+#endif							/* TIMESCALEDB_NET_UTILS_H */

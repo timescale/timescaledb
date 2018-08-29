@@ -1,32 +1,26 @@
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <postgres.h>
 #include <access/xact.h>
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <commands/extension.h>
 #include <utils/builtins.h>
+#include <utils/json.h>
 #include <utils/jsonb.h>
-#include <utils/snapmgr.h>
-#include <utils/fmgrprotos.h>
 
 #include "compat.h"
+#include "config.h"
+#include "version.h"
 #include "guc.h"
 #include "telemetry.h"
-#include "uuid.h"
+#include "metadata.h"
 #include "hypertable.h"
+#include "extension.h"
 #include "net/utils.h"
 
-#ifndef WIN32
-#include <sys/utsname.h>
-#endif
 
 #define TS_VERSION_JSON_FIELD "current_timescaledb_version"
 
 /*  HTTP request details */
-#define TIMESCALE_URI	"/v1/metrics"
 #define TIMESCALE_TYPE	"application/json"
 #define MAX_REQUEST_SIZE	4096
 
@@ -47,36 +41,75 @@
 
 #define PG_PROMETHEUS	"pg_prometheus"
 #define POSTGIS			"postgis"
-static const char *related_extensions[] = { PG_PROMETHEUS, POSTGIS };
 
-static const char *version_delimiter[3] = { ".", ".", ""};
+static const char *related_extensions[] = {PG_PROMETHEUS, POSTGIS};
+static const char *version_delimiter[3] = {".", ".", ""};
 
-char *get_guc_endpoint_hostname() {
-	char *endpoint = palloc(strlen(guc_telemetry_endpoint) + 1);
-	strncpy(endpoint, guc_telemetry_endpoint, strlen(guc_telemetry_endpoint));
-	endpoint[strlen(guc_telemetry_endpoint)] = '\0';
+static bool
+parse_version_string(const char *version, long version_result[3])
+{
+	char	   *parse_version = pstrdup(version);
+	int			i;
 
-	char *protocol = strtok(endpoint, "/");
-	char *hostname = strtok(NULL, "/");
+	for (i = 0; i < 3; i++)
+	{
+		const char *subversion;
+		char	   *endptr;
 
-	if (protocol == NULL || hostname == NULL) 
-		return NULL;
-	return hostname;
+		subversion = strtok(i == 0 ? parse_version : NULL, version_delimiter[i]);
+
+		if (subversion == NULL)
+			return i > 0;
+
+		version_result[i] = strtol(subversion, &endptr, 10);
+
+		if (endptr != NULL && *endptr != '.' && *endptr != '\0')
+			return false;
+	}
+
+	return true;
 }
 
-int get_guc_endpoint_port() {
-	char *endpoint = palloc(strlen(guc_telemetry_endpoint) + 1);
-	strncpy(endpoint, guc_telemetry_endpoint, strlen(guc_telemetry_endpoint));
-	endpoint[strlen(guc_telemetry_endpoint)] = '\0';
+bool
+telemetry_parse_version(const char *json, const long installed_version[3], VersionResult *result)
+{
+	Datum		version = DirectFunctionCall2(json_object_field_text,
+											  CStringGetTextDatum(json),
+											  PointerGetDatum(cstring_to_text(TS_VERSION_JSON_FIELD)));
+	int			i;
 
-	char *protocol = strtok(endpoint, ":");
-	if (protocol == NULL)
-		return -1;
-	if (strcmp(protocol, "http"))
-		return 80;
-	else if (strcmp(protocol, "https"))
-		return 443;
-	return -1;
+	result->versionstr = text_to_cstring(DatumGetTextPP(version));
+
+	result->is_up_to_date = false;
+
+	if (result->versionstr == NULL)
+	{
+		result->errhint = "no version string in response";
+		return false;
+	}
+
+	/*
+	 * Now parse the version string. We expect format to be XX.XX.XX, and if
+	 * not, we error out
+	 */
+	if (!parse_version_string(result->versionstr, result->version))
+	{
+		result->errhint = "could not parse version string";
+		return false;
+	}
+
+	for (i = 0; i < 3; i++)
+	{
+		if (installed_version[i] < result->version[i])
+			return true;
+
+		if (installed_version[i] > result->version[i])
+			break;
+	}
+
+	result->is_up_to_date = true;
+
+	return true;
 }
 
 /*
@@ -85,55 +118,36 @@ int get_guc_endpoint_port() {
  * version, and notify the user if it is behind.
  */
 static void
-process_response(char *endpoint_response)
+process_response(const char *json)
 {
-	int i;
-	char *curr_sub_version;
-	long curr_sub_version_long;
-	long local_version[3] = {
+	const long	installed_version[3] = {
 		strtol(TIMESCALEDB_MAJOR_VERSION, NULL, 10),
 		strtol(TIMESCALEDB_MINOR_VERSION, NULL, 10),
-		strtol(TIMESCALEDB_PATCH_VERSION, NULL, 10) };
+	strtol(TIMESCALEDB_PATCH_VERSION, NULL, 10)};
+	VersionResult result = {0};
 
-	char	   *version_string = text_to_cstring(DatumGetTextPP(
-		DirectFunctionCall2(json_object_field_text,
-		CStringGetTextDatum(endpoint_response),
-		PointerGetDatum(cstring_to_text(TS_VERSION_JSON_FIELD)))));
-
-	if (version_string == NULL)
-		elog(ERROR, "could not get TimescaleDB version from server response");
-	else
+	if (!telemetry_parse_version(json, installed_version, &result))
 	{
-		/*
-		 * Now parse the version string. We expect format to be XX.XX.XX, and
-		 * if not, we error out
-		 */
-		for (i = 0; i < 3; i++) {
-			curr_sub_version = strtok(i == 0 ? version_string : NULL, version_delimiter[i]);
-			if (curr_sub_version == NULL)
-				elog(ERROR, "ill-formatted TimescaleDB version from server response");
+		if (NULL == result.versionstr)
+			elog(ERROR, "could not get TimescaleDB version from server response");
 
-			curr_sub_version_long = strtol(curr_sub_version, NULL, 10);
-
-			if (local_version[i] < curr_sub_version_long)
-			{
-				ereport(LOG, (errmsg("you are not running the most up-to-date version of TimescaleDB."),
-						errhint("The most up-to-date version is %s, your version is %s", version_string, TIMESCALEDB_VERSION_MOD)));
-				return;
-			}
-			if (local_version[i] > curr_sub_version_long)
-				break;
-		}
-		/* Put the successful version check in a lower logging level to avoid clogging logs. */
-		elog(NOTICE, "you are running the most up-to-date version of TimescaleDB.");
+		elog(ERROR, "ill-formatted TimescaleDB version in server response");
 	}
+
+	if (result.is_up_to_date)
+		elog(NOTICE, "the \"%s\" extension is up-to-date", EXTENSION_NAME);
+	else
+		ereport(LOG,
+				(errmsg("the \"%s\" extension is not up-to-date", EXTENSION_NAME),
+				 errhint("The most up-to-date version is %s, the installed version is %s",
+						 result.versionstr, TIMESCALEDB_VERSION_MOD)));
 }
 
 static char *
 get_num_hypertables()
 {
-	StringInfo buf = makeStringInfo();
-	
+	StringInfo	buf = makeStringInfo();
+
 	appendStringInfo(buf, "%d", number_of_hypertables());
 	return buf->data;
 }
@@ -141,12 +155,12 @@ get_num_hypertables()
 static char *
 get_database_size()
 {
-	StringInfoData buf;
-	int64		data_size = DatumGetInt64(DirectFunctionCall1(pg_database_size_oid, ObjectIdGetDatum(MyDatabaseId)));
+	StringInfo	buf = makeStringInfo();
+	int64		data_size = DatumGetInt64(DirectFunctionCall1(pg_database_size_oid,
+															  ObjectIdGetDatum(MyDatabaseId)));
 
-	initStringInfo(&buf);
-	appendStringInfo(&buf, "" INT64_FORMAT "", data_size);
-	return buf.data;
+	appendStringInfo(buf, "" INT64_FORMAT "", data_size);
+	return buf->data;
 }
 
 static void
@@ -174,11 +188,14 @@ jsonb_add_pair(JsonbParseState *state, const char *key, const char *value)
 static void
 add_related_extensions(JsonbParseState *state)
 {
-	int i;
+	int			i;
+
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 
-	for (i = 0; i < sizeof(related_extensions) / sizeof(char *); i++) {
+	for (i = 0; i < sizeof(related_extensions) / sizeof(char *); i++)
+	{
 		const char *ext = related_extensions[i];
+
 		jsonb_add_pair(state, ext, OidIsValid(get_extension_oid(ext, true)) ? "true" : "false");
 	}
 
@@ -188,33 +205,31 @@ add_related_extensions(JsonbParseState *state)
 static StringInfo
 build_version_body(void)
 {
-#ifndef WIN32
-	/* Get the OS name  */
-	struct utsname os_info;
-
-	uname(&os_info);
-#endif
 	JsonbValue	ext_key;
 	JsonbValue *result;
 	Jsonb	   *jb;
 	StringInfo	jtext;
 	JsonbParseState *parseState = NULL;
-	
+	VersionOSInfo osinfo;
+
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
-	jsonb_add_pair(parseState, REQ_DB_UUID, 
-		DatumGetCString(DirectFunctionCall1(uuid_out, UUIDPGetDatum(get_uuid()))));
+	jsonb_add_pair(parseState, REQ_DB_UUID,
+				   DatumGetCString(DirectFunctionCall1(uuid_out, metadata_get_uuid())));
 	jsonb_add_pair(parseState, REQ_EXPORTED_DB_UUID,
-		DatumGetCString(DirectFunctionCall1(uuid_out, UUIDPGetDatum(get_exported_uuid()))));
-	jsonb_add_pair(parseState, REQ_INSTALL_TIME, get_install_timestamp());
+				   DatumGetCString(DirectFunctionCall1(uuid_out, metadata_get_exported_uuid())));
+	jsonb_add_pair(parseState, REQ_INSTALL_TIME,
+				   DatumGetCString(DirectFunctionCall1(timestamptz_out, metadata_get_install_timestamp())));
 	jsonb_add_pair(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
-#ifndef WIN32
-	jsonb_add_pair(parseState, REQ_OS, os_info.sysname);
-	jsonb_add_pair(parseState, REQ_OS_VERSION, os_info.version);
-	jsonb_add_pair(parseState, REQ_OS_RELEASE, os_info.release);
-#elif WIN32
-	jsonb_add_pair(parseState, REQ_OS, "Windows");
-#endif
+	if (version_get_os_info(&osinfo))
+	{
+		jsonb_add_pair(parseState, REQ_OS, osinfo.sysname);
+		jsonb_add_pair(parseState, REQ_OS_VERSION, osinfo.version);
+		jsonb_add_pair(parseState, REQ_OS_RELEASE, osinfo.release);
+	}
+	else
+		jsonb_add_pair(parseState, REQ_OS, "Unknown");
+
 	jsonb_add_pair(parseState, REQ_PS_VERSION, PG_VERSION);
 	jsonb_add_pair(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
 	jsonb_add_pair(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
@@ -234,11 +249,12 @@ build_version_body(void)
 	jb = JsonbValueToJsonb(result);
 	jtext = makeStringInfo();
 	JsonbToCString(jtext, &jb->root, VARSIZE(jb));
+
 	return jtext;
 }
 
 HttpRequest *
-build_version_request(void)
+build_version_request(const char *host, const char *path)
 {
 	char		body_len_string[5];
 	HttpRequest *req;
@@ -249,38 +265,56 @@ build_version_request(void)
 	/* Fill in HTTP request */
 	req = http_request_create(HTTP_POST);
 
-	http_request_set_uri(req, TIMESCALE_URI);
-	http_request_set_version(req, HTTP_10);
+	http_request_set_uri(req, path);
+	http_request_set_version(req, HTTP_VERSION_10);
 	http_request_set_header(req, HTTP_CONTENT_TYPE, TIMESCALE_TYPE);
 	http_request_set_header(req, HTTP_CONTENT_LENGTH, body_len_string);
-	http_request_set_header(req, HTTP_HOST, get_guc_endpoint_hostname());
+	http_request_set_header(req, HTTP_HOST, host);
 	http_request_set_body(req, jtext->data, jtext->len);
 
 	return req;
 }
 
+Connection *
+telemetry_connect(void)
+{
+	Connection *conn;
+	int			ret;
+
+	conn = connection_create(CONNECTION_SSL);
+
+	if (conn == NULL)
+		elog(ERROR, "could not create telemetry connection");
+
+	ret = connection_connect(conn, TELEMETRY_HOST, TELEMETRY_SCHEME, 0);
+
+	if (ret < 0)
+	{
+		connection_destroy(conn);
+
+		elog(ERROR, "could not make a connection to %s", TELEMETRY_ENDPOINT);
+	}
+
+	return conn;
+}
+
 void
 telemetry_main()
 {
-	int			ret;
 	char	   *response;
 	Connection *conn;
 
 	if (!telemetry_on())
 		return;
 
-	conn = connection_create(CONNECTION_SSL);
-	if (conn == NULL)
-		elog(ERROR, "could not create an SSL connection");
-	ret = connection_connect(conn, get_guc_endpoint_hostname(), HTTPS_PORT);
-	if (ret < 0)
-		elog(ERROR, "could not make a connection to %s:%d", guc_telemetry_endpoint, HTTPS_PORT);
-		
-	response = send_and_recv_http(conn, build_version_request());
+	conn = telemetry_connect();
+
+	response = send_and_recv_http(conn, build_version_request(TELEMETRY_HOST, TELEMETRY_PATH));
+
 	/*
-     * Do the version-check. Response is the body of a well-formed HTTP response, since
-	 * otherwise the previous line will throw an error.
-     */
+	 * Do the version-check. Response is the body of a well-formed HTTP
+	 * response, since otherwise the previous line will throw an error.
+	 */
 	process_response(response);
 	connection_close(conn);
 	connection_destroy(conn);
