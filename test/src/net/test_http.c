@@ -163,7 +163,7 @@ test_http_request_build(PG_FUNCTION_ARGS)
 	HttpRequest *req = http_request_create(HTTP_GET);
 
 	http_request_set_uri(req, "/v1/alerts");
-	http_request_set_version(req, HTTP_11);
+	http_request_set_version(req, HTTP_VERSION_11);
 	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
 	http_request_set_header(req, HTTP_HOST, host);
 
@@ -177,7 +177,7 @@ test_http_request_build(PG_FUNCTION_ARGS)
 
 	req = http_request_create(HTTP_GET);
 	http_request_set_uri(req, "/tmp/path/to/uri");
-	http_request_set_version(req, HTTP_10);
+	http_request_set_version(req, HTTP_VERSION_10);
 	http_request_set_header(req, HTTP_CONTENT_TYPE, "application/json");
 	http_request_set_header(req, HTTP_HOST, host);
 	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
@@ -192,7 +192,7 @@ test_http_request_build(PG_FUNCTION_ARGS)
 
 	req = http_request_create(HTTP_POST);
 	http_request_set_uri(req, "/tmp/status/1234");
-	http_request_set_version(req, HTTP_11);
+	http_request_set_version(req, HTTP_VERSION_11);
 	http_request_set_header(req, HTTP_HOST, host);
 	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
 
@@ -204,7 +204,7 @@ test_http_request_build(PG_FUNCTION_ARGS)
 	/* Check that content-length checking works */
 	req = http_request_create(HTTP_POST);
 	http_request_set_uri(req, "/tmp/status/1234");
-	http_request_set_version(req, HTTP_11);
+	http_request_set_version(req, HTTP_VERSION_11);
 	http_request_set_header(req, HTTP_HOST, host);
 	http_request_set_header(req, HTTP_CONTENT_LENGTH, "9");
 

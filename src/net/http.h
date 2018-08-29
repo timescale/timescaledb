@@ -1,8 +1,7 @@
 #ifndef TIMESCALEDB_NET_HTTP_H
 #define TIMESCALEDB_NET_HTTP_H
 
-#include <unistd.h>
-#include <stdbool.h>
+#include <postgres.h>
 
 #define HTTP_HOST	"Host"
 #define HTTP_CONTENT_LENGTH	"Content-Length"
@@ -27,15 +26,19 @@ typedef enum HttpRequestMethod
 	HTTP_POST,
 } HttpRequestMethod;
 
-typedef enum HttpRequestVersion
+typedef enum HttpVersion
 {
-	HTTP_10,
-	HTTP_11,
-} HttpRequestVersion;
+	HTTP_VERSION_10,
+	HTTP_VERSION_11,
+	HTTP_VERSION_INVALID,
+} HttpVersion;
 
 /*  NOTE: HttpRequest* structs are all responsible */
 /*  for allocating and deallocating the char* */
 typedef struct HttpRequest HttpRequest;
+
+HttpVersion http_version_from_string(const char *version);
+const char *http_version_string(HttpVersion version);
 
 void		http_request_init(HttpRequest *req, HttpRequestMethod method);
 HttpRequest *http_request_create(HttpRequestMethod method);
@@ -43,7 +46,7 @@ void		http_request_destroy(HttpRequest *req);
 
 /* Assume that uri is null-terminated */
 void		http_request_set_uri(HttpRequest *req, const char *uri);
-void		http_request_set_version(HttpRequest *req, HttpRequestVersion version);
+void		http_request_set_version(HttpRequest *req, HttpVersion version);
 
 /* Assume that name and value are null-terminated */
 void		http_request_set_header(HttpRequest *req, const char *name, const char *valuue);
@@ -72,4 +75,5 @@ HttpHeader *http_response_state_headers(HttpResponseState *state);
 
 /*  Returns false if encountered an error during parsing */
 bool		http_response_state_parse(HttpResponseState *state, size_t bytes);
+
 #endif							/* TIMESCALEDB_HTTP_H */

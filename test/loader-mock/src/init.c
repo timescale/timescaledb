@@ -1,14 +1,12 @@
 #include <postgres.h>
 #include <pg_config.h>
 #include <access/xact.h>
+#include <access/parallel.h>
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <parser/analyze.h>
-#include <nodes/print.h>
-#include <access/parallel.h>
-
 #include "export.h"
 
 #define STR_EXPAND(x) #x

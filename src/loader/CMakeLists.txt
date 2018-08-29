@@ -22,12 +22,14 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 add_library(${PROJECT_NAME}-loader MODULE ${SOURCES} ${TEST_SOURCES} ${HEADERS})
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+# Do not compile mock extensions on Windows due to missing exported symbol
+# in IsParallelWorker macro
+if (CMAKE_BUILD_TYPE MATCHES Debug AND NOT WIN32)
   add_subdirectory(../../test/loader-mock/ "${CMAKE_CURRENT_BINARY_DIR}/mock")
 
   # This define generates extension-specific code for symbol conflict testing
   target_compile_definitions(${PROJECT_NAME}-loader PUBLIC MODULE_NAME=loader)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+endif (CMAKE_BUILD_TYPE MATCHES Debug AND NOT WIN32)
 
 set_target_properties(${PROJECT_NAME}-loader PROPERTIES
     OUTPUT_NAME ${PROJECT_NAME}

@@ -366,7 +366,11 @@ launcher_pre_shmem_cleanup(int code, Datum arg)
 		terminate_background_worker(current_entry->db_scheduler_handle);
 
 	hash_destroy(db_htab);
-	/* Reset our pid in the queue so that others know we've died and don't wait forever */
+
+	/*
+	 * Reset our pid in the queue so that others know we've died and don't
+	 * wait forever
+	 */
 	bgw_message_queue_shmem_cleanup();
 }
 
@@ -560,7 +564,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	BackgroundWorkerUnblockSignals();
 	ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher started")));
 
-	/*set counter back to zero on restart*/
+	/* set counter back to zero on restart */
 	bgw_counter_reinit();
 	if (!bgw_total_workers_increment())
 	{
