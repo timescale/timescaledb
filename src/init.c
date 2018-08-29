@@ -37,8 +37,18 @@ extern void _process_utility_fini(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
 
-extern void _connection_init(void);
-extern void _connection_fini(void);
+extern void _conn_plain_init();
+extern void _conn_plain_fini();
+
+#ifdef USE_OPENSSL
+extern void _conn_ssl_init();
+extern void _conn_ssl_fini();
+#endif
+
+#ifdef DEBUG
+extern void _conn_mock_init();
+extern void _conn_mock_fini();
+#endif
 
 extern void PGDLLEXPORT _PG_init(void);
 extern void PGDLLEXPORT _PG_fini(void);
@@ -61,7 +71,13 @@ _PG_init(void)
 	_event_trigger_init();
 	_process_utility_init();
 	_guc_init();
-	_connection_init();
+	_conn_plain_init();
+#ifdef USE_OPENSSL
+	_conn_ssl_init();
+#endif
+#ifdef DEBUG
+	_conn_mock_init();
+#endif
 }
 
 void
@@ -71,7 +87,13 @@ _PG_fini(void)
 	 * Order of items should be strict reverse order of _PG_init. Please
 	 * document any exceptions.
 	 */
-	_connection_fini();
+#ifdef DEBUG
+	_conn_mock_fini();
+#endif
+#ifdef USE_OPENSSL
+	_conn_ssl_fini();
+#endif
+	_conn_plain_fini();
 	_guc_fini();
 	_process_utility_fini();
 	_event_trigger_fini();

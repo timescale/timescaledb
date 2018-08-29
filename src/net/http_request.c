@@ -14,11 +14,18 @@
 #define NEW_LINE	'\n'
 
 /*  So that http_response.c can find this function */
-HttpHeader *http_header_create(char *name, int name_len, char *value, int value_len, HttpHeader *next);
+HttpHeader *http_header_create(const char *name,
+				   size_t name_len,
+				   const char *value,
+				   size_t value_len,
+				   HttpHeader *next);
 
 HttpHeader *
-http_header_create(char *name, int name_len, char *value, int value_len, HttpHeader
-				   *next)
+http_header_create(const char *name,
+				   size_t name_len,
+				   const char *value,
+				   size_t value_len,
+				   HttpHeader *next)
 {
 	HttpHeader *new_header = palloc(sizeof(HttpHeader));
 
@@ -43,11 +50,11 @@ typedef struct HttpRequest
 {
 	HttpRequestMethod method;
 	char	   *uri;
-	int			uri_len;
+	size_t		uri_len;
 	HttpRequestVersion version;
 	HttpHeader *headers;
 	char	   *body;
-	int			body_len;
+	size_t		body_len;
 	MemoryContext context;
 } HttpRequest;
 
@@ -73,8 +80,9 @@ http_request_init(HttpRequest *req, HttpRequestMethod method)
 HttpRequest *
 http_request_create(HttpRequestMethod method)
 {
-	MemoryContext request_context = AllocSetContextCreate(
-														  CurrentMemoryContext, "Http Request", ALLOCSET_DEFAULT_SIZES);
+	MemoryContext request_context = AllocSetContextCreate(CurrentMemoryContext,
+														  "Http Request",
+														  ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(request_context);
 
 	HttpRequest *req = palloc(sizeof(HttpRequest));
@@ -95,10 +103,10 @@ http_request_destroy(HttpRequest *req)
 }
 
 void
-http_request_set_uri(HttpRequest *req, char *uri)
+http_request_set_uri(HttpRequest *req, const char *uri)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
-	int uri_len = strlen(uri);
+	int			uri_len = strlen(uri);
 
 	req->uri = palloc(uri_len + 1);
 	memcpy(req->uri, uri, uri_len);
@@ -114,20 +122,20 @@ http_request_set_version(HttpRequest *req, HttpRequestVersion version)
 }
 
 void
-http_request_set_header(HttpRequest *req, char *name, char *value)
+http_request_set_header(HttpRequest *req, const char *name, const char *value)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
-	int name_len = strlen(name);
-	int value_len = strlen(value);
+	int			name_len = strlen(name);
+	int			value_len = strlen(value);
 	HttpHeader *new_header =
-		http_header_create(name, name_len, value, value_len, req->headers);
+	http_header_create(name, name_len, value, value_len, req->headers);
 
 	req->headers = new_header;
 	MemoryContextSwitchTo(old);
 }
 
 void
-http_request_set_body(HttpRequest *req, char *body, int body_len)
+http_request_set_body(HttpRequest *req, const char *body, size_t body_len)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
 
