@@ -64,3 +64,6 @@ END;
 $BODY$;
 
 SELECT timescaledb_integrity_test();
+
+-- Verify that the default jobs are the same in bgw_job
+SELECT * FROM _timescaledb_config.bgw_job;

@@ -20,7 +20,7 @@ ORDER BY proname;
  detach_tablespaces
  drop_chunks
  first
- get_report
+ get_telemetry_report
  histogram
  hypertable_approximate_row_count
  hypertable_relation_size

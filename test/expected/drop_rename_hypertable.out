@@ -200,10 +200,10 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 (8 rows)
 
 \dt+ "_timescaledb_internal".*
-                                 List of relations
-        Schema         |     Name     | Type  |   Owner    |  Size   | Description 
------------------------+--------------+-------+------------+---------+-------------
- _timescaledb_internal | bgw_job_stat | table | super_user | 0 bytes | 
+                                  List of relations
+        Schema         |     Name     | Type  |   Owner    |    Size    | Description 
+-----------------------+--------------+-------+------------+------------+-------------
+ _timescaledb_internal | bgw_job_stat | table | super_user | 8192 bytes | 
 (1 row)
 
 -- Test that renaming ordinary table works
