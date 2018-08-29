@@ -7,7 +7,7 @@
 #include "compat.h"
 #include "net/http.h"
 
-#define MAX_REQUEST_SIZE	4096	
+#define MAX_REQUEST_SIZE	4096
 
 /*  Tests for auxiliary HttpResponseState functions in http_parsing.h */
 
@@ -69,35 +69,40 @@ num_test_strings()
 	return sizeof(TEST_LENGTHS) / sizeof(int);
 }
 
-// Check we can succesfully parse partial by well-formed HTTP responses
+/*  Check we can succesfully parse partial by well-formed HTTP responses */
 Datum
 test_http_parsing(PG_FUNCTION_ARGS)
 {
 	int			num_iterations = PG_GETARG_INT32(0);
-	int bytes;
+	int			bytes,
+				i,
+				j;
 
 	srand(time(0));
 
-	for (int j = 0; j < num_iterations; j++)
+	for (j = 0; j < num_iterations; j++)
 	{
-		for (int i = 0; i < num_test_strings(); i++)
+		for (i = 0; i < num_test_strings(); i++)
 		{
-			bytes = rand() % (strlen(TEST_RESPONSES[i]) + 1);
 			HttpResponseState *state = http_response_state_create();
+			bool		success;
 
-			// Copy part of the message into the parsing state
+			bytes = rand() % (strlen(TEST_RESPONSES[i]) + 1);
+
+			/* Copy part of the message into the parsing state */
 			memcpy(http_response_state_next_buffer(state), TEST_RESPONSES[i], bytes);
-			// Now do the parse
-			Assert(http_response_state_parse(state, bytes));
 
-			if (bytes < strlen(TEST_RESPONSES[i]))
-				Assert(!http_response_state_is_done(state));
-			else
-				Assert(http_response_state_is_done(state));
+			/* Now do the parse */
+			success = http_response_state_parse(state, bytes);
+
+			Assert(success);
+
+			success = http_response_state_is_done(state);
+
+			Assert(bytes < strlen(TEST_RESPONSES[i]) ? !success : success);
 
 			http_response_state_destroy(state);
 		}
-
 	}
 	PG_RETURN_NULL();
 }
@@ -108,16 +113,19 @@ test_http_parsing(PG_FUNCTION_ARGS)
 Datum
 test_http_parsing_full(PG_FUNCTION_ARGS)
 {
-	srand(time(0));
-	int bytes;
+	int			bytes,
+				i;
 
-	for (int i = 0; i < num_test_strings(); i++)
+	srand(time(0));
+
+	for (i = 0; i < num_test_strings(); i++)
 	{
 		HttpResponseState *state = http_response_state_create();
+
 		bytes = strlen(TEST_RESPONSES[i]);
-		// Copy all of the message into the parsing state
+		/* Copy all of the message into the parsing state */
 		memcpy(http_response_state_next_buffer(state), TEST_RESPONSES[i], bytes);
-		// Now do the parse
+		/* Now do the parse */
 		Assert(http_response_state_parse(state, bytes));
 
 		Assert(http_response_state_is_done(state));
@@ -128,15 +136,16 @@ test_http_parsing_full(PG_FUNCTION_ARGS)
 		http_response_state_destroy(state);
 	}
 
-	// Now do the bad responses
-	for (int i = 0; i < 3; i++)
+	/* Now do the bad responses */
+	for (i = 0; i < 3; i++)
 	{
 		HttpResponseState *state = http_response_state_create();
+
 		bytes = strlen(BAD_RESPONSES[i]);
 		memcpy(http_response_state_next_buffer(state), BAD_RESPONSES[i], bytes);
 
 		Assert(!http_response_state_parse(state, bytes) ||
-				!http_response_state_valid_status(state));
+			   !http_response_state_valid_status(state));
 
 		http_response_state_destroy(state);
 	}
@@ -144,19 +153,20 @@ test_http_parsing_full(PG_FUNCTION_ARGS)
 }
 
 Datum
-test_http_request_build(PG_FUNCTION_ARGS) {
+test_http_request_build(PG_FUNCTION_ARGS)
+{
 	const char *serialized;
-	size_t request_len;
+	size_t		request_len;
 	const char *expected_response = "GET /v1/alerts HTTP/1.1\r\n"
-		"Host: herp.com\r\nContent-Length: 0\r\n\r\n";
-	char *host = "herp.com";
+	"Host: herp.com\r\nContent-Length: 0\r\n\r\n";
+	char	   *host = "herp.com";
 	HttpRequest *req = http_request_create(HTTP_GET);
 
 	http_request_set_uri(req, "/v1/alerts");
 	http_request_set_version(req, HTTP_11);
 	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
 	http_request_set_header(req, HTTP_HOST, host);
-	
+
 	serialized = http_request_build(req, &request_len);
 
 	Assert(!strncmp(expected_response, serialized, request_len));
@@ -174,8 +184,8 @@ test_http_request_build(PG_FUNCTION_ARGS) {
 
 	serialized = http_request_build(req, &request_len);
 
-	Assert(!strncmp(expected_response, serialized, request_len));	
-	http_request_destroy(req);	
+	Assert(!strncmp(expected_response, serialized, request_len));
+	http_request_destroy(req);
 
 	expected_response = "POST /tmp/status/1234 HTTP/1.1\r\n"
 		"Content-Length: 0\r\nHost: herp.com\r\n\r\n";
@@ -188,10 +198,10 @@ test_http_request_build(PG_FUNCTION_ARGS) {
 
 	serialized = http_request_build(req, &request_len);
 
-	Assert(!strncmp(expected_response, serialized, request_len));	
+	Assert(!strncmp(expected_response, serialized, request_len));
 	http_request_destroy(req);
 
-	// Check that content-length checking works
+	/* Check that content-length checking works */
 	req = http_request_create(HTTP_POST);
 	http_request_set_uri(req, "/tmp/status/1234");
 	http_request_set_version(req, HTTP_11);
@@ -200,6 +210,6 @@ test_http_request_build(PG_FUNCTION_ARGS) {
 
 	Assert(!http_request_build(req, &request_len));
 	http_request_destroy(req);
-		
+
 	PG_RETURN_NULL();
 }
