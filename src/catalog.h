@@ -589,9 +589,6 @@ enum Anum_bgw_job_stat_pkey_idx
  ******************************/
 
 #define INSTALLATION_METADATA_TABLE_NAME		"installation_metadata"
-#define INSTALLATION_METADATA_UUID_KEY_NAME			"uuid"
-#define INSTALLATION_METADATA_EXPORTED_UUID_KEY_NAME	"exported_uuid"
-#define INSTALLATION_METADATA_TIMESTAMP_KEY_NAME		"install_timestamp"
 
 enum Anum_installation_metadata
 {
@@ -627,20 +624,11 @@ enum
 	_MAX_INSTALLATION_METADATA_INDEX,
 };
 
-#define MAX(a, b) \
-	((long)(a) > (long)(b) ? (a) : (b))
-
-#define _MAX_TABLE_INDEXES												\
-	MAX(_MAX_HYPERTABLE_INDEX,											\
-		MAX(_MAX_DIMENSION_INDEX,										\
-			MAX(_MAX_DIMENSION_SLICE_INDEX,								\
-				MAX(_MAX_CHUNK_CONSTRAINT_INDEX,						\
-					MAX(_MAX_CHUNK_INDEX_INDEX,							\
-						MAX(_MAX_TABLESPACE_INDEX,						\
-							MAX(_MAX_BGW_JOB_INDEX,						\
-								MAX(_MAX_BGW_JOB_STAT_INDEX,			\
-									MAX(_MAX_INSTALLATION_METADATA_INDEX, \
-										_MAX_CHUNK_INDEX)))))))))
+/*
+ * The maximum number of indexes a catalog table can have.
+ * This needs to be bumped in case of new catalog tables that have more indexes.
+ */
+#define _MAX_TABLE_INDEXES 5
 
 typedef enum CacheType
 {
@@ -659,8 +647,8 @@ typedef struct Catalog
 		const char *schema_name;
 		const char *name;
 		Oid			id;
-		Oid			index_ids[_MAX_TABLE_INDEXES];
 		Oid			serial_relid;
+		Oid			index_ids[_MAX_TABLE_INDEXES];
 	}			tables[_MAX_CATALOG_TABLES];
 
 	Oid			cache_schema_id;

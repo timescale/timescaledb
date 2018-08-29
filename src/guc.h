@@ -1,12 +1,7 @@
 #ifndef TIMESCALEDB_GUC_H
 #define TIMESCALEDB_GUC_H
-#include <postgres.h>
 
-typedef enum TelemetryLevel
-{
-	TELEMETRY_OFF,
-	TELEMETRY_BASIC,
-} TelemetryLevel;
+#include <postgres.h>
 
 extern bool telemetry_on(void);
 

@@ -6,14 +6,14 @@ set(SOURCES
 
 include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/src)
 
-add_library(${PROJECT_NAME}-mock-1 MODULE ${SOURCES} version.h)
-add_library(${PROJECT_NAME}-mock-2 MODULE ${SOURCES} version.h)
-add_library(${PROJECT_NAME}-mock-3 MODULE ${SOURCES} version.h)
+add_library(${PROJECT_NAME}-mock-1 MODULE ${SOURCES} config.h)
+add_library(${PROJECT_NAME}-mock-2 MODULE ${SOURCES} config.h)
+add_library(${PROJECT_NAME}-mock-3 MODULE ${SOURCES} config.h)
 #mock-4 will be broken mismatched .so
-add_library(${PROJECT_NAME}-mock-4 MODULE ${SOURCES} version.h)
-add_library(${PROJECT_NAME}-mock-5 MODULE ${SOURCES} version.h)
-add_library(${PROJECT_NAME}-mock-broken MODULE ${SOURCES} version.h)
-add_library(${PROJECT_NAME}-mock-6 MODULE ${SOURCES} version.h)
+add_library(${PROJECT_NAME}-mock-4 MODULE ${SOURCES} config.h)
+add_library(${PROJECT_NAME}-mock-5 MODULE ${SOURCES} config.h)
+add_library(${PROJECT_NAME}-mock-broken MODULE ${SOURCES} config.h)
+add_library(${PROJECT_NAME}-mock-6 MODULE ${SOURCES} config.h)
 
 
 target_compile_definitions(${PROJECT_NAME}-mock-1 PRIVATE TIMESCALEDB_VERSION_MOD="mock-1" BROKEN=0)

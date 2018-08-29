@@ -1,7 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
 #include <postgres.h>
 #include <lib/stringinfo.h>
 #include <utils/memutils.h>
@@ -51,7 +47,7 @@ typedef struct HttpRequest
 	HttpRequestMethod method;
 	char	   *uri;
 	size_t		uri_len;
-	HttpRequestVersion version;
+	HttpVersion version;
 	HttpHeader *headers;
 	char	   *body;
 	size_t		body_len;
@@ -63,13 +59,8 @@ static const char *http_method_strings[] = {
 	[HTTP_POST] = "POST"
 };
 
-static const char *http_version_strings[] = {
-	[HTTP_10] = "HTTP/1.0",
-	[HTTP_11] = "HTTP/1.1"
-};
-
 #define METHOD_STRING(x)	http_method_strings[x]
-#define VERSION_STRING(x)	http_version_strings[x]
+#define VERSION_STRING(x)	http_version_string(x)
 
 void
 http_request_init(HttpRequest *req, HttpRequestMethod method)
@@ -116,7 +107,7 @@ http_request_set_uri(HttpRequest *req, const char *uri)
 }
 
 void
-http_request_set_version(HttpRequest *req, HttpRequestVersion version)
+http_request_set_version(HttpRequest *req, HttpVersion version)
 {
 	req->version = version;
 }

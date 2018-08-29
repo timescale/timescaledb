@@ -21,7 +21,7 @@
 #include "catalog.h"
 #include "extension.h"
 #include "guc.h"
-#include "version.h"
+#include "config.h"
 #include "extension_utils.c"
 #include "compat.h"
 

@@ -107,12 +107,9 @@ function(cat_files SRC_FILE_LIST OUTPUT_FILE)
   if (WIN32)
     # Make list of files into string of files separated by "+"
     # to make Windows copy concatenate them
-
     file(TO_NATIVE_PATH "${SRC_FILE_LIST}" SRC_FILE_LIST_NATIVE)
-    string(REPLACE ";" ";+" SQL_LIST_JOINED "${SRC_FILE_LIST_NATIVE}")
-
+    string(REPLACE ";" ";+;" SQL_LIST_JOINED "${SRC_FILE_LIST_NATIVE}")
     file(TO_NATIVE_PATH "${OUTPUT_FILE}" OUTPUT_FILE_NATIVE)
-
     set(CAT_CMD copy /B /y ${SQL_LIST_JOINED} "\"${OUTPUT_FILE_NATIVE}\"" >NUL)
   else ()
     set(CAT_CMD cat ${SRC_FILE_LIST} > ${OUTPUT_FILE})

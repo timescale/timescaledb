@@ -46,13 +46,16 @@ send_and_recv_http(Connection *conn, HttpRequest *req)
 	HttpResponseState *state;
 	int			ret;
 	MemoryContext old;
-	/* Allocate these before we make a temporary context, so that it won't get freed
-	 * after the function returns.
+
+	/*
+	 * Allocate these before we make a temporary context, so that it won't get
+	 * freed after the function returns.
 	 */
-	char		*response = palloc(MAX_RESPONSE_BODY_SIZE);
+	char	   *response = palloc(MAX_RESPONSE_BODY_SIZE);
 
 	MemoryContext send_and_recv_context = AllocSetContextCreate(CurrentMemoryContext, "send_and_recv",
 																ALLOCSET_DEFAULT_SIZES);
+
 	old = MemoryContextSwitchTo(send_and_recv_context);
 
 	built_request = http_request_build(req, &request_len);

@@ -2,7 +2,6 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 #include <unistd.h>
 #include <postgres.h>
 #include <pg_config.h>
@@ -60,10 +59,20 @@ connection_create(ConnectionType type)
 	return conn;
 }
 
+/*
+ * Connect to a remote endpoint (host, service/port).
+ *
+ * The connection will be made to the host's service endpoint given by
+ * 'servname' (e.g., 'http'), unless a valid port number is given.
+ */
 int
-connection_connect(Connection *conn, const char *host, int port)
+connection_connect(Connection *conn, const char *host, const char *servname, int port)
 {
-	return conn->ops->connect(conn, host, port);
+/* Windows defines 'connect()' as a macro, so we need to undef it here to use it in ops->connect */
+#ifdef WIN32
+#undef connect
+#endif
+	return conn->ops->connect(conn, host, servname, port);
 }
 
 ssize_t

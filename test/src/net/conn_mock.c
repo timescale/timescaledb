@@ -21,7 +21,7 @@ typedef struct MockConnection
 } MockConnection;
 
 static int
-mock_connect(Connection *conn, const char *host, int port)
+mock_connect(Connection *conn, const char *host, const char *servname, int port)
 {
 	return 0;
 }
@@ -69,7 +69,6 @@ mock_init(Connection *conn)
 	return 0;
 }
 
-
 static ConnOps mock_ops = {
 	.size = sizeof(MockConnection),
 	.init = mock_init,
@@ -82,9 +81,10 @@ static ConnOps mock_ops = {
 ssize_t
 connection_mock_set_recv_buf(Connection *conn, char *buf, size_t buf_len)
 {
+	MockConnection *mock = (MockConnection *) conn;
+
 	if (buf_len > MOCK_MAX_BUF_SIZE)
 		return -1;
-	MockConnection *mock = (MockConnection *) conn;
 
 	memcpy(mock->recv_buf, buf, buf_len);
 	mock->recv_buf_len = buf_len;
