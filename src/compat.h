@@ -1,6 +1,8 @@
 #ifndef TIMESCALEDB_COMPAT_H
 #define TIMESCALEDB_COMPAT_H
 
+#include <postgres.h>
+
 #include "export.h"
 
 #define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))

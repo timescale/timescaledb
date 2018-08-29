@@ -11,52 +11,68 @@
 #include "conn_plain.h"
 
 #define DEFAULT_TIMEOUT_SEC	3
+#define MAX_PORT 65535
 
 /*  Create socket and connect */
 int
-plain_connect(Connection *conn, const char *host, int port)
+plain_connect(Connection *conn, const char *host, const char *servname, int port)
 {
-	struct addrinfo *server_ip;
-	struct sockaddr_in serv_info;
-	struct sockaddr_in *temp;
+	char		strport[6];
+	struct addrinfo *ainfo,
+				hints = {
+		.ai_family = PF_UNSPEC,
+		.ai_socktype = SOCK_STREAM,
+	};
 	struct timeval timeouts = {
 		.tv_sec = DEFAULT_TIMEOUT_SEC,
 	};
 	int			ret;
 
-	ret = socket(AF_INET, SOCK_STREAM, 0);
+	if (NULL == servname && port <= 0 && port > MAX_PORT)
+		return -1;
+
+	/* Explicit port given. Use it instead of servname */
+	if (port > 0 && port <= MAX_PORT)
+	{
+		snprintf(strport, sizeof(strport), "%d", port);
+		servname = strport;
+		hints.ai_flags = AI_NUMERICSERV;
+	}
+
+	/* Lookup the endpoint ip address */
+	ret = getaddrinfo(host, servname, &hints, &ainfo);
 
 	if (ret < 0)
-		elog(ERROR, "connection library: could not create a socket");
-	else
-		conn->sock = ret;
+		return ret;
+
+	ret = socket(ainfo->ai_family, ainfo->ai_socktype, ainfo->ai_protocol);
+
+	if (ret < 0)
+		goto out;
+
+	conn->sock = ret;
 
 	/*
 	 * Set send / recv timeout so that write and read don't block forever. Set
 	 * separately so that one of the actions failing doesn't block the other.
 	 */
-	if (setsockopt(conn->sock, SOL_SOCKET, SO_RCVTIMEO, &timeouts, sizeof(struct timeval)) != 0)
-		elog(ERROR, "connection library: could not set recv timeouts on SSL sockets");
-	if (setsockopt(conn->sock, SOL_SOCKET, SO_SNDTIMEO, &timeouts, sizeof(struct timeval)) != 0)
-		elog(ERROR, "connection library: could not set send timeouts on SSL sockets");
+	ret = setsockopt(conn->sock, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeouts, sizeof(struct timeval));
 
-	/* Lookup the endpoint ip address */
-	if (getaddrinfo(host, NULL, NULL, &server_ip) < 0 || server_ip == NULL)
-		elog(ERROR, "connection library: could not get IP of endpoint");
-	memset(&serv_info, 0, sizeof(serv_info));
-	serv_info.sin_family = AF_INET;
-	serv_info.sin_port = htons(port);
-	temp = (struct sockaddr_in *) (server_ip->ai_addr);
+	if (ret < 0)
+		goto out;
 
-	memcpy(&serv_info.sin_addr.s_addr, &temp->sin_addr.s_addr, sizeof(serv_info.sin_addr.s_addr));
+	ret = setsockopt(conn->sock, SOL_SOCKET, SO_SNDTIMEO, (const char *) &timeouts, sizeof(struct timeval));
 
-	freeaddrinfo(server_ip);
+	if (ret < 0)
+		goto out;
 
 	/* connect the socket */
-	ret = connect(conn->sock, (struct sockaddr *) &serv_info, sizeof(serv_info));
-	if (ret < 0)
-		elog(ERROR, "connection library: could not connect to endpoint");
-	return 0;
+	ret = connect(conn->sock, ainfo->ai_addr, ainfo->ai_addrlen);
+
+out:
+	freeaddrinfo(ainfo);
+
+	return ret;
 }
 
 static ssize_t

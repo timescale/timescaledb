@@ -91,7 +91,7 @@ bgw_counter_shmem_startup(void)
 extern void
 bgw_counter_reinit(void)
 {
-	/*set counter back to zero on startup*/
+	/* set counter back to zero on startup */
 	SpinLockAcquire(&ct->mutex);
 	ct->total_workers = 0;
 	SpinLockRelease(&ct->mutex);

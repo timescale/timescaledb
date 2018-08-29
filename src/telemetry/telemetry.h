@@ -6,17 +6,31 @@
 #include <utils/builtins.h>
 
 #include "compat.h"
-#include "guc.h"
 #include "version.h"
 #include "net/conn.h"
 #include "net/http.h"
 #include "utils.h"
 
-#define HTTPS_PORT	443
+#define TELEMETRY_SCHEME "https"
+#define TELEMETRY_HOST "telemetry.timescale.com"
+#define TELEMETRY_PATH "/v1/metrics"
+#define TELEMETRY_MAKE_ENDPOINT(scheme, host, path)	\
+	scheme "://" host path
 
-char *get_guc_endpoint_hostname(void);
-int get_guc_endpoint_port(void);
-HttpRequest *build_version_request(void);
+#define TELEMETRY_ENDPOINT TELEMETRY_MAKE_ENDPOINT(TELEMETRY_SCHEME, TELEMETRY_HOST, TELEMETRY_PATH)
+
+
+typedef struct VersionResult
+{
+	const char *versionstr;
+	long		version[3];
+	bool		is_up_to_date;
+	const char *errhint;
+} VersionResult;
+
+HttpRequest *build_version_request(const char *host, const char *path);
+Connection *telemetry_connect(void);
+bool		telemetry_parse_version(const char *json, const long installed_version[3], VersionResult *result);
 
 /*
  *	This function is intended as the main function for a BGW.
