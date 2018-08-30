@@ -12,19 +12,26 @@ env:
     # PG_VERSION (docker) and PG_GIT_TAG (Git) should be the same
     - PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
     - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+    - EXEC_BACKEND="-DEXEC_BACKEND=1" PG_VERSION=10 PG_GIT_TAG=REL_10_2
+    - EXEC_BACKEND="-DEXEC_BACKEND=1" PG_VERSION=9.6 PG_GIT_TAG=REL9_6_6
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL
   # regression tests
   - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
-  - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine
+  - if [[ -z "$EXEC_BACKEND" ]]; then docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine; fi
+  - if [[ -n "$EXEC_BACKEND" ]]; then docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres timescaledev/postgresdev:exec_backend-${PG_VERSION}-alpine; fi
 install:
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug"
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
   # We only need to build the regress stuff
-  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --enable-coverage --enable-debug --enable-cassert --without-readline --without-zlib && make -C /postgres/src/test/regress"
+  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure  CPPFLAGS=\"$EXEC_BACKEND\" --enable-coverage --enable-debug --enable-cassert --without-readline --without-zlib && make -C /postgres/src/test/regress"
   - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install && chown -R postgres:postgres /build/"
 script:
-  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+  # some of the postgres tests don't pass with EXEC_BACKEND,
+  # since this is merely a windows canary, not a real platform,
+  # we simply disable postgres tests there.
+  - if [[ -z "$EXEC_BACKEND" ]]; then docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"; fi
   - ci_env=`bash <(curl -s https://codecov.io/env)`
   - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) || echo \"Codecov did not collect coverage reports\" "
 after_failure:
