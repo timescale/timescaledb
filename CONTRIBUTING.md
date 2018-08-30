@@ -40,12 +40,11 @@ our [Style Guide](docs/StyleGuide.md).
 
     * Hack away. Add tests for non-trivial changes.
 
-    * Run the [test suite](#testing)
-      and make sure everything passes.
+    * Run the [test suite](#testing) and make sure everything passes.
 
     * When committing, be sure to write good commit messages. Stylistically,
-      we use commit message titles in the imperative tense, e.g., "Add
-      merge-append query optimization for time aggregate."  In the case of
+      we use commit message titles in the imperative tense, e.g., `Add
+      merge-append query optimization for time aggregate`.  In the case of
       non-trivial changes, include a longer description in the commit message
       body explaining and detailing the changes.  That is, a commit message
       should have a short title, followed by a empty line, and then
@@ -60,9 +59,11 @@ our [Style Guide](docs/StyleGuide.md).
       then `git rebase origin/master`) to make sure you're
       submitting your changes on top of the newest version of our code.
 
-    * When finalizing your PR, you may squash commits in order to ensure that
-      each commit represents a clean, logical change and includes a
-      descriptive commit message.  
+    * When finalizing your PR (i.e., it has been approved for merging),
+      aim for the fewest number of commits that
+      make sense. That is, squash any "fix up" commits into the commit they
+      fix rather than keep them separate. Each commit should represent a
+      clean, logical change and include a descriptive commit message.
 
     * Push your commit to your upstream feature branch: `git push -u <yourfork> my-feature-branch`
 
@@ -90,19 +91,41 @@ Every non-trivial change to the code base should be accompanied by a
 relevant addition to or modification of the test suite.
 
 Please check that the full test suite (including your test additions
-or changes) passes successfully on your local machine before you
-open a pull request.
+or changes) passes successfully on your local machine **before you
+open a pull request**.
 
 If you are running locally:
 ```bash
+# Use Debug build mode for full battery of tests
+./bootstrap -DCMAKE_BUILD_TYPE=Debug
+cd build && make
 make installcheck
-```
-
-If you are using Docker:
-```bash
-make -f docker.mk test
 ```
 
 All submitted pull requests are also automatically
 run against our test suite via [Travis CI](https://travis-ci.org/timescale/timescaledb)
 (that link shows the latest build status of the repository).
+
+## Advanced Topics
+
+### Testing on Windows
+
+Currently our CI infrastructure only ensures that TimescaleDB builds on
+Windows, but does not run regression tests due to differences between
+Unix-based systems and Windows. We do run these tests before releases
+manually, and it would be a bonus if you could test at least non-trivial
+contributions for Windows. This involves setting up a remote Windows machine
+with TimescaleDB and a Unix-based (e.g., macOS or Linux) machine
+to serve as the client. To set up the Windows machine, build from source:
+```bash
+./bootstrap -DCMAKE_BUILD_TYPE=Debug
+cmake --build ./build --config Debug
+cmake --build ./build --config Debug --target install
+```
+
+Then on the client machine:
+```bash
+./bootstrap -DCMAKE_BUILD_TYPE=Debug -DTEST_PGHOST=ip_addr_of_Win_machine
+cd build && make
+make installchecklocal
+```
