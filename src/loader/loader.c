@@ -27,6 +27,7 @@
 #include "bgw_counter.h"
 #include "bgw_launcher.h"
 #include "bgw_message_queue.h"
+#include "bgw_interface.h"
 
 /*
  * Some notes on design:
@@ -315,6 +316,7 @@ _PG_init(void)
 	bgw_message_queue_alloc();
 	bgw_cluster_launcher_register();
 	bgw_counter_setup_gucs();
+	bgw_interface_register_api_version();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME, "Disable the loading of the actual extension",

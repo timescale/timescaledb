@@ -6,6 +6,7 @@
 #include <utils/guc.h>
 
 #include "extension.h"
+#include "bgw/launcher_interface.h"
 #include "guc.h"
 #include "catalog.h"
 #include "version.h"
@@ -62,6 +63,7 @@ _PG_init(void)
 	 */
 	extension_check_version(TIMESCALEDB_VERSION_MOD);
 	extension_check_server_version();
+	bgw_check_loader_api_version();
 
 	_chunk_dispatch_info_init();
 	_cache_init();

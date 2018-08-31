@@ -2,7 +2,6 @@ set(HEADERS
   bgw_message_queue.h
   bgw_counter.h
   bgw_launcher.h
-  bgw_interface.h
   loader.h
   ../compat.h
   ../extension_constants.h

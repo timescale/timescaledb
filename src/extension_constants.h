@@ -11,6 +11,7 @@
 #define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
 #define CONFIG_SCHEMA_NAME "_timescaledb_config"
+#define RENDEZVOUS_BGW_LOADER_API_VERSION "timescaledb.bgw_loader_api_version"
 
 
 #endif							/* TIMESCALEDB_EXTENSION_CONSTANTS_H */
