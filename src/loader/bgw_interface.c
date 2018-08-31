@@ -2,20 +2,35 @@
 
 #include <miscadmin.h>
 #include <fmgr.h>
+
+#include "bgw_interface.h"
 #include "../compat.h"
 #include "bgw_counter.h"
 #include "bgw_message_queue.h"
-#include "bgw_interface.h"
+#include "../extension_constants.h"
 
 
 /* This is where versioned-extension facing functions live. They shouldn't live anywhere else. */
 
+const int32 ts_bgw_loader_api_version = 1;
 
+TS_FUNCTION_INFO_V1(ts_bgw_worker_reserve);
+TS_FUNCTION_INFO_V1(ts_bgw_worker_release);
+TS_FUNCTION_INFO_V1(ts_bgw_num_unreserved);
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_start);
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_stop);
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_restart);
+
+void
+bgw_interface_register_api_version()
+{
+	void	  **versionptr = find_rendezvous_variable(RENDEZVOUS_BGW_LOADER_API_VERSION);
+
+	/* Cast away the const to store in the rendezvous variable */
+	*versionptr = (void *) &ts_bgw_loader_api_version;
+}
 
 Datum
 ts_bgw_worker_reserve(PG_FUNCTION_ARGS)

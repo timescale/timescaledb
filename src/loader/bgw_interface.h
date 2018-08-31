@@ -2,13 +2,8 @@
 #define TIMESCALEDB_BGW_INTERFACE_H
 
 #include <postgres.h>
-#include <fmgr.h>
 
-/* This is where versioned-extension facing functions live. It shouldn't live anywhere else */
+extern void bgw_interface_register_api_version(void);
+extern const int32 ts_bgw_loader_api_version;
 
-PGDLLEXPORT extern Datum ts_bgw_worker_reserve(PG_FUNCTION_ARGS);
-PGDLLEXPORT extern Datum ts_bgw_worker_release(PG_FUNCTION_ARGS);
-PGDLLEXPORT extern Datum ts_bgw_num_unreserved(PG_FUNCTION_ARGS);
-
-
-#endif							/* TIMESCALEDB_BGW_INTERFACE_H */
+#endif
