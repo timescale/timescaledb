@@ -337,10 +337,9 @@ start_db_schedulers(HTAB *db_htab)
 						  errhint("%d schedulers have been started, %d databases remain without scheduler. Increase max_worker_processes and restart the server.", nstarted, (ndatabases - nstarted))));
 
 			/*
-			 * We incremented total workers until we had enough workers for
-			 * all databases, decrement by number we started
+			 * We incremented total workers, but we don't need to decrement
+			 * as that will be handled by the stopped workers check.
 			 */
-			bgw_total_workers_decrement_by(ndatabases - nstarted);
 			break;
 		}
 		wait_for_background_worker_startup(current_entry->db_scheduler_handle, &worker_pid);
