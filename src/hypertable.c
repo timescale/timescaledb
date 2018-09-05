@@ -1091,7 +1091,7 @@ old_insert_blocker_trigger_get(Oid relid)
 		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
 
 		if (TRIGGER_TYPE_MATCHES(trig->tgtype, TRIGGER_TYPE_ROW, TRIGGER_TYPE_BEFORE, TRIGGER_TYPE_INSERT) &&
-			strncmp(OLD_INSERT_BLOCKER_NAME, NameStr(trig->tgname), strlen(OLD_INSERT_BLOCKER_NAME)) == 0  && trig->tgisinternal)
+			strncmp(OLD_INSERT_BLOCKER_NAME, NameStr(trig->tgname), strlen(OLD_INSERT_BLOCKER_NAME)) == 0 && trig->tgisinternal)
 		{
 			tgoid = HeapTupleGetOid(tuple);
 			break;
@@ -1130,8 +1130,8 @@ insert_blocker_trigger_add(Oid relid)
 
 	/*
 	 * We create a user-visible trigger, so that it will get pg_dump'd with
-	 * the hypertable. This call will error out if a trigger with the same name already exists.
-     * (This is the desired behavior.)
+	 * the hypertable. This call will error out if a trigger with the same
+	 * name already exists. (This is the desired behavior.)
 	 */
 	objaddr = CreateTrigger(&stmt, NULL, relid, InvalidOid, InvalidOid, InvalidOid, false);
 

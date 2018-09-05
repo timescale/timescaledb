@@ -64,8 +64,11 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     loader.sql
     symbol_conflict.sql
     net.sql
-    telemetry.sql
-    privacy.sql)
+    telemetry.sql)
+  if (USE_OPENSSL)
+    list(APPEND TEST_FILES
+      privacy.sql)
+  endif (USE_OPENSSL)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(TEST_TEMPLATES

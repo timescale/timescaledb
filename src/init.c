@@ -16,7 +16,6 @@
 PG_MODULE_MAGIC;
 #endif
 
-
 extern void _chunk_dispatch_info_init(void);
 extern void _chunk_dispatch_info_fini(void);
 
@@ -41,12 +40,12 @@ extern void _event_trigger_fini(void);
 extern void _conn_plain_init();
 extern void _conn_plain_fini();
 
-#ifdef USE_OPENSSL
+#ifdef TS_USE_OPENSSL
 extern void _conn_ssl_init();
 extern void _conn_ssl_fini();
 #endif
 
-#ifdef DEBUG
+#ifdef TS_DEBUG
 extern void _conn_mock_init();
 extern void _conn_mock_fini();
 #endif
@@ -73,10 +72,10 @@ _PG_init(void)
 	_process_utility_init();
 	_guc_init();
 	_conn_plain_init();
-#ifdef USE_OPENSSL
+#ifdef TS_USE_OPENSSL
 	_conn_ssl_init();
 #endif
-#ifdef DEBUG
+#ifdef TS_DEBUG
 	_conn_mock_init();
 #endif
 }
@@ -88,10 +87,10 @@ _PG_fini(void)
 	 * Order of items should be strict reverse order of _PG_init. Please
 	 * document any exceptions.
 	 */
-#ifdef DEBUG
+#ifdef TS_DEBUG
 	_conn_mock_fini();
 #endif
-#ifdef USE_OPENSSL
+#ifdef TS_USE_OPENSSL
 	_conn_ssl_fini();
 #endif
 	_conn_plain_fini();
