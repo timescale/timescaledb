@@ -11,6 +11,7 @@
 #include "extension.h"
 #include "compat.h"
 #include "job_stat.h"
+#include "telemetry/telemetry.h"
 
 const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "check_for_update_if_enabled",
@@ -182,8 +183,8 @@ bgw_job_execute(BgwJob *job)
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_VERSION_CHECK:
-			/* TODO: fill in when merging with Amy's stuff  */
-			return false;
+			telemetry_main();
+			return true;
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)
 				return unknown_job_type_hook(job);
