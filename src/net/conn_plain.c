@@ -28,7 +28,7 @@ plain_connect(Connection *conn, const char *host, const char *servname, int port
 	};
 	int			ret;
 
-	if (NULL == servname && port <= 0 && port > MAX_PORT)
+	if (NULL == servname && (port <= 0 || port > MAX_PORT))
 		return -1;
 
 	/* Explicit port given. Use it instead of servname */
