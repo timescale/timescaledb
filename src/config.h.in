@@ -34,4 +34,11 @@
 #cmakedefine DEBUG
 #endif
 
+#ifndef TS_DEBUG
+#cmakedefine TS_DEBUG
+#endif
+
+/* Avoid conflicts with USE_OPENSSL defined by PostgreSQL */
+#cmakedefine TS_USE_OPENSSL
+
 #endif /* TIMESCALEDB_CONFIG_H */

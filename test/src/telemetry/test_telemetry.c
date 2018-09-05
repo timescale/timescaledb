@@ -6,7 +6,8 @@
 
 #include "telemetry/telemetry.h"
 #include "net/utils.h"
-#ifdef DEBUG
+#include "config.h"
+#ifdef TS_DEBUG
 #include "net/conn_mock.h"
 #endif
 
@@ -18,7 +19,7 @@ TS_FUNCTION_INFO_V1(test_status_ssl);
 TS_FUNCTION_INFO_V1(test_status_mock);
 TS_FUNCTION_INFO_V1(test_telemetry);
 
-#ifdef DEBUG
+#ifdef TS_DEBUG
 static char *test_string;
 #endif
 
@@ -52,7 +53,7 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	if (ret < 0)
 		goto cleanup_conn;
 
-#ifdef DEBUG
+#ifdef TS_DEBUG
 	if (type == CONNECTION_MOCK)
 		connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
 #endif
@@ -69,8 +70,19 @@ Datum
 test_status_ssl(PG_FUNCTION_ARGS)
 {
 	int			status = PG_GETARG_INT32(0);
+#ifdef TS_USE_OPENSSL
 
 	return test_factory(CONNECTION_SSL, status, TEST_ENDPOINT, HTTPS_PORT);
+#else
+	char		buf[128] = {'\0'};
+
+	if (status / 100 != 2)
+		elog(ERROR, "endpoint sent back unexpected HTTP status: %d", status);
+
+	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
+
+	PG_RETURN_TEXT_P(cstring_to_text(buf));
+#endif
 }
 
 /*  Test default_ops */
@@ -83,7 +95,7 @@ test_status(PG_FUNCTION_ARGS)
 	return test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port);
 }
 
-#ifdef DEBUG
+#ifdef TS_DEBUG
 /* Test mock_ops */
 Datum
 test_status_mock(PG_FUNCTION_ARGS)
