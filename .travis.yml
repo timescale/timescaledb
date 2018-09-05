@@ -59,6 +59,10 @@ jobs:
     # memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
+      before_install:
+      install:
+      after_failure:
+      after_script:
       env:
         - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
       before_script:
@@ -69,6 +73,9 @@ jobs:
     # Valgrind test #1 : first 40 excluding plan_hashagg_optimized* and plan_hashagg_results*
     - if: (branch = prerelease_test)
       stage: test
+      before_install:
+      install:
+      after_failure:
       before_script:
         # clone valgrind test script
         - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
@@ -82,6 +89,9 @@ jobs:
     # Valgrind test #2: tests matching plan_hashagg_optimized*
     - if: (branch = prerelease_test)
       stage: test
+      before_install:
+      install:
+      after_failure:
       before_script:
         # clone valgrind test script
         - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
@@ -95,6 +105,9 @@ jobs:
     # Valgrind test #3: tests matching plan_hashagg_results*
     - if: (branch = prerelease_test)
       stage: test
+      before_install:
+      install:
+      after_failure:
       before_script:
         # clone valgrind test script
         - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
@@ -108,6 +121,9 @@ jobs:
     # Valgrind test #4 : tests from #41 to end excluding plan_hashagg_optimized* and plan_hashagg_results*
     - if: (branch = prerelease_test)
       stage: test
+      before_install:
+      install:
+      after_failure:
       before_script:
         # clone valgrind test script
         - git clone https://$USR:$PASSWORD@bitbucket.org/440-labs/tsdb-dev-tools.git /tmp/tsdb-dev-tools
@@ -118,7 +134,9 @@ jobs:
       after_script:
         - kill $(jobs -p) # kill job that prints repeatedly
 
-    - stage: test
+    # Coverity test
+    - if: (branch = prerelease_test) OR (branch = coverity_scan)
+      stage: test
       env:
         - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
       before_install:
@@ -135,4 +153,4 @@ jobs:
           notification_email: ci@timescale.com
           build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug && cd build"
           build_command: "make"
-          branch_pattern: coverity_scan
+          branch_pattern: coverity_scan|prerelease_test
