@@ -38,7 +38,7 @@
 #define ACK_SUCCESS true
 #define ACK_FAILURE false
 
-#ifdef DEBUG
+#ifdef TS_DEBUG
 #define BGW_LAUNCHER_RESTART_TIME 0
 #else
 #define BGW_LAUNCHER_RESTART_TIME 60
@@ -337,8 +337,8 @@ start_db_schedulers(HTAB *db_htab)
 						  errhint("%d schedulers have been started, %d databases remain without scheduler. Increase max_worker_processes and restart the server.", nstarted, (ndatabases - nstarted))));
 
 			/*
-			 * We incremented total workers, but we don't need to decrement
-			 * as that will be handled by the stopped workers check.
+			 * We incremented total workers, but we don't need to decrement as
+			 * that will be handled by the stopped workers check.
 			 */
 			break;
 		}
