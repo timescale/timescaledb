@@ -13,11 +13,9 @@
 #include <access/xact.h>
 #include <pgstat.h>
 
-
 #include "timer.h"
 #include "compat.h"
-
-
+#include "config.h"
 
 #define MAX_TIMEOUT (5*1000L)
 #define MILLISECS_PER_SEC 1000L
@@ -104,7 +102,7 @@ timer_get_current_timestamp()
 	return timer_get()->get_current_timestamp();
 }
 
-#ifdef DEBUG
+#ifdef TS_DEBUG
 void
 timer_set(const Timer *timer)
 {
