@@ -1,19 +1,3 @@
-# Check if PostgreSQL has OpenSSL enabled
-file(STRINGS ${PG_INCLUDEDIR}/pg_config.h PG_USE_OPENSSL REGEX "#define USE_OPENSSL [01]")
-string(REGEX REPLACE "#define USE_OPENSSL ([01])" "\\1" USE_OPENSSL ${PG_USE_OPENSSL})
-
-# If OpenSSL couldn't be found, we need to disable usage of OpenSSL
-if (USE_OPENSSL)
-  # Try to find a local OpenSSL installation
-  include(FindOpenSSL)
-
-  if (NOT OPENSSL_FOUND)
-    message(FATAL_ERROR "PostgreSQL was compiled with SSL support, but OpenSSL was not found")
-  endif (NOT OPENSSL_FOUND)
-
-  include_directories(${OPENSSL_INCLUDE_DIR})
-endif (USE_OPENSSL)
-
 if (UNIX)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L${PG_LIBDIR}")
@@ -146,6 +130,8 @@ set(GITCOMMIT_H ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
 # Add test source code in Debug builds
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   set(TEST_SOURCES ../test/src/symbol_conflict.c)
+  set(TS_DEBUG 1)
+  set(DEBUG 1)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 if (WIN32)
@@ -168,16 +154,7 @@ endif (WIN32)
 
 add_library(${PROJECT_NAME} MODULE ${SOURCES} ${TEST_SOURCES} ${GITCOMMIT_H})
 
-if (OPENSSL_FOUND AND USE_OPENSSL)
-    target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
-endif (OPENSSL_FOUND AND USE_OPENSSL)
-
-if (OPENSSL_FOUND AND USE_OPENSSL)
-  target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
-endif (OPENSSL_FOUND AND USE_OPENSSL)
-
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  set(DEBUG 1)
   add_subdirectory(../test/src "${CMAKE_CURRENT_BINARY_DIR}/test/src")
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
@@ -193,6 +170,10 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 install(
   TARGETS ${PROJECT_NAME}
   DESTINATION ${PG_PKGLIBDIR})
+
+if (USE_OPENSSL)
+  set(TS_USE_OPENSSL ${USE_OPENSSL})
+endif (USE_OPENSSL)
 
 configure_file(config.h.in config.h)
 

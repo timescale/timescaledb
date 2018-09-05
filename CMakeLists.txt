@@ -40,7 +40,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   # Therefore, we only set these flags if the configuration-time CMAKE_BUILD_TYPE is set to
   # Debug. Then Debug enabled builds will only happen on Windows if both the configuration-
   # and build-time settings are Debug.
-  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DUSE_ASSERT_CHECKING=1 -DDEBUG=1")
+  set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DUSE_ASSERT_CHECKING=1 -DDEBUG=1 -DTS_DEBUG=1")
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(SUPPORTED_COMPILERS "GNU" "Clang" "AppleClang" "MSVC")
@@ -269,3 +269,14 @@ if (PGINDENT)
 else ()
   message(STATUS "Install pgindent to be able to format C code: https://github.com/postgres/postgres/tree/master/src/tools/pgindent")
 endif (PGINDENT)
+
+option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
+
+if (USE_OPENSSL)
+  # Try to find a local OpenSSL installation
+  include(FindOpenSSL)
+
+  if (NOT OPENSSL_FOUND)
+    message(FATAL_ERROR "TimescaleDB requires OpenSSL but it wasn't found")
+  endif(NOT OPENSSL_FOUND)
+endif (USE_OPENSSL)
