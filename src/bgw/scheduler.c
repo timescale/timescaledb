@@ -168,7 +168,9 @@ assert_that_worker_has_stopped(ScheduledBgwJob *sjob)
 static void
 scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 {
+#if USE_ASSERT_CHECKING
 	JobState	prev_state = sjob->state;
+#endif
 
 	BgwJobStat *job_stat;
 

@@ -211,7 +211,9 @@ test_job_3_long()
 static TestJobType
 get_test_job_type_from_name(Name job_type_name)
 {
-	for (int i = 0; i < _MAX_TEST_JOB_TYPE; i++)
+	int			i;
+
+	for (i = 0; i < _MAX_TEST_JOB_TYPE; i++)
 	{
 		if (namestrcmp(job_type_name, test_job_type_names[i]) == 0)
 			return i;

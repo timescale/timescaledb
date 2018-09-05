@@ -58,7 +58,9 @@ bgw_job_start(BgwJob *job)
 static JobType
 get_job_type_from_name(Name job_type_name)
 {
-	for (int i = 0; i < _MAX_JOB_TYPE; i++)
+	int			i;
+
+	for (i = 0; i < _MAX_JOB_TYPE; i++)
 		if (namestrcmp(job_type_name, job_type_names[i]) == 0)
 			return i;
 	return JOB_TYPE_UNKNOWN;
