@@ -75,12 +75,9 @@ http_request_create(HttpRequestMethod method)
 														  "Http Request",
 														  ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(request_context);
+	HttpRequest *req = palloc0(sizeof(HttpRequest));
 
-	HttpRequest *req = palloc(sizeof(HttpRequest));
-
-	memset(req, 0, sizeof(*req));
 	req->context = request_context;
-
 	http_request_init(req, method);
 
 	MemoryContextSwitchTo(old);

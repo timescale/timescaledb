@@ -86,11 +86,17 @@ test_http_parsing(PG_FUNCTION_ARGS)
 		{
 			HttpResponseState *state = http_response_state_create();
 			bool		success;
+			ssize_t		bufsize = 0;
+			char	   *buf;
 
 			bytes = rand() % (strlen(TEST_RESPONSES[i]) + 1);
 
+			buf = http_response_state_next_buffer(state, &bufsize);
+
+			Assert(bufsize >= bytes);
+
 			/* Copy part of the message into the parsing state */
-			memcpy(http_response_state_next_buffer(state), TEST_RESPONSES[i], bytes);
+			memcpy(buf, TEST_RESPONSES[i], bytes);
 
 			/* Now do the parse */
 			success = http_response_state_parse(state, bytes);
@@ -121,10 +127,18 @@ test_http_parsing_full(PG_FUNCTION_ARGS)
 	for (i = 0; i < num_test_strings(); i++)
 	{
 		HttpResponseState *state = http_response_state_create();
+		ssize_t		bufsize = 0;
+		char	   *buf;
+
+		buf = http_response_state_next_buffer(state, &bufsize);
 
 		bytes = strlen(TEST_RESPONSES[i]);
+
+		Assert(bufsize >= bytes);
+
 		/* Copy all of the message into the parsing state */
-		memcpy(http_response_state_next_buffer(state), TEST_RESPONSES[i], bytes);
+		memcpy(buf, TEST_RESPONSES[i], bytes);
+
 		/* Now do the parse */
 		Assert(http_response_state_parse(state, bytes));
 
@@ -140,9 +154,16 @@ test_http_parsing_full(PG_FUNCTION_ARGS)
 	for (i = 0; i < 3; i++)
 	{
 		HttpResponseState *state = http_response_state_create();
+		ssize_t		bufsize = 0;
+		char	   *buf;
+
+		buf = http_response_state_next_buffer(state, &bufsize);
 
 		bytes = strlen(BAD_RESPONSES[i]);
-		memcpy(http_response_state_next_buffer(state), BAD_RESPONSES[i], bytes);
+
+		Assert(bufsize >= bytes);
+
+		memcpy(buf, BAD_RESPONSES[i], bytes);
 
 		Assert(!http_response_state_parse(state, bytes) ||
 			   !http_response_state_valid_status(state));

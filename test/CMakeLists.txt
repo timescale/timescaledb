@@ -21,8 +21,6 @@ set(TEST_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(TEST_CLUSTER ${TEST_OUTPUT_DIR}/testcluster)
 
-add_subdirectory(sql)
-
 set(PG_REGRESS_OPTS_BASE
   --host=${TEST_PGHOST}
   --load-language=plpgsql
@@ -78,6 +76,8 @@ add_custom_target(installchecklocal
   ${PG_REGRESS_OPTS_INOUT}
   ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
   USES_TERMINAL)
+  
+add_subdirectory(sql)
 
 if (PG_SOURCE_DIR)
   add_subdirectory(pgtest)

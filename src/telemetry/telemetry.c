@@ -15,7 +15,7 @@
 #include "metadata.h"
 #include "hypertable.h"
 #include "extension.h"
-#include "net/utils.h"
+#include "net/http.h"
 
 
 #define TS_VERSION_JSON_FIELD "current_timescaledb_version"
@@ -290,9 +290,14 @@ telemetry_connect(void)
 
 	if (ret < 0)
 	{
+		const char *errstr = connection_get_and_clear_error(conn);
+
 		connection_destroy(conn);
 
-		elog(ERROR, "could not make a connection to %s", TELEMETRY_ENDPOINT);
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not make a connection to %s", TELEMETRY_ENDPOINT),
+				 errdetail("%s", errstr)));
 	}
 
 	return conn;
@@ -301,24 +306,39 @@ telemetry_connect(void)
 void
 telemetry_main()
 {
-	char	   *response;
+	HttpError	err;
 	Connection *conn;
+	HttpRequest *req;
+	HttpResponseState *rsp;
 
 	if (!telemetry_on())
 		return;
 
 	conn = telemetry_connect();
 
-	response = send_and_recv_http(conn, build_version_request(TELEMETRY_HOST, TELEMETRY_PATH));
+	req = build_version_request(TELEMETRY_HOST, TELEMETRY_PATH);
+
+	rsp = http_response_state_create();
+
+	err = http_send_and_recv(conn, req, rsp);
+
+	http_request_destroy(req);
+	connection_destroy(conn);
+
+	if (err != HTTP_ERROR_NONE)
+		elog(ERROR, "telemetry error: %s", http_strerror(err));
+
+	if (!http_response_state_valid_status(rsp))
+		elog(ERROR, "telemetry got unexpected HTTP response status: %d",
+			 http_response_state_status_code(rsp));
 
 	/*
 	 * Do the version-check. Response is the body of a well-formed HTTP
 	 * response, since otherwise the previous line will throw an error.
 	 */
-	process_response(response);
-	connection_close(conn);
-	connection_destroy(conn);
-	return;
+	process_response(http_response_state_body_start(rsp));
+
+	http_response_state_destroy(rsp);
 }
 
 TS_FUNCTION_INFO_V1(ts_get_telemetry_report);

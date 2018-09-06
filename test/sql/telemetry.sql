@@ -1,15 +1,14 @@
 \c single :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status(int) RETURNS TEXT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status(int) RETURNS JSONB
     AS :MODULE_PATHNAME, 'test_status' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_ssl(int) RETURNS TEXT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_ssl(int) RETURNS JSONB
     AS :MODULE_PATHNAME, 'test_status_ssl' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_mock(text) RETURNS TEXT
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_mock(text) RETURNS JSONB
     AS :MODULE_PATHNAME, 'test_status_mock' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_parse_version(response text, installed_major int, installed_minor int, installed_patch int)
     RETURNS TABLE(version_string text, major int, minor int, patch int, up_to_date bool)
     AS :MODULE_PATHNAME, 'test_telemetry_parse_version' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry() RETURNS VOID
-    AS :MODULE_PATHNAME, 'test_telemetry' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 \c single :ROLE_DEFAULT_PERM_USER
 SELECT _timescaledb_internal.test_status_ssl(200);
