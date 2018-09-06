@@ -33,9 +33,23 @@ typedef enum HttpVersion
 	HTTP_VERSION_INVALID,
 } HttpVersion;
 
+typedef enum HttpError
+{
+	HTTP_ERROR_NONE = 0,
+	HTTP_ERROR_WRITE,			/* Connection write error, check errno */
+	HTTP_ERROR_READ,			/* Connection read error, check errno */
+	HTTP_ERROR_CONN_CLOSED,
+	HTTP_ERROR_REQUEST_BUILD,
+	HTTP_ERROR_RESPONSE_PARSE,
+	HTTP_ERROR_RESPONSE_INCOMPLETE,
+	HTTP_ERROR_INVALID_BUFFER_STATE,
+	HTTP_ERROR_UNKNOWN,			/* Should always be last */
+} HttpError;
+
 /*  NOTE: HttpRequest* structs are all responsible */
 /*  for allocating and deallocating the char* */
 typedef struct HttpRequest HttpRequest;
+typedef struct Connection Connection;
 
 HttpVersion http_version_from_string(const char *version);
 const char *http_version_string(HttpVersion version);
@@ -66,14 +80,17 @@ void		http_response_state_destroy(HttpResponseState *state);
 /*  Accessor Functions */
 bool		http_response_state_is_done(HttpResponseState *state);
 bool		http_response_state_valid_status(HttpResponseState *state);
-char	   *http_response_state_next_buffer(HttpResponseState *state);
-size_t		http_response_state_buffer_remaining(HttpResponseState *state);
-char	   *http_response_state_body_start(HttpResponseState *state);
+char	   *http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize);
+ssize_t		http_response_state_buffer_remaining(HttpResponseState *state);
+const char *http_response_state_body_start(HttpResponseState *state);
 size_t		http_response_state_content_length(HttpResponseState *state);
 int			http_response_state_status_code(HttpResponseState *state);
 HttpHeader *http_response_state_headers(HttpResponseState *state);
 
 /*  Returns false if encountered an error during parsing */
 bool		http_response_state_parse(HttpResponseState *state, size_t bytes);
+
+const char *http_strerror(HttpError http_errno);
+HttpError	http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state);
 
 #endif							/* TIMESCALEDB_HTTP_H */

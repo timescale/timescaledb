@@ -16,7 +16,7 @@ test_conn(PG_FUNCTION_ARGS)
 {
 	char		response[MAX_RESULT_SIZE];
 	Connection *conn;
-	bool		should_fail = false;
+	int			ret;
 	int			port = 80;
 #ifdef TS_USE_OPENSSL
 	int			ssl_port = 443;
@@ -32,21 +32,21 @@ test_conn(PG_FUNCTION_ARGS)
 
 	/* Check that delays on the socket are properly handled */
 	conn = connection_create(CONNECTION_PLAIN);
+
+	connection_set_timeout_millis(conn, 200);
+
 	/* This is a brittle assert function because we might not necessarily have */
 	/* connectivity on the server running this test? */
-	Assert(connection_connect(conn, host, NULL, port) >= 0);
+	ret = connection_connect(conn, host, NULL, port);
+
+	if (ret < 0)
+		elog(ERROR, "%s", connection_get_and_clear_error(conn));
 
 	/* should timeout */
-	PG_TRY();
-	{
-		connection_read(conn, response, 1);
-	}
-	PG_CATCH();
-	{
-		should_fail = true;
-	}
-	PG_END_TRY();
-	Assert(should_fail);
+	ret = connection_read(conn, response, 1);
+
+	if (ret == 0)
+		elog(ERROR, "Expected timeout");
 
 	connection_close(conn);
 	connection_destroy(conn);
@@ -54,19 +54,18 @@ test_conn(PG_FUNCTION_ARGS)
 #ifdef TS_USE_OPENSSL
 	/* Now test ssl_ops */
 	conn = connection_create(CONNECTION_SSL);
-	Assert(connection_connect(conn, host, NULL, ssl_port) >= 0);
 
-	should_fail = false;
-	PG_TRY();
-	{
-		connection_read(conn, response, 1);
-	}
-	PG_CATCH();
-	{
-		should_fail = true;
-	}
-	PG_END_TRY();
-	Assert(should_fail);
+	connection_set_timeout_millis(conn, 200);
+
+	ret = connection_connect(conn, host, NULL, ssl_port);
+
+	if (ret < 0)
+		elog(ERROR, "%s", connection_get_and_clear_error(conn));
+
+	ret = connection_read(conn, response, 1);
+
+	if (ret == 0)
+		elog(ERROR, "Expected timeout");
 
 	connection_close(conn);
 	connection_destroy(conn);

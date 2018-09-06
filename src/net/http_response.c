@@ -90,29 +90,44 @@ http_response_state_is_done(HttpResponseState *state)
 	return (state->state == HTTP_STATE_DONE);
 }
 
-size_t
+/*
+ * Return the remaining buffer space.
+ *
+ * Returns 0 or a positive number, or -1 for invalid state.
+ *
+ */
+ssize_t
 http_response_state_buffer_remaining(HttpResponseState *state)
 {
 	Assert(state->offset <= MAX_RAW_BUFFER_SIZE);
 
-	if (state->offset > MAX_RAW_BUFFER_SIZE)
-		elog(ERROR, "invalid buffer state in HTTP parser");
-
 	return MAX_RAW_BUFFER_SIZE - state->offset;
 }
 
+/*
+ * Return a pointer to the next buffer to write to.
+ *
+ * Optionally, return the buffer size via the bufsize parameter.
+ */
 char *
-http_response_state_next_buffer(HttpResponseState *state)
+http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize)
 {
 	Assert(state->offset <= MAX_RAW_BUFFER_SIZE);
 
+	if (NULL != bufsize)
+		*bufsize = http_response_state_buffer_remaining(state);
+
+	/*
+	 * This should not happen, be we return NULL in this case and let caller
+	 * deal with it
+	 */
 	if (state->offset > MAX_RAW_BUFFER_SIZE)
-		elog(ERROR, "invalid buffer state in HTTP parser");
+		return NULL;
 
 	return state->raw_buffer + state->offset;
 }
 
-char *
+const char *
 http_response_state_body_start(HttpResponseState *state)
 {
 	return state->body_start;

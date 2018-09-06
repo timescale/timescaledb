@@ -1,8 +1,3 @@
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <postgres.h>
 #include <pg_config.h>
 
@@ -78,14 +73,7 @@ connection_connect(Connection *conn, const char *host, const char *servname, int
 ssize_t
 connection_write(Connection *conn, const char *buf, size_t writelen)
 {
-	int			bytes;
-
-	bytes = conn->ops->write(conn, buf, writelen);
-
-	if (bytes <= 0 || bytes != writelen)
-		elog(ERROR, "could not write");
-
-	return bytes;
+	return conn->ops->write(conn, buf, writelen);
 }
 
 ssize_t
@@ -101,6 +89,15 @@ connection_close(Connection *conn)
 		conn->ops->close(conn);
 }
 
+int
+connection_set_timeout_millis(Connection *conn, unsigned long millis)
+{
+	if (NULL != conn->ops->set_timeout)
+		return conn->ops->set_timeout(conn, millis);
+
+	return -1;
+}
+
 void
 connection_destroy(Connection *conn)
 {
@@ -112,11 +109,22 @@ connection_destroy(Connection *conn)
 	pfree(conn);
 }
 
-void
+int
 connection_register(ConnectionType type, ConnOps *ops)
 {
 	if (type == _CONNECTION_MAX)
-		elog(ERROR, "invalid connection type");
+		return -1;
 
 	conn_ops[type] = ops;
+
+	return 0;
+}
+
+const char *
+connection_get_and_clear_error(Connection *conn)
+{
+	if (NULL != conn->ops->errmsg)
+		return conn->ops->errmsg(conn);
+
+	return "unknown connection error";
 }

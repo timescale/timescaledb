@@ -234,14 +234,6 @@ if (PG_SOURCE_DIR)
   message(STATUS "Found PostgreSQL source in ${PG_SOURCE_DIR}")
 endif (PG_SOURCE_DIR)
 
-if (UNIX)
-  add_subdirectory(test)
-  add_subdirectory(scripts)
-endif (UNIX)
-
-add_subdirectory(sql)
-add_subdirectory(src)
-
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
@@ -279,4 +271,18 @@ if (USE_OPENSSL)
   if (NOT OPENSSL_FOUND)
     message(FATAL_ERROR "TimescaleDB requires OpenSSL but it wasn't found")
   endif(NOT OPENSSL_FOUND)
+
+  if (${OPENSSL_VERSION} VERSION_LESS "1.0")
+    message(FATAL_ERROR "TimescaleDB requires OpenSSL version 1.0 or greater")
+  endif ()
+
+  message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
 endif (USE_OPENSSL)
+
+if (UNIX)
+  add_subdirectory(test)
+  add_subdirectory(scripts)
+endif (UNIX)
+
+add_subdirectory(sql)
+add_subdirectory(src)

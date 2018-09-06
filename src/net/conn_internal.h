@@ -11,8 +11,10 @@ typedef struct ConnOps
 	void		(*close) (Connection *conn);
 	ssize_t		(*write) (Connection *conn, const char *buf, size_t writelen);
 	ssize_t		(*read) (Connection *conn, char *buf, size_t readlen);
+	int			(*set_timeout) (Connection *conn, unsigned long millis);
+	const char *(*errmsg) (Connection *conn);
 } ConnOps;
 
-extern void connection_register(ConnectionType type, ConnOps *ops);
+extern int	connection_register(ConnectionType type, ConnOps *ops);
 
 #endif							/* TIMESCALEDB_CONN_INTERNAL_H */

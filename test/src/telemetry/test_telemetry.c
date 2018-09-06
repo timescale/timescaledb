@@ -1,11 +1,12 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <utils/builtins.h>
+#include <utils/jsonb.h>
 #include <funcapi.h>
 #include <fmgr.h>
 
 #include "telemetry/telemetry.h"
-#include "net/utils.h"
+#include "net/http.h"
 #include "config.h"
 #ifdef TS_DEBUG
 #include "net/conn_mock.h"
@@ -32,7 +33,6 @@ build_request(int status)
 
 	snprintf(uri, 20, "/status/%d", status);
 
-
 	http_request_set_uri(req, uri);
 	http_request_set_version(req, HTTP_VERSION_10);
 	http_request_set_header(req, HTTP_HOST, TEST_ENDPOINT);
@@ -43,26 +43,49 @@ build_request(int status)
 static Datum
 test_factory(ConnectionType type, int status, char *host, int port)
 {
-	int			ret;
-	char	   *response = "Problem during test";
-	Connection *conn = connection_create(type);
+	Connection *conn;
+	HttpRequest *req;
+	HttpResponseState *rsp = NULL;
+	HttpError	err;
+	Datum		json;
+
+	conn = connection_create(type);
 
 	if (conn == NULL)
-		return CStringGetTextDatum("Could not initialize a connection");
-	ret = connection_connect(conn, host, NULL, port);
-	if (ret < 0)
-		goto cleanup_conn;
+		return CStringGetTextDatum("could not initialize a connection");
+
+	if (connection_connect(conn, host, NULL, port) < 0)
+	{
+		connection_destroy(conn);
+		elog(ERROR, "connection error: %s", connection_get_and_clear_error(conn));
+	}
 
 #ifdef TS_DEBUG
 	if (type == CONNECTION_MOCK)
 		connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
 #endif
 
-	response = send_and_recv_http(conn, build_request(status));
-cleanup_conn:
-	connection_close(conn);
+	req = build_request(status);
+
+	rsp = http_response_state_create();
+
+	err = http_send_and_recv(conn, req, rsp);
+
+	http_request_destroy(req);
 	connection_destroy(conn);
-	return CStringGetTextDatum(response);
+
+	if (err != HTTP_ERROR_NONE)
+		elog(ERROR, "%s", http_strerror(err));
+
+	if (!http_response_state_valid_status(rsp))
+		elog(ERROR, "endpoint sent back unexpected HTTP status: %d",
+			 http_response_state_status_code(rsp));
+
+	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(http_response_state_body_start(rsp)));
+
+	http_response_state_destroy(rsp);
+
+	return json;
 }
 
 /*  Test ssl_ops */
@@ -81,7 +104,7 @@ test_status_ssl(PG_FUNCTION_ARGS)
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
-	PG_RETURN_TEXT_P(cstring_to_text(buf));
+	PG_RETURN_JSONB(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf)));;
 #endif
 }
 
@@ -92,7 +115,7 @@ test_status(PG_FUNCTION_ARGS)
 	int			port = 80;
 	int			status = PG_GETARG_INT32(0);
 
-	return test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port);
+	PG_RETURN_JSONB(test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
 }
 
 #ifdef TS_DEBUG
@@ -105,7 +128,7 @@ test_status_mock(PG_FUNCTION_ARGS)
 
 	test_string = text_to_cstring(arg1);
 
-	return test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port);
+	PG_RETURN_JSONB(test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
 }
 #endif
 
@@ -155,16 +178,65 @@ test_telemetry_parse_version(PG_FUNCTION_ARGS)
 Datum
 test_telemetry(PG_FUNCTION_ARGS)
 {
-	char	   *response;
 	Connection *conn;
+	ConnectionType conntype;
+	HttpRequest *req;
+	HttpResponseState *rsp;
+	HttpError	err;
+	Datum		json_body;
+	const char *host = PG_ARGISNULL(0) ? TELEMETRY_HOST : text_to_cstring(PG_GETARG_TEXT_P(0));
+	const char *servname = PG_ARGISNULL(1) ? "https" : text_to_cstring(PG_GETARG_TEXT_P(1));
+	int			port = PG_ARGISNULL(2) ? 0 : PG_GETARG_INT32(2);
+	int			ret;
 
-	conn = telemetry_connect();
+	if (PG_NARGS() > 3)
+		elog(ERROR, "invalid number of arguments");
 
-	response = send_and_recv_http(conn, build_version_request(TELEMETRY_HOST, TELEMETRY_PATH));
+	if (strcmp("http", servname) == 0)
+		conntype = CONNECTION_PLAIN;
+	else if (strcmp("https", servname) == 0)
+		conntype = CONNECTION_SSL;
+	else
+		elog(ERROR, "invalid service type '%s'", servname);
 
-	/* Just verify that it's some sort of valid JSON */
-	Assert(strtok(response, ":") != NULL);
-	connection_close(conn);
+	conn = connection_create(conntype);
+
+	if (conn == NULL)
+		elog(ERROR, "could not create telemetry connection");
+
+	ret = connection_connect(conn, host, servname, port);
+
+	if (ret < 0)
+	{
+		const char *errstr = connection_get_and_clear_error(conn);
+
+		connection_destroy(conn);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not make a connection to %s://%s", servname, host),
+				 errdetail("%s", errstr)));
+	}
+
+	req = build_version_request(host, TELEMETRY_PATH);
+
+	rsp = http_response_state_create();
+
+	err = http_send_and_recv(conn, req, rsp);
+
+	http_request_destroy(req);
 	connection_destroy(conn);
-	PG_RETURN_NULL();
+
+	if (err != HTTP_ERROR_NONE)
+		elog(ERROR, "HTTP error: %s", http_strerror(err));
+
+	if (!http_response_state_valid_status(rsp))
+		elog(ERROR, "invalid HTTP response status %d",
+			 http_response_state_status_code(rsp));
+
+	json_body = DirectFunctionCall1(jsonb_in, CStringGetDatum(http_response_state_body_start(rsp)));
+
+	http_response_state_destroy(rsp);
+
+	PG_RETURN_JSONB(json_body);
 }

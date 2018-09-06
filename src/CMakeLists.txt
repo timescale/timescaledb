@@ -173,6 +173,8 @@ install(
 
 if (USE_OPENSSL)
   set(TS_USE_OPENSSL ${USE_OPENSSL})
+  target_include_directories(${PROJECT_NAME} PUBLIC ${OPENSSL_INCLUDE_DIR})
+  target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
 endif (USE_OPENSSL)
 
 configure_file(config.h.in config.h)
