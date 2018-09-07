@@ -4,6 +4,12 @@
 # Any flags will be passed on to CMake, e.g.,
 # ./bootstrap -DCMAKE_BUILD_TYPE="Debug"
 
+## Check to make cmake is installed
+if ! command -v cmake >/dev/null 2>&1; then
+	echo "cmake is required to build TimescaleDB. Please install via your system's preferred method."
+	exit 1
+fi
+
 BUILD_DIR=${BUILD_DIR:-./build}
 BUILD_FORCE_REMOVE=${BUILD_FORCE_REMOVE:-false}
 SRC_DIR=$(dirname $0)
