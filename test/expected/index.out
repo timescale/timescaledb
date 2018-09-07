@@ -128,9 +128,9 @@ INSERT INTO index_test VALUES ('2017-04-20T09:00:01', 1, 17.5);
 SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------+---------------+------+--------+---------+-----------+------------
- index_test_time_idx        | {time}        |      | f      | f       | f         | 
  index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  index_test_time_device_idx | {time,device} |      | t      | f       | f         | 
+ index_test_time_idx        | {time}        |      | f      | f       | f         | 
  index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
 
@@ -165,9 +165,9 @@ ALTER INDEX index_test_time_idx RENAME TO index_test_time_idx2;
 SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------+---------------+------+--------+---------+-----------+------------
- index_test_time_idx2       | {time}        |      | f      | f       | f         | 
  index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  index_test_time_device_idx | {time,device} |      | t      | f       | f         | 
+ index_test_time_idx2       | {time}        |      | f      | f       | f         | 
  index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
 
@@ -231,10 +231,10 @@ CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates_2 ON i
 SELECT * FROM test.show_indexes('index_test');
                              Index                              |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
- index_test_device_time_idx                                     | {device,time} |      | f      | f       | f         | 
- index_test_time_temp_idx                                       | {time,temp}   |      | f      | f       | f         | 
  a_hypertable_index_with_a_very_very_long_name_that_truncates   | {time,temp}   |      | f      | f       | f         | 
  a_hypertable_index_with_a_very_very_long_name_that_truncates_2 | {time,temp}   |      | f      | f       | f         | 
+ index_test_device_time_idx                                     | {device,time} |      | f      | f       | f         | 
+ index_test_time_temp_idx                                       | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
@@ -271,8 +271,8 @@ SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------+---------------+------+--------+---------+-----------+-------------
  index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
+ index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (3 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
@@ -294,8 +294,8 @@ SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------+---------------+------+--------+---------+-----------+-------------
  index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
  index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace2
+ index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (3 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
@@ -315,9 +315,9 @@ SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------+---------------+------+--------+---------+-----------+-------------
  index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
- index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
- index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace2
  index_test_time_device_key | {time,device} |      | t      | f       | f         | 
+ index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace2
+ index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
@@ -388,9 +388,9 @@ INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 17.5);
 SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------+---------------+------+--------+---------+-----------+-------------
- index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
- index_test_time_device_idx | {time,device} |      | f      | f       | f         | tablespace2
  index_test_device_idx      | {device}      |      | f      | f       | f         | 
+ index_test_time_device_idx | {time,device} |      | f      | f       | f         | tablespace2
+ index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
 (3 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
@@ -407,9 +407,9 @@ CREATE INDEX ON index_test (time, temp) TABLESPACE tablespace2;
 SELECT * FROM test.show_indexes('index_test');
            Index            |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace  
 ----------------------------+---------------+------+--------+---------+-----------+-------------
- index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
- index_test_time_device_idx | {time,device} |      | f      | f       | f         | tablespace2
  index_test_device_idx      | {device}      |      | f      | f       | f         | 
+ index_test_time_device_idx | {time,device} |      | f      | f       | f         | tablespace2
+ index_test_time_idx        | {time}        |      | f      | f       | f         | tablespace1
  index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | tablespace2
 (4 rows)
 
