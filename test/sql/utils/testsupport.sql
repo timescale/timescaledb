@@ -69,7 +69,7 @@ $BODY$
     (SELECT t.spcname FROM pg_tablespace t WHERE t.oid = c.reltablespace)
     FROM pg_class c, pg_index i
     WHERE c.oid = i.indexrelid AND i.indrelid = rel
-    ORDER BY c.oid;
+    ORDER BY c.relname;
 $BODY$;
 
 CREATE OR REPLACE FUNCTION test.show_indexesp(pattern text)

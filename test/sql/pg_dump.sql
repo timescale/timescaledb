@@ -69,6 +69,7 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 \c postgres :ROLE_SUPERUSER
 
+-- NOTE: This section does _not_ work when server is remote, i.e. not localhost
 \! pg_dump -h localhost -U super_user -Fc single > dump/single.sql
 \! dropdb -h localhost -U super_user single
 \! createdb -h localhost -U super_user single

@@ -168,8 +168,8 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
                             Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
- "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
  "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
 (2 rows)
 
 ROLLBACK;
@@ -212,8 +212,8 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
                             Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
- "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
  "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
+ "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
 (2 rows)
 
 ROLLBACK;
