@@ -256,12 +256,12 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 (12 rows)
 
 \c postgres :ROLE_SUPERUSER
--- NOTE: This section does _not_ work when server is remote, i.e. not localhost
-\! pg_dump -h localhost -U super_user -Fc single > dump/single.sql
-\! dropdb -h localhost -U super_user single
-\! createdb -h localhost -U super_user single
+-- We shell out to a script in order to grab the correct hostname from the
+-- environmental variables that originally called this psql command. Sadly
+-- vars passed to psql do not work in \! commands so we can't do it that way.
+\! utils/pg_dump_aux_dump.sh
 ALTER DATABASE single SET timescaledb.restoring='on';
-\! pg_restore -h localhost -U super_user -d single dump/single.sql
+\! utils/pg_dump_aux_restore.sh
 \c single
 -- Set to OFF for future DB sessions.
 ALTER DATABASE single SET timescaledb.restoring='off';
