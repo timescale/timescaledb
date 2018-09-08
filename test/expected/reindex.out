@@ -105,8 +105,8 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
                                 Index                                |   Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 ---------------------------------------------------------------------+-------------+------+--------+---------+-----------+------------
  _timescaledb_internal."1_1_reindex_test_pkey"                       | {time,temp} |      | t      | t       | f         | 
- _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      |      | t      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk_1_1_reindex_test_pkey        | {time,temp} |      | t      | t       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      |      | t      | f       | f         | 
 (3 rows)
 
 SELECT * FROM _timescaledb_internal.chunk_index_replace('_timescaledb_internal."1_1_reindex_test_pkey"'::regclass, '_timescaledb_internal."_hyper_1_1_chunk_1_1_reindex_test_pkey"'::regclass);
@@ -118,7 +118,7 @@ SELECT * FROM _timescaledb_internal.chunk_index_replace('_timescaledb_internal."
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
                                 Index                                |   Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 ---------------------------------------------------------------------+-------------+------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      |      | t      | f       | f         | 
  _timescaledb_internal."1_1_reindex_test_pkey"                       | {time,temp} |      | t      | t       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk_reindex_test_time_unique_idx | {time}      |      | t      | f       | f         | 
 (2 rows)
 
