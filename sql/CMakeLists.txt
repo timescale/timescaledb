@@ -75,6 +75,7 @@ set(MOD_FILES
   updates/0.10.0--0.10.1.sql
   updates/0.10.1--0.11.0.sql
   updates/0.11.0--0.12.0.sql
+  updates/0.12.0--0.12.1-dev.sql
 )
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")

@@ -270,7 +270,7 @@ WELCOME TO
   | | | |  _ ` _ \ / _ \/ __|/ __/ _` | |/ _ \ | | | ___ \ 
   | | | | | | | | |  __/\__ \ (_| (_| | |  __/ |/ /| |_/ /
   |_| |_|_| |_| |_|\___||___/\___\__,_|_|\___|___/ \____/
-               Running version 0.12.0
+               Running version 0.12.1-dev
 For more information on TimescaleDB, please visit the following links:
 
  1. Getting started: https://docs.timescale.com/getting-started
