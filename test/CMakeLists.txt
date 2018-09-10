@@ -53,6 +53,7 @@ set(PG_REGRESS_ENV
   TEST_INPUT_DIR=${TEST_INPUT_DIR}
   TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR}
   TEST_SCHEDULE=${TEST_SCHEDULE}
+  PG_BINDIR=${PG_BINDIR}
   PG_REGRESS=${PG_REGRESS})
 
 # installcheck starts up new temporary instances for testing code
