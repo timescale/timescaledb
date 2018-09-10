@@ -4,6 +4,39 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.12.0 (2018-09-10)
+
+**High-level changes**
+
+*Scheduler framework:* This release introduces a background job framework and scheduler. Each database running within a PostgreSQL instance has a scheduler that schedules recurring jobs from a new jobs table while maintaining statistics that inform the scheduler's policy. Future releases will leverage this scheduler framework for more automated management of data retention, archiving, analytics, and the like.
+
+*Telemetry:* Using this new scheduler framework, TimescaleDB databases now send anonymized usage information to a telemetry server via HTTPS, as well as perform version checking to notify users if a newer version is available. For transparency, a new `get_telemetry_report` function details the exact JSON that is sent, and users may also opt out of this telemetry and version check.
+
+*Continued hardening:* This release addresses several issues around more robust backup and recovery, handling large numbers of chunks, and additional test coverage.
+
+**Notable commits**
+
+* [efab2aa] Fix net lib functionality on Windows and improve error handling
+* [71589c4] Fix issues when OpenSSL is not available
+* [a43cd04] Call the main telemetry function inside BGW executor
+* [faf481b] Add telemetry functionality
+* [45a2b76] Add new Connection and HTTP libraries
+* [b6fe657] Fix max_background_workers guc, errors on EXEC_BACKEND and formatting
+* [5d8c7cc] Add a scheduler for background jobs
+* [55a7141] Implement a cluster-wide launcher for background workers
+* [5bc705f] Update bootstrap to check for cmake and exit if not found
+* [98e56dd] Improve show_indexes test func to be more platform agnostic
+* [b928caa] Note how to recreate templated files
+* [8571e41] Use AttrNumberGetAttrOffset instead of Anum_name - 1 for array indexing
+* [d1710ef] Improve regression test script to cleanup more thoroughly
+* [fc3677f] Reduce number of open chunks per insert
+* [027b7b2] Hide extension symbols by default on Unix platforms
+* [6a3abe5] Fix SubspaceStore to ensure max_open_chunks_per_insert is obeyed
+
+**Thanks**
+
+@EvanCarroll for updates to the bootstrap script to check for cmake
+
 ## 0.11.0 (2018-08-08)
 
 **High-level changes**
