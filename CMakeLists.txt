@@ -23,16 +23,17 @@ endif ()
 # Set project name, version, and language. Language needs to be set for compiler checks
 project(timescaledb VERSION ${VERSION} LANGUAGES C)
 
+if (NOT CMAKE_BUILD_TYPE)
+  # Default to Release builds
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
+endif ()
+
 message(STATUS "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}")
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
 set(PROJECT_INSTALL_METHOD source CACHE STRING "Specify what install platform this binary
 is built for")
-
-if (NOT CMAKE_BUILD_TYPE)
-  # Default to Release builds
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
-endif ()
+message(STATUS "Install method is '${PROJECT_INSTALL_METHOD}'")
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of CMAKE_C_FLAGS_DEBUG is
