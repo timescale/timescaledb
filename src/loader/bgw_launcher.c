@@ -20,6 +20,9 @@
 #include <utils/snapmgr.h>
 #include <access/xact.h>
 
+/* and checking db list for whether we're in a template*/
+#include <utils/syscache.h>
+
 /* for calling external function*/
 #include <fmgr.h>
 
@@ -31,6 +34,7 @@
 #include "bgw_counter.h"
 #include "bgw_message_queue.h"
 #include "bgw_launcher.h"
+
 
 #define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
 #define BGW_ENTRYPOINT_FUNCNAME "ts_bgw_db_scheduler_entrypoint"
@@ -273,10 +277,9 @@ populate_database_htab(void)
 		Oid			db_oid;
 		bool		hash_found;
 
-		if (!pgdb->datallowconn)
+		if (!pgdb->datallowconn || pgdb->datistemplate)
 			continue;			/* don't bother with dbs that don't allow
-								 * connections, we'll fail when starting a
-								 * worker anyway */
+								 * connections or are templates */
 
 		db_oid = HeapTupleGetOid(tup);
 		db_he = (DbHashEntry *) hash_search(db_htab, &db_oid, HASH_ENTER, &hash_found);
@@ -610,6 +613,32 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+/*
+ * Inside the entrypoint, we must check again if we're in a template db
+ * even though we excluded template dbs in populate_database_htab because
+ * we can be called on, say, CREATE EXTENSION in a template db and then
+ * we'll not stop til next server shutdown so if we hit this point and are
+ * in a template db, we throw an error and shut down Check in the syscache
+ * rather than searching through the entire database catalog again.
+ * Modelled on autovacuum.c -> do_autovacuum.
+ */
+static void
+database_is_template_check(void)
+{
+
+	Form_pg_database pgdb;
+	HeapTuple	tuple;
+
+	tuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(MyDatabaseId));
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR, (errmsg("TimescaleDB background worker failed to find entry for database in syscache")));
+
+	pgdb = (Form_pg_database) GETSTRUCT(tuple);
+	if (pgdb->datistemplate)
+		ereport(ERROR, (errmsg("TimescaleDB background worker connected to template database, exiting")));
+
+	ReleaseSysCache(tuple);
+}
 
 /*
  * This can be run either from the cluster launcher at db_startup time, or in the case of an install/uninstall/update of the extension,
@@ -623,6 +652,7 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	bool		ts_installed = false;
 	char		version[MAX_VERSION_LEN];
 	VirtualTransactionId vxid;
+
 
 	/* unblock signals and use default signal handlers */
 	BackgroundWorkerUnblockSignals();
@@ -648,6 +678,12 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	 */
 	StartTransactionCommand();
 	(void) GetTransactionSnapshot();
+
+	/*
+	 * Check whether a database is a template database and raise an error if
+	 * so, as we don't want to run in template dbs.
+	 */
+	database_is_template_check();
 	ts_installed = loader_extension_exists();
 	if (ts_installed)
 		StrNCpy(version, loader_extension_version(), MAX_VERSION_LEN);
