@@ -4,6 +4,22 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.0.0-rc1 (2018-09-12)
+
+This release is our 1.0 release candidate. We expect to only merge bug fixes between now and our final 1.0 release. This is a big milestone for us and signifies our maturity and enterprise readiness.
+
+**PLEASE NOTE** that release candidate (rc) builds will only be made available via GitHub and Docker, and _not_ on other release channels. Please help us test these release candidates out if you can!
+
+
+**Notable commits**
+* [acebaea] Don't start schedulers for template databases.
+* [f221a12] Fix use-after-free bug in telemetry test
+* [2092b2a] Fix unused variable warning in Release build
+* [0dc5bbb] Use pg_config bindir directory for pg executables
+
+**Thanks**
+* @did-g for reporting a use-after-free bug in a test and for improving the robustness of another test
+
 ## 0.12.0 (2018-09-10)
 
 **High-level changes**
