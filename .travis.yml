@@ -82,7 +82,7 @@ jobs:
         - bash -c 'while true; do echo -e "keepalive\n"; sleep 60; done' & # print line every 60 minutes to avoid Travis timeout
       script:
         # TEST_MAX specifies the maximum test # to go up to
-        - cd /tmp/tsdb-dev-tools; TIMESCALE_DIR=$TRAVIS_BUILD_DIR TEST_MAX=40 EXCLUDE_PATTERN='plan_hashagg_optimized*|plan_hashagg_results*' bash ./test_valgrind.sh
+        - cd /tmp/tsdb-dev-tools; USE_REMOTE=true TIMESCALE_DIR=$TRAVIS_BUILD_DIR TEST_MAX=35 EXCLUDE_PATTERN='plan_hashagg_optimized*|plan_hashagg_results*' bash ./test_valgrind.sh
       after_script:
         - kill $(jobs -p) # kill job that prints repeatedly
 
@@ -98,7 +98,7 @@ jobs:
         - bash -c 'while true; do echo -e "keepalive\n"; sleep 60; done' & # print line every 60 minutes to avoid Travis timeout
       script:
         # TEST_MAX specifies the maximum test # to go up to
-        - cd /tmp/tsdb-dev-tools; TIMESCALE_DIR=$TRAVIS_BUILD_DIR INCLUDE_PATTERN='plan_hashagg_optimized*' bash ./test_valgrind.sh
+        - cd /tmp/tsdb-dev-tools; USE_REMOTE=true TIMESCALE_DIR=$TRAVIS_BUILD_DIR INCLUDE_PATTERN='plan_hashagg_optimized*' bash ./test_valgrind.sh
       after_script:
         - kill $(jobs -p) # kill job that prints repeatedly
 
@@ -114,7 +114,7 @@ jobs:
         - bash -c 'while true; do echo -e "keepalive\n"; sleep 60; done' & # print line every 60 minutes to avoid Travis timeout
       script:
         # TEST_MAX specifies the maximum test # to go up to
-        - cd /tmp/tsdb-dev-tools;TIMESCALE_DIR=$TRAVIS_BUILD_DIR INCLUDE_PATTERN='plan_hashagg_results*' bash ./test_valgrind.sh
+        - cd /tmp/tsdb-dev-tools; USE_REMOTE=true TIMESCALE_DIR=$TRAVIS_BUILD_DIR INCLUDE_PATTERN='plan_hashagg_results*' bash ./test_valgrind.sh
       after_script:
         - kill $(jobs -p) # kill job that prints repeatedly
 
@@ -130,7 +130,7 @@ jobs:
         - bash -c 'while true; do echo -e "keepalive\n"; sleep 60; done' & # print line every 60 minutes to avoid Travis timeout
       script:
         # TEST_MIN specifies the minimum test # to go start from
-        - cd /tmp/tsdb-dev-tools; TIMESCALE_DIR=$TRAVIS_BUILD_DIR TEST_MIN=41 EXCLUDE_PATTERN='plan_hashagg_optimized*|plan_hashagg_results*' bash ./test_valgrind.sh
+        - cd /tmp/tsdb-dev-tools; USE_REMOTE=true TIMESCALE_DIR=$TRAVIS_BUILD_DIR TEST_MIN=36 EXCLUDE_PATTERN='plan_hashagg_optimized*|plan_hashagg_results*' bash ./test_valgrind.sh
       after_script:
         - kill $(jobs -p) # kill job that prints repeatedly
 
