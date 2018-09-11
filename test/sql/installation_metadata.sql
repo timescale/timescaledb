@@ -36,7 +36,8 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 \! dropdb -h localhost -U super_user single
 \! createdb -h localhost -U super_user single
 ALTER DATABASE single SET timescaledb.restoring='on';
-\! pg_restore -h localhost -U super_user -d single dump/single.sql
+-- Redirect to /dev/null to suppress NOTICE
+\! pg_restore -h localhost -U super_user -d single dump/single.sql > /dev/null 2>&1
 ALTER DATABASE single SET timescaledb.restoring='off';
 
 \c single :ROLE_DEFAULT_PERM_USER
