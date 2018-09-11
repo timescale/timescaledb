@@ -56,8 +56,9 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 	if (connection_connect(conn, host, NULL, port) < 0)
 	{
+		const char *err_msg = connection_get_and_clear_error(conn);
 		connection_destroy(conn);
-		elog(ERROR, "connection error: %s", connection_get_and_clear_error(conn));
+		elog(ERROR, "connection error: %s", err_msg);
 	}
 
 #ifdef TS_DEBUG
