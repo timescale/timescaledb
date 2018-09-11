@@ -61,9 +61,10 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
     bgw_launcher.sql
     bgw_db_scheduler.sql
+    installation_metadata.sql
     loader.sql
-    symbol_conflict.sql
     net.sql
+    symbol_conflict.sql
     telemetry.sql)
   if (USE_OPENSSL)
     list(APPEND TEST_FILES
