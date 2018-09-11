@@ -108,7 +108,6 @@ bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.list = NIL,
 		.alloc_size = alloc_size,
 	};
-	int			num_tuples;
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[BGW_JOB].id,
 		.index = InvalidOid,
@@ -119,8 +118,7 @@ bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.result_mctx = mctx,
 	};
 
-	num_tuples = scanner_scan(&scanctx);
-	Assert(list_length(list_data.list) == num_tuples);
+	scanner_scan(&scanctx);
 	return list_data.list;
 }
 
