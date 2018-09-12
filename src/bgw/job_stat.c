@@ -257,20 +257,20 @@ bgw_job_stat_insert_mark_start_relation(Relation rel,
 	CatalogSecurityContext sec_ctx;
 	Interval	zero_ival = {.time = 0,};
 
-	values[Anum_bgw_job_stat_job_id - 1] = Int32GetDatum(bgw_job_id);
-	values[Anum_bgw_job_stat_last_start - 1] = TimestampGetDatum(timer_get_current_timestamp());
-	values[Anum_bgw_job_stat_last_finish - 1] = TimestampGetDatum(DT_NOBEGIN);
-	values[Anum_bgw_job_stat_next_start - 1] = TimestampGetDatum(DT_NOBEGIN);
-	values[Anum_bgw_job_stat_total_runs - 1] = Int64GetDatum(1);
-	values[Anum_bgw_job_stat_total_duration - 1] = IntervalPGetDatum(&zero_ival);
-	values[Anum_bgw_job_stat_total_success - 1] = Int64GetDatum(0);
-	values[Anum_bgw_job_stat_total_failures - 1] = Int64GetDatum(0);
-	values[Anum_bgw_job_stat_consecutive_failures - 1] = Int32GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_job_id)] = Int32GetDatum(bgw_job_id);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] = TimestampGetDatum(timer_get_current_timestamp());
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_finish)] = TimestampGetDatum(DT_NOBEGIN);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(DT_NOBEGIN);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] = Int64GetDatum(1);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] = IntervalPGetDatum(&zero_ival);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
 
 	/* This is udone by any of the end marks */
-	values[Anum_bgw_job_stat_last_run_success - 1] = BoolGetDatum(false);
-	values[Anum_bgw_job_stat_total_crashes - 1] = Int64GetDatum(1);
-	values[Anum_bgw_job_stat_consecutive_crashes - 1] = Int32GetDatum(1);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_run_success)] = BoolGetDatum(false);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_crashes)] = Int64GetDatum(1);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(1);
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
 	catalog_insert_values(rel, desc, values, nulls);
