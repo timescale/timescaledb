@@ -1,11 +1,8 @@
 #include <unistd.h>
 #include <postgres.h>
 #include <pg_config.h>
-
-#ifndef WIN32
 #include <sys/socket.h>
 #include <sys/time.h>
-#endif
 
 #include "conn_internal.h"
 #include "conn_plain.h"
