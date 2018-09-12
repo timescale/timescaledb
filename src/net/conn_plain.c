@@ -4,6 +4,7 @@
 
 #ifndef WIN32
 #include <sys/socket.h>
+#include <sys/time.h>
 #endif
 
 #include "conn_internal.h"
