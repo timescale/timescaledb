@@ -11,6 +11,7 @@ RUN set -ex \
 	&& apk add --no-cache --virtual .fetch-deps \
 		ca-certificates \
 		openssl \
+		openssl-dev \
 		tar \
 	\
 	&& wget -O postgresql.tar.bz2 "https://ftp.postgresql.org/pub/snapshot/$PG_MAJOR/postgresql-$PG_MAJOR-snapshot.tar.bz2" \
