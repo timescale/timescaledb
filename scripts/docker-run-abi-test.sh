@@ -3,7 +3,7 @@
 # This script test abi-compatibility wrt timescale between minor version of postgres
 # It will compile timescale on a release version of postgres ($PG_MAJOR.PG_MINOR_COMPILE)
 # and then run that compiled .so on the latest snapshot of postgres ($PG_MAJOR branch).
-# This script will then run the regression tests on that machine. 
+# This script will then run the regression tests on that machine.
 #
 set -e
 
@@ -34,10 +34,10 @@ create_base_container() {
   # Run a Postgres container
   docker run -u postgres -d --name $1 -v ${BASE_DIR}:/src -v ${COMPILE_VOLUME}:/compile $2
   # Install build dependencies
-  docker exec -u root -it $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex && mkdir -p /build/debug"
+  docker exec -u root -it $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev && mkdir -p /build/debug"
 
   # Copy the source files to build directory
-  docker exec -u root -it $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug && make -C /build/debug install && chown -R postgres /build/debug"
+  docker exec -u root -it $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug && make -C /build/debug install && chown -R postgres /build"
 }
 
 create_base_container $CONTAINER_NAME_COMPILE $PG_IMAGE_TAG_COMPILE
@@ -49,7 +49,9 @@ create_base_container $CONTAINER_NAME_RUN $PG_IMAGE_TAG_RUN
 
 docker exec -u root -it $CONTAINER_NAME_RUN /bin/bash -c "cp /compile/* \`pg_config --pkglibdir\`/"
 
-# Run tests
+
+# Run tests, allow continuation after error to get regressions.diffs
+set +e
 docker exec -u postgres -it ${CONTAINER_NAME_RUN} /bin/bash -c "make -C /build/debug installcheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
 
 if [ "$?" != "0" ]; then
