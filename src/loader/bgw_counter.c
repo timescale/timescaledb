@@ -98,38 +98,6 @@ bgw_counter_reinit(void)
 }
 
 extern bool
-bgw_total_workers_increment()
-{
-	bool		incremented = false;
-	int			max_workers = guc_max_background_workers;
-
-	SpinLockAcquire(&ct->mutex);
-	if (ct->total_workers < max_workers)
-	{
-		ct->total_workers++;
-		incremented = true;
-	}
-	SpinLockRelease(&ct->mutex);
-	return incremented;
-}
-
-extern void
-bgw_total_workers_decrement()
-{
-	/*
-	 * Launcher is 1 worker, and when it dies we reinitialize, so we should
-	 * never be below 1
-	 */
-	SpinLockAcquire(&ct->mutex);
-	if (ct->total_workers > 1)
-		ct->total_workers--;
-	else
-		ereport(ERROR, (errmsg("TimescaleDB background worker internal error: cannot decrement workers below 1"),
-						errhint("The background worker scheduler is in an invalid state, please submit a bug report.")));
-	SpinLockRelease(&ct->mutex);
-}
-
-extern bool
 bgw_total_workers_increment_by(int increment_by)
 {
 	bool		incremented = false;
@@ -145,22 +113,39 @@ bgw_total_workers_increment_by(int increment_by)
 	return incremented;
 }
 
+extern bool
+bgw_total_workers_increment()
+{
+	return bgw_total_workers_increment_by(1);
+}
+
 extern void
 bgw_total_workers_decrement_by(int decrement_by)
 {
-	SpinLockAcquire(&ct->mutex);
-
 	/*
 	 * Launcher is 1 worker, and when it dies we reinitialize, so we should
 	 * never be below 1
 	 */
+	SpinLockAcquire(&ct->mutex);
 	if (ct->total_workers - decrement_by >= 1)
+	{
 		ct->total_workers -= decrement_by;
+		SpinLockRelease(&ct->mutex);
+	}
 	else
-		ereport(ERROR, (errmsg("TimescaleDB background worker internal error: cannot decrement workers below 1"),
-						errhint("The background worker scheduler is in an invalid state, please submit a bug report.")));
-	SpinLockRelease(&ct->mutex);
+	{
+		SpinLockRelease(&ct->mutex);
+		ereport(FATAL, (errmsg("TimescaleDB background worker cannot decrement workers below 1"),
+						errhint("The background worker scheduler is in an invalid state and may not be keeping track of workers allocated to TimescaleDB properly, please submit a bug report.")));
+	}
 }
+
+extern void
+bgw_total_workers_decrement()
+{
+	bgw_total_workers_decrement_by(1);
+}
+
 extern int
 bgw_total_workers_get()
 {
