@@ -196,7 +196,13 @@ static bool
 test_job_3_long()
 {
 	BackgroundWorkerBlockSignals();
-	prev_signal_func = pqsignal(SIGTERM, log_terminate_signal);
+
+	/*
+	 * Only set prev_signal_func once to prevent it from being set to
+	 * log_terminate_signal.
+	 */
+	if (prev_signal_func == NULL)
+		prev_signal_func = pqsignal(SIGTERM, log_terminate_signal);
 	/* Setup any signal handlers here */
 	BackgroundWorkerUnblockSignals();
 
