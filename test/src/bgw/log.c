@@ -58,19 +58,42 @@ emit_log_hook_callback(ErrorData *edata)
 {
 	bool		started_txn = false;
 
-	if (!IsTransactionState())
+	PG_TRY();
 	{
-		StartTransactionCommand();
-		started_txn = true;
+		/*
+		 * If we do encounter some error writing to our log hook, remove the
+		 * hook to prevent potentially infinite recursion where this callback
+		 * keeps encountering an error, and it is its own logging callback. We
+		 * reinstall the hook when we're successfully done with this function.
+		 */
+		emit_log_hook = NULL;
+
+		if (!IsTransactionState())
+		{
+			StartTransactionCommand();
+			started_txn = true;
+		}
+
+		bgw_log_insert(edata->message);
+
+		if (started_txn)
+			CommitTransactionCommand();
+
+		if (prev_emit_log_hook != NULL)
+			prev_emit_log_hook(edata);
+
+		/* Reinstall the hook if log was successful. */
+		emit_log_hook = emit_log_hook_callback;
 	}
-
-	bgw_log_insert(edata->message);
-
-	if (started_txn)
-		CommitTransactionCommand();
-
-	if (prev_emit_log_hook != NULL)
-		prev_emit_log_hook(edata);
+	PG_CATCH();
+	{
+		/*
+		 * Reinstall the hook because we are out of the main body of the
+		 * function.
+		 */
+		emit_log_hook = emit_log_hook_callback;
+	}
+	PG_END_TRY();
 }
 
 void
