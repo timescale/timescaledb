@@ -22,15 +22,15 @@
 
 typedef struct VersionResult
 {
+	VersionInfo vinfo;
 	const char *versionstr;
-	long		version[3];
 	bool		is_up_to_date;
 	const char *errhint;
 } VersionResult;
 
 HttpRequest *build_version_request(const char *host, const char *path);
 Connection *telemetry_connect(void);
-bool		telemetry_parse_version(const char *json, const long installed_version[3], VersionResult *result);
+bool		telemetry_parse_version(const char *json, VersionInfo *vinfo, VersionResult *result);
 
 /*
  *	This function is intended as the main function for a BGW.
