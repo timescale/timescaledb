@@ -43,40 +43,15 @@
 #define POSTGIS			"postgis"
 
 static const char *related_extensions[] = {PG_PROMETHEUS, POSTGIS};
-static const char *version_delimiter[3] = {".", ".", ""};
-
-static bool
-parse_version_string(const char *version, long version_result[3])
-{
-	char	   *parse_version = pstrdup(version);
-	int			i;
-
-	for (i = 0; i < 3; i++)
-	{
-		const char *subversion;
-		char	   *endptr;
-
-		subversion = strtok(i == 0 ? parse_version : NULL, version_delimiter[i]);
-
-		if (subversion == NULL)
-			return i > 0;
-
-		version_result[i] = strtol(subversion, &endptr, 10);
-
-		if (endptr != NULL && *endptr != '.' && *endptr != '\0')
-			return false;
-	}
-
-	return true;
-}
 
 bool
-telemetry_parse_version(const char *json, const long installed_version[3], VersionResult *result)
+telemetry_parse_version(const char *json, VersionInfo *installed_version, VersionResult *result)
 {
 	Datum		version = DirectFunctionCall2(json_object_field_text,
 											  CStringGetTextDatum(json),
 											  PointerGetDatum(cstring_to_text(TS_VERSION_JSON_FIELD)));
-	int			i;
+
+	memset(result, 0, sizeof(VersionResult));
 
 	result->versionstr = text_to_cstring(DatumGetTextPP(version));
 
@@ -89,25 +64,17 @@ telemetry_parse_version(const char *json, const long installed_version[3], Versi
 	}
 
 	/*
-	 * Now parse the version string. We expect format to be XX.XX.XX, and if
-	 * not, we error out
+	 * Now parse the version string. We expect format to be
+	 * XX.XX.XX-<prerelease_tag>, and if not, we error out
 	 */
-	if (!parse_version_string(result->versionstr, result->version))
+	if (!version_parse(result->versionstr, &result->vinfo))
 	{
-		result->errhint = "could not parse version string";
+		result->errhint = psprintf("parsing failed for version string \"%s\"", result->versionstr);
 		return false;
 	}
 
-	for (i = 0; i < 3; i++)
-	{
-		if (installed_version[i] < result->version[i])
-			return true;
-
-		if (installed_version[i] > result->version[i])
-			break;
-	}
-
-	result->is_up_to_date = true;
+	if (version_cmp(installed_version, &result->vinfo) >= 0)
+		result->is_up_to_date = true;
 
 	return true;
 }
@@ -117,21 +84,18 @@ telemetry_parse_version(const char *json, const long installed_version[3], Versi
  * called "current_timescaledb_version". Check this against the local
  * version, and notify the user if it is behind.
  */
-static void
+static bool
 process_response(const char *json)
 {
-	const long	installed_version[3] = {
-		strtol(TIMESCALEDB_MAJOR_VERSION, NULL, 10),
-		strtol(TIMESCALEDB_MINOR_VERSION, NULL, 10),
-	strtol(TIMESCALEDB_PATCH_VERSION, NULL, 10)};
-	VersionResult result = {0};
+	VersionInfo installed_version;
+	VersionResult result;
 
-	if (!telemetry_parse_version(json, installed_version, &result))
+	version_get_info(&installed_version);
+
+	if (!telemetry_parse_version(json, &installed_version, &result))
 	{
-		if (NULL == result.versionstr)
-			elog(ERROR, "could not get TimescaleDB version from server response");
-
-		elog(ERROR, "ill-formatted TimescaleDB version in server response");
+		elog(WARNING, "could not get TimescaleDB version from server response: %s", result.errhint);
+		return false;
 	}
 
 	if (result.is_up_to_date)
@@ -141,6 +105,8 @@ process_response(const char *json)
 				(errmsg("the \"%s\" extension is not up-to-date", EXTENSION_NAME),
 				 errhint("The most up-to-date version is %s, the installed version is %s",
 						 result.versionstr, TIMESCALEDB_VERSION_MOD)));
+
+	return true;
 }
 
 static char *
@@ -286,7 +252,10 @@ telemetry_connect(void)
 	conn = connection_create(CONNECTION_SSL);
 
 	if (conn == NULL)
-		elog(ERROR, "could not create telemetry connection");
+	{
+		elog(WARNING, "could not create telemetry connection");
+		return NULL;
+	}
 
 	ret = connection_connect(conn, TELEMETRY_HOST, TELEMETRY_SCHEME, 0);
 
@@ -295,8 +264,9 @@ telemetry_connect(void)
 		const char *errstr = connection_get_and_clear_error(conn);
 
 		connection_destroy(conn);
+		conn = NULL;
 
-		ereport(ERROR,
+		ereport(WARNING,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not make a connection to %s", TELEMETRY_ENDPOINT),
 				 errdetail("%s", errstr)));
@@ -335,11 +305,17 @@ telemetry_main()
 	connection_destroy(conn);
 
 	if (err != HTTP_ERROR_NONE)
-		elog(ERROR, "telemetry error: %s", http_strerror(err));
+	{
+		elog(WARNING, "telemetry error: %s", http_strerror(err));
+		return;
+	}
 
 	if (!http_response_state_valid_status(rsp))
-		elog(ERROR, "telemetry got unexpected HTTP response status: %d",
+	{
+		elog(WARNING, "telemetry got unexpected HTTP response status: %d",
 			 http_response_state_status_code(rsp));
+		return;
+	}
 
 	/*
 	 * Do the version-check. Response is the body of a well-formed HTTP

@@ -5,9 +5,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_ssl(int) RETURNS JS
     AS :MODULE_PATHNAME, 'test_status_ssl' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_mock(text) RETURNS JSONB
     AS :MODULE_PATHNAME, 'test_status_mock' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_parse_version(response text, installed_major int, installed_minor int, installed_patch int)
-    RETURNS TABLE(version_string text, major int, minor int, patch int, up_to_date bool)
-    AS :MODULE_PATHNAME, 'test_telemetry_parse_version' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_parse_version(response text, installed_major int, installed_minor int, installed_patch int, installed_modtag text = NULL)
+    RETURNS TABLE(version_string text, major int, minor int, patch int, modtag text, up_to_date bool)
+    AS :MODULE_PATHNAME, 'test_telemetry_parse_version' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 \c single :ROLE_DEFAULT_PERM_USER
@@ -93,10 +93,25 @@ SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_time
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10"}', 9, 1, 1);
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "9.2.0"}', 9, 1, 1);
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "9.1.2"}', 9, 1, 1);
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0"}', 1, 0, 0, 'rc1');
+
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'rc1');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'rc2');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc2"}', 1, 0, 0, 'rc1');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'alpha');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-alpha"}', 1, 0, 0, 'rc1');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 1, 'rc1');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'beta');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-alpha"}', 1, 0, 0, 'beta');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-alpha1"}', 1, 0, 0, 'alpha2');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": " 10 "}', 10, 1, 0);
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "a"}', 9, 1, 1);
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "a.b.c"}', 9, 1, 1);
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1.1a"}', 9, 1, 1);
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1.1+rc1"}', 10, 1, 1, 'rc1');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1.1.1"}', 10, 1, 1, 'rc1');
+SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}', 1, 0, 0, 'alpha2');
+
 \set ON_ERROR_STOP 1
