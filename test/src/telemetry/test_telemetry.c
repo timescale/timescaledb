@@ -140,19 +140,15 @@ Datum
 test_telemetry_parse_version(PG_FUNCTION_ARGS)
 {
 	text	   *response = PG_GETARG_TEXT_P(0);
-	long		installed_version[3] = {
-		PG_GETARG_INT32(1),
-		PG_GETARG_INT32(2),
-		PG_GETARG_INT32(3),
-	};
-	VersionResult result = {0};
+	VersionInfo installed_version;
+	VersionResult result;
 	TupleDesc	tupdesc;
-	Datum		values[5];
-	bool		nulls[5] = {false};
+	Datum		values[6];
+	bool		nulls[6] = {false};
 	HeapTuple	tuple;
 	bool		success;
 
-	if (PG_NARGS() != 4)
+	if (PG_NARGS() < 2)
 		PG_RETURN_NULL();
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
@@ -161,16 +157,36 @@ test_telemetry_parse_version(PG_FUNCTION_ARGS)
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
 
-	success = telemetry_parse_version(text_to_cstring(response), installed_version, &result);
+	memset(&installed_version, 0, sizeof(VersionInfo));
+	installed_version.version[0] = PG_GETARG_INT32(1);
+	installed_version.version[1] = PG_ARGISNULL(2) ? 0 : PG_GETARG_INT32(2);
+	installed_version.version[2] = PG_ARGISNULL(3) ? 0 : PG_GETARG_INT32(3);
+
+	if (!PG_ARGISNULL(4))
+	{
+		text	   *version_mod = PG_GETARG_TEXT_P(4);
+
+		StrNCpy(installed_version.version_mod,
+				text_to_cstring(version_mod),
+				sizeof(installed_version.version_mod));
+		installed_version.has_version_mod = true;
+	}
+
+	success = telemetry_parse_version(text_to_cstring(response), &installed_version, &result);
 
 	if (!success)
 		elog(ERROR, "%s", result.errhint);
 
 	values[0] = CStringGetTextDatum(result.versionstr);
-	values[1] = Int32GetDatum(result.version[0]);
-	values[2] = Int32GetDatum(result.version[1]);
-	values[3] = Int32GetDatum(result.version[2]);
-	values[4] = BoolGetDatum(result.is_up_to_date);
+	values[1] = Int32GetDatum((int32) result.vinfo.version[0]);
+	values[2] = Int32GetDatum((int32) result.vinfo.version[1]);
+	values[3] = Int32GetDatum((int32) result.vinfo.version[2]);
+	values[5] = BoolGetDatum(result.is_up_to_date);
+
+	if (result.vinfo.has_version_mod)
+		values[4] = CStringGetTextDatum(result.vinfo.version_mod);
+	else
+		nulls[4] = true;
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
