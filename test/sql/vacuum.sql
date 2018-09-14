@@ -13,23 +13,23 @@ INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
 -- no stats
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'vacuum_test'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 VACUUM (VERBOSE, ANALYZE) vacuum_test;
 
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 -- stats should exist on parent hypertable
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'vacuum_test'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 DROP TABLE vacuum_test;
 
@@ -48,23 +48,23 @@ INSERT INTO analyze_test VALUES ('2017-01-20T16:00:01', 17.5),
 -- no stats
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'analyze_test'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 ANALYZE VERBOSE analyze_test;
 
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 -- stats should exist on parent hypertable
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'analyze_test'
-ORDER BY schemaname, tablename;
+ORDER BY schemaname, tablename, array_dims(histogram_bounds);
 
 -- Run vacuum on a normal (non-hypertable) table
 CREATE TABLE vacuum_norm(time timestamp, temp float);
