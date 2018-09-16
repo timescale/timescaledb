@@ -89,9 +89,6 @@ END
 $BODY$;
 select wait_equals(:'orig_backend_start');
 
-/*Make sure restart works from stopped worker state*/
-SELECT _timescaledb_internal.stop_background_workers();
-SELECT wait_worker_counts(1,0,0,0);
 SELECT _timescaledb_internal.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 
