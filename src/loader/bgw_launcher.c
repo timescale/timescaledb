@@ -39,8 +39,11 @@
 #define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
 #define BGW_ENTRYPOINT_FUNCNAME "ts_bgw_db_scheduler_entrypoint"
 
-#define ACK_SUCCESS true
-#define ACK_FAILURE false
+typedef enum AckResult
+{
+	ACK_FAILURE = 0,
+	ACK_SUCCESS,
+} AckResult;
 
 #ifdef TS_DEBUG
 #define BGW_LAUNCHER_RESTART_TIME 0
@@ -231,6 +234,33 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 	return RegisterDynamicBackgroundWorker(&worker, handle);
 }
 
+/* Initializes the launcher's hash table of schedulers.
+ * Return value is guaranteed to be not-null, because otherwise the function
+ * will have thrown an error.
+ */
+static HTAB *
+init_database_htab(void)
+{
+	HASHCTL		info = {
+		.keysize = sizeof(Oid),
+		.entrysize = sizeof(DbHashEntry)
+	};
+
+	return hash_create("launcher_db_htab", guc_max_background_workers, &info, HASH_BLOBS | HASH_ELEM);
+}
+
+/* Insert a scheduler entry into the hash table. Correctly set entry values. */
+static DbHashEntry *
+db_hash_entry_create(HTAB *db_htab, Oid db_oid)
+{
+	DbHashEntry *db_he;
+	bool		found;
+
+	db_he = (DbHashEntry *) hash_search(db_htab, &db_oid, HASH_ENTER, &found);
+	db_he->db_scheduler_handle = NULL;
+
+	return db_he;
+}
 
 /*
  * Model this on autovacuum.c -> get_database_list.
@@ -242,23 +272,18 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
  * times 1) when the cluster launcher starts and is looking for dbs and 2) if
  * it restarts due to a postmaster signal.
  */
-static HTAB *
-populate_database_htab(void)
+static void
+populate_database_htab(HTAB *db_htab)
 {
 	Relation	rel;
 	HeapScanDesc scan;
 	HeapTuple	tup;
-	HTAB	   *db_htab = NULL;
-	HASHCTL		info = {
-		.keysize = sizeof(Oid),
-		.entrysize = sizeof(DbHashEntry)
-	};
+	ListCell   *lc;
 
 	/*
-	 * first initialize the hashtable before we start a txn, we'll be writing
-	 * info about dbs there
+	 * Used to store OIDs that can be assigned schedulers.
 	 */
-	db_htab = hash_create("launcher_db_htab", 8, &info, HASH_BLOBS | HASH_ELEM);
+	List	   *db_oids = NIL;
 
 	/*
 	 * by this time we should already be connected to the db, and only have
@@ -270,35 +295,58 @@ populate_database_htab(void)
 	rel = heap_open(DatabaseRelationId, AccessShareLock);
 	scan = heap_beginscan_catalog(rel, 0, NULL);
 
+	/*
+	 * Do an initial scan just to figure out how many databases there are.
+	 * This initial scan is necessary so that we can maintain the invariant
+	 * that entries are not added to the hash table UNLESS they have already
+	 * been accounted for in the bgw_counter.
+	 */
 	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
 	{
 		Form_pg_database pgdb = (Form_pg_database) GETSTRUCT(tup);
-		DbHashEntry *db_he;
-		Oid			db_oid;
-		bool		hash_found;
 
 		if (!pgdb->datallowconn || pgdb->datistemplate)
 			continue;			/* don't bother with dbs that don't allow
 								 * connections or are templates */
 
-		db_oid = HeapTupleGetOid(tup);
-		db_he = (DbHashEntry *) hash_search(db_htab, &db_oid, HASH_ENTER, &hash_found);
-		if (!hash_found)
-			db_he->db_scheduler_handle = NULL;
+		db_oids = lappend_oid(db_oids, HeapTupleGetOid(tup));
 	}
 	heap_endscan(scan);
 	heap_close(rel, AccessShareLock);
+
+	/*
+	 * Now reserve slots for all schedulers via the bgw_counter. We want to
+	 * avoid the race condition where we have enough workers allocated to
+	 * start schedulers for all databases, but before we could get all of them
+	 * started, the (say) first scheduler has started too many jobs and then
+	 * we don't have enough schedulers for the dbs. So we need to increment
+	 * our workers all at once so that schedulers don't start workers stealing
+	 * other schedulers' spots.
+	 */
+	if (!bgw_total_workers_increment_by(list_length(db_oids)))
+	{
+		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					  errmsg("total databases = %ld TimescaleDB background worker limit %d, so no schedulers allocated", hash_get_num_entries(db_htab), guc_max_background_workers),
+					  errhint("You may start background workers manually by using the  _timescaledb_internal.start_background_workers() function in each database you would like to have a scheduler worker in.")));
+		return;
+	}
+
+	/*
+	 * All schedulers have been correctly accounted for, so go ahead and
+	 * insert all into the actual hash table.
+	 */
+	foreach(lc, db_oids)
+		(void) db_hash_entry_create(db_htab, lfirst_oid(lc));
+
+	/*
+	 * This commit is at the end of this function instead of after heap_close
+	 * above because the db_oids list is allocated on this txn's memory
+	 * context. We cannot free this context until we are done using the list.
+	 */
 	CommitTransactionCommand();
-	return db_htab;
 }
 
-/*
- * We want to avoid the race condition where we have enough workers allocated to start schedulers
- * for all databases, but before we could get all of them started, the (say) first scheduler has
- * started too many jobs and then we don't have enough schedulers for the dbs. So we need to first
- * get the number of dbs for which we may need schedulers, then reserve the correct number of workers,
- * then start the workers.
- */
+/* Scan our hash table of dbs and register a worker for each */
 static void
 start_db_schedulers(HTAB *db_htab)
 {
@@ -307,21 +355,7 @@ start_db_schedulers(HTAB *db_htab)
 	int			nstarted = 0;
 	int			ndatabases = hash_get_num_entries(db_htab);
 
-	/*
-	 * Increment our workers all at once so that schedulers don't start
-	 * workers stealing other schedulers' spots
-	 */
-	if (!bgw_total_workers_increment_by(ndatabases))
-	{
-		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					  errmsg("total databases = %ld TimescaleDB background worker limit %d", hash_get_num_entries(db_htab), guc_max_background_workers),
-					  errhint("You may start background workers manually by using the  _timescaledb_internal.start_background_workers() function in each database you would like to have a scheduler worker in.")));
-		return;
-	}
-
-	/* Now scan our hash table of dbs and register a worker for each */
 	hash_seq_init(&hash_seq, db_htab);
-
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		bool		worker_registered = false;
@@ -340,8 +374,8 @@ start_db_schedulers(HTAB *db_htab)
 						  errhint("%d schedulers have been started, %d databases remain without scheduler. Increase max_worker_processes and restart the server.", nstarted, (ndatabases - nstarted))));
 
 			/*
-			 * We incremented total workers, but we don't need to decrement as
-			 * that will be handled by the stopped workers check.
+			 * We don't need to decrement as that will be handled by the
+			 * stopped workers check.
 			 */
 			break;
 		}
@@ -397,54 +431,78 @@ stopped_db_schedulers_cleanup(HTAB *db_htab)
 	}
 }
 
-/* Actions for message types we could receive off of the bgw_message_queue*/
-static void
-message_start_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
+/* Returns the hashtable entry for a database's scheduler, allocating one if it does not exist. */
+static DbHashEntry *
+allocate_scheduler(HTAB *db_htab, Oid db_oid)
 {
-	DbHashEntry *db_he;
 	bool		found;
-	bool		worker_registered;
-	pid_t		worker_pid;
+	DbHashEntry *db_he;
 
-	db_he = hash_search(db_htab, &message->db_oid, HASH_ENTER, &found);
-
-	/*
-	 * This should be idempotent, so if we find the background worker and it's
-	 * not stopped, we should just continue. If we have a worker that stopped
-	 * but hasn't been cleaned up yet, simply restart the worker without
-	 * incrementing cause we've already incremented
-	 */
+	db_he = hash_search(db_htab, &db_oid, HASH_FIND, &found);
 	if (!found)
 	{
+		/* Reserve a spot for this scheduler with BGW counter */
 		if (!bgw_total_workers_increment())
 		{
 			report_bgw_limit_exceeded();
-			bgw_message_send_ack(message, ACK_FAILURE);
-			return;
+			return NULL;
 		}
+
+		/*
+		 * Only insert into the hash table if we successfully get a counter
+		 * spot
+		 */
+		db_he = db_hash_entry_create(db_htab, db_oid);
 	}
 
-	if (!found || get_background_worker_pid(db_he->db_scheduler_handle, &worker_pid) == BGWH_STOPPED)
-	{
-		worker_registered = register_entrypoint_for_db(db_he->db_oid, vxid, &db_he->db_scheduler_handle);
-		if (!worker_registered)
-		{
-			report_error_on_worker_register_failure();
-			bgw_total_workers_decrement();	/* couldn't register the worker,
-											 * decrement and return false */
-			hash_search(db_htab, &message->db_oid, HASH_REMOVE, &found);
-			bgw_message_send_ack(message, ACK_FAILURE);
-			return;
-
-		}
-		wait_for_background_worker_startup(db_he->db_scheduler_handle, &worker_pid);
-	}
-
-	bgw_message_send_ack(message, ACK_SUCCESS);
-	return;
+	return db_he;
 }
 
-static void
+static AckResult
+register_scheduler_handle(VirtualTransactionId vxid, DbHashEntry *db_he)
+{
+	pid_t		worker_pid;
+	bool		worker_registered = register_entrypoint_for_db(db_he->db_oid, vxid, &db_he->db_scheduler_handle);
+
+	if (!worker_registered)
+	{
+		report_error_on_worker_register_failure();
+		return ACK_FAILURE;
+	}
+	wait_for_background_worker_startup(db_he->db_scheduler_handle, &worker_pid);
+	return ACK_SUCCESS;
+}
+
+/*
+ *************
+ * Actions for message types we could receive off of the bgw_message_queue.
+ * None of these action functions should do accounting clean-up, as this is done in exclusively
+ * in stopped_db_schedulers.
+ *************
+ */
+
+/*
+ * This should be idempotent. If we find the background worker and it's
+ * not stopped, do nothing. If we have a worker that stopped
+ * but hasn't been cleaned up yet, simply restart the worker.
+ */
+static AckResult
+message_start_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
+{
+	DbHashEntry *db_he;
+	pid_t		worker_pid;
+
+	db_he = allocate_scheduler(db_htab, message->db_oid);
+	if (db_he == NULL)
+		return ACK_FAILURE;
+
+	if (get_background_worker_pid(db_he->db_scheduler_handle, &worker_pid) == BGWH_STOPPED)
+		return register_scheduler_handle(vxid, db_he);
+
+	return ACK_SUCCESS;
+}
+
+static AckResult
 message_stop_action(HTAB *db_htab, BgwMessage *message)
 {
 	DbHashEntry *db_he;
@@ -456,52 +514,38 @@ message_stop_action(HTAB *db_htab, BgwMessage *message)
 		terminate_background_worker(db_he->db_scheduler_handle);
 		wait_for_background_worker_shutdown(db_he->db_scheduler_handle);
 	}
-	bgw_message_send_ack(message, ACK_SUCCESS);
-	stopped_db_schedulers_cleanup(db_htab);
-	return;
+	return ACK_SUCCESS;
 }
 
 /*
+ * This function will only restart an existing scheduler and will throw an error
+ * if it is told to restart a nonexistent scheduler.
+ *
  * One might think that this function would simply be a combination of stop and start above, however
- * We decided against that because we want to maintain the worker's "slot" reserved by keeping the number of workers constant during stop/restart
- * when you stop and start the num_workers will be decremented and then incremented, if you restart, the count simply should remain constant.
+ * we decided against that because we want to maintain the worker's "slot".
  * We don't want a race condition where some other db steals the scheduler of the other by requesting a worker at the wrong time.
 */
-static void
+static AckResult
 message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
 {
 	DbHashEntry *db_he;
 	bool		found;
-	bool		worker_registered;
-	pid_t		worker_pid;
 
-	db_he = hash_search(db_htab, &message->db_oid, HASH_ENTER, &found);
-	if (found)
+	db_he = hash_search(db_htab, &message->db_oid, HASH_FIND, &found);
+	if (!found)
 	{
-		terminate_background_worker(db_he->db_scheduler_handle);
-		wait_for_background_worker_shutdown(db_he->db_scheduler_handle);
+		ereport(WARNING, (errmsg("TimescaleDB background worker launcher instructed to restart a nonexistent scheduler BGW")));
+		return ACK_FAILURE;
 	}
-	else if (!bgw_total_workers_increment())	/* we still need to increment
-												 * if we haven't found an
-												 * entry */
-	{
-		report_bgw_limit_exceeded();
-		bgw_message_send_ack(message, ACK_FAILURE);
-		return;
-	}
-	worker_registered = register_entrypoint_for_db(db_he->db_oid, vxid, &db_he->db_scheduler_handle);
-	if (!worker_registered)
-	{
-		report_error_on_worker_register_failure();
-		bgw_total_workers_decrement();	/* couldn't register the worker,
-										 * decrement and return false */
-		hash_search(db_htab, &message->db_oid, HASH_REMOVE, &found);
-		bgw_message_send_ack(message, ACK_FAILURE);
-		return;
-	}
-	wait_for_background_worker_startup(db_he->db_scheduler_handle, &worker_pid);
-	bgw_message_send_ack(message, ACK_SUCCESS);
-	return;
+
+	/*
+	 * Stop the scheduler no matter what, so we can restart. Both helper
+	 * functions correctly handle null scheduler_handles
+	 */
+	terminate_background_worker(db_he->db_scheduler_handle);
+	wait_for_background_worker_shutdown(db_he->db_scheduler_handle);
+
+	return register_scheduler_handle(vxid, db_he);
 }
 
 /*
@@ -513,6 +557,7 @@ launcher_handle_message(HTAB *db_htab)
 	BgwMessage *message = bgw_message_receive();
 	PGPROC	   *sender;
 	VirtualTransactionId vxid;
+	AckResult	action_result = ACK_FAILURE;
 
 	if (message == NULL)
 		return false;
@@ -529,16 +574,17 @@ launcher_handle_message(HTAB *db_htab)
 	switch (message->message_type)
 	{
 		case START:
-			message_start_action(db_htab, message, vxid);
+			action_result = message_start_action(db_htab, message, vxid);
 			break;
 		case STOP:
-			message_stop_action(db_htab, message);
+			action_result = message_stop_action(db_htab, message);
 			break;
 		case RESTART:
-			message_restart_action(db_htab, message, vxid);
+			action_result = message_restart_action(db_htab, message, vxid);
 			break;
 	}
 
+	bgw_message_send_ack(message, action_result);
 	return true;
 }
 
@@ -585,7 +631,9 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	ereport(LOG, (errmsg("TimescaleDB background worker launcher connected to shared catalogs")));
 
 	bgw_message_queue_set_reader();
-	db_htab = populate_database_htab();
+	db_htab = init_database_htab();
+	populate_database_htab(db_htab);
+
 	before_shmem_exit(launcher_pre_shmem_cleanup, PointerGetDatum(db_htab));
 
 	start_db_schedulers(db_htab);
