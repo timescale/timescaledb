@@ -198,7 +198,11 @@ build_version_body(void)
 	else
 		jsonb_add_pair(parseState, REQ_OS, "Unknown");
 
-	jsonb_add_pair(parseState, REQ_PS_VERSION, PG_VERSION);
+	/*
+	 * PACKAGE_VERSION does not include extra details that some systems (e.g.,
+	 * Ubuntu) sometimes include in PG_VERSION
+	 */
+	jsonb_add_pair(parseState, REQ_PS_VERSION, PACKAGE_VERSION);
 	jsonb_add_pair(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
 	jsonb_add_pair(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
 	jsonb_add_pair(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
