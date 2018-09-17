@@ -9,7 +9,6 @@
 #define TIMESCALEDB_MOD_VERSION "@VERSION_MOD@"
 #define BUILD_OS_NAME "@CMAKE_SYSTEM_NAME@"
 #define BUILD_OS_VERSION "@CMAKE_SYSTEM_VERSION@"
-#define PG_VERSION "@PG_VERSION@"
 /*
  * Value should be set in package release scripts. Otherwise
  * defaults to "source"
