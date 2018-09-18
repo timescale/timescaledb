@@ -204,6 +204,7 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 static MinMaxResult
 relation_minmax_indexscan(Relation rel,
 						  Oid atttype,
+						  Name attname,
 						  AttrNumber attnum,
 						  Datum minmax[2])
 {
@@ -217,7 +218,7 @@ relation_minmax_indexscan(Relation rel,
 
 		idxrel = index_open(lfirst_oid(lc), AccessShareLock);
 
-		if (idxrel->rd_att->attrs[0]->attnum == attnum)
+		if (idxrel->rd_att->attrs[0]->atttypid == atttype && namestrcmp(&idxrel->rd_att->attrs[0]->attname, NameStr(*attname)) == 0)
 			res = minmax_indexscan(rel, idxrel, attnum, minmax);
 
 		index_close(idxrel, AccessShareLock);
@@ -230,11 +231,11 @@ relation_minmax_indexscan(Relation rel,
 }
 
 static bool
-table_has_minmax_index(Oid relid, Oid atttype, AttrNumber attnum)
+table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
 {
 	Datum		minmax[2];
 	Relation	rel = heap_open(relid, AccessShareLock);
-	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attnum, minmax);
+	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attname, attnum, minmax);
 
 	heap_close(rel, AccessShareLock);
 
@@ -250,13 +251,17 @@ static bool
 chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 {
 	Relation	rel = heap_open(relid, AccessShareLock);
-	MinMaxResult res = relation_minmax_indexscan(rel, atttype, attnum, minmax);
+	NameData	attname;
+	MinMaxResult res;
+
+	namestrcpy(&attname, get_attname(relid, attnum));
+	res = relation_minmax_indexscan(rel, atttype, &attname, attnum, minmax);
 
 	if (res == MINMAX_NO_INDEX)
 	{
 		ereport(WARNING,
 				(errmsg("no index on \"%s\" found for adaptive chunking on chunk \"%s\"",
-						get_attname(relid, attnum), get_rel_name(relid)),
+						NameStr(attname), get_rel_name(relid)),
 				 errdetail("Adaptive chunking works best with an index on the dimension being adapted.")));
 
 		res = minmax_heapscan(rel, atttype, attnum, minmax);
@@ -635,6 +640,7 @@ void
 chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 {
 	AttrNumber	attnum;
+	NameData	attname;
 	Oid			atttype;
 
 	if (!OidIsValid(info->table_relid))
@@ -648,6 +654,7 @@ chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 				 errmsg("no open dimension found for adaptive chunking")));
 
 	attnum = get_attnum(info->table_relid, info->colname);
+	namestrcpy(&attname, info->colname);
 	atttype = get_atttype(info->table_relid, attnum);
 
 	if (!OidIsValid(atttype))
@@ -673,7 +680,7 @@ chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 		elog(WARNING, "target chunk size for adaptive chunking is less than 10 MB");
 
 	if (info->check_for_index &&
-		!table_has_minmax_index(info->table_relid, atttype, attnum))
+		!table_has_minmax_index(info->table_relid, atttype, &attname, attnum))
 		ereport(WARNING,
 				(errmsg("no index on \"%s\" found for adaptive chunking on hypertable \"%s\"",
 						info->colname, get_rel_name(info->table_relid)),
