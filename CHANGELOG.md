@@ -4,6 +4,32 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 0.12.1 (2018-09-18)
+
+**High-level changes**
+
+* Fixes for a few issues related to the new scheduler and background worker framework.
+* Fixed bug in adaptive chunking where the incorrect index could be used for determining the current interval.
+* Improved testing, code cleanup, and other housekeeping.
+
+**Notable commits**
+* [0f6f7fc] Fix adaptive chunking so it chooses correct index
+* [3ed79ed] Fix sigterm handling in background jobs
+* [bea098f] Remove !WIN32 for sys/time.h and sys/socket.h, pg provides fills
+* [9f62a1a] Also add sys/time.h for NetBSD. Fixes #700
+* [95a982f] Fix build on FreeBSD wrt sockets
+* [fcb4a79] Remove (redefined) macro PG_VERSION and replace with PACKAGE_VERSION
+* [2634897] Release SpinLock even when we're about to Error due to over-decrementing
+* [1f30dbb] Make sure DB schedulers are not decremented if they were never incremented
+* [f518cd0] Add support for pre-release version checks
+* [acebaea] Don't start schedulers for template databases.
+* [f221a12] Fix use-after-free bug in telemetry test
+* [0dc5bbb] Use pg_config bindir directory for pg executables
+
+**Thanks**
+* @did-g for reporting a use-after-free bug in a test and for improving the robustness of another test
+* @kev009 for fixing build issues on FreeBSD and NetBSD
+
 ## 0.12.0 (2018-09-10)
 
 **High-level changes**
