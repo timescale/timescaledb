@@ -138,6 +138,101 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
 
 SELECT * FROM chunk_relation_size('test_adaptive_no_index');
 
+-- Test added to check that the correct index (i.e. time index) is being used
+-- to find the min and max. Previously a bug selected the first index listed,
+-- which in this case is location rather than time and therefore could return
+-- the wrong min and max if items at the start and end of the index did not have
+-- the correct min and max timestamps.
+--
+-- In this test, we create chunks with a lot of locations with only one reading
+-- that is at the beginning of the time frame, and then one location in the middle
+-- of the range that has two readings, one that is the same as the others and one
+-- that is larger. The algorithm should use these two readings for min & max; however,
+-- if it's broken (as it was before), it would choose just the reading that is common
+-- to all the locations.
+CREATE TABLE test_adaptive_correct_index(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive_correct_index', 'time',
+                         chunk_target_size => '100MB',
+                         chunk_time_interval => 86400000000,
+                         create_default_indexes => false);
+CREATE INDEX ON test_adaptive_correct_index(location);
+CREATE INDEX ON test_adaptive_correct_index(time DESC);
+
+-- First chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-01T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-01T00:00:00+00'::timestamptz,
+                '2018-01-01T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-01T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+
+-- Second chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-02T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-02T00:00:00+00'::timestamptz,
+                '2018-01-02T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-02T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+
+-- Third chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-03T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-03T00:00:00+00'::timestamptz,
+                '2018-01-03T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-03T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+
+-- This should be the start of the fourth chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-04T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-04T00:00:00+00'::timestamptz,
+                '2018-01-04T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-04T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+
+-- If working correctly, this goes in the 4th chunk, otherwise its a separate 5th chunk
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-05T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(1, 1000) as val;
+INSERT INTO test_adaptive_correct_index
+SELECT time, 0.0, '1500' FROM
+generate_series('2018-01-05T00:00:00+00'::timestamptz,
+                '2018-01-05T20:00:00+00'::timestamptz,
+                '10 hours') as time;
+INSERT INTO test_adaptive_correct_index
+SELECT '2018-01-05T00:00:00+00'::timestamptz, val, val + 1 FROM
+generate_series(2001, 3000) as val;
+
+-- This should show 4 chunks, rather than 5
+SELECT COUNT(*) FROM chunk_relation_size_pretty('test_adaptive_correct_index');
+-- The interval_length should no longer be 86400000000 for our hypertable, so 3rd column so be true.
+-- Note: the exact interval_length is non-deterministic, so we can't use its actual value for tests
+SELECT id, hypertable_id, interval_length > 86400000000 FROM _timescaledb_catalog.dimension;
+
+-- Drop because it's size and estimated chunk_interval is non-deterministic so
+-- we don't want to make other tests flaky.
+DROP TABLE test_adaptive_correct_index;
+
 -- Test with space partitioning. This might affect the estimation
 -- since there are more chunks in the same time interval and space
 -- chunks might be unevenly filled.
