@@ -265,12 +265,21 @@ endif (PGINDENT)
 
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 
+# Check if PostgreSQL has OpenSSL enabled.
+# Right now, a Postgres header will redefine an OpenSSL function if Postgres is not installed --with-openssl,
+# so in order for TimescaleDB to compile correctly with OpenSSL, Postgres must also have OpenSSL enabled.
+file(STRINGS ${PG_INCLUDEDIR}/pg_config.h PG_USE_OPENSSL REGEX "#define USE_OPENSSL [01]")
+
+if (USE_OPENSSL AND (NOT PG_USE_OPENSSL))
+    message(FATAL_ERROR "PostgreSQL was built without OpenSSL support, which TimescaleDB needs for full compatibility. Please rebuild PostgreSQL using `--with-openssl` or if you want to continue without OpenSSL, re-run bootstrap with `-DUSE_OPENSSL=0`")
+endif (USE_OPENSSL AND (NOT PG_USE_OPENSSL))
+
 if (USE_OPENSSL)
   # Try to find a local OpenSSL installation
   include(FindOpenSSL)
 
   if (NOT OPENSSL_FOUND)
-    message(FATAL_ERROR "TimescaleDB requires OpenSSL but it wasn't found")
+    message(FATAL_ERROR "TimescaleDB requires OpenSSL but it wasn't found. If you want to continue without OpenSSL, re-run bootstrap with `-DUSE_OPENSSL=0`")
   endif(NOT OPENSSL_FOUND)
 
   if (${OPENSSL_VERSION} VERSION_LESS "1.0")
