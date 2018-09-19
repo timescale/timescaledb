@@ -4,10 +4,11 @@
 #include <postgres.h>
 
 #define VERSION_INFO_LEN 128
+#define VERSION_PARTS 3
 
 typedef struct VersionInfo
 {
-	long		version[3];
+	long		version[VERSION_PARTS];
 	char		version_mod[VERSION_INFO_LEN];
 	bool		has_version_mod;
 } VersionInfo;
