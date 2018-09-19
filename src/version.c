@@ -70,7 +70,7 @@ version_cmp(VersionInfo *v1, VersionInfo *v2)
 
 #define NUM_VERSION_DELIMS 4
 
-static const char *version_delimiter[NUM_VERSION_DELIMS] = {".", ".", "-", ""};
+static const char *const version_delimiter[NUM_VERSION_DELIMS] = {".", ".", "-", ""};
 
 bool
 version_parse(const char *version, VersionInfo *result)
@@ -106,6 +106,8 @@ version_parse(const char *version, VersionInfo *result)
 		else
 		{
 			char	   *endptr;
+
+			Assert(i < VERSION_PARTS);
 
 			result->version[i] = strtol(subversion, &endptr, 10);
 
