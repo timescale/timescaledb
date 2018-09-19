@@ -3,6 +3,7 @@
 #include <catalog/namespace.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <postmaster/bgworker.h>
 
 #include "log.h"
 #include "scanner.h"
@@ -58,6 +59,12 @@ emit_log_hook_callback(ErrorData *edata)
 {
 	bool		started_txn = false;
 
+	/*
+	 * Block signals so we don't lose messages generated during signal
+	 * processing if they occur while we are saving this log message (since
+	 * emit_log_hook is modified and restored below)
+	 */
+	BackgroundWorkerBlockSignals();
 	PG_TRY();
 	{
 		/*
@@ -94,6 +101,7 @@ emit_log_hook_callback(ErrorData *edata)
 		emit_log_hook = emit_log_hook_callback;
 	}
 	PG_END_TRY();
+	BackgroundWorkerUnblockSignals();
 }
 
 void
