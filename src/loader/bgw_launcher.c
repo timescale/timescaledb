@@ -591,6 +591,12 @@ launcher_handle_message(HTAB *db_htab)
 static void
 bgw_sigterm(SIGNAL_ARGS)
 {
+	/*
+	 * The launcher should never be in a critical section, but if it is we
+	 * have no choice but to PANIC since it is unsafe to exit.
+	 */
+	if (CritSectionCount != 0)
+		ereport(PANIC, (errmsg("TimescaleDB background worker launcher terminated while in a critical section")));
 	ereport(LOG, (errmsg("TimescaleDB background worker launcher terminated by administrator command. Launcher will not restart after exiting")));
 	proc_exit(0);
 }

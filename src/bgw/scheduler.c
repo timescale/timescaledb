@@ -23,6 +23,7 @@
 #include <utils/memutils.h>
 #include <access/xact.h>
 #include <pgstat.h>
+#include <tcop/tcopprot.h>
 
 #include "extension.h"
 #include "scheduler.h"
@@ -516,11 +517,30 @@ bgw_scheduler_setup_callbacks()
 	before_shmem_exit(bgw_scheduler_before_shmem_exit_callback, PointerGetDatum(NULL));
 }
 
+static void
+handle_sigterm(SIGNAL_ARGS)
+{
+	/*
+	 * do not use a level >= ERROR because we don't want to exit here but
+	 * rather only during CHECK_FOR_INTERRUPTS
+	 */
+	ereport(LOG,
+			(errcode(ERRCODE_ADMIN_SHUTDOWN),
+			 errmsg("terminating TimescaleDB job scheduler due to administrator command")));
+	die(postgres_signal_arg);
+}
+
 Datum
 ts_bgw_scheduler_main(PG_FUNCTION_ARGS)
 {
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
+
+	/*
+	 * do not use the default `bgworker_die` sigterm handler because it does
+	 * not respect critical sections
+	 */
+	pqsignal(SIGTERM, handle_sigterm);
 	BackgroundWorkerUnblockSignals();
 
 	bgw_scheduler_setup_callbacks();
