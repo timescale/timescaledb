@@ -5,6 +5,8 @@
 #include <pgstat.h>
 #include <utils/memutils.h>
 #include <miscadmin.h>
+#include <storage/ipc.h>
+#include <tcop/tcopprot.h>
 
 #include "job.h"
 #include "scanner.h"
@@ -218,6 +220,21 @@ bgw_job_timeout_at(BgwJob *job, TimestampTz start_time)
 }
 
 
+static void
+handle_sigterm(SIGNAL_ARGS)
+{
+	/*
+	 * do not use a level >= ERROR because we don't want to exit here but
+	 * rather only during CHECK_FOR_INTERRUPTS
+	 */
+	ereport(LOG,
+			(errcode(ERRCODE_ADMIN_SHUTDOWN),
+			 errmsg("terminating TimescaleDB background job \"%s\" due to administrator command",
+					MyBgworkerEntry->bgw_name)));
+	die(postgres_signal_arg);
+}
+
+
 TS_FUNCTION_INFO_V1(ts_bgw_job_entrypoint);
 
 extern Datum
@@ -230,6 +247,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
+
+	/*
+	 * do not use the default `bgworker_die` sigterm handler because it does
+	 * not respect critical sections
+	 */
+	pqsignal(SIGTERM, handle_sigterm);
 	BackgroundWorkerUnblockSignals();
 
 	elog(DEBUG1, "started background job %d", job_id);

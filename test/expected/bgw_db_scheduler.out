@@ -510,14 +510,15 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 (1 row)
 
 SELECT * FROM bgw_log;
- msg_no | mock_time | application_name |                                     msg                                      
---------+-----------+------------------+------------------------------------------------------------------------------
+ msg_no | mock_time | application_name |                                          msg                                          
+--------+-----------+------------------+---------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 300000, started at 0
       0 |         0 | test_job_3_long  | Before sleep job 3
       1 |         0 | test_job_3_long  | Job got term signal
-      2 |         0 | test_job_3_long  | terminating background worker "test_job_3_long" due to administrator command
-(5 rows)
+      2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
+      3 |         0 | test_job_3_long  | terminating connection due to administrator command
+(6 rows)
 
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
@@ -541,19 +542,20 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM bgw_log;
- msg_no | mock_time | application_name |                                     msg                                      
---------+-----------+------------------+------------------------------------------------------------------------------
+ msg_no | mock_time | application_name |                                          msg                                          
+--------+-----------+------------------+---------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 300000, started at 0
       0 |         0 | test_job_3_long  | Before sleep job 3
       1 |         0 | test_job_3_long  | Job got term signal
-      2 |         0 | test_job_3_long  | terminating background worker "test_job_3_long" due to administrator command
+      2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
+      3 |         0 | test_job_3_long  | terminating connection due to administrator command
       0 |    300000 | DB Scheduler     | [TESTING] Wait until 800000, started at 300000
       1 |    800000 | DB Scheduler     | [TESTING] Registered new background worker
       2 |    800000 | DB Scheduler     | [TESTING] Wait until 1200000, started at 800000
       0 |    800000 | test_job_3_long  | Before sleep job 3
       1 |    800000 | test_job_3_long  | After sleep job 3
-(10 rows)
+(11 rows)
 
 --Test that sending SIGTERM to scheduler terminates the jobs as well
 \c single :ROLE_SUPERUSER
@@ -610,8 +612,9 @@ SELECT * FROM bgw_log;
       0 |         0 | test_job_3_long  | Before sleep job 3
       2 |         0 | DB Scheduler     | terminating background worker "ts_bgw_db_scheduler_test_main" due to administrator command
       1 |         0 | test_job_3_long  | Job got term signal
-      2 |         0 | test_job_3_long  | terminating background worker "test_job_3_long" due to administrator command
-(6 rows)
+      2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
+      3 |         0 | test_job_3_long  | terminating connection due to administrator command
+(7 rows)
 
 --After a SIGTERM to scheduler and jobs, the jobs are considered crashed and there is a imposed wait of 5 min before a job can be run.
 --See that there is no run again because of the crash-imposed wait (not run with the 10ms retry_period)
@@ -650,14 +653,15 @@ SELECT * FROM bgw_log;
       0 |         0 | test_job_3_long  | Before sleep job 3
       2 |         0 | DB Scheduler     | terminating background worker "ts_bgw_db_scheduler_test_main" due to administrator command
       1 |         0 | test_job_3_long  | Job got term signal
-      2 |         0 | test_job_3_long  | terminating background worker "test_job_3_long" due to administrator command
+      2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
+      3 |         0 | test_job_3_long  | terminating connection due to administrator command
       0 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
       0 |    500000 | DB Scheduler     | [TESTING] Wait until 300500000, started at 500000
       1 | 300500000 | DB Scheduler     | [TESTING] Registered new background worker
       2 | 300500000 | DB Scheduler     | [TESTING] Wait until 400500000, started at 300500000
       0 | 300500000 | test_job_3_long  | Before sleep job 3
       1 | 300500000 | test_job_3_long  | After sleep job 3
-(12 rows)
+(13 rows)
 
 --
 -- Test starting more jobs than availlable workers
