@@ -8,12 +8,6 @@ env:
   global:
     - secure: "TurskgAodG44RKCUPfoUb4JlT+UZwaPjUN73MS4+2ED2ayf46iUpcMODovDf7CPQRriMAvii/5xQ9UWTGYZejJy/Si3aE0fQeSKHIOPmuHqmmBkC3jgK9A5vOMpaAwljSNvIAMfwhIjVsq87nyvxHYWReDWl5SrdxTvh91RJvOiMRNdqwBbnj2j1cC30783ICGZUazrUyhDDnXispyBJYFxlHJmQJpfs6428dTRNJY/X8nVDXFwQkRjlIXarquTsrifCfzdq40Ykb8/1CS0295R8/kdKamQqXM0aS7iIkw3JFmZIz08OHKc7wcJuv6KSnCfNSftJqy2+nb1gkyIqkr3mrpYUa+2tKVwpA6OfET2S2kC5B3bOTcyBgihhnivAOS9zG8PTouLSUzqZzo+H893xdaMlX4kX3oOrOqzbj8YvTw6Dgw8PWERfnOngpKmKJFb8yboXPmGY7luSVxOplnPnYO0jaAXPU4ESsFYL3EBG5Zo4rVIuA5g7aJ0Ex+e5GQWiHDM1ubUo2vcuVVlurs/Aj8eSpNhqo0S5MjI05Jcz82X+9+asFcP+QV81UrueiXTlQ/7buAyMyVtKOgOhZwR4ImA1zzWkJjNNbZMJqeO9tPEgU7IxrqLhMgIpBB/pn0gzJZ8LN7C2oyznMYGzS5lrYaavojFUViv8vFyAQ24="
     - secure: "S8WfPsrVGg21vZPxjrmy1X19T7zpHNgaSAoqYGzJdDZcNYuZbI87+tP3VQZo4MxjP3Ag46zTI5K+6aMjCqYqFGKufZdEaSpPSLmppFbXALgSp/rOkzp1M9HhGj0QVP7QcoPbva5Bjnj3zVi9CMAo6MwtnGAvzqBLOsdtnXTxEmKYyeNgwUVbQi2nzO38GeLgabaFL4XD3f3bmHE5jG6QAwZ/L7+jajsD1biH4sOiRLCRshtvermtYxh3SK6rML2kiwATABxTd1xDdMVRO/llmDBN373tHK6mufJyIhrwG9oTprSSDDIJlEbSPCkH0uvJBGcDvOAWf9tr4TGs/beawx3ELcXqR/4EisFqvMiVL4Vpt1gMBg9gue4Y0wpHZYoBOOef2gFtuyL7PjYe9koYJAJxg9DJ29DMxIjuCLTnbHN6yLa9425pdvxcuNEJ2K2zD0ZWoLSVueL0MxLhOZJsqlMkmmrFyI7y5cj1XvJF3vcsa5yK3S7sXroKUzeLu6QMh8hO3jD/2IvdQJ7Huy5uiJk2a+KUceLzruxLbwPF4b8SEoTquJ9NFGtagCG77lbIbLltLs2fUf+JnM8ipdpoMibVRFBOahP8NZwpL/NFzG3WLH3tDncj/c3fneMiNv3FUHLf6ufOVOayQiAEidszcMct2R20qIxggXKymrjZA3k="
-  matrix:
-    # PG_VERSION (docker) and PG_GIT_TAG (Git) should be the same
-    - PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
-    - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
-    - EXEC_BACKEND="-DEXEC_BACKEND=1" PG_VERSION=10 PG_GIT_TAG=REL_10_2
-    - EXEC_BACKEND="-DEXEC_BACKEND=1" PG_VERSION=9.6 PG_GIT_TAG=REL9_6_6
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL
   # regression tests
@@ -41,18 +35,46 @@ after_script:
 
 jobs:
   include:
-    # this tests the ability to upgrade to the latest version from versions without constraint support
-    - stage: test
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 9.6"
+      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 10"
+      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 9.6 w/ EXEC_BACKEND"
+      env: EXEC_BACKEND="-DEXEC_BACKEND=1" PG_VERSION=9.6 PG_GIT_TAG=REL9_6_6
+
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 10 w/ EXEC_BACKEND"
+      env: EXEC_BACKEND="-DEXEC_BACKEND=1" PG_VERSION=10 PG_GIT_TAG=REL_10_2
+
+    # This tests the ability to upgrade to the latest version from versions without constraint support
+    - if: (type = pull_request) OR (type = cron)
+      stage: test
+      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+      name: "Update tests (versions w/o constraints support) 9.6"
       script:
         - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_no_constraints.sh
 
     # This tests the ability to upgrade to the latest version from versions with constraint support
-    - stage: test
+    - if: (type = pull_request) OR (type = cron)
+      stage: test
+      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
+      name: "Update tests (versions w/ constraints support) 9.6"
       script:
         - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_with_constraints.sh
 
-    # this tests the formatting of a PR.
-    - stage: test
+    # This tests the formatting of a PR.
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "pgindent"
       env:
         - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
       before_install:
@@ -69,19 +91,22 @@ jobs:
 
     - if: type = cron
       stage: test
-      script:
-        # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
-        - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
-
-    - if: type = cron
-      stage: test
+      name: "ABI breakage smoketest 9.6"
       script:
         # Version >= 9.6.3 is required by TimescaleDB
         - PG_MAJOR=9.6 PG_MINOR_COMPILE=3 bash -x ./scripts/docker-run-abi-test.sh
 
-    # memory spike test when running out of order random inserts into timescaledb database
+    - if: type = cron
+      stage: test
+      name: "ABI breakage smoketest 10"
+      script:
+        # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
+        - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
+
+    # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
+      name: "Memory leak on insert tests"
       before_install:
       install:
       after_failure:
@@ -96,6 +121,7 @@ jobs:
     # Valgrind test #1 : first 40 excluding plan_hashagg_optimized* and plan_hashagg_results*
     - if: (branch = prerelease_test)
       stage: test
+      name: "Valgrind test #1"
       before_install:
       install:
       after_failure:
@@ -112,6 +138,7 @@ jobs:
     # Valgrind test #2: tests matching plan_hashagg_optimized*
     - if: (branch = prerelease_test)
       stage: test
+      name: "Valgrind test #2"
       before_install:
       install:
       after_failure:
@@ -128,6 +155,7 @@ jobs:
     # Valgrind test #3: tests matching plan_hashagg_results*
     - if: (branch = prerelease_test)
       stage: test
+      name: "Valgrind test #3"
       before_install:
       install:
       after_failure:
@@ -144,6 +172,7 @@ jobs:
     # Valgrind test #4 : tests from #41 to end excluding plan_hashagg_optimized* and plan_hashagg_results*
     - if: (branch = prerelease_test)
       stage: test
+      name: "Valgrind test #4"
       before_install:
       install:
       after_failure:
@@ -160,6 +189,7 @@ jobs:
     # Coverity test
     - if: (branch = prerelease_test) OR (branch = coverity_scan)
       stage: test
+      name: "Coverity"
       env:
         - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
       before_install:
