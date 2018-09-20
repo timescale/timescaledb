@@ -320,13 +320,14 @@ dimension_scan_internal(ScanKeyData *scankey,
 						tuple_found_func tuple_found,
 						void *data,
 						int limit,
+						int dimension_index,
 						LOCKMODE lockmode,
 						MemoryContext mctx)
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[DIMENSION].id,
-		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_HYPERTABLE_ID_IDX],
+		.index = catalog->tables[DIMENSION].index_ids[dimension_index],
 		.nkeys = nkeys,
 		.limit = limit,
 		.scankey = scankey,
@@ -351,7 +352,8 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions, 
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	dimension_scan_internal(scankey, 1, dimension_tuple_found,
-							space, num_dimensions, AccessShareLock, mctx);
+							space, num_dimensions, DIMENSION_HYPERTABLE_ID_IDX,
+							AccessShareLock, mctx);
 
 	/* Sort dimensions in ascending order to allow binary search lookups */
 	qsort(space->dimensions, space->num_dimensions, sizeof(Dimension), cmp_dimension_id);
@@ -380,9 +382,9 @@ dimension_get_hypertable_id(int32 dimension_id)
 	/* Perform an index scan dimension_id. */
 	ScanKeyInit(&scankey[0], Anum_dimension_id_idx_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
-
 	ret = dimension_scan_internal(scankey, 1, dimension_find_hypertable_id_tuple_found,
-								  &hypertable_id, 1, AccessShareLock, CurrentMemoryContext);
+								  &hypertable_id, 1, DIMENSION_ID_IDX,
+								  AccessShareLock, CurrentMemoryContext);
 
 	if (ret == 1)
 		return hypertable_id;
@@ -450,7 +452,9 @@ dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices)
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
 	return dimension_scan_internal(scankey, 1, dimension_tuple_delete,
-								   &delete_slices, 0, RowExclusiveLock,
+								   &delete_slices, 0,
+								   DIMENSION_HYPERTABLE_ID_IDX,
+								   RowExclusiveLock,
 								   CurrentMemoryContext);
 }
 

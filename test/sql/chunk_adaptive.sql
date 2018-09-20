@@ -251,3 +251,13 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
 
 SELECT * FROM chunk_relation_size('test_adaptive_space');
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
+
+-- A previous version stopped working as soon as hypertable_id stopped being
+-- equal to dimension_id (i.e., there was a hypertable with more than 1 dimension).
+-- This test comes after test_adaptive_space, which has 2 dimensions, and makes
+-- sure that it still works.
+CREATE TABLE test_adaptive_after_multiple_dims(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive_after_multiple_dims', 'time',
+                         chunk_target_size => '100MB',
+                         create_default_indexes => true);
+INSERT INTO test_adaptive_after_multiple_dims VALUES('2018-01-01T00:00:00+00'::timestamptz, 0.0, 5);
