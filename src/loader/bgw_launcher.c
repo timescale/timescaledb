@@ -26,6 +26,10 @@
 /* for calling external function*/
 #include <fmgr.h>
 
+/* for signal handling (specifically die() function) */
+#include <tcop/tcopprot.h>
+
+/* for looking up sending proc information for message handling */
 #include <storage/procarray.h>
 
 #include "../compat.h"
@@ -34,7 +38,6 @@
 #include "bgw_counter.h"
 #include "bgw_message_queue.h"
 #include "bgw_launcher.h"
-
 
 #define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
 #define BGW_ENTRYPOINT_FUNCNAME "ts_bgw_db_scheduler_entrypoint"
@@ -588,23 +591,33 @@ launcher_handle_message(HTAB *db_htab)
 	return true;
 }
 
+/*
+ * Wrapper around normal postgres `die()` function to give more context on
+ * sigterms. The default, `bgworker_die()`, can't be used due to the fact
+ * that it handles signals synchronously, rather than waiting for a
+ * CHECK_FOR_INTERRUPTS(). `die()` (which is arguably misnamed) sets flags
+ * that will cause the backend to exit on the next call to
+ * CHECK_FOR_INTERRUPTS(), which can happen either in our code or in
+ * functions within the Postgres codebase that we call. This means that we
+ * don't need to wait for the next time control is returned to our loop to
+ * exit, which would be necessary if we set our own flag and checked it in
+ * a loop condition. However, because it cannot exit 0, the launcher will be
+ * restarted by the postmaster, even when it has received a SIGTERM, which
+ * we decided was the proper behavior. If users want to disable the launcher,
+ * they can set `timescaledb.max_background_workers = 0` and then we will
+ * `proc_exit(0)` before doing anything else.
+ */
 static void
-bgw_sigterm(SIGNAL_ARGS)
+launcher_sigterm(SIGNAL_ARGS)
 {
 	/*
-	 * The launcher should never be in a critical section, but if it is we
-	 * have no choice but to PANIC since it is unsafe to exit.
+	 * do not use a level >= ERROR because we don't want to exit here but
+	 * rather only during CHECK_FOR_INTERRUPTS
 	 */
-	if (CritSectionCount != 0)
-		ereport(PANIC, (errmsg("TimescaleDB background worker launcher terminated while in a critical section")));
-	ereport(LOG, (errmsg("TimescaleDB background worker launcher terminated by administrator command. Launcher will not restart after exiting")));
-	proc_exit(0);
-}
-
-static void
-bgw_sigint(SIGNAL_ARGS)
-{
-	ereport(ERROR, (errmsg("TimescaleDB background worker launcher canceled by administrator command. Launcher will restart after exiting")));
+	ereport(LOG,
+			(errcode(ERRCODE_ADMIN_SHUTDOWN),
+			 errmsg("terminating TimescaleDB background worker launcher due to administrator command")));
+	die(postgres_signal_arg);
 }
 
 extern Datum
@@ -613,8 +626,8 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 
 	HTAB	   *db_htab;
 
-	pqsignal(SIGTERM, bgw_sigterm);
-	pqsignal(SIGINT, bgw_sigint);
+	pqsignal(SIGINT, StatementCancelHandler);
+	pqsignal(SIGTERM, launcher_sigterm);
 	BackgroundWorkerUnblockSignals();
 	ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher started")));
 
@@ -644,12 +657,11 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 
 	start_db_schedulers(db_htab);
 
-	CHECK_FOR_INTERRUPTS();
-
 	while (true)
 	{
 		int			wl_rc;
 
+		CHECK_FOR_INTERRUPTS();
 		stopped_db_schedulers_cleanup(db_htab);
 		if (launcher_handle_message(db_htab))
 			continue;
@@ -662,9 +674,18 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		ResetLatch(MyLatch);
 		if (wl_rc & WL_POSTMASTER_DEATH)
 			bgw_on_postmaster_death();
-		CHECK_FOR_INTERRUPTS();
 	}
 	PG_RETURN_VOID();
+}
+
+/* Wrapper around `die()`, see note on `launcher_sigterm()` above for more info*/
+static void
+entrypoint_sigterm(SIGNAL_ARGS)
+{
+	ereport(LOG,
+			(errcode(ERRCODE_ADMIN_SHUTDOWN),
+			 errmsg("terminating TimescaleDB scheduler entrypoint due to administrator command")));
+	die(postgres_signal_arg);
 }
 
 /*
@@ -695,9 +716,13 @@ database_is_template_check(void)
 }
 
 /*
- * This can be run either from the cluster launcher at db_startup time, or in the case of an install/uninstall/update of the extension,
- * in the first case, we have no vxid that we're waiting on. In the second case, we do, because we have to wait so that we see the effects of said txn.
- * So we wait for it to finish, then we  morph into the new db_scheduler worker using whatever version is now installed (or exit gracefully if no version is now installed).
+ * This can be run either from the cluster launcher at db_startup time, or
+ * in the case of an install/uninstall/update of the extension, in the
+ * first case, we have no vxid that we're waiting on. In the second case,
+ * we do, because we have to wait so that we see the effects of said txn.
+ * So we wait for it to finish, then we  morph into the new db_scheduler
+ * worker using whatever version is now installed (or exit gracefully if
+ * no version is now installed).
  */
 extern Datum
 ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
@@ -708,7 +733,8 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	VirtualTransactionId vxid;
 
 
-	/* unblock signals and use default signal handlers */
+	pqsignal(SIGINT, StatementCancelHandler);
+	pqsignal(SIGTERM, entrypoint_sigterm);
 	BackgroundWorkerUnblockSignals();
 	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
