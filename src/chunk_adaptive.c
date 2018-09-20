@@ -427,7 +427,7 @@ calculate_chunk_interval(PG_FUNCTION_ARGS)
 	current_interval = dim->fd.interval_length;
 
 	/* Get a window of recent chunks */
-	chunks = chunk_get_window(hypertable_id,
+	chunks = chunk_get_window(dimension_id,
 							  dimension_coord,
 							  DEFAULT_CHUNK_WINDOW,
 							  CurrentMemoryContext);
