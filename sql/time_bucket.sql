@@ -1,15 +1,15 @@
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
-	AS '@MODULE_PATHNAME@', 'timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'ts_timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of timestamptz happens at UTC time
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
-	AS '@MODULE_PATHNAME@', 'timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'ts_timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 --bucketing on date should not do any timezone conversion
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+	AS '@MODULE_PATHNAME@', 'ts_date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width SMALLINT, ts SMALLINT) RETURNS SMALLINT
 	AS '@MODULE_PATHNAME@', 'ts_int16_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;

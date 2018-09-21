@@ -29,7 +29,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
     chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'hypertable_create' LANGUAGE C VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
 CREATE OR REPLACE FUNCTION  set_adaptive_chunking(
@@ -37,7 +37,7 @@ CREATE OR REPLACE FUNCTION  set_adaptive_chunking(
     chunk_target_size              TEXT,
     INOUT chunk_sizing_func        REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     OUT chunk_target_size          BIGINT
-) RETURNS RECORD AS '@MODULE_PATHNAME@', 'chunk_adaptive_set' LANGUAGE C VOLATILE;
+) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_chunk_adaptive_set' LANGUAGE C VOLATILE;
 
 -- Update chunk_time_interval for a hypertable.
 --
@@ -51,13 +51,13 @@ CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
     main_table              REGCLASS,
     chunk_time_interval     ANYELEMENT,
     dimension_name          NAME = NULL
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'dimension_set_interval' LANGUAGE C VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION  set_number_partitions(
     main_table              REGCLASS,
     number_partitions       INTEGER,
     dimension_name          NAME = NULL
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'dimension_set_num_slices' LANGUAGE C VOLATILE;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_num_slices' LANGUAGE C VOLATILE;
 
 -- Drop chunks that are older than a timestamp.
 CREATE OR REPLACE FUNCTION drop_chunks(
@@ -139,24 +139,24 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     partitioning_func       REGPROC = NULL,
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'dimension_add' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION attach_tablespace(
     tablespace NAME,
     hypertable REGCLASS,
     if_not_attached BOOLEAN = false
 ) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'tablespace_attach' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'ts_tablespace_attach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION detach_tablespace(
     tablespace NAME,
     hypertable REGCLASS = NULL,
     if_attached BOOLEAN = false
 ) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'tablespace_detach' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'ts_tablespace_detach' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION detach_tablespaces(hypertable REGCLASS) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
+AS '@MODULE_PATHNAME@', 'ts_tablespace_detach_all_from_hypertable' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
-AS '@MODULE_PATHNAME@', 'tablespace_show' LANGUAGE C VOLATILE STRICT;
+AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;

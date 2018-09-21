@@ -310,17 +310,17 @@ part_func_cache_create(Oid argtype, TypeCacheEntry *tce, Oid coerce_funcid, Memo
 	return pfc;
 }
 
-/* _timescaledb_catalog.get_partition_for_key(key anyelement) RETURNS INT */
-PGDLLEXPORT Datum get_partition_for_key(PG_FUNCTION_ARGS);
+/* _timescaledb_catalog.ts_get_partition_for_key(key anyelement) RETURNS INT */
+PGDLLEXPORT Datum ts_get_partition_for_key(PG_FUNCTION_ARGS);
 
-TS_FUNCTION_INFO_V1(get_partition_for_key);
+TS_FUNCTION_INFO_V1(ts_get_partition_for_key);
 
 /*
  * Partition hash function that first converts all inputs to text before
  * hashing.
  */
 Datum
-get_partition_for_key(PG_FUNCTION_ARGS)
+ts_get_partition_for_key(PG_FUNCTION_ARGS)
 {
 	Datum		arg = PG_GETARG_DATUM(0);
 	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;
@@ -365,21 +365,21 @@ get_partition_for_key(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(res);
 }
 
-PGDLLEXPORT Datum get_partition_hash(PG_FUNCTION_ARGS);
+PGDLLEXPORT Datum ts_get_partition_hash(PG_FUNCTION_ARGS);
 
-TS_FUNCTION_INFO_V1(get_partition_hash);
+TS_FUNCTION_INFO_V1(ts_get_partition_hash);
 
 /*
  * Compute a partition hash value for any input type.
  *
- * get_partition_hash() takes a single argument of anyelement type. We compute
+ * ts_get_partition_hash() takes a single argument of anyelement type. We compute
  * the hash based on the argument type information that we expect to find in the
  * function expression in the function call context. If no such expression
  * exists, or the type cannot be resolved from the expression, the function
  * throws an error.
  */
 Datum
-get_partition_hash(PG_FUNCTION_ARGS)
+ts_get_partition_hash(PG_FUNCTION_ARGS)
 {
 	Datum		arg = PG_GETARG_DATUM(0);
 	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;

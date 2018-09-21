@@ -9,10 +9,10 @@
 
 #define MAX_RESULT_SIZE	2048
 
-TS_FUNCTION_INFO_V1(test_conn);
+TS_FUNCTION_INFO_V1(ts_test_conn);
 
 Datum
-test_conn(PG_FUNCTION_ARGS)
+ts_test_conn(PG_FUNCTION_ARGS)
 {
 	char		response[MAX_RESULT_SIZE];
 	Connection *conn;

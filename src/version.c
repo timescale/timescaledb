@@ -159,10 +159,10 @@ ts_version_get_info(PG_FUNCTION_ARGS)
 
 const char *git_commit = STR(EXT_GIT_COMMIT);
 
-TS_FUNCTION_INFO_V1(get_git_commit);
+TS_FUNCTION_INFO_V1(ts_get_git_commit);
 
 Datum
-get_git_commit(PG_FUNCTION_ARGS)
+ts_get_git_commit(PG_FUNCTION_ARGS)
 {
 	size_t		var_size = VARHDRSZ + strlen(git_commit);
 	text	   *version_text = (text *) palloc(var_size);
