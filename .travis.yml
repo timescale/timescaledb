@@ -92,6 +92,10 @@ jobs:
     - if: type = cron
       stage: test
       name: "ABI breakage smoketest 9.6"
+      before_install:
+      install:
+      after_failure:
+      after_script:
       script:
         # Version >= 9.6.3 is required by TimescaleDB
         - PG_MAJOR=9.6 PG_MINOR_COMPILE=3 bash -x ./scripts/docker-run-abi-test.sh
@@ -99,6 +103,10 @@ jobs:
     - if: type = cron
       stage: test
       name: "ABI breakage smoketest 10"
+      before_install:
+      install:
+      after_failure:
+      after_script:
       script:
         # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
         - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
