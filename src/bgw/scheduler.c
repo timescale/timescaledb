@@ -36,8 +36,11 @@
 
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 
-#define LEAST_TIMESTAMP(left, right) \
-	(left < right ? left : right)
+static TimestampTz
+least_timestamp(TimestampTz left, TimestampTz right)
+{
+	return (left < right ? left : right);
+}
 
 TS_FUNCTION_INFO_V1(ts_bgw_scheduler_main);
 
@@ -357,7 +360,7 @@ earliest_time_to_start_next_job()
 		ScheduledBgwJob *sjob = lfirst(lc);
 
 		if (sjob->state == JOB_STATE_SCHEDULED)
-			earliest = LEAST_TIMESTAMP(earliest, sjob->next_start);
+			earliest = least_timestamp(earliest, sjob->next_start);
 	}
 	return earliest;
 }
@@ -374,7 +377,7 @@ earliest_job_timeout()
 		ScheduledBgwJob *sjob = lfirst(lc);
 
 		if (sjob->state == JOB_STATE_STARTED)
-			earliest = LEAST_TIMESTAMP(earliest, sjob->timeout_at);
+			earliest = least_timestamp(earliest, sjob->timeout_at);
 	}
 	return earliest;
 }
@@ -491,8 +494,8 @@ bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_call
 
 		/* start jobs, and then check when to next wake up */
 		start_scheduled_jobs(bgw_register);
-		next_wakeup = LEAST_TIMESTAMP(next_wakeup, earliest_time_to_start_next_job());
-		next_wakeup = LEAST_TIMESTAMP(next_wakeup, earliest_job_timeout());
+		next_wakeup = least_timestamp(next_wakeup, earliest_time_to_start_next_job());
+		next_wakeup = least_timestamp(next_wakeup, earliest_job_timeout());
 
 		timer_wait(next_wakeup);
 
