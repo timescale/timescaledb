@@ -19,6 +19,7 @@
 TS_FUNCTION_INFO_V1(test_status);
 TS_FUNCTION_INFO_V1(test_status_ssl);
 TS_FUNCTION_INFO_V1(test_status_mock);
+TS_FUNCTION_INFO_V1(test_telemetry_main_conn);
 TS_FUNCTION_INFO_V1(test_telemetry);
 
 #ifdef TS_DEBUG
@@ -193,6 +194,18 @@ test_telemetry_parse_version(PG_FUNCTION_ARGS)
 	return HeapTupleGetDatum(tuple);
 }
 
+/* Try to get the telemetry function to handle errors. Never connect to the actual endpoint. Only test cases that will result in connection errors. */
+Datum
+test_telemetry_main_conn(PG_FUNCTION_ARGS)
+{
+	text	   *host = PG_GETARG_TEXT_P(0);
+	text	   *path = PG_GETARG_TEXT_P(1);
+	text	   *service = PG_GETARG_TEXT_P(2);
+
+	telemetry_main(text_to_cstring(host), text_to_cstring(path), text_to_cstring(service));
+	PG_RETURN_NULL();
+}
+
 Datum
 test_telemetry(PG_FUNCTION_ARGS)
 {
@@ -246,11 +259,17 @@ test_telemetry(PG_FUNCTION_ARGS)
 	connection_destroy(conn);
 
 	if (err != HTTP_ERROR_NONE)
-		elog(ERROR, "HTTP error: %s", http_strerror(err));
+	{
+		http_response_state_destroy(rsp);
+		elog(ERROR, "telemetry error: %s", http_strerror(err));
+	}
 
 	if (!http_response_state_valid_status(rsp))
-		elog(ERROR, "invalid HTTP response status %d",
+	{
+		http_response_state_destroy(rsp);
+		elog(ERROR, "telemetry got unexpected HTTP response status: %d",
 			 http_response_state_status_code(rsp));
+	}
 
 	json_body = DirectFunctionCall1(jsonb_in, CStringGetDatum(http_response_state_body_start(rsp)));
 

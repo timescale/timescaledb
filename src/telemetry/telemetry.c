@@ -248,7 +248,7 @@ build_version_request(const char *host, const char *path)
 }
 
 Connection *
-telemetry_connect(void)
+telemetry_connect(const char *host, const char *service)
 {
 	Connection *conn;
 	int			ret;
@@ -261,7 +261,7 @@ telemetry_connect(void)
 		return NULL;
 	}
 
-	ret = connection_connect(conn, TELEMETRY_HOST, TELEMETRY_SCHEME, 0);
+	ret = connection_connect(conn, host, service, 0);
 
 	if (ret < 0)
 	{
@@ -272,7 +272,7 @@ telemetry_connect(void)
 
 		ereport(WARNING,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not make a connection to %s", TELEMETRY_ENDPOINT),
+				 errmsg("could not make a connection to %s://%s", service, host),
 				 errdetail("%s", errstr)));
 	}
 
@@ -280,7 +280,7 @@ telemetry_connect(void)
 }
 
 void
-telemetry_main()
+telemetry_main(const char *host, const char *path, const char *service)
 {
 	HttpError	err;
 	Connection *conn;
@@ -297,9 +297,15 @@ telemetry_main()
 		StartTransactionCommand();
 	}
 
-	conn = telemetry_connect();
+	conn = telemetry_connect(host, service);
 
-	req = build_version_request(TELEMETRY_HOST, TELEMETRY_PATH);
+	if (conn == NULL)
+	{
+		elog(WARNING, "telemetry connect error: could not make connection");
+		goto cleanup;
+	}
+
+	req = build_version_request(host, path);
 
 	rsp = http_response_state_create();
 
@@ -311,14 +317,14 @@ telemetry_main()
 	if (err != HTTP_ERROR_NONE)
 	{
 		elog(WARNING, "telemetry error: %s", http_strerror(err));
-		return;
+		goto cleanup;
 	}
 
 	if (!http_response_state_valid_status(rsp))
 	{
 		elog(WARNING, "telemetry got unexpected HTTP response status: %d",
 			 http_response_state_status_code(rsp));
-		return;
+		goto cleanup;
 	}
 
 	/*
@@ -331,6 +337,11 @@ telemetry_main()
 
 	if (started)
 		CommitTransactionCommand();
+	return;
+
+cleanup:
+	if (started)
+		AbortCurrentTransaction();
 	return;
 }
 

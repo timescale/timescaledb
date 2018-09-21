@@ -14,11 +14,6 @@
 #define TELEMETRY_SCHEME "https"
 #define TELEMETRY_HOST "telemetry.timescale.com"
 #define TELEMETRY_PATH "/v1/metrics"
-#define TELEMETRY_MAKE_ENDPOINT(scheme, host, path)	\
-	scheme "://" host path
-
-#define TELEMETRY_ENDPOINT TELEMETRY_MAKE_ENDPOINT(TELEMETRY_SCHEME, TELEMETRY_HOST, TELEMETRY_PATH)
-
 
 typedef struct VersionResult
 {
@@ -29,7 +24,7 @@ typedef struct VersionResult
 } VersionResult;
 
 HttpRequest *build_version_request(const char *host, const char *path);
-Connection *telemetry_connect(void);
+Connection *telemetry_connect(const char *host, const char *service);
 bool		telemetry_parse_version(const char *json, VersionInfo *vinfo, VersionResult *result);
 
 /*
@@ -37,6 +32,6 @@ bool		telemetry_parse_version(const char *json, VersionInfo *vinfo, VersionResul
  *  Its job is to send metrics and fetch the most up-to-date version of
  *  Timescale via HTTPS.
  */
-void		telemetry_main(void);
+void		telemetry_main(const char *host, const char *path, const char *service);
 
 #endif							/* TIMESCALEDB_TELEMETRY_TELEMETRY_H */
