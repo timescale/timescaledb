@@ -31,8 +31,8 @@
 #include "compat.h"
 #include "extension.h"
 
-#define INVALID_ESTIMATE -1
-#define IS_VALID_ESTIMATE(est) (est >= 0)
+#define INVALID_ESTIMATE (-1)
+#define IS_VALID_ESTIMATE(est) ((est) >= 0)
 #define MAX_FUNCTION_ARGS 10
 
 static double custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr, double path_rows);

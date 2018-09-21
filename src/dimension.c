@@ -655,7 +655,7 @@ interval_to_usec(Interval *interval)
 }
 
 #define INT_TYPE_MAX(type)												\
-	(int64)((type == INT2OID) ? INT16_MAX : ((type == INT4OID) ? INT32_MAX : INT64_MAX))
+	(int64)(((type) == INT2OID) ? INT16_MAX : (((type) == INT4OID) ? INT32_MAX : INT64_MAX))
 
 #define IS_VALID_NUM_SLICES(num_slices)					\
 	((num_slices) >= 1 && (num_slices) <= INT16_MAX)

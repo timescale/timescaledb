@@ -30,7 +30,7 @@
 #define DEFAULT_EXTRA_CONSTRAINTS_SIZE 4
 
 #define CHUNK_CONSTRAINTS_SIZE(num_constraints)		\
-	((sizeof(ChunkConstraint) * num_constraints))
+	(sizeof(ChunkConstraint) * (num_constraints))
 
 ChunkConstraints *
 chunk_constraints_alloc(int size_hint, MemoryContext mctx)
