@@ -21,7 +21,7 @@
 
 /* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
 /* This avoids the problem with coord < range_end where coord and range_end is an int64 */
-#define REMAP_LAST_COORDINATE(coord) ((coord==DIMENSION_SLICE_MAXVALUE) ? DIMENSION_SLICE_MAXVALUE-1 : coord)
+#define REMAP_LAST_COORDINATE(coord) (((coord)==DIMENSION_SLICE_MAXVALUE) ? DIMENSION_SLICE_MAXVALUE-1 : (coord))
 
 static inline DimensionSlice *
 dimension_slice_alloc(void)
