@@ -185,7 +185,7 @@ bgw_job_execute(BgwJob *job)
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_VERSION_CHECK:
-			telemetry_main();
+			telemetry_main(TELEMETRY_HOST, TELEMETRY_PATH, TELEMETRY_SCHEME);
 			return true;
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)

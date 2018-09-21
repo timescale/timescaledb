@@ -36,7 +36,6 @@ bool		guc_restoring = false;
 bool		guc_constraint_aware_append = true;
 int			guc_max_open_chunks_per_insert = 10;
 int			guc_max_cached_chunks_per_hypertable = 10;
-char	   *guc_telemetry_endpoint = TELEMETRY_ENDPOINT;
 int			guc_telemetry_level = TELEMETRY_BASIC;
 
 static void
@@ -121,16 +120,6 @@ _guc_init(void)
 							NULL,
 							assign_max_cached_chunks_per_hypertable_hook,
 							NULL);
-	DefineCustomStringVariable("timescaledb.telemetry_endpoint",
-							   "URI for telemetry endpoint",
-							   "URI for telemetry endpoint",
-							   &guc_telemetry_endpoint,
-							   guc_telemetry_endpoint,
-							   PGC_INTERNAL,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
 	DefineCustomEnumVariable("timescaledb.telemetry_level",
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
