@@ -51,10 +51,10 @@ convert_text_memory_amount_to_bytes(const char *memory_amount)
  * Exposed for testing purposes to be able to simulate a different memory
  * cache size in tests.
  */
-TS_FUNCTION_INFO_V1(set_memory_cache_size);
+TS_FUNCTION_INFO_V1(ts_set_memory_cache_size);
 
 Datum
-set_memory_cache_size(PG_FUNCTION_ARGS)
+ts_set_memory_cache_size(PG_FUNCTION_ARGS)
 {
 	const char *memory_amount = text_to_cstring(PG_GETARG_TEXT_P(0));
 
@@ -304,7 +304,7 @@ chunk_get_attno(Oid hypertable_relid, Oid chunk_relid, AttrNumber hypertable_att
  * and be used in normal prediction mode */
 #define UNDERSIZED_FILLFACTOR_THRESH (SIZE_FILLFACTOR_THRESH * 1.1)
 
-TS_FUNCTION_INFO_V1(calculate_chunk_interval);
+TS_FUNCTION_INFO_V1(ts_calculate_chunk_interval);
 
 /*
  * Calculate a new interval for a chunk in a given dimension.
@@ -386,7 +386,7 @@ TS_FUNCTION_INFO_V1(calculate_chunk_interval);
  * further if needed.
  */
 Datum
-calculate_chunk_interval(PG_FUNCTION_ARGS)
+ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 {
 	int32		dimension_id = PG_GETARG_INT32(0);
 	int64		dimension_coord = PG_GETARG_INT64(1);
@@ -687,13 +687,13 @@ chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 				 errdetail("Adaptive chunking works best with an index on the dimension being adapted.")));
 }
 
-TS_FUNCTION_INFO_V1(chunk_adaptive_set);
+TS_FUNCTION_INFO_V1(ts_chunk_adaptive_set);
 
 /*
  * Change the settings for adaptive chunking.
  */
 Datum
-chunk_adaptive_set(PG_FUNCTION_ARGS)
+ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 {
 	ChunkSizingInfo info = {
 		.table_relid = PG_GETARG_OID(0),

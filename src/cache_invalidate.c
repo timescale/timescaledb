@@ -72,7 +72,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 		hypertable_cache_invalidate_callback();
 }
 
-TS_FUNCTION_INFO_V1(timescaledb_invalidate_cache);
+TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
 
 /*
  * Force a cache invalidation for a catalog table.
@@ -84,7 +84,7 @@ TS_FUNCTION_INFO_V1(timescaledb_invalidate_cache);
  * cache invalidation.
  */
 Datum
-timescaledb_invalidate_cache(PG_FUNCTION_ARGS)
+ts_timescaledb_invalidate_cache(PG_FUNCTION_ARGS)
 {
 	catalog_invalidate_cache(PG_GETARG_OID(0), CMD_UPDATE);
 	PG_RETURN_VOID();

@@ -17,13 +17,13 @@
  *	 SELECT first(metric, time), last(metric, time) FROM metric GROUP BY hostname.
  */
 
-TS_FUNCTION_INFO_V1(first_sfunc);
-TS_FUNCTION_INFO_V1(first_combinefunc);
-TS_FUNCTION_INFO_V1(last_sfunc);
-TS_FUNCTION_INFO_V1(last_combinefunc);
-TS_FUNCTION_INFO_V1(bookend_finalfunc);
-TS_FUNCTION_INFO_V1(bookend_serializefunc);
-TS_FUNCTION_INFO_V1(bookend_deserializefunc);
+TS_FUNCTION_INFO_V1(ts_first_sfunc);
+TS_FUNCTION_INFO_V1(ts_first_combinefunc);
+TS_FUNCTION_INFO_V1(ts_last_sfunc);
+TS_FUNCTION_INFO_V1(ts_last_combinefunc);
+TS_FUNCTION_INFO_V1(ts_bookend_finalfunc);
+TS_FUNCTION_INFO_V1(ts_bookend_serializefunc);
+TS_FUNCTION_INFO_V1(ts_bookend_deserializefunc);
 
 /* A  PolyDatum represents a polymorphic datum */
 typedef struct PolyDatum
@@ -286,7 +286,7 @@ transcache_get(FunctionCallInfo fcinfo)
 }
 
 /*
- * bookend_sfunc - internal function called be last_sfunc and first_sfunc;
+ * bookend_sfunc - internal function called be ts_last_sfunc and ts_first_sfunc;
  */
 static inline Datum
 bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum value, PolyDatum cmp, char *opname, FunctionCallInfo fcinfo)
@@ -319,7 +319,7 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum va
 	PG_RETURN_POINTER(state);
 }
 
-/* bookend_combinefunc - internal function called be last_combinefunc and first_combinefunc;
+/* bookend_combinefunc - internal function called be ts_last_combinefunc and ts_first_combinefunc;
  * fmgr args are: (internal internal_state, internal2 internal_state)
  */
 static inline Datum
@@ -372,7 +372,7 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1, Inter
 
 /* first(internal internal_state, anyelement value, "any" comparison_element) */
 Datum
-first_sfunc(PG_FUNCTION_ARGS)
+ts_first_sfunc(PG_FUNCTION_ARGS)
 {
 	InternalCmpAggStore *store = PG_ARGISNULL(0) ? NULL : (InternalCmpAggStore *) PG_GETARG_POINTER(0);
 	PolyDatum	value = polydatum_from_arg(1, fcinfo);
@@ -390,7 +390,7 @@ first_sfunc(PG_FUNCTION_ARGS)
 
 /* last(internal internal_state, anyelement value, "any" comparison_element) */
 Datum
-last_sfunc(PG_FUNCTION_ARGS)
+ts_last_sfunc(PG_FUNCTION_ARGS)
 {
 	InternalCmpAggStore *store = PG_ARGISNULL(0) ? NULL : (InternalCmpAggStore *) PG_GETARG_POINTER(0);
 	PolyDatum	value = polydatum_from_arg(1, fcinfo);
@@ -408,7 +408,7 @@ last_sfunc(PG_FUNCTION_ARGS)
 
 /* first_combinerfunc(internal, internal) => internal */
 Datum
-first_combinefunc(PG_FUNCTION_ARGS)
+ts_first_combinefunc(PG_FUNCTION_ARGS)
 {
 	MemoryContext aggcontext;
 	InternalCmpAggStore *state1 = PG_ARGISNULL(0) ? NULL : (InternalCmpAggStore *) PG_GETARG_POINTER(0);
@@ -417,14 +417,14 @@ first_combinefunc(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{
 		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "first_combinefunc called in non-aggregate context");
+		elog(ERROR, "ts_first_combinefunc called in non-aggregate context");
 	}
 	return bookend_combinefunc(aggcontext, state1, state2, "<", fcinfo);
 }
 
 /* last_combinerfunc(internal, internal) => internal */
 Datum
-last_combinefunc(PG_FUNCTION_ARGS)
+ts_last_combinefunc(PG_FUNCTION_ARGS)
 {
 	MemoryContext aggcontext;
 	InternalCmpAggStore *state1 = PG_ARGISNULL(0) ? NULL : (InternalCmpAggStore *) PG_GETARG_POINTER(0);
@@ -433,15 +433,15 @@ last_combinefunc(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{
 		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "last_combinefunc called in non-aggregate context");
+		elog(ERROR, "ts_last_combinefunc called in non-aggregate context");
 	}
 	return bookend_combinefunc(aggcontext, state1, state2, ">", fcinfo);
 }
 
 
-/* bookend_serializefunc(internal) => bytea */
+/* ts_bookend_serializefunc(internal) => bytea */
 Datum
-bookend_serializefunc(PG_FUNCTION_ARGS)
+ts_bookend_serializefunc(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf;
 	InternalCmpAggStoreIOState *my_extra;
@@ -463,9 +463,9 @@ bookend_serializefunc(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
-/* bookend_deserializefunc(bytea, internal) => internal */
+/* ts_bookend_deserializefunc(bytea, internal) => internal */
 Datum
-bookend_deserializefunc(PG_FUNCTION_ARGS)
+ts_bookend_deserializefunc(PG_FUNCTION_ARGS)
 {
 	bytea	   *sstate;
 	StringInfoData buf;
@@ -499,16 +499,16 @@ bookend_deserializefunc(PG_FUNCTION_ARGS)
 }
 
 
-/* bookend_finalfunc(internal, anyelement, "any") => anyelement */
+/* ts_bookend_finalfunc(internal, anyelement, "any") => anyelement */
 Datum
-bookend_finalfunc(PG_FUNCTION_ARGS)
+ts_bookend_finalfunc(PG_FUNCTION_ARGS)
 {
 	InternalCmpAggStore *state;
 
 	if (!AggCheckCallContext(fcinfo, NULL))
 	{
 		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "bookend_finalfunc called in non-aggregate context");
+		elog(ERROR, "ts_bookend_finalfunc called in non-aggregate context");
 	}
 
 

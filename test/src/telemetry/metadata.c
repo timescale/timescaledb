@@ -7,25 +7,25 @@
 #include "export.h"
 #include "telemetry/metadata.h"
 
-TS_FUNCTION_INFO_V1(test_uuid);
-TS_FUNCTION_INFO_V1(test_exported_uuid);
-TS_FUNCTION_INFO_V1(test_install_timestamp);
+TS_FUNCTION_INFO_V1(ts_test_uuid);
+TS_FUNCTION_INFO_V1(ts_test_exported_uuid);
+TS_FUNCTION_INFO_V1(ts_test_install_timestamp);
 
 Datum
-test_uuid(PG_FUNCTION_ARGS)
+ts_test_uuid(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(metadata_get_uuid());
 }
 
 Datum
-test_exported_uuid(PG_FUNCTION_ARGS)
+ts_test_exported_uuid(PG_FUNCTION_ARGS)
 
 {
 	PG_RETURN_DATUM(metadata_get_exported_uuid());
 }
 
 Datum
-test_install_timestamp(PG_FUNCTION_ARGS)
+ts_test_install_timestamp(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(metadata_get_install_timestamp());
 }

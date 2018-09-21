@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
         dimension_id INTEGER,
         dimension_coord BIGINT,
         chunk_target_size BIGINT
-) RETURNS BIGINT AS '@MODULE_PATHNAME@', 'calculate_chunk_interval' LANGUAGE C;
+) RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_calculate_chunk_interval' LANGUAGE C;
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN chunk_sizing_func_schema NAME;
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN chunk_sizing_func_name NAME;

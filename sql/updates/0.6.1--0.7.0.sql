@@ -62,10 +62,10 @@ $BODY$;
 SELECT _timescaledb_internal.set_time_columns_not_null();
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '@MODULE_PATHNAME@', 'pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'ts_pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '@MODULE_PATHNAME@', 'pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_is_finite(
     val      BIGINT
@@ -179,7 +179,7 @@ BEGIN
     DROP FUNCTION IF EXISTS _timescaledb_internal.get_partition_for_key(text);
     CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement)
     RETURNS int
-    AS '@MODULE_PATHNAME@', 'get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'ts_get_partition_for_key' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
     FOR chunk_constraint_row IN
         SELECT cc.*

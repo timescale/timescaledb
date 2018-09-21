@@ -711,7 +711,7 @@ FROM unnest(ARRAY[
 -------------------------------------
 \c single :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION test.interval_to_internal(coltype REGTYPE, value ANYELEMENT = NULL::BIGINT) RETURNS BIGINT
-AS :MODULE_PATHNAME, 'dimension_interval_to_internal_test' LANGUAGE C VOLATILE;
+AS :MODULE_PATHNAME, 'ts_dimension_interval_to_internal_test' LANGUAGE C VOLATILE;
 \c single :ROLE_DEFAULT_PERM_USER
 SELECT test.interval_to_internal('TIMESTAMP'::regtype, INTERVAL '1 day');
  interval_to_internal 

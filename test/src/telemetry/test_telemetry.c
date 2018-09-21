@@ -16,11 +16,11 @@
 #define HTTPS_PORT	443
 #define TEST_ENDPOINT	"postman-echo.com"
 
-TS_FUNCTION_INFO_V1(test_status);
-TS_FUNCTION_INFO_V1(test_status_ssl);
-TS_FUNCTION_INFO_V1(test_status_mock);
-TS_FUNCTION_INFO_V1(test_telemetry_main_conn);
-TS_FUNCTION_INFO_V1(test_telemetry);
+TS_FUNCTION_INFO_V1(ts_test_status);
+TS_FUNCTION_INFO_V1(ts_test_status_ssl);
+TS_FUNCTION_INFO_V1(ts_test_status_mock);
+TS_FUNCTION_INFO_V1(ts_test_telemetry_main_conn);
+TS_FUNCTION_INFO_V1(ts_test_telemetry);
 
 #ifdef TS_DEBUG
 static char *test_string;
@@ -93,7 +93,7 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 /*  Test ssl_ops */
 Datum
-test_status_ssl(PG_FUNCTION_ARGS)
+ts_test_status_ssl(PG_FUNCTION_ARGS)
 {
 	int			status = PG_GETARG_INT32(0);
 #ifdef TS_USE_OPENSSL
@@ -113,7 +113,7 @@ test_status_ssl(PG_FUNCTION_ARGS)
 
 /*  Test default_ops */
 Datum
-test_status(PG_FUNCTION_ARGS)
+ts_test_status(PG_FUNCTION_ARGS)
 {
 	int			port = 80;
 	int			status = PG_GETARG_INT32(0);
@@ -124,7 +124,7 @@ test_status(PG_FUNCTION_ARGS)
 #ifdef TS_DEBUG
 /* Test mock_ops */
 Datum
-test_status_mock(PG_FUNCTION_ARGS)
+ts_test_status_mock(PG_FUNCTION_ARGS)
 {
 	int			port = 80;
 	text	   *arg1 = PG_GETARG_TEXT_P(0);
@@ -135,10 +135,10 @@ test_status_mock(PG_FUNCTION_ARGS)
 }
 #endif
 
-TS_FUNCTION_INFO_V1(test_telemetry_parse_version);
+TS_FUNCTION_INFO_V1(ts_test_telemetry_parse_version);
 
 Datum
-test_telemetry_parse_version(PG_FUNCTION_ARGS)
+ts_test_telemetry_parse_version(PG_FUNCTION_ARGS)
 {
 	text	   *response = PG_GETARG_TEXT_P(0);
 	VersionInfo installed_version;
@@ -196,7 +196,7 @@ test_telemetry_parse_version(PG_FUNCTION_ARGS)
 
 /* Try to get the telemetry function to handle errors. Never connect to the actual endpoint. Only test cases that will result in connection errors. */
 Datum
-test_telemetry_main_conn(PG_FUNCTION_ARGS)
+ts_test_telemetry_main_conn(PG_FUNCTION_ARGS)
 {
 	text	   *host = PG_GETARG_TEXT_P(0);
 	text	   *path = PG_GETARG_TEXT_P(1);
@@ -206,7 +206,7 @@ test_telemetry_main_conn(PG_FUNCTION_ARGS)
 }
 
 Datum
-test_telemetry(PG_FUNCTION_ARGS)
+ts_test_telemetry(PG_FUNCTION_ARGS)
 {
 	Connection *conn;
 	ConnectionType conntype;

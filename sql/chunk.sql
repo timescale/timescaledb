@@ -3,14 +3,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
         interval_length   BIGINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '@MODULE_PATHNAME@', 'dimension_calculate_open_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'ts_dimension_calculate_open_range_default' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_closed(
         dimension_value   BIGINT,
         num_slices        SMALLINT,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
-    AS '@MODULE_PATHNAME@', 'dimension_calculate_closed_range_default' LANGUAGE C STABLE;
+    AS '@MODULE_PATHNAME@', 'ts_dimension_calculate_closed_range_default' LANGUAGE C STABLE;
 
 -- Built-in function for calculating the next chunk interval when
 -- using adaptive chunking. The function can be replaced by a
@@ -29,4 +29,4 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
         dimension_id INTEGER,
         dimension_coord BIGINT,
         chunk_target_size BIGINT
-) RETURNS BIGINT AS '@MODULE_PATHNAME@', 'calculate_chunk_interval' LANGUAGE C;
+) RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_calculate_chunk_interval' LANGUAGE C;
