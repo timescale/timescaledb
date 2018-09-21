@@ -178,9 +178,10 @@ enum Anum_dimension_id_idx
 #define Natts_dimension_id_idx \
 	(_Anum_dimension_id_idx_max - 1)
 
-enum Anum_dimension_hypertable_id_idx
+enum Anum_dimension_hypertable_id_column_name_idx
 {
-	Anum_dimension_hypertable_id_idx_hypertable_id = 1,
+	Anum_dimension_hypertable_id_column_name_idx_hypertable_id = 1,
+	Anum_dimension_hypertable_id_column_name_idx_column_name,
 	_Anum_dimension_hypertable_id_idx_max,
 };
 
@@ -190,7 +191,7 @@ enum Anum_dimension_hypertable_id_idx
 enum
 {
 	DIMENSION_ID_IDX = 0,
-	DIMENSION_HYPERTABLE_ID_IDX,
+	DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX,
 	_MAX_DIMENSION_INDEX,
 };
 

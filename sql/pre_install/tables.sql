@@ -84,8 +84,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.dimension (
     ),
     UNIQUE (hypertable_id, column_name)
 );
-CREATE INDEX IF NOT EXISTS dimension_hypertable_id_idx
-ON _timescaledb_catalog.dimension(hypertable_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension','id'), '');
 

@@ -348,12 +348,17 @@ dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions, 
 	ScanKeyData scankey[1];
 
 	/* Perform an index scan on hypertable_id. */
-	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
+	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_column_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
-	dimension_scan_internal(scankey, 1, dimension_tuple_found,
-							space, num_dimensions, DIMENSION_HYPERTABLE_ID_IDX,
-							AccessShareLock, mctx);
+	dimension_scan_internal(scankey,
+							1,
+							dimension_tuple_found,
+							space,
+							num_dimensions,
+							DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX,
+							AccessShareLock,
+							mctx);
 
 	/* Sort dimensions in ascending order to allow binary search lookups */
 	qsort(space->dimensions, space->num_dimensions, sizeof(Dimension), cmp_dimension_id);
@@ -382,9 +387,15 @@ dimension_get_hypertable_id(int32 dimension_id)
 	/* Perform an index scan dimension_id. */
 	ScanKeyInit(&scankey[0], Anum_dimension_id_idx_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
-	ret = dimension_scan_internal(scankey, 1, dimension_find_hypertable_id_tuple_found,
-								  &hypertable_id, 1, DIMENSION_ID_IDX,
-								  AccessShareLock, CurrentMemoryContext);
+
+	ret = dimension_scan_internal(scankey,
+								  1,
+								  dimension_find_hypertable_id_tuple_found,
+								  &hypertable_id,
+								  1,
+								  DIMENSION_ID_IDX,
+								  AccessShareLock,
+								  CurrentMemoryContext);
 
 	if (ret == 1)
 		return hypertable_id;
@@ -448,12 +459,15 @@ dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices)
 	ScanKeyData scankey[1];
 
 	/* Perform an index scan to delete based on hypertable_id */
-	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_idx_hypertable_id,
+	ScanKeyInit(&scankey[0], Anum_dimension_hypertable_id_column_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
 
-	return dimension_scan_internal(scankey, 1, dimension_tuple_delete,
-								   &delete_slices, 0,
-								   DIMENSION_HYPERTABLE_ID_IDX,
+	return dimension_scan_internal(scankey,
+								   1,
+								   dimension_tuple_delete,
+								   &delete_slices,
+								   0,
+								   DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX,
 								   RowExclusiveLock,
 								   CurrentMemoryContext);
 }

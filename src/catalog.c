@@ -92,7 +92,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_DIMENSION_INDEX,
 		.names = (char *[]) {
 			[DIMENSION_ID_IDX] = "dimension_pkey",
-			[DIMENSION_HYPERTABLE_ID_IDX] = "dimension_hypertable_id_idx",
+			[DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX] = "dimension_hypertable_id_column_name_key",
 		}
 	},
 	[DIMENSION_SLICE] = {
