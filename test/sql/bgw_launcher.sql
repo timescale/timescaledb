@@ -2,10 +2,10 @@
 
 \ir include/bgw_launcher_utils.sql
 
-/* 
- * When we've connected to single_2, we should be able to see the cluster launcher 
+/*
+ * When we've connected to single_2, we should be able to see the cluster launcher
  * and the scheduler for single in pg_stat_activity
- * but single_2 shouldn't have a scheduler because ext not created yet 
+ * but single_2 shouldn't have a scheduler because ext not created yet
  */
 SELECT wait_worker_counts(1,1,0,0);
 
@@ -21,19 +21,19 @@ DROP DATABASE single;
 SELECT wait_worker_counts(1,0,1,0);
 
 /*Now let's restart the scheduler and make sure our backend_start changed */
-SELECT backend_start as orig_backend_start 
-FROM pg_stat_activity 
-WHERE application_name = 'TimescaleDB Background Worker Scheduler' 
+SELECT backend_start as orig_backend_start
+FROM pg_stat_activity
+WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = 'single_2' \gset
 /* We'll do this in a txn so that we can see that the worker locks on our txn before continuing*/
 BEGIN;
 SELECT _timescaledb_internal.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 
-SELECT (backend_start > :'orig_backend_start'::timestamptz) backend_start_changed, 
+SELECT (backend_start > :'orig_backend_start'::timestamptz) backend_start_changed,
 (wait_event = 'virtualxid') wait_event_changed
-FROM pg_stat_activity 
-WHERE application_name = 'TimescaleDB Background Worker Scheduler' 
+FROM pg_stat_activity
+WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = 'single_2';
 COMMIT;
 
@@ -63,9 +63,9 @@ AND datname = 'single_2' \gset
 
 /* Since we're doing idempotency tests, we're also going to exercise our queue and start 20 times*/
 SELECT _timescaledb_internal.start_background_workers() as start_background_workers, * FROM generate_series(1,20);
-/*Here we're waiting to see if something shows up in pg_stat_activity, 
- * so we have to condition our loop in the opposite way. We'll only wait 
- * half a second in total as well so that tests don't take too long. */ 
+/*Here we're waiting to see if something shows up in pg_stat_activity,
+ * so we have to condition our loop in the opposite way. We'll only wait
+ * half a second in total as well so that tests don't take too long. */
 CREATE FUNCTION wait_equals(TIMESTAMPTZ) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -134,7 +134,7 @@ WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = 'single_2' \gset
 
 SELECT coalesce(
-  (SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher'), 
+  (SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher'),
   (SELECT current_setting('server_version_num')::int < 100000));
 
 SELECT wait_worker_counts(1,0,1,0);
@@ -148,7 +148,7 @@ DROP EXTENSION timescaledb;
 COMMIT;
 SELECT wait_worker_counts(1,0,0,0);
 
-/* Connect to the template1 database */ 
+/* Connect to the template1 database */
 \c template1
 \ir include/bgw_launcher_utils.sql
 BEGIN;
