@@ -1,5 +1,5 @@
 \c single :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_privacy() RETURNS VOID
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_privacy() RETURNS BOOLEAN
     AS :MODULE_PATHNAME, 'test_privacy' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 \c single :ROLE_DEFAULT_PERM_USER
 

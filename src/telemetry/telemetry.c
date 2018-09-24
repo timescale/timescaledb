@@ -17,7 +17,6 @@
 #include "extension.h"
 #include "net/http.h"
 
-
 #define TS_VERSION_JSON_FIELD "current_timescaledb_version"
 
 /*  HTTP request details */
@@ -279,7 +278,13 @@ telemetry_connect(const char *host, const char *service)
 	return conn;
 }
 
-void
+bool
+telemetry_main_wrapper()
+{
+	return telemetry_main(TELEMETRY_HOST, TELEMETRY_PATH, TELEMETRY_SCHEME);
+}
+
+bool
 telemetry_main(const char *host, const char *path, const char *service)
 {
 	HttpError	err;
@@ -289,7 +294,7 @@ telemetry_main(const char *host, const char *path, const char *service)
 	bool		started = false;
 
 	if (!telemetry_on())
-		return;
+		return true;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -337,12 +342,12 @@ telemetry_main(const char *host, const char *path, const char *service)
 
 	if (started)
 		CommitTransactionCommand();
-	return;
+	return true;
 
 cleanup:
 	if (started)
 		AbortCurrentTransaction();
-	return;
+	return false;
 }
 
 TS_FUNCTION_INFO_V1(ts_get_telemetry_report);

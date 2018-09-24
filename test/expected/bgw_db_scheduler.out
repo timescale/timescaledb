@@ -728,3 +728,75 @@ SELECT ts_bgw_params_destroy();
  
 (1 row)
 
+--
+-- Test setting next_start time within a job
+--
+\c single :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+DELETE FROM _timescaledb_config.bgw_job;
+INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
+('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+select * from _timescaledb_config.bgw_job;
+  id  | application_name |    job_type    | schedule_interval |   max_runtime   | max_retries | retry_period 
+------+------------------+----------------+-------------------+-----------------+-------------+--------------
+ 1013 | test_job_4       | bgw_test_job_4 | @ 0.1 secs        | @ 1 min 40 secs |           3 | @ 1 sec
+(1 row)
+
+\c single :ROLE_DEFAULT_PERM_USER
+-- Now run and make sure next_start is 200ms away, not 100ms
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+ job_id | until_next | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------+------------------+------------+-----------------+----------------+---------------
+   1013 | @ 0.2 secs | t                |          1 |               1 |              0 |             0
+(1 row)
+
+SELECT * FROM bgw_log;
+ msg_no | mock_time | application_name |                    msg                     
+--------+-----------+------------------+--------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      0 |         0 | test_job_4       | Execute job 4
+(3 rows)
+
+-- Now just make sure that the job actually runs in 200ms
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+-- Print next_start and last_finish explicitly, instead of the difference, to make sure the times have changed
+-- since the last run
+SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+ job_id |           next_start           |          last_finish           | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------
+   1013 | Fri Dec 31 16:00:00.4 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          2 |               2 |              0 |             0
+(1 row)
+
+SELECT * FROM bgw_log;
+ msg_no | mock_time | application_name |                      msg                       
+--------+-----------+------------------+------------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
+      0 |         0 | test_job_4       | Execute job 4
+      0 |     25000 | DB Scheduler     | [TESTING] Wait until 200000, started at 25000
+      1 |    200000 | DB Scheduler     | [TESTING] Registered new background worker
+      2 |    200000 | DB Scheduler     | [TESTING] Wait until 225000, started at 200000
+      0 |    200000 | test_job_4       | Execute job 4
+(7 rows)
+

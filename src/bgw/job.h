@@ -18,6 +18,7 @@ typedef struct BgwJob
 
 } BgwJob;
 
+typedef bool job_main_func (void);
 typedef bool (*unknown_job_type_hook_type) (BgwJob *job);
 
 BackgroundWorkerHandle *bgw_start_worker(const char *function, const char *name, const char *extra);
@@ -37,5 +38,6 @@ bool		bgw_job_execute(BgwJob *job);
 PGDLLEXPORT extern Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
 extern void bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook);
 extern void bgw_job_set_job_entrypoint_function_name(char *func_name);
+extern bool bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs, Interval *next_interval);
 
 #endif							/* BGW_JOB_H */

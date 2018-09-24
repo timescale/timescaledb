@@ -15,6 +15,8 @@
 #include "job_stat.h"
 #include "telemetry/telemetry.h"
 
+#define TELEMETRY_INITIAL_NUM_RUNS	12
+
 const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
 	[JOB_TYPE_UNKNOWN] = "unknown"
@@ -185,8 +187,16 @@ bgw_job_execute(BgwJob *job)
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_VERSION_CHECK:
-			telemetry_main(TELEMETRY_HOST, TELEMETRY_PATH, TELEMETRY_SCHEME);
-			return true;
+			{
+				/*
+				 * In the first 12 hours, we want telemetry to ping every
+				 * hour. After that initial period, we default to the
+				 * schedule_interval listed in the job table.
+				 */
+				Interval   *one_hour = DatumGetIntervalP(DirectFunctionCall7(make_interval, Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(1), Int32GetDatum(0), Float8GetDatum(0)));
+
+				return bgw_job_run_and_set_next_start(job, telemetry_main_wrapper, TELEMETRY_INITIAL_NUM_RUNS, one_hour);
+			}
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)
 				return unknown_job_type_hook(job);
@@ -326,4 +336,30 @@ void
 bgw_job_set_job_entrypoint_function_name(char *func_name)
 {
 	job_entrypoint_function_name = func_name;
+}
+
+bool
+bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs, Interval *next_interval)
+{
+	BgwJobStat *job_stat;
+	bool		ret = func();
+
+	/* Now update next_start. */
+	StartTransactionCommand();
+
+	job_stat = bgw_job_stat_find(job->fd.id);
+
+	/*
+	 * Note that setting next_start explicitly from this function will
+	 * override any backoff calculation due to failure.
+	 */
+	if (job_stat->fd.total_runs < initial_runs)
+	{
+		TimestampTz next_start = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval, TimestampTzGetDatum(job_stat->fd.last_start), IntervalPGetDatum(next_interval)));
+
+		bgw_job_stat_set_next_start(job, next_start);
+	}
+	CommitTransactionCommand();
+
+	return ret;
 }
