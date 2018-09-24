@@ -32,6 +32,7 @@ bool		telemetry_parse_version(const char *json, VersionInfo *vinfo, VersionResul
  *  Its job is to send metrics and fetch the most up-to-date version of
  *  Timescale via HTTPS.
  */
-void		telemetry_main(const char *host, const char *path, const char *service);
+bool		telemetry_main(const char *host, const char *path, const char *service);
+bool		telemetry_main_wrapper(void);
 
 #endif							/* TIMESCALEDB_TELEMETRY_TELEMETRY_H */

@@ -202,8 +202,7 @@ test_telemetry_main_conn(PG_FUNCTION_ARGS)
 	text	   *path = PG_GETARG_TEXT_P(1);
 	text	   *service = PG_GETARG_TEXT_P(2);
 
-	telemetry_main(text_to_cstring(host), text_to_cstring(path), text_to_cstring(service));
-	PG_RETURN_NULL();
+	PG_RETURN_BOOL(telemetry_main(text_to_cstring(host), text_to_cstring(path), text_to_cstring(service)));
 }
 
 Datum

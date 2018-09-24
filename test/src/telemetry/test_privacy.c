@@ -14,6 +14,5 @@ Datum
 test_privacy(PG_FUNCTION_ARGS)
 {
 	/* This test should only run when timescaledb.telemetry_level=off */
-	telemetry_main("", "", "");
-	PG_RETURN_NULL();
+	PG_RETURN_BOOL(telemetry_main("", "", ""));
 }

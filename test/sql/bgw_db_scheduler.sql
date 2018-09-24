@@ -297,3 +297,32 @@ ORDER BY job_id;
 SELECT * FROM bgw_log WHERE application_name = 'DB Scheduler' ORDER BY mock_time, application_name, msg_no;
 
 SELECT ts_bgw_params_destroy();
+
+--
+-- Test setting next_start time within a job
+--
+\c single :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+SELECT ts_bgw_params_reset_time();
+DELETE FROM _timescaledb_config.bgw_job;
+INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
+('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+select * from _timescaledb_config.bgw_job;
+\c single :ROLE_DEFAULT_PERM_USER
+
+-- Now run and make sure next_start is 200ms away, not 100ms
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+
+SELECT * FROM bgw_log;
+
+-- Now just make sure that the job actually runs in 200ms
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
+-- Print next_start and last_finish explicitly, instead of the difference, to make sure the times have changed
+-- since the last run
+SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+
+SELECT * FROM bgw_log;
