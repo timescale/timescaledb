@@ -76,6 +76,9 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 if (${PG_VERSION_MAJOR} EQUAL "10")
   list(APPEND TEST_FILES
     rowsecurity-10.sql)
+else()
+  list(APPEND TEST_FILES
+    rowsecurity-9.6.sql)
 endif ()
 
 set(TEST_TEMPLATES
