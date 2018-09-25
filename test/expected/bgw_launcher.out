@@ -295,6 +295,38 @@ SELECT wait_worker_counts(1,0,0,0);
  t
 (1 row)
 
+/* Test that background workers are stopped with DROP OWNED */
+ALTER ROLE :ROLE_DEFAULT_PERM_USER WITH SUPERUSER;
+\c single_2  :ROLE_DEFAULT_PERM_USER
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+/* Make sure there is 1 launcher and 1 bgw in single_2 */
+SELECT wait_worker_counts(launcher_ct=>1, scheduler1_ct=> 0, scheduler2_ct=>1, template1_ct=>0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
+/* drop a non-owner of the extension results in no change to worker counts */
+DROP OWNED BY  :ROLE_DEFAULT_PERM_USER_2;
+SELECT wait_worker_counts(launcher_ct=>1, scheduler1_ct=> 0, scheduler2_ct=>1, template1_ct=>0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
+/* drop of owner of extension results in extension drop and a stop to the bgw */
+DROP OWNED BY  :ROLE_DEFAULT_PERM_USER;
+/* The worker in single_2 is dead. Note that 0s are respected */
+SELECT wait_worker_counts(launcher_ct=>1, scheduler1_ct=>0, scheduler2_ct=>0, template1_ct=>0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
+\c single_2  :ROLE_SUPERUSER
+ALTER ROLE :ROLE_DEFAULT_PERM_USER WITH NOSUPERUSER;
 /* Connect to the template1 database */
 \c template1
 \ir include/bgw_launcher_utils.sql
