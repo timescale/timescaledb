@@ -189,6 +189,14 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.installation_metadata (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.installation_metadata', $$WHERE key='exported_uuid'$$);
 
 -- Set table permissions
+-- We need to grant SELECT to PUBLIC for all tables even those not
+-- marked as being dumped because pg_dump will try to access all
+-- tables initially to detect inheritance chains and then decide
+-- which objects actually need to be dumped.
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
-GRANT SELECT ON _timescaledb_internal.bgw_job_stat TO PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_internal TO PUBLIC;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
+

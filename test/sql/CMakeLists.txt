@@ -35,6 +35,7 @@ set(TEST_FILES
   lateral.sql
   partitioning.sql
   pg_dump.sql
+  pg_dump_unprivileged.sql
   plain.sql
   plan_expand_hypertable_optimized.sql
   plan_expand_hypertable_results_diff.sql
