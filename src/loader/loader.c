@@ -3,6 +3,7 @@
 #include <access/xact.h>
 #include "../compat-msvc-enter.h"
 #include <commands/extension.h>
+#include <commands/user.h>
 #include <miscadmin.h>
 #include <parser/analyze.h>
 #include <storage/ipc.h>
@@ -120,6 +121,70 @@ drop_statement_drops_extension(DropStmt *stmt)
 			if (strcmp(ext_name, EXTENSION_NAME) == 0)
 				return true;
 		}
+	}
+	return false;
+}
+
+static Oid
+extension_owner(void)
+{
+	Datum		result;
+	Relation	rel;
+	SysScanDesc scandesc;
+	HeapTuple	tuple;
+	ScanKeyData entry[1];
+	bool		is_null = true;
+	Oid			extension_owner = InvalidOid;
+
+	rel = heap_open(ExtensionRelationId, AccessShareLock);
+
+	ScanKeyInit(&entry[0],
+				Anum_pg_extension_extname,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(EXTENSION_NAME)));
+
+	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true,
+								  NULL, 1, entry);
+
+	tuple = systable_getnext(scandesc);
+
+	/* We assume that there can be at most one matching tuple */
+	if (HeapTupleIsValid(tuple))
+	{
+		result = heap_getattr(tuple, Anum_pg_extension_extowner, RelationGetDescr(rel), &is_null);
+
+		if (!is_null)
+			extension_owner = ObjectIdGetDatum(result);
+	}
+
+	systable_endscan(scandesc);
+	heap_close(rel, AccessShareLock);
+
+	if (extension_owner == InvalidOid)
+		elog(ERROR, "extension not found while getting owner");
+
+	return extension_owner;
+}
+
+static bool
+drop_owned_statement_drops_extension(DropOwnedStmt *stmt)
+{
+	Oid			extension_owner_oid;
+	List	   *role_ids;
+	ListCell   *lc;
+
+	Assert(IsTransactionState());
+	extension_owner_oid = extension_owner();
+
+	role_ids = roleSpecsToIds(stmt->roles);
+
+	/* Check privileges */
+	foreach(lc, role_ids)
+	{
+		Oid			role_id = lfirst_oid(lc);
+
+		if (role_id == extension_owner_oid)
+			return true;
 	}
 	return false;
 }
@@ -258,6 +323,10 @@ post_analyze_hook(ParseState *pstate, Query *query)
 				{
 					bgw_message_send_and_wait(RESTART, MyDatabaseId);
 				}
+				break;
+			case T_DropOwnedStmt:
+				if (drop_owned_statement_drops_extension((DropOwnedStmt *) query->utilityStmt))
+					bgw_message_send_and_wait(RESTART, MyDatabaseId);
 				break;
 			default:
 
