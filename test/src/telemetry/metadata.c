@@ -4,7 +4,7 @@
 #include <fmgr.h>
 #include <utils/builtins.h>
 
-#include "compat.h"
+#include "export.h"
 #include "telemetry/metadata.h"
 
 TS_FUNCTION_INFO_V1(test_uuid);

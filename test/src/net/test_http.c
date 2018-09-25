@@ -4,7 +4,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-#include "compat.h"
+#include "export.h"
 #include "net/http.h"
 
 #define MAX_REQUEST_SIZE	4096

@@ -1,7 +1,8 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 #include <fmgr.h>
-#include "../../src/compat.h"
+
+#include "export.h"
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)

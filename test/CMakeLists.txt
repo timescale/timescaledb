@@ -77,9 +77,13 @@ add_custom_target(installchecklocal
   ${PG_REGRESS_OPTS_INOUT}
   ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
   USES_TERMINAL)
-  
+
 add_subdirectory(sql)
 
 if (PG_SOURCE_DIR)
   add_subdirectory(pgtest)
 endif (PG_SOURCE_DIR)
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  add_subdirectory(src)
+endif (CMAKE_BUILD_TYPE MATCHES Debug)
