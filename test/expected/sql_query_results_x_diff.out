@@ -235,12 +235,12 @@
 <                                           QUERY PLAN                                          
 < ----------------------------------------------------------------------------------------------
 ---
->                            QUERY PLAN                            
-> -----------------------------------------------------------------
+>                              QUERY PLAN                             
+> --------------------------------------------------------------------
 377,384c388,396
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
+<                      Sort Key: (time_bucket(10, hyper_1_int."time")) DESC
 <                      ->  Index Scan using time_plain_int on hyper_1_int
 <                      ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
 <                      ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
@@ -248,7 +248,7 @@
 < (10 rows)
 ---
 >          ->  Sort
->                Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
+>                Sort Key: (time_bucket(10, hyper_1_int."time")) DESC
 >                ->  Result
 >                      ->  Append
 >                            ->  Seq Scan on hyper_1_int
@@ -260,12 +260,12 @@
 <                                           QUERY PLAN                                          
 < ----------------------------------------------------------------------------------------------
 ---
->                                  QUERY PLAN                                  
-> -----------------------------------------------------------------------------
+>                                    QUERY PLAN                                   
+> --------------------------------------------------------------------------------
 401,408c413,421
 <          ->  Result
 <                ->  Merge Append
-<                      Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
+<                      Sort Key: ((time_bucket(10, (hyper_1_int."time" - 2)) + 2)) DESC
 <                      ->  Index Scan using time_plain_int on hyper_1_int
 <                      ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
 <                      ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
@@ -273,7 +273,7 @@
 < (10 rows)
 ---
 >          ->  Sort
->                Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
+>                Sort Key: ((time_bucket(10, (hyper_1_int."time" - 2)) + 2)) DESC
 >                ->  Result
 >                      ->  Append
 >                            ->  Seq Scan on hyper_1_int

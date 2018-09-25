@@ -83,6 +83,27 @@ static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
+		.extension_function = true,
+		.function_name = "time_bucket",
+		.nargs = 2,
+		.arg_types = {INT2OID, INT2OID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
+		.nargs = 2,
+		.arg_types = {INT4OID, INT4OID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
+		.nargs = 2,
+		.arg_types = {INT8OID, INT8OID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
 		.function_name = "date_trunc",
 		.nargs = 2,
 		.arg_types = {TEXTOID, TIMESTAMPOID},
@@ -254,7 +275,7 @@ estimate_max_spread_expr(PlannerInfo *root, Expr *expr)
 }
 
 /* Return an estimate for the number of groups formed when expr is divided
-   into intervals of size interval_priod. */
+   into intervals of size interval_period. */
 static double
 custom_group_estimate_expr_interval(PlannerInfo *root, Expr *expr, double interval_period)
 {
@@ -280,14 +301,30 @@ custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr, double path
 	Node	   *first_arg = eval_const_expressions(root, linitial(expr->args));
 	Expr	   *second_arg = lsecond(expr->args);
 	Const	   *c;
-	Interval   *interval;
+	double		period;
 
 	if (!IsA(first_arg, Const))
 		return INVALID_ESTIMATE;
 
 	c = (Const *) first_arg;
-	interval = DatumGetIntervalP(c->constvalue);
-	return custom_group_estimate_expr_interval(root, second_arg, (double) get_interval_period_approx(interval));
+	switch (c->consttype)
+	{
+		case INT2OID:
+			period = (double) DatumGetInt16(c->constvalue);
+			break;
+		case INT4OID:
+			period = (double) DatumGetInt32(c->constvalue);
+			break;
+		case INT8OID:
+			period = (double) DatumGetInt64(c->constvalue);
+			break;
+		case INTERVALOID:
+			period = (double) get_interval_period_approx(DatumGetIntervalP(c->constvalue));
+			break;
+		default:
+			return INVALID_ESTIMATE;
+	}
+	return custom_group_estimate_expr_interval(root, second_arg, period);
 }
 
 /* For date_trunc this estimate currently works by seeing how many possible
