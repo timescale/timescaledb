@@ -509,50 +509,161 @@ FROM unnest(ARRAY[
  Sun Nov 05 03:05:00 2017 EST | Sun Nov 05 02:00:00 2017
 (4 rows)
 
-SELECT time, time_bucket(10, time)
+SELECT time,
+    time_bucket(10::smallint, time) AS time_bucket_smallint,
+    time_bucket(10::int, time) AS time_bucket_int,
+    time_bucket(10::bigint, time) AS time_bucket_bigint
 FROM unnest(ARRAY[
-     '99',
+     '-11',
+     '-10',
+      '-9',
+      '-1',
+       '0',
+       '1',
+      '99',
      '100',
      '109',
      '110'
-    ]::int[]) AS time;
- time | time_bucket 
-------+-------------
-   99 |          90
-  100 |         100
-  109 |         100
-  110 |         110
-(4 rows)
+    ]::smallint[]) AS time;
+ time | time_bucket_smallint | time_bucket_int | time_bucket_bigint 
+------+----------------------+-----------------+--------------------
+  -11 |                  -20 |             -20 |                -20
+  -10 |                  -10 |             -10 |                -10
+   -9 |                  -10 |             -10 |                -10
+   -1 |                  -10 |             -10 |                -10
+    0 |                    0 |               0 |                  0
+    1 |                    0 |               0 |                  0
+   99 |                   90 |              90 |                 90
+  100 |                  100 |             100 |                100
+  109 |                  100 |             100 |                100
+  110 |                  110 |             110 |                110
+(10 rows)
 
-SELECT time, time_bucket(10, time,2)
+SELECT time,
+    time_bucket(10::smallint, time, 2::smallint) AS time_bucket_smallint,
+    time_bucket(10::int, time, 2::int) AS time_bucket_int,
+    time_bucket(10::bigint, time, 2::bigint) AS time_bucket_bigint
 FROM unnest(ARRAY[
+      '-9',
+      '-8',
+      '-7',
+       '1',
+       '2',
+       '3',
      '101',
      '102',
      '111',
      '112'
-    ]::int[]) AS time;
- time | time_bucket 
-------+-------------
-  101 |          92
-  102 |         102
-  111 |         102
-  112 |         112
-(4 rows)
+    ]::smallint[]) AS time;
+ time | time_bucket_smallint | time_bucket_int | time_bucket_bigint 
+------+----------------------+-----------------+--------------------
+   -9 |                  -18 |             -18 |                -18
+   -8 |                   -8 |              -8 |                 -8
+   -7 |                   -8 |              -8 |                 -8
+    1 |                   -8 |              -8 |                 -8
+    2 |                    2 |               2 |                  2
+    3 |                    2 |               2 |                  2
+  101 |                   92 |              92 |                 92
+  102 |                  102 |             102 |                102
+  111 |                  102 |             102 |                102
+  112 |                  112 |             112 |                112
+(10 rows)
 
-SELECT time, time_bucket(10, time, -2)
+SELECT time,
+    time_bucket(10::smallint, time, -2::smallint) AS time_bucket_smallint,
+    time_bucket(10::int, time, -2::int) AS time_bucket_int,
+    time_bucket(10::bigint, time, -2::bigint) AS time_bucket_bigint
 FROM unnest(ARRAY[
+    '-13',
+    '-12',
+    '-11',
+     '-3',
+     '-2',
+     '-1',
      '97',
      '98',
-     '107',
-     '108'
+    '107',
+    '108'
+    ]::smallint[]) AS time;
+ time | time_bucket_smallint | time_bucket_int | time_bucket_bigint 
+------+----------------------+-----------------+--------------------
+  -13 |                  -22 |             -22 |                -22
+  -12 |                  -12 |             -12 |                -12
+  -11 |                  -12 |             -12 |                -12
+   -3 |                  -12 |             -12 |                -12
+   -2 |                   -2 |              -2 |                 -2
+   -1 |                   -2 |              -2 |                 -2
+   97 |                   88 |              88 |                 88
+   98 |                   98 |              98 |                 98
+  107 |                   98 |              98 |                 98
+  108 |                  108 |             108 |                108
+(10 rows)
+
+\set ON_ERROR_STOP 0
+SELECT time_bucket(10::smallint, '-32768'::smallint);
+ERROR:  timestamp out of range
+SELECT time_bucket(10::smallint, '-32761'::smallint);
+ERROR:  timestamp out of range
+select time_bucket(10::smallint, '-32000'::smallint, 1000::smallint);
+ERROR:  smallint out of range
+CONTEXT:  SQL function "time_bucket" statement 1
+\set ON_ERROR_STOP 1
+SELECT time, time_bucket(10::smallint, time)
+FROM unnest(ARRAY[
+    '-32760',
+    '-32759',
+    '32767'
+    ]::smallint[]) AS time;
+  time  | time_bucket 
+--------+-------------
+ -32760 |      -32760
+ -32759 |      -32760
+  32767 |       32760
+(3 rows)
+
+\set ON_ERROR_STOP 0
+SELECT time_bucket(10::int, '-2147483648'::int);
+ERROR:  timestamp out of range
+SELECT time_bucket(10::int, '-2147483641'::int);
+ERROR:  timestamp out of range
+SELECT time_bucket(10::int, '-2147483000'::int, 1000::int);
+ERROR:  integer out of range
+CONTEXT:  SQL function "time_bucket" statement 1
+\set ON_ERROR_STOP 1
+SELECT time, time_bucket(10::int, time)
+FROM unnest(ARRAY[
+    '-2147483640',
+    '-2147483639',
+    '2147483647'
     ]::int[]) AS time;
- time | time_bucket 
-------+-------------
-   97 |          88
-   98 |          98
-  107 |          98
-  108 |         108
-(4 rows)
+    time     | time_bucket 
+-------------+-------------
+ -2147483640 | -2147483640
+ -2147483639 | -2147483640
+  2147483647 |  2147483640
+(3 rows)
+
+\set ON_ERROR_STOP 0
+SELECT time_bucket(10::bigint, '-9223372036854775808'::bigint);
+ERROR:  timestamp out of range
+SELECT time_bucket(10::bigint, '-9223372036854775801'::bigint);
+ERROR:  timestamp out of range
+SELECT time_bucket(10::bigint, '-9223372036854775000'::bigint, 1000::bigint);
+ERROR:  bigint out of range
+CONTEXT:  SQL function "time_bucket" statement 1
+\set ON_ERROR_STOP 1
+SELECT time, time_bucket(10::bigint, time)
+FROM unnest(ARRAY[
+    '-9223372036854775800',
+    '-9223372036854775799',
+    '9223372036854775807'
+    ]::bigint[]) AS time;
+         time         |     time_bucket      
+----------------------+----------------------
+ -9223372036854775800 | -9223372036854775800
+ -9223372036854775799 | -9223372036854775800
+  9223372036854775807 |  9223372036854775800
+(3 rows)
 
 SELECT time, time_bucket(INTERVAL '1 day', time::date)
 FROM unnest(ARRAY[

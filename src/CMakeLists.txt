@@ -121,6 +121,7 @@ set(SOURCES
   sort_transform.c
   subspace_store.c
   tablespace.c
+  time_bucket.c
   trigger.c
   utils.c
   version.c)

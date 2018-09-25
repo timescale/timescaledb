@@ -373,10 +373,10 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 ----------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (((hyper_1_int."time" / 10) * 10))
+         Group Key: (time_bucket(10, hyper_1_int."time"))
          ->  Result
                ->  Merge Append
-                     Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
+                     Sort Key: (time_bucket(10, hyper_1_int."time")) DESC
                      ->  Index Scan using time_plain_int on hyper_1_int
                      ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
                      ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk
@@ -397,10 +397,10 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 ----------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2))
+         Group Key: ((time_bucket(10, (hyper_1_int."time" - 2)) + 2))
          ->  Result
                ->  Merge Append
-                     Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
+                     Sort Key: ((time_bucket(10, (hyper_1_int."time" - 2)) + 2)) DESC
                      ->  Index Scan using time_plain_int on hyper_1_int
                      ->  Index Scan using _hyper_3_3_chunk_time_plain_int on _hyper_3_3_chunk
                      ->  Index Scan using _hyper_3_4_chunk_time_plain_int on _hyper_3_4_chunk

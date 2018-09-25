@@ -11,6 +11,15 @@ CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ) RE
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
 	AS '@MODULE_PATHNAME@', 'date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+CREATE OR REPLACE FUNCTION time_bucket(bucket_width SMALLINT, ts SMALLINT) RETURNS SMALLINT
+	AS '@MODULE_PATHNAME@', 'ts_int16_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION time_bucket(bucket_width INT, ts INT) RETURNS INT
+	AS '@MODULE_PATHNAME@', 'ts_int32_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION time_bucket(bucket_width BIGINT, ts BIGINT) RETURNS BIGINT
+	AS '@MODULE_PATHNAME@', 'ts_int64_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
 -- If an interval is given as the third argument, the bucket alignment is offset by the interval.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL)
     RETURNS TIMESTAMP LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
@@ -30,39 +39,21 @@ $BODY$
     SELECT (@extschema@.time_bucket(bucket_width, ts-"offset")+"offset")::date;
 $BODY$;
 
-
-CREATE OR REPLACE FUNCTION time_bucket(bucket_width BIGINT, ts BIGINT)
-    RETURNS BIGINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
-$BODY$
-    SELECT (ts / bucket_width)*bucket_width;
-$BODY$;
-
-CREATE OR REPLACE FUNCTION time_bucket(bucket_width INT, ts INT)
-    RETURNS INT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
-$BODY$
-    SELECT (ts / bucket_width)*bucket_width;
-$BODY$;
-
-CREATE OR REPLACE FUNCTION time_bucket(bucket_width SMALLINT, ts SMALLINT)
+CREATE OR REPLACE FUNCTION time_bucket(bucket_width SMALLINT, ts SMALLINT, "offset" SMALLINT)
     RETURNS SMALLINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
-    SELECT (ts / bucket_width)*bucket_width;
-$BODY$;
-
-CREATE OR REPLACE FUNCTION time_bucket(bucket_width BIGINT, ts BIGINT, "offset" BIGINT)
-    RETURNS BIGINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
-$BODY$
-    SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
+    SELECT @extschema@.time_bucket(bucket_width, ts-"offset")+"offset";
 $BODY$;
 
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INT, ts INT, "offset" INT)
     RETURNS INT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
-    SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
+    SELECT @extschema@.time_bucket(bucket_width, ts-"offset")+"offset";
 $BODY$;
 
-CREATE OR REPLACE FUNCTION time_bucket(bucket_width SMALLINT, ts SMALLINT, "offset" SMALLINT)
-    RETURNS SMALLINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
+CREATE OR REPLACE FUNCTION time_bucket(bucket_width BIGINT, ts BIGINT, "offset" BIGINT)
+    RETURNS BIGINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
-    SELECT (((ts-"offset") / bucket_width)*bucket_width)+"offset";
+    SELECT @extschema@.time_bucket(bucket_width, ts-"offset")+"offset";
 $BODY$;
+

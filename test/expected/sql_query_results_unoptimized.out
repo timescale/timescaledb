@@ -380,13 +380,13 @@ FROM hyper_1_tz GROUP BY t ORDER BY t DESC limit 2;
 
 EXPLAIN (costs off) SELECT time_bucket(10, time) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-                           QUERY PLAN                            
------------------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (((hyper_1_int."time" / 10) * 10))
+         Group Key: (time_bucket(10, hyper_1_int."time"))
          ->  Sort
-               Sort Key: (((hyper_1_int."time" / 10) * 10)) DESC
+               Sort Key: (time_bucket(10, hyper_1_int."time")) DESC
                ->  Result
                      ->  Append
                            ->  Seq Scan on hyper_1_int
@@ -405,13 +405,13 @@ FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
 
 EXPLAIN (costs off) SELECT time_bucket(10, time, 2) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_1_int GROUP BY t ORDER BY t DESC limit 2;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2))
+         Group Key: ((time_bucket(10, (hyper_1_int."time" - 2)) + 2))
          ->  Sort
-               Sort Key: (((((hyper_1_int."time" - 2) / 10) * 10) + 2)) DESC
+               Sort Key: ((time_bucket(10, (hyper_1_int."time" - 2)) + 2)) DESC
                ->  Result
                      ->  Append
                            ->  Seq Scan on hyper_1_int
