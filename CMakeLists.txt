@@ -294,9 +294,9 @@ if (USE_OPENSSL)
 endif (USE_OPENSSL)
 
 if (UNIX)
-  add_subdirectory(test)
   add_subdirectory(scripts)
 endif (UNIX)
 
+add_subdirectory(test)
 add_subdirectory(sql)
 add_subdirectory(src)

@@ -8,6 +8,7 @@
 #include "telemetry/telemetry.h"
 #include "net/http.h"
 #include "config.h"
+#include "export.h"
 #ifdef TS_DEBUG
 #include "net/conn_mock.h"
 #endif
@@ -24,8 +25,7 @@ TS_FUNCTION_INFO_V1(test_telemetry);
 static char *test_string;
 #endif
 
-static
-HttpRequest *
+static HttpRequest *
 build_request(int status)
 {
 	HttpRequest *req = http_request_create(HTTP_GET);
