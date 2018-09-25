@@ -75,6 +75,7 @@ endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 if (${PG_VERSION_MAJOR} EQUAL "10")
   list(APPEND TEST_FILES
+    generated_as_identity.sql
     rowsecurity-10.sql)
 else()
   list(APPEND TEST_FILES
