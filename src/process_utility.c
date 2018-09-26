@@ -1729,9 +1729,65 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 					 errmsg("hypertables do not support inheritance")));
 		case AT_SetStatistics:
 		case AT_SetLogged:
-			/* handled by default recursion */
+		case AT_SetStorage:
+		case AT_ColumnDefault:
+		case AT_SetNotNull:
+		case AT_DropNotNull:
+		case AT_AddOf:
+		case AT_DropOf:
+#if PG10
+		case AT_AddIdentity:
+		case AT_SetIdentity:
+		case AT_DropIdentity:
+#endif
+			/* all of the above are handled by default recursion */
 			break;
-		default:
+		case AT_EnableRowSecurity:
+		case AT_DisableRowSecurity:
+		case AT_ForceRowSecurity:
+		case AT_NoForceRowSecurity:
+			/* RLS commands should not recurse to chunks */
+			break;
+		case AT_ReAddConstraint:
+		case AT_ReAddIndex:
+		case AT_AddOidsRecurse:
+
+			/*
+			 * all of the above are internal commands that are hit in tests
+			 * and correctly handled
+			 */
+			break;
+		case AT_AddColumn:
+		case AT_AddColumnRecurse:
+		case AT_DropColumn:
+		case AT_DropColumnRecurse:
+
+			/*
+			 * adding and dropping columns handled in
+			 * process_altertable_start_table
+			 */
+			break;
+		case AT_DropConstraint:
+		case AT_DropConstraintRecurse:
+			/* drop constraints handled by process_ddl_sql_drop */
+			break;
+		case AT_ProcessedConstraint:	/* internal command never hit in our
+										 * test code, so don't know how to
+										 * handle */
+		case AT_ReAddComment:	/* internal command never hit in our test
+								 * code, so don't know how to handle */
+		case AT_AddColumnToView:	/* only used with views */
+		case AT_AlterColumnGenericOptions:	/* only used with foreign tables */
+		case AT_GenericOptions: /* only used with foreign tables */
+#if PG10
+		case AT_AttachPartition:	/* handled in
+									 * process_altertable_start_table but also
+									 * here as failsafe */
+		case AT_DetachPartition:
+#endif
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on hypertables %d", cmd->subtype)));
 			break;
 	}
 }
