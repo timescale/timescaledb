@@ -1,0 +1,10 @@
+Parsed test spec with 1 sessions
+
+starting permutation: s1a
+create_hypertable
+
+               
+step s1a: SELECT pg_sleep(0);
+pg_sleep       
+
+               

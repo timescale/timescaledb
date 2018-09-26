@@ -17,10 +17,17 @@ before_install:
 install:
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug"
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
-  # We only need to build the regress stuff
-  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure  CPPFLAGS=\"$EXEC_BACKEND\" --enable-coverage --enable-debug --enable-cassert --without-readline --without-zlib && make -C /postgres/src/test/regress"
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install && chown -R postgres:postgres /build/"
+  # We set /usr/local as prefix so the regression tools will be able to find
+  # initdb, psql, and postgres
+  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure CPPFLAGS=\"$EXEC_BACKEND\" --prefix=/usr/local --enable-coverage --enable-debug --enable-cassert --without-readline --without-zlib"
+  # We only need to build the regress and isolation stuff
+  - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/regress"
+  - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"
+
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install"
+  - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /build/"
 script:
+  - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
   - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
   # some of the postgres tests don't pass with EXEC_BACKEND,
   # since this is merely a windows canary, not a real platform,
