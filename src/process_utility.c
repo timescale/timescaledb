@@ -26,6 +26,7 @@
 #include <utils/guc.h>
 #include <utils/snapmgr.h>
 #include <parser/parse_utilcmd.h>
+#include <commands/tablespace.h>
 
 #include <miscadmin.h>
 
@@ -827,8 +828,6 @@ process_rename(Node *parsetree)
 	if (!OidIsValid(relid))
 		return;
 
-	/* TODO: forbid all rename op on chunk table */
-
 	hcache = hypertable_cache_pin();
 
 	switch (stmt->renameType)
@@ -1429,6 +1428,36 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 }
 
 static void
+process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
+{
+	Oid			tspc_oid = get_rel_tablespace(ht->main_table_relid);
+	NameData	tspc_name;
+	Tablespaces *tspcs;
+
+	Assert(OidIsValid(tspc_oid));
+	namestrcpy(&tspc_name, cmd->name);
+
+	tspcs = tablespace_scan(ht->fd.id);
+
+	if (tspcs->num_tablespaces > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("cannot set new tablespace when multiple tablespaces are attached to hypertable \"%s\"",
+						get_rel_name(ht->main_table_relid)),
+				 errhint("Detach tablespaces before altering the hypertable.")));
+
+
+	if (tspcs->num_tablespaces == 1)
+	{
+		Assert(hypertable_has_tablespace(ht, tspcs->tablespaces[0].tablespace_oid));
+		tablespace_delete(ht->fd.id, NameStr(tspcs->tablespaces[0].fd.tablespace_name));
+	}
+
+	tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
+	foreach_chunk(ht, process_altertable_chunk, cmd);
+}
+
+static void
 process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
@@ -1690,6 +1719,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropCluster:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
+		case AT_SetTableSpace:
+			process_altertable_set_tablespace_end(ht, cmd);
+			break;
 		case AT_AddInherit:
 		case AT_DropInherit:
 			ereport(ERROR,
@@ -1742,8 +1774,6 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 		return;
 
 	hcache = hypertable_cache_pin();
-
-	/* TODO: forbid all alter_table on chunk table */
 
 	ht = hypertable_cache_get_entry(hcache, relid);
 
