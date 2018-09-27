@@ -79,7 +79,7 @@ indexing_verify_columns(Hyperspace *hs, List *indexelems)
 
 		if (!index_has_attribute(indexelems, NameStr(dim->fd.column_name)))
 			ereport(ERROR,
-					(errcode(ERRCODE_IO_BAD_HYPERTABLE_INDEX_DEFINITION),
+					(errcode(ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION),
 					 errmsg("cannot create a unique index without the column \"%s\" (used in partitioning)",
 							NameStr(dim->fd.column_name))));
 	}

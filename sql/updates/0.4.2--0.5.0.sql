@@ -76,7 +76,7 @@ BEGIN
 
         IF missing_column IS NOT NULL THEN
             RAISE EXCEPTION 'Cannot create a unique index without the column: % (used in partitioning)', missing_column
-            USING ERRCODE = 'IO103';
+            USING ERRCODE = 'TS103';
         END IF;
     END IF;
 END
@@ -159,7 +159,7 @@ BEGIN
 
         IF constraint_row.connoinherit THEN
             RAISE 'NO INHERIT option not supported on hypertables: %', constraint_row.conname
-            USING ERRCODE = 'IO101';
+            USING ERRCODE = 'TS101';
         END IF;
 
         RETURN FALSE;

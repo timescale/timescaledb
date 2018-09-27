@@ -43,7 +43,7 @@ BEGIN
 
         IF exist_count = 0 THEN
             RAISE 'hypertable "%" does not exist', drop_chunks_impl.table_name
-            USING ERRCODE = 'IO001';
+            USING ERRCODE = 'TS001';
         END IF;
     END IF;
 

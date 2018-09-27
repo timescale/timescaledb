@@ -911,7 +911,7 @@ process_altertable_drop_not_null(Hypertable *ht, AlterTableCmd *cmd)
 		if (IS_OPEN_DIMENSION(dim) &&
 			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
+					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot drop not-null constraint from a time-partitioned column")));
 	}
 }
@@ -1378,7 +1378,7 @@ process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
 		if (IS_CLOSED_DIMENSION(dim) &&
 			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_IO_OPERATION_NOT_SUPPORTED),
+					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot change the type of a hash-partitioned column")));
 	}
 }
