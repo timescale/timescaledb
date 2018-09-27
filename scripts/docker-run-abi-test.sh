@@ -52,7 +52,7 @@ docker exec -u root -it $CONTAINER_NAME_RUN /bin/bash -c "cp /compile/* \`pg_con
 
 # Run tests, allow continuation after error to get regressions.diffs
 set +e
-docker exec -u postgres -it ${CONTAINER_NAME_RUN} /bin/bash -c "make -C /build/debug installcheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
+docker exec -u postgres -it ${CONTAINER_NAME_RUN} /bin/bash -c "make -C /build/debug regresscheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
 
 if [ "$?" != "0" ]; then
     docker exec -it ${CONTAINER_NAME_RUN} cat /build/debug/test/regression.diffs
