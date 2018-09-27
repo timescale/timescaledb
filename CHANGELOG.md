@@ -4,6 +4,52 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.0.0-rc2 (2018-09-27)
+
+This release is our second 1.0 release candidate. We expect to only merge bug fixes between now and our final 1.0 release. This is a big milestone for us and signifies our maturity and enterprise readiness.
+
+**PLEASE NOTE** that release candidate (rc) builds will only be made available via GitHub and Docker, and _not_ on other release channels. Please help us test these release candidates out if you can!
+
+**Potential breaking change**: We updated our error codes to be prefixed with `TS` instead of the old `IO` prefix. If you were checking for these error codes by name, please update your checks.
+
+**Notable commits**
+* [b43574f] Switch 'IO' error prefix to 'TS'
+* [9747885] Prefix public C functions with ts_
+* [39510c3] Block unknown alter table commands on  hypertables
+* [2408a83] Add support for ALTER TABLE SET TABLESPACE on hypertables
+* [41d9846] Enclose macro replacement list and arguments in parentheses
+* [cc59d51] Replace macro LEAST_TIMESTAMP by a static function
+* [281f363] Modify telemetry BGW to run every hour the first 12 hours
+* [a09b3ec] Add pg_isolation_regress support to the timescale build system
+* [2c267ba] Handle SIGTERM/SIGINT asynchronously
+* [5377e2d] Fix use-after-free bug for connections in the telemetry BGW
+* [248f662] Fix pg_dump for unprivileged users
+* [193fa4a] Stop background workers when extension is DROP OWNED
+* [625e3fa] Fix negative value handling in int time_bucket
+* [a33224b] Add loader API version function
+* [18b8068] Remove unnecessary index on dimension metadata table
+* [d09405d] Fix adaptive chunking when hypertables have multiple dimensions
+* [a81dc18] Block signals when writing to the log table in tests
+* [d5a6392] Fix adaptive chunking so it chooses correct index
+* [3489cca] Fix sigterm handling in background jobs
+* [2369ae9] Remove !WIN32 for sys/time.h and sys/socket.h, pg provides fills
+* [ebbb4ae] Also add sys/time.h for NetBSD. Fixes #700
+* [1a9ae17] Fix build on FreeBSD wrt sockets
+* [8225cd2] Remove (redefined) macro PG_VERSION and replace with PACKAGE_VERSION
+* [2a07cf9] Release SpinLock even when we're about to Error due to over-decrementing
+* [b2a15b8] Make sure DB schedulers are not decremented if they were never incremented
+* [6731c86] Add support for pre-release version checks
+
+**Thanks**
+* @did-g for an improvement to our macros to make compiliers happy
+* @mx781 and @HeikoOnnebrink for reporting issues with working with pg_dump fully
+* @znbang and @timolson for reporting a bug that was causing telemetry to fail
+* @alanhamlett for reporting an issue with spinlocks when handling SIGTERMs
+* @oldgreen for reporting an issue with building on NetBSD
+* @kev009 for fixing build issues on FreeBSD and NetBSD
+* All the others who have helped us test and used these RCs!
+
+
 ## 0.12.1 (2018-09-19)
 
 **High-level changes**
