@@ -120,7 +120,7 @@ BEGIN
 
     IF h_id IS NULL THEN
         RAISE EXCEPTION 'hypertable "%" not found', table_name
-        USING ERRCODE = 'IO101';
+        USING ERRCODE = 'TS101';
     END IF;
 
     SELECT COUNT(*)
@@ -130,7 +130,7 @@ BEGIN
 
     IF dimension_cnt > 2 THEN
         RAISE EXCEPTION 'get_create_command only supports hypertables with up to 2 dimensions'
-        USING ERRCODE = 'IO101';
+        USING ERRCODE = 'TS101';
     END IF;
 
     FOR dimension_row IN

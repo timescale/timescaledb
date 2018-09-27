@@ -459,7 +459,7 @@ hypertable_lock_tuple(Oid table_relid)
 
 	if (num_found != 1)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(table_relid))));
 
@@ -1251,7 +1251,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	if (if_not_exists && is_hypertable(table_relid))
 	{
 		ereport(NOTICE,
-				(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
+				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 				 errmsg("table \"%s\" is already a hypertable, skipping",
 						get_rel_name(table_relid))));
 
@@ -1282,7 +1282,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		if (if_not_exists)
 		{
 			ereport(NOTICE,
-					(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
+					(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 					 errmsg("table \"%s\" is already a hypertable, skipping",
 							get_rel_name(table_relid))));
 
@@ -1290,7 +1290,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		}
 
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_HYPERTABLE_EXISTS),
+				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 				 errmsg("table \"%s\" is already a hypertable",
 						get_rel_name(table_relid))));
 	}

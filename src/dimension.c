@@ -793,7 +793,7 @@ dimension_update(FunctionCallInfo fcinfo,
 
 	if (NULL == ht)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(table_relid))));
 
@@ -814,7 +814,7 @@ dimension_update(FunctionCallInfo fcinfo,
 
 	if (NULL == dim)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
+				(errcode(ERRCODE_TS_DIMENSION_NOT_EXIST),
 				 errmsg("hypertable \"%s\" does not have a matching dimension",
 						get_rel_name(table_relid))));
 
@@ -942,7 +942,7 @@ dimension_validate_info(DimensionInfo *info)
 		{
 			if (!info->if_not_exists)
 				ereport(ERROR,
-						(errcode(ERRCODE_IO_DUPLICATE_DIMENSION),
+						(errcode(ERRCODE_TS_DUPLICATE_DIMENSION),
 						 errmsg("column \"%s\" is already a dimension",
 								NameStr(*info->colname))));
 
@@ -1046,7 +1046,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 
 	if (NULL == info.ht)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(info.table_relid))));
 

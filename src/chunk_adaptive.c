@@ -650,7 +650,7 @@ chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 
 	if (NULL == info->colname)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
+				(errcode(ERRCODE_TS_DIMENSION_NOT_EXIST),
 				 errmsg("no open dimension found for adaptive chunking")));
 
 	attnum = get_attnum(info->table_relid, info->colname);
@@ -721,7 +721,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	if (NULL == ht)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_HYPERTABLE_NOT_EXIST),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(info.table_relid))));
 
@@ -730,7 +730,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	if (NULL == dim)
 		ereport(ERROR,
-				(errcode(ERRCODE_IO_DIMENSION_NOT_EXIST),
+				(errcode(ERRCODE_TS_DIMENSION_NOT_EXIST),
 				 errmsg("no open dimension found for adaptive chunking")));
 
 	info.colname = NameStr(dim->fd.column_name);
