@@ -114,7 +114,12 @@ build_indexcolumn_list(Relation idxrel)
 	int			i;
 
 	for (i = 0; i < idxrel->rd_att->natts; i++)
-		columns = lappend(columns, makeString(NameStr(idxrel->rd_att->attrs[i]->attname)));
+	{
+		Form_pg_attribute idxattr = TupleDescAttr(idxrel->rd_att, i);
+
+		columns = lappend(columns, makeString(NameStr(idxattr->attname)));
+	}
+
 
 	return columns;
 }
@@ -131,16 +136,13 @@ create_default_index(Hypertable *ht, List *indexelems)
 		.indexParams = indexelems,
 	};
 
-	DefineIndex(ht->main_table_relid,
-				&stmt,
-				InvalidOid,
-				false,			/* is alter table */
-				false,			/* check rights */
-#if PG10
-				false,			/* check not in use */
-#endif
-				false,			/* skip_build */
-				true);			/* quiet */
+	DefineIndexCompat(ht->main_table_relid,
+					  &stmt,
+					  InvalidOid,
+					  false,	/* is alter table */
+					  false,	/* check rights */
+					  false,	/* skip_build */
+					  true);	/* quiet */
 }
 
 static Node *
@@ -224,20 +226,24 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 		/* Check for existence of "default" indexes */
 		if (create_default && NULL != time_dim)
 		{
-			Form_pg_attribute *attrs = idxrel->rd_att->attrs;
+			Form_pg_attribute idxattr_time,
+						idxattr_space;
 
 			switch (idxrel->rd_att->natts)
 			{
 				case 1:
 					/* ("time") index */
-					if (namestrcmp(&attrs[0]->attname, NameStr(time_dim->fd.column_name)) == 0)
+					idxattr_time = TupleDescAttr(idxrel->rd_att, 0);
+					if (namestrcmp(&idxattr_time->attname, NameStr(time_dim->fd.column_name)) == 0)
 						has_time_idx = true;
 					break;
 				case 2:
 					/* ("space", "time") index */
+					idxattr_space = TupleDescAttr(idxrel->rd_att, 0);
+					idxattr_time = TupleDescAttr(idxrel->rd_att, 1);
 					if (space_dim != NULL &&
-						namestrcmp(&attrs[0]->attname, NameStr(space_dim->fd.column_name)) == 0 &&
-						namestrcmp(&attrs[1]->attname, NameStr(time_dim->fd.column_name)) == 0)
+						namestrcmp(&idxattr_space->attname, NameStr(space_dim->fd.column_name)) == 0 &&
+						namestrcmp(&idxattr_time->attname, NameStr(time_dim->fd.column_name)) == 0)
 						has_time_space_idx = true;
 					break;
 				default:

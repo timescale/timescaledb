@@ -10,6 +10,7 @@
 #include <catalog/pg_class.h>
 #include <nodes/extensible.h>
 
+#include "compat.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
 #include "chunk_dispatch.h"
@@ -92,7 +93,20 @@ chunk_dispatch_exec(CustomScanState *node)
 		 * won't pick it up.
 		 */
 		if (cis->arbiter_indexes != NIL)
+		{
+			/*
+			 * In PG11 several fields were removed from the ModifyTableState
+			 * node and ExecInsert function nodes, as they were redundant.
+			 * (See:
+			 * https://github.com/postgres/postgres/commit/ee0a1fc84eb29c916687dc5bd26909401d3aa8cd).
+			 */
+#if PG96 || PG10
 			state->parent->mt_arbiterindexes = cis->arbiter_indexes;
+#else
+			Assert(IsA(state->parent->ps.plan, ModifyTable));
+			((ModifyTable *) state->parent->ps.plan)->arbiterIndexes = cis->arbiter_indexes;
+#endif
+		}
 
 		/* slot for the "existing" tuple in ON CONFLICT UPDATE IS chunk schema */
 		if (cis->tup_conv_map != NULL && state->parent->mt_existing != NULL)
@@ -163,8 +177,38 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	ModifyTable *mt_plan;
 
 	state->parent = parent;
-	state->dispatch->arbiter_indexes = parent->mt_arbiterindexes;
-	state->dispatch->on_conflict = parent->mt_onconflict;
+#if !PG96 && !PG10
+
+	/*
+	 * Several tuple slots are created with static tupledescs when PG thinks
+	 * it's accessing a normal table (and not when it's accessing a
+	 * partitioned table) we make copies of these slots and replace them so
+	 * that we can modify the tupledesc later in our code.
+	 */
+	if (parent->mt_existing != NULL)
+	{
+		TupleDesc	existing;
+
+		existing = parent->mt_existing->tts_tupleDescriptor;
+		parent->mt_existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL);
+		ExecSetSlotDescriptor(parent->mt_existing, existing);
+	}
+	if (parent->mt_conflproj != NULL)
+	{
+		TupleDesc	existing;
+
+		existing = parent->mt_conflproj->tts_tupleDescriptor;
+
+		/*
+		 * in this case we must overwrite mt_conflproj because there are
+		 * several pointers to it throughout expressions and other
+		 * evaluations, and the original tuple will otherwise be stored to the
+		 * old slot, whose pointer is saved there.
+		 */
+		*parent->mt_conflproj = *MakeTupleTableSlot(NULL);
+		ExecSetSlotDescriptor(parent->mt_conflproj, existing);
+	}
+#endif
 	state->dispatch->cmd_type = parent->operation;
 
 	/*
@@ -178,6 +222,8 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 
 	state->dispatch->returning_lists = mt_plan->returningLists;
 	state->dispatch->on_conflict_set = mt_plan->onConflictSet;
+	state->dispatch->arbiter_indexes = mt_plan->arbiterIndexes;
+	state->dispatch->on_conflict = mt_plan->onConflictAction;
 
 	Assert(mt_plan->onConflictWhere == NULL || IsA(mt_plan->onConflictWhere, List));
 	state->dispatch->on_conflict_where = (List *) mt_plan->onConflictWhere;

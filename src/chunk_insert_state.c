@@ -152,19 +152,7 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
-
-#if PG10
-	rri->ri_ConstraintExprs =
-		(ExprState **) palloc(ncheck * sizeof(ExprState *));
-
-	for (i = 0; i < ncheck; i++)
-	{
-		Expr	   *checkconstr = stringToNode(check[i].ccbin);
-
-		rri->ri_ConstraintExprs[i] =
-			prepare_constr_expr(checkconstr);
-	}
-#elif PG96
+#if PG96
 	rri->ri_ConstraintExprs =
 		(List **) palloc(ncheck * sizeof(List *));
 
@@ -175,6 +163,17 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 		rri->ri_ConstraintExprs[i] = (List *)
 			prepare_constr_expr((Expr *) qual);
+	}
+#else
+	rri->ri_ConstraintExprs =
+		(ExprState **) palloc(ncheck * sizeof(ExprState *));
+
+	for (i = 0; i < ncheck; i++)
+	{
+		Expr	   *checkconstr = stringToNode(check[i].ccbin);
+
+		rri->ri_ConstraintExprs[i] =
+			prepare_constr_expr(checkconstr);
 	}
 #endif
 }
@@ -209,8 +208,12 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
 	rri->ri_junkFilter = rri_orig->ri_junkFilter;
 	rri->ri_projectReturning = rri_orig->ri_projectReturning;
-	rri->ri_onConflictSetProj = rri_orig->ri_onConflictSetProj;
-	rri->ri_onConflictSetWhere = rri_orig->ri_onConflictSetWhere;
+#if PG96 || PG10
+	ResultRelInfo_OnConflictProjInfoCompat(rri) = ResultRelInfo_OnConflictProjInfoCompat(rri_orig);
+	ResultRelInfo_OnConflictWhereCompat(rri) = ResultRelInfo_OnConflictWhereCompat(rri_orig);
+#else
+	rri->ri_onConflict = rri_orig->ri_onConflict;
+#endif
 
 	create_chunk_rri_constraint_expr(rri, rel);
 
@@ -278,7 +281,7 @@ adjust_hypertable_tlist(List *tlist, TupleConversionMap *map)
 
 	for (chunk_attrno = 1; chunk_attrno <= chunk_tupdesc->natts; chunk_attrno++)
 	{
-		Form_pg_attribute att_tup = TupleDescAttrCompat(chunk_tupdesc, chunk_attrno - 1);
+		Form_pg_attribute att_tup = TupleDescAttr(chunk_tupdesc, chunk_attrno - 1);
 		TargetEntry *tle;
 
 		if (attrMap[chunk_attrno - 1] != InvalidAttrNumber)
@@ -321,9 +324,9 @@ adjust_hypertable_tlist(List *tlist, TupleConversionMap *map)
 }
 
 static ProjectionInfo *
-get_adjusted_projection_info_onconflicupdate(ProjectionInfo *orig, List *update_tles, AttrNumber *variable_attnos_map,
-											 int variable_attnos_map_size, Index varno, Oid rowtype,
-											 TupleDesc chunk_desc, TupleConversionMap *hypertable_to_chunk_map)
+get_adjusted_projection_info_onconflictupdate(ProjectionInfo *orig, List *update_tles, AttrNumber *variable_attnos_map,
+											  int variable_attnos_map_size, Index varno, Oid rowtype,
+											  TupleDesc chunk_desc, TupleConversionMap *hypertable_to_chunk_map)
 {
 	bool		found_whole_row;
 
@@ -381,25 +384,25 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 												   chunk_desc);
 	}
 
-	if (rri->ri_onConflictSetProj != NULL)
+	if (ResultRelInfo_OnConflictNotNull(rri) && ResultRelInfo_OnConflictProjInfoCompat(rri) != NULL)
 	{
-		rri->ri_onConflictSetProj =
-			get_adjusted_projection_info_onconflicupdate(rri->ri_onConflictSetProj,
-														 dispatch->on_conflict_set,
-														 variable_attnos_map,
-														 variable_attnos_map_size,
-														 dispatch->hypertable_result_rel_info->ri_RangeTableIndex,
-														 rowtype,
-														 chunk_desc, cis->tup_conv_map);
+		ResultRelInfo_OnConflictProjInfoCompat(rri) =
+			get_adjusted_projection_info_onconflictupdate(ResultRelInfo_OnConflictProjInfoCompat(rri),
+														  dispatch->on_conflict_set,
+														  variable_attnos_map,
+														  variable_attnos_map_size,
+														  dispatch->hypertable_result_rel_info->ri_RangeTableIndex,
+														  rowtype,
+														  chunk_desc, cis->tup_conv_map);
 
-		if (rri->ri_onConflictSetWhere != NULL)
+		if (ResultRelInfo_OnConflictNotNull(rri) && ResultRelInfo_OnConflictWhereCompat(rri) != NULL)
 		{
 #if PG96
-			rri->ri_onConflictSetWhere = (List *)
+			ResultRelInfo_OnConflictWhereCompat(rri) = (List *)
 #else
-			rri->ri_onConflictSetWhere =
+			ResultRelInfo_OnConflictWhereCompat(rri) =
 #endif
-				get_adjusted_onconflictupdate_where((ExprState *) rri->ri_onConflictSetWhere,
+				get_adjusted_onconflictupdate_where((ExprState *) ResultRelInfo_OnConflictWhereCompat(rri),
 													dispatch->on_conflict_where,
 													variable_attnos_map,
 													variable_attnos_map_size,
@@ -440,6 +443,9 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim->indexoid);
 	}
+#if !PG96 && !PG10
+	state->result_relation_info->ri_onConflictArbiterIndexes = state->arbiter_indexes;
+#endif
 }
 
 /*
@@ -519,7 +525,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	/* Need a tuple table slot to store converted tuples */
 	if (state->tup_conv_map)
-		state->slot = MakeTupleTableSlot();
+		state->slot = MakeTupleTableSlotCompat(NULL);
 
 	heap_close(parent_rel, AccessShareLock);
 

@@ -216,10 +216,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	estate->es_range_table = range_table;
 
 	/* Set up a tuple slot too */
-	myslot = ExecInitExtraTupleSlot(estate);
-	ExecSetSlotDescriptor(myslot, tupDesc);
+	myslot = ExecInitExtraTupleSlotCompat(estate, tupDesc);
 	/* Triggers might need a slot as well */
-	estate->es_trig_tuple_slot = ExecInitExtraTupleSlot(estate);
+	estate->es_trig_tuple_slot = ExecInitExtraTupleSlotCompat(estate, NULL);
 
 	/* Prepare to catch AFTER triggers. */
 	AfterTriggerBeginQuery();
@@ -390,11 +389,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	ExecResetTupleTable(estate->es_tupleTable, false);
 
 	ExecCloseIndices(resultRelInfo);
-
-#if PG10
-	/* Close any trigger target relations */
-	ExecCleanUpTriggerState(estate);
-#elif PG96
+#if PG96
 	{
 		/*
 		 * es_trig_target_relations sometimes created in
@@ -413,6 +408,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			heap_close(resultRelInfo->ri_RelationDesc, NoLock);
 		}
 	}
+#else
+	/* Close any trigger target relations */
+	ExecCleanUpTriggerState(estate);
 #endif
 
 	copy_chunk_state_destroy(ccstate);
@@ -444,13 +442,14 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 	if (attnamelist == NIL)
 	{
 		/* Generate default column list */
-		Form_pg_attribute *attr = tupDesc->attrs;
 		int			attr_count = tupDesc->natts;
 		int			i;
 
 		for (i = 0; i < attr_count; i++)
 		{
-			if (attr[i]->attisdropped)
+			Form_pg_attribute attr = TupleDescAttr(tupDesc, i);
+
+			if (attr->attisdropped)
 				continue;
 			attnums = lappend_int(attnums, i + 1);
 		}
@@ -470,11 +469,13 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 			attnum = InvalidAttrNumber;
 			for (i = 0; i < tupDesc->natts; i++)
 			{
-				if (tupDesc->attrs[i]->attisdropped)
+				Form_pg_attribute attr = TupleDescAttr(tupDesc, i);
+
+				if (attr->attisdropped)
 					continue;
-				if (namestrcmp(&(tupDesc->attrs[i]->attname), name) == 0)
+				if (namestrcmp(&(attr->attname), name) == 0)
 				{
-					attnum = tupDesc->attrs[i]->attnum;
+					attnum = attr->attnum;
 					break;
 				}
 			}
@@ -601,7 +602,10 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	copy_security_check(rel, attnums);
 
-#if PG10
+#if PG96
+	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program,
+						   stmt->attlist, stmt->options);
+#else
 	{
 		ParseState *pstate = make_parsestate(NULL);
 
@@ -610,10 +614,6 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 							   NULL, stmt->attlist, stmt->options);
 		free_parsestate(pstate);
 	}
-#elif PG96
-	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program,
-						   stmt->attlist, stmt->options);
-
 #endif
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate);
 
@@ -657,13 +657,13 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	RangeVar	rv = {
 		.schemaname = NameStr(ht->fd.schema_name),
 		.relname = NameStr(ht->fd.table_name),
-#if PG10
-		.inh = false,			/* Don't recurse */
-#elif PG96
+#if PG96
 		.inhOpt = INH_NO,
+#else
+		.inh = false,			/* Don't recurse */
 #endif
-
 	};
+
 	TruncateStmt stmt = {
 		.type = T_TruncateStmt,
 		.relations = list_make1(&rv),
@@ -674,7 +674,12 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	rel = heap_open(ht->main_table_relid, lockmode);
 
 	for (i = 0; i < rel->rd_att->natts; i++)
-		attnums = lappend_int(attnums, rel->rd_att->attrs[i]->attnum);
+	{
+		Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+
+		attnums = lappend_int(attnums, attr->attnum);
+	}
+
 
 	copy_security_check(rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());

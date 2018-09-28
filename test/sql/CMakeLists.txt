@@ -1,8 +1,6 @@
 set(TEST_FILES
-  agg_bookends_optimized.sql
   agg_bookends_results_optimized.sql
   agg_bookends_results_diff.sql
-  alternate_users.sql
   alter.sql
   append.sql
   append_unoptimized.sql
@@ -77,16 +75,31 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   endif (USE_OPENSSL)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-if (${PG_VERSION_MAJOR} EQUAL "10")
+if (${PG_VERSION_MAJOR} EQUAL "9" )
+  list(APPEND TEST_FILES
+    rowsecurity-9.6.sql
+    )
+else() #everything else gets generated_as_identity
   list(APPEND TEST_FILES
     generated_as_identity.sql
-    rowsecurity-10.sql)
-else()
-  list(APPEND TEST_FILES
-    rowsecurity-9.6.sql)
+    )
 endif ()
+if(${PG_VERSION_MAJOR} EQUAL "10")
+  list(APPEND TEST_FILES
+   rowsecurity-10.sql
+   )
+endif()
+if(${PG_VERSION_MAJOR} EQUAL "11")
+  list(APPEND TEST_FILES
+    rowsecurity-11.sql
+    vacuum_multi.sql
+    )
+endif()
 
 set(TEST_TEMPLATES
+  #some error messages changed in PG11 from "relation" to "table" so alternate_users has different output
+  agg_bookends_optimized.sql.in
+  alternate_users.sql.in
   parallel.sql.in
   partitioning.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
@@ -98,7 +111,7 @@ set(TEST_TEMPLATES
 # be in the same directory. These files are updated when the template
 # is edited, but not when the output file is deleted. If the output is
 # deleted either recreate it manually, or rerun cmake on the root dir.
-if (${PG_VERSION_MAJOR} EQUAL "10")
+if (${PG_VERSION_MAJOR} GREATER "9")
     set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR})
 else ()
     set(TEST_VERSION_SUFFIX ${PG_VERSION_MAJOR}.${PG_VERSION_MINOR})

@@ -77,6 +77,11 @@ jobs:
       stage: test
       name: "Regression 10"
       env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+    
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "Regression 11"
+      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
     - if: (type = pull_request) OR (type = cron)
@@ -123,6 +128,16 @@ jobs:
       script:
         # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
         - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
+    
+    - if: type = cron
+      stage: test
+      name: "ABI breakage smoketest 11"
+      before_install:
+      install:
+      after_failure:
+      after_script:
+      script:
+        - PG_MAJOR=11 PG_MINOR_COMPILE=0 bash -x ./scripts/docker-run-abi-test.sh
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)

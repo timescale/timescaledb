@@ -30,7 +30,7 @@
 #include "utils.h"
 #include "compat.h"
 
-#if PG10
+#if !PG96
 #include <utils/fmgrprotos.h>
 #endif
 

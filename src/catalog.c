@@ -22,7 +22,7 @@
 #include "catalog.h"
 #include "extension.h"
 
-#if PG10
+#if !PG96
 #include <utils/regproc.h>
 #endif
 

@@ -140,7 +140,7 @@ drop_statement_drops_extension(DropStmt *stmt)
 
 			Assert(list_length(names) == 1);
 			ext_name = strVal(linitial(names));
-#elif PG10
+#else
 			void	   *name = linitial(stmt->objects);
 
 			ext_name = strVal(name);

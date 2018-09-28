@@ -15,6 +15,8 @@
 #include "net/http.h"
 #include "config.h"
 #include "export.h"
+#include "compat.h"
+
 #ifdef TS_DEBUG
 #include "net/conn_mock.h"
 #endif
@@ -113,7 +115,7 @@ ts_test_status_ssl(PG_FUNCTION_ARGS)
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
-	PG_RETURN_JSONB(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf)));;
+	PG_RETURN_JSONB_P(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf)));;
 #endif
 }
 
@@ -124,7 +126,7 @@ ts_test_status(PG_FUNCTION_ARGS)
 	int			port = 80;
 	int			status = PG_GETARG_INT32(0);
 
-	PG_RETURN_JSONB(test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
+	PG_RETURN_JSONB_P(test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
 }
 
 #ifdef TS_DEBUG
@@ -137,7 +139,7 @@ ts_test_status_mock(PG_FUNCTION_ARGS)
 
 	test_string = text_to_cstring(arg1);
 
-	PG_RETURN_JSONB(test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
+	PG_RETURN_JSONB_P(test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
 }
 #endif
 
@@ -242,5 +244,5 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 
 	ts_http_response_state_destroy(rsp);
 
-	PG_RETURN_JSONB(json_body);
+	PG_RETURN_JSONB_P(json_body);
 }

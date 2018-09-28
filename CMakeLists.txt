@@ -168,9 +168,9 @@ endif ()
 message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
 if ((${PG_VERSION} VERSION_LESS "9.6")
-    OR (${PG_VERSION} VERSION_EQUAL "11")
-    OR (${PG_VERSION} VERSION_GREATER "11"))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6 or 10")
+    OR (${PG_VERSION} VERSION_EQUAL "12")
+    OR (${PG_VERSION} VERSION_GREATER "12"))
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6, 10 or 11")
 endif ()
 
 # Get PostgreSQL configuration from pg_config
