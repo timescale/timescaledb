@@ -104,7 +104,7 @@ typedef struct DimensionSliceScanData
 	int			limit;
 }			DimensionSliceScanData;
 
-static bool
+static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionVec **slices = data;
@@ -112,7 +112,7 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 
 	*slices = dimension_vec_add_slice(slices, slice);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 static int
@@ -363,7 +363,7 @@ dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, 
 	return dimension_vec_sort(&slices);
 }
 
-static bool
+static ScanTupleResult
 dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 {
 	bool		isnull;
@@ -381,7 +381,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 int
@@ -426,13 +426,13 @@ dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
 											   CurrentMemoryContext);
 }
 
-static bool
+static ScanTupleResult
 dimension_slice_fill(TupleInfo *ti, void *data)
 {
 	DimensionSlice **slice = data;
 
 	memcpy(&(*slice)->fd, GETSTRUCT(ti->tuple), sizeof(FormData_dimension_slice));
-	return false;
+	return SCAN_DONE;
 }
 
 /*
@@ -458,7 +458,7 @@ dimension_slice_scan_for_existing(DimensionSlice *slice)
 	return slice;
 }
 
-static bool
+static ScanTupleResult
 dimension_slice_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionSlice **slice = data;
@@ -466,7 +466,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 
 	*slice = dimension_slice_from_tuple(ti->tuple);
 	MemoryContextSwitchTo(old);
-	return false;
+	return SCAN_DONE;
 }
 
 DimensionSlice *

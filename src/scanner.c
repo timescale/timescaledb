@@ -14,6 +14,12 @@
 
 #include "scanner.h"
 
+enum ScannerType
+{
+	ScannerTypeHeap,
+	ScannerTypeIndex,
+};
+
 typedef union ScanDesc
 {
 	IndexScanDesc index_scan;
@@ -188,7 +194,7 @@ scanner_scan(ScannerCtx *ctx)
 
 	while (is_valid)
 	{
-		if (ctx->filter == NULL || ctx->filter(&ictx.tinfo, ctx->data))
+		if (ctx->filter == NULL || ctx->filter(&ictx.tinfo, ctx->data) == SCAN_INCLUDE)
 		{
 			ictx.tinfo.count++;
 
@@ -211,7 +217,8 @@ scanner_scan(ScannerCtx *ctx)
 			}
 
 			/* Abort the scan if the handler wants us to */
-			if (ctx->tuple_found != NULL && !ctx->tuple_found(&ictx.tinfo, ctx->data))
+			if (ctx->tuple_found != NULL &&
+				ctx->tuple_found(&ictx.tinfo, ctx->data) == SCAN_DONE)
 				break;
 		}
 

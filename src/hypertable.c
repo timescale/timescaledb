@@ -123,7 +123,7 @@ hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx)
 	return h;
 }
 
-static bool
+static ScanTupleResult
 hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 {
 	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
@@ -133,7 +133,7 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 	if (OidIsValid(schema_oid))
 		*relid = get_relname_relid(NameStr(form->table_name), schema_oid);
 
-	return false;
+	return SCAN_DONE;
 }
 
 Oid
@@ -214,7 +214,7 @@ number_of_hypertables()
 	return hypertable_scan_limit_internal(NULL, 0, HYPERTABLE_ID_INDEX, NULL, NULL, -1, AccessShareLock, false, CurrentMemoryContext);
 }
 
-static bool
+static ScanTupleResult
 hypertable_tuple_update(TupleInfo *ti, void *data)
 {
 	Hypertable *ht = data;
@@ -267,7 +267,7 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 
 	heap_freetuple(copy);
 
-	return false;
+	return SCAN_DONE;
 }
 
 int
@@ -339,7 +339,7 @@ hypertable_scan_relid(Oid table_relid,
 						   tuplock);
 }
 
-static bool
+static ScanTupleResult
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
@@ -354,7 +354,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 int
@@ -402,7 +402,7 @@ hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  CurrentMemoryContext);
 }
 
-static bool
+static ScanTupleResult
 reset_associated_tuple_found(TupleInfo *ti, void *data)
 {
 	HeapTuple	tuple = heap_copytuple(ti->tuple);
@@ -416,7 +416,7 @@ reset_associated_tuple_found(TupleInfo *ti, void *data)
 
 	heap_freetuple(tuple);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 /*
@@ -442,13 +442,13 @@ hypertable_reset_associated_schema_name(const char *associated_schema)
 										  CurrentMemoryContext);
 }
 
-static bool
+static ScanTupleResult
 tuple_found_lock(TupleInfo *ti, void *data)
 {
 	HTSU_Result *result = data;
 
 	*result = ti->lockresult;
-	return false;
+	return SCAN_DONE;
 }
 
 HTSU_Result
@@ -625,13 +625,13 @@ hypertable_insert(Name schema_name,
 	heap_close(rel, RowExclusiveLock);
 }
 
-static bool
+static ScanTupleResult
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	Hypertable **entry = data;
 
 	*entry = hypertable_from_tuple(ti->tuple, ti->mctx);
-	return false;
+	return SCAN_DONE;
 }
 
 Hypertable *
@@ -1520,7 +1520,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 }
 
 /* Used as a tuple found function */
-static bool
+static ScanTupleResult
 hypertable_rename_schema_name(TupleInfo *ti, void *data)
 {
 	const char **schema_names = (const char **) data;
@@ -1556,8 +1556,9 @@ hypertable_rename_schema_name(TupleInfo *ti, void *data)
 		catalog_update(ti->scanrel, tuple);
 
 	heap_freetuple(tuple);
-	/* Return true to keep going so we can change the name for all hypertables */
-	return true;
+
+	/* Keep going so we can change the name for all hypertables */
+	return SCAN_CONTINUE;
 }
 
 /* Go through internal hypertable table and rename all matching schemas */

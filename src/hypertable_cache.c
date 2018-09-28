@@ -73,13 +73,13 @@ hypertable_cache_create()
 
 static Cache *hypertable_cache_current = NULL;
 
-static bool
+static ScanTupleResult
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	HypertableCacheEntry *entry = data;
 
 	entry->hypertable = hypertable_from_tuple(ti->tuple, ti->mctx);
-	return false;
+	return SCAN_DONE;
 }
 
 static void *

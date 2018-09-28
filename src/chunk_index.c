@@ -554,7 +554,7 @@ chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 	return cim;
 }
 
-static bool
+static ScanTupleResult
 chunk_index_collect(TupleInfo *ti, void *data)
 {
 	List	  **mappings = data;
@@ -562,7 +562,7 @@ chunk_index_collect(TupleInfo *ti, void *data)
 
 	*mappings = lappend(*mappings, cim);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 List *
@@ -593,7 +593,7 @@ typedef struct ChunkIndexDeleteData
 	bool		drop_index;
 } ChunkIndexDeleteData;
 
-static bool
+static ScanTupleResult
 chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
@@ -613,10 +613,10 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 			performDeletion(&idxobj, DROP_RESTRICT, 0);
 	}
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
-static bool
+static ScanFilterResult
 chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
@@ -627,7 +627,7 @@ chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 		Chunk	   *chunk = chunk_get_by_id(chunk_index->chunk_id, 0, false);
 
 		if (NULL != chunk && namestrcmp(&chunk->fd.schema_name, cid->schema) == 0)
-			return true;
+			return SCAN_INCLUDE;
 	}
 
 	if (namestrcmp(&chunk_index->hypertable_index_name, cid->index_name) == 0)
@@ -637,10 +637,10 @@ chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 		ht = hypertable_get_by_id(chunk_index->hypertable_id);
 
 		if (NULL != ht && namestrcmp(&ht->fd.schema_name, cid->schema) == 0)
-			return true;
+			return SCAN_INCLUDE;
 	}
 
-	return false;
+	return SCAN_EXCLUDE;
 }
 
 int
@@ -725,7 +725,6 @@ chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index)
 		.drop_index = drop_index,
 	};
 
-
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(hypertable_id));
@@ -734,13 +733,13 @@ chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index)
 								   scankey, 1, chunk_index_tuple_delete, NULL, &data);
 }
 
-static bool
+static ScanTupleResult
 chunk_index_tuple_found(TupleInfo *ti, void *const data)
 {
 	ChunkIndexMapping *const cim = data;
 
 	chunk_index_mapping_from_tuple(ti, cim);
-	return false;
+	return SCAN_DONE;
 }
 
 
@@ -764,7 +763,7 @@ chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
 	return cim;
 }
 
-static bool
+static ScanFilterResult
 chunk_hypertable_index_name_filter(TupleInfo *ti, void *data)
 {
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
@@ -772,9 +771,9 @@ chunk_hypertable_index_name_filter(TupleInfo *ti, void *data)
 	const char *hypertable_indexname = get_rel_name(cim->parent_indexoid);
 
 	if (namestrcmp(&chunk_index->hypertable_index_name, hypertable_indexname) == 0)
-		return true;
+		return SCAN_INCLUDE;
 
-	return false;
+	return SCAN_EXCLUDE;
 }
 
 ChunkIndexMapping *
@@ -803,7 +802,7 @@ typedef struct ChunkIndexRenameInfo
 	bool		isparent;
 } ChunkIndexRenameInfo;
 
-static bool
+static ScanTupleResult
 chunk_index_tuple_rename(TupleInfo *ti, void *data)
 {
 	ChunkIndexRenameInfo *info = data;
@@ -838,9 +837,9 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 	heap_freetuple(tuple);
 
 	if (info->isparent)
-		return true;
+		return SCAN_CONTINUE;
 
-	return false;
+	return SCAN_DONE;
 }
 
 int
@@ -884,7 +883,7 @@ chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char 
 								   scankey, 2, chunk_index_tuple_rename, NULL, &renameinfo);
 }
 
-static bool
+static ScanTupleResult
 chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 {
 	char	   *tablespace = data;
@@ -900,7 +899,7 @@ chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 
 	AlterTableInternal(indexrelid, cmds, false);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 int
@@ -932,6 +931,7 @@ chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 }
 
 TS_FUNCTION_INFO_V1(ts_chunk_index_clone);
+
 Datum
 ts_chunk_index_clone(PG_FUNCTION_ARGS)
 {
@@ -969,6 +969,7 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 }
 
 TS_FUNCTION_INFO_V1(ts_chunk_index_replace);
+
 Datum
 ts_chunk_index_replace(PG_FUNCTION_ARGS)
 {
