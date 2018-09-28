@@ -5,16 +5,18 @@
 #include <nodes/parsenodes.h>
 #include <fmgr.h>
 
-typedef struct Chunk Chunk;
-typedef struct Hypertable Hypertable;
+typedef struct ChunkIndexMapping ChunkIndexMapping;
 
-typedef struct ChunkIndexMapping
+#include "chunk.h"
+#include "hypertable.h"
+
+struct ChunkIndexMapping
 {
 	Oid			chunkoid;
 	Oid			parent_indexoid;
 	Oid			indexoid;
 	Oid			hypertableoid;
-} ChunkIndexMapping;
+};
 
 extern void chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid);
 extern Oid	chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid, int32 hypertable_id, Oid hypertable_indexrelid);

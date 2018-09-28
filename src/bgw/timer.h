@@ -4,14 +4,16 @@
 #include <postgres.h>
 #include <utils/timestamp.h>
 
+typedef struct Timer Timer;
+
 #include "config.h"
 
-typedef struct Timer
+struct Timer
 {
 	TimestampTz (*get_current_timestamp) ();
 	bool		(*wait) (TimestampTz until);
 
-} Timer;
+};
 
 extern bool timer_wait(TimestampTz until);
 extern TimestampTz timer_get_current_timestamp(void);

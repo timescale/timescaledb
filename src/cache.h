@@ -5,20 +5,24 @@
 #include <utils/memutils.h>
 #include <utils/hsearch.h>
 
-typedef struct CacheQuery
+typedef struct Cache Cache;
+typedef struct CacheQuery CacheQuery;
+typedef struct CacheStats CacheStats;
+
+struct CacheQuery
 {
 	void	   *result;
 	void	   *data;
-} CacheQuery;
+};
 
-typedef struct CacheStats
+struct CacheStats
 {
 	long		numelements;
 	uint64		hits;
 	uint64		misses;
-} CacheStats;
+};
 
-typedef struct Cache
+struct Cache
 {
 	HASHCTL		hctl;
 	HTAB	   *htab;
@@ -34,7 +38,7 @@ typedef struct Cache
 	bool		release_on_commit;	/* This should be false if doing
 									 * cross-commit operations like CLUSTER or
 									 * VACUUM */
-} Cache;
+};
 
 extern void cache_init(Cache *cache);
 extern void cache_invalidate(Cache *cache);

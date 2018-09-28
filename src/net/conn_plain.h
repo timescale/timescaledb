@@ -1,7 +1,7 @@
 #ifndef TIMESCALEDB_CONN_PLAIN_H
 #define TIMESCALEDB_CONN_PLAIN_H
 
-typedef struct Connection Connection;
+#include "conn.h"
 
 #ifdef WIN32
 #define IS_SOCKET_ERROR(err) (err == SOCKET_ERROR)

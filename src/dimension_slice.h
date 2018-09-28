@@ -4,9 +4,13 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 
+typedef struct DimensionSlice DimensionSlice;
+
 #include "catalog.h"
-#include "dimension.h"
 #include "chunk_constraint.h"
+#include "dimension.h"
+#include "dimension_vector.h"
+#include "hypercube.h"
 
 #define DIMENSION_SLICE_MAXVALUE ((int64)PG_INT64_MAX)
 #define DIMENSION_SLICE_MINVALUE ((int64)PG_INT64_MIN)
@@ -14,15 +18,12 @@
 /* partition functions return int32 */
 #define DIMENSION_SLICE_CLOSED_MAX ((int64)PG_INT32_MAX)
 
-typedef struct DimensionSlice
+struct DimensionSlice
 {
 	FormData_dimension_slice fd;
 	void		(*storage_free) (void *);
 	void	   *storage;
-} DimensionSlice;
-
-typedef struct DimensionVec DimensionVec;
-typedef struct Hypercube Hypercube;
+};
 
 extern DimensionVec *dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit);
 extern DimensionVec *dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit);

@@ -3,17 +3,19 @@
 
 #include <pg_config.h>
 
+typedef enum ConnectionType ConnectionType;
 typedef struct ConnOps ConnOps;
+typedef struct Connection Connection;
 
-typedef enum ConnectionType
+enum ConnectionType
 {
 	CONNECTION_PLAIN,
 	CONNECTION_SSL,
 	CONNECTION_MOCK,
 	_CONNECTION_MAX,
-} ConnectionType;
+};
 
-typedef struct Connection
+struct Connection
 {
 	ConnectionType type;
 #ifdef WIN32
@@ -23,7 +25,7 @@ typedef struct Connection
 #endif
 	ConnOps    *ops;
 	int			err;
-} Connection;
+};
 
 extern Connection *connection_create(ConnectionType type);
 extern int	connection_connect(Connection *conn, const char *host, const char *servname, int port);

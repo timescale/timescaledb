@@ -178,14 +178,14 @@ dimension_restrict_info_slices(DimensionRestrictInfo *dri)
 	}
 }
 
-typedef struct HypertableRestrictInfo
+struct HypertableRestrictInfo
 {
 	int			num_base_restrictions;	/* number of base restrictions
 										 * successfully added */
 	int			num_dimensions;
 	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER];	/* array of dimension
 																			 * restrictions */
-} HypertableRestrictInfo;
+};
 
 
 HypertableRestrictInfo *

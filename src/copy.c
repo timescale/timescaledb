@@ -23,6 +23,8 @@
 #include <utils/rel.h>
 #include <utils/rls.h>
 
+typedef struct CopyChunkState CopyChunkState;
+
 #include "hypertable.h"
 #include "copy.h"
 #include "dimension.h"
@@ -41,12 +43,10 @@
  *
  */
 
-typedef struct CopyChunkState CopyChunkState;
-
 typedef bool (*CopyFromFunc) (CopyChunkState *ccstate, ExprContext *econtext,
 							  Datum *values, bool *nulls, Oid *tuple_oid);
 
-typedef struct CopyChunkState
+struct CopyChunkState
 {
 	Relation	rel;
 	EState	   *estate;
@@ -58,7 +58,7 @@ typedef struct CopyChunkState
 		HeapScanDesc scandesc;
 		void	   *data;
 	}			fromctx;
-} CopyChunkState;
+};
 
 
 static CopyChunkState *

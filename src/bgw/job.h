@@ -1,22 +1,26 @@
 #ifndef BGW_JOB_H
 #define BGW_JOB_H
 
-#include "catalog.h"
 #include <postmaster/bgworker.h>
 
-typedef enum JobType
+typedef enum JobType JobType;
+typedef struct BgwJob BgwJob;
+
+#include "catalog.h"
+
+enum JobType
 {
 	JOB_TYPE_VERSION_CHECK = 0,
 	JOB_TYPE_UNKNOWN,
 	_MAX_JOB_TYPE
-} JobType;
+};
 
-typedef struct BgwJob
+struct BgwJob
 {
 	FormData_bgw_job fd;
 	JobType		bgw_type;
 
-} BgwJob;
+};
 
 typedef bool job_main_func (void);
 typedef bool (*unknown_job_type_hook_type) (BgwJob *job);

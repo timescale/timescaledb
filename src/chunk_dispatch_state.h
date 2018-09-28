@@ -5,12 +5,13 @@
 #include <nodes/execnodes.h>
 #include <nodes/parsenodes.h>
 
-typedef struct ChunkDispatch ChunkDispatch;
-typedef struct ChunkDispatchInfo ChunkDispatchInfo;
-typedef struct Cache Cache;
+typedef struct ChunkDispatchState ChunkDispatchState;
+
+#include "chunk_dispatch.h"
+#include "chunk_dispatch_info.h"
 
 /* State used for every tuple in an insert statement */
-typedef struct ChunkDispatchState
+struct ChunkDispatchState
 {
 	CustomScanState cscan_state;
 	Plan	   *subplan;
@@ -29,7 +30,7 @@ typedef struct ChunkDispatchState
 	 * for each chunk.
 	 */
 	ChunkDispatch *dispatch;
-} ChunkDispatchState;
+};
 
 #define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
 

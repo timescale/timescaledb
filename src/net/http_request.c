@@ -42,7 +42,7 @@ http_header_create(const char *name,
 
 /*  NOTE: The setter functions for HttpRequest should all */
 /*  ensure that every char * in this struct is null-terminated */
-typedef struct HttpRequest
+struct HttpRequest
 {
 	HttpRequestMethod method;
 	char	   *uri;
@@ -52,7 +52,7 @@ typedef struct HttpRequest
 	char	   *body;
 	size_t		body_len;
 	MemoryContext context;
-} HttpRequest;
+};
 
 static const char *http_method_strings[] = {
 	[HTTP_GET] = "GET",

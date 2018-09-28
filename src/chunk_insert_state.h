@@ -6,12 +6,15 @@
 #include <funcapi.h>
 #include <access/tupconvert.h>
 
-#include "hypertable.h"
-#include "chunk.h"
-#include "cache.h"
-#include "chunk_dispatch_state.h"
+typedef struct ChunkInsertState ChunkInsertState;
 
-typedef struct ChunkInsertState
+#include "cache.h"
+#include "chunk.h"
+#include "chunk_dispatch.h"
+#include "chunk_dispatch_state.h"
+#include "hypertable.h"
+
+struct ChunkInsertState
 {
 	Relation	rel;
 	ResultRelInfo *result_relation_info;
@@ -21,9 +24,7 @@ typedef struct ChunkInsertState
 	MemoryContext mctx;
 
 	EState	   *estate;
-} ChunkInsertState;
-
-typedef struct ChunkDispatch ChunkDispatch;
+};
 
 extern HeapTuple chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple, TupleTableSlot **existing_slot);
 extern ChunkInsertState *chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);

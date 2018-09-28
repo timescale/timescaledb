@@ -1,12 +1,11 @@
 #ifndef TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H
 #define TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H
 
-#include "hypertable.h"
-
-
 /* HypertableRestrictInfo represents restrictions on a hypertable. It uses
  * range exclusion logic to figure out which chunks can match the description */
 typedef struct HypertableRestrictInfo HypertableRestrictInfo;
+
+#include "hypertable.h"
 
 extern HypertableRestrictInfo *hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht);
 

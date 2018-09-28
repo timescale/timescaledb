@@ -5,6 +5,8 @@
 #include <pg_config.h> // To get USE_OPENSSL from postgres build
 #include <utils/builtins.h>
 
+typedef struct VersionResult VersionResult;
+
 #include "compat.h"
 #include "version.h"
 #include "net/conn.h"
@@ -15,13 +17,13 @@
 #define TELEMETRY_HOST "telemetry.timescale.com"
 #define TELEMETRY_PATH "/v1/metrics"
 
-typedef struct VersionResult
+struct VersionResult
 {
 	VersionInfo vinfo;
 	const char *versionstr;
 	bool		is_up_to_date;
 	const char *errhint;
-} VersionResult;
+};
 
 HttpRequest *build_version_request(const char *host, const char *path);
 Connection *telemetry_connect(const char *host, const char *service);

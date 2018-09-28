@@ -9,6 +9,9 @@
 #include <utils/typcache.h>
 #include <fmgr.h>
 
+typedef struct PartitioningFunc PartitioningFunc;
+typedef struct PartitioningInfo PartitioningInfo;
+
 #include "catalog.h"
 
 #define OPEN_START_TIME -1
@@ -17,7 +20,7 @@
 #define DEFAULT_PARTITIONING_FUNC_SCHEMA INTERNAL_SCHEMA_NAME
 #define DEFAULT_PARTITIONING_FUNC_NAME "get_partition_hash"
 
-typedef struct PartitioningFunc
+struct PartitioningFunc
 {
 	char		schema[NAMEDATALEN];
 	char		name[NAMEDATALEN];
@@ -27,15 +30,15 @@ typedef struct PartitioningFunc
 	 * partitioning column's text representation.
 	 */
 	FmgrInfo	func_fmgr;
-} PartitioningFunc;
+};
 
 
-typedef struct PartitioningInfo
+struct PartitioningInfo
 {
 	char		column[NAMEDATALEN];
 	AttrNumber	column_attnum;
 	PartitioningFunc partfunc;
-} PartitioningInfo;
+};
 
 
 extern Oid	partitioning_func_get_default(void);

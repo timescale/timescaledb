@@ -4,15 +4,17 @@
 #include <postgres.h>
 #include <storage/dsm.h>
 
+typedef enum BgwMessageType BgwMessageType;
+typedef struct BgwMessage BgwMessage;
 
-typedef enum BgwMessageType
+enum BgwMessageType
 {
 	STOP = 0,
 	START,
 	RESTART
-} BgwMessageType;
+};
 
-typedef struct BgwMessage
+struct BgwMessage
 {
 	BgwMessageType message_type;
 
@@ -21,7 +23,7 @@ typedef struct BgwMessage
 	dsm_handle	ack_dsm_handle;
 
 
-} BgwMessage;
+};
 
 extern bool bgw_message_send_and_wait(BgwMessageType message, Oid db_oid);
 

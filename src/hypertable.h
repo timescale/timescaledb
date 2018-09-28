@@ -4,26 +4,26 @@
 #include <postgres.h>
 #include <nodes/primnodes.h>
 
+typedef struct Hypertable Hypertable;
+
 #include "catalog.h"
+#include "chunk.h"
 #include "dimension.h"
-#include "tablespace.h"
 #include "scanner.h"
+#include "subspace_store.h"
+#include "tablespace.h"
 
 #define OLD_INSERT_BLOCKER_NAME	"insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"
 
-typedef struct SubspaceStore SubspaceStore;
-typedef struct Chunk Chunk;
-typedef struct HeapTupleData *HeapTuple;
-
-typedef struct Hypertable
+struct Hypertable
 {
 	FormData_hypertable fd;
 	Oid			main_table_relid;
 	Oid			chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
-} Hypertable;
+};
 
 extern int	number_of_hypertables(void);
 

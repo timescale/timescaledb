@@ -4,55 +4,63 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 
-typedef enum EventTriggerDropType
+typedef enum EventTriggerDropType EventTriggerDropType;
+typedef struct EventTriggerDropIndex EventTriggerDropIndex;
+typedef struct EventTriggerDropObject EventTriggerDropObject;
+typedef struct EventTriggerDropSchema EventTriggerDropSchema;
+typedef struct EventTriggerDropTable EventTriggerDropTable;
+typedef struct EventTriggerDropTableConstraint EventTriggerDropTableConstraint;
+typedef struct EventTriggerDropTrigger EventTriggerDropTrigger;
+
+enum EventTriggerDropType
 {
 	EVENT_TRIGGER_DROP_TABLE_CONSTRAINT,
 	EVENT_TRIGGER_DROP_INDEX,
 	EVENT_TRIGGER_DROP_TABLE,
 	EVENT_TRIGGER_DROP_SCHEMA,
 	EVENT_TRIGGER_DROP_TRIGGER
-} EventTriggerDropType;
+};
 
-typedef struct EventTriggerDropObject
+struct EventTriggerDropObject
 {
 	EventTriggerDropType type;
-} EventTriggerDropObject;
+};
 
-typedef struct EventTriggerDropTableConstraint
+struct EventTriggerDropTableConstraint
 {
 	EventTriggerDropObject obj;
 	char	   *constraint_name;
 	char	   *schema;
 	char	   *table;
-} EventTriggerDropTableConstraint;
+};
 
-typedef struct EventTriggerDropIndex
+struct EventTriggerDropIndex
 {
 	EventTriggerDropObject obj;
 	char	   *index_name;
 	char	   *schema;
-} EventTriggerDropIndex;
+};
 
-typedef struct EventTriggerDropTable
+struct EventTriggerDropTable
 {
 	EventTriggerDropObject obj;
 	char	   *table_name;
 	char	   *schema;
-} EventTriggerDropTable;
+};
 
-typedef struct EventTriggerDropSchema
+struct EventTriggerDropSchema
 {
 	EventTriggerDropObject obj;
 	char	   *schema;
-} EventTriggerDropSchema;
+};
 
-typedef struct EventTriggerDropTrigger
+struct EventTriggerDropTrigger
 {
 	EventTriggerDropObject obj;
 	char	   *trigger_name;
 	char	   *schema;
 	char	   *table;
-} EventTriggerDropTrigger;
+};
 
 extern List *event_trigger_dropped_objects(void);
 extern List *event_trigger_ddl_commands(void);

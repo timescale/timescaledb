@@ -4,11 +4,13 @@
 #include <postgres.h>
 #include <nodes/execnodes.h>
 
-typedef struct HypertableInsertState
+typedef struct HypertableInsertState HypertableInsertState;
+
+struct HypertableInsertState
 {
 	CustomScanState cscan_state;
 	ModifyTable *mt;
-} HypertableInsertState;
+};
 
 Plan	   *hypertable_insert_plan_create(ModifyTable *mt);
 

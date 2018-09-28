@@ -23,14 +23,14 @@ typedef struct SubspaceStoreInternalNode
 	bool		last_internal_node;
 } SubspaceStoreInternalNode;
 
-typedef struct SubspaceStore
+struct SubspaceStore
 {
 	MemoryContext mcxt;
 	int16		num_dimensions;
 /* limit growth of store by  limiting number of slices in first dimension,	0 for no limit */
 	int16		max_items;
 	SubspaceStoreInternalNode *origin;	/* origin of the tree */
-} SubspaceStore;
+};
 
 static inline SubspaceStoreInternalNode *
 subspace_store_internal_node_create(bool last_internal_node)

@@ -5,17 +5,20 @@
 #include <nodes/parsenodes.h>
 #include <nodes/execnodes.h>
 
-#include "hypertable_cache.h"
+typedef struct ChunkDispatch ChunkDispatch;
+
 #include "cache.h"
-#include "subspace_store.h"
 #include "chunk_dispatch_state.h"
+#include "chunk_insert_state.h"
+#include "hypertable_cache.h"
+#include "subspace_store.h"
 
 /*
  * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is
  * separate from any plan and executor nodes, since it is used both for INSERT
  * and COPY.
 */
-typedef struct ChunkDispatch
+struct ChunkDispatch
 {
 	Hypertable *hypertable;
 	SubspaceStore *cache;
@@ -34,10 +37,7 @@ typedef struct ChunkDispatch
 	List	   *on_conflict_where;
 	CmdType		cmd_type;
 
-} ChunkDispatch;
-
-typedef struct Point Point;
-typedef struct ChunkInsertState ChunkInsertState;
+};
 
 ChunkDispatch *chunk_dispatch_create(Hypertable *ht, EState *estate);
 void		chunk_dispatch_destroy(ChunkDispatch *dispatch);

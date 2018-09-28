@@ -3,7 +3,9 @@
 
 #include <postgres.h>
 
-typedef struct ChunkSizingInfo
+typedef struct ChunkSizingInfo ChunkSizingInfo;
+
+struct ChunkSizingInfo
 {
 	Oid			table_relid;
 	/* Set manually */
@@ -18,7 +20,7 @@ typedef struct ChunkSizingInfo
 	NameData	func_name;
 	NameData	func_schema;
 	int64		target_size_bytes;
-} ChunkSizingInfo;
+};
 
 void		chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info);
 

@@ -6,14 +6,15 @@
 #include <access/tupdesc.h>
 #include <utils/hsearch.h>
 
+typedef struct Chunk Chunk;
+typedef struct ChunkScanCtx ChunkScanCtx;
+typedef struct ChunkScanEntry ChunkScanEntry;
+
 #include "catalog.h"
 #include "chunk_constraint.h"
+#include "dimension.h"
+#include "hypercube.h"
 #include "hypertable.h"
-
-typedef struct Hypercube Hypercube;
-typedef struct Point Point;
-typedef struct Hyperspace Hyperspace;
-typedef struct Hypertable Hypertable;
 
 /*
  * A chunk represents a table that stores data, part of a partitioned
@@ -23,7 +24,7 @@ typedef struct Hypertable Hypertable;
  * boundaries of the cube is represented by a collection of slices from the N
  * distinct dimensions.
  */
-typedef struct Chunk
+struct Chunk
 {
 	FormData_chunk fd;
 	Oid			table_id;
@@ -36,7 +37,7 @@ typedef struct Chunk
 	 */
 	Hypercube  *cube;
 	ChunkConstraints *constraints;
-} Chunk;
+};
 
 /*
  * ChunkScanCtx is used to scan for chunks in a hypertable's N-dimensional
@@ -45,7 +46,7 @@ typedef struct Chunk
  * For every matching constraint, a corresponding chunk will be created in the
  * context's hash table, keyed on the chunk ID.
  */
-typedef struct ChunkScanCtx
+struct ChunkScanCtx
 {
 	HTAB	   *htab;
 	Hyperspace *space;
@@ -53,14 +54,14 @@ typedef struct ChunkScanCtx
 	bool		early_abort;
 	LOCKMODE	lockmode;
 	void	   *data;
-} ChunkScanCtx;
+};
 
 /* The hash table entry for the ChunkScanCtx */
-typedef struct ChunkScanEntry
+struct ChunkScanEntry
 {
 	int32		chunk_id;
 	Chunk	   *chunk;
-} ChunkScanEntry;
+};
 
 extern Chunk *chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern Chunk *chunk_create_stub(int32 id, int16 num_constraints);

@@ -23,7 +23,7 @@ typedef enum HttpParseState
 	HTTP_STATE_DONE,
 } HttpParseState;
 
-typedef struct HttpResponseState
+struct HttpResponseState
 {
 	MemoryContext context;
 	char		version[HTTP_VERSION_BUFFER_SIZE];
@@ -40,7 +40,7 @@ typedef struct HttpResponseState
 	size_t		content_length;
 	char	   *body_start;
 	HttpParseState state;
-} HttpResponseState;
+};
 
 void
 http_response_state_init(HttpResponseState *state)

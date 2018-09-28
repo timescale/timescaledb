@@ -7,14 +7,20 @@
 #include <access/heapam.h>
 #include <nodes/lockoptions.h>
 
-typedef enum ScannerType
+typedef enum ScannerType ScannerType;
+typedef struct ScannerCtx ScannerCtx;
+typedef struct TupleInfo TupleInfo;
+typedef bool (*tuple_filter_func) (TupleInfo *ti, void *data);
+typedef bool (*tuple_found_func) (TupleInfo *ti, void *data);
+
+enum ScannerType
 {
 	ScannerTypeHeap,
 	ScannerTypeIndex,
-}			ScannerType;
+};
 
 /* Tuple information passed on to handlers when scanning for tuples. */
-typedef struct TupleInfo
+struct TupleInfo
 {
 	Relation	scanrel;
 	HeapTuple	tuple;
@@ -35,12 +41,9 @@ typedef struct TupleInfo
 	 * can be used to allocate data on in the tuple handle function.
 	 */
 	MemoryContext mctx;
-} TupleInfo;
+};
 
-typedef bool (*tuple_found_func) (TupleInfo *ti, void *data);
-typedef bool (*tuple_filter_func) (TupleInfo *ti, void *data);
-
-typedef struct ScannerCtx
+struct ScannerCtx
 {
 	Oid			table;
 	Oid			index;
@@ -86,7 +89,7 @@ typedef struct ScannerCtx
 	 * false to abort.
 	 */
 	bool		(*tuple_found) (TupleInfo *ti, void *data);
-} ScannerCtx;
+};
 
 /* Performs an index scan or heap scan and returns the number of matching
  * tuples. */

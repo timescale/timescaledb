@@ -3,7 +3,7 @@
 
 #include "conn.h"
 
-typedef struct ConnOps
+struct ConnOps
 {
 	size_t		size;			/* Size of the connection object */
 	int			(*init) (Connection *conn);
@@ -13,7 +13,7 @@ typedef struct ConnOps
 	ssize_t		(*read) (Connection *conn, char *buf, size_t readlen);
 	int			(*set_timeout) (Connection *conn, unsigned long millis);
 	const char *(*errmsg) (Connection *conn);
-} ConnOps;
+};
 
 extern int	connection_register(ConnectionType type, ConnOps *ops);
 

@@ -5,22 +5,27 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 
-#include "catalog.h"
-#include "hypertable.h"
+typedef struct ChunkConstraint ChunkConstraint;
+typedef struct ChunkConstraints ChunkConstraints;
 
-typedef struct ChunkConstraint
+#include "catalog.h"
+#include "chunk.h"
+#include "dimension.h"
+#include "hypercube.h"
+
+struct ChunkConstraint
 {
 	FormData_chunk_constraint fd;
-} ChunkConstraint;
+};
 
-typedef struct ChunkConstraints
+struct ChunkConstraints
 {
 	MemoryContext mctx;
 	int16		capacity;
 	int16		num_constraints;
 	int16		num_dimension_constraints;
 	ChunkConstraint *constraints;
-} ChunkConstraints;
+};
 
 #define chunk_constraints_get(cc, i)			\
 	&((cc)->constraints[i])
@@ -28,11 +33,6 @@ typedef struct ChunkConstraints
 #define is_dimension_constraint(cc)				\
 	((cc)->fd.dimension_slice_id > 0)
 
-
-typedef struct Chunk Chunk;
-typedef struct DimensionSlice DimensionSlice;
-typedef struct Hypercube Hypercube;
-typedef struct ChunkScanCtx ChunkScanCtx;
 
 extern ChunkConstraints *chunk_constraints_alloc(int size_hint, MemoryContext mctx);
 extern ChunkConstraints *chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint, MemoryContext mctx);

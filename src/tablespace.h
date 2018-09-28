@@ -4,20 +4,23 @@
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 
+typedef struct Tablespace Tablespace;
+typedef struct Tablespaces Tablespaces;
+
 #include "catalog.h"
 
-typedef struct Tablespace
+struct Tablespace
 {
 	FormData_tablespace fd;
 	Oid			tablespace_oid;
-} Tablespace;
+};
 
-typedef struct Tablespaces
+struct Tablespaces
 {
 	int			capacity;
 	int			num_tablespaces;
 	Tablespace *tablespaces;
-} Tablespaces;
+};
 
 extern Tablespace *tablespaces_add(Tablespaces *tablespaces, FormData_tablespace *form, Oid tspc_oid);
 extern bool tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid);

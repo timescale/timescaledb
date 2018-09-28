@@ -10,9 +10,9 @@
  * Thus, a subspace is a "rectangular" cutout in a multidimensional space.
  */
 
-typedef struct Hypercube Hypercube;
-typedef struct Point Point;
 typedef struct SubspaceStore SubspaceStore;
+
+#include "hypercube.h"
 
 extern SubspaceStore *subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items);
 

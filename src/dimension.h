@@ -5,28 +5,33 @@
 #include <access/attnum.h>
 #include <access/htup_details.h>
 
+typedef enum DimensionType DimensionType;
+typedef struct Dimension Dimension;
+typedef struct DimensionInfo DimensionInfo;
+typedef struct Hyperspace Hyperspace;
+typedef struct Point Point;
+
 #include "catalog.h"
+#include "dimension_vector.h"
+#include "dimension_slice.h"
+#include "partitioning.h"
 #include "utils.h"
 
-typedef struct PartitioningInfo PartitioningInfo;
-typedef struct DimensionSlice DimensionSlice;
-typedef struct DimensionVec DimensionVec;
-
-typedef enum DimensionType
+enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
 	DIMENSION_TYPE_CLOSED,
 	DIMENSION_TYPE_ANY,
-} DimensionType;
+};
 
-typedef struct Dimension
+struct Dimension
 {
 	FormData_dimension fd;
 	DimensionType type;
 	AttrNumber	column_attno;
 	Oid			main_table_relid;
 	PartitioningInfo *partitioning;
-} Dimension;
+};
 
 
 #define IS_OPEN_DIMENSION(d)					\
@@ -47,7 +52,7 @@ typedef struct Dimension
 /*
  * A hyperspace defines how to partition in a N-dimensional space.
  */
-typedef struct Hyperspace
+struct Hyperspace
 {
 	int32		hypertable_id;
 	Oid			main_table_relid;
@@ -55,7 +60,7 @@ typedef struct Hyperspace
 	uint16		num_dimensions;
 	/* Open dimensions should be stored before closed dimensions */
 	Dimension	dimensions[FLEXIBLE_ARRAY_MEMBER];
-} Hyperspace;
+};
 
 #define HYPERSPACE_SIZE(num_dimensions)							\
 	(sizeof(Hyperspace) + (sizeof(Dimension) * (num_dimensions)))
@@ -63,13 +68,13 @@ typedef struct Hyperspace
 /*
  * A point in an N-dimensional hyperspace.
  */
-typedef struct Point
+struct Point
 {
 	int16		cardinality;
 	uint8		num_coords;
 	/* Open dimension coordinates are stored before the closed coordinates */
 	int64		coordinates[FLEXIBLE_ARRAY_MEMBER];
-} Point;
+};
 
 #define POINT_SIZE(cardinality)							\
 	(sizeof(Point) + (sizeof(int64) * (cardinality)))
@@ -78,12 +83,10 @@ typedef struct Point
 #define DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE (USECS_PER_DAY)	/* 1 day with adaptive
 																 * chunking enabled */
 
-typedef struct Hypertable Hypertable;
-
 /*
  * Dimension information used to validate, create and update dimensions.
  */
-typedef struct DimensionInfo
+struct DimensionInfo
 {
 	Oid			table_relid;
 	Name		colname;
@@ -99,8 +102,8 @@ typedef struct DimensionInfo
 	bool		set_not_null;
 	bool		num_slices_is_set;
 	bool		adaptive_chunking;	/* True if adaptive chunking is enabled */
-	Hypertable *ht;
-} DimensionInfo;
+	struct Hypertable *ht;
+};
 
 #define DIMENSION_INFO_IS_SET(di)										\
 	(OidIsValid((di)->table_relid) &&									\

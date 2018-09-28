@@ -7,7 +7,7 @@
 #include <executor/executor.h>
 #include <commands/copy.h>
 
-typedef struct Hypertable Hypertable;
+#include "hypertable.h"
 
 void		timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht);
 void		timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode);

@@ -9,31 +9,38 @@
 #define MAX_RAW_BUFFER_SIZE	4096
 #define MAX_REQUEST_DATA_SIZE	2048
 
-typedef struct HttpHeader
+typedef enum HttpError HttpError;
+typedef enum HttpRequestMethod HttpRequestMethod;
+typedef enum HttpVersion HttpVersion;
+typedef struct HttpHeader HttpHeader;
+
+#include "conn.h"
+
+struct HttpHeader
 {
 	char	   *name;
 	int			name_len;
 	char	   *value;
 	int			value_len;
 	struct HttpHeader *next;
-} HttpHeader;
+};
 
 /******* http_request.c *******/
 /*  We can add more methods later, but for now we do not need others */
-typedef enum HttpRequestMethod
+enum HttpRequestMethod
 {
 	HTTP_GET,
 	HTTP_POST,
-} HttpRequestMethod;
+};
 
-typedef enum HttpVersion
+enum HttpVersion
 {
 	HTTP_VERSION_10,
 	HTTP_VERSION_11,
 	HTTP_VERSION_INVALID,
-} HttpVersion;
+};
 
-typedef enum HttpError
+enum HttpError
 {
 	HTTP_ERROR_NONE = 0,
 	HTTP_ERROR_WRITE,			/* Connection write error, check errno */
@@ -44,12 +51,11 @@ typedef enum HttpError
 	HTTP_ERROR_RESPONSE_INCOMPLETE,
 	HTTP_ERROR_INVALID_BUFFER_STATE,
 	HTTP_ERROR_UNKNOWN,			/* Should always be last */
-} HttpError;
+};
 
 /*  NOTE: HttpRequest* structs are all responsible */
 /*  for allocating and deallocating the char* */
 typedef struct HttpRequest HttpRequest;
-typedef struct Connection Connection;
 
 HttpVersion http_version_from_string(const char *version);
 const char *http_version_string(HttpVersion version);
