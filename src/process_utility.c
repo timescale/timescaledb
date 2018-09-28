@@ -10,12 +10,9 @@
 #include <nodes/makefuncs.h>
 #include <tcop/utility.h>
 #include <catalog/namespace.h>
-#include <catalog/pg_inherits_fn.h>
 #include <catalog/index.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_trigger.h>
-#include <catalog/pg_constraint_fn.h>
-#include <catalog/pg_constraint.h>
 #include <commands/copy.h>
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
@@ -33,6 +30,14 @@
 #include <utils/snapmgr.h>
 #include <parser/parse_utilcmd.h>
 #include <commands/tablespace.h>
+
+#include <catalog/pg_constraint.h>
+#include <catalog/pg_inherits.h>
+#include "compat.h"
+#if PG96 || PG10				/* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#include <catalog/pg_inherits_fn.h>
+#include <catalog/pg_constraint_fn.h>
+#endif
 
 #include <miscadmin.h>
 
@@ -61,7 +66,7 @@ static bool expect_chunk_modification = false;
 
 typedef struct ProcessUtilityArgs
 {
-#if PG10
+#if !PG96
 	PlannedStmt *pstmt;
 	QueryEnvironment *queryEnv;
 #endif
@@ -79,7 +84,7 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 {
 	if (prev_ProcessUtility_hook != NULL)
 	{
-#if PG10
+#if !PG96
 		/* Call any earlier hooks */
 		(prev_ProcessUtility_hook) (args->pstmt,
 									args->query_string,
@@ -88,7 +93,7 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 									args->queryEnv,
 									args->dest,
 									args->completion_tag);
-#elif PG96
+#else
 		(prev_ProcessUtility_hook) (args->parsetree,
 									args->query_string,
 									args->context,
@@ -101,7 +106,7 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 	else
 	{
 		/* Call the standard */
-#if PG10
+#if !PG96
 		standard_ProcessUtility(args->pstmt,
 								args->query_string,
 								args->context,
@@ -109,7 +114,7 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 								args->queryEnv,
 								args->dest,
 								args->completion_tag);
-#elif PG96
+#else
 		standard_ProcessUtility(args->parsetree,
 								args->query_string,
 								args->context,
@@ -165,9 +170,9 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 static void
 relation_not_only(RangeVar *rv)
 {
-#if PG10
+#if !PG96
 	bool		only = !rv->inh;
-#elif PG96
+#else
 	bool		only = (rv->inhOpt == INH_NO);
 #endif
 	if (only)
@@ -307,6 +312,16 @@ foreach_chunk_relation(RangeVar *rv, process_chunk_t process_chunk, void *arg)
 	return foreach_chunk_relid(RangeVarGetRelid(rv, NoLock, true), process_chunk, arg);
 }
 
+/*
+ * PG11 modified  how vacuum works (see:
+ * https://github.com/postgres/postgres/commit/11d8d72c27a64ea4e30adce11cf6c4f3dd3e60db)
+ * so that a) one can run vacuum on multiple tables at once with `VACUUM table1,
+ * table2;` and b) because of this modified the way that the VacuumStmt node in
+ * the planner works due to this change. It now has a list of VacuumRelations.
+ * Given this change it seemed easier to take rewrite this completely for 11 to
+ * take advantage of the new changes.
+ */
+#if PG96 || PG10
 typedef struct VacuumCtx
 {
 	VacuumStmt *stmt;
@@ -344,7 +359,6 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 		return false;
 
 	hypertable_oid = ts_hypertable_relid(stmt->relation);
-
 	if (!OidIsValid(hypertable_oid))
 		return false;
 
@@ -378,6 +392,74 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 
 	return true;
 }
+#else
+typedef struct VacuumCtx
+{
+	VacuumRelation *ht_vacuum_rel;
+	List	   *chunk_rels;
+} VacuumCtx;
+
+/* Adds a chunk to the list of tables to be vacuumed */
+static void
+add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	VacuumCtx  *ctx = (VacuumCtx *) arg;
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	VacuumRelation *chunk_vacuum_rel;
+	RangeVar   *chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
+
+	chunk_range_var->relname = NameStr(chunk->fd.table_name);
+	chunk_range_var->schemaname = NameStr(chunk->fd.schema_name);
+	chunk_vacuum_rel = makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
+
+	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
+}
+
+/* Vacuums a hypertable and all of it's chunks */
+static bool
+process_vacuum(Node *parsetree, ProcessUtilityContext context)
+{
+	VacuumStmt *stmt = (VacuumStmt *) parsetree;
+	bool		is_toplevel = (context == PROCESS_UTILITY_TOPLEVEL);
+	VacuumCtx	ctx = {
+		.ht_vacuum_rel = NULL,
+		.chunk_rels = NIL,
+	};
+	ListCell   *lc;
+	Oid			hypertable_oid;
+	Cache	   *hcache;
+	Hypertable *ht;
+	bool		affects_hypertable = false;
+
+	if (stmt->rels == NIL)
+		/* Vacuum is for all tables */
+		return false;
+
+	hcache = ts_hypertable_cache_pin();
+	foreach(lc, stmt->rels)
+	{
+		VacuumRelation *vacuum_rel = lfirst_node(VacuumRelation, lc);
+
+		hypertable_oid = ts_hypertable_relid(vacuum_rel->relation);
+		if (!OidIsValid(hypertable_oid))
+			continue;
+
+		affects_hypertable = true;
+		ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
+		ctx.ht_vacuum_rel = vacuum_rel;
+		foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+	}
+	ts_cache_release(hcache);
+	if (!affects_hypertable)
+		return false;
+
+	stmt->rels = list_concat(ctx.chunk_rels, stmt->rels);
+	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ?
+								 "VACUUM" : "ANALYZE");
+	ExecVacuum(stmt, is_toplevel);
+	return true;
+}
+#endif
 
 static void
 process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
@@ -394,9 +476,9 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 static bool
 relation_should_recurse(RangeVar *rv)
 {
-#if PG10
+#if !PG96
 	return rv->inh;
-#elif PG96
+#else
 	if (rv->inhOpt == INH_DEFAULT)
 	{
 		char	   *inherit_guc = GetConfigOptionByName("SQL_inheritance", NULL, false);
@@ -555,7 +637,18 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 	switch (stmt->objtype)
 	{
+/*
+ * PG11 consolidated several ACL_OBJECT_FOO or similar to the already extant
+ * OBJECT_FOO see:
+ * https://github.com/postgres/postgres/commit/2c6f37ed62114bd5a092c20fe721bd11b3bcb91e
+ * so we can't simply #define OBJECT_TABLESPACE ACL_OBJECT_TABLESPACE and have
+ * things work correctly for previous versions.
+ */
+#if PG96 || PG10
 		case ACL_OBJECT_TABLESPACE:
+#else
+		case OBJECT_TABLESPACE:
+#endif
 			ts_tablespace_validate_revoke(stmt);
 			break;
 		default:
@@ -1122,6 +1215,15 @@ process_index_start(Node *parsetree)
 
 	Assert(IsA(stmt, IndexStmt));
 
+	/*
+	 * PG11 adds some cases where the relation is not there, namely on
+	 * declaratively partitioned tables, with partitioned indexes:
+	 * https://github.com/postgres/postgres/commit/8b08f7d4820fd7a8ef6152a9dd8c6e3cb01e5f99
+	 * we don't deal with them so we will just return immediately
+	 */
+	if (NULL == stmt->relation)
+		return;
+
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
@@ -1150,6 +1252,11 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 	bool		handled = false;
 
 	Assert(IsA(stmt, IndexStmt));
+
+	/* see note in process_index_start above */
+	if (NULL == stmt->relation)
+		return false;
+
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
@@ -1269,14 +1376,19 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 					mcxt;
 
 		if (!pg_class_ownercheck(ht->main_table_relid, GetUserId()))
-			aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_CLASS,
+			aclcheck_error(ACLCHECK_NOT_OWNER,
+#if PG96 || PG10
+						   ACL_KIND_CLASS,
+#else
+						   OBJECT_TABLE,
+#endif
 						   get_rel_name(ht->main_table_relid));
 
 		/*
 		 * If CLUSTER is run inside a user transaction block; we bail out or
 		 * otherwise we'd be holding locks way too long.
 		 */
-		PreventTransactionChain(is_top_level, "CLUSTER");
+		PreventInTransactionBlock(is_top_level, "CLUSTER");
 
 		if (NULL == stmt->indexname)
 			index_relid = find_clustered_index(ht->main_table_relid);
@@ -1608,7 +1720,7 @@ process_altertable_start_table(Node *parsetree)
 				if (ht != NULL)
 					process_alter_column_type_start(ht, cmd);
 				break;
-#if PG10
+#if !PG96
 			case AT_AttachPartition:
 				{
 					RangeVar   *relation;
@@ -1772,7 +1884,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
-#if PG10
+#if !PG96
 		case AT_AddIdentity:
 		case AT_SetIdentity:
 		case AT_DropIdentity:
@@ -1816,7 +1928,12 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AddColumnToView:	/* only used with views */
 		case AT_AlterColumnGenericOptions:	/* only used with foreign tables */
 		case AT_GenericOptions: /* only used with foreign tables */
-#if PG10
+#if !PG96 && !PG10
+		case AT_ReAddDomainConstraint:	/* We should handle this in future,
+										 * new subset of constraints in PG11
+										 * currently not hit in test code */
+#endif
+#if !PG96
 		case AT_AttachPartition:	/* handled in
 									 * process_altertable_start_table but also
 									 * here as failsafe */
@@ -1928,7 +2045,7 @@ process_create_trigger_start(Node *parsetree)
 	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
 		return;
 
-#if PG10
+#if !PG96
 	if (stmt->transitionRels != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -2213,15 +2330,15 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
  */
 static void
 timescaledb_ddl_command_start(
-#if PG10
+#if !PG96
 							  PlannedStmt *pstmt,
-#elif PG96
+#else
 							  Node *parsetree,
 #endif
 							  const char *query_string,
 							  ProcessUtilityContext context,
 							  ParamListInfo params,
-#if PG10
+#if !PG96
 							  QueryEnvironment *queryEnv,
 #endif
 							  DestReceiver *dest,
@@ -2233,11 +2350,11 @@ timescaledb_ddl_command_start(
 		.params = params,
 		.dest = dest,
 		.completion_tag = completion_tag,
-#if PG10
+#if !PG96
 		.pstmt = pstmt,
 		.parsetree = pstmt->utilityStmt,
 		.queryEnv = queryEnv,
-#elif PG96
+#else
 		.parsetree = parsetree,
 #endif
 	};

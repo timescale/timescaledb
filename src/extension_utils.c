@@ -25,6 +25,8 @@
 #include <utils/guc.h>
 #include <catalog/indexing.h>
 
+
+#include "compat.h"
 #include "extension_constants.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
@@ -188,10 +190,11 @@ extension_load_without_preload()
 		 * half-loaded state after an ERROR
 		 */
 		/* Only privileged users can get the value of `config file` */
-#if PG10
-		if (is_member_of_role(GetUserId(), DEFAULT_ROLE_READ_ALL_SETTINGS))
-#else
+
+#if PG96
 		if (superuser())
+#else
+		if (is_member_of_role(GetUserId(), DEFAULT_ROLE_READ_ALL_SETTINGS))
 #endif
 		{
 			char	   *config_file = GetConfigOptionByName("config_file", NULL, false);

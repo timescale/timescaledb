@@ -78,7 +78,7 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 {
 	HypertableCacheEntry *entry = data;
 
-	entry->hypertable = ts_hypertable_from_tuple(ti->tuple, ti->mctx);
+	entry->hypertable = ts_hypertable_from_tupleinfo(ti);
 	return SCAN_DONE;
 }
 

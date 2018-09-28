@@ -11,7 +11,7 @@
 #include "compat.h"
 #include "telemetry/uuid.h"
 
-#if PG10
+#if !PG96
 #include <utils/backend_random.h>
 #endif
 
@@ -30,7 +30,7 @@ ts_uuid_create(void)
 	unsigned char *gen_uuid = palloc0(UUID_LEN);
 	bool		rand_success = false;
 
-#if PG10
+#if !PG96
 	rand_success = pg_backend_random((char *) gen_uuid, UUID_LEN);
 #endif
 

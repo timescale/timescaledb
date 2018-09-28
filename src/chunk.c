@@ -427,7 +427,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 	for (attno = 1; attno <= natts; attno++)
 	{
-		Form_pg_attribute attribute = tupleDesc->attrs[attno - 1];
+		Form_pg_attribute attribute = TupleDescAttr(tupleDesc, attno - 1);
 		char	   *attributeName = NameStr(attribute->attname);
 		HeapTuple	tuple;
 		Datum		options;
@@ -559,7 +559,7 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 							 RELKIND_RELATION,
 							 rel->rd_rel->relowner,
 							 NULL
-#if PG10
+#if !PG96
 							 ,NULL
 #endif
 		);

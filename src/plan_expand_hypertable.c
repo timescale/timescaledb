@@ -9,16 +9,23 @@
 #include <parser/parsetree.h>
 #include <optimizer/var.h>
 #include <optimizer/restrictinfo.h>
-#include <catalog/pg_inherits_fn.h>
 #include <nodes/plannodes.h>
 #include <optimizer/prep.h>
 #include <nodes/nodeFuncs.h>
+
+#include <catalog/pg_constraint.h>
+#include <catalog/pg_inherits.h>
+#include "compat.h"
+#if PG96 || PG10				/* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#include <catalog/pg_constraint_fn.h>
+#include <catalog/pg_inherits_fn.h>
+#endif
+#include <optimizer/pathnode.h>
 
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "planner_import.h"
-#include "compat.h"
 
 
 
@@ -252,4 +259,11 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	heap_close(oldrelation, NoLock);
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
+#if !PG96 && !PG10
+/*
+ * PG11 introduces a separate array to make looking up children faster, see:
+ * https://github.com/postgres/postgres/commit/7d872c91a3f9d49b56117557cdbb0c3d4c620687.
+ */
+	setup_append_rel_array(root);
+#endif
 }

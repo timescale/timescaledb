@@ -17,7 +17,7 @@
 #include "trigger.h"
 #include "compat.h"
 
-#if PG10
+#if !PG96
 #include <parser/analyze.h>
 #endif
 
@@ -87,7 +87,9 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 	Assert(list_length(deparsed_list) == 1);
 	deparsed_node = linitial(deparsed_list);
 
-#if PG10
+#if PG96
+	stmt = (CreateTrigStmt *) deparsed_node;
+#else
 	do
 	{
 		RawStmt    *rawstmt = (RawStmt *) deparsed_node;
@@ -100,16 +102,14 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 		free_parsestate(pstate);
 		stmt = (CreateTrigStmt *) query->utilityStmt;
 	} while (0);
-#elif PG96
-	stmt = (CreateTrigStmt *) deparsed_node;
 #endif
 
 	Assert(IsA(stmt, CreateTrigStmt));
 	stmt->relation->relname = chunk_table_name;
 	stmt->relation->schemaname = chunk_schema_name;
 
-	CreateTrigger(stmt, def, InvalidOid, InvalidOid,
-				  InvalidOid, InvalidOid, false);
+	CreateTriggerCompat(stmt, def, InvalidOid, InvalidOid,
+						InvalidOid, InvalidOid, false);
 
 	CommandCounterIncrement();	/* needed to prevent pg_class being updated
 								 * twice */
@@ -146,7 +146,7 @@ create_trigger_handler(Trigger *trigger, void *arg)
 {
 	Chunk	   *chunk = arg;
 
-#if PG10
+#if !PG96
 	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
 		ereport(ERROR,
@@ -201,7 +201,7 @@ ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 	ReleaseSysCache(tuple);
 }
 
-#if PG10
+#if !PG96
 static bool
 check_for_transition_table(Trigger *trigger, void *arg)
 {
@@ -223,7 +223,7 @@ ts_relation_has_transition_table_trigger(Oid relid)
 {
 	bool		found = false;
 
-#if PG10
+#if !PG96
 	for_each_trigger(relid, check_for_transition_table, &found);
 #endif
 

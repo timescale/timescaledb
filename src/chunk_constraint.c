@@ -14,13 +14,17 @@
 #include <access/heapam.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
-#include <catalog/pg_constraint.h>
-#include <catalog/pg_constraint_fn.h>
 #include <catalog/objectaddress.h>
 #include <commands/tablecmds.h>
 #include <catalog/dependency.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
+
+#include <catalog/pg_constraint.h>
+#include "compat.h"
+#if PG96 || PG10				/* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#include <catalog/pg_constraint_fn.h>
+#endif
 
 #include "scanner.h"
 #include "chunk_constraint.h"
@@ -353,7 +357,7 @@ ts_chunk_constraints_create(ChunkConstraints *ccs,
 static ScanFilterResult
 chunk_constraint_for_dimension_slice(TupleInfo *ti, void *data)
 {
-	if (heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id))
+	if (heap_attisnull_compat(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc))
 		return SCAN_EXCLUDE;
 
 	return SCAN_INCLUDE;
@@ -500,7 +504,7 @@ chunk_constraint_dimension_slice_id_tuple_found(TupleInfo *ti, void *data)
 	bool		found;
 	int32		chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &found);
 
-	Assert(!heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id));
+	Assert(!heap_attisnull_compat(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc));
 
 	entry = hash_search(scanctx->htab, &chunk_id, HASH_ENTER, &found);
 
@@ -627,7 +631,7 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs,
 				BTEqualStrategyNumber, F_OIDEQ, hypertable_oid);
 
 	rel = heap_open(ConstraintRelationId, AccessShareLock);
-	scan = systable_beginscan(rel, ConstraintRelidIndexId, true,
+	scan = systable_beginscan(rel, ConstraintRelidTypidNameIndexId, true,
 							  NULL, 1, &skey);
 
 	while (HeapTupleIsValid(htup = systable_getnext(scan)))

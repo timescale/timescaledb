@@ -4,17 +4,18 @@
 -- see LICENSE-APACHE at the top level directory.
 --make sure diff only has explain output not result output
 \! diff ${TEST_OUTPUT_DIR}/results/sql_query_results_optimized.out ${TEST_OUTPUT_DIR}/results/sql_query_results_unoptimized.out
-5c5
+5c5,6
 < SET timescaledb.disable_optimizations= 'off';
 ---
 > SET timescaledb.disable_optimizations= 'on';
-144,145c144,145
+> SET max_parallel_workers_per_gather = 0; -- Disable parallel for this test
+144,145c145,146
 <                                         QUERY PLAN                                        
 < ------------------------------------------------------------------------------------------
 ---
 >                                 QUERY PLAN                                 
 > ---------------------------------------------------------------------------
-149,154c149,155
+149,154c150,156
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
@@ -29,13 +30,13 @@
 >                            ->  Seq Scan on hyper_1
 >                            ->  Seq Scan on _hyper_1_1_chunk
 > (9 rows)
-158,159c159,160
+158,159c160,161
 <                                                     QUERY PLAN                                                    
 < ------------------------------------------------------------------------------------------------------------------
 ---
 >                                               QUERY PLAN                                              
 > ------------------------------------------------------------------------------------------------------
-161,180c162,182
+161,180c163,183
 <    ->  GroupAggregate
 <          Group Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone))
 <          ->  Result
@@ -78,13 +79,13 @@
 >                            ->  Seq Scan on _hyper_4_17_chunk
 >                            ->  Seq Scan on _hyper_4_18_chunk
 > (21 rows)
-205,206c207,208
+205,206c208,209
 <                                                 QUERY PLAN                                                 
 < -----------------------------------------------------------------------------------------------------------
 ---
 >                                                       QUERY PLAN                                                       
 > -----------------------------------------------------------------------------------------------------------------------
-208,217c210,222
+208,217c211,223
 <    ->  GroupAggregate
 <          Group Key: (date_trunc('minute'::text, hyper_1."time"))
 <          ->  Custom Scan (ConstraintAwareAppend)
@@ -109,13 +110,13 @@
 >                                  ->  Bitmap Index Scan on _hyper_1_1_chunk_time_plain
 >                                        Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 > (13 rows)
-326,327c331,332
+326,327c332,333
 <                                         QUERY PLAN                                        
 < ------------------------------------------------------------------------------------------
 ---
 >                                    QUERY PLAN                                    
 > ---------------------------------------------------------------------------------
-331,336c336,342
+331,336c337,343
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, hyper_1."time")) DESC
@@ -130,13 +131,13 @@
 >                            ->  Seq Scan on hyper_1
 >                            ->  Seq Scan on _hyper_1_1_chunk
 > (9 rows)
-348,349c354,355
+348,349c355,356
 <                                                                 QUERY PLAN                                                                 
 < -------------------------------------------------------------------------------------------------------------------------------------------
 ---
 >                                                              QUERY PLAN                                                              
 > -------------------------------------------------------------------------------------------------------------------------------------
-353,358c359,365
+353,358c360,366
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
@@ -151,13 +152,13 @@
 >                            ->  Seq Scan on hyper_1
 >                            ->  Seq Scan on _hyper_1_1_chunk
 > (9 rows)
-370,371c377,378
+370,371c378,379
 <                                                    QUERY PLAN                                                    
 < -----------------------------------------------------------------------------------------------------------------
 ---
 >                                                 QUERY PLAN                                                 
 > -----------------------------------------------------------------------------------------------------------
-375,380c382,388
+375,380c383,389
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval))) DESC
@@ -172,13 +173,13 @@
 >                            ->  Seq Scan on hyper_1
 >                            ->  Seq Scan on _hyper_1_1_chunk
 > (9 rows)
-392,393c400,401
+392,393c401,402
 <                                                                 QUERY PLAN                                                                 
 < -------------------------------------------------------------------------------------------------------------------------------------------
 ---
 >                                                              QUERY PLAN                                                              
 > -------------------------------------------------------------------------------------------------------------------------------------
-397,402c405,411
+397,402c406,412
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: ((time_bucket('@ 1 min'::interval, (hyper_1."time" - '@ 30 secs'::interval)) + '@ 30 secs'::interval)) DESC
@@ -193,13 +194,13 @@
 >                            ->  Seq Scan on hyper_1
 >                            ->  Seq Scan on _hyper_1_1_chunk
 > (9 rows)
-414,415c423,424
+414,415c424,425
 <                                          QUERY PLAN                                          
 < ---------------------------------------------------------------------------------------------
 ---
 >                                      QUERY PLAN                                     
 > ------------------------------------------------------------------------------------
-419,424c428,434
+419,424c429,435
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, hyper_1_tz."time")) DESC
@@ -214,13 +215,13 @@
 >                            ->  Seq Scan on hyper_1_tz
 >                            ->  Seq Scan on _hyper_2_2_chunk
 > (9 rows)
-436,437c446,447
+436,437c447,448
 <                                                        QUERY PLAN                                                        
 < -------------------------------------------------------------------------------------------------------------------------
 ---
 >                                                     QUERY PLAN                                                     
 > -------------------------------------------------------------------------------------------------------------------
-441,446c451,457
+441,446c452,458
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (time_bucket('@ 1 min'::interval, (hyper_1_tz."time")::timestamp without time zone)) DESC
@@ -235,13 +236,13 @@
 >                            ->  Seq Scan on hyper_1_tz
 >                            ->  Seq Scan on _hyper_2_2_chunk
 > (9 rows)
-458,459c469,470
+458,459c470,471
 <                                           QUERY PLAN                                          
 < ----------------------------------------------------------------------------------------------
 ---
 >                              QUERY PLAN                             
 > --------------------------------------------------------------------
-463,470c474,482
+463,470c475,483
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (time_bucket(10, hyper_1_int."time")) DESC
@@ -260,13 +261,13 @@
 >                            ->  Seq Scan on _hyper_3_4_chunk
 >                            ->  Seq Scan on _hyper_3_5_chunk
 > (11 rows)
-482,483c494,495
+482,483c495,496
 <                                           QUERY PLAN                                          
 < ----------------------------------------------------------------------------------------------
 ---
 >                               QUERY PLAN                               
 > -----------------------------------------------------------------------
-487,494c499,507
+487,494c500,508
 <          ->  Result
 <                ->  Merge Append
 <                      Sort Key: (time_bucket(10, hyper_1_int."time", 2)) DESC
@@ -285,13 +286,13 @@
 >                            ->  Seq Scan on _hyper_3_4_chunk
 >                            ->  Seq Scan on _hyper_3_5_chunk
 > (11 rows)
-547,548c560,561
+547,548c561,562
 <                                           QUERY PLAN                                           
 < -----------------------------------------------------------------------------------------------
 ---
 >                                                 QUERY PLAN                                                 
 > -----------------------------------------------------------------------------------------------------------
-550,554c563,571
+550,554c564,572
 <    ->  GroupAggregate
 <          Group Key: date_trunc('minute'::text, "time")
 <          ->  Index Scan using time_plain_plain_table on plain_table
@@ -307,3 +308,5 @@
 >                      ->  Bitmap Index Scan on time_plain_plain_table
 >                            Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
 > (9 rows)
+568a587
+> RESET max_parallel_workers_per_gather;

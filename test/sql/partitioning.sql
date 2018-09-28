@@ -18,8 +18,13 @@ VACUUM part_legacy;
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
 
 -- Make sure constraint exclusion works on device column
+BEGIN;
+-- For plan stability between versions
+SET LOCAL enable_bitmapscan = false;
+SET LOCAL enable_indexscan = false;
 EXPLAIN (verbose, costs off)
 SELECT * FROM part_legacy WHERE device = 1;
+COMMIT;
 
 CREATE TABLE part_new(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_new', 'time', 'device', 2);
@@ -35,8 +40,13 @@ VACUUM part_new;
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
 
 -- Make sure constraint exclusion works on device column
+BEGIN;
+-- For plan stability between versions
+SET LOCAL enable_bitmapscan = false;
+SET LOCAL enable_indexscan = false;
 EXPLAIN (verbose, costs off)
 SELECT * FROM part_new WHERE device = 1;
+COMMIT;
 
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
 SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);

@@ -104,14 +104,14 @@ hyperspace_get_num_dimensions_by_type(Hyperspace *hs, DimensionType type)
 }
 
 static inline DimensionType
-dimension_type(HeapTuple tuple)
+dimension_type(TupleInfo *ti)
 {
-	if (heap_attisnull(tuple, Anum_dimension_interval_length) &&
-		!heap_attisnull(tuple, Anum_dimension_num_slices))
+	if (heap_attisnull_compat(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
+		!heap_attisnull_compat(ti->tuple, Anum_dimension_num_slices, ti->desc))
 		return DIMENSION_TYPE_CLOSED;
 
-	if (!heap_attisnull(tuple, Anum_dimension_interval_length) &&
-		heap_attisnull(tuple, Anum_dimension_num_slices))
+	if (!heap_attisnull_compat(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
+		heap_attisnull_compat(ti->tuple, Anum_dimension_num_slices, ti->desc))
 		return DIMENSION_TYPE_OPEN;
 
 	elog(ERROR, "invalid partitioning dimension");
@@ -129,7 +129,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	 */
 	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
 
-	d->type = dimension_type(ti->tuple);
+	d->type = dimension_type(ti);
 	d->fd.id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_id)]);
 	d->fd.hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_hypertable_id)]);
 	d->fd.aligned = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_dimension_aligned)]);

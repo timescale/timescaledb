@@ -21,5 +21,8 @@ typedef.list
 /.vs
 /test/sql/parallel-*.sql
 /test/sql/plan_hashagg_optimized-*.sql
+/test/sql/agg_bookends_optimized-*.sql
+/test/sql/alternate_users-*.sql
+/test/sql/partitioning-*.sql
 /compile_commands.json
 /.DS_Store

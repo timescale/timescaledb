@@ -13,7 +13,7 @@
 #include "timer.h"
 #include "utils.h"
 
-#if PG10
+#if !PG96
 #include <utils/fmgrprotos.h>
 #endif
 #define MAX_INTERVALS_BACKOFF 5

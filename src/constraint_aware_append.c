@@ -66,7 +66,7 @@ excluded_by_constraint(RangeTblEntry *rte, AppendRelInfo *appinfo, List *restric
 		 * Update Vars to reference the child relation (chunk) instead of the
 		 * hypertable main table
 		 */
-		rinfo->clause = (Expr *) adjust_appendrel_attrs(&root, (Node *) old->clause, appinfo);
+		rinfo->clause = (Expr *) adjust_appendrel_attrs_compat(&root, (Node *) old->clause, appinfo);
 		rel.baserestrictinfo = lappend(rel.baserestrictinfo, rinfo);
 	}
 
@@ -278,9 +278,8 @@ ca_append_exec(CustomScanState *node)
 
 		econtext->ecxt_scantuple = subslot;
 
-#if PG10
-		return ExecProject(node->ss.ps.ps_ProjInfo);
-#elif PG96
+
+#if PG96
 		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
 
 		if (isDone != ExprEndResult)
@@ -288,6 +287,8 @@ ca_append_exec(CustomScanState *node)
 			node->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
 			return resultslot;
 		}
+#else
+		return ExecProject(node->ss.ps.ps_ProjInfo);
 #endif
 	}
 }
@@ -323,7 +324,16 @@ ca_append_explain(CustomScanState *node,
 	Oid			relid = linitial_oid(linitial(cscan->custom_private));
 
 	ExplainPropertyText("Hypertable", get_rel_name(relid), es);
+#if PG96 || PG10
 	ExplainPropertyInteger("Chunks left after exclusion", state->num_append_subplans, es);
+#else
+
+	/*
+	 * PG 11 adds a uint field for certain cases. (See:
+	 * https://github.com/postgres/postgres/commit/7a50bb690b4837d29e715293c156cff2fc72885c).
+	 */
+	ExplainPropertyInteger("Chunks left after exclusion", NULL, state->num_append_subplans, es);
+#endif
 }
 
 
