@@ -96,7 +96,7 @@ typedef struct AccumData
 	size_t		alloc_size;
 } AccumData;
 
-static bool
+static ScanTupleResult
 bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 {
 	AccumData  *list_data = data;
@@ -106,7 +106,7 @@ bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 	list_data->list = lappend(list_data->list, job);
 
 	MemoryContextSwitchTo(orig);
-	return true;
+	return SCAN_CONTINUE;
 }
 
 
@@ -166,15 +166,18 @@ bgw_job_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_filter
 					 scankey, 1, tuple_found, tuple_filter, data, mctx, lockmode);
 }
 
-static bool
+static ScanTupleResult
 bgw_job_tuple_found(TupleInfo *ti, void *const data)
 {
 	BgwJob	  **job_pp = data;
 
 	*job_pp = bgw_job_from_tuple(ti->tuple, sizeof(BgwJob), ti->mctx);
 
-	/* return true since used with scan one */
-	return true;
+	/*
+	 * Return SCAN_CONTINUE because we check for multiple tuples as an error
+	 * condition.
+	 */
+	return SCAN_CONTINUE;
 }
 
 BgwJob *
@@ -227,7 +230,7 @@ ts_bgw_job_insert_relation(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-static bool
+static ScanTupleResult
 bgw_job_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
@@ -239,7 +242,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
-	return true;
+	return SCAN_CONTINUE;
 }
 
 static bool
