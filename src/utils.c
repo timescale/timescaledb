@@ -283,9 +283,23 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 	Timestamp	timestamp = PG_GETARG_TIMESTAMP(1);
 	Timestamp	result;
 	int64		period = -1;
+	/* The offset moves the epoch to start on a monday the default postgres epoch starts on a saturday.
+	 * This makes time-buckets by a week more intuitive.
+	 */
+#ifdef HAVE_INT64_TIMESTAMP
+	int64 offset = 2*USECS_PER_DAY;
+#else
+	double offset = 2*SECS_PER_DAY;
+#endif
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMP(timestamp);
+
+	if(timestamp < DT_NOBEGIN + offset)
+		ereport(ERROR,
+			(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+				errmsg("timestamp out of range")));
+	timestamp -= offset;
 
 	period = get_interval_period_timestamp_units(interval);
 	/* result = (timestamp / period) * period */
@@ -304,6 +318,7 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 	{
 		result *= period;
 	}
+	result += offset;
 	PG_RETURN_TIMESTAMP(result);
 }
 
@@ -315,9 +330,24 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
 	TimestampTz result;
 	int64		period = -1;
+	/* The offset moves the epoch to start on a monday the default postgres epoch starts on a saturday.
+	 * This makes time-buckets by a week more intuitive.
+	 */
+	#ifdef HAVE_INT64_TIMESTAMP
+		int64 offset = 2*USECS_PER_DAY;
+	#else
+		double offset = 2*SECS_PER_DAY;
+	#endif
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMPTZ(timestamp);
+
+	if(timestamp < DT_NOBEGIN + offset)
+		ereport(ERROR,
+			(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+				errmsg("timestamp out of range")));
+
+	timestamp -= offset;
 
 	period = get_interval_period_timestamp_units(interval);
 	/* result = (timestamp / period) * period */
@@ -336,6 +366,7 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	{
 		result *= period;
 	}
+	result += offset;
 	PG_RETURN_TIMESTAMPTZ(result);
 }
 

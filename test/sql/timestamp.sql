@@ -401,21 +401,63 @@ FROM unnest(ARRAY[
 
 SELECT time, time_bucket(INTERVAL '4 day', time::date)
 FROM unnest(ARRAY[
-    date '2017-11-02',
-    date '2017-11-03',
-    date '2017-11-06',
-    date '2017-11-07'
-    ]) AS time;
-
-SELECT time, time_bucket(INTERVAL '4 day', time::date, INTERVAL '2 day')
-FROM unnest(ARRAY[
     date '2017-11-04',
     date '2017-11-05',
     date '2017-11-08',
     date '2017-11-09'
     ]) AS time;
 
+SELECT time, time_bucket(INTERVAL '4 day', time::date, INTERVAL '2 day')
+FROM unnest(ARRAY[
+    date '2017-11-06',
+    date '2017-11-07',
+    date '2017-11-10',
+    date '2017-11-11'
+    ]) AS time;
 
+-- 2019-09-24 is a Monday.
+SELECT time, time_bucket(INTERVAL '1 week', time::date)
+FROM unnest(ARRAY[
+    date '2018-09-16',
+    date '2018-09-17',
+    date '2018-09-23',
+    date '2018-09-24'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp without time zone '2018-09-16',
+    timestamp without time zone '2018-09-17',
+    timestamp without time zone '2018-09-23',
+    timestamp without time zone '2018-09-24'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp with time zone '2018-09-16',
+    timestamp with time zone '2018-09-17',
+    timestamp with time zone '2018-09-23',
+    timestamp with time zone '2018-09-24'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp with time zone '-Infinity',
+    timestamp with time zone 'Infinity'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp without time zone '-Infinity',
+    timestamp without time zone 'Infinity'
+    ]) AS time;
+
+
+SELECT time, time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp without time zone '4714-11-24 01:01:01.0 BC',
+    timestamp without time zone '294276-12-31 23:59:59.9999'
+    ]) AS time;
 -------------------------------------
 --- Test time input functions --
 -------------------------------------

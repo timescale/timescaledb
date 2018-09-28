@@ -434,12 +434,12 @@ psql:include/append.sql:166: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:166: NOTICE:  Stable function now_s() called!
             btime             | value 
 ------------------------------+-------
- Wed Mar 01 16:00:00 2017 PST |  22.5
- Fri Mar 31 17:00:00 2017 PDT |      
- Sun Apr 30 17:00:00 2017 PDT |  25.7
- Tue May 30 17:00:00 2017 PDT |      
- Thu Jun 29 17:00:00 2017 PDT |      
- Sat Jul 29 17:00:00 2017 PDT |  34.1
+ Fri Mar 03 16:00:00 2017 PST |  22.5
+ Sun Apr 02 17:00:00 2017 PDT |      
+ Tue May 02 17:00:00 2017 PDT |  25.7
+ Thu Jun 01 17:00:00 2017 PDT |      
+ Sat Jul 01 17:00:00 2017 PDT |      
+ Mon Jul 31 17:00:00 2017 PDT |  34.1
 (6 rows)
 
 -- Create another hypertable to join with
