@@ -194,15 +194,22 @@ ts_test_telemetry_parse_version(PG_FUNCTION_ARGS)
 	return HeapTupleGetDatum(tuple);
 }
 
-/* Try to get the telemetry function to handle errors. Never connect to the actual endpoint. Only test cases that will result in connection errors. */
+/* Try to get the telemetry function to handle errors. Never connect to the
+ * actual endpoint. Only test cases that will result in connection errors. */
 Datum
 ts_test_telemetry_main_conn(PG_FUNCTION_ARGS)
 {
 	text	   *host = PG_GETARG_TEXT_P(0);
 	text	   *path = PG_GETARG_TEXT_P(1);
-	text	   *service = PG_GETARG_TEXT_P(2);
+	const char *scheme;
 
-	PG_RETURN_BOOL(telemetry_main(text_to_cstring(host), text_to_cstring(path), text_to_cstring(service)));
+#ifdef TS_USE_OPENSSL
+	scheme = "https";
+#else
+	scheme = "http";
+#endif
+
+	PG_RETURN_BOOL(telemetry_main(text_to_cstring(host), text_to_cstring(path), scheme));
 }
 
 Datum

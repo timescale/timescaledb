@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_mock(text) RETURNS 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_parse_version(response text, installed_major int, installed_minor int, installed_patch int, installed_modtag text = NULL)
     RETURNS TABLE(version_string text, major int, minor int, patch int, modtag text, up_to_date bool)
     AS :MODULE_PATHNAME, 'ts_test_telemetry_parse_version' LANGUAGE C IMMUTABLE PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, text, text)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, text)
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
@@ -117,7 +117,6 @@ SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_time
 SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}', 1, 0, 0, 'alpha2');
 \set ON_ERROR_STOP 1
 SET timescaledb.telemetry_level=basic;
-SELECT _timescaledb_internal.test_telemetry_main_conn('timescale.com', 'path', 'http');
-SELECT _timescaledb_internal.test_telemetry_main_conn('timescale.com', 'path', 'https');
-SELECT _timescaledb_internal.test_telemetry_main_conn('telemetry.timescale.com', 'path', 'http');
+-- Connect to a bogus host and path to test error handling in telemetry_main()
+SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
 SET timescaledb.telemetry_level=off;

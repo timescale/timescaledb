@@ -249,16 +249,21 @@ build_version_request(const char *host, const char *path)
 Connection *
 telemetry_connect(const char *host, const char *service)
 {
-	Connection *conn;
+	Connection *conn = NULL;
 	int			ret;
 
-	conn = connection_create(CONNECTION_SSL);
+	if (strcmp("http", service) == 0)
+		conn = connection_create(CONNECTION_PLAIN);
+	else if (strcmp("https", service) == 0)
+		conn = connection_create(CONNECTION_SSL);
+	else
+		ereport(WARNING,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("scheme \"%s\" not supported for telemetry",
+						service)));
 
 	if (conn == NULL)
-	{
-		elog(WARNING, "could not create telemetry connection");
 		return NULL;
-	}
 
 	ret = connection_connect(conn, host, service, 0);
 
@@ -271,7 +276,7 @@ telemetry_connect(const char *host, const char *service)
 
 		ereport(WARNING,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not make a connection to %s://%s", service, host),
+				 errmsg("telemetry could not connect to \"%s\"", host),
 				 errdetail("%s", errstr)));
 	}
 
@@ -305,10 +310,7 @@ telemetry_main(const char *host, const char *path, const char *service)
 	conn = telemetry_connect(host, service);
 
 	if (conn == NULL)
-	{
-		elog(WARNING, "telemetry connect error: could not make connection");
 		goto cleanup;
-	}
 
 	req = build_version_request(host, path);
 
