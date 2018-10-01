@@ -50,7 +50,22 @@ plain_connect(Connection *conn, const char *host, const char *servname, int port
 	ret = getaddrinfo(host, servname, &hints, &ainfo);
 
 	if (ret != 0)
+	{
+		ret = SOCKET_ERROR;
+
+#ifdef WIN32
+		WSASetLastError(WSAHOST_NOT_FOUND);
+#else
+
+		/*
+		 * The closest match for a name resolution error. Strictly, this error
+		 * should not be used here, but to fix we need to support using
+		 * gai_strerror()
+		 */
+		errno = EADDRNOTAVAIL;
+#endif
 		goto out;
+	}
 
 #ifdef WIN32
 

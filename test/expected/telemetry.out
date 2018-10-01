@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_mock(text) RETURNS 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_parse_version(response text, installed_major int, installed_minor int, installed_patch int, installed_modtag text = NULL)
     RETURNS TABLE(version_string text, major int, minor int, patch int, modtag text, up_to_date bool)
     AS :MODULE_PATHNAME, 'ts_test_telemetry_parse_version' LANGUAGE C IMMUTABLE PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, text, text)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, text)
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 \c single :ROLE_DEFAULT_PERM_USER
@@ -262,25 +262,9 @@ SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_time
 ERROR:  parsing failed for version string "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
 \set ON_ERROR_STOP 1
 SET timescaledb.telemetry_level=basic;
-SELECT _timescaledb_internal.test_telemetry_main_conn('timescale.com', 'path', 'http');
-WARNING:  could not make a connection to http://timescale.com
-WARNING:  telemetry connect error: could not make connection
- test_telemetry_main_conn 
---------------------------
- f
-(1 row)
-
-SELECT _timescaledb_internal.test_telemetry_main_conn('timescale.com', 'path', 'https');
-WARNING:  could not make a connection to https://timescale.com
-WARNING:  telemetry connect error: could not make connection
- test_telemetry_main_conn 
---------------------------
- f
-(1 row)
-
-SELECT _timescaledb_internal.test_telemetry_main_conn('telemetry.timescale.com', 'path', 'http');
-WARNING:  could not make a connection to http://telemetry.timescale.com
-WARNING:  telemetry connect error: could not make connection
+-- Connect to a bogus host and path to test error handling in telemetry_main()
+SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
+WARNING:  telemetry could not connect to "noservice.timescale.com"
  test_telemetry_main_conn 
 --------------------------
  f
