@@ -42,7 +42,7 @@ docker_exec() {
 }
 
 docker_run() {
-    docker run -d --name $1 $2
+    docker run --env TIMESCALEDB_TELEMETRY=off -d --name $1 $2
     wait_for_pg $1
 }
 
