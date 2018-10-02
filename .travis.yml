@@ -76,16 +76,24 @@ jobs:
       stage: test
       env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
       name: "Update tests (versions w/o constraints support) 9.6"
+      before_install:
+      install:
+      after_failure:
+      after_script:
       script:
-        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_no_constraints.sh
+        - bash -x ./scripts/test_updates_no_constraints.sh
 
     # This tests the ability to upgrade to the latest version from versions with constraint support
     - if: (type = pull_request) OR (type = cron)
       stage: test
       env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
       name: "Update tests (versions w/ constraints support) 9.6"
+      before_install:
+      install:
+      after_failure:
+      after_script:
       script:
-        - PGTEST_TMPDIR=/tmp/ bash -x ./scripts/test_updates_with_constraints.sh
+        - bash -x ./scripts/test_updates_with_constraints.sh
 
     # This tests the formatting of a PR.
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)

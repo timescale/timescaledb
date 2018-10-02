@@ -5,7 +5,7 @@
 #
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-PG_VERSION=${PG_VERSION:-10.4}
+PG_VERSION=${PG_VERSION:-9.6.5}
 PG_IMAGE_TAG=${PG_IMAGE_TAG:-${PG_VERSION}-alpine}
 BUILD_CONTAINER_NAME=${BUILD_CONTAINER_NAME:-pgbuild}
 BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME:-$USER/pgbuild}
@@ -15,7 +15,7 @@ GIT_TAG=$(git -C ${BASE_DIR} rev-parse --short --verify HEAD)
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty | sed -e "s|/|_|g")
 TAG_NAME=${TAG_NAME:-$GIT_ID}
 BUILD_TYPE=${BUILD_TYPE:-Debug}
-USE_OPENSSL=${USE_OPENSSL:-True}
+USE_OPENSSL=${USE_OPENSSL:-true}
 PUSH_PG_IMAGE=${PUSH_PG_IMAGE:-false}
 
 # Full image identifiers
@@ -96,10 +96,10 @@ fi
 
 if ! postgres_build_image_exists; then
     if ! fetch_postgres_build_image; then
-        create_postgres_build_image || exit -1
+        create_postgres_build_image || exit 1
     fi
 fi
 
-build_timescaledb || exit -1
+build_timescaledb || exit 1
 
 message_and_exit

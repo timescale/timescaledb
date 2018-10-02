@@ -6,17 +6,27 @@ set -o pipefail
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 TEST_VERSION=${TEST_VERSION:-v2}
-PGTEST_TMPDIR=${PGTEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test')}
+TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test' || mkdir -p /tmp/${RANDOM})}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
 PG_VERSION=${PG_VERSION:-9.6.5} # Need 9.6.x version since we are
                                 # upgrading the extension from
                                 # versions that didn't support PG10.
+GIT_ID=$(git -C ${BASE_DIR} describe --dirty | sed -e "s|/|_|g")
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
-UPDATE_TO_TAG=${UPDATE_TO_TAG:-latest}
+UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
 DO_CLEANUP=true
+
+# PID of the current shell
+PID=$$
+
+# Container names. Append shell PID so that we can run this script in parallel
+CONTAINER_ORIG=timescaledb-orig-${PID}
+CONTAINER_CLEAN_RESTORE=timescaledb-clean-restore-${PID}
+CONTAINER_UPDATED=timescaledb-updated-${PID}
+CONTAINER_CLEAN_RERUN=timescaledb-clean-rerun-${PID}
 
 export PG_VERSION
 
@@ -33,28 +43,36 @@ done
 
 shift $((OPTIND-1))
 
-if "$DO_CLEANUP" = "true"; then
-    trap cleanup EXIT
-fi
+trap cleanup EXIT
+
+remove_containers() {
+    docker rm -vf ${CONTAINER_ORIG} 2>/dev/null
+    docker rm -vf ${CONTAINER_CLEAN_RESTORE} 2>/dev/null
+    docker rm -vf ${CONTAINER_UPDATED}  2>/dev/null
+    docker rm -vf ${CONTAINER_CLEAN_RERUN} 2>/dev/null
+    docker volume rm -f ${CLEAN_VOLUME} 2>/dev/null
+    docker volume rm -f ${UPDATE_VOLUME} 2>/dev/null
+}
 
 cleanup() {
     # Save status here so that we can return the status of the last
     # command in the script and not the last command of the cleanup
     # function
-    status="$?"
+    local status="$?"
     set +e # do not exit immediately on failure in cleanup handler
-    if [ $status -eq 0 ]; then
-        rm -rf ${PGTEST_TMPDIR}
-        docker rm -vf timescaledb-orig timescaledb-clean-restore timescaledb-updated 2>/dev/null
+    if [ "$DO_CLEANUP" = "true" ]; then
+        rm -rf ${TEST_TMPDIR}
+        sleep 1
+        remove_containers
     fi
-    echo "Exit status is $status"
-    exit $status
+    echo "Test with pid ${PID} exited with code ${status}"
+    exit ${status}
 }
 
 docker_exec() {
     # Echo to stderr
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec -it $1 /bin/bash -c "$2"
+    docker exec $1 /bin/bash -c "$2"
 }
 
 docker_pgcmd() {
@@ -67,15 +85,15 @@ docker_pgscript() {
 
 docker_pgtest() {
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d single -f $2 > ${PGTEST_TMPDIR}/$1.out || exit $?
+    docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d single -f $2 > ${TEST_TMPDIR}/$1.out || exit $?
 }
 
 docker_pgdiff() {
     >&2 echo -e "\033[1m$1 vs $2\033[0m: $2"
     docker_pgtest $1 $3
     docker_pgtest $2 $3
-    echo "RUNNING:  diff ${PGTEST_TMPDIR}/$1.out ${PGTEST_TMPDIR}/$2.out "
-    diff ${PGTEST_TMPDIR}/$1.out ${PGTEST_TMPDIR}/$2.out | tee ${PGTEST_TMPDIR}/update_test.output
+    echo "RUNNING:  diff ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out "
+    diff ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out | tee ${TEST_TMPDIR}/update_test.output
 }
 
 docker_run() {
@@ -90,8 +108,8 @@ docker_run_vol() {
 
 wait_for_pg() {
     set +e
-    for i in {1..10}; do
-        sleep 2
+    for i in {1..20}; do
+        sleep 0.5
 
         docker_exec $1 "pg_isready -U postgres"
 
@@ -100,7 +118,7 @@ wait_for_pg() {
             # ideal. Apperently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
             # queries
-            sleep 2
+            sleep 0.2
             set -e
             return 0
         fi
@@ -110,42 +128,46 @@ wait_for_pg() {
 
 VERSION=`echo ${UPDATE_FROM_TAG} | sed 's/\([0-9]\{0,\}\.[0-9]\{0,\}\.[0-9]\{0,\}\).*/\1/g'`
 echo "Testing from version ${VERSION} (test version ${TEST_VERSION})"
-echo "Using temporary directory $PGTEST_TMPDIR"
+echo "Using temporary directory ${TEST_TMPDIR}"
 
-docker rm -f timescaledb-orig timescaledb-updated timescaledb-clean-restore timescaledb-clean-rerun 2>/dev/null || true
-IMAGE_NAME=update_test TAG_NAME=latest bash ${SCRIPT_DIR}/docker-build.sh
+remove_containers || true
 
-docker_run timescaledb-orig ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
-docker_run timescaledb-clean-restore ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
-docker_run timescaledb-clean-rerun ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+IMAGE_NAME=${UPDATE_TO_IMAGE} TAG_NAME=${UPDATE_TO_TAG} PG_VERSION=${PG_VERSION} bash ${SCRIPT_DIR}/docker-build.sh
 
-CLEAN_VOLUME=$(docker inspect timescaledb-clean-restore --format='{{range .Mounts }}{{.Name}}{{end}}')
-UPDATE_VOLUME=$(docker inspect timescaledb-orig --format='{{range .Mounts }}{{.Name}}{{end}}')
+docker_run ${CONTAINER_ORIG} ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
+docker_run ${CONTAINER_CLEAN_RESTORE} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+docker_run ${CONTAINER_CLEAN_RERUN} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+
+CLEAN_VOLUME=$(docker inspect ${CONTAINER_CLEAN_RESTORE} --format='{{range .Mounts }}{{.Name}}{{end}}')
+UPDATE_VOLUME=$(docker inspect ${CONTAINER_ORIG} --format='{{range .Mounts }}{{.Name}}{{end}}')
 
 echo "Executing setup script on ${VERSION}"
-docker_pgscript timescaledb-orig /src/test/sql/updates/setup.${TEST_VERSION}.sql
-docker rm -f timescaledb-orig
+docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 
-docker_run_vol timescaledb-updated ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+# Remove container but keep volume
+docker rm -f ${CONTAINER_ORIG}
+
+echo "Running update container"
+docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
 echo "Executing ALTER EXTENSION timescaledb UPDATE"
-docker_pgcmd timescaledb-updated "ALTER EXTENSION timescaledb UPDATE"
+docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE"
 
-docker_exec timescaledb-updated "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
-docker cp timescaledb-updated:/tmp/single.sql ${PGTEST_TMPDIR}/single.sql
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
+docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
 
 echo "Executing setup script on clean"
-docker_pgscript timescaledb-clean-rerun /src/test/sql/updates/setup.${TEST_VERSION}.sql
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 
 echo "Testing updated vs clean"
-docker_pgdiff timescaledb-updated timescaledb-clean-rerun /src/test/sql/updates/test-rerun.sql
+docker_pgdiff ${CONTAINER_UPDATED} ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/test-rerun.sql
 
 echo "Restoring database on clean version"
-docker cp ${PGTEST_TMPDIR}/single.sql timescaledb-clean-restore:/tmp/single.sql
-docker_exec timescaledb-clean-restore "createdb -h localhost -U postgres single"
-docker_pgcmd timescaledb-clean-restore "ALTER DATABASE single SET timescaledb.restoring='on'"
-docker_exec timescaledb-clean-restore "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
-docker_pgcmd timescaledb-clean-restore "ALTER DATABASE single SET timescaledb.restoring='off'"
+docker cp ${TEST_TMPDIR}/single.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/single.sql
+docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='on'"
+docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='off'"
 
 echo "Testing restored"
-docker_pgdiff timescaledb-updated timescaledb-clean-restore /src/test/sql/updates/post.${TEST_VERSION}.sql
+docker_pgdiff ${CONTAINER_UPDATED} ${CONTAINER_CLEAN_RESTORE} /src/test/sql/updates/post.${TEST_VERSION}.sql
