@@ -15,7 +15,7 @@ before_install:
   - if [[ -z "$EXEC_BACKEND" ]]; then docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine; fi
   - if [[ -n "$EXEC_BACKEND" ]]; then docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres timescaledev/postgresdev:exec_backend-${PG_VERSION}-alpine; fi
 install:
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug"
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug /build/debug-nossl"
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
   # We set /usr/local as prefix so the regression tools will be able to find
   # initdb, psql, and postgres
@@ -24,11 +24,20 @@ install:
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/regress"
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"
 
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install"
+  # First build without OpenSSL
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres && make install"
+  # Now build with OpenSSL
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install"
+  # Ensure postgres user has permissions
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /build/"
 script:
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
+  # First run only telemetry test to see that it works without OpenSSL
+  - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+
+  # Now run all tests
   - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+
   # some of the postgres tests don't pass with EXEC_BACKEND,
   # since this is merely a windows canary, not a real platform,
   # we simply disable postgres tests there.
