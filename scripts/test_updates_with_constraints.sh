@@ -10,9 +10,9 @@
 set -e
 set -o pipefail
 
-TAGS="0.5.0 0.6.0 0.6.1 0.7.0-pg9.6 0.7.1-pg9.6 0.8.0-pg9.6 0.9.0-pg9.6 0.9.1-pg9.6 0.9.2-pg9.6 0.10.0-pg9.6 0.10.1-pg9.6 0.11.0-pg9.6 0.12.0-pg9.6 1.0.0-rc1-pg9.6 1.0.0-rc2-pg9.6 1.0.0-rc3-pg9.6"
+SCRIPT_DIR=$(dirname $0)
 
-for tag in ${TAGS};
-do
-    UPDATE_FROM_TAG=${tag} TEST_VERSION="v2" $(dirname $0)/test_update_from_tag.sh
-done
+TAGS="0.5.0 0.6.0 0.6.1 0.7.0-pg9.6 0.7.1-pg9.6 0.8.0-pg9.6 0.9.0-pg9.6 0.9.1-pg9.6 0.9.2-pg9.6 0.10.0-pg9.6 0.10.1-pg9.6 0.11.0-pg9.6 0.12.0-pg9.6 1.0.0-rc1-pg9.6 1.0.0-rc2-pg9.6 1.0.0-rc3-pg9.6"
+TEST_VERSION="v2"
+
+. ${SCRIPT_DIR}/test_updates.sh

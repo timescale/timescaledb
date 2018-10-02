@@ -7,9 +7,8 @@
 set -e
 set -o pipefail
 
+SCRIPT_DIR=$(dirname $0)
 TAGS="0.1.0 0.2.0 0.3.0 0.4.0 0.4.1 0.4.2"
+TEST_VERSION="v1"
 
-for tag in ${TAGS};
-do
-    UPDATE_FROM_TAG=${tag} TEST_VERSION="v1" $(dirname $0)/test_update_from_tag.sh
-done
+. ${SCRIPT_DIR}/test_updates.sh
