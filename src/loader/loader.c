@@ -2,6 +2,8 @@
 #include <pg_config.h>
 #include <access/xact.h>
 #include "../compat-msvc-enter.h"
+#include "catalog/objectaccess.h"
+#include "catalog/pg_database.h"
 #include <commands/extension.h>
 #include <commands/user.h>
 #include <miscadmin.h>
@@ -12,9 +14,6 @@
 #include <utils/inval.h>
 #include <nodes/print.h>
 #include <commands/dbcommands.h>
-
-
-
 
 /* for setting our wait event during waitlatch*/
 #include <pgstat.h>
@@ -73,12 +72,11 @@ static shmem_startup_hook_type prev_shmem_startup_hook;
 /* This is timescaleDB's versioned-extension's post_parse_analyze_hook */
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
 
+static object_access_hook_type prev_object_access_hook = NULL;
+
 static void inline extension_check(void);
 static void call_extension_post_parse_analyze_hook(ParseState *pstate,
 									   Query *query);
-
-
-
 
 extern char *
 loader_extension_version(void)
@@ -353,6 +351,35 @@ post_analyze_hook(ParseState *pstate, Query *query)
 	}
 }
 
+/* For now, this hook is only used by the launcher to intercept CREATE DATABASE calls */
+static void
+timescale_object_access_hook(ObjectAccessType access,
+							 Oid classId,
+							 Oid objectId,
+							 int subId,
+							 void *arg)
+{
+	/* First make sure it's a CREATE call */
+	switch (access)
+	{
+		case OAT_POST_CREATE:
+			/* Now make sure that it's a CREATE DATABASE call */
+			if (classId != DatabaseRelationId)
+				break;
+
+			/* Tell the launcher about the new database */
+			if (!bgw_message_send_and_wait(REGISTER_CREATEDB, objectId))
+				ereport(LOG, (errmsg("Could not notify the launcher in timescale_object_access_hook")));
+			break;
+		default:
+			/* Do nothing for all other calls. */
+			break;
+	}
+
+	if (prev_object_access_hook != NULL)
+		prev_object_access_hook(access, classId, objectId, subId, arg);
+}
+
 static void
 timescale_shmem_startup_hook(void)
 {
@@ -414,6 +441,9 @@ _PG_init(void)
 
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescale_shmem_startup_hook;
+
+	prev_object_access_hook = object_access_hook;
+	object_access_hook = timescale_object_access_hook;
 }
 
 void
@@ -421,6 +451,7 @@ _PG_fini(void)
 {
 	post_parse_analyze_hook = prev_post_parse_analyze_hook;
 	shmem_startup_hook = prev_shmem_startup_hook;
+	object_access_hook = prev_object_access_hook;
 	/* No way to unregister relcache callback */
 }
 

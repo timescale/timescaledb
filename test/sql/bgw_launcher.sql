@@ -180,6 +180,29 @@ COMMIT;
 /* End our transaction and it should immediately exit because it's a template database.*/
 SELECT wait_worker_counts(1,0,0,0);
 
+\c single_2
+/* Now try creating a DB from a template with the extension already installed.
+ * Make sure we see a scheduler start. */
+CREATE DATABASE single;
+
+SELECT wait_worker_counts(1,1,0,0);
+DROP DATABASE single;
+
+/* Now make sure that there's no race between create database and create extension.
+ * Although to be honest, this race probably wouldn't manifest in this test. */
+\c template1
+DROP EXTENSION timescaledb;
+
+\c single_2
+CREATE DATABASE single;
+
+\c single
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+
+SELECT wait_worker_counts(1,1,0,0);
+
+\c template1
 /* Clean up after ourselves */
 \ir include/bgw_launcher_utils_cleanup.sql
-DROP EXTENSION timescaledb;
