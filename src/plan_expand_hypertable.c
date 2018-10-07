@@ -128,7 +128,7 @@ plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti,
 }
 
 /* Inspired by expand_inherited_rtentry but expands
- * a hypertable chunks into an append rekationship */
+ * a hypertable chunks into an append relationship */
 void
 plan_expand_hypertable_chunks(Hypertable *ht,
 							  PlannerInfo *root,

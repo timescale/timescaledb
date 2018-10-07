@@ -1262,8 +1262,8 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	 * Serialize hypertable creation to avoid having multiple transactions
 	 * creating the same hypertable simultaneously. The lock should conflict
 	 * with itself and RowExclusive, to prevent simultaneous inserts on the
-	 * table. Also since TRUNCATE (part of data migrationt) takes an
-	 * AccessExclusiveLock take that lock level here to so that we don't have
+	 * table. Also since TRUNCATE (part of data migrations) takes an
+	 * AccessExclusiveLock take that lock level here too so that we don't have
 	 * lock upgrades, which are suceptible to deadlocks. If we aren't
 	 * migrating data, then shouldn't have much contention on the table thus
 	 * not worth optimizing.
