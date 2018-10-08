@@ -79,7 +79,7 @@ SELECT * FROM test_dt ORDER BY time;
 (4 rows)
 
 -- testing time_bucket START
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 minutes') AS ten_min FROM test_ts GROUP BY ten_min ORDER BY avg_tmp;
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERVAL '1 minutes') AS ten_min FROM test_ts GROUP BY ten_min ORDER BY avg_tmp;
  avg_tmp |         ten_min          
 ---------+--------------------------
     21.6 | Mon Mar 20 09:26:00 2017
@@ -87,7 +87,7 @@ SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 min
       30 | Mon Mar 20 09:36:00 2017
 (3 rows)
 
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 minutes') AS ten_min FROM test_tz GROUP BY ten_min ORDER BY avg_tmp;
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERVAL '1 minutes') AS ten_min FROM test_tz GROUP BY ten_min ORDER BY avg_tmp;
  avg_tmp |           ten_min            
 ---------+------------------------------
     21.6 | Mon Mar 20 09:26:00 2017 PDT
@@ -95,7 +95,7 @@ SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 min
       30 | Mon Mar 20 09:36:00 2017 PDT
 (3 rows)
 
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
  avg_tmp |  ten_min   
 ---------+------------
     21.2 | 03-21-2017

@@ -139,7 +139,7 @@ ORDER BY MetricMinuteTs DESC, metricid;
                                        Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
 (14 rows)
 
-:PREFIX SELECT time_bucket('1 minute', time, '30 seconds') AS MetricMinuteTs, AVG(value) as avg
+:PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs

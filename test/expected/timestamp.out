@@ -706,7 +706,8 @@ FROM unnest(ARRAY[
  11-11-2017 | 11-11-2017
 (4 rows)
 
--- 2019-09-24 is a Monday.
+-- 2019-09-24 is a Monday, and we want to ensure that time_bucket returns the week starting with a Monday as date_trunc does,
+-- Rather than a Saturday which is the date of the PostgreSQL epoch
 SELECT time, time_bucket(INTERVAL '1 week', time::date)
 FROM unnest(ARRAY[
     date '2018-09-16',
@@ -774,17 +775,419 @@ FROM unnest(ARRAY[
  infinity  | infinity
 (2 rows)
 
-SELECT time, time_bucket(INTERVAL '1 week', time)
+SELECT time, time_bucket(INTERVAL '1 week', time), date_trunc('week', time) = time_bucket(INTERVAL '1 week', time)
 FROM unnest(ARRAY[
     timestamp without time zone '4714-11-24 01:01:01.0 BC',
     timestamp without time zone '294276-12-31 23:59:59.9999'
     ]) AS time;
-              time               |         time_bucket         
----------------------------------+-----------------------------
- Mon Nov 24 01:01:01 4714 BC     | Mon Nov 24 00:00:00 4714 BC
- Sun Dec 31 23:59:59.9999 294276 | Mon Dec 25 00:00:00 294276
+              time               |         time_bucket         | ?column? 
+---------------------------------+-----------------------------+----------
+ Mon Nov 24 01:01:01 4714 BC     | Mon Nov 24 00:00:00 4714 BC | t
+ Sun Dec 31 23:59:59.9999 294276 | Mon Dec 25 00:00:00 294276  | t
 (2 rows)
 
+--1000 years later weeks still align.
+SELECT time, time_bucket(INTERVAL '1 week', time), date_trunc('week', time) = time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp without time zone '3018-09-14',
+    timestamp without time zone '3018-09-20',
+    timestamp without time zone '3018-09-21',
+    timestamp without time zone '3018-09-22'
+    ]) AS time;
+           time           |       time_bucket        | ?column? 
+--------------------------+--------------------------+----------
+ Mon Sep 14 00:00:00 3018 | Mon Sep 14 00:00:00 3018 | t
+ Sun Sep 20 00:00:00 3018 | Mon Sep 14 00:00:00 3018 | t
+ Mon Sep 21 00:00:00 3018 | Mon Sep 21 00:00:00 3018 | t
+ Tue Sep 22 00:00:00 3018 | Mon Sep 21 00:00:00 3018 | t
+(4 rows)
+
+--weeks align for timestamptz as well if cast to local time, (but not if done at UTC).
+SELECT time, date_trunc('week', time) = time_bucket(INTERVAL '1 week', time),  date_trunc('week', time) = time_bucket(INTERVAL '1 week', time::timestamp)
+FROM unnest(ARRAY[
+    timestamp with time zone '3018-09-14',
+    timestamp with time zone '3018-09-20',
+    timestamp with time zone '3018-09-21',
+    timestamp with time zone '3018-09-22'
+    ]) AS time;
+             time             | ?column? | ?column? 
+------------------------------+----------+----------
+ Mon Sep 14 00:00:00 3018 EDT | f        | t
+ Sun Sep 20 00:00:00 3018 EDT | f        | t
+ Mon Sep 21 00:00:00 3018 EDT | f        | t
+ Tue Sep 22 00:00:00 3018 EDT | f        | t
+(4 rows)
+
+--check functions with origin
+--note that the default origin is at 0 UTC, using origin parameter it is easy to provide a EDT origin point
+\x
+SELECT time, time_bucket(INTERVAL '1 week', time) no_epoch,
+             time_bucket(INTERVAL '1 week', time::timestamp) no_epoch_local,
+             time_bucket(INTERVAL '1 week', time) = time_bucket(INTERVAL '1 week', time, timestamptz '2000-01-03 00:00:00+0') always_true,
+             time_bucket(INTERVAL '1 week', time, timestamptz '2000-01-01 00:00:00+0') pg_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamptz 'epoch') unix_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamptz '3018-09-13') custom_1,
+             time_bucket(INTERVAL '1 week', time, timestamptz '3018-09-14') custom_2
+FROM unnest(ARRAY[
+    timestamp with time zone '2000-01-01 00:00:00+0'- interval '1 second',
+    timestamp with time zone '2000-01-01 00:00:00+0',
+    timestamp with time zone '2000-01-03 00:00:00+0'- interval '1 second',
+    timestamp with time zone '2000-01-03 00:00:00+0',
+    timestamp with time zone '2000-01-01',
+    timestamp with time zone '2000-01-02',
+    timestamp with time zone '2000-01-03',
+    timestamp with time zone '3018-09-12',
+    timestamp with time zone '3018-09-13',
+    timestamp with time zone '3018-09-14',
+    timestamp with time zone '3018-09-15'
+    ]) AS time;
+-[ RECORD 1 ]--+-----------------------------
+time           | Fri Dec 31 18:59:59 1999 EST
+no_epoch       | Sun Dec 26 19:00:00 1999 EST
+no_epoch_local | Mon Dec 27 00:00:00 1999
+always_true    | t
+pg_epoch       | Fri Dec 24 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Dec 25 23:00:00 1999 EST
+custom_2       | Sun Dec 26 23:00:00 1999 EST
+-[ RECORD 2 ]--+-----------------------------
+time           | Fri Dec 31 19:00:00 1999 EST
+no_epoch       | Sun Dec 26 19:00:00 1999 EST
+no_epoch_local | Mon Dec 27 00:00:00 1999
+always_true    | t
+pg_epoch       | Fri Dec 31 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Dec 25 23:00:00 1999 EST
+custom_2       | Sun Dec 26 23:00:00 1999 EST
+-[ RECORD 3 ]--+-----------------------------
+time           | Sun Jan 02 18:59:59 2000 EST
+no_epoch       | Sun Dec 26 19:00:00 1999 EST
+no_epoch_local | Mon Dec 27 00:00:00 1999
+always_true    | t
+pg_epoch       | Fri Dec 31 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Jan 01 23:00:00 2000 EST
+custom_2       | Sun Dec 26 23:00:00 1999 EST
+-[ RECORD 4 ]--+-----------------------------
+time           | Sun Jan 02 19:00:00 2000 EST
+no_epoch       | Sun Jan 02 19:00:00 2000 EST
+no_epoch_local | Mon Dec 27 00:00:00 1999
+always_true    | t
+pg_epoch       | Fri Dec 31 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Jan 01 23:00:00 2000 EST
+custom_2       | Sun Dec 26 23:00:00 1999 EST
+-[ RECORD 5 ]--+-----------------------------
+time           | Sat Jan 01 00:00:00 2000 EST
+no_epoch       | Sun Dec 26 19:00:00 1999 EST
+no_epoch_local | Mon Dec 27 00:00:00 1999
+always_true    | t
+pg_epoch       | Fri Dec 31 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Dec 25 23:00:00 1999 EST
+custom_2       | Sun Dec 26 23:00:00 1999 EST
+-[ RECORD 6 ]--+-----------------------------
+time           | Sun Jan 02 00:00:00 2000 EST
+no_epoch       | Sun Dec 26 19:00:00 1999 EST
+no_epoch_local | Mon Dec 27 00:00:00 1999
+always_true    | t
+pg_epoch       | Fri Dec 31 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Jan 01 23:00:00 2000 EST
+custom_2       | Sun Dec 26 23:00:00 1999 EST
+-[ RECORD 7 ]--+-----------------------------
+time           | Mon Jan 03 00:00:00 2000 EST
+no_epoch       | Sun Jan 02 19:00:00 2000 EST
+no_epoch_local | Mon Jan 03 00:00:00 2000
+always_true    | t
+pg_epoch       | Fri Dec 31 19:00:00 1999 EST
+unix_epoch     | Wed Dec 29 19:00:00 1999 EST
+custom_1       | Sat Jan 01 23:00:00 2000 EST
+custom_2       | Sun Jan 02 23:00:00 2000 EST
+-[ RECORD 8 ]--+-----------------------------
+time           | Sat Sep 12 00:00:00 3018 EDT
+no_epoch       | Sun Sep 06 20:00:00 3018 EDT
+no_epoch_local | Mon Sep 07 00:00:00 3018
+always_true    | t
+pg_epoch       | Fri Sep 11 20:00:00 3018 EDT
+unix_epoch     | Wed Sep 09 20:00:00 3018 EDT
+custom_1       | Sun Sep 06 00:00:00 3018 EDT
+custom_2       | Mon Sep 07 00:00:00 3018 EDT
+-[ RECORD 9 ]--+-----------------------------
+time           | Sun Sep 13 00:00:00 3018 EDT
+no_epoch       | Sun Sep 06 20:00:00 3018 EDT
+no_epoch_local | Mon Sep 07 00:00:00 3018
+always_true    | t
+pg_epoch       | Fri Sep 11 20:00:00 3018 EDT
+unix_epoch     | Wed Sep 09 20:00:00 3018 EDT
+custom_1       | Sun Sep 13 00:00:00 3018 EDT
+custom_2       | Mon Sep 07 00:00:00 3018 EDT
+-[ RECORD 10 ]-+-----------------------------
+time           | Mon Sep 14 00:00:00 3018 EDT
+no_epoch       | Sun Sep 13 20:00:00 3018 EDT
+no_epoch_local | Mon Sep 14 00:00:00 3018
+always_true    | t
+pg_epoch       | Fri Sep 11 20:00:00 3018 EDT
+unix_epoch     | Wed Sep 09 20:00:00 3018 EDT
+custom_1       | Sun Sep 13 00:00:00 3018 EDT
+custom_2       | Mon Sep 14 00:00:00 3018 EDT
+-[ RECORD 11 ]-+-----------------------------
+time           | Tue Sep 15 00:00:00 3018 EDT
+no_epoch       | Sun Sep 13 20:00:00 3018 EDT
+no_epoch_local | Mon Sep 14 00:00:00 3018
+always_true    | t
+pg_epoch       | Fri Sep 11 20:00:00 3018 EDT
+unix_epoch     | Wed Sep 09 20:00:00 3018 EDT
+custom_1       | Sun Sep 13 00:00:00 3018 EDT
+custom_2       | Mon Sep 14 00:00:00 3018 EDT
+
+SELECT time, time_bucket(INTERVAL '1 week', time) no_epoch,
+             time_bucket(INTERVAL '1 week', time) = time_bucket(INTERVAL '1 week', time, timestamp '2000-01-03 00:00:00') always_true,
+             time_bucket(INTERVAL '1 week', time, timestamp '2000-01-01 00:00:00+0') pg_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamp 'epoch') unix_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamp '3018-09-13') custom_1,
+             time_bucket(INTERVAL '1 week', time, timestamp '3018-09-14') custom_2
+FROM unnest(ARRAY[
+    timestamp without time zone '2000-01-01 00:00:00'- interval '1 second',
+    timestamp without time zone '2000-01-01 00:00:00',
+    timestamp without time zone '2000-01-03 00:00:00'- interval '1 second',
+    timestamp without time zone '2000-01-03 00:00:00',
+    timestamp without time zone '2000-01-01',
+    timestamp without time zone '2000-01-02',
+    timestamp without time zone '2000-01-03',
+    timestamp without time zone '3018-09-12',
+    timestamp without time zone '3018-09-13',
+    timestamp without time zone '3018-09-14',
+    timestamp without time zone '3018-09-15'
+    ]) AS time;
+-[ RECORD 1 ]-------------------------
+time        | Fri Dec 31 23:59:59 1999
+no_epoch    | Mon Dec 27 00:00:00 1999
+always_true | t
+pg_epoch    | Sat Dec 25 00:00:00 1999
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Dec 26 00:00:00 1999
+custom_2    | Mon Dec 27 00:00:00 1999
+-[ RECORD 2 ]-------------------------
+time        | Sat Jan 01 00:00:00 2000
+no_epoch    | Mon Dec 27 00:00:00 1999
+always_true | t
+pg_epoch    | Sat Jan 01 00:00:00 2000
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Dec 26 00:00:00 1999
+custom_2    | Mon Dec 27 00:00:00 1999
+-[ RECORD 3 ]-------------------------
+time        | Sun Jan 02 23:59:59 2000
+no_epoch    | Mon Dec 27 00:00:00 1999
+always_true | t
+pg_epoch    | Sat Jan 01 00:00:00 2000
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Jan 02 00:00:00 2000
+custom_2    | Mon Dec 27 00:00:00 1999
+-[ RECORD 4 ]-------------------------
+time        | Mon Jan 03 00:00:00 2000
+no_epoch    | Mon Jan 03 00:00:00 2000
+always_true | t
+pg_epoch    | Sat Jan 01 00:00:00 2000
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Jan 02 00:00:00 2000
+custom_2    | Mon Jan 03 00:00:00 2000
+-[ RECORD 5 ]-------------------------
+time        | Sat Jan 01 00:00:00 2000
+no_epoch    | Mon Dec 27 00:00:00 1999
+always_true | t
+pg_epoch    | Sat Jan 01 00:00:00 2000
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Dec 26 00:00:00 1999
+custom_2    | Mon Dec 27 00:00:00 1999
+-[ RECORD 6 ]-------------------------
+time        | Sun Jan 02 00:00:00 2000
+no_epoch    | Mon Dec 27 00:00:00 1999
+always_true | t
+pg_epoch    | Sat Jan 01 00:00:00 2000
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Jan 02 00:00:00 2000
+custom_2    | Mon Dec 27 00:00:00 1999
+-[ RECORD 7 ]-------------------------
+time        | Mon Jan 03 00:00:00 2000
+no_epoch    | Mon Jan 03 00:00:00 2000
+always_true | t
+pg_epoch    | Sat Jan 01 00:00:00 2000
+unix_epoch  | Thu Dec 30 00:00:00 1999
+custom_1    | Sun Jan 02 00:00:00 2000
+custom_2    | Mon Jan 03 00:00:00 2000
+-[ RECORD 8 ]-------------------------
+time        | Sat Sep 12 00:00:00 3018
+no_epoch    | Mon Sep 07 00:00:00 3018
+always_true | t
+pg_epoch    | Sat Sep 12 00:00:00 3018
+unix_epoch  | Thu Sep 10 00:00:00 3018
+custom_1    | Sun Sep 06 00:00:00 3018
+custom_2    | Mon Sep 07 00:00:00 3018
+-[ RECORD 9 ]-------------------------
+time        | Sun Sep 13 00:00:00 3018
+no_epoch    | Mon Sep 07 00:00:00 3018
+always_true | t
+pg_epoch    | Sat Sep 12 00:00:00 3018
+unix_epoch  | Thu Sep 10 00:00:00 3018
+custom_1    | Sun Sep 13 00:00:00 3018
+custom_2    | Mon Sep 07 00:00:00 3018
+-[ RECORD 10 ]------------------------
+time        | Mon Sep 14 00:00:00 3018
+no_epoch    | Mon Sep 14 00:00:00 3018
+always_true | t
+pg_epoch    | Sat Sep 12 00:00:00 3018
+unix_epoch  | Thu Sep 10 00:00:00 3018
+custom_1    | Sun Sep 13 00:00:00 3018
+custom_2    | Mon Sep 14 00:00:00 3018
+-[ RECORD 11 ]------------------------
+time        | Tue Sep 15 00:00:00 3018
+no_epoch    | Mon Sep 14 00:00:00 3018
+always_true | t
+pg_epoch    | Sat Sep 12 00:00:00 3018
+unix_epoch  | Thu Sep 10 00:00:00 3018
+custom_1    | Sun Sep 13 00:00:00 3018
+custom_2    | Mon Sep 14 00:00:00 3018
+
+SELECT time, time_bucket(INTERVAL '1 week', time) no_epoch,
+             time_bucket(INTERVAL '1 week', time) = time_bucket(INTERVAL '1 week', time, date '2000-01-03') always_true,
+             time_bucket(INTERVAL '1 week', time, date '2000-01-01') pg_epoch,
+             time_bucket(INTERVAL '1 week', time, (timestamp 'epoch')::date) unix_epoch,
+             time_bucket(INTERVAL '1 week', time, date '3018-09-13') custom_1,
+             time_bucket(INTERVAL '1 week', time, date '3018-09-14') custom_2
+FROM unnest(ARRAY[
+    date '1999-12-31',
+    date '2000-01-01',
+    date '2000-01-02',
+    date '2000-01-03',
+    date '3018-09-12',
+    date '3018-09-13',
+    date '3018-09-14',
+    date '3018-09-15'
+    ]) AS time;
+-[ RECORD 1 ]-----------
+time        | 12-31-1999
+no_epoch    | 12-27-1999
+always_true | t
+pg_epoch    | 12-25-1999
+unix_epoch  | 12-30-1999
+custom_1    | 12-26-1999
+custom_2    | 12-27-1999
+-[ RECORD 2 ]-----------
+time        | 01-01-2000
+no_epoch    | 12-27-1999
+always_true | t
+pg_epoch    | 01-01-2000
+unix_epoch  | 12-30-1999
+custom_1    | 12-26-1999
+custom_2    | 12-27-1999
+-[ RECORD 3 ]-----------
+time        | 01-02-2000
+no_epoch    | 12-27-1999
+always_true | t
+pg_epoch    | 01-01-2000
+unix_epoch  | 12-30-1999
+custom_1    | 01-02-2000
+custom_2    | 12-27-1999
+-[ RECORD 4 ]-----------
+time        | 01-03-2000
+no_epoch    | 01-03-2000
+always_true | t
+pg_epoch    | 01-01-2000
+unix_epoch  | 12-30-1999
+custom_1    | 01-02-2000
+custom_2    | 01-03-2000
+-[ RECORD 5 ]-----------
+time        | 09-12-3018
+no_epoch    | 09-07-3018
+always_true | t
+pg_epoch    | 09-12-3018
+unix_epoch  | 09-10-3018
+custom_1    | 09-06-3018
+custom_2    | 09-07-3018
+-[ RECORD 6 ]-----------
+time        | 09-13-3018
+no_epoch    | 09-07-3018
+always_true | t
+pg_epoch    | 09-12-3018
+unix_epoch  | 09-10-3018
+custom_1    | 09-13-3018
+custom_2    | 09-07-3018
+-[ RECORD 7 ]-----------
+time        | 09-14-3018
+no_epoch    | 09-14-3018
+always_true | t
+pg_epoch    | 09-12-3018
+unix_epoch  | 09-10-3018
+custom_1    | 09-13-3018
+custom_2    | 09-14-3018
+-[ RECORD 8 ]-----------
+time        | 09-15-3018
+no_epoch    | 09-14-3018
+always_true | t
+pg_epoch    | 09-12-3018
+unix_epoch  | 09-10-3018
+custom_1    | 09-13-3018
+custom_2    | 09-14-3018
+
+\x
+--really old origin works if date around that time
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '4710-11-24 01:01:01.0 BC')
+FROM unnest(ARRAY[
+    timestamp without time zone '4710-11-24 01:01:01.0 BC',
+    timestamp without time zone '4710-11-25 01:01:01.0 BC',
+    timestamp without time zone '2001-01-01',
+    timestamp without time zone '3001-01-01'
+    ]) AS time;
+            time             |         time_bucket         
+-----------------------------+-----------------------------
+ Sat Nov 24 01:01:01 4710 BC | Sat Nov 24 01:01:01 4710 BC
+ Sun Nov 25 01:01:01 4710 BC | Sat Nov 24 01:01:01 4710 BC
+ Mon Jan 01 00:00:00 2001    | Sat Dec 30 01:01:01 2000
+ Thu Jan 01 00:00:00 3001    | Sat Dec 27 01:01:01 3000
+(4 rows)
+
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '294270-12-30 23:59:59.9999')
+FROM unnest(ARRAY[
+    timestamp without time zone '294270-12-29 23:59:59.9999',
+    timestamp without time zone '294270-12-30 23:59:59.9999',
+    timestamp without time zone '294270-12-31 23:59:59.9999',
+    timestamp without time zone '2001-01-01',
+    timestamp without time zone '3001-01-01'
+    ]) AS time;
+              time               |           time_bucket           
+---------------------------------+---------------------------------
+ Thu Dec 29 23:59:59.9999 294270 | Fri Dec 23 23:59:59.9999 294270
+ Fri Dec 30 23:59:59.9999 294270 | Fri Dec 30 23:59:59.9999 294270
+ Sat Dec 31 23:59:59.9999 294270 | Fri Dec 30 23:59:59.9999 294270
+ Mon Jan 01 00:00:00 2001        | Fri Dec 29 23:59:59.9999 2000
+ Thu Jan 01 00:00:00 3001        | Fri Dec 26 23:59:59.9999 3000
+(5 rows)
+
+\set ON_ERROR_STOP 0
+--really old origin + very new data errors
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '4710-11-24 01:01:01.0 BC')
+FROM unnest(ARRAY[
+    timestamp without time zone '294270-12-31 23:59:59.9999'
+    ]) AS time;
+ERROR:  timestamp out of range
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp with time zone '4710-11-25 01:01:01.0 BC')
+FROM unnest(ARRAY[
+    timestamp with time zone '294270-12-30 23:59:59.9999'
+    ]) AS time;
+ERROR:  timestamp out of range
+--really high origin + old data errors out
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '294270-12-31 23:59:59.9999')
+FROM unnest(ARRAY[
+    timestamp without time zone '4710-11-24 01:01:01.0 BC'
+    ]) AS time;
+ERROR:  timestamp out of range
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp with time zone '294270-12-31 23:59:59.9999')
+FROM unnest(ARRAY[
+    timestamp with time zone '4710-11-24 01:01:01.0 BC'
+    ]) AS time;
+ERROR:  timestamp out of range
+\set ON_ERROR_STOP 1
 -------------------------------------
 --- Test time input functions --
 -------------------------------------

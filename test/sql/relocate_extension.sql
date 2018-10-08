@@ -39,9 +39,9 @@ INSERT INTO test_dt VALUES('Mon Mar 22 09:28:00.936242 2017', 21.2, 'dev1');
 INSERT INTO test_dt VALUES('Mon Mar 23 09:37:00.936242 2017', 30, 'dev3');
 SELECT * FROM test_dt ORDER BY time;
 -- testing time_bucket START
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 minutes') AS ten_min FROM test_ts GROUP BY ten_min ORDER BY avg_tmp;
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, '1 minutes') AS ten_min FROM test_tz GROUP BY ten_min ORDER BY avg_tmp;
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERVAL '1 minutes') AS ten_min FROM test_ts GROUP BY ten_min ORDER BY avg_tmp;
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERVAL '1 minutes') AS ten_min FROM test_tz GROUP BY ten_min ORDER BY avg_tmp;
+SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
 -- testing time_bucket END
 
 -- testing drop_chunks START

@@ -17,7 +17,7 @@ WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs, metricid
 ORDER BY MetricMinuteTs DESC, metricid;
 
-:PREFIX SELECT time_bucket('1 minute', time, '30 seconds') AS MetricMinuteTs, AVG(value) as avg
+:PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
