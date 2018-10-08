@@ -281,25 +281,41 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 {
 	Interval   *interval = PG_GETARG_INTERVAL_P(0);
 	Timestamp	timestamp = PG_GETARG_TIMESTAMP(1);
+	Timestamp	origin;
 	Timestamp	result;
 	int64		period = -1;
-	/* The offset moves the epoch to start on a monday the default postgres epoch starts on a saturday.
-	 * This makes time-buckets by a week more intuitive.
-	 */
+
+	if (PG_NARGS() > 2)
+		origin = PG_GETARG_TIMESTAMPTZ(2);
+	else
+	{
+		/*
+		 * The default origin moves the PG epoch to start on a monday:
+		 * 2000-01-03. We don't use PG epoch since it starts on a saturday.
+		 * This makes time-buckets by a week more intuitive and aligns it with
+		 * date_trunc.
+		 */
 #ifdef HAVE_INT64_TIMESTAMP
-	int64 offset = 2*USECS_PER_DAY;
+		origin = 2 * USECS_PER_DAY;
 #else
-	double offset = 2*SECS_PER_DAY;
+		origin = 2 * SECS_PER_DAY;
 #endif
+	}
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMP(timestamp);
 
-	if(timestamp < DT_NOBEGIN + offset)
+	if (origin > 0 && timestamp < DT_NOBEGIN + origin)
 		ereport(ERROR,
-			(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-				errmsg("timestamp out of range")));
-	timestamp -= offset;
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
+
+	if (origin < 0 && timestamp > DT_NOEND + origin)
+		ereport(ERROR,
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
+
+	timestamp -= origin;
 
 	period = get_interval_period_timestamp_units(interval);
 	/* result = (timestamp / period) * period */
@@ -318,7 +334,7 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 	{
 		result *= period;
 	}
-	result += offset;
+	result += origin;
 	PG_RETURN_TIMESTAMP(result);
 }
 
@@ -328,26 +344,42 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 {
 	Interval   *interval = PG_GETARG_INTERVAL_P(0);
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz origin;
 	TimestampTz result;
 	int64		period = -1;
-	/* The offset moves the epoch to start on a monday the default postgres epoch starts on a saturday.
-	 * This makes time-buckets by a week more intuitive.
-	 */
-	#ifdef HAVE_INT64_TIMESTAMP
-		int64 offset = 2*USECS_PER_DAY;
-	#else
-		double offset = 2*SECS_PER_DAY;
-	#endif
+
+
+	if (PG_NARGS() > 2)
+		origin = PG_GETARG_TIMESTAMPTZ(2);
+	else
+	{
+		/*
+		 * The default origin moves the PG epoch to start on a monday:
+		 * 2000-01-03. We don't use PG epoch since it starts on a saturday.
+		 * This makes time-buckets by a week more intuitive and aligns it with
+		 * date_trunc.
+		 */
+#ifdef HAVE_INT64_TIMESTAMP
+		origin = 2 * USECS_PER_DAY;
+#else
+		origin = 2 * SECS_PER_DAY;
+#endif
+	}
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMPTZ(timestamp);
 
-	if(timestamp < DT_NOBEGIN + offset)
+	if (origin > 0 && timestamp < DT_NOBEGIN + origin)
 		ereport(ERROR,
-			(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-				errmsg("timestamp out of range")));
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
 
-	timestamp -= offset;
+	if (origin < 0 && timestamp > DT_NOEND + origin)
+		ereport(ERROR,
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
+
+	timestamp -= origin;
 
 	period = get_interval_period_timestamp_units(interval);
 	/* result = (timestamp / period) * period */
@@ -366,7 +398,7 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	{
 		result *= period;
 	}
-	result += offset;
+	result += origin;
 	PG_RETURN_TIMESTAMPTZ(result);
 }
 
@@ -415,7 +447,17 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 
 	/* convert to timestamp (NOT tz), bucket, convert back to date */
 	converted_ts = DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(1));
-	bucketed = DirectFunctionCall2(ts_timestamp_bucket, PG_GETARG_DATUM(0), converted_ts);
+	if (PG_NARGS() > 2)
+	{
+		Datum		converted_ts_origin;
+
+		converted_ts_origin = DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(2));
+		bucketed = DirectFunctionCall3(ts_timestamp_bucket, PG_GETARG_DATUM(0), converted_ts, converted_ts_origin);
+	}
+	else
+	{
+		bucketed = DirectFunctionCall2(ts_timestamp_bucket, PG_GETARG_DATUM(0), converted_ts);
+	}
 	return DirectFunctionCall1(timestamp_date, bucketed);
 }
 

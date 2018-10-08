@@ -415,7 +415,8 @@ FROM unnest(ARRAY[
     date '2017-11-11'
     ]) AS time;
 
--- 2019-09-24 is a Monday.
+-- 2019-09-24 is a Monday, and we want to ensure that time_bucket returns the week starting with a Monday as date_trunc does,
+-- Rather than a Saturday which is the date of the PostgreSQL epoch
 SELECT time, time_bucket(INTERVAL '1 week', time::date)
 FROM unnest(ARRAY[
     date '2018-09-16',
@@ -453,11 +454,132 @@ FROM unnest(ARRAY[
     ]) AS time;
 
 
-SELECT time, time_bucket(INTERVAL '1 week', time)
+SELECT time, time_bucket(INTERVAL '1 week', time), date_trunc('week', time) = time_bucket(INTERVAL '1 week', time)
 FROM unnest(ARRAY[
     timestamp without time zone '4714-11-24 01:01:01.0 BC',
     timestamp without time zone '294276-12-31 23:59:59.9999'
     ]) AS time;
+
+--1000 years later weeks still align.
+SELECT time, time_bucket(INTERVAL '1 week', time), date_trunc('week', time) = time_bucket(INTERVAL '1 week', time)
+FROM unnest(ARRAY[
+    timestamp without time zone '3018-09-14',
+    timestamp without time zone '3018-09-20',
+    timestamp without time zone '3018-09-21',
+    timestamp without time zone '3018-09-22'
+    ]) AS time;
+
+--weeks align for timestamptz as well if cast to local time, (but not if done at UTC).
+SELECT time, date_trunc('week', time) = time_bucket(INTERVAL '1 week', time),  date_trunc('week', time) = time_bucket(INTERVAL '1 week', time::timestamp)
+FROM unnest(ARRAY[
+    timestamp with time zone '3018-09-14',
+    timestamp with time zone '3018-09-20',
+    timestamp with time zone '3018-09-21',
+    timestamp with time zone '3018-09-22'
+    ]) AS time;
+
+--check functions with origin
+--note that the default origin is at 0 UTC, using origin parameter it is easy to provide a EDT origin point
+\x
+SELECT time, time_bucket(INTERVAL '1 week', time) no_epoch,
+             time_bucket(INTERVAL '1 week', time::timestamp) no_epoch_local,
+             time_bucket(INTERVAL '1 week', time) = time_bucket(INTERVAL '1 week', time, timestamptz '2000-01-03 00:00:00+0') always_true,
+             time_bucket(INTERVAL '1 week', time, timestamptz '2000-01-01 00:00:00+0') pg_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamptz 'epoch') unix_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamptz '3018-09-13') custom_1,
+             time_bucket(INTERVAL '1 week', time, timestamptz '3018-09-14') custom_2
+FROM unnest(ARRAY[
+    timestamp with time zone '2000-01-01 00:00:00+0'- interval '1 second',
+    timestamp with time zone '2000-01-01 00:00:00+0',
+    timestamp with time zone '2000-01-03 00:00:00+0'- interval '1 second',
+    timestamp with time zone '2000-01-03 00:00:00+0',
+    timestamp with time zone '2000-01-01',
+    timestamp with time zone '2000-01-02',
+    timestamp with time zone '2000-01-03',
+    timestamp with time zone '3018-09-12',
+    timestamp with time zone '3018-09-13',
+    timestamp with time zone '3018-09-14',
+    timestamp with time zone '3018-09-15'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time) no_epoch,
+             time_bucket(INTERVAL '1 week', time) = time_bucket(INTERVAL '1 week', time, timestamp '2000-01-03 00:00:00') always_true,
+             time_bucket(INTERVAL '1 week', time, timestamp '2000-01-01 00:00:00+0') pg_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamp 'epoch') unix_epoch,
+             time_bucket(INTERVAL '1 week', time, timestamp '3018-09-13') custom_1,
+             time_bucket(INTERVAL '1 week', time, timestamp '3018-09-14') custom_2
+FROM unnest(ARRAY[
+    timestamp without time zone '2000-01-01 00:00:00'- interval '1 second',
+    timestamp without time zone '2000-01-01 00:00:00',
+    timestamp without time zone '2000-01-03 00:00:00'- interval '1 second',
+    timestamp without time zone '2000-01-03 00:00:00',
+    timestamp without time zone '2000-01-01',
+    timestamp without time zone '2000-01-02',
+    timestamp without time zone '2000-01-03',
+    timestamp without time zone '3018-09-12',
+    timestamp without time zone '3018-09-13',
+    timestamp without time zone '3018-09-14',
+    timestamp without time zone '3018-09-15'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time) no_epoch,
+             time_bucket(INTERVAL '1 week', time) = time_bucket(INTERVAL '1 week', time, date '2000-01-03') always_true,
+             time_bucket(INTERVAL '1 week', time, date '2000-01-01') pg_epoch,
+             time_bucket(INTERVAL '1 week', time, (timestamp 'epoch')::date) unix_epoch,
+             time_bucket(INTERVAL '1 week', time, date '3018-09-13') custom_1,
+             time_bucket(INTERVAL '1 week', time, date '3018-09-14') custom_2
+FROM unnest(ARRAY[
+    date '1999-12-31',
+    date '2000-01-01',
+    date '2000-01-02',
+    date '2000-01-03',
+    date '3018-09-12',
+    date '3018-09-13',
+    date '3018-09-14',
+    date '3018-09-15'
+    ]) AS time;
+\x
+
+--really old origin works if date around that time
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '4710-11-24 01:01:01.0 BC')
+FROM unnest(ARRAY[
+    timestamp without time zone '4710-11-24 01:01:01.0 BC',
+    timestamp without time zone '4710-11-25 01:01:01.0 BC',
+    timestamp without time zone '2001-01-01',
+    timestamp without time zone '3001-01-01'
+    ]) AS time;
+
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '294270-12-30 23:59:59.9999')
+FROM unnest(ARRAY[
+    timestamp without time zone '294270-12-29 23:59:59.9999',
+    timestamp without time zone '294270-12-30 23:59:59.9999',
+    timestamp without time zone '294270-12-31 23:59:59.9999',
+    timestamp without time zone '2001-01-01',
+    timestamp without time zone '3001-01-01'
+    ]) AS time;
+
+\set ON_ERROR_STOP 0
+--really old origin + very new data errors
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '4710-11-24 01:01:01.0 BC')
+FROM unnest(ARRAY[
+    timestamp without time zone '294270-12-31 23:59:59.9999'
+    ]) AS time;
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp with time zone '4710-11-25 01:01:01.0 BC')
+FROM unnest(ARRAY[
+    timestamp with time zone '294270-12-30 23:59:59.9999'
+    ]) AS time;
+
+--really high origin + old data errors out
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '294270-12-31 23:59:59.9999')
+FROM unnest(ARRAY[
+    timestamp without time zone '4710-11-24 01:01:01.0 BC'
+    ]) AS time;
+SELECT time, time_bucket(INTERVAL '1 week', time, timestamp with time zone '294270-12-31 23:59:59.9999')
+FROM unnest(ARRAY[
+    timestamp with time zone '4710-11-24 01:01:01.0 BC'
+    ]) AS time;
+\set ON_ERROR_STOP 1
+
 -------------------------------------
 --- Test time input functions --
 -------------------------------------
