@@ -6,6 +6,11 @@
 \d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
 
+\z _timescaledb_cache.*
+\z _timescaledb_catalog.*
+\z _timescaledb_config.*
+\z _timescaledb_internal.*
+
 \di+ _timescaledb_catalog.*
 -- Do not list sequence details because of potentially different state
 -- of the sequence between updated and restored versions of a database
