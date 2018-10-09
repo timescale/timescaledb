@@ -1165,24 +1165,24 @@ FROM unnest(ARRAY[
 (5 rows)
 
 \set ON_ERROR_STOP 0
---really old origin + very new data errors
-SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '4710-11-24 01:01:01.0 BC')
+--really old origin + very new data + long period errors
+SELECT time, time_bucket(INTERVAL '100000 day', time, timestamp without time zone '4710-11-24 01:01:01.0 BC')
 FROM unnest(ARRAY[
     timestamp without time zone '294270-12-31 23:59:59.9999'
     ]) AS time;
 ERROR:  timestamp out of range
-SELECT time, time_bucket(INTERVAL '1 week', time, timestamp with time zone '4710-11-25 01:01:01.0 BC')
+SELECT time, time_bucket(INTERVAL '100000 day', time, timestamp with time zone '4710-11-25 01:01:01.0 BC')
 FROM unnest(ARRAY[
     timestamp with time zone '294270-12-30 23:59:59.9999'
     ]) AS time;
 ERROR:  timestamp out of range
---really high origin + old data errors out
-SELECT time, time_bucket(INTERVAL '1 week', time, timestamp without time zone '294270-12-31 23:59:59.9999')
+--really high origin + old data + long period errors out
+SELECT time, time_bucket(INTERVAL '10000000 day', time, timestamp without time zone '294270-12-31 23:59:59.9999')
 FROM unnest(ARRAY[
     timestamp without time zone '4710-11-24 01:01:01.0 BC'
     ]) AS time;
 ERROR:  timestamp out of range
-SELECT time, time_bucket(INTERVAL '1 week', time, timestamp with time zone '294270-12-31 23:59:59.9999')
+SELECT time, time_bucket(INTERVAL '10000000 day', time, timestamp with time zone '294270-12-31 23:59:59.9999')
 FROM unnest(ARRAY[
     timestamp with time zone '4710-11-24 01:01:01.0 BC'
     ]) AS time;
