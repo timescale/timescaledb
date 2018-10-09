@@ -416,9 +416,7 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 	/* convert to timestamp (NOT tz), bucket, convert back to date */
 	timestamp = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(1)));
 	if (PG_NARGS() > 2)
-	{
 		origin = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(2)));
-	}
 
 	Assert(!TIMESTAMP_NOT_FINITE(timestamp));
 
