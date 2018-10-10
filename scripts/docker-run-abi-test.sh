@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This script test abi-compatibility wrt timescale between minor version of postgres
 # It will compile timescale on a release version of postgres ($PG_MAJOR.PG_MINOR_COMPILE)

@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Wrapper around pg_regress to be able to override the tests to run via the
 # TESTS environment variable
 
 # NB this script mirrors the adjacent pg_regress.sh, and they should
-#    kept in synch
+# be kept in sync
 
 EXE_DIR=$(dirname $0)
 PG_ISOLATION_REGRESS=${PG_ISOLATION_REGRESS:-pg_isolation_regress}

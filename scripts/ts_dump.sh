@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # This script is used for backing up a single hypertable into an easy-to-restore
 # tarball. The tarball contains two files: (1) a .sql file for recreating the
 # hypertable and its indices and (2) a .csv file containing the data as CSV.

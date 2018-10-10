@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prior to version 0.5.0, TimescaleDB did not fully support most constraints
 # so we don't include update tests that test constraint support in pre-0.5.0

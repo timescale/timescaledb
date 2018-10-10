@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This bootstrap scripts set up the build environment for TimescaleDB
 # Any flags will be passed on to CMake, e.g.,
