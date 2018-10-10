@@ -208,3 +208,95 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 DROP TABLE hyper_in_space;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
+
+-- Make sure we handle ALTER SCHEMA RENAME for hypertable schemas
+\c single :ROLE_SUPERUSER
+
+CREATE SCHEMA IF NOT EXISTS original_name;
+CREATE TABLE original_name.my_table (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+SELECT create_hypertable('original_name.my_table','date');
+
+INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+
+ALTER SCHEMA original_name RENAME TO new_name;
+
+DROP TABLE new_name.my_table;
+DROP SCHEMA new_name;
+
+-- Now make sure schema is renamed for multiple hypertables, but not hypertables not in the schema
+CREATE SCHEMA IF NOT EXISTS original_name;
+CREATE TABLE original_name.my_table (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+CREATE TABLE original_name.my_table2 (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+CREATE TABLE regular_table (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+SELECT create_hypertable('original_name.my_table','date');
+SELECT create_hypertable('original_name.my_table2','date');
+SELECT create_hypertable('regular_table','date');
+
+INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+INSERT INTO regular_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+
+ALTER SCHEMA original_name RENAME TO new_name;
+
+DROP TABLE new_name.my_table;
+DROP TABLE new_name.my_table2;
+DROP TABLE regular_table;
+DROP SCHEMA new_name;
+
+-- These tables should also drop when we drop the whole schema
+CREATE SCHEMA IF NOT EXISTS original_name;
+CREATE TABLE original_name.my_table (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+CREATE TABLE original_name.my_table2 (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+SELECT create_hypertable('original_name.my_table','date');
+SELECT create_hypertable('original_name.my_table2','date');
+
+INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+
+ALTER SCHEMA original_name RENAME TO new_name;
+
+DROP SCHEMA new_name CASCADE;
+\dt new_name.*;
+
+-- Make sure we can't rename internal schemas
+\set ON_ERROR_STOP 0
+ALTER SCHEMA _timescaledb_internal RENAME TO my_new_schema_name;
+ALTER SCHEMA _timescaledb_catalog RENAME TO my_new_schema_name;
+ALTER SCHEMA _timescaledb_cache RENAME TO my_new_schema_name;
+ALTER SCHEMA _timescaledb_config RENAME TO my_new_schema_name;
+\set ON_ERROR_STOP 1
+
+-- Make sure we can rename associated schemas
+CREATE TABLE my_table (
+  date timestamp with time zone NOT NULL,
+  quantity double precision
+);
+
+SELECT create_hypertable('my_table','date', associated_schema_name => 'my_associated_schema');
+INSERT INTO my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
+
+ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
+INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
+-- Make sure the schema name is changed in both catalog tables
+SELECT * from _timescaledb_catalog.hypertable;
+SELECT * from _timescaledb_catalog.chunk;
+
+DROP TABLE my_table;

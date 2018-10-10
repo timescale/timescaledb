@@ -1494,3 +1494,63 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATUM(retval);
 }
+
+/* Used as a tuple found function */
+static bool
+hypertable_rename_schema_name(TupleInfo *ti, void *data)
+{
+	const char **schema_names = (const char **) data;
+	const char *old_schema_name = schema_names[0];
+	const char *new_schema_name = schema_names[1];
+	bool		updated = false;
+
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_hypertable *ht = (FormData_hypertable *) GETSTRUCT(tuple);
+
+	/*
+	 * Because we are doing a heap scan with no scankey, we don't know which
+	 * schema name to change, if any
+	 */
+	if (namestrcmp(&ht->schema_name, old_schema_name) == 0)
+	{
+		namestrcpy(&ht->schema_name, new_schema_name);
+		updated = true;
+	}
+	if (namestrcmp(&ht->associated_schema_name, old_schema_name) == 0)
+	{
+		namestrcpy(&ht->associated_schema_name, new_schema_name);
+		updated = true;
+	}
+	if (namestrcmp(&ht->chunk_sizing_func_schema, old_schema_name) == 0)
+	{
+		namestrcpy(&ht->chunk_sizing_func_schema, new_schema_name);
+		updated = true;
+	}
+
+	/* Only update the catalog if we explicitly something */
+	if (updated)
+		catalog_update(ti->scanrel, tuple);
+
+	heap_freetuple(tuple);
+	/* Return true to keep going so we can change the name for all hypertables */
+	return true;
+}
+
+/* Go through internal hypertable table and rename all matching schemas */
+void
+hypertables_rename_schema_name(const char *old_name, const char *new_name)
+{
+	const char *schema_names[2] = {old_name, new_name};
+	Catalog    *catalog = catalog_get();
+
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[HYPERTABLE].id,
+		.index = InvalidOid,
+		.tuple_found = hypertable_rename_schema_name,
+		.data = schema_names,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	scanner_scan(&scanctx);
+}

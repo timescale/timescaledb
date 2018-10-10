@@ -185,3 +185,26 @@ SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'tuple_hash');
 
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
+
+DROP TABLE part_custom_dim;
+-- Now make sure that renaming partitioning_func_schema will get updated properly
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_partitioning_schema;
+
+CREATE FUNCTION my_partitioning_schema.tuple_hash(value ANYELEMENT) RETURNS INT4
+LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RAISE NOTICE 'custom hash value is: %', value.val1+value.val2;
+    RETURN value.val1+value.val2;
+END
+$BODY$;
+
+CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
+
+SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'my_partitioning_schema.tuple_hash');
+INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
+
+ALTER SCHEMA my_partitioning_schema RENAME TO new_partitioning_schema;
+-- Inserts should work even after we rename the schema
+INSERT INTO part_custom_dim(time, combo) VALUES (now(), (3,4));

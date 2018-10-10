@@ -261,3 +261,31 @@ SELECT create_hypertable('test_adaptive_after_multiple_dims', 'time',
                          chunk_target_size => '100MB',
                          create_default_indexes => true);
 INSERT INTO test_adaptive_after_multiple_dims VALUES('2018-01-01T00:00:00+00'::timestamptz, 0.0, 5);
+
+-- Now make sure renaming schema gets propagated to the func_schema
+DROP TABLE test_adaptive;
+
+\c single :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_chunk_func_schema;
+
+CREATE OR REPLACE FUNCTION my_chunk_func_schema.calculate_chunk_interval(
+        dimension_id INTEGER,
+        dimension_coord BIGINT,
+        chunk_target_size BIGINT
+)
+    RETURNS BIGINT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+BEGIN
+    RETURN 2;
+END
+$BODY$;
+
+CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
+SELECT create_hypertable('test_adaptive', 'time',
+                         chunk_target_size => '1MB',
+                         chunk_sizing_func => 'my_chunk_func_schema.calculate_chunk_interval');
+
+
+ALTER SCHEMA my_chunk_func_schema RENAME TO new_chunk_func_schema;
+INSERT INTO test_adaptive VALUES (now(), 1.0, 1);
