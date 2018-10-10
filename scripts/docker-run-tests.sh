@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This script runs the TimescaleDB tests through a standard PostgreSQL
 # container, first installing the extension via a mounted host volume.

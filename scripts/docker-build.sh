@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This script builds a development TimescaleDB image from the
 # currently checked out source on the host.

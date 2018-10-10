@@ -1,4 +1,4 @@
- #!/bin/bash
+#!/usr/bin/env bash
 
 # To avoid pw writing, add localhost:5432:*:postgres:test to ~/.pgpass
 set -u

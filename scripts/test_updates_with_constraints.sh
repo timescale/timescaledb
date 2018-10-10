@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Starting with version 0.5.0, TimescaleDB had support for most constraints,
 # including foreign keys from the hypertable to another table. In order to test
