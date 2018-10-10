@@ -25,6 +25,18 @@ typedef struct Hypertable
 	SubspaceStore *chunk_cache;
 } Hypertable;
 
+/* create_hypertable record attribute numbers */
+enum Anum_create_hypertable
+{
+	Anum_create_hypertable_id = 1,
+	Anum_create_hypertable_schema_name,
+	Anum_create_hypertable_table_name,
+	_Anum_create_hypertable_max,
+};
+
+#define Natts_create_hypertable \
+	(_Anum_create_hypertable_max - 1)
+
 extern int	number_of_hypertables(void);
 
 extern Oid	rel_get_owner(Oid relid);

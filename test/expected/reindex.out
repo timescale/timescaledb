@@ -2,9 +2,9 @@ CREATE TABLE reindex_test(time timestamp, temp float, PRIMARY KEY(time, temp));
 CREATE UNIQUE INDEX reindex_test_time_unique_idx ON reindex_test(time);
 -- create hypertable with three chunks
 SELECT create_hypertable('reindex_test', 'time', chunk_time_interval => 2628000000000);
- create_hypertable 
--------------------
- 
+    create_hypertable    
+-------------------------
+ (1,public,reindex_test)
 (1 row)
 
 INSERT INTO reindex_test VALUES ('2017-01-20T09:00:01', 17.5),

@@ -2,9 +2,9 @@ CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
 -- create hypertable with two chunks
 SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+   create_hypertable   
+-----------------------
+ (1,public,alter_test)
 (1 row)
 
 INSERT INTO alter_test VALUES ('2017-01-20T09:00:01', 17.5, 'blue'),
@@ -135,9 +135,9 @@ ERROR:  ONLY option not supported on hypertable operations
 CREATE TABLE alter_test_bigint(time bigint, temp float);
 SELECT create_hypertable('alter_test_bigint', 'time', chunk_time_interval => 2628000000000);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+      create_hypertable       
+------------------------------
+ (2,public,alter_test_bigint)
 (1 row)
 
 \set ON_ERROR_STOP 0

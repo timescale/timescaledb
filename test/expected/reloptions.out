@@ -2,9 +2,9 @@ CREATE TABLE reloptions_test(time integer, temp float8, color integer)
 WITH (fillfactor=75, oids=true, autovacuum_vacuum_threshold=100);
 SELECT create_hypertable('reloptions_test', 'time', chunk_time_interval => 3);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (1,public,reloptions_test)
 (1 row)
 
 INSERT INTO reloptions_test VALUES (4, 24.3, 1), (9, 13.3, 2);

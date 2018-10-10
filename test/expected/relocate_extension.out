@@ -12,23 +12,23 @@ CREATE TABLE test_tz(time timestamptz, temp float8, device text);
 CREATE TABLE test_dt(time date, temp float8, device text);
 SELECT "testSchema0".create_hypertable('test_ts', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+ create_hypertable  
+--------------------
+ (1,public,test_ts)
 (1 row)
 
 SELECT "testSchema0".create_hypertable('test_tz', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+ create_hypertable  
+--------------------
+ (2,public,test_tz)
 (1 row)
 
 SELECT "testSchema0".create_hypertable('test_dt', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+ create_hypertable  
+--------------------
+ (3,public,test_dt)
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;

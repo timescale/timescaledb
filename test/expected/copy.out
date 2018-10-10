@@ -62,7 +62,7 @@ CREATE TABLE "hyper" (
 SELECT create_hypertable('hyper', 'time', chunk_time_interval => 100);
  create_hypertable 
 -------------------
- 
+ (2,public,hyper)
 (1 row)
 
 INSERT INTO "meta" ("id") values (1);

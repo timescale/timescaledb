@@ -43,6 +43,7 @@
 #include "errors.h"
 #include "copy.h"
 #include "utils.h"
+#include "funcapi.h"
 
 Oid
 rel_get_owner(Oid relid)
@@ -1187,6 +1188,31 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(insert_blocker_trigger_add(relid));
 }
 
+static Datum
+create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht)
+{
+	TupleDesc	tupdesc;
+	Datum		values[Natts_create_hypertable];
+	bool		nulls[Natts_create_hypertable] = {false};
+	HeapTuple	tuple;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in "
+						"context that cannot accept type record")));
+
+	tupdesc = BlessTupleDesc(tupdesc);
+	values[AttrNumberGetAttrOffset(Anum_create_hypertable_id)] = Int32GetDatum(ht->fd.id);
+	values[AttrNumberGetAttrOffset(Anum_create_hypertable_schema_name)] = NameGetDatum(&ht->fd.schema_name);
+	values[AttrNumberGetAttrOffset(Anum_create_hypertable_table_name)] = NameGetDatum(&ht->fd.table_name);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
+
+
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
 
 /*
@@ -1246,6 +1272,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				table_name,
 				default_associated_schema_name;
 	Relation	rel;
+	Datum		retval;
 
 	/* quick exit in the easy if-not-exists case to avoid all locking */
 	if (if_not_exists && is_hypertable(table_relid))
@@ -1255,7 +1282,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is already a hypertable, skipping",
 						get_rel_name(table_relid))));
 
-		PG_RETURN_VOID();
+		PG_RETURN_NULL();
 	}
 
 	/*
@@ -1286,7 +1313,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 					 errmsg("table \"%s\" is already a hypertable, skipping",
 							get_rel_name(table_relid))));
 
-			PG_RETURN_VOID();
+			PG_RETURN_NULL();
 		}
 
 		ereport(ERROR,
@@ -1462,6 +1489,8 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	if (create_default_indexes)
 		indexing_create_default_indexes(ht);
 
+	retval = create_hypertable_datum(fcinfo, ht);
 	cache_release(hcache);
-	PG_RETURN_VOID();
+
+	PG_RETURN_DATUM(retval);
 }

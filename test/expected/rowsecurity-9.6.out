@@ -63,9 +63,9 @@ CREATE TABLE document (
 );
 GRANT ALL ON document TO public;
 SELECT public.create_hypertable('document', 'did', chunk_time_interval=>2);
- create_hypertable 
--------------------
- 
+        create_hypertable        
+---------------------------------
+ (1,regress_rls_schema,document)
 (1 row)
 
 INSERT INTO document VALUES
@@ -833,9 +833,9 @@ GRANT ALL ON hyper_document TO public;
 SELECT public.create_hypertable('hyper_document', 'did', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "did"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+           create_hypertable           
+---------------------------------------
+ (2,regress_rls_schema,hyper_document)
 (1 row)
 
 INSERT INTO hyper_document VALUES
@@ -1253,18 +1253,18 @@ CREATE TABLE dependee (x integer, y integer);
 SELECT public.create_hypertable('dependee', 'x', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "x"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+        create_hypertable        
+---------------------------------
+ (3,regress_rls_schema,dependee)
 (1 row)
 
 CREATE TABLE dependent (x integer, y integer);
 SELECT public.create_hypertable('dependent', 'x', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "x"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+        create_hypertable         
+----------------------------------
+ (4,regress_rls_schema,dependent)
 (1 row)
 
 CREATE POLICY d1 ON dependent FOR ALL
@@ -1292,9 +1292,9 @@ CREATE TABLE rec1 (x integer, y integer);
 SELECT public.create_hypertable('rec1', 'x', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "x"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+      create_hypertable      
+-----------------------------
+ (5,regress_rls_schema,rec1)
 (1 row)
 
 CREATE POLICY r1 ON rec1 USING (x = (SELECT r.x FROM rec1 r WHERE y = r.y));
@@ -1351,9 +1351,9 @@ CREATE TABLE s1 (a int, b text);
 SELECT public.create_hypertable('s1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (6,regress_rls_schema,s1)
 (1 row)
 
 INSERT INTO s1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
@@ -1361,9 +1361,9 @@ CREATE TABLE s2 (x int, y text);
 SELECT public.create_hypertable('s2', 'x', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "x"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (7,regress_rls_schema,s2)
 (1 row)
 
 INSERT INTO s2 (SELECT x, md5(x::text) FROM generate_series(-6,6) x);
@@ -2050,9 +2050,9 @@ CREATE TABLE b1 (a int, b text);
 SELECT public.create_hypertable('b1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (8,regress_rls_schema,b1)
 (1 row)
 
 INSERT INTO b1 (SELECT x, md5(x::text) FROM generate_series(-10,10) x);
@@ -2560,18 +2560,18 @@ CREATE TABLE z1 (a int, b text);
 SELECT public.create_hypertable('z1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (9,regress_rls_schema,z1)
 (1 row)
 
 CREATE TABLE z2 (a int, b text);
 SELECT public.create_hypertable('z2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (10,regress_rls_schema,z2)
 (1 row)
 
 GRANT SELECT ON z1,z2 TO regress_rls_group1, regress_rls_group2,
@@ -3103,9 +3103,9 @@ CREATE TABLE x1 (a int, b text, c text);
 SELECT public.create_hypertable('x1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (11,regress_rls_schema,x1)
 (1 row)
 
 GRANT ALL ON x1 TO PUBLIC;
@@ -3219,9 +3219,9 @@ CREATE TABLE y1 (a int, b text);
 SELECT public.create_hypertable('y1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (12,regress_rls_schema,y1)
 (1 row)
 
 INSERT INTO y1 VALUES(1,2);
@@ -3229,9 +3229,9 @@ CREATE TABLE y2 (a int, b text);
 SELECT public.create_hypertable('y2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (13,regress_rls_schema,y2)
 (1 row)
 
 GRANT ALL ON y1, y2 TO regress_rls_bob;
@@ -3545,9 +3545,9 @@ CREATE TABLE t1 (a integer);
 SELECT public.create_hypertable('t1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (14,regress_rls_schema,t1)
 (1 row)
 
 GRANT SELECT ON t1 TO regress_rls_bob, regress_rls_carol;
@@ -3597,9 +3597,9 @@ CREATE TABLE t1 (a integer, b text);
 SELECT public.create_hypertable('t1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (15,regress_rls_schema,t1)
 (1 row)
 
 CREATE POLICY p1 ON t1 USING (a % 2 = 0);
@@ -3727,9 +3727,9 @@ CREATE TABLE t2 (a integer, b text);
 SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (16,regress_rls_schema,t2)
 (1 row)
 
 INSERT INTO t2 (SELECT * FROM t1);
@@ -3847,18 +3847,18 @@ CREATE TABLE blog (id integer, author text, post text);
 SELECT public.create_hypertable('blog', 'id', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "id"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+      create_hypertable       
+------------------------------
+ (17,regress_rls_schema,blog)
 (1 row)
 
 CREATE TABLE comment (blog_id integer, message text);
 SELECT public.create_hypertable('comment', 'blog_id', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "blog_id"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+        create_hypertable        
+---------------------------------
+ (18,regress_rls_schema,comment)
 (1 row)
 
 GRANT ALL ON blog, comment TO regress_rls_bob;
@@ -4052,9 +4052,9 @@ CREATE TABLE copy_t (a integer, b text);
 SELECT public.create_hypertable('copy_t', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+       create_hypertable        
+--------------------------------
+ (19,regress_rls_schema,copy_t)
 (1 row)
 
 CREATE POLICY p1 ON copy_t USING (a % 2 = 0);
@@ -4145,9 +4145,9 @@ CREATE TABLE copy_rel_to (a integer, b text);
 SELECT public.create_hypertable('copy_rel_to', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+          create_hypertable          
+-------------------------------------
+ (20,regress_rls_schema,copy_rel_to)
 (1 row)
 
 CREATE POLICY p1 ON copy_rel_to USING (a % 2 = 0);
@@ -4221,9 +4221,9 @@ CREATE TABLE current_check (currentid int, payload text, rlsuser text);
 SELECT public.create_hypertable('current_check', 'currentid', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "currentid"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+           create_hypertable           
+---------------------------------------
+ (21,regress_rls_schema,current_check)
 (1 row)
 
 GRANT ALL ON current_check TO PUBLIC;
@@ -4464,9 +4464,9 @@ CREATE TABLE t (c int);
 SELECT public.create_hypertable('t', 'c', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "c"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (22,regress_rls_schema,t)
 (1 row)
 
 CREATE POLICY p ON t USING (c % 2 = 1);
@@ -4503,18 +4503,18 @@ CREATE TABLE r1 (a int);
 SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (23,regress_rls_schema,r1)
 (1 row)
 
 CREATE TABLE r2 (a int);
 SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (24,regress_rls_schema,r2)
 (1 row)
 
 INSERT INTO r1 VALUES (10), (20);
@@ -4599,9 +4599,9 @@ CREATE TABLE r1 (a int);
 SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (25,regress_rls_schema,r1)
 (1 row)
 
 INSERT INTO r1 VALUES (10), (20);
@@ -4654,9 +4654,9 @@ CREATE TABLE r2 (a int REFERENCES r1);
 SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (26,regress_rls_schema,r2)
 (1 row)
 
 INSERT INTO r1 VALUES (10), (20);
@@ -4698,9 +4698,9 @@ CREATE TABLE r2 (a int REFERENCES r1 ON DELETE CASCADE);
 SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (27,regress_rls_schema,r2)
 (1 row)
 
 INSERT INTO r1 VALUES (10), (20);
@@ -4731,9 +4731,9 @@ CREATE TABLE r2 (a int REFERENCES r1 ON UPDATE CASCADE);
 SELECT public.create_hypertable('r2', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (28,regress_rls_schema,r2)
 (1 row)
 
 INSERT INTO r1 VALUES (10), (20);
@@ -4772,9 +4772,9 @@ CREATE TABLE r1 (a int);
 SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (29,regress_rls_schema,r1)
 (1 row)
 
 CREATE POLICY p1 ON r1 FOR SELECT USING (false);
@@ -4807,9 +4807,9 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
 CREATE TABLE r1 (a int PRIMARY KEY);
 SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>100);
- create_hypertable 
--------------------
- 
+     create_hypertable      
+----------------------------
+ (30,regress_rls_schema,r1)
 (1 row)
 
 CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
@@ -4848,18 +4848,18 @@ CREATE TABLE dep1 (c1 int);
 SELECT public.create_hypertable('dep1', 'c1', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "c1"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+      create_hypertable       
+------------------------------
+ (31,regress_rls_schema,dep1)
 (1 row)
 
 CREATE TABLE dep2 (c1 int);
 SELECT public.create_hypertable('dep2', 'c1', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "c1"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+      create_hypertable       
+------------------------------
+ (32,regress_rls_schema,dep2)
 (1 row)
 
 CREATE POLICY dep_p1 ON dep1 TO regress_rls_bob USING (c1 > (select max(dep2.c1) from dep2));
@@ -4909,9 +4909,9 @@ CREATE TABLE dob_t1 (c1 int);
 SELECT public.create_hypertable('dob_t1', 'c1', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "c1"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+       create_hypertable        
+--------------------------------
+ (33,regress_rls_schema,dob_t1)
 (1 row)
 
 CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1 USING (true);
@@ -4944,9 +4944,9 @@ CREATE TABLE rls_tbl (c1 int);
 SELECT public.create_hypertable('rls_tbl', 'c1', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "c1"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+        create_hypertable        
+---------------------------------
+ (34,regress_rls_schema,rls_tbl)
 (1 row)
 
 ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
@@ -4958,9 +4958,9 @@ CREATE TABLE rls_tbl_force (c1 int);
 SELECT public.create_hypertable('rls_tbl_force', 'c1', chunk_time_interval=>2);
 NOTICE:  adding not-null constraint to column "c1"
 DETAIL:  Time dimensions cannot have NULL values
- create_hypertable 
--------------------
- 
+           create_hypertable           
+---------------------------------------
+ (35,regress_rls_schema,rls_tbl_force)
 (1 row)
 
 ALTER TABLE rls_tbl_force ENABLE ROW LEVEL SECURITY;

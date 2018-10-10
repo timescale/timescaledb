@@ -8,7 +8,7 @@ SELECT create_hypertable('hyper', 'time', chunk_time_interval => interval '20 da
 psql:include/plan_hashagg_load.sql:5: NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
- 
+ (1,public,hyper)
 (1 row)
 
 ALTER TABLE hyper
