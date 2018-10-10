@@ -32,6 +32,7 @@
 #include "hypertable.h"
 #include "errors.h"
 #include "process_utility.h"
+#include "compat.h"
 
 #define DEFAULT_EXTRA_CONSTRAINTS_SIZE 4
 

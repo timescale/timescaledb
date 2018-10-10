@@ -115,10 +115,10 @@ if (UNIX)
     bin/postgres
     HINTS
     $ENV{HOME}
+    PATH_SUFFIXES
     /opt/local/pgsql
     /usr/local/pgsql
     /usr/lib/postgresql
-    PATH_SUFFIXES
     bin
     10/bin
     9.6/bin

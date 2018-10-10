@@ -48,6 +48,7 @@
 #include "chunk.h"
 #include "plan_expand_hypertable.h"
 #include "plan_add_hashagg.h"
+#include "compat.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);

@@ -13,9 +13,9 @@
 #include <miscadmin.h>
 
 #include "catalog.h"
-#include "compat.h"
 #include "extension.h"
 #include "hypertable_cache.h"
+#include "compat.h"
 
 #include "bgw/scheduler.h"
 

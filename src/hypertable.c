@@ -34,7 +34,6 @@
 #include "dimension.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
-#include "compat.h"
 #include "subspace_store.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
@@ -49,6 +48,7 @@
 #include "copy.h"
 #include "utils.h"
 #include "funcapi.h"
+#include "compat.h"
 
 Oid
 rel_get_owner(Oid relid)

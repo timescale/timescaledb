@@ -13,13 +13,13 @@
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
-#include "compat.h"
 #include "config.h"
 #include "version.h"
 #include "guc.h"
+#include "hypertable.h"
+#include "compat.h"
 #include "telemetry.h"
 #include "metadata.h"
-#include "hypertable.h"
 #include "extension.h"
 #include "net/http.h"
 
