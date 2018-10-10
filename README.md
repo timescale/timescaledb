@@ -133,6 +133,8 @@ cd build && make
 make install
 ```
 
+Note, if you have multiple versions of PostgreSQL installed you can specify the path to `pg_config` that should be used by using `./bootstrap -DPG_CONFIG=/path/to/pg_config`.
+
 Please see our [additional configuration instructions](https://docs.timescale.com/latest/getting-started/installation#update-postgresql-conf).
 
 #### Building from source (Windows)
