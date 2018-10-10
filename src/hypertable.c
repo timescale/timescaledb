@@ -19,7 +19,6 @@
 #include <nodes/value.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits_fn.h>
-#include <catalog/pg_constraint_fn.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_proc.h>
