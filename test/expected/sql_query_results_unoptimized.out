@@ -8,9 +8,9 @@ CREATE TABLE PUBLIC.hyper_1 (
 );
 CREATE INDEX "time_plain" ON PUBLIC.hyper_1 (time DESC, series_0);
 SELECT * FROM create_hypertable('"public"."hyper_1"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
- create_hypertable 
--------------------
- 
+ hypertable_id | schema_name | table_name 
+---------------+-------------+------------
+             1 | public      | hyper_1
 (1 row)
 
 INSERT INTO hyper_1 SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
@@ -23,9 +23,9 @@ CREATE TABLE PUBLIC.hyper_1_tz (
 );
 CREATE INDEX "time_plain_tz" ON PUBLIC.hyper_1_tz (time DESC, series_0);
 SELECT * FROM create_hypertable('"public"."hyper_1_tz"'::regclass, 'time'::name, number_partitions => 1, create_default_indexes=>false);
- create_hypertable 
--------------------
- 
+ hypertable_id | schema_name | table_name 
+---------------+-------------+------------
+             2 | public      | hyper_1_tz
 (1 row)
 
 INSERT INTO hyper_1_tz SELECT to_timestamp(ser), ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
@@ -38,9 +38,9 @@ CREATE TABLE PUBLIC.hyper_1_int (
 );
 CREATE INDEX "time_plain_int" ON PUBLIC.hyper_1_int (time DESC, series_0);
 SELECT * FROM create_hypertable('"public"."hyper_1_int"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>10000, create_default_indexes=>FALSE);
- create_hypertable 
--------------------
- 
+ hypertable_id | schema_name | table_name  
+---------------+-------------+-------------
+             3 | public      | hyper_1_int
 (1 row)
 
 INSERT INTO hyper_1_int SELECT ser, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;
@@ -53,9 +53,9 @@ CREATE TABLE PUBLIC.hyper_1_date (
 );
 CREATE INDEX "time_plain_date" ON PUBLIC.hyper_1_date (time DESC, series_0);
 SELECT * FROM create_hypertable('"public"."hyper_1_date"'::regclass, 'time'::name, number_partitions => 1, chunk_time_interval=>86400000000, create_default_indexes=>FALSE);
- create_hypertable 
--------------------
- 
+ hypertable_id | schema_name |  table_name  
+---------------+-------------+--------------
+             4 | public      | hyper_1_date
 (1 row)
 
 INSERT INTO hyper_1_date SELECT to_timestamp(ser)::date, ser, ser+10000, sqrt(ser::numeric) FROM generate_series(0,10000) ser;

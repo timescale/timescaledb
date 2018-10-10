@@ -34,9 +34,9 @@ GRANT :ROLE_DEFAULT_PERM_USER TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+ hypertable_id | schema_name |       table_name       
+---------------+-------------+------------------------
+             1 | test_schema | test_table_no_not_null
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -57,9 +57,9 @@ GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+ hypertable_id | schema_name | table_name 
+---------------+-------------+------------
+             2 | test_schema | test_table
 (1 row)
 
 -- Check that the insert block trigger exists
@@ -166,9 +166,9 @@ select * from _timescaledb_catalog.dimension;
 CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+    create_hypertable     
+--------------------------
+ (3,public,dim_test_time)
 (1 row)
 
 SELECT add_dimension('dim_test_time', 'time2', chunk_time_interval => INTERVAL '1 day');
@@ -197,9 +197,9 @@ NOTICE:  adding not-null constraint to column "time3"
 CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time2', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (4,public,dim_test_time2)
 (1 row)
 
 SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500);
@@ -260,9 +260,9 @@ NOTICE:  column "location" is already a dimension, skipping
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+     create_hypertable     
+---------------------------
+ (5,test_schema,test_1dim)
 (1 row)
 
 SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
@@ -324,9 +324,9 @@ ERROR:  table "test_migrate" is not empty
 select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
 NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
- create_hypertable 
--------------------
- 
+      create_hypertable       
+------------------------------
+ (6,test_schema,test_migrate)
 (1 row)
 
 --there should be two new chunks
@@ -374,18 +374,18 @@ select * from only _timescaledb_internal._hyper_6_5_chunk;
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+         create_hypertable          
+------------------------------------
+ (7,test_schema,test_migrate_empty)
 (1 row)
 
 CREATE TYPE test_type AS (time timestamp, temp float);
 CREATE TABLE test_table_of_type OF test_type;
 SELECT create_hypertable('test_table_of_type', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+       create_hypertable       
+-------------------------------
+ (8,public,test_table_of_type)
 (1 row)
 
 INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
@@ -398,9 +398,9 @@ NOTICE:  drop cascades to 3 other objects
 CREATE TABLE test_table_of_type (time timestamp, temp float);
 SELECT create_hypertable('test_table_of_type', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+       create_hypertable       
+-------------------------------
+ (9,public,test_table_of_type)
 (1 row)
 
 INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
@@ -470,9 +470,9 @@ ERROR:  invalid partitioning function
 -- Test that add_dimension fails due to invalid partitioning function
 select create_hypertable('test_schema.test_partfunc', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+       create_hypertable        
+--------------------------------
+ (10,test_schema,test_partfunc)
 (1 row)
 
 \set ON_ERROR_STOP 0

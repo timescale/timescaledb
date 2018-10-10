@@ -1,9 +1,9 @@
 CREATE TABLE drop_test(time timestamp, temp float8, device text);
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+  create_hypertable   
+----------------------
+ (1,public,drop_test)
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
@@ -46,9 +46,9 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 NOTICE:  extension "timescaledb" already exists, skipping
 -- Make the table a hypertable again
 SELECT create_hypertable('drop_test', 'time', 'device', 2);
- create_hypertable 
--------------------
- 
+  create_hypertable   
+----------------------
+ (1,public,drop_test)
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;

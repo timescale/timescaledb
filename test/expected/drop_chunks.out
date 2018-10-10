@@ -4,23 +4,23 @@ CREATE TABLE PUBLIC.drop_chunk_test3(time bigint, temp float8, device_id text);
 CREATE INDEX ON drop_chunk_test1(time DESC);
 SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval => 1, create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+      create_hypertable      
+-----------------------------
+ (1,public,drop_chunk_test1)
 (1 row)
 
 SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval => 1, create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+      create_hypertable      
+-----------------------------
+ (2,public,drop_chunk_test2)
 (1 row)
 
 SELECT create_hypertable('public.drop_chunk_test3', 'time', chunk_time_interval => 1, create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+      create_hypertable      
+-----------------------------
+ (3,public,drop_chunk_test3)
 (1 row)
 
 -- Add space dimensions to ensure chunks share dimension slices
@@ -537,17 +537,17 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+       create_hypertable       
+-------------------------------
+ (4,public,drop_chunk_test_ts)
 (1 row)
 
 CREATE TABLE PUBLIC.drop_chunk_test_tstz(time timestamptz, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_tstz', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+        create_hypertable        
+---------------------------------
+ (5,public,drop_chunk_test_tstz)
 (1 row)
 
 SET timezone = '+1';
@@ -626,9 +626,9 @@ ERROR:  cannot call drop_chunks with a timestamp without time zone on hypertable
 CREATE TABLE PUBLIC.drop_chunk_test_date(time date, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- 
+        create_hypertable        
+---------------------------------
+ (6,public,drop_chunk_test_date)
 (1 row)
 
 SET timezone = '+100';
