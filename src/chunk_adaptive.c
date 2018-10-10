@@ -225,10 +225,12 @@ relation_minmax_indexscan(Relation rel,
 	foreach(lc, indexlist)
 	{
 		Relation	idxrel;
+		Form_pg_attribute attr;
 
 		idxrel = index_open(lfirst_oid(lc), AccessShareLock);
+		attr = TupleDescAttr(idxrel->rd_att, 0);
 
-		if (idxrel->rd_att->attrs[0]->atttypid == atttype && namestrcmp(&idxrel->rd_att->attrs[0]->attname, NameStr(*attname)) == 0)
+		if (attr->atttypid == atttype && namestrcmp(&attr->attname, NameStr(*attname)) == 0)
 			res = minmax_indexscan(rel, idxrel, attnum, minmax);
 
 		index_close(idxrel, AccessShareLock);

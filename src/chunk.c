@@ -411,7 +411,8 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 	for (attno = 1; attno <= natts; attno++)
 	{
-		Form_pg_attribute attribute = tupleDesc->attrs[attno - 1];
+		Form_pg_attribute attribute = TupleDescAttr(tupleDesc, attno - 1);
+
 		char	   *attributeName = NameStr(attribute->attname);
 		HeapTuple	tuple;
 		Datum		options;

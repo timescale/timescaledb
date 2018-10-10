@@ -11,11 +11,11 @@
 #include <pg_config.h> // To get USE_OPENSSL from postgres build
 #include <utils/builtins.h>
 
-#include "compat.h"
 #include "version.h"
 #include "net/conn.h"
 #include "net/http.h"
 #include "utils.h"
+#include "compat.h"
 
 #define TELEMETRY_SCHEME "https"
 #define TELEMETRY_HOST "telemetry.timescale.com"

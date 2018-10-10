@@ -16,6 +16,7 @@
 #include "chunk_dispatch_plan.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_info.h"
+#include "compat.h"
 
 /*
  * Create a ChunkDispatchState node from this plan. This is the full execution
@@ -72,8 +73,8 @@ build_customscan_targetlist(Relation rel, List *targetlist)
 					 errmsg("table row type and query-specified row type do not match"),
 					 errdetail("Query has too many columns.")));
 
-		attr = tupdesc->attrs[attno++];
-
+		attr = TupleDescAttr(tupdesc, attno);
+		attno++;
 		if (attr->attisdropped)
 			expr = &makeConst(INT4OID,
 							  -1,

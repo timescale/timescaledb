@@ -305,7 +305,7 @@ get_adjusted_projection_info_onconflicupdate(ProjectionInfo *orig, List *update_
 		Form_pg_attribute attribute;
 
 		Assert(i < chunk_desc->natts);
-		attribute = chunk_desc->attrs[i];
+		attribute = TupleDescAttr(chunk_desc, i);
 
 		if (namestrcmp(&attribute->attname, t->resname) != 0)
 			elog(ERROR, "invalid translation of ON CONFLICT update statements");

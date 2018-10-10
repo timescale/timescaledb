@@ -39,7 +39,11 @@ create_index_colnames(Relation indexrel)
 	int			i;
 
 	for (i = 0; i < indexrel->rd_att->natts; i++)
-		colnames = lappend(colnames, pstrdup(NameStr(indexrel->rd_att->attrs[i]->attname)));
+	{
+		Form_pg_attribute attr = TupleDescAttr(indexrel->rd_att, i);
+
+		colnames = lappend(colnames, pstrdup(NameStr(attr->attname)));
+	}
 
 	return colnames;
 }
@@ -85,7 +89,7 @@ find_attno_by_attname(TupleDesc tupdesc, Name attname)
 
 	for (i = 0; i < tupdesc->natts; i++)
 	{
-		FormData_pg_attribute *attr = tupdesc->attrs[i];
+		FormData_pg_attribute *attr = TupleDescAttr(tupdesc, i);
 
 		if (strncmp(NameStr(attr->attname), NameStr(*attname), NAMEDATALEN) == 0)
 			return attr->attnum;
@@ -100,7 +104,7 @@ find_attname_by_attno(TupleDesc tupdesc, AttrNumber attno)
 
 	for (i = 0; i < tupdesc->natts; i++)
 	{
-		FormData_pg_attribute *attr = tupdesc->attrs[i];
+		FormData_pg_attribute *attr = TupleDescAttr(tupdesc, i);
 
 		if (attr->attnum == attno)
 			return &attr->attname;
@@ -155,7 +159,7 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 
 	for (i = 0; i < idxrel->rd_att->natts; i++)
 	{
-		FormData_pg_attribute *idxattr = idxrel->rd_att->attrs[i];
+		FormData_pg_attribute *idxattr = TupleDescAttr(idxrel->rd_att, i);
 		AttrNumber	attno = find_attno_by_attname(chunkrel->rd_att, &idxattr->attname);
 
 		if (attno == InvalidAttrNumber)

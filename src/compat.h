@@ -19,6 +19,13 @@
 #define PG96 is_supported_pg_version_96(PG_VERSION_NUM)
 #define PG10 is_supported_pg_version_10(PG_VERSION_NUM)
 
+#ifndef TupleDescAttr
+/*
+   backport in PG10 commit d34a74dd
+*/
+#define TupleDescAttr(a, i) ((a)->attrs[(i)])
+#endif
+
 #if PG10
 
 #define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes) \
