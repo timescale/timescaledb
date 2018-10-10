@@ -746,6 +746,29 @@ process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
 	}
 }
 
+/* Visit all internal catalog tables with a schema column to check for applicable rename */
+static void
+process_rename_schema(RenameStmt *stmt)
+{
+	int			i = 0;
+
+	/* Block any renames of our internal schemas */
+	for (i = 0; i < NUM_TIMESCALEDB_SCHEMAS; i++)
+	{
+		if (strncmp(stmt->subname, timescaledb_schema_names[i], NAMEDATALEN) == 0)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+					 errmsg("cannot rename schemas used by the TimescaleDB extension")));
+			return;
+		}
+	}
+
+	chunks_rename_schema_name(stmt->subname, stmt->newname);
+	dimensions_rename_schema_name(stmt->subname, stmt->newname);
+	hypertables_rename_schema_name(stmt->subname, stmt->newname);
+}
+
 static void
 rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -816,17 +839,24 @@ static void
 process_rename(Node *parsetree)
 {
 	RenameStmt *stmt = (RenameStmt *) parsetree;
-	Oid			relid;
+	Oid			relid = InvalidOid;
 	Cache	   *hcache;
 
-	if (NULL == stmt->relation)
-		/* Not an object we are interested in */
-		return;
-
-	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-
-	if (!OidIsValid(relid))
-		return;
+	/* Only get the relid if it exists for this stmt */
+	if (NULL != stmt->relation)
+	{
+		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+		if (!OidIsValid(relid))
+			return;
+	}
+	else
+	{
+		/*
+		 * stmt->relation never be NULL unless we are renaming a schema
+		 */
+		if (stmt->renameType != OBJECT_SCHEMA)
+			return;
+	}
 
 	hcache = hypertable_cache_pin();
 
@@ -843,6 +873,9 @@ process_rename(Node *parsetree)
 			break;
 		case OBJECT_TABCONSTRAINT:
 			process_rename_constraint(hcache, relid, stmt);
+			break;
+		case OBJECT_SCHEMA:
+			process_rename_schema(stmt);
 			break;
 		default:
 			break;

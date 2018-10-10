@@ -65,6 +65,7 @@ extern Tablespace *hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 extern char *hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
 extern Tablespace *hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset);
 extern bool hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
+extern void hypertables_rename_schema_name(const char *old_name, const char *new_name);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock) \
 	hypertable_scan_with_memory_context(schema, table, tuple_found, data, lockmode, tuplock, CurrentMemoryContext)

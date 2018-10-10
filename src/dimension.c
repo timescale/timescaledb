@@ -1089,3 +1089,46 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 
 	PG_RETURN_VOID();
 }
+
+/* Used as a tuple found function */
+static bool
+dimension_rename_schema_name(TupleInfo *ti, void *data)
+{
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_dimension *dimension = (FormData_dimension *) GETSTRUCT(tuple);
+
+	/* Rename schema name */
+	namestrcpy(&dimension->partitioning_func_schema, (const char *) data);
+	catalog_update(ti->scanrel, tuple);
+	heap_freetuple(tuple);
+	/* Return true to keep going */
+	return true;
+}
+
+/* Go through internal dimensions table and rename all relevant schema */
+void
+dimensions_rename_schema_name(char *old_name, char *new_name)
+{
+	NameData	old_schema_name;
+	ScanKeyData scankey[1];
+	Catalog    *catalog = catalog_get();
+
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[DIMENSION].id,
+		.index = InvalidOid,
+		.nkeys = 1,
+		.scankey = scankey,
+		.tuple_found = dimension_rename_schema_name,
+		.data = new_name,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	namestrcpy(&old_schema_name, old_name);
+
+	ScanKeyInit(&scankey[0], Anum_dimension_partitioning_func_schema,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				NameGetDatum(&old_schema_name));
+
+	scanner_scan(&scanctx);
+}

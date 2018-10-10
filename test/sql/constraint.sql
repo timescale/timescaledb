@@ -561,3 +561,19 @@ BEGIN;
   SELECT 1;
 COMMIT;
 \set ON_ERROR_STOP 1
+
+-- Make sure renaming schemas won't break dropping constraints
+\c single :ROLE_SUPERUSER
+CREATE TABLE hyper_unique (
+  time BIGINT NOT NULL UNIQUE,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+
+SELECT * FROM create_hypertable('hyper_unique', 'time', chunk_time_interval => 10, associated_schema_name => 'my_associated_schema');
+
+INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
+
+ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
+
+ALTER TABLE hyper_unique DROP CONSTRAINT hyper_unique_time_key;

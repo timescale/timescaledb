@@ -1410,3 +1410,46 @@ chunk_set_schema(Chunk *chunk, const char *newschema)
 
 	return chunk_update_form(&chunk->fd);
 }
+
+/* Used as a tuple found function */
+static bool
+chunk_rename_schema_name(TupleInfo *ti, void *data)
+{
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_chunk *chunk = (FormData_chunk *) GETSTRUCT(tuple);
+
+	/* Rename schema name */
+	namestrcpy(&chunk->schema_name, (char *) data);
+	catalog_update(ti->scanrel, tuple);
+	heap_freetuple(tuple);
+	/* Return true to keep going */
+	return true;
+}
+
+/* Go through the internal chunk table and rename all matching schemas */
+void
+chunks_rename_schema_name(char *old_schema, char *new_schema)
+{
+	NameData	old_schema_name;
+	ScanKeyData scankey[1];
+	Catalog    *catalog = catalog_get();
+
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[CHUNK].id,
+		.index = CATALOG_INDEX(catalog, CHUNK, CHUNK_SCHEMA_NAME_INDEX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.tuple_found = chunk_rename_schema_name,
+		.data = new_schema,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	namestrcpy(&old_schema_name, old_schema);
+
+	ScanKeyInit(&scankey[0], Anum_chunk_schema_name_idx_schema_name,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				NameGetDatum(&old_schema_name));
+
+	scanner_scan(&scanctx);
+}
