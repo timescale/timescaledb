@@ -1430,11 +1430,9 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 static void
 process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	Oid			tspc_oid = get_rel_tablespace(ht->main_table_relid);
 	NameData	tspc_name;
 	Tablespaces *tspcs;
 
-	Assert(OidIsValid(tspc_oid));
 	namestrcpy(&tspc_name, cmd->name);
 
 	tspcs = tablespace_scan(ht->fd.id);
