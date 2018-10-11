@@ -9,7 +9,8 @@ typedef enum BgwMessageType
 {
 	STOP = 0,
 	START,
-	RESTART
+	RESTART,
+	REGISTER_CREATEDB,
 } BgwMessageType;
 
 typedef struct BgwMessage
@@ -19,8 +20,6 @@ typedef struct BgwMessage
 	pid_t		sender_pid;
 	Oid			db_oid;
 	dsm_handle	ack_dsm_handle;
-
-
 } BgwMessage;
 
 extern bool bgw_message_send_and_wait(BgwMessageType message, Oid db_oid);
