@@ -1,3 +1,9 @@
+/*
+ * The contents and feature provided by this file (and its associated header
+ * file) -- adaptive chunking -- are currently in BETA.
+ * Feedback, suggestions, and bugs should be reported
+ * on the GitHub repository issues page, or in our public slack.
+ */
 #include <postgres.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
@@ -25,6 +31,10 @@
  * deterministically. */
 static int64 fixed_memory_cache_size = -1;
 
+/*
+ * Takes a PostgreSQL text representation of data (e.g., 40MB) and converts it
+ * into a int64 for calculations
+ */
 static int64
 convert_text_memory_amount_to_bytes(const char *memory_amount)
 {
@@ -230,6 +240,11 @@ relation_minmax_indexscan(Relation rel,
 	return res;
 }
 
+/*
+ * Determines if a table has an appropriate index for finding the minimum and
+ * maximum time value. This would be an index whose first column is the same as
+ * the column used for time partitioning.
+ */
 static bool
 table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
 {
@@ -569,6 +584,12 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(chunk_interval);
 }
 
+/*
+ * Validate that the provided function in the catalog can be used for
+ * determining a new chunk size, i.e., has form (int,bigint,bigint) -> bigint.
+ *
+ * Parameter 'info' will be updated with the function's information
+ */
 static void
 chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info)
 {
@@ -612,6 +633,13 @@ chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info)
 	ReleaseSysCache(tuple);
 }
 
+/*
+ * Parse the target size text into an integer amount of bytes.
+ *
+ * 'off' / 'disable' - returns a target of 0
+ * 'estimate' - returns a target based on number of bytes in shared memory
+ * 'XXMB' / etc - converts from PostgreSQL pretty text into number of bytes
+ */
 static int64
 chunk_target_size_in_bytes(const text *target_size_text)
 {
