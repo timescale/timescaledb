@@ -12,7 +12,7 @@
 
 /* This is where versioned-extension facing functions live. They shouldn't live anywhere else. */
 
-const int32 ts_bgw_loader_api_version = 1;
+const int32 ts_bgw_loader_api_version = 2;
 
 TS_FUNCTION_INFO_V1(ts_bgw_worker_reserve);
 TS_FUNCTION_INFO_V1(ts_bgw_worker_release);
@@ -22,6 +22,8 @@ TS_FUNCTION_INFO_V1(ts_bgw_db_workers_start);
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_stop);
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_restart);
+
+TS_FUNCTION_INFO_V1(ts_bgw_db_workers_start_or_restart);
 
 void
 bgw_interface_register_api_version()
@@ -71,4 +73,10 @@ Datum
 ts_bgw_db_workers_restart(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(bgw_message_send_and_wait(RESTART, MyDatabaseId));
+}
+
+Datum
+ts_bgw_db_workers_start_or_restart(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_BOOL(bgw_message_send_and_wait(START_OR_RESTART, MyDatabaseId));
 }

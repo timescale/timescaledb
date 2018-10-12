@@ -66,3 +66,11 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.installation_metadata (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.installation_metadata', $$WHERE key='exported_uuid'$$);
 
 INSERT INTO _timescaledb_catalog.installation_metadata SELECT 'install_timestamp', to_timestamp(0);
+
+--Create and run the start_or_restart function here, in the first version that has a scheduler, see loader readme for more details.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.start_or_restart_background_workers()
+RETURNS BOOL
+AS '@LOADER_PATHNAME@', 'ts_bgw_db_workers_start_or_restart'
+LANGUAGE C VOLATILE;
+
+SELECT _timescaledb_internal.start_or_restart_background_workers();
