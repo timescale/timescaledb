@@ -8,6 +8,7 @@ message(STATUS "Using pg_regress ${PG_REGRESS}")
 
 find_program(PG_ISOLATION_REGRESS pg_isolation_regress
   HINTS
+  ${BINDIR}/
   ${PG_PKGLIBDIR}/pgxs/src/test/isolation/
   ${PG_SOURCE_DIR}/src/test/isolation
   REQUIRED)
