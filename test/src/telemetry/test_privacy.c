@@ -10,7 +10,6 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 
-#include "compat.h"
 #include "telemetry/telemetry.h"
 #include "telemetry/uuid.h"
 
