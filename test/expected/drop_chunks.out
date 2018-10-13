@@ -25,21 +25,21 @@ NOTICE:  adding not-null constraint to column "time"
 
 -- Add space dimensions to ensure chunks share dimension slices
 SELECT add_dimension('public.drop_chunk_test1', 'device_id', 2);
- add_dimension 
----------------
- 
+             add_dimension             
+---------------------------------------
+ (4,public,drop_chunk_test1,device_id)
 (1 row)
 
 SELECT add_dimension('public.drop_chunk_test2', 'device_id', 2);
- add_dimension 
----------------
- 
+             add_dimension             
+---------------------------------------
+ (5,public,drop_chunk_test2,device_id)
 (1 row)
 
 SELECT add_dimension('public.drop_chunk_test3', 'device_id', 2);
- add_dimension 
----------------
- 
+             add_dimension             
+---------------------------------------
+ (6,public,drop_chunk_test3,device_id)
 (1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end

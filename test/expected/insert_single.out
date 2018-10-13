@@ -283,9 +283,9 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT add_dimension('"3dim"', 'location', 2);
- add_dimension 
----------------
- 
+      add_dimension       
+--------------------------
+ (9,public,3dim,location)
 (1 row)
 
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:01', 22.5, 'blue', 'nyc');

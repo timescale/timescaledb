@@ -506,7 +506,7 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	return false;
 }
 
-static void
+static int32
 dimension_insert_relation(Relation rel, int32 hypertable_id,
 						  Name colname, Oid coltype, int16 num_slices,
 						  regproc partitioning_func, int64 interval_length)
@@ -515,6 +515,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id,
 	Datum		values[Natts_dimension];
 	bool		nulls[Natts_dimension] = {false};
 	CatalogSecurityContext sec_ctx;
+	int32		dimension_id;
 
 	values[AttrNumberGetAttrOffset(Anum_dimension_hypertable_id)] = Int32GetDatum(hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_column_name)] = NameGetDatum(colname);
@@ -542,12 +543,15 @@ dimension_insert_relation(Relation rel, int32 hypertable_id,
 	}
 
 	catalog_become_owner(catalog_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_dimension_id)] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), DIMENSION));
+	dimension_id = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), DIMENSION));
+	values[AttrNumberGetAttrOffset(Anum_dimension_id)] = dimension_id;
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);
+
+	return dimension_id;
 }
 
-static void
+static int32
 dimension_insert(int32 hypertable_id,
 				 Name colname,
 				 Oid coltype,
@@ -557,10 +561,12 @@ dimension_insert(int32 hypertable_id,
 {
 	Catalog    *catalog = catalog_get();
 	Relation	rel;
+	int32		dimension_id;
 
 	rel = heap_open(catalog->tables[DIMENSION].id, RowExclusiveLock);
-	dimension_insert_relation(rel, hypertable_id, colname, coltype, num_slices, partitioning_func, interval_length);
+	dimension_id = dimension_insert_relation(rel, hypertable_id, colname, coltype, num_slices, partitioning_func, interval_length);
 	heap_close(rel, RowExclusiveLock);
+	return dimension_id;
 }
 
 int
@@ -995,8 +1001,35 @@ dimension_add_from_info(DimensionInfo *info)
 
 	Assert(info->ht != NULL);
 
-	dimension_insert(info->ht->fd.id, info->colname, info->coltype,
-					 info->num_slices, info->partitioning_func, info->interval);
+	info->dimension_id = dimension_insert(info->ht->fd.id, info->colname, info->coltype,
+										  info->num_slices, info->partitioning_func, info->interval);
+}
+
+/*
+ * Create a datum to be returned by add_dimension DDL function
+ */
+static Datum
+dimension_create_datum(FunctionCallInfo fcinfo, DimensionInfo *info)
+{
+	TupleDesc	tupdesc;
+	HeapTuple	tuple;
+	Datum		values[Natts_add_dimension];
+	bool		nulls[Natts_add_dimension] = {false};
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in "
+						"context that cannot accept type record")));
+
+	tupdesc = BlessTupleDesc(tupdesc);
+	values[AttrNumberGetAttrOffset(Anum_add_dimension_id)] = info->dimension_id;
+	values[AttrNumberGetAttrOffset(Anum_add_dimension_schema_name)] = NameGetDatum(&info->ht->fd.schema_name);
+	values[AttrNumberGetAttrOffset(Anum_add_dimension_table_name)] = NameGetDatum(&info->ht->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_add_dimension_column_name)] = NameGetDatum(info->colname);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
 }
 
 TS_FUNCTION_INFO_V1(ts_dimension_add);
@@ -1026,6 +1059,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
 	};
+	Datum		retval = 0;
 
 	hypertable_permissions_check(info.table_relid, GetUserId());
 
@@ -1083,11 +1117,15 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		 */
 		info.ht = hypertable_get_by_id(info.ht->fd.id);
 		indexing_verify_indexes(info.ht);
+		retval = dimension_create_datum(fcinfo, &info);
 	}
 
 	cache_release(hcache);
 
-	PG_RETURN_VOID();
+	if (retval)
+		PG_RETURN_DATUM(retval);
+	else
+		PG_RETURN_NULL();
 }
 
 /* Used as a tuple found function */
