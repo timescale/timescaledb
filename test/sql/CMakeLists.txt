@@ -73,7 +73,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   endif (USE_OPENSSL)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-if (${PG_VERSION_MAJOR} EQUAL "10")
+if (${PG_VERSION_MAJOR} GREATER "9")
   list(APPEND TEST_FILES
     generated_as_identity.sql
     rowsecurity-10.sql)
