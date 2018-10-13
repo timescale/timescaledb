@@ -205,6 +205,30 @@ SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
 SELECT * FROM _timescaledb_catalog.tablespace;
 
+-- tablespace functions should handle the default tablespace just as they do others
+SELECT attach_tablespace('pg_default', 'hyper_in_space');
+SELECT attach_tablespace('tablespace2', 'hyper_in_space');
+
+SELECT tablename, tablespace FROM pg_tables
+WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
+SELECT * FROM _timescaledb_catalog.tablespace;
+
+INSERT INTO hyper_in_space(time, temp, device) VALUES (12, 22, 1);
+INSERT INTO hyper_in_space(time, temp, device) VALUES (13, 23, 2);
+
+SELECT tablename, tablespace FROM pg_tables
+WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
+
+
+SELECT detach_tablespace('pg_default', 'hyper_in_space');
+
+ALTER TABLE hyper_in_space SET TABLESPACE pg_default;
+
+SELECT tablename, tablespace FROM pg_tables
+WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
+
+SELECT detach_tablespace('pg_default', 'hyper_in_space');
+
 DROP TABLE hyper_in_space;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

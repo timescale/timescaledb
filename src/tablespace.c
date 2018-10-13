@@ -498,19 +498,33 @@ tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attach
 
 	ownerid = hypertable_permissions_check(hypertable_oid, GetUserId());
 
+
 	/*
-	 * Note that we check against the table owner rather than the current user
-	 * here, since we're not actually creating a table using this tablespace
-	 * at this point
+	 * Only check permissions on tablespace if it is not the database default.
+	 * In usual case users can create tables in their database which will use
+	 * the default tablespace of the database. This condition makes sure they
+	 * can also always move a table from another tablespace to the default of
+	 * their own database. Related to this issue in postgres core:
+	 * https://www.postgresql.org/message-id/52DC8AEA.7090507%402ndquadrant.com
+	 * Which was handled in a similar way. (See
+	 * tablecmds.c::ATPrepSetTableSpace)
 	 */
-	aclresult = pg_tablespace_aclcheck(tspc_oid, ownerid, ACL_CREATE);
+	if (tspc_oid != MyDatabaseTableSpace)
+	{
 
-	if (aclresult != ACLCHECK_OK)
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for tablespace \"%s\" by table owner \"%s\"",
-						NameStr(*tspcname), GetUserNameFromId(ownerid, true))));
+		/*
+		 * Note that we check against the table owner rather than the current
+		 * user here, since we're not actually creating a table using this
+		 * tablespace at this point
+		 */
+		aclresult = pg_tablespace_aclcheck(tspc_oid, ownerid, ACL_CREATE);
 
+		if (aclresult != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for tablespace \"%s\" by table owner \"%s\"",
+							NameStr(*tspcname), GetUserNameFromId(ownerid, true))));
+	}
 	hcache = hypertable_cache_pin();
 	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
 
