@@ -77,9 +77,9 @@ SELECT * FROM _timescaledb_internal.get_create_command('test_table');
 
 --test adding one more closed dimension
 select add_dimension('test_schema.test_table', 'location', 4);
- add_dimension 
----------------
- 
+            add_dimension            
+-------------------------------------
+ (5,test_schema,test_table,location)
 (1 row)
 
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
@@ -140,9 +140,9 @@ ERROR:  get_create_command only supports hypertables with up to 2 dimensions
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
 NOTICE:  adding not-null constraint to column "id"
- add_dimension 
----------------
- 
+         add_dimension         
+-------------------------------
+ (6,test_schema,test_table,id)
 (1 row)
 
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
@@ -173,9 +173,9 @@ NOTICE:  adding not-null constraint to column "time"
 
 SELECT add_dimension('dim_test_time', 'time2', chunk_time_interval => INTERVAL '1 day');
 NOTICE:  adding not-null constraint to column "time2"
- add_dimension 
----------------
- 
+         add_dimension          
+--------------------------------
+ (8,public,dim_test_time,time2)
 (1 row)
 
 -- Test add_dimension: only integral should work on BIGINT columns
@@ -188,9 +188,9 @@ ERROR:  invalid interval: must be an interval or integer type
 \set ON_ERROR_STOP 1
 SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 500);
 NOTICE:  adding not-null constraint to column "time3"
- add_dimension 
----------------
- 
+         add_dimension          
+--------------------------------
+ (9,public,dim_test_time,time3)
 (1 row)
 
 -- Test add_dimension: integrals should work on TIMESTAMPTZ columns
@@ -205,9 +205,9 @@ NOTICE:  adding not-null constraint to column "time"
 SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500);
 WARNING:  unexpected interval: smaller than one second
 NOTICE:  adding not-null constraint to column "time2"
- add_dimension 
----------------
- 
+          add_dimension           
+----------------------------------
+ (11,public,dim_test_time2,time2)
 (1 row)
 
 --adding a dimension twice should not fail with 'if_not_exists'
@@ -487,8 +487,8 @@ ERROR:  invalid partitioning function
 \set ON_ERROR_STOP 1
 -- A valid function should work:
 select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');
- add_dimension 
----------------
- 
+             add_dimension             
+---------------------------------------
+ (18,test_schema,test_partfunc,device)
 (1 row)
 

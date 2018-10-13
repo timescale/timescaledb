@@ -122,9 +122,9 @@ SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => 'bad_fu
 ERROR:  function "bad_func" does not exist at character 74
 \set ON_ERROR_STOP 1
 SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
- add_dimension 
----------------
- 
+          add_dimension           
+----------------------------------
+ (9,public,part_add_dim,location)
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -287,9 +287,9 @@ ERROR:  cannot create a unique index without the column "device" (used in partit
 DROP INDEX time_index;
 CREATE UNIQUE INDEX time_space_index ON hyper_with_index(time, device);
 SELECT add_dimension('hyper_with_index', 'device', 4);
- add_dimension 
----------------
- 
+            add_dimension            
+-------------------------------------
+ (23,public,hyper_with_index,device)
 (1 row)
 
 CREATE TABLE hyper_with_primary(time TIMESTAMPTZ PRIMARY KEY, temp float, device int);

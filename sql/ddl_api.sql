@@ -138,7 +138,7 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
     if_not_exists           BOOLEAN = FALSE
-) RETURNS VOID
+) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION attach_tablespace(

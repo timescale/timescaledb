@@ -86,6 +86,7 @@ typedef struct Hypertable Hypertable;
 typedef struct DimensionInfo
 {
 	Oid			table_relid;
+	int32		dimension_id;
 	Name		colname;
 	Oid			coltype;
 	DimensionType type;
@@ -106,6 +107,19 @@ typedef struct DimensionInfo
 	(OidIsValid((di)->table_relid) &&									\
 	 (di)->colname != NULL &&											\
 	 ((di)->num_slices_is_set || OidIsValid((di)->interval_datum)))
+
+/* add_dimension record attribute numbers */
+enum Anum_add_dimension
+{
+	Anum_add_dimension_id = 1,
+	Anum_add_dimension_schema_name,
+	Anum_add_dimension_table_name,
+	Anum_add_dimension_column_name,
+	_Anum_add_dimension_max,
+};
+
+#define Natts_add_dimension \
+	(_Anum_add_dimension_max - 1)
 
 extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension, MemoryContext mctx);
 extern DimensionSlice *dimension_calculate_default_slice(Dimension *dim, int64 value);
