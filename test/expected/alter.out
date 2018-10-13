@@ -408,6 +408,78 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 ----+---------------+-----------------
 (0 rows)
 
+-- tablespace functions should handle the default tablespace just as they do others
+SELECT attach_tablespace('pg_default', 'hyper_in_space');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT attach_tablespace('tablespace2', 'hyper_in_space');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT tablename, tablespace FROM pg_tables
+WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
+     tablename     | tablespace  
+-------------------+-------------
+ _hyper_4_10_chunk | tablespace1
+ _hyper_4_11_chunk | tablespace1
+ _hyper_4_12_chunk | tablespace1
+ _hyper_4_13_chunk | 
+ hyper_in_space    | tablespace1
+(5 rows)
+
+SELECT * FROM _timescaledb_catalog.tablespace;
+ id | hypertable_id | tablespace_name 
+----+---------------+-----------------
+  7 |             4 | pg_default
+  8 |             4 | tablespace2
+(2 rows)
+
+INSERT INTO hyper_in_space(time, temp, device) VALUES (12, 22, 1);
+INSERT INTO hyper_in_space(time, temp, device) VALUES (13, 23, 2);
+SELECT tablename, tablespace FROM pg_tables
+WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
+     tablename     | tablespace  
+-------------------+-------------
+ _hyper_4_10_chunk | tablespace1
+ _hyper_4_11_chunk | tablespace1
+ _hyper_4_12_chunk | tablespace1
+ _hyper_4_13_chunk | 
+ _hyper_4_14_chunk | 
+ _hyper_4_15_chunk | tablespace2
+ hyper_in_space    | tablespace1
+(7 rows)
+
+SELECT detach_tablespace('pg_default', 'hyper_in_space');
+ detach_tablespace 
+-------------------
+                 1
+(1 row)
+
+ALTER TABLE hyper_in_space SET TABLESPACE pg_default;
+SELECT tablename, tablespace FROM pg_tables
+WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
+     tablename     | tablespace 
+-------------------+------------
+ _hyper_4_10_chunk | 
+ _hyper_4_11_chunk | 
+ _hyper_4_12_chunk | 
+ _hyper_4_13_chunk | 
+ _hyper_4_14_chunk | 
+ _hyper_4_15_chunk | 
+ hyper_in_space    | 
+(7 rows)
+
+SELECT detach_tablespace('pg_default', 'hyper_in_space');
+ detach_tablespace 
+-------------------
+                 1
+(1 row)
+
 DROP TABLE hyper_in_space;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
@@ -536,8 +608,8 @@ SELECT * from _timescaledb_catalog.hypertable;
 SELECT * from _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |     table_name     
 ----+---------------+-----------------------+--------------------
- 20 |            11 | new_associated_schema | _hyper_11_20_chunk
- 21 |            11 | new_associated_schema | _hyper_11_21_chunk
+ 22 |            11 | new_associated_schema | _hyper_11_22_chunk
+ 23 |            11 | new_associated_schema | _hyper_11_23_chunk
 (2 rows)
 
 DROP TABLE my_table;
