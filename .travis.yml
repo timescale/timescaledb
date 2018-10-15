@@ -98,7 +98,7 @@ jobs:
     # This tests the formatting of a PR.
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
-      name: "pgindent"
+      name: "pgindent and license check"
       env:
         - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
       before_install:
@@ -112,6 +112,7 @@ jobs:
         - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make pgindent'
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/src /tmp/timescale_src'
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/test/src /tmp/timescale_test_src'
+        - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make licensecheck'
 
     - if: type = cron
       stage: test
