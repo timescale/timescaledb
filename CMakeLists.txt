@@ -300,3 +300,10 @@ endif (UNIX)
 add_subdirectory(test)
 add_subdirectory(sql)
 add_subdirectory(src)
+
+add_custom_target(licensecheck
+  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -c ${CMAKE_CURRENT_SOURCE_DIR}/src
+  COMMAND SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -s ${CMAKE_CURRENT_SOURCE_DIR}/sql
+  COMMAND SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -c ${CMAKE_CURRENT_SOURCE_DIR}/test
+  COMMAND SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -t ${CMAKE_CURRENT_SOURCE_DIR}/test
+  USES_TERMINAL)
