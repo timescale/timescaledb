@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+ *
+ * This file is licensed under the Apache License,
+ * see LICENSE-APACHE at the top level directory.
+ */
 /* This file will be used by the versioned timescaledb extension and the loader
  * Because we want the loader not to export symbols all files here should be static
  * and be included via #include "extension_utils.c" instead of the regular linking process

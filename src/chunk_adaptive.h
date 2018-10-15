@@ -1,3 +1,6 @@
+/*
+ * NOTE: adaptive chunking is still in BETA
+ */
 #ifndef TIMESCALEDB_CHUNK_ADAPTIVE_H
 #define TIMESCALEDB_CHUNK_ADAPTIVE_H
 

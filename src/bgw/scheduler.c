@@ -1,4 +1,10 @@
 /*
+ * Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+ *
+ * This file is licensed under the Apache License,
+ * see LICENSE-APACHE at the top level directory.
+ */
+/*
  * This is a scheduler that takes background jobs and schedules them appropriately
  *
  * Limitations: For now the jobs are only loaded when the scheduler starts and are not

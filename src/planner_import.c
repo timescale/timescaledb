@@ -1,4 +1,10 @@
 /*
+ * Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+ *
+ * This file is licensed under the Apache License,
+ * see LICENSE-APACHE at the top level directory.
+ */
+/*
  * This file contains functions copied verbatim from the PG core planner.
  * These function had to be copied since they were declared static in the core planner, but we need them for our
  * manipulations.
