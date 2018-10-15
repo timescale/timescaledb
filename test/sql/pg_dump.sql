@@ -45,10 +45,12 @@ CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 
 FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 
-SELECT count(*)
+-- Save the number of dependent objects so we can make sure we have the same number later
+SELECT count(*) as num_dependent_objects
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
-     AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+     AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb')
+\gset
 
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
@@ -93,7 +95,7 @@ VALUES (1357894000000000000, 'dev5', 1.5, 2);
 SET timescaledb.restoring='off';
 
 --should be same as count above
-SELECT count(*)
+SELECT count(*) = :num_dependent_objects as dependent_objects_match
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
@@ -135,4 +137,4 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         refobjid = (select oid from pg_extension where extname='timescaledb') AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
-        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
+        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb');

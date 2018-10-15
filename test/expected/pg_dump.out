@@ -81,15 +81,12 @@ FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
 
 CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 FOR EACH ROW EXECUTE PROCEDURE test_trigger();
-SELECT count(*)
+-- Save the number of dependent objects so we can make sure we have the same number later
+SELECT count(*) as num_dependent_objects
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
-     AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
- count 
--------
-   112
-(1 row)
-
+     AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb')
+\gset
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
    Column    |       Type       | Nullable 
 -------------+------------------+----------
@@ -277,13 +274,13 @@ ERROR:  cannot INSERT into hypertable "two_Partitions" during restore
 -- INSERTs below.
 SET timescaledb.restoring='off';
 --should be same as count above
-SELECT count(*)
+SELECT count(*) = :num_dependent_objects as dependent_objects_match
   FROM pg_depend
  WHERE refclassid = 'pg_extension'::regclass
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
- count 
--------
-   112
+ dependent_objects_match 
+-------------------------
+ t
 (1 row)
 
 --main table and chunk schemas should be the same
@@ -482,7 +479,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         refobjid = (select oid from pg_extension where extname='timescaledb') AND
         deptype = 'e' AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
-        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
+        AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb');
                  objid                  
 ----------------------------------------
  _timescaledb_internal.bgw_job_stat
