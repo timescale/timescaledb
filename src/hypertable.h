@@ -12,6 +12,7 @@
 
 #include "catalog.h"
 #include "dimension.h"
+#include "export.h"
 #include "tablespace.h"
 #include "scanner.h"
 
@@ -47,7 +48,7 @@ extern int	ts_number_of_hypertables(void);
 
 extern Oid	ts_rel_get_owner(Oid relid);
 extern List *ts_hypertable_get_all(void);
-extern Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
+extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern Oid	ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
@@ -62,9 +63,10 @@ extern int	ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions
 extern int	ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
 extern int	ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern Oid	ts_hypertable_id_to_relid(int32 hypertable_id);
+extern TSDLLEXPORT int ts_hypertable_relid_to_id(Oid relid);
 extern Chunk *ts_hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid	ts_hypertable_relid(RangeVar *rv);
-extern bool ts_is_hypertable(Oid relid);
+extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
 extern Tablespace *ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 extern char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);

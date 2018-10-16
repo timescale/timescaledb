@@ -1,5 +1,4 @@
 
-
 include("${PRIMARY_TEST_DIR}/test-defs.cmake")
 
 add_custom_target(installcheck-t
@@ -55,3 +54,4 @@ add_custom_target(isolationchecklocal-t
   USES_TERMINAL)
 
 add_subdirectory(sql)
+add_subdirectory(src)

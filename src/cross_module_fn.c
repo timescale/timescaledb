@@ -6,10 +6,41 @@
  */
 #include <postgres.h>
 #include <fmgr.h>
+#include <utils/timestamp.h>
 
 #include "export.h"
 #include "cross_module_fn.h"
 #include "guc.h"
+#include "bgw/job.h"
+
+TS_FUNCTION_INFO_V1(ts_add_drop_chunks_policy);
+TS_FUNCTION_INFO_V1(ts_add_recluster_policy);
+TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
+TS_FUNCTION_INFO_V1(ts_remove_recluster_policy);
+
+Datum
+ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->add_drop_chunks_policy(fcinfo));
+}
+
+Datum
+ts_add_recluster_policy(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->add_recluster_policy(fcinfo));
+}
+
+Datum
+ts_remove_drop_chunks_policy(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remove_drop_chunks_policy(fcinfo));
+}
+
+Datum
+ts_remove_recluster_policy(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remove_recluster_policy(fcinfo));
+}
 
 /*
  * casting a function pointer to a pointer of another type is undefined
@@ -24,6 +55,13 @@ error_no_default_fn()
 			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
 			 errhint("Buy a Timescale license to enable the functionality")));
 
+}
+
+static Datum
+error_no_default_fn_pg(PG_FUNCTION_ARGS)
+{
+	error_no_default_fn();
+	PG_RETURN_VOID();
 }
 
 static bool
@@ -45,6 +83,12 @@ add_telemetry_default(JsonbParseState *parseState)
 	error_no_default_fn();
 }
 
+static bool
+bgw_policy_job_execute_default_fn(BgwJob *job)
+{
+	error_no_default_fn();
+	return false;
+}
 
 /*
  * Define cross-module functions' default values:
@@ -57,6 +101,11 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.check_tsl_loaded = error_no_default_fn_bool_void,
 	.tsl_module_shutdown = error_no_default_fn,
 	.add_tsl_license_info_telemetry = add_telemetry_default,
+	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
+	.add_drop_chunks_policy = error_no_default_fn_pg,
+	.add_recluster_policy = error_no_default_fn_pg,
+	.remove_drop_chunks_policy = error_no_default_fn_pg,
+	.remove_recluster_policy = error_no_default_fn_pg,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

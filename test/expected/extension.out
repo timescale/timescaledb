@@ -16,6 +16,8 @@ ORDER BY proname;
              proname              
 ----------------------------------
  add_dimension
+ add_drop_chunks_policy
+ add_recluster_policy
  attach_tablespace
  chunk_relation_size
  chunk_relation_size_pretty
@@ -32,11 +34,13 @@ ORDER BY proname;
  indexes_relation_size
  indexes_relation_size_pretty
  last
+ remove_drop_chunks_policy
+ remove_recluster_policy
  set_adaptive_chunking
  set_chunk_time_interval
  set_number_partitions
  show_chunks
  show_tablespaces
  time_bucket
-(23 rows)
+(27 rows)
 

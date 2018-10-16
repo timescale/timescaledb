@@ -1,7 +1,8 @@
 set(SOURCES
   init.c
   license.c
-  telemetry.c)
+  telemetry.c
+)
 
 # Add test source code in Debug builds
 if (CMAKE_BUILD_TYPE MATCHES Debug)
@@ -14,10 +15,7 @@ set(TSL_LIBRARY_NAME ${PROJECT_NAME}-tsl)
 include(build-defs.cmake)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-# We don't yet have test-only C code, but once we do we'll want to uncomment
-# the following line
-#add_library(${TSL_LIBRARY_NAME} MODULE ${SOURCES} $<TARGET_OBJECTS:${TSL_TESTS_LIB_NAME}>)
-add_library(${TSL_LIBRARY_NAME} MODULE ${SOURCES})
+add_library(${TSL_LIBRARY_NAME} MODULE ${SOURCES} $<TARGET_OBJECTS:${TSL_TESTS_LIB_NAME}>)
 else ()
 add_library(${TSL_LIBRARY_NAME} MODULE ${SOURCES})
 endif ()
@@ -36,3 +34,5 @@ install(
 # if (WIN32)
 #   target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}-${PROJECT_VERSION_MOD}.lib)
 # endif(WIN32)
+
+add_subdirectory(bgw_policy)

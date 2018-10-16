@@ -325,5 +325,5 @@ add_custom_target(licensecheck-apache
   USES_TERMINAL)
 
 add_custom_target(licensecheck-timescale
-  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license.sh -e ${CMAKE_CURRENT_SOURCE_DIR}/tsl/src -u ${CMAKE_CURRENT_SOURCE_DIR}/tsl/test
+  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license.sh -e ${CMAKE_CURRENT_SOURCE_DIR}/tsl/src -u ${CMAKE_CURRENT_SOURCE_DIR}/tsl/test/sql -e ${CMAKE_CURRENT_SOURCE_DIR}/tsl/test/src
   USES_TERMINAL)

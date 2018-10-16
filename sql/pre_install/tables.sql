@@ -164,14 +164,14 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
     max_runtime         INTERVAL    NOT NULL,
     max_retries         INT         NOT NULL,
     retry_period        INTERVAL    NOT NULL,
-    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled'))
+    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'recluster', 'drop_chunks'))
 );
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
-    job_id                  INT         PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    job_id                  INTEGER         PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
     last_start              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_finish             TIMESTAMPTZ NOT NULL,
     next_start              TIMESTAMPTZ NOT NULL,
@@ -186,6 +186,34 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 );
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
+
+--Now we define the argument tables for available BGW policies.
+CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_recluster (
+    job_id          		INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id   		INTEGER     UNIQUE NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+	hypertable_index_name	NAME		NOT NULL
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_recluster', '');
+
+CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
+    job_id          		INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id   		INTEGER     UNIQUE NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+	older_than				INTERVAL    NOT NULL,
+	cascade					BOOLEAN
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
+
+----- End BGW policy table definitions
+
+-- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
+-- to determine whether to run a specific job on a specific chunk.
+CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (
+	job_id					INTEGER 	NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+	chunk_id				INTEGER		NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
+	num_times_job_run		INTEGER,
+	last_time_job_run		TIMESTAMPTZ,
+	UNIQUE(job_id,chunk_id)
+);
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.installation_metadata (
     key     NAME NOT NULL PRIMARY KEY,

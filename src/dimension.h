@@ -12,6 +12,7 @@
 #include <access/htup_details.h>
 
 #include "catalog.h"
+#include "export.h"
 #include "utils.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
@@ -132,7 +133,7 @@ extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, 
 extern DimensionSlice *ts_dimension_calculate_default_slice(Dimension *dim, int64 value);
 extern Point *ts_hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
 extern Dimension *ts_hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
-extern Dimension *ts_hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
+extern TSDLLEXPORT Dimension *ts_hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
 extern Dimension *ts_hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 extern DimensionVec *ts_dimension_get_slices(Dimension *dim);
 extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
