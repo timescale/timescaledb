@@ -1051,7 +1051,7 @@ ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot INSERT into hypertable \"%s\" during restore", relname),
-				 errhint("Set 'timescaledb.restoring' to 'OFF' after the restore process has finished.")));
+				 errhint("Set 'timescaledb.restoring' to 'off' after the restore process has finished.")));
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1165,11 +1165,11 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 				 errdetail("Migrate the data from the root table to chunks before running the UPDATE again."),
 				 errhint("Data can be migrated as follows:\n"
 						 "> BEGIN;\n"
-						 "> SET timescaledb.restoring = 'OFF';\n"
+						 "> SET timescaledb.restoring = 'off';\n"
 						 "> INSERT INTO \"%1$s\" SELECT * FROM ONLY \"%1$s\";\n"
-						 "> SET timescaledb.restoring = 'ON';\n"
+						 "> SET timescaledb.restoring = 'on';\n"
 						 "> TRUNCATE ONLY \"%1$s\";\n"
-						 "> SET timescaledb.restoring = 'OFF';\n"
+						 "> SET timescaledb.restoring = 'off';\n"
 						 "> COMMIT;", get_rel_name(relid))));
 
 	/* Now drop the old trigger */
