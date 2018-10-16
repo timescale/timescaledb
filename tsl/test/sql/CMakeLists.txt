@@ -1,5 +1,6 @@
 set(TEST_FILES
-    edition.sql)
+    edition.sql
+	tsl_tables.sql)
 
 list(SORT TEST_FILES)
 file(REMOVE ${TEST_SCHEDULE})

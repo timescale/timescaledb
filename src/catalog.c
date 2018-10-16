@@ -67,6 +67,18 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = INSTALLATION_METADATA_TABLE_NAME,
 	},
+	[BGW_POLICY_RECLUSTER] = {
+		.schema_name = CONFIG_SCHEMA_NAME,
+		.table_name = BGW_POLICY_RECLUSTER_TABLE_NAME,
+	},
+	[BGW_POLICY_DROP_CHUNKS] = {
+		.schema_name = CONFIG_SCHEMA_NAME,
+		.table_name = BGW_POLICY_DROP_CHUNKS_TABLE_NAME,
+	},
+	[BGW_POLICY_CHUNK_STATS] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.table_name = BGW_POLICY_CHUNK_STATS_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -141,6 +153,26 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[INSTALLATION_METADATA_PKEY_IDX] = "installation_metadata_pkey",
 		}
+	},
+	[BGW_POLICY_RECLUSTER] = {
+		.length = _MAX_BGW_POLICY_RECLUSTER_INDEX,
+		.names = (char *[]) {
+			[BGW_POLICY_RECLUSTER_PKEY_IDX] = "bgw_policy_recluster_pkey",
+			[BGW_POLICY_RECLUSTER_HYPERTABLE_ID_IDX] = "bgw_policy_recluster_hypertable_id_key",
+		}
+	},
+	[BGW_POLICY_DROP_CHUNKS] = {
+		.length = _MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
+		.names = (char *[]) {
+			[BGW_POLICY_DROP_CHUNKS_PKEY_IDX] = "bgw_policy_drop_chunks_pkey",
+			[BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_IDX] = "bgw_policy_drop_chunks_hypertable_id_key",
+		}
+	},
+	[BGW_POLICY_CHUNK_STATS] = {
+		.length = _MAX_BGW_POLICY_CHUNK_STATS_INDEX,
+		.names = (char *[]) {
+			[BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX] = "bgw_policy_chunk_stats_job_id_chunk_id_key",
+		}
 	}
 };
 
@@ -154,6 +186,8 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
+	[BGW_POLICY_RECLUSTER] = NULL,
+	[BGW_POLICY_DROP_CHUNKS] = NULL,
 };
 
 typedef struct InternalFunctionDef
@@ -587,4 +621,43 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 		default:
 			break;
 	}
+}
+
+/* Scanner helper functions specifically for the catalog tables */
+bool
+ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode, char *table_name, void *data)
+{
+	Catalog    *catalog = ts_catalog_get();
+
+	ScannerCtx	scanctx = {
+		.table = catalog_get_table_id(catalog, table),
+		.index = catalog_get_index(catalog, table, indexid),
+		.nkeys = num_keys,
+		.scankey = scankey,
+		.tuple_found = tuple_found,
+		.data = data,
+		.lockmode = lockmode,
+		.scandirection = ForwardScanDirection,
+	};
+
+	return ts_scanner_scan_one(&scanctx, false, table_name);
+}
+
+void
+ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode, void *data)
+{
+	Catalog    *catalog = ts_catalog_get();
+
+	ScannerCtx	scanctx = {
+		.table = catalog_get_table_id(catalog, table),
+		.index = catalog_get_index(catalog, table, indexid),
+		.nkeys = num_keys,
+		.scankey = scankey,
+		.tuple_found = tuple_found,
+		.data = data,
+		.lockmode = lockmode,
+		.scandirection = ForwardScanDirection,
+	};
+
+	ts_scanner_scan(&scanctx);
 }

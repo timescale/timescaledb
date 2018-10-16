@@ -21,11 +21,18 @@
 #include "job_stat.h"
 #include "utils.h"
 #include "telemetry/telemetry.h"
+#include "bgw_policy/chunk_stats.h"
+#include "bgw_policy/drop_chunks.h"
+#include "bgw_policy/recluster.h"
+
+#include <cross_module_fn.h>
 
 #define TELEMETRY_INITIAL_NUM_RUNS	12
 
 static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
+	[JOB_TYPE_RECLUSTER] = "recluster",
+	[JOB_TYPE_DROP_CHUNKS] = "drop_chunks",
 	[JOB_TYPE_UNKNOWN] = "unknown"
 };
 
@@ -197,9 +204,17 @@ static ScanTupleResult
 bgw_job_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
+	int32		job_id = ((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id;
 
 	/* Also delete the bgw_stat entry */
-	ts_bgw_job_stat_delete(((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id);
+	ts_bgw_job_stat_delete(job_id);
+
+	/* Delete any policy args associated with this job */
+	ts_bgw_policy_recluster_delete_row_only_by_job_id(job_id);
+	ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(job_id);
+
+	/* Delete any stats in bgw_policy_chunk_stats related to this job */
+	ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(job_id);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);
@@ -235,7 +250,7 @@ bgw_job_delete_scan(ScanKeyData *scankey)
 }
 
 bool
-ts_bgw_job_delete_by_id_internal(int32 job_id)
+ts_bgw_job_delete_by_id(int32 job_id)
 {
 	ScanKeyData scankey[1];
 
@@ -262,6 +277,9 @@ ts_bgw_job_execute(BgwJob *job)
 
 				return ts_bgw_job_run_and_set_next_start(job, ts_telemetry_main_wrapper, TELEMETRY_INITIAL_NUM_RUNS, one_hour);
 			}
+		case JOB_TYPE_RECLUSTER:
+		case JOB_TYPE_DROP_CHUNKS:
+			return ts_cm_functions->bgw_policy_job_execute(job);
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)
 				return unknown_job_type_hook(job);
@@ -427,4 +445,33 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 	CommitTransactionCommand();
 
 	return ret;
+}
+
+int
+ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period)
+{
+	Catalog    *catalog = ts_catalog_get();
+	Relation	rel;
+	TupleDesc	desc;
+	Datum		values[Natts_bgw_job];
+	CatalogSecurityContext sec_ctx;
+	bool		nulls[Natts_bgw_job] = {false};
+
+	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
+	desc = RelationGetDescr(rel);
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_job_type)] = NameGetDatum(job_type);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = IntervalPGetDatum(schedule_interval);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = IntervalPGetDatum(max_runtime);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = ts_catalog_table_next_seq_id(catalog, BGW_JOB);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+
+	heap_close(rel, RowExclusiveLock);
+	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
 }

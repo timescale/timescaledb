@@ -51,6 +51,7 @@
 #include "utils.h"
 #include "hypertable_cache.h"
 #include "cache.h"
+#include "bgw_policy/chunk_stats.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
@@ -1598,6 +1599,9 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 			ts_chunk_constraint_scan_by_dimension_slice_id(cc->fd.dimension_slice_id, NULL, CurrentMemoryContext) == 0)
 			ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
 	}
+
+	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
+	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form->id);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);

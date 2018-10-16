@@ -36,8 +36,8 @@ TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_main);
 TS_FUNCTION_INFO_V1(ts_bgw_job_execute_test);
-TS_FUNCTION_INFO_V1(ts_bgw_job_insert_relation);
-TS_FUNCTION_INFO_V1(ts_bgw_job_delete_by_id);
+TS_FUNCTION_INFO_V1(ts_test_bgw_job_insert_relation);
+TS_FUNCTION_INFO_V1(ts_test_bgw_job_delete_by_id);
 
 typedef enum TestJobType
 {
@@ -290,47 +290,17 @@ ts_bgw_job_execute_test(PG_FUNCTION_ARGS)
 	return ts_bgw_job_entrypoint(fcinfo);
 }
 
-static bool
-bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period)
-{
-	Catalog    *catalog = ts_catalog_get();
-	Relation	rel;
-	TupleDesc	desc;
-	Datum		values[Natts_bgw_job];
-	CatalogSecurityContext sec_ctx;
-	bool		nulls[Natts_bgw_job] = {false};
-
-	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
-
-	desc = RelationGetDescr(rel);
-
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_job_type)] = NameGetDatum(job_type);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = IntervalPGetDatum(schedule_interval);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = IntervalPGetDatum(max_runtime);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = ts_catalog_table_next_seq_id(catalog, BGW_JOB);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
-
-	return true;
-}
-
 Datum
-ts_bgw_job_insert_relation(PG_FUNCTION_ARGS)
+ts_test_bgw_job_insert_relation(PG_FUNCTION_ARGS)
 {
-	bgw_job_insert_relation(PG_GETARG_NAME(0), PG_GETARG_NAME(1), PG_GETARG_INTERVAL_P(2), PG_GETARG_INTERVAL_P(3), PG_GETARG_INT32(4), PG_GETARG_INTERVAL_P(5));
+	ts_bgw_job_insert_relation(PG_GETARG_NAME(0), PG_GETARG_NAME(1), PG_GETARG_INTERVAL_P(2), PG_GETARG_INTERVAL_P(3), PG_GETARG_INT32(4), PG_GETARG_INTERVAL_P(5));
 
 	PG_RETURN_NULL();
 }
 
 Datum
-ts_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
+ts_test_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
 {
-	ts_bgw_job_delete_by_id_internal(PG_GETARG_INT32(0));
+	ts_bgw_job_delete_by_id(PG_GETARG_INT32(0));
 	PG_RETURN_NULL();
 }

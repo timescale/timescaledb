@@ -582,25 +582,26 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (9 rows)
 
 \dt "_timescaledb_internal".*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
------------------------+-------------------+-------+-------------------
- _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
- _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
- _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
- _timescaledb_internal | _hyper_1_6_chunk  | table | default_perm_user
- _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
- _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
- _timescaledb_internal | _hyper_3_14_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_3_15_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_3_16_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_3_17_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_3_18_chunk | table | default_perm_user
- _timescaledb_internal | bgw_job_stat      | table | super_user
-(15 rows)
+                             List of relations
+        Schema         |          Name          | Type  |       Owner       
+-----------------------+------------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_3_chunk       | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk       | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk       | table | default_perm_user
+ _timescaledb_internal | _hyper_1_6_chunk       | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk       | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk       | table | default_perm_user
+ _timescaledb_internal | _hyper_3_14_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_3_15_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_3_16_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_3_17_chunk      | table | default_perm_user
+ _timescaledb_internal | _hyper_3_18_chunk      | table | default_perm_user
+ _timescaledb_internal | bgw_job_stat           | table | super_user
+ _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
+(16 rows)
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');

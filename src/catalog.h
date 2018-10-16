@@ -12,8 +12,9 @@
 #include <utils/rel.h>
 #include <nodes/nodes.h>
 #include <access/heapam.h>
-#include "export.h"
 #include "extension_constants.h"
+#include "scanner.h"
+
 /*
  * TimescaleDB catalog.
  *
@@ -41,6 +42,9 @@ typedef enum CatalogTable
 	BGW_JOB,
 	BGW_JOB_STAT,
 	INSTALLATION_METADATA,
+	BGW_POLICY_RECLUSTER,
+	BGW_POLICY_DROP_CHUNKS,
+	BGW_POLICY_CHUNK_STATS,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -644,6 +648,156 @@ enum
 	_MAX_INSTALLATION_METADATA_INDEX,
 };
 
+/****** BGW_POLICY_RECLUSTER TABLE definitions */
+#define BGW_POLICY_RECLUSTER_TABLE_NAME	"bgw_policy_recluster"
+
+enum Anum_bgw_policy_recluster
+{
+	Anum_bgw_policy_recluster_job_id = 1,
+	Anum_bgw_policy_recluster_hypertable_id,
+	Anum_bgw_policy_recluster_hypertable_index_name,
+	_Anum_bgw_policy_recluster_max,
+};
+
+#define Natts_bgw_policy_recluster \
+	(_Anum_bgw_policy_recluster_max - 1)
+
+typedef struct FormData_bgw_policy_recluster
+{
+	int32		job_id;
+	int32		hypertable_id;
+	NameData	hypertable_index_name;
+} FormData_bgw_policy_recluster;
+
+typedef FormData_bgw_policy_recluster *Form_bgw_policy_recluster;
+
+enum
+{
+	BGW_POLICY_RECLUSTER_PKEY_IDX = 0,
+	BGW_POLICY_RECLUSTER_HYPERTABLE_ID_IDX,
+	_MAX_BGW_POLICY_RECLUSTER_INDEX,
+};
+
+enum Anum_bgw_policy_recluster_pkey_idx
+{
+	Anum_bgw_policy_recluster_pkey_idx_job_id = 1,
+	_Anum_bgw_policy_recluster_pkey_idx_max,
+};
+
+typedef struct FormData_bgw_policy_recluster_pkey_idx
+{
+	int32		job_id;
+}			FormData_bgw_policy_recluster_pkey_idx;
+
+enum Anum_bgw_policy_recluster_hypertable_id_idx
+{
+	Anum_bgw_policy_recluster_hypertable_id_idx_hypertable_id = 1,
+	_Anum_bgw_policy_recluster_hypertable_id_idx_max,
+};
+
+typedef struct FormData_bgw_policy_recluster_hypertable_id_idx
+{
+	int32		hypertable_id;
+}			FormData_bgw_policy_recluster_hypertable_id_idx;
+
+/****** BGW_POLICY_DROP_CHUNKS TABLE definitions */
+#define BGW_POLICY_DROP_CHUNKS_TABLE_NAME	"bgw_policy_drop_chunks"
+
+enum Anum_bgw_policy_drop_chunks
+{
+	Anum_bgw_policy_drop_chunks_job_id = 1,
+	Anum_bgw_policy_drop_chunks_hypertable_id,
+	Anum_bgw_policy_drop_chunks_older_than,
+	Anum_bgw_policy_drop_chunks_cascade,
+	_Anum_bgw_policy_drop_chunks_max,
+};
+
+#define Natts_bgw_policy_drop_chunks \
+	(_Anum_bgw_policy_drop_chunks_max - 1)
+
+typedef struct FormData_bgw_policy_drop_chunks
+{
+	int32		job_id;
+	int32		hypertable_id;
+	Interval	older_than;
+	bool		cascade;
+} FormData_bgw_policy_drop_chunks;
+
+typedef FormData_bgw_policy_drop_chunks *Form_bgw_policy_drop_chunks;
+
+enum
+{
+	BGW_POLICY_DROP_CHUNKS_PKEY_IDX = 0,
+	BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_IDX,
+	_MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
+};
+
+enum Anum_bgw_policy_drop_chunks_pkey_idx
+{
+	Anum_bgw_policy_drop_chunks_pkey_idx_job_id = 1,
+	_Anum_bgw_policy_drop_chunks_pkey_idx_max,
+};
+
+typedef struct FormData_bgw_policy_drop_chunks_pkey_idx
+{
+	int32		job_id;
+}			FormData_bgw_policy_drop_chunks_pkey_idx;
+
+enum Anum_bgw_policy_drop_chunks_hypertable_id_idx
+{
+	Anum_bgw_policy_drop_chunks_hypertable_id_idx_hypertable_id = 1,
+	_Anum_bgw_policy_drop_chunks_hypertable_id_idx_max,
+};
+
+typedef struct FormData_bgw_policy_drop_chunks_hypertable_id_idx
+{
+	int32		hypertable_id;
+}			FormData_bgw_policy_drop_chunks_hypertable_id_idx;
+
+/****** BGW_POLICY_CHUNK_STATS TABLE definitions */
+#define BGW_POLICY_CHUNK_STATS_TABLE_NAME	"bgw_policy_chunk_stats"
+
+enum Anum_bgw_policy_chunk_stats
+{
+	Anum_bgw_policy_chunk_stats_job_id = 1,
+	Anum_bgw_policy_chunk_stats_chunk_id,
+	Anum_bgw_policy_chunk_stats_num_times_job_run,
+	Anum_bgw_policy_chunk_stats_last_time_job_run,
+	_Anum_bgw_policy_chunk_stats_max,
+};
+
+#define Natts_bgw_policy_chunk_stats \
+	(_Anum_bgw_policy_chunk_stats_max - 1)
+
+typedef struct FormData_bgw_policy_chunk_stats
+{
+	int32		job_id;
+	int32		chunk_id;
+	int32		num_times_job_run;
+	TimestampTz last_time_job_run;
+} FormData_bgw_policy_chunk_stats;
+
+typedef FormData_bgw_policy_chunk_stats *Form_bgw_job_chunk_stats;
+
+enum
+{
+	BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX = 0,
+	_MAX_BGW_POLICY_CHUNK_STATS_INDEX,
+};
+
+enum Anum_bgw_policy_chunk_stats_job_id_chunk_id_idx
+{
+	Anum_bgw_policy_chunk_stats_job_id_chunk_id_idx_job_id = 1,
+	Anum_bgw_policy_chunk_stats_job_id_chunk_id_idx_chunk_id,
+	_Anum_bgw_policy_chunk_stats_job_id_chunk_id_idx_max,
+};
+
+typedef struct FormData_bgw_policy_chunk_stats_job_id_chunk_id_idx
+{
+	int32		job_id;
+	int32		chunk_id;
+}			FormData_bgw_policy_chunk_stats_job_id_chunk_id_idx;
+
 /*
  * The maximum number of indexes a catalog table can have.
  * This needs to be bumped in case of new catalog tables that have more indexes.
@@ -733,5 +887,8 @@ extern void ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 
 /* Delete only: do not increment command counter or invalidate caches */
 extern void ts_catalog_delete_only(Relation rel, HeapTuple tuple);
+
+bool		ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode, char *policy_type, void *data);
+void		ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode, void *data);
 
 #endif							/* TIMESCALEDB_CATALOG_H */

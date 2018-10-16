@@ -56,6 +56,7 @@
 #include "utils.h"
 #include "funcapi.h"
 #include "utils.h"
+#include "bgw_policy/policy.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -178,6 +179,18 @@ ts_hypertable_id_to_relid(int32 hypertable_id)
 	ts_scanner_scan(&scanctx);
 
 	return relid;
+}
+
+int32
+ts_hypertable_relid_to_id(Oid relid)
+{
+	Cache	   *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
+	int			result = (ht == NULL) ? -1 : ht->fd.id;
+
+	ts_cache_release(hcache);
+
+	return result;
 }
 
 typedef struct ChunkStoreEntry
@@ -379,6 +392,9 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
+
+	/* Also remove any policy argument / job that uses this hypertable */
+	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);

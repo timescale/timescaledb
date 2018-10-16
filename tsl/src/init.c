@@ -12,6 +12,9 @@
 
 #include "license.h"
 #include "telemetry.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/recluster_api.h"
+#include "bgw_policy/drop_chunks_api.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -37,6 +40,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.check_tsl_loaded = check_tsl_loaded,
 	.tsl_module_shutdown = tsl_module_shutdown,
 	.add_tsl_license_info_telemetry = tsl_telemetry_add_license_info,
+	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
+	.add_drop_chunks_policy = drop_chunks_add_policy,
+	.add_recluster_policy = recluster_add_policy,
+	.remove_drop_chunks_policy = drop_chunks_remove_policy,
+	.remove_recluster_policy = recluster_remove_policy,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

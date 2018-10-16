@@ -8,8 +8,10 @@
 #define TIMESCALEDB_CROSS_MODULE_FN_H
 
 #include <c.h>
+#include <utils/timestamp.h>
 
 #include "export.h"
+#include "bgw/job.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -28,6 +30,11 @@ typedef struct CrossModuleFunctions
 	bool		(*check_tsl_loaded) (void);
 	void		(*tsl_module_shutdown) (void);
 	void		(*add_tsl_license_info_telemetry) (JsonbParseState *parseState);
+	bool		(*bgw_policy_job_execute) (BgwJob *job);
+	Datum		(*add_drop_chunks_policy) (PG_FUNCTION_ARGS);
+	Datum		(*add_recluster_policy) (PG_FUNCTION_ARGS);
+	Datum		(*remove_drop_chunks_policy) (PG_FUNCTION_ARGS);
+	Datum		(*remove_recluster_policy) (PG_FUNCTION_ARGS);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

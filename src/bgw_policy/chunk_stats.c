@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+ *
+ * This file is licensed under the Apache License,
+ * see LICENSE-APACHE at the top level directory.
+ */
+
+#include <postgres.h>
+
+#include "bgw/job.h"
+#include "catalog.h"
+#include "chunk_stats.h"
+#include "utils.h"
+#include "policy.h"
+
+/* Cascades deletes via the job delete function */
+static ScanTupleResult
+bgw_policy_chunk_stats_delete_via_job_tuple_found(TupleInfo *ti, void *const data)
+{
+	FormData_bgw_policy_chunk_stats *fd = (FormData_bgw_policy_chunk_stats *) GETSTRUCT(ti->tuple);
+
+	/* This call will actually delete the row for us */
+	ts_bgw_job_delete_by_id(fd->job_id);
+	return SCAN_CONTINUE;
+}
+
+/*
+ * Delete all chunk_stat rows associated with this job_id.
+ * To prevent infinite recursive calls from the job <-> policy tables, we do not cascade deletes in this function.
+ * Instead, the caller must be responsible for making sure that the delete cascades to the job corresponding to
+ * this policy.
+ */
+void
+ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(int32 job_id)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_bgw_policy_chunk_stats_job_id_chunk_id_idx_job_id, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(job_id));
+
+	ts_catalog_scan_all(BGW_POLICY_CHUNK_STATS, BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX, scankey, 1, ts_bgw_policy_delete_row_only_tuple_found, RowExclusiveLock, NULL);
+}
+
+/*
+ * Delete all chunk_stat rows associated with this chunk_id.
+ * Deletes are cascaded via ...delete_via_job_tuple_found.
+ */
+void
+ts_bgw_policy_chunk_stats_delete_by_chunk_id(int32 chunk_id)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_bgw_policy_chunk_stats_chunk_id, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk_id));
+
+	ts_catalog_scan_all(BGW_POLICY_CHUNK_STATS, InvalidOid, scankey, 1, bgw_policy_chunk_stats_delete_via_job_tuple_found, RowExclusiveLock, NULL);
+}
+
+static void
+ts_bgw_policy_chunk_stats_insert_with_relation(Relation rel, BgwPolicyChunkStats *chunk_stats)
+{
+	TupleDesc	tupdesc;
+	CatalogSecurityContext sec_ctx;
+	Datum		values[Natts_bgw_policy_chunk_stats];
+	bool		nulls[Natts_bgw_policy_chunk_stats] = {false};
+
+	tupdesc = RelationGetDescr(rel);
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_policy_chunk_stats_job_id)] = Int32GetDatum(chunk_stats->fd.job_id);
+	values[AttrNumberGetAttrOffset(Anum_bgw_policy_chunk_stats_chunk_id)] = Int32GetDatum(chunk_stats->fd.chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_bgw_policy_chunk_stats_num_times_job_run)] = Int32GetDatum(chunk_stats->fd.num_times_job_run);
+	values[AttrNumberGetAttrOffset(Anum_bgw_policy_chunk_stats_last_time_job_run)] = TimestampTzGetDatum(&chunk_stats->fd.last_time_job_run);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, tupdesc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+}
+
+void
+ts_bgw_policy_chunk_stats_insert(BgwPolicyChunkStats *chunk_stats)
+{
+	Catalog    *catalog = ts_catalog_get();
+	Relation	rel = heap_open(catalog_get_table_id(catalog, BGW_POLICY_CHUNK_STATS), RowExclusiveLock);
+
+	ts_bgw_policy_chunk_stats_insert_with_relation(rel, chunk_stats);
+	heap_close(rel, RowExclusiveLock);
+}
