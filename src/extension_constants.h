@@ -10,6 +10,7 @@
 /* No function definitions here, only potentially globally available defines as this is used by the loader*/
 
 #define EXTENSION_NAME "timescaledb"
+#define TSL_LIBRARY_NAME "timescaledb-tsl"
 #define EXTENSION_SO "$libdir/"EXTENSION_NAME
 #define MAX_VERSION_LEN (NAMEDATALEN+1)
 #define MAX_SO_NAME_LEN (8+NAMEDATALEN+1+MAX_VERSION_LEN)	/* "$libdir/"+extname+"-"+version

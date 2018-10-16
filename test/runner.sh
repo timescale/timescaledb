@@ -2,7 +2,8 @@
 
 set -u
 set -e
-EXE_DIR=$(dirname $0)
+CURRENT_DIR=$(dirname $0)
+EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
 PG_REGRESS_PSQL=$1
 PSQL=${PSQL:-$PG_REGRESS_PSQL}
 TEST_PGUSER=${TEST_PGUSER:-postgres}
@@ -11,7 +12,7 @@ TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 
 # Read the extension version from version.config
-read -r VERSION < ../version.config
+read -r VERSION < ${CURRENT_DIR}/../version.config
 EXT_VERSION=${VERSION##version = }
 
 #docker doesn't set user
@@ -43,10 +44,11 @@ mkdir -p dump
 
 # set role permissions and reset database
 ${PSQL} $@ -U $USER -d postgres -v ECHO=none -c "ALTER USER $TEST_ROLE_SUPERUSER WITH SUPERUSER;"
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "DROP DATABASE \"${TEST_DBNAME}\";" >/dev/null 2>&1 || :
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "DROP DATABASE IF EXISTS \"${TEST_DBNAME}\";" >/dev/null 2>&1 || :
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "DROP DATABASE IF EXISTS \"${TEST_DBNAME2}\";" >/dev/null 2>&1 || :
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
 ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "set client_min_messages=error; CREATE EXTENSION timescaledb;"
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" < ${EXE_DIR}/sql/utils/testsupport.sql >/dev/null 2>&1 || :
+${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" < ${CURRENT_DIR}/sql/utils/testsupport.sql >/dev/null 2>&1 || :
 
 export TEST_DBNAME
 

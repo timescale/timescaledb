@@ -91,8 +91,8 @@ PG_MODULE_MAGIC;
 #else
 #define CalledInParallelWorker() (MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
 #endif							/* PG96 */
-extern void PGDLLEXPORT _PG_init(void);
-extern void PGDLLEXPORT _PG_fini(void);
+extern void TSDLLEXPORT _PG_init(void);
+extern void TSDLLEXPORT _PG_fini(void);
 
 /* was the versioned-extension loaded*/
 static bool loaded = false;

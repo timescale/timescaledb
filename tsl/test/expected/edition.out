@@ -1,0 +1,132 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-TIMESCALE at the top of the tsl directory.
+SELECT _timescaledb_internal.current_license_key();
+WARNING:  starting TimescaleDB code that requires the Timescale License
+WARNING:  Timescale License expired
+                    current_license_key                     
+------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ t
+(1 row)
+
+-- changing licenses requires superuser privleges
+\set ON_ERROR_STOP 0
+SET timescaledb.license_key='CommunityLicense';
+ERROR:  permission denied to set parameter "timescaledb.license_key"
+SELECT _timescaledb_internal.current_license_key();
+                    current_license_key                     
+------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 1
+\c single :ROLE_SUPERUSER
+SELECT _timescaledb_internal.current_license_key();
+WARNING:  starting TimescaleDB code that requires the Timescale License
+WARNING:  Timescale License expired
+                    current_license_key                     
+------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 0
+SET timescaledb.license_key='ApacheOnly';
+ERROR:  invalid value for parameter "timescaledb.license_key": "ApacheOnly"
+SELECT _timescaledb_internal.current_license_key();
+                    current_license_key                     
+------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 1
+SET timescaledb.license_key='CommunityLicense';
+WARNING:  starting TimescaleDB code that requires the Timescale License
+SELECT _timescaledb_internal.current_license_key();
+ current_license_key 
+---------------------
+ CommunityLicense
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ f
+(1 row)
+
+SET timescaledb.license_key=Default;
+WARNING:  starting TimescaleDB code that requires the Timescale License
+WARNING:  Timescale License expired
+SELECT _timescaledb_internal.current_license_key();
+                    current_license_key                     
+------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.enterprise_enabled();
+ enterprise_enabled 
+--------------------
+ t
+(1 row)
+
+\c single :ROLE_DEFAULT_PERM_USER

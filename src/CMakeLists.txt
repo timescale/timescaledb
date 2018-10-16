@@ -1,5 +1,6 @@
 set(SOURCES
   agg_bookend.c
+  base64_compat.c
   cache.c
   cache_invalidate.c
   catalog.c
@@ -12,6 +13,7 @@ set(SOURCES
   chunk_index.c
   chunk_insert_state.c
   constraint_aware_append.c
+  cross_module_fn.c
   copy.c
   dimension.c
   dimension_slice.c
@@ -28,6 +30,7 @@ set(SOURCES
   indexing.c
   init.c
   installation_metadata.c
+  license_guc.c
   partitioning.c
   planner.c
   plan_expand_hypertable.c

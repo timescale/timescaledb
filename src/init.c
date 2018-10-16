@@ -54,8 +54,8 @@ extern void _conn_mock_init();
 extern void _conn_mock_fini();
 #endif
 
-extern void PGDLLEXPORT _PG_init(void);
-extern void PGDLLEXPORT _PG_fini(void);
+extern void TSDLLEXPORT _PG_init(void);
+extern void TSDLLEXPORT _PG_fini(void);
 
 void
 _PG_init(void)

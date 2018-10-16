@@ -9,6 +9,7 @@
 #include <miscadmin.h>
 
 #include "guc.h"
+#include "license_guc.h"
 #include "hypertable_cache.h"
 #include "telemetry/telemetry.h"
 
@@ -43,6 +44,8 @@ bool		ts_guc_constraint_aware_append = true;
 int			ts_guc_max_open_chunks_per_insert = 10;
 int			ts_guc_max_cached_chunks_per_hypertable = 10;
 int			ts_guc_telemetry_level = TELEMETRY_BASIC;
+
+TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
 
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
@@ -137,6 +140,17 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomStringVariable( /* name= */ "timescaledb.license_key",
+							    /* short_dec= */ "TimescaleDB license key",
+							    /* long_dec= */ "Determines which features are enabled",
+							    /* valueAddr= */ &ts_guc_license_key,
+							    /* bootValue= */ TS_DEFAULT_LICENSE,
+							    /* context= */ PGC_SUSET,
+							    /* flags= */ GUC_SUPERUSER_ONLY,
+							    /* check_hook= */ ts_license_update_check,
+							    /* assign_hook= */ ts_license_on_assign,
+							    /* show_hook= */ NULL);
 }
 
 void

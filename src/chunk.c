@@ -33,6 +33,7 @@
 #include <executor/executor.h>
 #include <access/tupdesc.h>
 
+#include "export.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "catalog.h"
