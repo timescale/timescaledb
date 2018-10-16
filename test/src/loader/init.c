@@ -33,6 +33,8 @@ static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 bool		ts_extension_invalidate(Oid relid);
 bool		ts_extension_is_loaded(void);
 void		ts_extension_check_version(const char *actual_version);
+bool		ts_license_update_check(char **newval, void **extra, GucSource source);
+void		ts_license_on_assign(const char *newval, void *extra);
 
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
@@ -109,4 +111,15 @@ ts_mock_function(PG_FUNCTION_ARGS)
 {
 	elog(WARNING, "mock function call " STR(TIMESCALEDB_VERSION_MOD));
 	PG_RETURN_VOID();
+}
+
+bool
+ts_license_update_check(char **newval, void **extra, GucSource source)
+{
+	return true;
+}
+
+void
+ts_license_on_assign(const char *newval, void *extra)
+{
 }

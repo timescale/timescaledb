@@ -28,6 +28,10 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif ()
 
+if (NOT DEFINED APACHE_ONLY)
+  set(APACHE_ONLY FALSE)
+endif ()
+
 message(STATUS "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}")
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
@@ -258,6 +262,7 @@ if (PGINDENT)
   add_custom_target(pgindent
     COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/src
     COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/test/src
+    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/tsl/src
     DEPENDS ${PROJECT_BINARY_DIR}/typedefs.list)
 else ()
   message(STATUS "Install pgindent to be able to format C code: https://github.com/postgres/postgres/tree/master/src/tools/pgindent")
@@ -301,9 +306,24 @@ add_subdirectory(test)
 add_subdirectory(sql)
 add_subdirectory(src)
 
-add_custom_target(licensecheck
-  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -c ${CMAKE_CURRENT_SOURCE_DIR}/src
-  COMMAND SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -s ${CMAKE_CURRENT_SOURCE_DIR}/sql
-  COMMAND SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -c ${CMAKE_CURRENT_SOURCE_DIR}/test
-  COMMAND SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license_apache.sh -t ${CMAKE_CURRENT_SOURCE_DIR}/test
+if(NOT APACHE_ONLY)
+  add_subdirectory(tsl)
+else()
+  add_compile_definitions(APACHE_ONLY)
+endif()
+
+if(NOT APACHE_ONLY)
+  add_custom_target(licensecheck
+    DEPENDS licensecheck-apache licensecheck-timescale)
+else()
+  add_custom_target(licensecheck
+    DEPENDS licensecheck-apache)
+endif()
+
+add_custom_target(licensecheck-apache
+  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license.sh -c ${CMAKE_CURRENT_SOURCE_DIR}/src -s ${CMAKE_CURRENT_SOURCE_DIR}/sql -c ${CMAKE_CURRENT_SOURCE_DIR}/test -t ${CMAKE_CURRENT_SOURCE_DIR}/test
+  USES_TERMINAL)
+
+add_custom_target(licensecheck-timescale
+  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license.sh -e ${CMAKE_CURRENT_SOURCE_DIR}/tsl/src -u ${CMAKE_CURRENT_SOURCE_DIR}/tsl/test
   USES_TERMINAL)

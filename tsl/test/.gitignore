@@ -1,0 +1,5 @@
+results/
+dump/
+regression.diffs
+regression.out
+unit/testoutputs.tmp

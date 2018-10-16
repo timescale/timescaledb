@@ -26,6 +26,7 @@
 #include <catalog/pg_constraint_fn.h>
 #endif
 
+#include "export.h"
 #include "scanner.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"

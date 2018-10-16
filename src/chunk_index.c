@@ -24,6 +24,7 @@
 #include <commands/cluster.h>
 #include <access/xact.h>
 
+#include "export.h"
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"

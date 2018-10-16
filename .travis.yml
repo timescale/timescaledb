@@ -39,7 +39,7 @@ script:
 
   - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 after_failure:
-  - docker exec -u postgres -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regression.diffs /build/debug/test/isolation/regression.diffs
+  - docker exec -u postgres -it pgbuild cat /build/debug/test/regression.diffs /build/debug/tsl/test/regression.diffs /build/debug/test/isolation/regression.diffs /build/debug/test/pgtest/regression.diffs
 after_success:
   - ci_env=`bash <(curl -s https://codecov.io/env)`
   - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) || echo \"Codecov did not collect coverage reports\" "

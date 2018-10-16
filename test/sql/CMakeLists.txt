@@ -25,6 +25,7 @@ set(TEST_FILES
   drop_hypertable.sql
   drop_rename_hypertable.sql
   dump_meta.sql
+  edition.sql
   extension.sql
   hash.sql
   histogram_test.sql

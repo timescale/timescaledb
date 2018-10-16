@@ -6,7 +6,8 @@
 # NB this script mirrors the adjacent pg_isolation_regress.sh, and they should
 # be kept in sync
 
-EXE_DIR=$(dirname $0)
+CURRENT_DIR=$(dirname $0)
+EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
 PG_REGRESS=${PG_REGRESS:-pg_regress}
 TEST_SCHEDULE=${TEST_SCHEDULE:-}
 TESTS=${TESTS:-}

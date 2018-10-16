@@ -7,6 +7,7 @@
 #ifndef BGW_JOB_H
 #define BGW_JOB_H
 
+#include "export.h"
 #include "catalog.h"
 #include <postmaster/bgworker.h>
 
@@ -42,7 +43,7 @@ extern bool ts_bgw_job_delete_by_id_internal(int32 job_id);
 
 extern bool ts_bgw_job_execute(BgwJob *job);
 
-PGDLLEXPORT extern Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
+TSDLLEXPORT extern Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
 extern void ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook);
 extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
 extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs, Interval *next_interval);

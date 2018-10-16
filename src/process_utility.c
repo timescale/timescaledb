@@ -41,6 +41,7 @@
 
 #include <miscadmin.h>
 
+#include "export.h"
 #include "process_utility.h"
 #include "catalog.h"
 #include "chunk.h"

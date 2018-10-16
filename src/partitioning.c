@@ -407,7 +407,7 @@ part_func_cache_create(Oid argtype, TypeCacheEntry *tce, Oid coerce_funcid, Memo
 }
 
 /* _timescaledb_catalog.ts_get_partition_for_key(key anyelement) RETURNS INT */
-PGDLLEXPORT Datum ts_get_partition_for_key(PG_FUNCTION_ARGS);
+TSDLLEXPORT Datum ts_get_partition_for_key(PG_FUNCTION_ARGS);
 
 TS_FUNCTION_INFO_V1(ts_get_partition_for_key);
 
@@ -461,7 +461,7 @@ ts_get_partition_for_key(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(res);
 }
 
-PGDLLEXPORT Datum ts_get_partition_hash(PG_FUNCTION_ARGS);
+TSDLLEXPORT Datum ts_get_partition_hash(PG_FUNCTION_ARGS);
 
 TS_FUNCTION_INFO_V1(ts_get_partition_hash);
 
