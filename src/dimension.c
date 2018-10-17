@@ -952,6 +952,7 @@ dimension_validate_info(DimensionInfo *info)
 						 errmsg("column \"%s\" is already a dimension",
 								NameStr(*info->colname))));
 
+			info->dimension_id = dim->fd.id;
 			info->skip = true;
 
 			ereport(NOTICE,
@@ -1027,6 +1028,7 @@ dimension_create_datum(FunctionCallInfo fcinfo, DimensionInfo *info)
 	values[AttrNumberGetAttrOffset(Anum_add_dimension_schema_name)] = NameGetDatum(&info->ht->fd.schema_name);
 	values[AttrNumberGetAttrOffset(Anum_add_dimension_table_name)] = NameGetDatum(&info->ht->fd.table_name);
 	values[AttrNumberGetAttrOffset(Anum_add_dimension_column_name)] = NameGetDatum(info->colname);
+	values[AttrNumberGetAttrOffset(Anum_add_dimension_created)] = BoolGetDatum(!info->skip);
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
@@ -1117,15 +1119,12 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		 */
 		info.ht = hypertable_get_by_id(info.ht->fd.id);
 		indexing_verify_indexes(info.ht);
-		retval = dimension_create_datum(fcinfo, &info);
 	}
 
+	retval = dimension_create_datum(fcinfo, &info);
 	cache_release(hcache);
 
-	if (retval)
-		PG_RETURN_DATUM(retval);
-	else
-		PG_RETURN_NULL();
+	PG_RETURN_DATUM(retval);
 }
 
 /* Used as a tuple found function */

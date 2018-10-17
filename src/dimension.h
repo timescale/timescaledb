@@ -115,6 +115,7 @@ enum Anum_add_dimension
 	Anum_add_dimension_schema_name,
 	Anum_add_dimension_table_name,
 	Anum_add_dimension_column_name,
+	Anum_add_dimension_created,
 	_Anum_add_dimension_max,
 };
 

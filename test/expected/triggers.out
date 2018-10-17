@@ -71,9 +71,9 @@ CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
     FOR EACH STATEMENT EXECUTE PROCEDURE test_trigger();
 SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             1 | public      | hyper
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | hyper      | t
 (1 row)
 
 --test triggers before create_hypertable
@@ -307,16 +307,16 @@ CREATE TRIGGER create_color_trigger
     BEFORE INSERT OR UPDATE ON location
     FOR EACH ROW EXECUTE PROCEDURE create_color_trigger_fn();
 SELECT create_hypertable('location', 'time');
-  create_hypertable  
----------------------
- (2,public,location)
+   create_hypertable   
+-----------------------
+ (2,public,location,t)
 (1 row)
 
 --make color also a hypertable
 SELECT create_hypertable('color', 'color_id', chunk_time_interval=>10);
- create_hypertable 
--------------------
- (3,public,color)
+ create_hypertable  
+--------------------
+ (3,public,color,t)
 (1 row)
 
 -- Test that we can create and use triggers with another user

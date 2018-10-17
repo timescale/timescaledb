@@ -11,9 +11,9 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
 SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (1,public,tspace_2dim)
+    create_hypertable     
+--------------------------
+ (1,public,tspace_2dim,t)
 (1 row)
 
 INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
@@ -107,9 +107,9 @@ SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 SELECT create_hypertable('tspace_1dim', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (2,public,tspace_1dim)
+    create_hypertable     
+--------------------------
+ (2,public,tspace_1dim,t)
 (1 row)
 
 --user doesn't have permission on tablespace1 --> error
@@ -331,9 +331,9 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 SELECT create_hypertable('tspace_1dim', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (3,public,tspace_1dim)
+    create_hypertable     
+--------------------------
+ (3,public,tspace_1dim,t)
 (1 row)
 
 SELECT attach_tablespace('tablespace1', 'tspace_1dim');

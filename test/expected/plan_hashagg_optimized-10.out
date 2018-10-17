@@ -6,9 +6,9 @@ CREATE TABLE hyper(time TIMESTAMP, time_int BIGINT, time_broken DATE, metricid i
 CREATE TABLE regular(time TIMESTAMP, time_int BIGINT, time_date DATE, metricid int REFERENCES metric(id), VALUE double precision);
 SELECT create_hypertable('hyper', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE);
 psql:include/plan_hashagg_load.sql:5: NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- (1,public,hyper)
+ create_hypertable  
+--------------------
+ (1,public,hyper,t)
 (1 row)
 
 ALTER TABLE hyper

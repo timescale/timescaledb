@@ -110,9 +110,9 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev
 CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
 SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
 NOTICE:  adding not-null constraint to column "time"
-  create_hypertable  
----------------------
- (2,public,int_part)
+   create_hypertable   
+-----------------------
+ (2,public,int_part,t)
 (1 row)
 
 INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 1, 22.5);

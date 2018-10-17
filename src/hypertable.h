@@ -31,6 +31,7 @@ enum Anum_create_hypertable
 	Anum_create_hypertable_id = 1,
 	Anum_create_hypertable_schema_name,
 	Anum_create_hypertable_table_name,
+	Anum_create_hypertable_created,
 	_Anum_create_hypertable_max,
 };
 

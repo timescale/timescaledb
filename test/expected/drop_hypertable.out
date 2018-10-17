@@ -11,17 +11,17 @@ SELECT * from _timescaledb_catalog.dimension;
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (1,public,should_drop)
+    create_hypertable     
+--------------------------
+ (1,public,should_drop,t)
 (1 row)
 
 CREATE TABLE hyper_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('hyper_with_dependencies', 'time');
 NOTICE:  adding not-null constraint to column "time"
-         create_hypertable          
-------------------------------------
- (2,public,hyper_with_dependencies)
+          create_hypertable           
+--------------------------------------
+ (2,public,hyper_with_dependencies,t)
 (1 row)
 
 CREATE VIEW dependent_view AS SELECT * FROM hyper_with_dependencies;
@@ -41,9 +41,9 @@ NOTICE:  drop cascades to view dependent_view
 CREATE TABLE chunk_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('chunk_with_dependencies', 'time');
 NOTICE:  adding not-null constraint to column "time"
-         create_hypertable          
-------------------------------------
- (3,public,chunk_with_dependencies)
+          create_hypertable           
+--------------------------------------
+ (3,public,chunk_with_dependencies,t)
 (1 row)
 
 INSERT INTO chunk_with_dependencies VALUES (now(), 1.0);
@@ -64,9 +64,9 @@ NOTICE:  drop cascades to view dependent_view_chunk
 -- although no new hypertable is created. Make sure we can handle this.
 SELECT create_hypertable('should_drop', 'time', if_not_exists => true);
 NOTICE:  table "should_drop" is already a hypertable, skipping
- create_hypertable 
--------------------
- 
+    create_hypertable     
+--------------------------
+ (1,public,should_drop,f)
 (1 row)
 
 SELECT * from _timescaledb_catalog.hypertable;
@@ -85,9 +85,9 @@ DROP TABLE should_drop;
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (4,public,should_drop)
+    create_hypertable     
+--------------------------
+ (4,public,should_drop,t)
 (1 row)
 
 INSERT INTO should_drop VALUES (now(), 1.0);

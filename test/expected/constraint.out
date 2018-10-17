@@ -4,9 +4,9 @@ CREATE TABLE hyper (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             1 | public      | hyper
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | hyper      | t
 (1 row)
 
 --check and not-null constraints are inherited through regular inheritance.
@@ -48,9 +48,9 @@ CREATE TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name |                           table_name                            
----------------+-------------+-----------------------------------------------------------------
-             2 | public      | hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+ hypertable_id | schema_name |                           table_name                            | created 
+---------------+-------------+-----------------------------------------------------------------+---------
+             2 | public      | hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name | t
 (1 row)
 
 INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1) VALUES
@@ -306,9 +306,9 @@ CREATE TABLE hyper_pk (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_pk', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             3 | public      | hyper_pk
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | hyper_pk   | t
 (1 row)
 
 INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
@@ -393,9 +393,9 @@ CREATE TABLE hyper_fk (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_fk', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             4 | public      | hyper_fk
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             4 | public      | hyper_fk   | t
 (1 row)
 
 --fail fk constraint
@@ -536,9 +536,9 @@ CREATE TABLE hyper_for_ref (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_for_ref', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name |  table_name   
----------------+-------------+---------------
-             5 | public      | hyper_for_ref
+ hypertable_id | schema_name |  table_name   | created 
+---------------+-------------+---------------+---------
+             5 | public      | hyper_for_ref | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -567,9 +567,9 @@ CREATE TABLE hyper_ex (
 );
 SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             6 | public      | hyper_ex
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             6 | public      | hyper_ex   | t
 (1 row)
 
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
@@ -648,9 +648,9 @@ CREATE TABLE hyper_noinherit_alter (
 );
 SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name |      table_name       
----------------+-------------+-----------------------
-             8 | public      | hyper_noinherit_alter
+ hypertable_id | schema_name |      table_name       | created 
+---------------+-------------+-----------------------+---------
+             8 | public      | hyper_noinherit_alter | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -664,9 +664,9 @@ CREATE TABLE hyper_unique_deferred (
 );
 SELECT * FROM create_hypertable('hyper_unique_deferred', 'time', chunk_time_interval => 10);
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name |      table_name       
----------------+-------------+-----------------------
-             9 | public      | hyper_unique_deferred
+ hypertable_id | schema_name |      table_name       | created 
+---------------+-------------+-----------------------+---------
+             9 | public      | hyper_unique_deferred | t
 (1 row)
 
 INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
@@ -690,9 +690,9 @@ CREATE TABLE hyper_pk_deferred (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_pk_deferred', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name |    table_name     
----------------+-------------+-------------------
-            10 | public      | hyper_pk_deferred
+ hypertable_id | schema_name |    table_name     | created 
+---------------+-------------+-------------------+---------
+            10 | public      | hyper_pk_deferred | t
 (1 row)
 
 INSERT INTO hyper_pk_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
@@ -716,9 +716,9 @@ CREATE TABLE hyper_fk_deferred (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_fk_deferred', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name |    table_name     
----------------+-------------+-------------------
-            11 | public      | hyper_fk_deferred
+ hypertable_id | schema_name |    table_name     | created 
+---------------+-------------+-------------------+---------
+            11 | public      | hyper_fk_deferred | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -745,9 +745,9 @@ CREATE TABLE hyper_ex_deferred (
 );
 SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name |    table_name     
----------------+-------------+-------------------
-            12 | public      | hyper_ex_deferred
+ hypertable_id | schema_name |    table_name     | created 
+---------------+-------------+-------------------+---------
+            12 | public      | hyper_ex_deferred | t
 (1 row)
 
 INSERT INTO hyper_ex_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 12);
@@ -772,9 +772,9 @@ CREATE TABLE hyper_unique (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_unique', 'time', chunk_time_interval => 10, associated_schema_name => 'my_associated_schema');
- hypertable_id | schema_name |  table_name  
----------------+-------------+--------------
-            13 | public      | hyper_unique
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+            13 | public      | hyper_unique | t
 (1 row)
 
 INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);

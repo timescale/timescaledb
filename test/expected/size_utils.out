@@ -15,9 +15,9 @@ CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2)
 CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
 SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
- hypertable_id | schema_name |   table_name   
----------------+-------------+----------------
-             1 | public      | two_Partitions
+ hypertable_id | schema_name |   table_name   | created 
+---------------+-------------+----------------+---------
+             1 | public      | two_Partitions | t
 (1 row)
 
 \set QUIET off
@@ -94,9 +94,9 @@ SELECT * FROM indexes_relation_size_pretty('"public"."two_Partitions"');
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name |      table_name       
----------------+-------------+-----------------------
-             2 | public      | timestamp_partitioned
+ hypertable_id | schema_name |      table_name       | created 
+---------------+-------------+-----------------------+---------
+             2 | public      | timestamp_partitioned | t
 (1 row)
 
 INSERT INTO timestamp_partitioned VALUES('2004-10-19 10:23:54', '10');
@@ -118,9 +118,9 @@ SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned');
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
 SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name |       table_name        
----------------+-------------+-------------------------
-             3 | public      | timestamp_partitioned_2
+ hypertable_id | schema_name |       table_name        | created 
+---------------+-------------+-------------------------+---------
+             3 | public      | timestamp_partitioned_2 | t
 (1 row)
 
 INSERT INTO timestamp_partitioned_2 VALUES('2004-10-19 10:23:54', '10');
@@ -145,9 +145,9 @@ CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
 ALTER TABLE toast_test ALTER COLUMN value SET STORAGE EXTERNAL;
 SELECT * FROM create_hypertable('toast_test', 'time');
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             4 | public      | toast_test
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             4 | public      | toast_test | t
 (1 row)
 
 INSERT INTO toast_test VALUES('2004-10-19 10:23:54', $$
@@ -168,9 +168,9 @@ SELECT * FROM chunk_relation_size_pretty('toast_test');
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
 NOTICE:  adding not-null constraint to column "time"
- hypertable_id | schema_name |  table_name  
----------------+-------------+--------------
-             5 | public      | approx_count
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             5 | public      | approx_count | t
 (1 row)
 
 INSERT INTO approx_count VALUES('2004-01-01 10:00:01', 1);

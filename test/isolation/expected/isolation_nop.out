@@ -3,7 +3,7 @@ Parsed test spec with 1 sessions
 starting permutation: s1a
 create_hypertable
 
-(1,public,ts_cluster_test)
+(1,public,ts_cluster_test,t)
 step s1a: SELECT pg_sleep(0);
 pg_sleep       
 
