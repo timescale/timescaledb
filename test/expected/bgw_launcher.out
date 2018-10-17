@@ -61,7 +61,7 @@ SELECT wait_worker_counts(1,0,1,0);
  t
 (1 row)
 
-/*Now let's restart the scheduler and make sure our backend_start changed */
+/*Now let's restart the scheduler in single_2 and make sure our backend_start changed */
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
 WHERE application_name = 'TimescaleDB Background Worker Scheduler'
@@ -203,6 +203,19 @@ $BODY$;
 select wait_equals(:'orig_backend_start');
  wait_equals 
 -------------
+ t
+(1 row)
+
+/* Make sure restart starts a worker even if it is stopped*/
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+SELECT wait_worker_counts(1,0,0,0);
+ wait_worker_counts 
+--------------------
  t
 (1 row)
 
