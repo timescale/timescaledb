@@ -20,7 +20,7 @@ DROP DATABASE single;
 /* Now the db_scheduler for single should have disappeared*/
 SELECT wait_worker_counts(1,0,1,0);
 
-/*Now let's restart the scheduler and make sure our backend_start changed */
+/*Now let's restart the scheduler in single_2 and make sure our backend_start changed */
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
 WHERE application_name = 'TimescaleDB Background Worker Scheduler'
@@ -89,6 +89,9 @@ END
 $BODY$;
 select wait_equals(:'orig_backend_start');
 
+/* Make sure restart starts a worker even if it is stopped*/
+SELECT _timescaledb_internal.stop_background_workers();
+SELECT wait_worker_counts(1,0,0,0);
 SELECT _timescaledb_internal.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 

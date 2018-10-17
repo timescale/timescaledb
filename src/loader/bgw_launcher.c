@@ -363,7 +363,6 @@ scheduler_modify_state(DbHashEntry *entry, SchedulerState new_state)
 }
 
 /* TRANSITION FUNCTIONS */
-
 static void
 scheduler_state_trans_disabled_to_enabled(DbHashEntry *entry)
 {
@@ -393,7 +392,7 @@ scheduler_state_trans_started_to_allocated(DbHashEntry *entry)
 }
 
 static void
-scheduler_state_trans_allocated_to_start(DbHashEntry *entry)
+scheduler_state_trans_allocated_to_started(DbHashEntry *entry)
 {
 	pid_t		worker_pid;
 	bool		worker_registered;
@@ -444,10 +443,10 @@ scheduler_state_trans_automatic(DbHashEntry *entry)
 		case ENABLED:
 			scheduler_state_trans_enabled_to_allocated(entry);
 			if (entry->state == ALLOCATED)
-				scheduler_state_trans_allocated_to_start(entry);
+				scheduler_state_trans_allocated_to_started(entry);
 			break;
 		case ALLOCATED:
-			scheduler_state_trans_allocated_to_start(entry);
+			scheduler_state_trans_allocated_to_started(entry);
 			break;
 		case STARTED:
 			if (get_background_worker_pid(entry->db_scheduler_handle, NULL) == BGWH_STOPPED)
@@ -502,17 +501,20 @@ launcher_pre_shmem_cleanup(int code, Datum arg)
  */
 
 /*
- * This should be idempotent. If we find the background worker and it's
- * not stopped, do nothing. If we have a worker that stopped
- * but hasn't been cleaned up yet, simply restart the worker.
+ * This should be idempotent. If we find the background worker and it's not
+ * stopped, do nothing. In order to maintain idempotency, a scheduler in the
+ * ENABLED, ALLOCATED or STARTED state cannot get a new vxid to wait on. (We
+ * cannot pass in a new vxid to wait on for an already-started scheduler in any
+ * case). This means that actions like restart, which are not idempotent, will
+ * not have their effects changed by subsequent start actions, no matter the
+ * state they are in when the start action is received.
  */
 static AckResult
-message_start_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
+message_start_action(HTAB *db_htab, BgwMessage *message)
 {
 	DbHashEntry *entry;
 
 	entry = db_hash_entry_create_if_not_exists(db_htab, message->db_oid);
-	entry->vxid = vxid;
 
 	if (entry->state == DISABLED)
 		scheduler_state_trans_disabled_to_enabled(entry);
@@ -555,26 +557,24 @@ message_stop_action(HTAB *db_htab, BgwMessage *message)
 }
 
 /*
- * This function will only restart an existing scheduler and will throw an error
- * if it is told to restart a nonexistent or disabled scheduler.
- *
- * One might think that this function would simply be a combination of stop and start above, however
- * we decided against that because we want to maintain the worker's "slot".
- * We don't want a race condition where some other db steals the scheduler of the other by requesting a worker at the wrong time.
+ * This function will stop and restart a scheduler in the STARTED state,  ENABLE
+ * a scheduler if it does not exist or is in the DISABLED state and set the vxid
+ * to wait on for a scheduler in any state. It is not idempotent. Additionally,
+ * one might think that this function would simply be a combination of stop and
+ * start above, but it is not as we maintain the worker's "slot" by never
+ * releasing the worker from our "pool" of background workers as stopping and
+ * starting would.  We don't want a race condition where some other db steals
+ * the scheduler of the other by requesting a worker at the wrong time. (This is
+ * accomplished by moving from STARTED to ALLOCATED after shutting down the
+ * worker, never releasing the entry and transitioning all the way back to
+ * ENABLED).
 */
 static AckResult
 message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
 {
 	DbHashEntry *entry;
-	bool		found;
 
-	entry = hash_search(db_htab, &message->db_oid, HASH_FIND, &found);
-
-	if (!found || entry->state == DISABLED)
-	{
-		ereport(WARNING, (errmsg("TimescaleDB background worker launcher instructed to restart a nonexistent scheduler BGW")));
-		return ACK_FAILURE;
-	}
+	entry = db_hash_entry_create_if_not_exists(db_htab, message->db_oid);
 
 	entry->vxid = vxid;
 
@@ -590,9 +590,7 @@ message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId 
 			scheduler_state_trans_started_to_allocated(entry);
 			break;
 		case DISABLED:
-			/* This case should have been caught above */
-			Assert(false);
-			return ACK_FAILURE;
+			scheduler_state_trans_disabled_to_enabled(entry);
 	}
 
 	scheduler_state_trans_automatic(entry);
@@ -625,7 +623,7 @@ launcher_handle_message(HTAB *db_htab)
 	switch (message->message_type)
 	{
 		case START:
-			action_result = message_start_action(db_htab, message, vxid);
+			action_result = message_start_action(db_htab, message);
 			break;
 		case STOP:
 			action_result = message_stop_action(db_htab, message);
