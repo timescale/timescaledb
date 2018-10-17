@@ -9,7 +9,8 @@ typedef enum BgwMessageType
 {
 	STOP = 0,
 	START,
-	RESTART
+	RESTART,
+	START_OR_RESTART
 } BgwMessageType;
 
 typedef struct BgwMessage

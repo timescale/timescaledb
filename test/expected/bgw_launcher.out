@@ -260,6 +260,49 @@ SELECT wait_greater(:'orig_backend_start');
  t
 (1 row)
 
+--make sure start_or_restart has same behavior as restart when worker already exists
+SELECT backend_start as orig_backend_start
+FROM pg_stat_activity
+WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+AND datname = 'single_2' \gset
+SELECT _timescaledb_internal.start_or_restart_background_workers();
+ start_or_restart_background_workers 
+-------------------------------------
+ t
+(1 row)
+
+SELECT wait_greater(:'orig_backend_start');
+ wait_greater 
+--------------
+ t
+(1 row)
+
+--make sure start_or_restart has same behavior as start from stopped case
+--we won't test that restart, doesn't start background workers as it's hard to prove a negative.
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+SELECT wait_worker_counts(1,0,0,0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
+SELECT _timescaledb_internal.start_or_restart_background_workers();
+ start_or_restart_background_workers 
+-------------------------------------
+ t
+(1 row)
+
+SELECT wait_worker_counts(1,0,1,0);
+ wait_worker_counts 
+--------------------
+ t
+(1 row)
+
 /* Make sure canceling the launcher backend causes a restart of schedulers */
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity

@@ -6,7 +6,7 @@
 #include "launcher_interface.h"
 #include "compat.h"
 
-#define MIN_LOADER_API_VERSION 1
+#define MIN_LOADER_API_VERSION 2
 
 extern bool
 bgw_worker_reserve(void)

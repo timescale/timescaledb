@@ -92,6 +92,7 @@ select wait_equals(:'orig_backend_start');
 SELECT _timescaledb_internal.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 
+
 /*Make sure drop extension statement restarts the worker and on rollback it keeps running*/
 /*Now let's restart the scheduler and make sure our backend_start changed */
 SELECT backend_start as orig_backend_start
@@ -126,6 +127,23 @@ RETURN FALSE;
 END
 $BODY$;
 SELECT wait_greater(:'orig_backend_start');
+
+--make sure start_or_restart has same behavior as restart when worker already exists
+SELECT backend_start as orig_backend_start
+FROM pg_stat_activity
+WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+AND datname = 'single_2' \gset
+
+SELECT _timescaledb_internal.start_or_restart_background_workers();
+
+SELECT wait_greater(:'orig_backend_start');
+
+--make sure start_or_restart has same behavior as start from stopped case
+--we won't test that restart, doesn't start background workers as it's hard to prove a negative.
+SELECT _timescaledb_internal.stop_background_workers();
+SELECT wait_worker_counts(1,0,0,0);
+SELECT _timescaledb_internal.start_or_restart_background_workers();
+SELECT wait_worker_counts(1,0,1,0);
 
 /* Make sure canceling the launcher backend causes a restart of schedulers */
 SELECT backend_start as orig_backend_start

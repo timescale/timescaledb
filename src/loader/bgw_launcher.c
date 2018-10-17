@@ -599,6 +599,33 @@ message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId 
 	return entry->state == STARTED ? ACK_SUCCESS : ACK_FAILURE;
 }
 
+/* Start scheduler if it doesn't exist, restart it if it's started, otherwise set vxid and attempt to advance*/
+static AckResult
+message_start_or_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
+{
+	DbHashEntry *entry;
+
+	entry = db_hash_entry_create_if_not_exists(db_htab, message->db_oid);
+	entry->vxid = vxid;
+	switch (entry->state)
+	{
+		case ENABLED:
+			break;
+		case ALLOCATED:
+			break;
+		case STARTED:
+			terminate_background_worker(entry->db_scheduler_handle);
+			wait_for_background_worker_shutdown(entry->db_scheduler_handle);
+			scheduler_state_trans_started_to_allocated(entry);
+			break;
+		case DISABLED:
+			scheduler_state_trans_disabled_to_enabled(entry);
+	}
+
+	scheduler_state_trans_automatic(entry);
+	return entry->state == STARTED ? ACK_SUCCESS : ACK_FAILURE;
+}
+
 /*
  * Handle 1 message.
  */
@@ -633,6 +660,8 @@ launcher_handle_message(HTAB *db_htab)
 		case RESTART:
 			action_result = message_restart_action(db_htab, message, vxid);
 			break;
+		case START_OR_RESTART:
+			action_result = message_start_or_restart_action(db_htab, message, vxid);
 	}
 
 	bgw_message_send_ack(message, action_result);
