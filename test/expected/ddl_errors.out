@@ -19,9 +19,9 @@ ERROR:  table "Hypertable_1" is not empty
 DELETE FROM  PUBLIC."Hypertable_1" ;
 \set ON_ERROR_STOP 1
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
- hypertable_id | schema_name |  table_name  
----------------+-------------+--------------
-             1 | public      | Hypertable_1
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             1 | public      | Hypertable_1 | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -64,9 +64,9 @@ ERROR:  table "Hypertable_unlogged" has to be logged
 \set ON_ERROR_STOP 1
 ALTER TABLE PUBLIC."Hypertable_unlogged" SET LOGGED;
 SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
- hypertable_id | schema_name |     table_name      
----------------+-------------+---------------------
-             2 | public      | Hypertable_unlogged
+ hypertable_id | schema_name |     table_name      | created 
+---------------+-------------+---------------------+---------
+             2 | public      | Hypertable_unlogged | t
 (1 row)
 
 CREATE TEMP TABLE "Hypertable_temp" (
@@ -110,9 +110,9 @@ ERROR:  hypertables do not support rules
 \set ON_ERROR_STOP 1
 DROP RULE notify_me ON "Hypertable_1_rule";
 SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
- hypertable_id | schema_name |    table_name     
----------------+-------------+-------------------
-             3 | public      | Hypertable_1_rule
+ hypertable_id | schema_name |    table_name     | created 
+---------------+-------------+-------------------+---------
+             3 | public      | Hypertable_1_rule | t
 (1 row)
 
 \set ON_ERROR_STOP 0

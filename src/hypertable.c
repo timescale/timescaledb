@@ -1189,7 +1189,7 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 }
 
 static Datum
-create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht)
+create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht, bool created)
 {
 	TupleDesc	tupdesc;
 	Datum		values[Natts_create_hypertable];
@@ -1206,6 +1206,7 @@ create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht)
 	values[AttrNumberGetAttrOffset(Anum_create_hypertable_id)] = Int32GetDatum(ht->fd.id);
 	values[AttrNumberGetAttrOffset(Anum_create_hypertable_schema_name)] = NameGetDatum(&ht->fd.schema_name);
 	values[AttrNumberGetAttrOffset(Anum_create_hypertable_table_name)] = NameGetDatum(&ht->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_create_hypertable_created)] = BoolGetDatum(created);
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
@@ -1282,7 +1283,12 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is already a hypertable, skipping",
 						get_rel_name(table_relid))));
 
-		PG_RETURN_NULL();
+		hcache = hypertable_cache_pin();
+		ht = hypertable_cache_get_entry(hcache, table_relid);
+		retval = create_hypertable_datum(fcinfo, ht, false);
+		cache_release(hcache);
+
+		PG_RETURN_DATUM(retval);
 	}
 
 	/*
@@ -1313,7 +1319,12 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 					 errmsg("table \"%s\" is already a hypertable, skipping",
 							get_rel_name(table_relid))));
 
-			PG_RETURN_NULL();
+			hcache = hypertable_cache_pin();
+			ht = hypertable_cache_get_entry(hcache, table_relid);
+			retval = create_hypertable_datum(fcinfo, ht, false);
+			cache_release(hcache);
+
+			PG_RETURN_DATUM(retval);
 		}
 
 		ereport(ERROR,
@@ -1489,7 +1500,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	if (create_default_indexes)
 		indexing_create_default_indexes(ht);
 
-	retval = create_hypertable_datum(fcinfo, ht);
+	retval = create_hypertable_datum(fcinfo, ht, true);
 	cache_release(hcache);
 
 	PG_RETURN_DATUM(retval);

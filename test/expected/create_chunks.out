@@ -25,9 +25,9 @@
 CREATE TABLE chunk_test(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test', 'time', 'tag', 2, chunk_time_interval => 3);
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable   
------------------------
- (1,public,chunk_test)
+    create_hypertable    
+-------------------------
+ (1,public,chunk_test,t)
 (1 row)
 
 INSERT INTO chunk_test VALUES (4, 24.3, 1, 1);
@@ -120,9 +120,9 @@ ORDER BY c.id, d.id;
 CREATE TABLE chunk_test_ends(time bigint, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test_ends', 'time', chunk_time_interval => 5);
 NOTICE:  adding not-null constraint to column "time"
-     create_hypertable      
-----------------------------
- (2,public,chunk_test_ends)
+      create_hypertable       
+------------------------------
+ (2,public,chunk_test_ends,t)
 (1 row)
 
 INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.1, 11233, 1);
@@ -150,9 +150,9 @@ CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integ
 SELECT create_hypertable('chunk_test2', 'time', 'tag', 2, chunk_time_interval => 3);
 WARNING:  unexpected interval: smaller than one second
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (3,public,chunk_test2)
+    create_hypertable     
+--------------------------
+ (3,public,chunk_test2,t)
 (1 row)
 
 SELECT interval_length

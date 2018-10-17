@@ -15,9 +15,9 @@ CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2)
 CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
 CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
 SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
- hypertable_id | schema_name |   table_name   
----------------+-------------+----------------
-             1 | public      | two_Partitions
+ hypertable_id | schema_name |   table_name   | created 
+---------------+-------------+----------------+---------
+             1 | public      | two_Partitions | t
 (1 row)
 
 \set QUIET off
@@ -185,9 +185,9 @@ SELECT * FROM ONLY "two_Partitions";
 CREATE TABLE error_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('error_test', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable   
------------------------
- (2,public,error_test)
+    create_hypertable    
+-------------------------
+ (2,public,error_test,t)
 (1 row)
 
 \set QUIET off
@@ -216,9 +216,9 @@ CREATE TABLE tick_character (
     time        TIMESTAMPTZ       NOT NULL
 );
 SELECT create_hypertable ('tick_character', 'time', 'symbol', 2);
-     create_hypertable     
----------------------------
- (3,public,tick_character)
+      create_hypertable      
+-----------------------------
+ (3,public,tick_character,t)
 (1 row)
 
 INSERT INTO tick_character ( symbol, mid, spread, time ) VALUES ( 'GBPJPY', 142.639000, 5.80, 'Mon Mar 20 09:18:22.3 2017') RETURNING time, symbol, mid;
@@ -236,9 +236,9 @@ SELECT * FROM tick_character;
 CREATE TABLE  many_partitions_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test', 'time', 'device', 1000);
 NOTICE:  adding not-null constraint to column "time"
-        create_hypertable        
----------------------------------
- (4,public,many_partitions_test)
+         create_hypertable         
+-----------------------------------
+ (4,public,many_partitions_test,t)
 (1 row)
 
 --NOTE: how much slower the first two queries are -- they are creating chunks
@@ -264,9 +264,9 @@ SELECT count(*) FROM  many_partitions_test;
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
 SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (5,public,date_col_test)
+     create_hypertable      
+----------------------------
+ (5,public,date_col_test,t)
 (1 row)
 
 INSERT INTO date_col_test
@@ -282,9 +282,9 @@ SELECT * FROM date_col_test WHERE time > '2001-01-01';
 CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
 NOTICE:  adding not-null constraint to column "time"
-         create_hypertable          
-------------------------------------
- (6,public,many_partitions_test_1m)
+          create_hypertable           
+--------------------------------------
+ (6,public,many_partitions_test_1m,t)
 (1 row)
 
 EXPLAIN (verbose on, costs off)
@@ -675,9 +675,9 @@ set timescaledb.max_open_chunks_per_insert=1;
 CREATE TABLE chunk_assert_fail(i bigint, j bigint);
 SELECT create_hypertable('chunk_assert_fail', 'i', 'j', 1000, chunk_time_interval=>1);
 NOTICE:  adding not-null constraint to column "i"
-      create_hypertable       
-------------------------------
- (7,public,chunk_assert_fail)
+       create_hypertable        
+--------------------------------
+ (7,public,chunk_assert_fail,t)
 (1 row)
 
 insert into chunk_assert_fail values (1, 1), (1, 2), (2,1);
@@ -708,9 +708,9 @@ SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
 CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('one_space_test', 'time', 'device', 1);
 NOTICE:  adding not-null constraint to column "time"
-     create_hypertable     
----------------------------
- (8,public,one_space_test)
+      create_hypertable      
+-----------------------------
+ (8,public,one_space_test,t)
 (1 row)
 
 INSERT INTO one_space_test VALUES

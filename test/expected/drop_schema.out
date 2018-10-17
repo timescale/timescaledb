@@ -12,16 +12,16 @@ CREATE TABLE hypertable_schema.test2 (time timestamptz, temp float, location int
 --create two identical tables with their own chunk schemas
 SELECT create_hypertable('hypertable_schema.test1', 'time', 'location', 2, associated_schema_name => 'chunk_schema1');
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable      
------------------------------
- (1,hypertable_schema,test1)
+       create_hypertable       
+-------------------------------
+ (1,hypertable_schema,test1,t)
 (1 row)
 
 SELECT create_hypertable('hypertable_schema.test2', 'time', 'location', 2, associated_schema_name => 'chunk_schema2');
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable      
------------------------------
- (2,hypertable_schema,test2)
+       create_hypertable       
+-------------------------------
+ (2,hypertable_schema,test2,t)
 (1 row)
 
 INSERT INTO hypertable_schema.test1 VALUES ('2001-01-01 01:01:01', 23.3, 1);

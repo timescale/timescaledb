@@ -8,9 +8,9 @@ ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
 ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable    
--------------------------
- (1,public,alter_before)
+     create_hypertable     
+---------------------------
+ (1,public,alter_before,t)
 (1 row)
 
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
@@ -46,9 +46,9 @@ ORDER BY c.relname, a.attnum;
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (2,public,alter_after)
+    create_hypertable     
+--------------------------
+ (2,public,alter_after,t)
 (1 row)
 
 -- Create first chunk
@@ -222,9 +222,9 @@ WHERE tablename = 'hyper_in_space' OR tablename LIKE '\_hyper\__\__\_chunk' ORDE
 CREATE TABLE hyper_in_space(time bigint, temp float, device int);
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
 NOTICE:  adding not-null constraint to column "time"
-     create_hypertable     
----------------------------
- (3,public,hyper_in_space)
+      create_hypertable      
+-----------------------------
+ (3,public,hyper_in_space,t)
 (1 row)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (1, 20, 1);
@@ -307,9 +307,9 @@ DROP TABLE hyper_in_space;
 CREATE TABLE hyper_in_space(time bigint, temp float, device int) TABLESPACE tablespace1;
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
 NOTICE:  adding not-null constraint to column "time"
-     create_hypertable     
----------------------------
- (4,public,hyper_in_space)
+      create_hypertable      
+-----------------------------
+ (4,public,hyper_in_space,t)
 (1 row)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (1, 20, 1);
@@ -419,9 +419,9 @@ CREATE TABLE original_name.my_table (
   quantity double precision
 );
 SELECT create_hypertable('original_name.my_table','date');
-     create_hypertable      
-----------------------------
- (5,original_name,my_table)
+      create_hypertable       
+------------------------------
+ (5,original_name,my_table,t)
 (1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -443,21 +443,21 @@ CREATE TABLE regular_table (
   quantity double precision
 );
 SELECT create_hypertable('original_name.my_table','date');
-     create_hypertable      
-----------------------------
- (6,original_name,my_table)
+      create_hypertable       
+------------------------------
+ (6,original_name,my_table,t)
 (1 row)
 
 SELECT create_hypertable('original_name.my_table2','date');
-      create_hypertable      
------------------------------
- (7,original_name,my_table2)
+       create_hypertable       
+-------------------------------
+ (7,original_name,my_table2,t)
 (1 row)
 
 SELECT create_hypertable('regular_table','date');
-    create_hypertable     
---------------------------
- (8,public,regular_table)
+     create_hypertable      
+----------------------------
+ (8,public,regular_table,t)
 (1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -479,15 +479,15 @@ CREATE TABLE original_name.my_table2 (
   quantity double precision
 );
 SELECT create_hypertable('original_name.my_table','date');
-     create_hypertable      
-----------------------------
- (9,original_name,my_table)
+      create_hypertable       
+------------------------------
+ (9,original_name,my_table,t)
 (1 row)
 
 SELECT create_hypertable('original_name.my_table2','date');
-      create_hypertable       
-------------------------------
- (10,original_name,my_table2)
+       create_hypertable        
+--------------------------------
+ (10,original_name,my_table2,t)
 (1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -518,9 +518,9 @@ CREATE TABLE my_table (
   quantity double precision
 );
 SELECT create_hypertable('my_table','date', associated_schema_name => 'my_associated_schema');
-  create_hypertable   
-----------------------
- (11,public,my_table)
+   create_hypertable    
+------------------------
+ (11,public,my_table,t)
 (1 row)
 
 INSERT INTO my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);

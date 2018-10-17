@@ -3,7 +3,7 @@ CREATE TABLE ht(time timestamptz NOT NULL, location text);
 SELECT create_hypertable('ht', 'time');
  create_hypertable 
 -------------------
- (1,public,ht)
+ (1,public,ht,t)
 (1 row)
 
 INSERT INTO ht(time) select timestamp 'epoch' + (i * interval '1 second') from generate_series(1, 100) as T(i);
@@ -24,9 +24,9 @@ DROP TABLE regular_table;
 DROP TABLE ht;
 CREATE TABLE orders(id int, user_id int, time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('orders', 'time');
- create_hypertable 
--------------------
- (2,public,orders)
+  create_hypertable  
+---------------------
+ (2,public,orders,t)
 (1 row)
 
 INSERT INTO orders values(1,1,timestamp 'epoch' + '1 second');

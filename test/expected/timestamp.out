@@ -22,9 +22,9 @@ CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE 
 CREATE SCHEMA "testNs" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 \c single :ROLE_DEFAULT_PERM_USER
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 2, associated_schema_name=>'testNs' );
- hypertable_id | schema_name | table_name 
----------------+-------------+------------
-             1 | public      | testNs
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | testNs     | t
 (1 row)
 
 \c single

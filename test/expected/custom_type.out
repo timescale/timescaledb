@@ -61,9 +61,9 @@ CREATE OPERATOR >= (
 CREATE TABLE customtype_test(time_custom customtype, val int);
 SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time_custom"
-     create_hypertable      
-----------------------------
- (1,public,customtype_test)
+      create_hypertable       
+------------------------------
+ (1,public,customtype_test,t)
 (1 row)
 
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);

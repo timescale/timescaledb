@@ -29,7 +29,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
     chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
-) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
 CREATE OR REPLACE FUNCTION  set_adaptive_chunking(
@@ -138,7 +138,7 @@ CREATE OR REPLACE FUNCTION  add_dimension(
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
     if_not_exists           BOOLEAN = FALSE
-) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME)
+) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION attach_tablespace(

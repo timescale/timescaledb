@@ -16,9 +16,9 @@ CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_boo
 CREATE SCHEMA "one_Partition" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 \c single :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
- hypertable_id | schema_name |  table_name   
----------------+-------------+---------------
-             1 | public      | one_Partition
+ hypertable_id | schema_name |  table_name   | created 
+---------------+-------------+---------------+---------
+             1 | public      | one_Partition | t
 (1 row)
 
 --output command tags
@@ -117,7 +117,7 @@ CREATE TABLE "1dim"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim"', 'time');
  create_hypertable 
 -------------------
- (2,public,1dim)
+ (2,public,1dim,t)
 (1 row)
 
 INSERT INTO "1dim" VALUES('2017-01-20T09:00:01', 22.5) RETURNING *;
@@ -170,9 +170,9 @@ SELECT "1dim" FROM "1dim";
 --test that we can insert pre-1970 dates
 CREATE TABLE "1dim_pre1970"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_pre1970"', 'time', chunk_time_interval=> INTERVAL '1 Month');
-    create_hypertable    
--------------------------
- (3,public,1dim_pre1970)
+     create_hypertable     
+---------------------------
+ (3,public,1dim_pre1970,t)
 (1 row)
 
 INSERT INTO "1dim_pre1970" VALUES('1969-12-01T19:00:00', 21.2);
@@ -184,27 +184,27 @@ BEGIN;
 CREATE TABLE "1dim_usec_interval"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_usec_interval"', 'time', chunk_time_interval=> 10);
 WARNING:  unexpected interval: smaller than one second
-       create_hypertable       
--------------------------------
- (4,public,1dim_usec_interval)
+        create_hypertable        
+---------------------------------
+ (4,public,1dim_usec_interval,t)
 (1 row)
 
 INSERT INTO "1dim_usec_interval" VALUES('1969-12-01T19:00:00', 21.2);
 ROLLBACK;
 CREATE TABLE "1dim_usec_interval"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"1dim_usec_interval"', 'time', chunk_time_interval=> 1000000);
-       create_hypertable       
--------------------------------
- (5,public,1dim_usec_interval)
+        create_hypertable        
+---------------------------------
+ (5,public,1dim_usec_interval,t)
 (1 row)
 
 INSERT INTO "1dim_usec_interval" VALUES('1969-12-01T19:00:00', 21.2);
 CREATE TABLE "1dim_neg"(time INTEGER, temp float);
 SELECT create_hypertable('"1dim_neg"', 'time', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "time"
-  create_hypertable  
----------------------
- (6,public,1dim_neg)
+   create_hypertable   
+-----------------------
+ (6,public,1dim_neg,t)
 (1 row)
 
 INSERT INTO "1dim_neg" VALUES (-20, 21.2);
@@ -279,13 +279,13 @@ SELECT create_hypertable('"3dim"', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
- (7,public,3dim)
+ (7,public,3dim,t)
 (1 row)
 
 SELECT add_dimension('"3dim"', 'location', 2);
-      add_dimension       
---------------------------
- (9,public,3dim,location)
+       add_dimension        
+----------------------------
+ (9,public,3dim,location,t)
 (1 row)
 
 INSERT INTO "3dim" VALUES('2017-01-20T09:00:01', 22.5, 'blue', 'nyc');
@@ -385,9 +385,9 @@ SELECT create_hypertable('"inttime_err"', 'time');
 ERROR:  integer dimensions require an explicit interval
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483647);
-   create_hypertable    
-------------------------
- (8,public,inttime_err)
+    create_hypertable     
+--------------------------
+ (8,public,inttime_err,t)
 (1 row)
 
 -- Test that large intervals and no interval fail for SMALLINT
@@ -399,18 +399,18 @@ SELECT create_hypertable('"smallinttime_err"', 'time');
 ERROR:  integer dimensions require an explicit interval
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>32767);
-      create_hypertable      
------------------------------
- (9,public,smallinttime_err)
+       create_hypertable       
+-------------------------------
+ (9,public,smallinttime_err,t)
 (1 row)
 
 --make sure date inserts work even when the timezone changes the
 CREATE TABLE hyper_date(time date, temp float);
 SELECT create_hypertable('"hyper_date"', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (10,public,hyper_date)
+    create_hypertable     
+--------------------------
+ (10,public,hyper_date,t)
 (1 row)
 
 SET timezone=+1;
@@ -420,9 +420,9 @@ RESET timezone;
 SET timezone = 'UTC';
 CREATE TABLE "test_tz"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"test_tz"', 'time', chunk_time_interval=> INTERVAL '1 day');
-  create_hypertable  
----------------------
- (11,public,test_tz)
+   create_hypertable   
+-----------------------
+ (11,public,test_tz,t)
 (1 row)
 
 INSERT INTO "test_tz" VALUES('2017-09-22 10:00:00', 21.2);
@@ -448,9 +448,9 @@ SET timescaledb.max_open_chunks_per_insert = 10;
 SET timescaledb.max_cached_chunks_per_hypertable = 10;
 CREATE TABLE "nondefault_mem_settings"(time timestamp PRIMARY KEY, temp float);
 SELECT create_hypertable('"nondefault_mem_settings"', 'time', chunk_time_interval=> INTERVAL '1 Month');
-          create_hypertable          
--------------------------------------
- (12,public,nondefault_mem_settings)
+           create_hypertable           
+---------------------------------------
+ (12,public,nondefault_mem_settings,t)
 (1 row)
 
 INSERT INTO "nondefault_mem_settings" VALUES('2000-12-01T19:00:00', 21.2);
@@ -495,9 +495,9 @@ BEGIN;
 CREATE TABLE "data_records" ("time" bigint NOT NULL, "value" integer CHECK (VALUE >= 0));
 CREATE TABLE
 SELECT create_hypertable('data_records', 'time', chunk_time_interval => 2592000000);
-    create_hypertable     
---------------------------
- (13,public,data_records)
+     create_hypertable      
+----------------------------
+ (13,public,data_records,t)
 (1 row)
 
 INSERT INTO "data_records" ("time", "value") VALUES (0, 1);

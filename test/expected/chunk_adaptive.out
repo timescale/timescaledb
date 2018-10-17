@@ -44,9 +44,9 @@ SELECT create_hypertable('test_adaptive', 'time',
                          chunk_sizing_func => 'calculate_chunk_interval');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (1,public,test_adaptive)
+     create_hypertable      
+----------------------------
+ (1,public,test_adaptive,t)
 (1 row)
 
 DROP TABLE test_adaptive;
@@ -57,9 +57,9 @@ SELECT create_hypertable('test_adaptive', 'time',
                          create_default_indexes => true);
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (2,public,test_adaptive)
+     create_hypertable      
+----------------------------
+ (2,public,test_adaptive,t)
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
@@ -262,9 +262,9 @@ SELECT create_hypertable('test_adaptive_no_index', 'time',
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_no_index"
 NOTICE:  adding not-null constraint to column "time"
-         create_hypertable         
------------------------------------
- (3,public,test_adaptive_no_index)
+          create_hypertable          
+-------------------------------------
+ (3,public,test_adaptive_no_index,t)
 (1 row)
 
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
@@ -361,9 +361,9 @@ SELECT create_hypertable('test_adaptive_correct_index', 'time',
                          create_default_indexes => false);
 WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_correct_index"
 NOTICE:  adding not-null constraint to column "time"
-           create_hypertable            
-----------------------------------------
- (4,public,test_adaptive_correct_index)
+            create_hypertable             
+------------------------------------------
+ (4,public,test_adaptive_correct_index,t)
 (1 row)
 
 CREATE INDEX ON test_adaptive_correct_index(location);
@@ -457,9 +457,9 @@ SELECT create_hypertable('test_adaptive_space', 'time', 'location', 2,
                          create_default_indexes => true);
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
-       create_hypertable        
---------------------------------
- (5,public,test_adaptive_space)
+        create_hypertable         
+----------------------------------
+ (5,public,test_adaptive_space,t)
 (1 row)
 
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
@@ -537,9 +537,9 @@ SELECT create_hypertable('test_adaptive_after_multiple_dims', 'time',
                          chunk_target_size => '100MB',
                          create_default_indexes => true);
 NOTICE:  adding not-null constraint to column "time"
-              create_hypertable               
-----------------------------------------------
- (6,public,test_adaptive_after_multiple_dims)
+               create_hypertable                
+------------------------------------------------
+ (6,public,test_adaptive_after_multiple_dims,t)
 (1 row)
 
 INSERT INTO test_adaptive_after_multiple_dims VALUES('2018-01-01T00:00:00+00'::timestamptz, 0.0, 5);
@@ -565,9 +565,9 @@ SELECT create_hypertable('test_adaptive', 'time',
                          chunk_sizing_func => 'my_chunk_func_schema.calculate_chunk_interval');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (7,public,test_adaptive)
+     create_hypertable      
+----------------------------
+ (7,public,test_adaptive,t)
 (1 row)
 
 ALTER SCHEMA my_chunk_func_schema RENAME TO new_chunk_func_schema;

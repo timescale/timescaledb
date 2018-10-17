@@ -1,9 +1,9 @@
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (1,public,part_legacy)
+    create_hypertable     
+--------------------------
+ (1,public,part_legacy,t)
 (1 row)
 
 -- Show legacy partitioning function is used
@@ -44,9 +44,9 @@ SELECT * FROM part_legacy WHERE device = 1;
 CREATE TABLE part_new(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_new', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
-  create_hypertable  
----------------------
- (2,public,part_new)
+   create_hypertable   
+-----------------------
+ (2,public,part_new,t)
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -88,9 +88,9 @@ SELECT * FROM part_new WHERE device = 1;
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
 SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable       
-------------------------------
- (3,public,part_new_convert1)
+       create_hypertable        
+--------------------------------
+ (3,public,part_new_convert1,t)
 (1 row)
 
 INSERT INTO part_new_convert1 VALUES ('2017-03-22T09:18:23', 1.0, 2);
@@ -112,9 +112,9 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_3_%_chunk');
 CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
 SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable    
--------------------------
- (4,public,part_add_dim)
+     create_hypertable     
+---------------------------
+ (4,public,part_add_dim,t)
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -122,9 +122,9 @@ SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => 'bad_fu
 ERROR:  function "bad_func" does not exist at character 74
 \set ON_ERROR_STOP 1
 SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
-          add_dimension           
-----------------------------------
- (9,public,part_add_dim,location)
+           add_dimension            
+------------------------------------
+ (9,public,part_add_dim,location,t)
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -158,9 +158,9 @@ $BODY$;
 CREATE TABLE part_custom_func(time timestamptz, temp float8, device text);
 SELECT create_hypertable('part_custom_func', 'time', 'device', 2, partitioning_func => 'custom_partfunc');
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable      
------------------------------
- (5,public,part_custom_func)
+       create_hypertable       
+-------------------------------
+ (5,public,part_custom_func,t)
 (1 row)
 
 SELECT _timescaledb_internal.get_partition_hash(substring('dev1' FROM '[A-za-z0-9 ]+'));
@@ -208,9 +208,9 @@ SELECT create_hypertable(
     chunk_time_interval => interval '1 day',
     partitioning_func=>'simpl_type_hash');
 NOTICE:  adding not-null constraint to column "timestamp"
-     create_hypertable      
-----------------------------
- (6,public,simpl_partition)
+      create_hypertable       
+------------------------------
+ (6,public,simpl_partition,t)
 (1 row)
 
 INSERT INTO simpl_partition VALUES ('2017-03-22T09:18:23', ROW(1)::simpl);
@@ -266,9 +266,9 @@ ERROR:  cannot create a unique index without the column "device" (used in partit
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('hyper_with_index', 'time');
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable       
-------------------------------
- (11,public,hyper_with_index)
+       create_hypertable        
+--------------------------------
+ (11,public,hyper_with_index,t)
 (1 row)
 
 -- make sure user created index is used.
@@ -287,9 +287,9 @@ ERROR:  cannot create a unique index without the column "device" (used in partit
 DROP INDEX time_index;
 CREATE UNIQUE INDEX time_space_index ON hyper_with_index(time, device);
 SELECT add_dimension('hyper_with_index', 'device', 4);
-            add_dimension            
--------------------------------------
- (23,public,hyper_with_index,device)
+             add_dimension             
+---------------------------------------
+ (23,public,hyper_with_index,device,t)
 (1 row)
 
 CREATE TABLE hyper_with_primary(time TIMESTAMPTZ PRIMARY KEY, temp float, device int);
@@ -298,9 +298,9 @@ SELECT create_hypertable('hyper_with_primary', 'time', 'device', 4);
 ERROR:  cannot create a unique index without the column "device" (used in partitioning)
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('hyper_with_primary', 'time');
-       create_hypertable        
---------------------------------
- (13,public,hyper_with_primary)
+        create_hypertable         
+----------------------------------
+ (13,public,hyper_with_primary,t)
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -329,9 +329,9 @@ ERROR:  could not find hash function for type tuple
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'tuple_hash');
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable      
------------------------------
- (15,public,part_custom_dim)
+       create_hypertable       
+-------------------------------
+ (15,public,part_custom_dim,t)
 (1 row)
 
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
@@ -352,9 +352,9 @@ $BODY$;
 CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'my_partitioning_schema.tuple_hash');
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable      
------------------------------
- (16,public,part_custom_dim)
+       create_hypertable       
+-------------------------------
+ (16,public,part_custom_dim,t)
 (1 row)
 
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));

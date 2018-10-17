@@ -1,9 +1,9 @@
 CREATE TABLE index_test(time timestamptz, temp float);
 SELECT create_hypertable('index_test', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable   
------------------------
- (1,public,index_test)
+    create_hypertable    
+-------------------------
+ (1,public,index_test,t)
 (1 row)
 
 -- Default indexes created
@@ -27,9 +27,9 @@ ERROR:  cannot create a unique index without the column "device" (used in partit
 -- Partitioning on only time should work
 SELECT create_hypertable('index_test', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable   
------------------------
- (3,public,index_test)
+    create_hypertable    
+-------------------------
+ (3,public,index_test,t)
 (1 row)
 
 INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 1, 17.5);
@@ -108,9 +108,9 @@ SELECT * FROM test.show_columns('index_test');
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable   
------------------------
- (4,public,index_test)
+    create_hypertable    
+-------------------------
+ (4,public,index_test,t)
 (1 row)
 
 INSERT INTO index_test VALUES ('2017-01-20T09:00:01', 1, 17.5);
@@ -370,9 +370,9 @@ CREATE TABLE index_test(time timestamptz, temp float, device int) TABLESPACE tab
 -- Default indexes should be in the table's tablespace
 SELECT create_hypertable('index_test', 'time');
 NOTICE:  adding not-null constraint to column "time"
-   create_hypertable   
------------------------
- (5,public,index_test)
+    create_hypertable    
+-------------------------
+ (5,public,index_test,t)
 (1 row)
 
 -- Explicitly defining an index tablespace should work and propagate

@@ -1,9 +1,9 @@
 CREATE TABLE "btest"(time timestamp, time_alt timestamp, gp INTEGER, temp float, strid TEXT DEFAULT 'testing');
 SELECT create_hypertable('"btest"', 'time');
 NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- (1,public,btest)
+ create_hypertable  
+--------------------
+ (1,public,btest,t)
 (1 row)
 
 INSERT INTO "btest" VALUES('2017-01-20T09:00:01', '2017-01-20T10:00:00', 1, 22.5);
@@ -133,9 +133,9 @@ CREATE TABLE btest_numeric
 );
 SELECT create_hypertable('btest_numeric', 'time');
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (2,public,btest_numeric)
+     create_hypertable      
+----------------------------
+ (2,public,btest_numeric,t)
 (1 row)
 
 -- Insert rows, with rows that contain NULL values

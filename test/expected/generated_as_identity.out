@@ -3,9 +3,9 @@ CREATE table test_gen (
     payload text
 );
  SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
-  create_hypertable  
----------------------
- (1,public,test_gen)
+   create_hypertable   
+-----------------------
+ (1,public,test_gen,t)
 (1 row)
 
 insert into test_gen (payload) select generate_series(1,15) returning *;

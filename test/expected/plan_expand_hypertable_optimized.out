@@ -8,9 +8,9 @@ DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper', 'time',  chunk_time_interval => 10);
 psql:include/plan_expand_hypertable_load.sql:8: NOTICE:  adding not-null constraint to column "time"
- create_hypertable 
--------------------
- (1,public,hyper)
+ create_hypertable  
+--------------------
+ (1,public,hyper,t)
 (1 row)
 
 INSERT INTO hyper SELECT g, g FROM generate_series(0,1000) g;
@@ -23,9 +23,9 @@ DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper_w_space', 'time', 'device_id', 2, chunk_time_interval => 10);
 psql:include/plan_expand_hypertable_load.sql:24: NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (2,public,hyper_w_space)
+     create_hypertable      
+----------------------------
+ (2,public,hyper_w_space,t)
 (1 row)
 
 INSERT INTO hyper_w_space (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
@@ -38,9 +38,9 @@ DROP COLUMN time_broken,
 ADD COLUMN time TIMESTAMPTZ;
 SELECT create_hypertable('hyper_ts', 'time', 'device_id', 2, chunk_time_interval => '10 seconds'::interval);
 psql:include/plan_expand_hypertable_load.sql:39: NOTICE:  adding not-null constraint to column "time"
-  create_hypertable  
----------------------
- (3,public,hyper_ts)
+   create_hypertable   
+-----------------------
+ (3,public,hyper_ts,t)
 (1 row)
 
 INSERT INTO tag(name) SELECT 'tag'||g FROM generate_series(0,10) g;
