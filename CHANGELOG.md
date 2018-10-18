@@ -4,6 +4,36 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.0.0-rc3 (2018-10-18)
+
+This release is our third 1.0 release candidate. We expect to only merge bug fixes between now and our final 1.0 release. This is a big milestone for us and signifies our maturity and enterprise readiness.
+
+**PLEASE NOTE** that release candidate (rc) builds will only be made available via GitHub and Docker, and _not_ on other release channels. Please help us test these release candidates out if you can!
+
+**Potential breaking change**: Starting with rc2, we updated our error codes to be prefixed with `TS` instead of the old `IO` prefix. If you were checking for these error codes by name, please update your checks.
+
+**Notable commits**
+* [f7ba13d] Handle and test tablespace changes to and from the default tablespace
+* [9ccda0d] Start stopped workers on restart message
+* [3e3bb0c] Add bool created to create_hypertable and add_dimension return value
+* [53ff656] Add state machine and polling to launcher
+* [d9b2dfe] Change return value of add_dimension to TABLE
+* [19299cf] Make all time_bucket function STRICT
+* [297d885] Add a version of time_bucket that takes an origin
+* [e74be30] Move time_bucket epoch to a Monday
+* [46564c1] Handle ALTER SCHEMA RENAME properly
+* [a83e283] Change return value of create_hypertable to TABLE
+* [aea7c7e] Add GRANTs to update script for pg_dump to work
+* [119963a] Replace hardcoded bash path in shell scripts
+
+**Thanks**
+* @jesperpedersen for several PRs that help improve documentation and some rough edges
+* @did-g for improvements to our build process
+* @skebanga for reporting an issue with ALTER SCHEMA RENAME
+* @p-alik for suggesting a way to improve our bash scripts' portability
+* @mx781 and @HeikoOnnebrink for reporting an issues with permission GRANTs and ownership when using pg_dump
+
+
 ## 1.0.0-rc2 (2018-09-27)
 
 This release is our second 1.0 release candidate. We expect to only merge bug fixes between now and our final 1.0 release. This is a big milestone for us and signifies our maturity and enterprise readiness.
