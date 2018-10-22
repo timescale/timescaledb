@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+#
+# This file is licensed under the Apache License, see LICENSE-APACHE
+# at the top level directory of the timescaledb distribution.
+
 # This script is used for restoring a hypertable from a tarball made with
 # ts_dump.sh. It unarchives the tarball, producing a schema file and data file,
 # which are then restore separately.
