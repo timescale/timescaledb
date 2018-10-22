@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
+
 -- This file contains utilities for time conversion.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
     AS '@MODULE_PATHNAME@', 'ts_pg_timestamp_to_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 CREATE TABLE vacuum_test(time timestamp, temp float);
 
 -- create hypertable with three chunks

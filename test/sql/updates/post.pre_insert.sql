@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 \d+ _timescaledb_catalog.hypertable
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension

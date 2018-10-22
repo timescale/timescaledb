@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
+
 -- time_bucket returns the left edge of the bucket where ts falls into.
 -- Buckets span an interval of time equal to the bucket_width and are aligned with the epoch.
 CREATE OR REPLACE FUNCTION time_bucket(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP

@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 /*
  * Note on testing: need a couple wrappers that pg_sleep in a loop to wait for changes
  * to appear in pg_stat_activity.

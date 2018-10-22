@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 -- Utility function for grouping/slotting time with a given interval.
 CREATE OR REPLACE FUNCTION date_group(
     field           timestamp,

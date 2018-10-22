@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 -- Secondary devices table to test foreign keys in "two_Partitions"
 CREATE TABLE devices (
     id TEXT PRIMARY KEY,

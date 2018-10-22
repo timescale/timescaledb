@@ -1,5 +1,13 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 \o /dev/null
 \ir include/insert_two_partitions.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 \c single
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,

@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 \c single :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_uuid() RETURNS UUID
     AS :MODULE_PATHNAME, 'ts_test_uuid' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

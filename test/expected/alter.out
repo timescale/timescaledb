@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 -- DROP a table's column before making it a hypertable
 CREATE TABLE alter_before(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 ALTER TABLE alter_before DROP COLUMN id;

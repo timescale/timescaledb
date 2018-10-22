@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 \ir include/insert_two_partitions.sql
 
 SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');

@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 --single time dimension
 CREATE TABLE hyper ("time_broken" bigint NOT NULL, "value" integer);
 

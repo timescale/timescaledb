@@ -1,4 +1,12 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 \ir include/insert_two_partitions.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 \c single
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
@@ -38,6 +46,10 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 INSERT 0 1
 \set QUIET on
 \ir ../../scripts/dump_meta_data.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
 -- This script will dump relevant meta data from internal TimescaleDB tables
 -- that can help our engineers trouble shoot.
 --

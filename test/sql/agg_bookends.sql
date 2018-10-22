@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 CREATE TABLE "btest"(time timestamp, time_alt timestamp, gp INTEGER, temp float, strid TEXT DEFAULT 'testing');
 SELECT create_hypertable('"btest"', 'time');
 INSERT INTO "btest" VALUES('2017-01-20T09:00:01', '2017-01-20T10:00:00', 1, 22.5);

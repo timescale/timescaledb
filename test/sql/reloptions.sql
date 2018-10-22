@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 CREATE TABLE reloptions_test(time integer, temp float8, color integer)
 WITH (fillfactor=75, oids=true, autovacuum_vacuum_threshold=100);
 

@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 CREATE TABLE PUBLIC."one_Partition" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,

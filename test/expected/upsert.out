@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 CREATE TABLE upsert_test(time timestamp PRIMARY KEY, temp float, color text);
 SELECT create_hypertable('upsert_test', 'time');
     create_hypertable     

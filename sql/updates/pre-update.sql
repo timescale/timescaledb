@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
+
 -- This file is always prepended to all upgrade scripts.
 
 -- Triggers should be disabled during upgrades to avoid having them
@@ -17,7 +22,7 @@ DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
 DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.restart_background_workers()
-RETURNS BOOL 
+RETURNS BOOL
 AS '@LOADER_PATHNAME@', 'ts_bgw_db_workers_restart'
 LANGUAGE C VOLATILE;
 

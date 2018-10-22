@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 CREATE TABLE regular_table(name text, junk text);
 CREATE TABLE ht(time timestamptz NOT NULL, location text);
 SELECT create_hypertable('ht', 'time');

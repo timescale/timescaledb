@@ -1,13 +1,21 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 SET timescaledb.disable_optimizations= 'off';
 \set PREFIX 'EXPLAIN (costs off) '
 \ir include/plan_expand_hypertable_load.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 --single time dimension
 CREATE TABLE hyper ("time_broken" bigint NOT NULL, "value" integer);
 ALTER TABLE hyper
 DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper', 'time',  chunk_time_interval => 10);
-psql:include/plan_expand_hypertable_load.sql:8: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:13: NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (1,public,hyper,t)
@@ -22,7 +30,7 @@ ALTER TABLE hyper_w_space
 DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 SELECT create_hypertable('hyper_w_space', 'time', 'device_id', 2, chunk_time_interval => 10);
-psql:include/plan_expand_hypertable_load.sql:24: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:29: NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (2,public,hyper_w_space,t)
@@ -37,7 +45,7 @@ ALTER TABLE hyper_ts
 DROP COLUMN time_broken,
 ADD COLUMN time TIMESTAMPTZ;
 SELECT create_hypertable('hyper_ts', 'time', 'device_id', 2, chunk_time_interval => '10 seconds'::interval);
-psql:include/plan_expand_hypertable_load.sql:39: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_expand_hypertable_load.sql:44: NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (3,public,hyper_ts,t)
@@ -51,6 +59,10 @@ SET client_min_messages = 'error';
 ANALYZE;
 RESET client_min_messages;
 \ir include/plan_expand_hypertable_query.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 --we want to see how our logic excludes chunks
 --and not how much work constraint_exclusion does
 SET constraint_exclusion = 'off';

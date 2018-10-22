@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;

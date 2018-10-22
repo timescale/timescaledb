@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 -- Tests for plain PostgreSQL commands to ensure that they work while
 -- the TimescaleDB extension is loaded. This is a mix of statements
 -- added mostly as regression checks when bugs are discovered and
