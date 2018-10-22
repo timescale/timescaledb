@@ -120,7 +120,7 @@ bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 	};
 	ScannerCtx	scanctx = {
 		.table = catalog->tables[BGW_JOB].id,
-		.index = InvalidOid,
+		.index = CATALOG_INDEX(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
 		.data = &list_data,
 		.tuple_found = bgw_job_accum_tuple_found,
 		.lockmode = AccessShareLock,
@@ -185,6 +185,108 @@ bgw_job_find(int32 bgw_job_id, MemoryContext mctx)
 	bgw_job_scan_job_id(bgw_job_id, bgw_job_tuple_found, NULL, &job_stat, mctx, AccessShareLock);
 
 	return job_stat;
+}
+
+static bool
+bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period)
+{
+	Catalog    *catalog = catalog_get();
+	Relation	rel;
+	TupleDesc	desc;
+	Datum		values[Natts_bgw_job];
+	CatalogSecurityContext sec_ctx;
+	bool		nulls[Natts_bgw_job] = {false};
+
+	rel = heap_open(catalog->tables[BGW_JOB].id, RowExclusiveLock);
+
+	desc = RelationGetDescr(rel);
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_job_type)] = NameGetDatum(job_type);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = IntervalPGetDatum(schedule_interval);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = IntervalPGetDatum(max_runtime);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
+
+	catalog_become_owner(catalog, &sec_ctx);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = catalog_table_next_seq_id(catalog, BGW_JOB);
+	catalog_insert_values(rel, desc, values, nulls);
+	catalog_restore_user(&sec_ctx);
+	heap_close(rel, RowExclusiveLock);
+
+	return true;
+}
+
+TS_FUNCTION_INFO_V1(ts_bgw_job_insert_relation);
+
+Datum
+ts_bgw_job_insert_relation(PG_FUNCTION_ARGS)
+{
+	bgw_job_insert_relation(PG_GETARG_NAME(0), PG_GETARG_NAME(1), PG_GETARG_INTERVAL_P(2), PG_GETARG_INTERVAL_P(3), PG_GETARG_INT32(4), PG_GETARG_INTERVAL_P(5));
+
+	PG_RETURN_NULL();
+}
+
+static bool
+bgw_job_tuple_delete(TupleInfo *ti, void *data)
+{
+	CatalogSecurityContext sec_ctx;
+
+	/* Also delete the bgw_stat entry */
+	bgw_job_stat_delete(((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id);
+
+	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_delete(ti->scanrel, ti->tuple);
+	catalog_restore_user(&sec_ctx);
+
+	return true;
+}
+
+static bool
+bgw_job_delete_scan(ScanKeyData *scankey)
+{
+	Catalog    *catalog = catalog_get();
+
+	ScannerCtx	scanctx = {
+		.table = catalog->tables[BGW_JOB].id,
+		.index = CATALOG_INDEX(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = NULL,
+		.limit = 1,
+		.tuple_found = bgw_job_tuple_delete,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+		.result_mctx = CurrentMemoryContext,
+		.tuplock = {
+			.waitpolicy = LockWaitBlock,
+			.lockmode = LockTupleExclusive,
+			.enabled = false,
+		}
+	};
+
+	return scanner_scan(&scanctx);
+}
+
+static bool
+bgw_job_delete_by_id(int32 job_id)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_bgw_job_pkey_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ,
+				Int32GetDatum(job_id));
+
+	return bgw_job_delete_scan(scankey);
+}
+
+TS_FUNCTION_INFO_V1(ts_bgw_job_delete_by_id);
+
+Datum
+ts_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
+{
+	bgw_job_delete_by_id(PG_GETARG_INT32(0));
+	PG_RETURN_NULL();
 }
 
 bool

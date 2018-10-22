@@ -23,6 +23,7 @@
 #include <storage/lwlock.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
+#include <utils/inval.h>
 #include <utils/jsonb.h>
 #include <utils/timestamp.h>
 #include <utils/snapmgr.h>
@@ -50,6 +51,11 @@ least_timestamp(TimestampTz left, TimestampTz right)
 
 TS_FUNCTION_INFO_V1(ts_bgw_scheduler_main);
 
+/*
+ * Global so the invalidate cache message can set. Don't need to protect
+ * access with a lock because it's accessed only by the scheduler process.
+ */
+bool		jobs_list_needs_update;
 
 /* has to be global to shutdown jobs on exit */
 static List *scheduled_jobs = NIL;
@@ -98,8 +104,20 @@ typedef struct ScheduledBgwJob
 	bool		may_need_mark_end;
 } ScheduledBgwJob;
 
-
 static void on_failure_to_start_job(ScheduledBgwJob *sjob);
+
+#if USE_ASSERT_CHECKING
+static void
+assert_that_worker_has_stopped(ScheduledBgwJob *sjob)
+{
+	pid_t		pid;
+	BgwHandleStatus status;
+
+	Assert(sjob->reserved_worker);
+	status = GetBackgroundWorkerPid(sjob->handle, &pid);
+	Assert(BGWH_STOPPED == status);
+}
+#endif
 
 static void
 mark_job_as_started(ScheduledBgwJob *sjob)
@@ -124,6 +142,15 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 	 * This function needs to be safe wrt failures occuring at any point in
 	 * the job starting process.
 	 */
+	if (sjob->handle != NULL)
+	{
+#if USE_ASSERT_CHECKING
+		/* Sanity check: worker has stopped (if it was started) */
+		assert_that_worker_has_stopped(sjob);
+#endif
+		pfree(sjob->handle);
+		sjob->handle = NULL;
+	}
 
 	/*
 	 * first cleanup reserved workers before accessing db. Want to minimize
@@ -159,20 +186,6 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 	}
 }
 
-
-#if USE_ASSERT_CHECKING
-static void
-assert_that_worker_has_stopped(ScheduledBgwJob *sjob)
-{
-	pid_t		pid;
-	BgwHandleStatus status;
-
-	Assert(sjob->reserved_worker);
-	status = GetBackgroundWorkerPid(sjob->handle, &pid);
-	Assert(BGWH_STOPPED == status);
-}
-#endif
-
 /* Set the state of the job.
 * This function is responsible for setting all of the variables in ScheduledBgwJob
 * except for the job itself.
@@ -194,11 +207,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			break;
 		case JOB_STATE_SCHEDULED:
 			/* prev_state can be any value, including itself */
-#if USE_ASSERT_CHECKING
-			/* Sanity check: worker has stopped (if it was started) */
-			if (sjob->handle != NULL)
-				assert_that_worker_has_stopped(sjob);
-#endif
+
 			worker_state_cleanup(sjob);
 
 			job_stat = bgw_job_stat_find(sjob->job.fd.id);
@@ -211,7 +220,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 
 			Assert(!sjob->reserved_worker);
 			sjob->next_start = bgw_job_stat_next_start(job_stat, &sjob->job);
-			sjob->handle = NULL;
 			break;
 		case JOB_STATE_STARTED:
 			Assert(prev_state == JOB_STATE_SCHEDULED);
@@ -325,20 +333,112 @@ scheduled_bgw_job_start(ScheduledBgwJob *sjob, register_background_worker_callba
 	}
 }
 
-static List *
-initialize_scheduled_jobs_list(MemoryContext mctx)
+static void
+terminate_and_cleanup_job(ScheduledBgwJob *sjob)
 {
-	List	   *jobs = bgw_job_get_all(sizeof(ScheduledBgwJob), mctx);
-	ListCell   *lc;
-
-	foreach(lc, jobs)
+	if (sjob->handle != NULL)
 	{
-		ScheduledBgwJob *sjob = lfirst(lc);
-
-		scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+		TerminateBackgroundWorker(sjob->handle);
+		WaitForBackgroundWorkerShutdown(sjob->handle);
 	}
-	return jobs;
+	sjob->may_need_mark_end = false;
+	worker_state_cleanup(sjob);
 }
+
+/*
+ *  Update the given job list with whatever is in the bgw_job table. For overlapping jobs,
+ *  copy over any existing scheduler info from the given jobs list.
+ *  Assume that both lists are ordered by job ID.
+ *  Note that this function call will destroy cur_jobs_list and return a new list.
+ */
+List *
+update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
+{
+	List	   *new_jobs = bgw_job_get_all(sizeof(ScheduledBgwJob), mctx);
+	ListCell   *new_ptr = list_head(new_jobs);
+	ListCell   *cur_ptr = list_head(cur_jobs_list);
+
+	while (cur_ptr != NULL && new_ptr != NULL)
+	{
+		ScheduledBgwJob *new_sjob = lfirst(new_ptr);
+		ScheduledBgwJob *cur_sjob = lfirst(cur_ptr);
+
+		if (cur_sjob->job.fd.id < new_sjob->job.fd.id)
+		{
+			/*
+			 * We don't need cur_sjob anymore. Make sure to clean up the job
+			 * state. Then keep advancing cur pointer until we catch up.
+			 */
+			terminate_and_cleanup_job(cur_sjob);
+
+			cur_ptr = lnext(cur_ptr);
+			continue;
+		}
+		if (cur_sjob->job.fd.id == new_sjob->job.fd.id)
+		{
+			/*
+			 * Then this job already exists. Copy over any state and advance
+			 * both pointers.
+			 */
+			cur_sjob->job = new_sjob->job;
+			*new_sjob = *cur_sjob;
+
+			cur_ptr = lnext(cur_ptr);
+			new_ptr = lnext(new_ptr);
+		}
+		else if (cur_sjob->job.fd.id > new_sjob->job.fd.id)
+		{
+			scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
+
+			/* Advance the new_job list until we catch up to cur_list */
+			new_ptr = lnext(new_ptr);
+		}
+	}
+
+	/* If there's more stuff in cur_list, clean it all up */
+	if (cur_ptr != NULL)
+	{
+		ListCell   *ptr;
+
+		for_each_cell(ptr, cur_ptr)
+			terminate_and_cleanup_job(lfirst(ptr));
+	}
+
+	if (new_ptr != NULL)
+	{
+		/* Then there are more new jobs. Initialize all of them. */
+		ListCell   *ptr;
+
+		for_each_cell(ptr, new_ptr)
+			scheduled_bgw_job_transition_state_to(lfirst(ptr), JOB_STATE_SCHEDULED);
+	}
+
+	/* Free the old list */
+	list_free_deep(cur_jobs_list);
+	return new_jobs;
+}
+
+#ifdef TS_DEBUG
+/* Only used by test code */
+void
+populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
+{
+	if (sjob == NULL)
+		return;
+
+	values[0] = Int32GetDatum(sjob->job.fd.id);
+	values[1] = NameGetDatum(&sjob->job.fd.application_name);
+	values[2] = NameGetDatum(&sjob->job.fd.job_type);
+	values[3] = IntervalPGetDatum(&sjob->job.fd.schedule_interval);
+	values[4] = IntervalPGetDatum(&sjob->job.fd.max_runtime);
+	values[5] = Int32GetDatum(sjob->job.fd.max_retries);
+	values[6] = IntervalPGetDatum(&sjob->job.fd.retry_period);
+	values[7] = TimestampTzGetDatum(sjob->next_start);
+	values[8] = TimestampTzGetDatum(sjob->timeout_at);
+	values[9] = BoolGetDatum(sjob->reserved_worker);
+	values[10] = BoolGetDatum(sjob->may_need_mark_end);
+}
+#endif
 
 static void
 start_scheduled_jobs(register_background_worker_callback_type bgw_register)
@@ -388,6 +488,12 @@ earliest_job_timeout()
 	return earliest;
 }
 
+/* Special exit function only used in shmem_exit_callback.
+ * Do not call the normal cleanup function (worker_state_cleanup), because
+ * 1) we do not wait for the BGW to terminate,
+ * 2) we cannot access the database at this time, so we should not be
+ *    trying to update the bgw_stat table.
+ */
 static void
 terminate_all_jobs_and_release_workers()
 {
@@ -487,8 +593,10 @@ bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_call
 
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
-	scheduled_jobs = initialize_scheduled_jobs_list(scheduler_mctx);
+	scheduled_jobs = update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
 	CommitTransactionCommand();
+
+	jobs_list_needs_update = false;
 
 	if (run_for_interval_ms > 0)
 		quit_time = TimestampTzPlusMilliseconds(start, run_for_interval_ms);
@@ -506,6 +614,21 @@ bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_call
 		timer_wait(next_wakeup);
 
 		CHECK_FOR_INTERRUPTS();
+
+		/*
+		 * Process any cache invalidation message that indicates we need to
+		 * update the jobs list
+		 */
+		AcceptInvalidationMessages();
+
+		/* txn to read the list of jobs from the DB */
+		if (jobs_list_needs_update)
+		{
+			StartTransactionCommand();
+			scheduled_jobs = update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
+			CommitTransactionCommand();
+			jobs_list_needs_update = false;
+		}
 
 		check_for_stopped_and_timed_out_jobs();
 	}
@@ -560,3 +683,9 @@ ts_bgw_scheduler_main(PG_FUNCTION_ARGS)
 
 	PG_RETURN_VOID();
 };
+
+void
+bgw_job_cache_invalidate_callback()
+{
+	jobs_list_needs_update = true;
+}

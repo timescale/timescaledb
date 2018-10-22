@@ -22,6 +22,7 @@ typedef enum JobResult
 } JobResult;
 
 extern BgwJobStat *bgw_job_stat_find(int job_id);
+extern void bgw_job_stat_delete(int job_id);
 extern void bgw_job_stat_mark_start(int32 bgw_job_id);
 extern void bgw_job_stat_mark_end(BgwJob *job, JobResult result);
 extern bool bgw_job_stat_end_was_marked(BgwJobStat *jobstat);

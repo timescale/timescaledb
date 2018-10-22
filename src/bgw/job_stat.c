@@ -89,6 +89,19 @@ bgw_job_stat_find(int32 bgw_job_id)
 	return job_stat;
 }
 
+static bool
+bgw_job_stat_tuple_delete(TupleInfo *ti, void *const data)
+{
+	catalog_delete(ti->scanrel, ti->tuple);
+	return true;
+}
+
+void
+bgw_job_stat_delete(int32 bgw_job_id)
+{
+	bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_delete, NULL, NULL, RowExclusiveLock);
+}
+
 /* Mark the start of a job. This should be done in a separate transaction by the scheduler
 *  before the bgw for a job is launched. This ensures that the job is counted as started
 * before /any/ job specific code is executed. A job that has been started but never ended

@@ -110,7 +110,9 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	StartTransactionCommand();
 	params_get();
+	initialize_timer_latch();
 	CommitTransactionCommand();
+
 	bgw_log_set_application_name("DB Scheduler");
 	register_emit_log_hook();
 

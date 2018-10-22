@@ -49,13 +49,28 @@ mock_wait(TimestampTz until)
 {
 	elog(WARNING, "[TESTING] Wait until %ld, started at %ld", until, params_get()->current_time);
 
-	if (!params_get()->mock_wait_returns_immediately && bgw_handle != NULL)
+	switch (params_get()->mock_wait_type)
 	{
-		WaitForBackgroundWorkerShutdown(bgw_handle);
-		bgw_handle = NULL;
+		case WAIT_ON_JOB:
+			if (bgw_handle != NULL)
+			{
+				WaitForBackgroundWorkerShutdown(bgw_handle);
+				bgw_handle = NULL;
+			}
+			/* Now fall through to set the time */
+		case IMMEDIATELY_SET_UNTIL:
+			params_set_time(until, false);
+			return true;
+		case WAIT_FOR_OTHER_TO_ADVANCE:
+			{
+				/* Wait for another process to set "next time" */
+				reset_and_wait_timer_latch();
+
+				return true;
+			}
+		default:
+			return false;
 	}
-	params_set_time(until);
-	return true;
 }
 
 static TimestampTz
