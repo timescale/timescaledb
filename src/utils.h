@@ -40,7 +40,7 @@ extern Oid	inheritance_parent_relid(Oid relid);
 	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
 
 #define is_inheritance_table(relid) \
-    (is_inheritance_child(relid) || is_inheritance_parent(relid))
+	(is_inheritance_child(relid) || is_inheritance_parent(relid))
 
 #define DATUM_GET(values, attno) \
 	values[attno-1]

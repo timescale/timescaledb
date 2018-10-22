@@ -1,7 +1,5 @@
 #include <postgres.h>
-#include <fmgr.h>
 #include <catalog/pg_type.h>
-#include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/indexing.h>
@@ -9,18 +7,16 @@
 #include <access/htup_details.h>
 #include <access/heapam.h>
 #include <access/genam.h>
-#include <nodes/nodes.h>
 #include <nodes/makefuncs.h>
 #include <parser/scansup.h>
-#include <utils/guc.h>
-#include <utils/date.h>
-#include <utils/datetime.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/relcache.h>
 #include <utils/fmgroids.h>
+#include <utils/date.h>
 #include <catalog/pg_cast.h>
 #include <parser/parse_coerce.h>
+#include <fmgr.h>
 
 #include "utils.h"
 #include "compat.h"
@@ -245,184 +241,6 @@ create_fmgr(char *schema, char *function_name, int num_args)
 	fmgr_info(func_list->oid, finfo);
 
 	return finfo;
-}
-
-/* Returns the period in the same representation as Postgres Timestamps.
- * (i.e. in microseconds if  HAVE_INT64_TIMESTAMP, seconds otherwise).
- * Note that this is not our internal representation (microseconds).
- * Always returns an exact value.*/
-static inline int64
-get_interval_period_timestamp_units(Interval *interval)
-{
-	if (interval->month != 0)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("interval defined in terms of month, year, century etc. not supported")
-				 ));
-	}
-#ifdef HAVE_INT64_TIMESTAMP
-	return interval->time + (interval->day * USECS_PER_DAY);
-#else
-	if (interval->time != trunc(interval->time))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("interval must not have sub-second precision")
-				 ));
-	}
-	return interval->time + (interval->day * SECS_PER_DAY);
-#endif
-}
-
-#ifdef HAVE_INT64_TIMESTAMP
-#define JAN_3_2000 (2 * USECS_PER_DAY)
-#else
-#define JAN_3_2000 (2 * SECS_PER_DAY)
-#endif
-
-/*
-* The default origin is Monday 2000-01-03. We don't use PG epoch since it starts on a saturday.
-* This makes time-buckets by a week more intuitive and aligns it with
-* date_trunc.
-*/
-#define DEFAULT_ORIGIN (JAN_3_2000)
-#define TIME_BUCKET_TS(period, timestamp, result, shift)			\
-	do															\
-	{															\
-		if (period <= 0) \
-			ereport(ERROR, \
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), \
-				 errmsg("period must be greater then 0"))); \
-		/* shift = shift % period, but use TMODULO */		\
-		TMODULO(shift, result, period);						\
-				 														\
-		if ((shift > 0 && timestamp < DT_NOBEGIN + shift)           \
-			|| (shift < 0 && timestamp > DT_NOEND + shift))               \
-			ereport(ERROR,                                          \
-					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),   \
-					 errmsg("timestamp out of range")));            \
-		timestamp -= shift;											\
-																	\
-		/* result = (timestamp / period) * period */					\
-		TMODULO(timestamp, result, period);								\
-		if (timestamp < 0)												\
-		{																\
-		/*																\
-		 * need to subtract another period if remainder < 0 this only happens \
-		 * if timestamp is negative to begin with and there is a remainder \
-		 * after division. Need to subtract another period since division \
-		 * truncates toward 0 in C99. \
-		 */ 															\
-		result = (result * period) - period;							\
-		}																	\
-		else																\
-			result *= period;												\
-																			\
-		result += shift; \
-	} while (0)
-
-
-TS_FUNCTION_INFO_V1(ts_timestamp_bucket);
-Datum
-ts_timestamp_bucket(PG_FUNCTION_ARGS)
-{
-	Interval   *interval = PG_GETARG_INTERVAL_P(0);
-	Timestamp	timestamp = PG_GETARG_TIMESTAMP(1);
-
-	/*
-	 * USE NARGS and not IS_NULL to differentiate a NULL argument from a call
-	 * with 2 parameters
-	 */
-	Timestamp	origin = (PG_NARGS() > 2 ? PG_GETARG_TIMESTAMP(2) : DEFAULT_ORIGIN);
-	Timestamp	result;
-	int64		period = get_interval_period_timestamp_units(interval);
-
-	if (TIMESTAMP_NOT_FINITE(timestamp))
-		PG_RETURN_TIMESTAMP(timestamp);
-
-	TIME_BUCKET_TS(period, timestamp, result, origin);
-
-	PG_RETURN_TIMESTAMP(result);
-}
-
-TS_FUNCTION_INFO_V1(ts_timestamptz_bucket);
-Datum
-ts_timestamptz_bucket(PG_FUNCTION_ARGS)
-{
-	Interval   *interval = PG_GETARG_INTERVAL_P(0);
-	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
-
-	/*
-	 * USE NARGS and not IS_NULL to differentiate a NULL argument from a call
-	 * with 2 parameters
-	 */
-	TimestampTz origin = (PG_NARGS() > 2 ? PG_GETARG_TIMESTAMPTZ(2) : DEFAULT_ORIGIN);
-	TimestampTz result;
-	int64		period = get_interval_period_timestamp_units(interval);
-
-	if (TIMESTAMP_NOT_FINITE(timestamp))
-		PG_RETURN_TIMESTAMPTZ(timestamp);
-
-	TIME_BUCKET_TS(period, timestamp, result, origin);
-
-	PG_RETURN_TIMESTAMPTZ(result);
-}
-
-static inline void
-check_period_is_daily(int64 period)
-{
-#ifdef HAVE_INT64_TIMESTAMP
-	int64		day = USECS_PER_DAY;
-#else
-	int64		day = SECS_PER_DAY;
-#endif
-	if (period < day)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("interval must not have sub-day precision")
-				 ));
-	}
-	if (period % day != 0)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("interval must be a multiple of a day")
-				 ));
-
-	}
-}
-
-TS_FUNCTION_INFO_V1(ts_date_bucket);
-
-Datum
-ts_date_bucket(PG_FUNCTION_ARGS)
-{
-	Interval   *interval = PG_GETARG_INTERVAL_P(0);
-	DateADT		date = PG_GETARG_DATEADT(1);
-	Timestamp	origin = DEFAULT_ORIGIN;
-	Timestamp	timestamp,
-				result;
-	int64		period = -1;
-
-	if (DATE_NOT_FINITE(date))
-		PG_RETURN_DATEADT(date);
-
-	period = get_interval_period_timestamp_units(interval);
-	/* check the period aligns on a date */
-	check_period_is_daily(period);
-
-	/* convert to timestamp (NOT tz), bucket, convert back to date */
-	timestamp = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(1)));
-	if (PG_NARGS() > 2)
-		origin = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(2)));
-
-	Assert(!TIMESTAMP_NOT_FINITE(timestamp));
-
-	TIME_BUCKET_TS(period, timestamp, result, origin);
-
-	PG_RETURN_DATUM(DirectFunctionCall1(timestamp_date, TimestampGetDatum(result)));
 }
 
 /* Returns approximate period in microseconds */
