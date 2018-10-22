@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 

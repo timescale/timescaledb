@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 --
 --  This test will create chunks in two dimenisions, time (x) and
 --  space (y), where the time dimension is aligned. The figure below

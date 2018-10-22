@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test3(time bigint, temp float8, device_id text);

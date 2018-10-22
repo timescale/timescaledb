@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 -- Test hashing Const values. We should expect the same hash value for
 -- all integer types when values are compatible
 SELECT _timescaledb_internal.get_partition_hash(1::int);

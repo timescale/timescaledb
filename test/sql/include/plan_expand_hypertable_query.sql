@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 --we want to see how our logic excludes chunks
 --and not how much work constraint_exclusion does
 SET constraint_exclusion = 'off';

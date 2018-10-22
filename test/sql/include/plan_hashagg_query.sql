@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 :PREFIX SELECT time_bucket('1 minute', time) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'

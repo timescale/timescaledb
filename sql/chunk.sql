@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
+
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_open(
         dimension_value   BIGINT,
         interval_length   BIGINT,

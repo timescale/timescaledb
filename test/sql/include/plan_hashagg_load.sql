@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 CREATE TABLE metric (id SERIAL PRIMARY KEY, value INT);
 CREATE TABLE hyper(time TIMESTAMP, time_int BIGINT, time_broken DATE, metricid int REFERENCES metric(id), VALUE double precision);
 CREATE TABLE regular(time TIMESTAMP, time_int BIGINT, time_date DATE, metricid int REFERENCES metric(id), VALUE double precision);

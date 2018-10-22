@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 CREATE TABLE index_test(time timestamptz, temp float);
 SELECT create_hypertable('index_test', 'time');
 NOTICE:  adding not-null constraint to column "time"

@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 -- Should expect an error when creating a hypertable from a partition
 \set ON_ERROR_STOP 0
 CREATE TABLE partitioned_ht_create(time timestamptz, temp float, device int) PARTITION BY RANGE (time);

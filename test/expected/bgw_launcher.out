@@ -1,5 +1,13 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 \c single_2 :ROLE_SUPERUSER
 \ir include/bgw_launcher_utils.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 /*
  * Note on testing: need a couple wrappers that pg_sleep in a loop to wait for changes
  * to appear in pg_stat_activity.
@@ -343,6 +351,10 @@ ALTER ROLE :ROLE_DEFAULT_PERM_USER WITH NOSUPERUSER;
 /* Connect to the template1 database */
 \c template1
 \ir include/bgw_launcher_utils.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 /*
  * Note on testing: need a couple wrappers that pg_sleep in a loop to wait for changes
  * to appear in pg_stat_activity.
@@ -396,6 +408,10 @@ SELECT wait_worker_counts(1,0,0,0);
 
 /* Clean up the template database, removing our test utilities etc */
 \ir include/bgw_launcher_utils_cleanup.sql
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 DROP FUNCTION wait_worker_counts(integer, integer, integer, integer);
 DROP VIEW worker_counts;
 \c single_2

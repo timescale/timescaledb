@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
+
 -- This file is meant to contain aggregate functions that need to be created only
 -- once and not recreated during updates.
 -- There is no CREATE OR REPLACE AGGREGATE which means that the only way to replace

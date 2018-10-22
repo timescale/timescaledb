@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+
 --keep same order of tables as tables.sql
 SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions
 FROM _timescaledb_catalog.hypertable ORDER BY id;

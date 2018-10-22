@@ -1,3 +1,7 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
 CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
 -- create hypertable with two chunks
 SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);

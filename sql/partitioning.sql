@@ -1,3 +1,8 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License, see LICENSE-APACHE
+-- at the top level directory of the timescaledb distribution.
+
 -- Deprecated partition hash function
 CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement)
     RETURNS int
