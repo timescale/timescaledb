@@ -8,6 +8,7 @@
 #define TIMESCALEDB_COMPAT_H
 
 #include <postgres.h>
+#include <pgstat.h>
 
 #include "export.h"
 

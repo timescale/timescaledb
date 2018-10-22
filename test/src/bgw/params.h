@@ -7,13 +7,26 @@
 #ifndef TEST_BGW_PARAMS_H
 #define TEST_BGW_PARAMS_H
 #include <postgres.h>
+#include <storage/latch.h>
+
+typedef enum MockWaitType
+{
+	WAIT_ON_JOB = 0,
+	IMMEDIATELY_SET_UNTIL,
+	WAIT_FOR_OTHER_TO_ADVANCE,
+	_MAX_MOCK_WAIT_TYPE
+} MockWaitType;
+
 typedef struct TestParams
 {
+	Latch		timer_latch;
 	int64		current_time;
-	bool		mock_wait_returns_immediately;
+	MockWaitType mock_wait_type;
 } TestParams;
 
 extern TestParams *params_get(void);
-extern void params_set_time(int64 new_val);
+extern void params_set_time(int64 new_val, bool set_latch);
+void		initialize_timer_latch(void);
+void		reset_and_wait_timer_latch(void);
 
 #endif							/* TEST_BGW_PARAMS_H */

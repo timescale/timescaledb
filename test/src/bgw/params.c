@@ -160,7 +160,24 @@ params_get()
 };
 
 void
-params_set_time(int64 new_val)
+params_set_time(int64 new_val, bool set_latch)
+{
+	TestParamsWrapper *wrapper = params_open_wrapper();
+
+	Assert(wrapper != NULL);
+
+	SpinLockAcquire(&wrapper->mutex);
+	wrapper->params.current_time = new_val;
+	SpinLockRelease(&wrapper->mutex);
+
+	if (set_latch)
+		SetLatch(&wrapper->params.timer_latch);
+
+	params_close_wrapper(wrapper);
+}
+
+void
+initialize_timer_latch()
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
@@ -168,15 +185,28 @@ params_set_time(int64 new_val)
 
 	SpinLockAcquire(&wrapper->mutex);
 
-	wrapper->params.current_time = new_val;
+	InitLatch(&wrapper->params.timer_latch);
 
 	SpinLockRelease(&wrapper->mutex);
 
 	params_close_wrapper(wrapper);
 }
 
+void
+reset_and_wait_timer_latch()
+{
+	TestParamsWrapper *wrapper = params_open_wrapper();
+
+	Assert(wrapper != NULL);
+
+	ResetLatch(&wrapper->params.timer_latch);
+	WaitLatchCompat(&wrapper->params.timer_latch, WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH, 10000);
+
+	params_close_wrapper(wrapper);
+}
+
 static void
-params_set_mock_wait_returns_immediately(bool new_val)
+params_set_mock_wait_type(MockWaitType new_val)
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
@@ -184,7 +214,7 @@ params_set_mock_wait_returns_immediately(bool new_val)
 
 	SpinLockAcquire(&wrapper->mutex);
 
-	wrapper->params.mock_wait_returns_immediately = new_val;
+	wrapper->params.mock_wait_type = new_val;
 
 	SpinLockRelease(&wrapper->mutex);
 
@@ -195,7 +225,7 @@ TS_FUNCTION_INFO_V1(ts_bgw_params_reset_time);
 Datum
 ts_bgw_params_reset_time(PG_FUNCTION_ARGS)
 {
-	params_set_time(0);
+	params_set_time(PG_GETARG_INT64(0), PG_GETARG_BOOL(1));
 
 	PG_RETURN_VOID();
 }
@@ -204,7 +234,7 @@ TS_FUNCTION_INFO_V1(ts_bgw_params_mock_wait_returns_immediately);
 Datum
 ts_bgw_params_mock_wait_returns_immediately(PG_FUNCTION_ARGS)
 {
-	params_set_mock_wait_returns_immediately(PG_GETARG_BOOL(0));
+	params_set_mock_wait_type(PG_GETARG_INT32(0));
 
 	PG_RETURN_VOID();
 }

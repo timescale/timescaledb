@@ -640,7 +640,7 @@ enum
 typedef enum CacheType
 {
 	CACHE_TYPE_HYPERTABLE,
-	CACHE_TYPE_CHUNK,
+	CACHE_TYPE_BGW_JOB,
 	_MAX_CACHE_TYPES
 } CacheType;
 

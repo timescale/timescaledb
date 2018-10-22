@@ -20,6 +20,7 @@ ORDER BY proname;
  chunk_relation_size
  chunk_relation_size_pretty
  create_hypertable
+ delete_job
  detach_tablespace
  detach_tablespaces
  drop_chunks
@@ -31,11 +32,12 @@ ORDER BY proname;
  hypertable_relation_size_pretty
  indexes_relation_size
  indexes_relation_size_pretty
+ insert_job
  last
  set_adaptive_chunking
  set_chunk_time_interval
  set_number_partitions
  show_tablespaces
  time_bucket
-(22 rows)
+(24 rows)
 

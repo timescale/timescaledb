@@ -17,6 +17,8 @@
 #include "extension.h"
 #include "hypertable_cache.h"
 
+#include "bgw/scheduler.h"
+
 /*
  * Notes on the way cache invalidation works.
  *
@@ -76,6 +78,9 @@ cache_invalidate_callback(Datum arg, Oid relid)
 
 	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
 		hypertable_cache_invalidate_callback();
+
+	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
+		bgw_job_cache_invalidate_callback();
 }
 
 TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
