@@ -1425,7 +1425,14 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		chunk_adaptive_sizing_info_validate(&chunk_sizing_info);
 
 		if (chunk_sizing_info.target_size_bytes > 0)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_WARNING),
+					 errmsg("adaptive chunking is a BETA feature and is not recommended for production deployments")));
+
 			time_dim_info.adaptive_chunking = true;
+		}
+
 	}
 
 	/* Validate that the dimensions are OK */
