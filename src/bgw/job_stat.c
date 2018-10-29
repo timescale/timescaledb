@@ -146,9 +146,9 @@ TimestampTz
 calculate_next_start_on_success(TimestampTz last_finish, BgwJob *job)
 {
 	/* TODO: add randomness here? Do we need a range or just a percent? */
-	TimestampTz ts = DirectFunctionCall2(timestamptz_pl_interval,
-										 TimestampTzGetDatum(last_finish),
-										 IntervalPGetDatum(&job->fd.schedule_interval));
+	TimestampTz ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
+															 TimestampTzGetDatum(last_finish),
+															 IntervalPGetDatum(&job->fd.schedule_interval)));
 
 	return ts;
 }
