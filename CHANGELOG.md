@@ -4,6 +4,20 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.0.0 (2018-10-30)
+
+**This is our 1.0 release!**
+
+For notable commits between 0.12.0/0.12.1 and this final 1.0 release, please see previous entries for the release candidates (rc1, rc2, and rc3).
+
+**Thanks**
+To all the external contributors who helped us debug the release candidates, as well as anyone who has contributed bug reports, PRs, or feedback on Slack, GitHub, and other channels. All input has been valuable and helped us create the product we have today!
+
+**Potential breaking changes**
+* To better align with the ISO standard so that time bucketing starts each week by default on a Monday (rather than Saturday), the `time_bucket` epoch/origin has been changed from January 1, 2000 to January 3, 2000.  The function now includes an `origin` parameter that can be used to adjust this.
+* Error codes are now prefixed with `TS` instead of the prior `IO` prefix. If you were checking for these error codes by name, please update your code.
+
+
 ## 1.0.0-rc3 (2018-10-18)
 
 This release is our third 1.0 release candidate. We expect to only merge bug fixes between now and our final 1.0 release. This is a big milestone for us and signifies our maturity and enterprise readiness.
