@@ -51,6 +51,26 @@ after_script:
 
 jobs:
   include:
+
+    # This tests the formatting of a PR.
+    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+      stage: test
+      name: "pgindent and license check"
+      env:
+        - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+      before_install:
+        - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
+        - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres timescaledev/pgindent:10-alpine
+      after_failure:
+        - docker exec -it pgbuild /bin/bash -c 'diff -r /build/src /tmp/timescale_src'
+        - docker exec -it pgbuild /bin/bash -c 'diff -r /build/test/src /tmp/timescale_test_src'
+      script:
+        - docker exec -it pgbuild /bin/bash -c 'cp -R /build/src/ /tmp/timescale_src && cp -R /build/test/src/ /tmp/timescale_test_src'
+        - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make pgindent'
+        - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/src /tmp/timescale_src'
+        - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/test/src /tmp/timescale_test_src'
+        - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make licensecheck'
+
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 9.6"
@@ -94,25 +114,6 @@ jobs:
       after_script:
       script:
         - bash -x ./scripts/test_updates_with_constraints.sh
-
-    # This tests the formatting of a PR.
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      stage: test
-      name: "pgindent and license check"
-      env:
-        - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
-      before_install:
-        - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
-        - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres timescaledev/pgindent:10-alpine
-      after_failure:
-        - docker exec -it pgbuild /bin/bash -c 'diff -r /build/src /tmp/timescale_src'
-        - docker exec -it pgbuild /bin/bash -c 'diff -r /build/test/src /tmp/timescale_test_src'
-      script:
-        - docker exec -it pgbuild /bin/bash -c 'cp -R /build/src/ /tmp/timescale_src && cp -R /build/test/src/ /tmp/timescale_test_src'
-        - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make pgindent'
-        - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/src /tmp/timescale_src'
-        - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/test/src /tmp/timescale_test_src'
-        - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make licensecheck'
 
     - if: type = cron
       stage: test
