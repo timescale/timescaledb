@@ -179,6 +179,10 @@ cmake --build ./build --config Release --target install
 # opening the generated build/timescaledb.sln solution file.
 ```
 
+### Version numbers
+
+We follow [Semantic Versioning](https://semver.org/), which describes releases in the form MAJOR.MINOR.PATCH. Major releases introduce backwards-incompatibilities, minor releases are backwards-compatible, and patch releases include bug fixes. Branches that we view as release candidates are tagged with '-rc' followed by a sequential number that is incremented as new release candidates for a given version are released. 
+
 ### Additional documentation
 
 - [Why use TimescaleDB?](https://docs.timescale.com/latest/introduction)
