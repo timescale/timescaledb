@@ -205,13 +205,13 @@ ORDER BY MetricMinuteTs DESC;
                                                                                          QUERY PLAN                                                                                          
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: ((time_bucket('60'::bigint, (hyper.time_int - '10'::bigint)) + '10'::bigint)) DESC
+   Sort Key: (time_bucket('60'::bigint, hyper.time_int, '10'::bigint)) DESC
    ->  Finalize HashAggregate
-         Group Key: ((time_bucket('60'::bigint, (hyper.time_int - '10'::bigint)) + '10'::bigint))
+         Group Key: (time_bucket('60'::bigint, hyper.time_int, '10'::bigint))
          ->  Gather
                Workers Planned: 2
                ->  Partial HashAggregate
-                     Group Key: (time_bucket('60'::bigint, (hyper.time_int - '10'::bigint)) + '10'::bigint)
+                     Group Key: time_bucket('60'::bigint, hyper.time_int, '10'::bigint)
                      ->  Result
                            ->  Append
                                  ->  Parallel Seq Scan on hyper
@@ -326,13 +326,13 @@ ORDER BY MetricMinuteTs DESC, metric.id;
                                                                                          QUERY PLAN                                                                                          
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: ((time_bucket('3600'::bigint, (hyper.time_int - '10'::bigint)) + '10'::bigint)) DESC, metric.id
+   Sort Key: (time_bucket('3600'::bigint, hyper.time_int, '10'::bigint)) DESC, metric.id
    ->  Finalize HashAggregate
-         Group Key: ((time_bucket('3600'::bigint, (hyper.time_int - '10'::bigint)) + '10'::bigint)), metric.id
+         Group Key: (time_bucket('3600'::bigint, hyper.time_int, '10'::bigint)), metric.id
          ->  Gather
                Workers Planned: 2
                ->  Partial HashAggregate
-                     Group Key: (time_bucket('3600'::bigint, (hyper.time_int - '10'::bigint)) + '10'::bigint), metric.id
+                     Group Key: time_bucket('3600'::bigint, hyper.time_int, '10'::bigint), metric.id
                      ->  Hash Join
                            Hash Cond: (hyper.metricid = metric.id)
                            ->  Append
@@ -354,9 +354,9 @@ ORDER BY MetricMinuteTs DESC, metric.id;
                                                                                 QUERY PLAN                                                                                 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
-   Group Key: ((time_bucket('3600'::bigint, (regular.time_int - '10'::bigint)) + '10'::bigint)), metric.id
+   Group Key: (time_bucket('3600'::bigint, regular.time_int, '10'::bigint)), metric.id
    ->  Sort
-         Sort Key: ((time_bucket('3600'::bigint, (regular.time_int - '10'::bigint)) + '10'::bigint)) DESC, metric.id
+         Sort Key: (time_bucket('3600'::bigint, regular.time_int, '10'::bigint)) DESC, metric.id
          ->  Nested Loop
                Join Filter: (regular.metricid = metric.id)
                ->  Seq Scan on regular

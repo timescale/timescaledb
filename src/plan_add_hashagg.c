@@ -77,8 +77,22 @@ static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
+		.nargs = 3,
+		.arg_types = {INTERVALOID, TIMESTAMPOID, TIMESTAMPOID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
 		.nargs = 2,
 		.arg_types = {INTERVALOID, TIMESTAMPTZOID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
+		.nargs = 3,
+		.arg_types = {INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID},
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
@@ -91,8 +105,22 @@ static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
+		.nargs = 3,
+		.arg_types = {INTERVALOID, DATEOID, DATEOID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
 		.nargs = 2,
 		.arg_types = {INT2OID, INT2OID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
+		.nargs = 3,
+		.arg_types = {INT2OID, INT2OID, INT2OID},
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
@@ -105,8 +133,22 @@ static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
+		.nargs = 3,
+		.arg_types = {INT4OID, INT4OID, INT4OID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
 		.nargs = 2,
 		.arg_types = {INT8OID, INT8OID},
+		.custom_group_estimate_func = custom_group_estimate_time_bucket,
+	},
+	{
+		.extension_function = true,
+		.function_name = "time_bucket",
+		.nargs = 3,
+		.arg_types = {INT8OID, INT8OID, INT8OID},
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{

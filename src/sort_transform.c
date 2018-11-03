@@ -48,6 +48,13 @@ transform_date_trunc(FuncExpr *func)
 	return (Expr *) copyObject(second);
 }
 
+/*
+ * Check that time_bucket period is Const and if an offset is supplied
+ * that it is Const aswell
+ */
+#define time_bucket_has_const_period_and_offset(func) \
+	(IsA(linitial((func)->args), Const) && (list_length((func)->args) == 2 || IsA(lthird((func)->args), Const)))
+
 static Expr *
 transform_time_bucket(FuncExpr *func)
 {
@@ -59,7 +66,12 @@ transform_time_bucket(FuncExpr *func)
 	 */
 	Expr	   *second;
 
-	if (list_length(func->args) != 2 || !IsA(linitial(func->args), Const))
+	Assert(list_length(func->args) >= 2);
+
+	/*
+	 * If period and offset are not constants we must not do the optimization
+	 */
+	if (!time_bucket_has_const_period_and_offset(func))
 		return (Expr *) func;
 
 	second = sort_transform_expr(lsecond(func->args));

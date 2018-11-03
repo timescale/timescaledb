@@ -608,9 +608,12 @@ SELECT time_bucket(10::smallint, '-32768'::smallint);
 ERROR:  timestamp out of range
 SELECT time_bucket(10::smallint, '-32761'::smallint);
 ERROR:  timestamp out of range
-select time_bucket(10::smallint, '-32000'::smallint, 1000::smallint);
-ERROR:  smallint out of range
-CONTEXT:  SQL function "time_bucket" statement 1
+select time_bucket(10::smallint, '-32768'::smallint, 1000::smallint);
+ERROR:  timestamp out of range
+select time_bucket(10::smallint, '-32768'::smallint, '32767'::smallint);
+ERROR:  timestamp out of range
+select time_bucket(10::smallint, '32767'::smallint, '-32768'::smallint);
+ERROR:  timestamp out of range
 \set ON_ERROR_STOP 1
 SELECT time, time_bucket(10::smallint, time)
 FROM unnest(ARRAY[
@@ -630,9 +633,12 @@ SELECT time_bucket(10::int, '-2147483648'::int);
 ERROR:  timestamp out of range
 SELECT time_bucket(10::int, '-2147483641'::int);
 ERROR:  timestamp out of range
-SELECT time_bucket(10::int, '-2147483000'::int, 1000::int);
-ERROR:  integer out of range
-CONTEXT:  SQL function "time_bucket" statement 1
+SELECT time_bucket(1000::int, '-2147483000'::int, 1::int);
+ERROR:  timestamp out of range
+SELECT time_bucket(1000::int, '-2147483648'::int, '2147483647'::int);
+ERROR:  timestamp out of range
+SELECT time_bucket(1000::int, '2147483647'::int, '-2147483648'::int);
+ERROR:  timestamp out of range
 \set ON_ERROR_STOP 1
 SELECT time, time_bucket(10::int, time)
 FROM unnest(ARRAY[
@@ -652,9 +658,12 @@ SELECT time_bucket(10::bigint, '-9223372036854775808'::bigint);
 ERROR:  timestamp out of range
 SELECT time_bucket(10::bigint, '-9223372036854775801'::bigint);
 ERROR:  timestamp out of range
-SELECT time_bucket(10::bigint, '-9223372036854775000'::bigint, 1000::bigint);
-ERROR:  bigint out of range
-CONTEXT:  SQL function "time_bucket" statement 1
+SELECT time_bucket(1000::bigint, '-9223372036854775000'::bigint, 1::bigint);
+ERROR:  timestamp out of range
+SELECT time_bucket(1000::bigint, '-9223372036854775808'::bigint, '9223372036854775807'::bigint);
+ERROR:  timestamp out of range
+SELECT time_bucket(1000::bigint, '9223372036854775807'::bigint, '-9223372036854775808'::bigint);
+ERROR:  timestamp out of range
 \set ON_ERROR_STOP 1
 SELECT time, time_bucket(10::bigint, time)
 FROM unnest(ARRAY[
