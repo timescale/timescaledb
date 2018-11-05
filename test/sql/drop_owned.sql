@@ -35,3 +35,12 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
 SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
+
+-- test drop owned in database without extension installed
+\c single :ROLE_SUPERUSER
+CREATE database test_drop_owned;
+\c test_drop_owned
+DROP OWNED BY :ROLE_SUPERUSER;
+\c single :ROLE_SUPERUSER
+DROP DATABASE test_drop_owned;
+
