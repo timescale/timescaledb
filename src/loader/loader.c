@@ -127,6 +127,9 @@ inval_cache_callback(Datum arg, Oid relid)
 static bool
 drop_statement_drops_extension(DropStmt *stmt)
 {
+	if (!extension_exists())
+		return false;
+
 	if (stmt->removeType == OBJECT_EXTENSION)
 	{
 		if (list_length(stmt->objects) == 1)
@@ -196,6 +199,9 @@ drop_owned_statement_drops_extension(DropOwnedStmt *stmt)
 	Oid			extension_owner_oid;
 	List	   *role_ids;
 	ListCell   *lc;
+
+	if (!extension_exists())
+		return false;
 
 	Assert(IsTransactionState());
 	extension_owner_oid = extension_owner();
@@ -312,6 +318,11 @@ load_utility_cmd(Node *utility_stmt)
 static void
 stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 {
+	/*
+	 * Don't check if extension exists here because even though the current
+	 * database might not have TimescaleDB installed the database we are
+	 * dropping might.
+	 */
 	Oid			dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
 
 	if (dropped_db_oid != InvalidOid)
