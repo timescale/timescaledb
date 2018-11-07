@@ -11,23 +11,13 @@
 #include "scanner.h"
 #include "compat.h"
 #include "timer.h"
+#include "utils.h"
 
 #if PG10
 #include <utils/fmgrprotos.h>
 #endif
 #define MAX_INTERVALS_BACKOFF 5
 #define MIN_WAIT_AFTER_CRASH_MS (5 * 60 * 1000)
-
-static BgwJobStat *
-bgw_job_stat_from_tuple(HeapTuple tuple, MemoryContext mctx)
-{
-	BgwJobStat *job_stat;
-
-	job_stat = MemoryContextAllocZero(mctx, sizeof(BgwJobStat));
-	memcpy(&job_stat->fd, GETSTRUCT(tuple), sizeof(FormData_bgw_job_stat));
-
-	return job_stat;
-}
 
 static bool
 bgw_job_stat_next_start_was_set(FormData_bgw_job_stat *fd)
@@ -41,7 +31,7 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 {
 	BgwJobStat **job_stat_pp = data;
 
-	*job_stat_pp = bgw_job_stat_from_tuple(ti->tuple, ti->mctx);
+	*job_stat_pp = STRUCT_FROM_TUPLE(ti->tuple, ti->mctx, BgwJobStat, FormData_bgw_job_stat);
 
 	/* return true because used with scan_one */
 	return true;
