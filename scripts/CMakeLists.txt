@@ -1,7 +1,7 @@
 if (APPLE)
-  # We strictly need gobjdump on macs, because objdump is usually
-  # llvm's incompatible objdump
-  find_program(OBJDUMP NAMES gobjdump PATHS /usr/local/bin /opt/local/bin)
+  # we need to use dwarfdump on mac b/c the gobjdump is occasionally broken
+  # and llvm-objdump doesn't output the information we need.
+  find_program(OBJDUMP NAMES dwarfdump)
 else ()
   find_program(OBJDUMP NAMES gobjdump objdump)
 endif (APPLE)

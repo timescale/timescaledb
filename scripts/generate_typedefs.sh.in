@@ -13,9 +13,32 @@ cleanup() {
   rm -rf ${TMPDIR}
 }
 
-@OBJDUMP@ -W `find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name *.o` | egrep -A3 DW_TAG_typedef |perl -e 'while (<>) { chomp; @flds = split;next unless (1 < @flds);\
+generate_with_dwarfdump() {
+  find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.o' -print0 \
+      | xargs -0 @OBJDUMP@ --debug-pubtypes \
+      | awk '{if($1 ~ /^0x/) {print}}' \
+      | sed 's/0x.*: //' \
+      | sort \
+      | uniq \
+      > ${TMPDIR}/typedefs.list.local
+}
+
+generate_with_objdump() {
+  find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.o' -print0 | xargs -0 @OBJDUMP@ -W | egrep -A3 DW_TAG_typedef |perl -e 'while (<>) { chomp; @flds = split;next unless (1 < @flds);\
    next if $flds[0]  ne "DW_AT_name" && $flds[1] ne "DW_AT_name";\
    next if $flds[-1] =~ /^DW_FORM_str/;\
    print $flds[-1],"\n"; }' |sort |uniq > ${TMPDIR}/typedefs.list.local
+}
+
+OSNAME=$(uname -s)
+
+case ${OSNAME} in
+  ("Darwin") generate_with_dwarfdump ;;
+  ("Linux") generate_with_objdump ;;
+  (*)
+    echo "unknown operating system \"${OSNAME}\""
+    exit 1
+esac
+
 wget -q -O - "http://www.pgbuildfarm.org/cgi-bin/typedefs.pl?branch=HEAD" |\
   cat - ${TMPDIR}/typedefs.list.local | sort | uniq
