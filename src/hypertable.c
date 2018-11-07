@@ -50,6 +50,7 @@
 #include "copy.h"
 #include "utils.h"
 #include "funcapi.h"
+#include "utils.h"
 
 Oid
 rel_get_owner(Oid relid)
@@ -94,11 +95,9 @@ hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 Hypertable *
 hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx)
 {
-	Hypertable *h;
 	Oid			namespace_oid;
+	Hypertable *h = STRUCT_FROM_TUPLE(tuple, mctx, Hypertable, FormData_hypertable);
 
-	h = MemoryContextAllocZero(mctx, sizeof(Hypertable));
-	memcpy(&h->fd, GETSTRUCT(tuple), sizeof(FormData_hypertable));
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);

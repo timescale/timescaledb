@@ -19,6 +19,7 @@
 #include "extension.h"
 #include "compat.h"
 #include "job_stat.h"
+#include "utils.h"
 #include "telemetry/telemetry.h"
 
 #define TELEMETRY_INITIAL_NUM_RUNS	12
@@ -81,10 +82,12 @@ bgw_job_from_tuple(HeapTuple tuple, size_t alloc_size, MemoryContext mctx)
 {
 	BgwJob	   *job;
 
-	/* allow for embedding */
+	/*
+	 * allow for embedding with arbitrary alloc_size, which means we can't use
+	 * the STRUCT_FROM_TUPLE macro
+	 */
 	Assert(alloc_size >= sizeof(BgwJob));
-	job = MemoryContextAllocZero(mctx, alloc_size);
-	memcpy(&job->fd, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
+	job = (BgwJob *) create_struct_from_tuple(tuple, mctx, alloc_size, sizeof(FormData_bgw_job));
 	job->bgw_type = get_job_type_from_name(&job->fd.job_type);
 
 	return job;
