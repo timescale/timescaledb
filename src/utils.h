@@ -12,7 +12,7 @@
 #include <nodes/primnodes.h>
 #include <catalog/pg_proc.h>
 #include <utils/datetime.h>
-
+#include <access/htup_details.h>
 
 extern bool type_is_int8_binary_compatible(Oid sourcetype);
 
@@ -37,6 +37,11 @@ extern FmgrInfo *create_fmgr(char *schema, char *function_name, int num_args);
 extern RangeVar *makeRangeVarFromRelid(Oid relid);
 extern int	int_cmp(const void *a, const void *b);
 extern Oid	inheritance_parent_relid(Oid relid);
+
+void	   *create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size);
+
+#define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type) \
+      (to_type *) create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));
 
 /* note PG10 has_superclass but PG96 does not so use this */
 #define is_inheritance_child(relid) \

@@ -357,3 +357,18 @@ type_is_int8_binary_compatible(Oid sourcetype)
 	ReleaseSysCache(tuple);
 	return result;
 }
+
+/*
+ * Create a fresh struct pointer that will contain copied contents of the tuple.
+ * Note that this function uses GETSTRUCT, which will not work correctly for tuple types
+ * that might have variable lengths.
+ */
+void *
+create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size)
+{
+	void	   *struct_ptr = MemoryContextAllocZero(mctx, alloc_size);
+
+	memcpy(struct_ptr, GETSTRUCT(tuple), copy_size);
+
+	return struct_ptr;
+}
