@@ -56,13 +56,9 @@ polydatum_from_arg(int argno, FunctionCallInfo fcinfo)
 	value.type_oid = get_fn_expr_argtype(fcinfo->flinfo, argno);
 	value.is_null = PG_ARGISNULL(argno);
 	if (!value.is_null)
-	{
 		value.datum = PG_GETARG_DATUM(argno);
-	}
 	else
-	{
-		value.datum = 0;
-	}
+		value.datum = PointerGetDatum(NULL);
 	return value;
 }
 
@@ -224,9 +220,15 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 	}
 	*output = input;
 	if (!input.is_null)
+	{
 		output->datum = datumCopy(input.datum, tic->typebyval, tic->typelen);
+		output->is_null = false;
+	}
 	else
+	{
 		output->datum = PointerGetDatum(NULL);
+		output->is_null = true;
+	}
 }
 
 typedef struct CmpFuncCache
@@ -292,7 +294,7 @@ transcache_get(FunctionCallInfo fcinfo)
 }
 
 /*
- * bookend_sfunc - internal function called be ts_last_sfunc and ts_first_sfunc;
+ * bookend_sfunc - internal function called by ts_last_sfunc and ts_first_sfunc;
  */
 static inline Datum
 bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum value, PolyDatum cmp, char *opname, FunctionCallInfo fcinfo)
@@ -310,11 +312,8 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum va
 	}
 	else
 	{
-		if (state->cmp.is_null || cmp.is_null)
-		{
-			state->cmp.is_null = true;
-		}
-		else if (cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, cmp, state->cmp))
+		/* only do comparison if cmp is not NULL */
+		if (!cmp.is_null && cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, cmp, state->cmp))
 		{
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 			typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
@@ -355,17 +354,18 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1, Inter
 		PG_RETURN_POINTER(state1);
 	}
 
-	if (state1->cmp.is_null || state2->cmp.is_null)
+	if (state1->cmp.is_null && state2->cmp.is_null)
 	{
-		/*
-		 * if any of the cmps were NULL, bail. The final aggregate will be
-		 * NULL
-		 */
-		state1->cmp.is_null = true;
 		PG_RETURN_POINTER(state1);
 	}
-
-	if (cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, state2->cmp, state1->cmp))
+	else if (state1->cmp.is_null != state2->cmp.is_null)
+	{
+		if (state1->cmp.is_null)
+			PG_RETURN_POINTER(state2);
+		else
+			PG_RETURN_POINTER(state1);
+	}
+	else if (cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, state2->cmp, state1->cmp))
 	{
 		old_context = MemoryContextSwitchTo(aggcontext);
 		typeinfocache_polydatumcopy(&cache->value_type_cache, state2->value, &state1->value);

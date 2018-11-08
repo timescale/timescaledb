@@ -33,6 +33,7 @@ set(SOURCES
   planner.c
   plan_expand_hypertable.c
   plan_add_hashagg.c
+  plan_agg_bookend.c
   planner_import.c
   planner_utils.c
   process_utility.c

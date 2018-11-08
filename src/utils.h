@@ -40,6 +40,8 @@ extern int64 ts_get_interval_period_approx(Interval *interval);
 
 extern Oid	ts_inheritance_parent_relid(Oid relid);
 
+extern bool ts_function_types_equal(Oid left[], Oid right[], int nargs);
+
 extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size);
 
 #define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type) \
