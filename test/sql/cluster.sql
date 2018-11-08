@@ -23,7 +23,7 @@ INSERT INTO cluster_test VALUES ('2017-01-22T09:00:01', 19.5, 3);
 -- Show clustered indexes
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
-WHERE indisclustered = true;
+WHERE indisclustered = true ORDER BY 1;
 
 -- Recluster just our table
 CLUSTER VERBOSE cluster_test;
@@ -31,7 +31,7 @@ CLUSTER VERBOSE cluster_test;
 -- Show clustered indexes, including new chunk
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
-WHERE indisclustered = true;
+WHERE indisclustered = true ORDER BY 1;
 
 -- Recluster all tables (although will only be our test table)
 CLUSTER VERBOSE;
@@ -44,7 +44,7 @@ CLUSTER VERBOSE cluster_test using cluster_test_time_location_idx;
 -- Show updated clustered indexes
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
-WHERE indisclustered = true;
+WHERE indisclustered = true ORDER BY 1;
 
 --check the setting of cluster indexes on hypertables and chunks
 ALTER TABLE cluster_test CLUSTER ON cluster_test_time_idx;

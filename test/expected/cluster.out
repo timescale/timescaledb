@@ -33,12 +33,12 @@ INSERT INTO cluster_test VALUES ('2017-01-22T09:00:01', 19.5, 3);
 -- Show clustered indexes
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
-WHERE indisclustered = true;
+WHERE indisclustered = true ORDER BY 1;
                           indexrelid                          | indisclustered 
 --------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
- _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
  cluster_test_time_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
 (3 rows)
 
 -- Recluster just our table
@@ -54,12 +54,12 @@ INFO:  "cluster_test": found 0 removable, 0 nonremovable row versions in 0 pages
 -- Show clustered indexes, including new chunk
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
-WHERE indisclustered = true;
+WHERE indisclustered = true ORDER BY 1;
                           indexrelid                          | indisclustered 
 --------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
- _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
  cluster_test_time_idx                                        | t
+ _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
  _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
 (4 rows)
 
@@ -87,13 +87,13 @@ INFO:  "cluster_test": found 0 removable, 0 nonremovable row versions in 0 pages
 -- Show updated clustered indexes
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
-WHERE indisclustered = true;
+WHERE indisclustered = true ORDER BY 1;
                         indexrelid                        | indisclustered 
 ----------------------------------------------------------+----------------
- _timescaledb_internal._hyper_1_3_chunk_time_location_idx | t
- _timescaledb_internal._hyper_1_2_chunk_time_location_idx | t
- _timescaledb_internal._hyper_1_1_chunk_time_location_idx | t
  cluster_test_time_location_idx                           | t
+ _timescaledb_internal._hyper_1_1_chunk_time_location_idx | t
+ _timescaledb_internal._hyper_1_2_chunk_time_location_idx | t
+ _timescaledb_internal._hyper_1_3_chunk_time_location_idx | t
 (4 rows)
 
 --check the setting of cluster indexes on hypertables and chunks
