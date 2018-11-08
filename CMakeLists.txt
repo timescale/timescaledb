@@ -242,28 +242,42 @@ install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
   DESTINATION "${PG_SHAREDIR}/extension")
 
-find_program(PGINDENT pgindent
-  HINTS ${PG_SOURCE_DIR}
-  PATH_SUFFIXES src/tools/pgindent
-  DOC "Format C code according to PostgreSQL standards")
+find_program(CLANG_FORMAT clang-format DOC "The path to clang-format")
 
-# Configuration for running pgindent
-if (PGINDENT)
-  message(STATUS "Using pgindent ${PGINDENT}")
-  file(WRITE ${CMAKE_BINARY_DIR}/pgindent_excludes "^\\..*/\n")
+if (CLANG_FORMAT)
+  execute_process(
+  COMMAND ${CLANG_FORMAT} --version
+  OUTPUT_VARIABLE CLANG_FORMAT_VERSION_OUTPUT
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-  add_custom_command(OUTPUT typedefs.list
-    DEPENDS ${PROJECT_NAME}
-    COMMAND sh ${PROJECT_BINARY_DIR}/scripts/generate_typedefs.sh > ${PROJECT_BINARY_DIR}/typedefs.list)
-  add_custom_target(pgindent
-    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/src
-    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/test/src
-    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/tsl/src
-    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/tsl/test/src
-    DEPENDS ${PROJECT_BINARY_DIR}/typedefs.list)
-else ()
-  message(STATUS "Install pgindent to be able to format C code: https://github.com/postgres/postgres/tree/master/src/tools/pgindent")
-endif (PGINDENT)
+  if (NOT ${CLANG_FORMAT_VERSION_OUTPUT} MATCHES "version[ ]+([0-9]+)\\.([0-9]+)(\\.([0-9]+))*")
+    message(FATAL_ERROR "Could not parse clang-format version ${CLANG_FORMAT_VERSION_OUTPUT}")
+  endif ()
+
+  if(${CMAKE_MATCH_1} LESS "7")
+    message(WARNING "clang-format is out of date (at least version 7 required)")
+    set(CLANG_FORMAT False)
+  endif()
+endif ()
+
+if (NOT CLANG_FORMAT)
+  find_program(DOCKER docker DOC "The path to docker")
+
+  if(NOT DOCKER)
+    message(WARNING "clang-format is disabled (can't find clang-format or docker)")
+  else ()
+    message(STATUS "Using docker based clang-format")
+    add_custom_target(format
+      COMMAND docker run -it -v ${PROJECT_SOURCE_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg11.1 /timescaledb/scripts/clang_format_all.sh
+    )
+  endif()
+else()
+  message(STATUS "Using local clang-format")
+  add_custom_target(format
+    COMMAND ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh
+  )
+endif ()
+
 
 option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
 
@@ -309,18 +323,6 @@ if(NOT APACHE_ONLY)
   add_subdirectory(tsl)
 endif()
 
-if(NOT APACHE_ONLY)
-  add_custom_target(licensecheck
-    DEPENDS licensecheck-apache licensecheck-timescale)
-else()
-  add_custom_target(licensecheck
-    DEPENDS licensecheck-apache)
-endif()
-
-add_custom_target(licensecheck-apache
-  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license.sh -c ${CMAKE_CURRENT_SOURCE_DIR}/src -s ${CMAKE_CURRENT_SOURCE_DIR}/sql -c ${CMAKE_CURRENT_SOURCE_DIR}/test -t ${CMAKE_CURRENT_SOURCE_DIR}/test
-  USES_TERMINAL)
-
-add_custom_target(licensecheck-timescale
-  SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_license.sh -e ${CMAKE_CURRENT_SOURCE_DIR}/tsl/src -u ${CMAKE_CURRENT_SOURCE_DIR}/tsl/test/sql -e ${CMAKE_CURRENT_SOURCE_DIR}/tsl/test/src
-  USES_TERMINAL)
+add_custom_target(licensecheck
+  COMMAND ${PROJECT_SOURCE_DIR}/scripts/check_license_all.sh
+)

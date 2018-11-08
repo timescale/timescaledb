@@ -170,7 +170,7 @@ circle_draw(Shape *shape, Canvas *canvas)
 ```
 
 There are a couple of noteworthy take-aways from this
-example. 
+example.
 
 * Non-static "member" methods should take a pointer to the
 object as first argument and be namespaced as described above.
@@ -200,10 +200,12 @@ in the PostgreSQL documentation.
 
 ## Tools and editors
 
-We recommend running C code through
-[pgindent](https://github.com/postgres/postgres/tree/master/src/tools/pgindent)
-before submitting a PR. This will ensure your code is properly
-formatted according to the PostgreSQL style.
+We require running C code through clang-format before submitting a PR.
+This will ensure your code is properly formatted according to our style
+(which is similar to the PostgreSQL style but implement in clang-format).
+You can run clang-format on all of the TimescaleDB code using `make format`
+if you have clang-format (version >= 7) or docker installed.
+
 
 The following
 [Wiki post](https://wiki.postgresql.org/wiki/Developer_FAQ#What.27s_the_formatting_style_used_in_PostgreSQL_source_code.3F)
