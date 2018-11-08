@@ -1,5 +1,7 @@
 set(TEST_FILES
-  agg_bookends.sql
+  agg_bookends_optimized.sql
+  agg_bookends_results_optimized.sql
+  agg_bookends_results_diff.sql
   alternate_users.sql
   alter.sql
   append.sql

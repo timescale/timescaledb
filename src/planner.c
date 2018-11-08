@@ -47,6 +47,7 @@
 #include "chunk.h"
 #include "plan_expand_hypertable.h"
 #include "plan_add_hashagg.h"
+#include "plan_agg_bookend.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -521,6 +522,8 @@ timescale_create_upper_paths_hook(PlannerInfo *root,
 								  RelOptInfo *input_rel,
 								  RelOptInfo *output_rel)
 {
+	Query	   *parse = root->parse;
+
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel);
 
@@ -534,7 +537,11 @@ timescale_create_upper_paths_hook(PlannerInfo *root,
 		return;
 
 	if (UPPERREL_GROUP_AGG == stage)
+	{
 		ts_plan_add_hashagg(root, input_rel, output_rel);
+		if (parse->hasAggs)
+			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
+	}
 }
 
 

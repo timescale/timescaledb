@@ -167,19 +167,6 @@ static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
 
 HTAB	   *custom_estimate_func_hash = NULL;
 
-static bool
-function_types_equal(Oid left[], Oid right[], int nargs)
-{
-	int			arg_index;
-
-	for (arg_index = 0; arg_index < nargs; arg_index++)
-	{
-		if (left[arg_index] != right[arg_index])
-			return false;
-	}
-	return true;
-}
-
 static void
 initialize_custom_estimate_func_info()
 {
@@ -213,7 +200,7 @@ initialize_custom_estimate_func_info()
 		/* check types */
 		while (!function_found && funclist != NULL)
 		{
-			if (funclist->nargs != def.nargs || !function_types_equal(funclist->args, def.arg_types, def.nargs))
+			if (funclist->nargs != def.nargs || !ts_function_types_equal(funclist->args, def.arg_types, def.nargs))
 				funclist = funclist->next;
 			else
 				function_found = true;

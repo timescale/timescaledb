@@ -407,3 +407,16 @@ ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_si
 
 	return struct_ptr;
 }
+
+bool
+ts_function_types_equal(Oid left[], Oid right[], int nargs)
+{
+	int			arg_index;
+
+	for (arg_index = 0; arg_index < nargs; arg_index++)
+	{
+		if (left[arg_index] != right[arg_index])
+			return false;
+	}
+	return true;
+}
