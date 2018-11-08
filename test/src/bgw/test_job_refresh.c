@@ -63,12 +63,12 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 	else
 	{
 		/* Return the current list_cell and advance ptr */
-		Datum		values[funcctx->tuple_desc->natts];
-		bool		nulls[funcctx->tuple_desc->natts];
 		HeapTuple	tuple;
+		Datum	   *values = palloc(sizeof(*values) * funcctx->tuple_desc->natts);
+		bool	   *nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
 
 		populate_scheduled_job_tuple(lfirst(lc), values);
-		memset(nulls, 0, sizeof(nulls));
+		memset(nulls, 0, sizeof(*nulls) * funcctx->tuple_desc->natts);
 		tuple = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 
 		funcctx->user_fctx = lnext(lc);
