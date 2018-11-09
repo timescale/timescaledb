@@ -11,7 +11,7 @@ RESET client_min_messages;
 \o
 
 --generate the results into two different files
-SET client_min_messages = 'fatal';
+SET client_min_messages = 'error';
 \set ECHO none
 --make output contain query results
 \set PREFIX ''
