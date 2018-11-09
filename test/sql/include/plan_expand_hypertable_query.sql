@@ -55,7 +55,7 @@ SELECT * FROM cte ORDER BY value;
 --unhandled space constraint
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 and device_id > 'dev5' ORDER BY value;
 
---use of OR
+--use of OR - does not filter chunks
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND (device_id = 'dev5' or device_id = 'dev6') ORDER BY value;
 
 --cte
@@ -70,6 +70,56 @@ SELECT * FROM cte ORDER BY value;
 --view
 :PREFIX SELECT * FROM hyper_w_space_view WHERE time < 10 and device_id = 'dev5' ORDER BY value;
 
+--IN statement - simple
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev5') ORDER BY value;
+
+--IN statement - two chunks
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev5','dev6') ORDER BY value;
+
+--IN statement - one chunk
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN ('dev4','dev5') ORDER BY value;
+
+--NOT IN - does not filter chunks
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id NOT IN ('dev5','dev6') ORDER BY value;
+
+--IN statement with subquery - does not filter chunks
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id IN (SELECT 'dev5'::text) ORDER BY value;
+
+--ANY
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) ORDER BY value;
+
+--ANY with intersection
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) AND device_id = ANY(ARRAY['dev6','dev7']) ORDER BY value;
+
+--ANY without intersection shouldn't scan any chunks
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND device_id = ANY(ARRAY['dev5','dev6']) AND device_id = ANY(ARRAY['dev8','dev9']) ORDER BY value;
+
+--ANY/IN/ALL only works for equals operator
+:PREFIX SELECT * FROM hyper_w_space WHERE device_id < ANY(ARRAY['dev5','dev6']) ORDER BY value;
+
+--ALL with equals and different values shouldn't scan any chunks
+:PREFIX SELECT * FROM hyper_w_space WHERE device_id = ALL(ARRAY['dev5','dev6']) ORDER BY value;
+
+--Multi AND
+:PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND time < 100 ORDER BY value;
+
+--Time dimension doesn't filter chunks when using IN/ANY with multiple arguments
+:PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1,2]) ORDER BY value;
+
+--Time dimension chunk filtering works for ANY with single argument
+:PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1]) ORDER BY value;
+
+--Time dimension chunk filtering works for ALL with single argument
+:PREFIX SELECT * FROM hyper_w_space WHERE time < ALL(ARRAY[1]) ORDER BY value;
+
+--Time dimension chunk filtering works for ALL with multiple arguments
+:PREFIX SELECT * FROM hyper_w_space WHERE time < ALL(ARRAY[1,10,20,30]) ORDER BY value;
+
+--AND intersection using IN and EQUALS
+:PREFIX SELECT * FROM hyper_w_space WHERE device_id IN ('dev1','dev2') AND device_id = 'dev1' ORDER BY value;
+
+--AND with no intersection using IN and EQUALS
+:PREFIX SELECT * FROM hyper_w_space WHERE device_id IN ('dev1','dev2') AND device_id = 'dev3' ORDER BY value;
 
 --timestamps
 --these should work since they are immutable functions
@@ -89,5 +139,4 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.name='tag1') and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
-
 

@@ -78,6 +78,20 @@ dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 }
 
 DimensionVec *
+dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
+{
+	DimensionVec *vec = *vecptr;
+
+	int32		existing_slice_index = dimension_vec_find_slice_index(vec, slice->fd.id);
+
+	if (existing_slice_index == -1)
+	{
+		return dimension_vec_add_slice(vecptr, slice);
+	}
+	return vec;
+}
+
+DimensionVec *
 dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec;
