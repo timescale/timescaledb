@@ -26,7 +26,7 @@ ALTER TABLE hyper_w_space
 DROP COLUMN time_broken,
 ADD COLUMN time BIGINT;
 
-SELECT create_hypertable('hyper_w_space', 'time', 'device_id', 2, chunk_time_interval => 10);
+SELECT create_hypertable('hyper_w_space', 'time', 'device_id', 4, chunk_time_interval => 10);
 
 INSERT INTO hyper_w_space (time, device_id, value) SELECT g, 'dev' || g, g FROM generate_series(0,30) g;
 

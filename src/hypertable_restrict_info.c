@@ -10,6 +10,7 @@
 #include <optimizer/clauses.h>
 #include <utils/lsyscache.h>
 #include <parser/parsetree.h>
+#include <utils/array.h>
 
 #include "hypertable_restrict_info.h"
 #include "dimension.h"
@@ -36,9 +37,16 @@ typedef struct DimensionRestrictInfoOpen
 typedef struct DimensionRestrictInfoClosed
 {
 	DimensionRestrictInfo base;
-	int32		value;			/* hash value */
+	List	   *partitions;		/* hash values */
 	StrategyNumber strategy;	/* either Invalid or equal */
 } DimensionRestrictInfoClosed;
+
+typedef struct DimensionValues
+{
+	List	   *values;
+	bool		use_or;			/* ORed or ANDed values */
+	Oid type;					/* Oid type for values */
+} DimensionValues;
 
 static DimensionRestrictInfoOpen *
 dimension_restrict_info_open_create(Dimension *d)
@@ -56,6 +64,7 @@ dimension_restrict_info_closed_create(Dimension *d)
 {
 	DimensionRestrictInfoClosed *new = palloc(sizeof(DimensionRestrictInfoClosed));
 
+	new->partitions = NIL;
 	new->base.dimension = d;
 	new->strategy = InvalidStrategy;
 	return new;
@@ -77,68 +86,128 @@ dimension_restrict_info_create(Dimension *d)
 }
 
 static bool
-dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy, Const *c)
+dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy, DimensionValues *dimValues)
 {
-	int64		value = time_value_to_internal(c->constvalue, c->consttype, false);
+	ListCell   *item;
+	bool		restriction_added = false;
 
-	switch (strategy)
+	/* can't handle IN/ANY with multiple values */
+	if (dimValues->use_or && list_length(dimValues->values) > 1)
+		return false;
+
+	foreach(item, dimValues->values)
 	{
-		case BTLessEqualStrategyNumber:
-		case BTLessStrategyNumber:
-			if (dri->upper_strategy == InvalidStrategy || value < dri->upper_bound)
-			{
-				dri->upper_strategy = strategy;
-				dri->upper_bound = value;
-			}
-			return true;
-		case BTGreaterEqualStrategyNumber:
-		case BTGreaterStrategyNumber:
-			if (dri->lower_strategy == InvalidStrategy || value > dri->lower_bound)
-			{
-				dri->lower_strategy = strategy;
+		Datum		datum = PointerGetDatum(lfirst(item));
+		int64		value = time_value_to_internal(datum, dimValues->type, false);
+
+		switch (strategy)
+		{
+			case BTLessEqualStrategyNumber:
+			case BTLessStrategyNumber:
+				if (dri->upper_strategy == InvalidStrategy || value < dri->upper_bound)
+				{
+					dri->upper_strategy = strategy;
+					dri->upper_bound = value;
+					restriction_added = true;
+				}
+				break;
+			case BTGreaterEqualStrategyNumber:
+			case BTGreaterStrategyNumber:
+				if (dri->lower_strategy == InvalidStrategy || value > dri->lower_bound)
+				{
+					dri->lower_strategy = strategy;
+					dri->lower_bound = value;
+					restriction_added = true;
+				}
+				break;
+			case BTEqualStrategyNumber:
 				dri->lower_bound = value;
-			}
-			return true;
-		case BTEqualStrategyNumber:
-			dri->lower_bound = value;
-			dri->upper_bound = value;
-			dri->lower_strategy = BTGreaterEqualStrategyNumber;
-			dri->upper_strategy = BTLessEqualStrategyNumber;
-			return true;
-		default:
-			return false;
+				dri->upper_bound = value;
+				dri->lower_strategy = BTGreaterEqualStrategyNumber;
+				dri->upper_strategy = BTLessEqualStrategyNumber;
+				restriction_added = true;
+				break;
+			default:
+				/* unsupported strategy */
+				break;
+
+		}
 	}
+	return restriction_added;
 }
 
-static bool
-dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNumber strategy, Const *c)
+static List *
+dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, List *values)
 {
-	int64		value = partitioning_func_apply(dri->base.dimension->partitioning, c->constvalue);
+	List	   *partitions = NIL;
+	ListCell   *item;
 
-	switch (strategy)
+	foreach(item, values)
 	{
-		case BTEqualStrategyNumber:
-			dri->value = value;
-			dri->strategy = strategy;
-			return true;
-		default:
-			return false;
+		Datum		datum = PointerGetDatum(lfirst(item));
+		int32		partition = partitioning_func_apply(dri->base.dimension->partitioning, datum);
+
+		partitions = list_append_unique_int(partitions, partition);
 	}
+	return partitions;
 }
 
+static bool
+dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNumber strategy, DimensionValues *dimValues)
+{
+	List	   *partitions;
+	bool		restriction_added = false;
+
+	if (strategy != BTEqualStrategyNumber)
+	{
+		return false;
+	}
+
+	partitions = dimension_restrict_info_get_partitions(dri, dimValues->values);
+
+	/* the intersection is empty when using ALL operator (ANDing values)  */
+	if (list_length(partitions) > 1 && !dimValues->use_or)
+	{
+		dri->strategy = strategy;
+		dri->partitions = NIL;
+		return true;
+	}
+
+	if (dri->strategy == InvalidStrategy)
+		/* first time through */
+	{
+		dri->partitions = partitions;
+		dri->strategy = strategy;
+		restriction_added = true;
+	}
+	else
+	{
+		/* intersection with NULL is NULL */
+		if (dri->partitions == NIL)
+			return true;
+
+		/*
+		 * We are always ANDing the expressions thus intersection is used.
+		 */
+		dri->partitions = list_intersection_int(dri->partitions, partitions);
+
+		/* no intersection is also a restriction  */
+		restriction_added = true;
+	}
+	return restriction_added;
+}
 
 static bool
-dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Const *c)
+dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, DimensionValues *values)
 {
 	switch (dri->dimension->type)
 	{
 		case DIMENSION_TYPE_OPEN:
-			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri, strategy, c);
+			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri, strategy, values);
 		case DIMENSION_TYPE_CLOSED:
-			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri, strategy, c);
+			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri, strategy, values);
 		default:
-			elog(ERROR, "unknown dimension type");
-			return false;
+			elog(ERROR, "unknown dimension type: %d", dri->dimension->type);
 	}
 }
 
@@ -153,13 +222,28 @@ static DimensionVec *
 dimension_restrict_info_closed_slices(DimensionRestrictInfoClosed *dri)
 {
 	if (dri->strategy == BTEqualStrategyNumber)
+	{
 		/* slice_end >= value && slice_start <= value */
-		return dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
-												BTLessEqualStrategyNumber,
-												dri->value,
-												BTGreaterEqualStrategyNumber,
-												dri->value,
-												0);
+		ListCell   *cell;
+		DimensionVec *dim_vec = dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
+
+		foreach(cell, dri->partitions)
+		{
+			int			i;
+			int32		partition = lfirst_int(cell);
+			DimensionVec *tmp = dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
+																 BTLessEqualStrategyNumber,
+																 partition,
+																 BTGreaterEqualStrategyNumber,
+																 partition,
+																 0);
+
+			for (i = 0; i < tmp->num_slices; i++)
+				dim_vec = dimension_vec_add_unique_slice(&dim_vec, tmp->slices[i]);
+		}
+		return dim_vec;
+	}
+
 	/* get all slices */
 	return dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
 											InvalidStrategy,
@@ -226,8 +310,10 @@ hypertable_restrict_info_get(HypertableRestrictInfo *hri, AttrNumber attno)
 	return NULL;
 }
 
+typedef DimensionValues *(*get_dimension_values) (Const *c, bool use_or);
+
 static bool
-hypertable_restrict_info_add_op_expr(HypertableRestrictInfo *hri, PlannerInfo *root, OpExpr *clause)
+hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, List *expr_args, Oid op_oid, get_dimension_values func_get_dim_values, bool use_or)
 {
 	Expr	   *leftop,
 			   *rightop,
@@ -235,25 +321,22 @@ hypertable_restrict_info_add_op_expr(HypertableRestrictInfo *hri, PlannerInfo *r
 	DimensionRestrictInfo *dri;
 	Var		   *v;
 	Const	   *c;
-	Oid			op_oid;
 	RangeTblEntry *rte;
 	Oid			columntype;
 	TypeCacheEntry *tce;
 	int			strategy;
 	Oid			lefttype,
 				righttype;
+	DimensionValues *dimValues;
 
-	if (list_length(clause->args) != 2)
+	if (list_length(expr_args) != 2)
 		return false;
 
-	/* Same as constraint_exclusion */
-	if (contain_mutable_functions((Node *) clause))
-		return false;
+	leftop = linitial(expr_args);
+	rightop = lsecond(expr_args);
 
-	leftop = (Expr *) get_leftop((Expr *) clause);
 	if (IsA(leftop, RelabelType))
 		leftop = ((RelabelType *) leftop)->arg;
-	rightop = (Expr *) get_rightop((Expr *) clause);
 	if (IsA(rightop, RelabelType))
 		rightop = ((RelabelType *) rightop)->arg;
 
@@ -261,13 +344,12 @@ hypertable_restrict_info_add_op_expr(HypertableRestrictInfo *hri, PlannerInfo *r
 	{
 		v = (Var *) leftop;
 		expr = rightop;
-		op_oid = clause->opno;
 	}
 	else if (IsA(rightop, Var))
 	{
 		v = (Var *) rightop;
 		expr = leftop;
-		op_oid = get_commutator(clause->opno);
+		op_oid = get_commutator(op_oid);
 	}
 	else
 		return false;
@@ -299,18 +381,86 @@ hypertable_restrict_info_add_op_expr(HypertableRestrictInfo *hri, PlannerInfo *r
 							   &lefttype,
 							   &righttype);
 
-	return dimension_restrict_info_add(dri, strategy, c);
+	dimValues = func_get_dim_values(c, use_or);
+	return dimension_restrict_info_add(dri, strategy, dimValues);
+}
+
+static DimensionValues *
+dimension_values_create(List *values, Oid type, bool use_or)
+{
+	DimensionValues *dimValues;
+
+	dimValues = palloc(sizeof(DimensionValues));
+	dimValues->values = values;
+	dimValues->use_or = use_or;
+	dimValues->type = type;
+
+	return dimValues;
+}
+
+static DimensionValues *
+dimension_values_create_from_array(Const *c, bool user_or)
+{
+	ArrayIterator iterator = array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
+	Datum		elem = (Datum) NULL;
+	bool		isnull;
+	List	   *values = NIL;
+	Oid			base_el_type;
+
+	while (array_iterate(iterator, &elem, &isnull))
+	{
+		if (!isnull)
+			values = lappend(values, DatumGetPointer(elem));
+	}
+
+	/* it's an array type, lets get the base element type */
+	base_el_type = get_element_type(c->consttype);
+	if (base_el_type == InvalidOid)
+		elog(ERROR, "Couldn't get base element type from array type: %d", c->consttype);
+
+	return dimension_values_create(values, base_el_type, user_or);
+}
+
+static DimensionValues *
+dimension_values_create_from_single_element(Const *c, bool user_or)
+{
+	return dimension_values_create(list_make1(DatumGetPointer(c->constvalue)), c->consttype, user_or);
 }
 
 static void
 hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerInfo *root, RestrictInfo *ri)
 {
+	bool		added = false;
+
 	Expr	   *e = ri->clause;
 
-	if (!IsA(e, OpExpr))
+	/* Same as constraint_exclusion */
+	if (contain_mutable_functions((Node *) e))
 		return;
 
-	if (hypertable_restrict_info_add_op_expr(hri, root, (OpExpr *) e))
+	switch (nodeTag(e))
+	{
+		case T_OpExpr:
+			{
+				OpExpr	   *op_expr = (OpExpr *) e;
+
+				added = hypertable_restrict_info_add_expr(hri, root, op_expr->args, op_expr->opno, dimension_values_create_from_single_element, false);
+				break;
+			}
+
+		case T_ScalarArrayOpExpr:
+			{
+				ScalarArrayOpExpr *scalar_expr = (ScalarArrayOpExpr *) e;
+
+				added = hypertable_restrict_info_add_expr(hri, root, scalar_expr->args, scalar_expr->opno, dimension_values_create_from_array, scalar_expr->useOr);
+				break;
+			}
+		default:
+			/* we don't support other node types */
+			break;
+	}
+
+	if (added)
 		hri->num_base_restrictions++;
 }
 
