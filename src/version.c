@@ -74,60 +74,51 @@ version_cmp(VersionInfo *v1, VersionInfo *v2)
 	return 0;
 }
 
-#define NUM_VERSION_DELIMS 4
-
-static const char *const version_delimiter[NUM_VERSION_DELIMS] = {".", ".", "-", ""};
-
 bool
 version_parse(const char *version, VersionInfo *result)
 {
-	char	   *parse_version = pstrdup(version);
-	int			i;
+	size_t		version_len = strlen(version);
+	int			fields_parsed = 0;
+	int			i = 0;
+	int			parse_length[4] = {0};
 
 	memset(result, 0, sizeof(VersionInfo));
 
-	for (i = 0; i < NUM_VERSION_DELIMS; i++)
-	{
-		const char *subversion;
+	/*
+	 * a version is a string of the form
+	 *
+	 * <number>[.<number>[.<number>[-<string>]]]
+	 *
+	 * this corresponds to the format-string
+	 *
+	 * "%lu.%lu.%lu-%<VERSION_INFO_LEN>s"
+	 *
+	 * after parsing each field in the version-string, we output the number of
+	 * bytes currently parsed using %n, a version-string is valid if all of
+	 * the bytes of the string were parsable using the above grammar.
+	 */
+	fields_parsed = sscanf(version, "%lu%n.%lu%n.%lu%n-%" STR(VERSION_INFO_LEN) "s%n",
+						   &result->version[0], &parse_length[0],
+						   &result->version[1], &parse_length[1],
+						   &result->version[2], &parse_length[2],
+						   result->version_mod, &parse_length[3]);
 
-		subversion = strtok(i == 0 ? parse_version : NULL, version_delimiter[i]);
+	/*
+	 * sscanf is allowed to return EOF if no parses succeed, so make sure
+	 * fields_parsed is between 1 and 4;
+	 */
+	if (fields_parsed <= 0 || fields_parsed > 4)
+		return false;
 
-		if (subversion == NULL)
-			return i > 0;
+	result->has_version_mod = fields_parsed > 3;
 
-		/*
-		 * If we are past the '-' delimiter, we've found the mod/pre-release
-		 * tag
-		 */
-		if (i > 0 && version_delimiter[i - 1][0] == '-')
-		{
-			int			len = snprintf(result->version_mod, sizeof(result->version_mod) - 1, "%s", subversion);
+	result->version_mod[VERSION_INFO_LEN - 1] = '\0';
 
-			if (len > (sizeof(result->version_mod) - 1))
-				return false;
+	for (i = 0; i < VERSION_INFO_LEN; i++)
+		if (!isprint(result->version_mod[i]))
+			result->version_mod[i] = '\0';
 
-			if (len > 0)
-				result->has_version_mod = true;
-		}
-		else
-		{
-			char	   *endptr;
-
-			Assert(i < VERSION_PARTS);
-
-			result->version[i] = strtol(subversion, &endptr, 10);
-
-			/*
-			 * We expect the parsing of the version num to end at a '\0' since
-			 * strtok() should have replaced the delimiter with a '\0' if the
-			 * delimiter was found
-			 */
-			if (endptr != NULL && *endptr != '\0')
-				return false;
-		}
-	}
-
-	return true;
+	return ((size_t) parse_length[fields_parsed - 1]) == version_len;
 }
 
 TS_FUNCTION_INFO_V1(ts_version_get_info);
