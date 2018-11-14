@@ -371,12 +371,12 @@ BEGIN
 END
 $BODY$;
 
-CREATE FUNCTION wait_for_job_1_to_run(runs INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+CREATE FUNCTION wait_for_job_1_to_run(runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
 	num_runs INTEGER;
 BEGIN
-	FOR i in 1..10
+	FOR i in 1..spins
 	LOOP
 	SELECT COUNT(*) from bgw_log where msg='Execute job 1' INTO num_runs;
 	if (num_runs = runs) THEN
@@ -389,14 +389,14 @@ BEGIN
 END
 $BODY$;
 
-CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
 	num_runs INTEGER;
 	message TEXT;
 BEGIN
 	select format('[TESTING] Wait until %%, started at %s', started_at) into message;
-	FOR i in 1..10
+	FOR i in 1..spins
 	LOOP
 	SELECT COUNT(*) from bgw_log where msg LIKE message INTO num_runs;
 	if (num_runs > 0) THEN
