@@ -1,7 +1,7 @@
 -- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
 --
 -- This file is licensed under the Apache License, see LICENSE-APACHE
--- at the top level directory of the timescaledb distribution.
+-- at the top level directory of the TimescaleDB distribution.
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.generate_uuid() RETURNS UUID
 AS '@MODULE_PATHNAME@', 'ts_uuid_generate' LANGUAGE C VOLATILE STRICT;

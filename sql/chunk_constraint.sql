@@ -1,7 +1,7 @@
 -- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
 --
 -- This file is licensed under the Apache License, see LICENSE-APACHE
--- at the top level directory of the timescaledb distribution.
+-- at the top level directory of the TimescaleDB distribution.
 
 -- Creates a constraint on a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_constraint_add_table_constraint(

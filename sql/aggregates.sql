@@ -1,7 +1,7 @@
 -- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
 --
 -- This file is licensed under the Apache License, see LICENSE-APACHE
--- at the top level directory of the timescaledb distribution.
+-- at the top level directory of the TimescaleDB distribution.
 
 -- This file is meant to contain aggregate functions that need to be created only
 -- once and not recreated during updates.
