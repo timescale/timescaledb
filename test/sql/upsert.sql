@@ -94,9 +94,18 @@ INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20
 DO UPDATE SET color = excluded.color, temp=excluded.temp WHERE excluded.temp < 20 RETURNING *;
 INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8') ON CONFLICT (time, device_id)
 DO UPDATE SET color = excluded.color WHERE upsert_test_space.temp < 20 RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_1) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-1-new') ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_1 = excluded.device_id_1 RETURNING *;
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_1) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-1-new') ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_1 = 'device-id-1-new-2', color = 'orange9'  RETURNING *;
 
+SELECT * FROM upsert_test_space;
 
-SELECT * FROM upsert_test_space; 
+ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id_2 char(20);
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_2) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-2')
+ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_2 = 'device-id-2-new', color = 'orange10' RETURNING *;
+
 
 WITH CTE AS (
     INSERT INTO upsert_test_multi_unique
