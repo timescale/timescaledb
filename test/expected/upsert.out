@@ -218,15 +218,38 @@ DO UPDATE SET color = excluded.color WHERE upsert_test_space.temp < 20 RETURNING
  Fri Jan 20 09:00:01 2017 |  3.5 | orange8 | dev5                 | 
 (1 row)
 
-SELECT * FROM upsert_test_space; 
-           time           | temp |             color              |      device_id       | device_id_1 
---------------------------+------+--------------------------------+----------------------+-------------
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_1) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-1-new') ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_1 = excluded.device_id_1 RETURNING *;
+           time           | temp |  color  |      device_id       |     device_id_1      
+--------------------------+------+---------+----------------------+----------------------
+ Fri Jan 20 09:00:01 2017 |  3.5 | orange8 | dev5                 | device-id-1-new     
+(1 row)
+
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_1) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-1-new') ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_1 = 'device-id-1-new-2', color = 'orange9'  RETURNING *;
+           time           | temp |  color  |      device_id       |     device_id_1      
+--------------------------+------+---------+----------------------+----------------------
+ Fri Jan 20 09:00:01 2017 |  3.5 | orange9 | dev5                 | device-id-1-new-2   
+(1 row)
+
+SELECT * FROM upsert_test_space;
+           time           | temp |             color              |      device_id       |     device_id_1      
+--------------------------+------+--------------------------------+----------------------+----------------------
  Fri Jan 20 09:00:01 2017 | 25.9 | orange                         | dev1                 | 
  Fri Jan 20 09:00:01 2017 | 25.9 | orange3 (originally yellow)    | dev2                 | 
  Fri Jan 20 09:00:01 2017 | 23.5 | orange3.1                      | dev3                 | 
  Fri Jan 20 09:00:01 2017 | 23.5 | orange5.1 (originally orange5) | dev4                 | 
- Fri Jan 20 09:00:01 2017 |  3.5 | orange8                        | dev5                 | 
+ Fri Jan 20 09:00:01 2017 |  3.5 | orange9                        | dev5                 | device-id-1-new-2   
 (5 rows)
+
+ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id_2 char(20);
+INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_2) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-2')
+ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_2 = 'device-id-2-new', color = 'orange10' RETURNING *;
+           time           | temp |  color   |      device_id       |     device_id_2      
+--------------------------+------+----------+----------------------+----------------------
+ Fri Jan 20 09:00:01 2017 |  3.5 | orange10 | dev5                 | device-id-2-new     
+(1 row)
 
 WITH CTE AS (
     INSERT INTO upsert_test_multi_unique
