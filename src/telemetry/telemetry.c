@@ -24,6 +24,7 @@
 #include "net/http.h"
 
 #define TS_VERSION_JSON_FIELD "current_timescaledb_version"
+#define TS_IS_UPTODATE_JSON_FIELD "is_up_to_date"
 
 /*  HTTP request details */
 #define TIMESCALE_TYPE	"application/json"
@@ -49,9 +50,30 @@
 
 static const char *related_extensions[] = {PG_PROMETHEUS, POSTGIS};
 
-bool
-telemetry_parse_version(const char *json, VersionInfo *installed_version, VersionResult *result)
+static bool
+char_in_valid_version_digits(const char c)
 {
+	switch (c)
+	{
+		case '.':
+		case '-':
+			return true;
+		default:
+			return false;
+	}
+}
+
+/*
+ * Makes sure the server version string is less than MAX_VERSION_STR_LEN
+ * chars, and all digits are "valid". Valid chars are either
+ * alphanumeric or in the array valid_version_digits above.
+ *
+ * Returns false if either of these conditions are false.
+ */
+bool
+validate_server_version(const char *json, VersionResult *result)
+{
+	int			i;
 	Datum		version = DirectFunctionCall2(json_object_field_text,
 											  CStringGetTextDatum(json),
 											  PointerGetDatum(cstring_to_text(TS_VERSION_JSON_FIELD)));
@@ -60,26 +82,26 @@ telemetry_parse_version(const char *json, VersionInfo *installed_version, Versio
 
 	result->versionstr = text_to_cstring(DatumGetTextPP(version));
 
-	result->is_up_to_date = false;
-
 	if (result->versionstr == NULL)
 	{
 		result->errhint = "no version string in response";
 		return false;
 	}
 
-	/*
-	 * Now parse the version string. We expect format to be
-	 * XX.XX.XX-<prerelease_tag>, and if not, we error out
-	 */
-	if (!version_parse(result->versionstr, &result->vinfo))
+	if (strlen(result->versionstr) > MAX_VERSION_STR_LEN)
 	{
-		result->errhint = psprintf("parsing failed for version string \"%s\"", result->versionstr);
+		result->errhint = "version string is too long";
 		return false;
 	}
 
-	if (version_cmp(installed_version, &result->vinfo) >= 0)
-		result->is_up_to_date = true;
+	for (i = 0; i < strlen(result->versionstr); i++)
+	{
+		if (!isalpha(result->versionstr[i]) && !isdigit(result->versionstr[i]) && !char_in_valid_version_digits(result->versionstr[i]))
+		{
+			result->errhint = "version string has invalid characters";
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -89,29 +111,31 @@ telemetry_parse_version(const char *json, VersionInfo *installed_version, Versio
  * called "current_timescaledb_version". Check this against the local
  * version, and notify the user if it is behind.
  */
-static bool
+static void
 process_response(const char *json)
 {
-	VersionInfo installed_version;
 	VersionResult result;
+	bool		is_uptodate = DatumGetBool(DirectFunctionCall2(texteq,
+															   DirectFunctionCall2(json_object_field_text,
+																				   CStringGetTextDatum(json),
+																				   PointerGetDatum(cstring_to_text(TS_IS_UPTODATE_JSON_FIELD))),
+															   PointerGetDatum(cstring_to_text("true"))));
 
-	version_get_info(&installed_version);
-
-	if (!telemetry_parse_version(json, &installed_version, &result))
-	{
-		elog(WARNING, "could not get TimescaleDB version from server response: %s", result.errhint);
-		return false;
-	}
-
-	if (result.is_up_to_date)
+	if (is_uptodate)
 		elog(NOTICE, "the \"%s\" extension is up-to-date", EXTENSION_NAME);
 	else
+	{
+		if (!validate_server_version(json, &result))
+		{
+			elog(WARNING, "server did not return a valid TimescaleDB version: %s", result.errhint);
+			return;
+		}
+
 		ereport(LOG,
 				(errmsg("the \"%s\" extension is not up-to-date", EXTENSION_NAME),
 				 errhint("The most up-to-date version is %s, the installed version is %s",
 						 result.versionstr, TIMESCALEDB_VERSION_MOD)));
-
-	return true;
+	}
 }
 
 static char *

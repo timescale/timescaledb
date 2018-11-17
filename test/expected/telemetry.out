@@ -9,9 +9,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_ssl(int) RETURNS JS
     AS :MODULE_PATHNAME, 'ts_test_status_ssl' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_mock(text) RETURNS JSONB
     AS :MODULE_PATHNAME, 'ts_test_status_mock' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_parse_version(response text, installed_major int, installed_minor int, installed_patch int, installed_modtag text = NULL)
-    RETURNS TABLE(version_string text, major int, minor int, patch int, modtag text, up_to_date bool)
-    AS :MODULE_PATHNAME, 'ts_test_telemetry_parse_version' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_validate_server_version(response text)
+    RETURNS TEXT
+    AS :MODULE_PATHNAME, 'ts_test_validate_server_version' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, text)
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
@@ -153,118 +153,126 @@ SELECT _timescaledb_internal.test_status_mock(:'test_string');
 ERROR:  could not parse HTTP response
 \set ON_ERROR_STOP 1
 -- Test parsing version response
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"status": "200", "current_timescaledb_version": "10.1.0"}', 10, 1, 0);
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 10.1.0         |    10 |     1 |     0 |        | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"status": "200", "current_timescaledb_version": "10.1.0"}');
+ test_validate_server_version 
+------------------------------
+ 10.1.0
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1"}', 10, 1, 0);
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 10.1           |    10 |     1 |     0 |        | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10.1"}');
+ test_validate_server_version 
+------------------------------
+ 10.1
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10"}', 10, 1, 0);
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 10             |    10 |     0 |     0 |        | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10"}');
+ test_validate_server_version 
+------------------------------
+ 10
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10"}', 9, 1, 1);
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 10             |    10 |     0 |     0 |        | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "9.2.0"}');
+ test_validate_server_version 
+------------------------------
+ 9.2.0
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "9.2.0"}', 9, 1, 1);
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 9.2.0          |     9 |     2 |     0 |        | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "9.1.2"}');
+ test_validate_server_version 
+------------------------------
+ 9.1.2
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "9.1.2"}', 9, 1, 1);
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 9.1.2          |     9 |     1 |     2 |        | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0"}');
+ test_validate_server_version 
+------------------------------
+ 1.0.0
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0"}', 1, 0, 0, 'rc1');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0          |     1 |     0 |     0 |        | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-rc1"}');
+ test_validate_server_version 
+------------------------------
+ 1.0.0-rc1
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'rc1');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-rc1      |     1 |     0 |     0 | rc1    | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-rc2"}');
+ test_validate_server_version 
+------------------------------
+ 1.0.0-rc2
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'rc2');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-rc1      |     1 |     0 |     0 | rc1    | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-rc1"}');
+ test_validate_server_version 
+------------------------------
+ 1.0.0-rc1
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc2"}', 1, 0, 0, 'rc1');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-rc2      |     1 |     0 |     0 | rc2    | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-alpha"}');
+ test_validate_server_version 
+------------------------------
+ 1.0.0-alpha
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'alpha');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-rc1      |     1 |     0 |     0 | rc1    | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "123456789"}');
+ test_validate_server_version 
+------------------------------
+ 123456789
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-alpha"}', 1, 0, 0, 'rc1');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-alpha    |     1 |     0 |     0 | alpha  | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "!@#$%"}');
+ test_validate_server_version 
+------------------------------
+ 
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 1, 'rc1');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-rc1      |     1 |     0 |     0 | rc1    | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": ""}');
+ test_validate_server_version 
+------------------------------
+ 
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-rc1"}', 1, 0, 0, 'beta');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-rc1      |     1 |     0 |     0 | rc1    | f
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": " 10 "}');
+ test_validate_server_version 
+------------------------------
+ 
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-alpha"}', 1, 0, 0, 'beta');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-alpha    |     1 |     0 |     0 | alpha  | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "a"}');
+ test_validate_server_version 
+------------------------------
+ a
 (1 row)
 
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-alpha1"}', 1, 0, 0, 'alpha2');
- version_string | major | minor | patch | modtag | up_to_date 
-----------------+-------+-------+-------+--------+------------
- 1.0.0-alpha1   |     1 |     0 |     0 | alpha1 | t
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "a.b.c"}');
+ test_validate_server_version 
+------------------------------
+ a.b.c
 (1 row)
 
-\set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": " 10 "}', 10, 1, 0);
-ERROR:  parsing failed for version string " 10 "
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "a"}', 9, 1, 1);
-ERROR:  parsing failed for version string "a"
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "a.b.c"}', 9, 1, 1);
-ERROR:  parsing failed for version string "a.b.c"
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1.1a"}', 9, 1, 1);
-ERROR:  parsing failed for version string "10.1.1a"
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1.1+rc1"}', 10, 1, 1, 'rc1');
-ERROR:  parsing failed for version string "10.1.1+rc1"
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "10.1.1.1"}', 10, 1, 1, 'rc1');
-ERROR:  parsing failed for version string "10.1.1.1"
-SELECT * FROM _timescaledb_internal.test_telemetry_parse_version('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}', 1, 0, 0, 'alpha2');
-ERROR:  parsing failed for version string "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-\set ON_ERROR_STOP 1
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10.1.1a"}');
+ test_validate_server_version 
+------------------------------
+ 10.1.1a
+(1 row)
+
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10.1.1+rc1"}');
+ test_validate_server_version 
+------------------------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "10.1.1.1"}');
+ test_validate_server_version 
+------------------------------
+ 10.1.1.1
+(1 row)
+
+SELECT * FROM _timescaledb_internal.test_validate_server_version('{"current_timescaledb_version": "1.0.0-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}');
+ test_validate_server_version 
+------------------------------
+ 
+(1 row)
+
 SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
