@@ -16,10 +16,3 @@ select pg_typeof(sysname) AS sysname_type,pg_typeof(version) AS version_type,pg_
  text         | text         | text
 (1 row)
 
--- Test that get_version major, minor and patch are int
-select pg_typeof(major) AS major_type,pg_typeof(minor) AS minor_type,pg_typeof(patch) AS patch_type from _timescaledb_internal.get_version();
- major_type | minor_type | patch_type 
-------------+------------+------------
- integer    | integer    | integer
-(1 row)
-

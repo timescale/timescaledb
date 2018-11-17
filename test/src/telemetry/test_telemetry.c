@@ -141,63 +141,18 @@ ts_test_status_mock(PG_FUNCTION_ARGS)
 }
 #endif
 
-TS_FUNCTION_INFO_V1(ts_test_telemetry_parse_version);
+TS_FUNCTION_INFO_V1(ts_test_validate_server_version);
 
 Datum
-ts_test_telemetry_parse_version(PG_FUNCTION_ARGS)
+ts_test_validate_server_version(PG_FUNCTION_ARGS)
 {
 	text	   *response = PG_GETARG_TEXT_P(0);
-	VersionInfo installed_version;
 	VersionResult result;
-	TupleDesc	tupdesc;
-	Datum		values[6];
-	bool		nulls[6] = {false};
-	HeapTuple	tuple;
-	bool		success;
 
-	if (PG_NARGS() < 2)
-		PG_RETURN_NULL();
+	if (validate_server_version(text_to_cstring(response), &result))
+		PG_RETURN_TEXT_P(cstring_to_text(result.versionstr));
 
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("function returning record called in context "
-						"that cannot accept type record")));
-
-	memset(&installed_version, 0, sizeof(VersionInfo));
-	installed_version.version[0] = PG_GETARG_INT32(1);
-	installed_version.version[1] = PG_ARGISNULL(2) ? 0 : PG_GETARG_INT32(2);
-	installed_version.version[2] = PG_ARGISNULL(3) ? 0 : PG_GETARG_INT32(3);
-
-	if (!PG_ARGISNULL(4))
-	{
-		text	   *version_mod = PG_GETARG_TEXT_P(4);
-
-		StrNCpy(installed_version.version_mod,
-				text_to_cstring(version_mod),
-				sizeof(installed_version.version_mod));
-		installed_version.has_version_mod = true;
-	}
-
-	success = telemetry_parse_version(text_to_cstring(response), &installed_version, &result);
-
-	if (!success)
-		elog(ERROR, "%s", result.errhint);
-
-	values[0] = CStringGetTextDatum(result.versionstr);
-	values[1] = Int32GetDatum((int32) result.vinfo.version[0]);
-	values[2] = Int32GetDatum((int32) result.vinfo.version[1]);
-	values[3] = Int32GetDatum((int32) result.vinfo.version[2]);
-	values[5] = BoolGetDatum(result.is_up_to_date);
-
-	if (result.vinfo.has_version_mod)
-		values[4] = CStringGetTextDatum(result.vinfo.version_mod);
-	else
-		nulls[4] = true;
-
-	tuple = heap_form_tuple(tupdesc, values, nulls);
-
-	return HeapTupleGetDatum(tuple);
+	PG_RETURN_NULL();
 }
 
 /* Try to get the telemetry function to handle errors. Never connect to the

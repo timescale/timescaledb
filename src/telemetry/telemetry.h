@@ -21,17 +21,17 @@
 #define TELEMETRY_HOST "telemetry.timescale.com"
 #define TELEMETRY_PATH "/v1/metrics"
 
+#define	MAX_VERSION_STR_LEN	128
+
 typedef struct VersionResult
 {
-	VersionInfo vinfo;
 	const char *versionstr;
-	bool		is_up_to_date;
 	const char *errhint;
 } VersionResult;
 
 HttpRequest *build_version_request(const char *host, const char *path);
 Connection *telemetry_connect(const char *host, const char *service);
-bool		telemetry_parse_version(const char *json, VersionInfo *vinfo, VersionResult *result);
+bool		validate_server_version(const char *json, VersionResult *result);
 
 /*
  *	This function is intended as the main function for a BGW.
