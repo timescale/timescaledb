@@ -14,9 +14,6 @@
 #include <utils/timestamp.h>
 #include <funcapi.h>
 #include <miscadmin.h>
-#ifdef _WIN32
-#include <stdint.h>
-#endif
 
 #include "catalog.h"
 #include "compat.h"
@@ -667,10 +664,10 @@ interval_to_usec(Interval *interval)
 }
 
 #define INT_TYPE_MAX(type)												\
-	(int64)(((type) == INT2OID) ? INT16_MAX : (((type) == INT4OID) ? INT32_MAX : INT64_MAX))
+	(int64)(((type) == INT2OID) ? PG_INT16_MAX : (((type) == INT4OID) ? PG_INT32_MAX : PG_INT64_MAX))
 
 #define IS_VALID_NUM_SLICES(num_slices)					\
-	((num_slices) >= 1 && (num_slices) <= INT16_MAX)
+	((num_slices) >= 1 && (num_slices) <= PG_INT16_MAX)
 
 static int64
 get_validated_integer_interval(Oid coltype, int64 value)
@@ -866,7 +863,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(1) || !IS_VALID_NUM_SLICES(num_slices_arg))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid number of partitions: must be between 1 and %d", INT16_MAX)));
+				 errmsg("invalid number of partitions: must be between 1 and %d", PG_INT16_MAX)));
 
 	/*
 	 * Our catalog stores num_slices as a smallint (int16). However, function
@@ -985,7 +982,7 @@ dimension_validate_info(DimensionInfo *info)
 		if (!IS_VALID_NUM_SLICES(info->num_slices))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid number of partitions: must be between 1 and %d", INT16_MAX)));
+					 errmsg("invalid number of partitions: must be between 1 and %d", PG_INT16_MAX)));
 	}
 	else
 	{
