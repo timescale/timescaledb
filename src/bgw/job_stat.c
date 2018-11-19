@@ -46,8 +46,8 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[BGW_JOB_STAT].id,
-		.index = CATALOG_INDEX(catalog, BGW_JOB_STAT, indexid),
+		.table = catalog_get_table_id(catalog, BGW_JOB_STAT),
+		.index = catalog_get_index(catalog, BGW_JOB_STAT, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
@@ -282,7 +282,7 @@ bgw_job_stat_insert_mark_start_relation(Relation rel,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_crashes)] = Int64GetDatum(1);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(1);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);
 
@@ -296,7 +296,7 @@ bgw_job_stat_insert_mark_start(int32 bgw_job_id)
 	Relation	rel;
 	bool		result;
 
-	rel = heap_open(catalog->tables[BGW_JOB_STAT].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB_STAT), RowExclusiveLock);
 	result = bgw_job_stat_insert_mark_start_relation(rel, bgw_job_id);
 	heap_close(rel, RowExclusiveLock);
 

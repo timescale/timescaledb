@@ -12,6 +12,7 @@
 #include <utils/rel.h>
 #include <nodes/nodes.h>
 #include <access/heapam.h>
+#include "export.h"
 #include "extension_constants.h"
 /*
  * TimescaleDB catalog.
@@ -43,26 +44,38 @@ typedef enum CatalogTable
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
+typedef struct TableInfoDef
+{
+	const char *schema_name;
+	const char *table_name;
+} TableInfoDef;
+
+typedef struct TableIndexDef
+{
+	int			length;
+	char	  **names;
+} TableIndexDef;
+
 #define INVALID_CATALOG_TABLE _MAX_CATALOG_TABLES
 #define INVALID_INDEXID -1
 
-#define CATALOG_INDEX(catalog, tableid, indexid) \
-	(indexid == INVALID_INDEXID ? InvalidOid : (catalog)->tables[tableid].index_ids[indexid])
+#define CATALOG_INTERNAL_FUNC(catalog, func) \
+	(catalog->functions[func].function_id)
 
 #define CatalogInternalCall1(func, datum1) \
-	OidFunctionCall1(catalog_get_internal_function_id(catalog_get(), func), datum1)
+	OidFunctionCall1(CATALOG_INTERNAL_FUNC(catalog_get(), func), datum1)
 #define CatalogInternalCall2(func, datum1, datum2) \
-	OidFunctionCall2(catalog_get_internal_function_id(catalog_get(), func), datum1, datum2)
+	OidFunctionCall2(CATALOG_INTERNAL_FUNC(catalog_get(), func), datum1, datum2)
 #define CatalogInternalCall3(func, datum1, datum2, datum3) \
-	OidFunctionCall3(catalog_get_internal_function_id(catalog_get(), func), datum1, datum2, datum3)
+	OidFunctionCall3(CATALOG_INTERNAL_FUNC(catalog_get(), func), datum1, datum2, datum3)
 #define CatalogInternalCall4(func, datum1, datum2, datum3, datum4) \
-	OidFunctionCall4(catalog_get_internal_function_id(catalog_get(), func), datum1, datum2, datum3, datum4)
+	OidFunctionCall4(CATALOG_INTERNAL_FUNC(catalog_get(), func), datum1, datum2, datum3, datum4)
 
 typedef enum InternalFunction
 {
 	DDL_ADD_CHUNK_CONSTRAINT,
 	_MAX_INTERNAL_FUNCTIONS,
-} InternalFunction;
+}			InternalFunction;
 
 
 /******************************
@@ -644,19 +657,26 @@ typedef enum CacheType
 	_MAX_CACHE_TYPES
 } CacheType;
 
-typedef struct Catalog
+typedef struct CatalogTableInfo
+{
+	const char *schema_name;
+	const char *name;
+	Oid			id;
+	Oid			serial_relid;
+	Oid			index_ids[_MAX_TABLE_INDEXES];
+} CatalogTableInfo;
+
+typedef struct CatalogDatabaseInfo
 {
 	char		database_name[NAMEDATALEN];
 	Oid			database_id;
 	Oid			schema_id;
-	struct
-	{
-		const char *schema_name;
-		const char *name;
-		Oid			id;
-		Oid			serial_relid;
-		Oid			index_ids[_MAX_TABLE_INDEXES];
-	}			tables[_MAX_CATALOG_TABLES];
+	Oid			owner_uid;
+} CatalogDatabaseInfo;
+
+typedef struct Catalog
+{
+	CatalogTableInfo tables[_MAX_CATALOG_TABLES];
 
 	Oid			cache_schema_id;
 	struct
@@ -664,14 +684,14 @@ typedef struct Catalog
 		Oid			inval_proxy_id;
 	}			caches[_MAX_CACHE_TYPES];
 
-	Oid			owner_uid;
 	Oid			internal_schema_id;
 	struct
 	{
 		Oid			function_id;
 	}			functions[_MAX_INTERNAL_FUNCTIONS];
-} Catalog;
 
+	bool		initialized;
+} Catalog;
 
 typedef struct CatalogSecurityContext
 {
@@ -679,23 +699,31 @@ typedef struct CatalogSecurityContext
 	int			saved_security_context;
 } CatalogSecurityContext;
 
-bool		catalog_is_valid(Catalog *catalog);
+void		catalog_table_info_init(CatalogTableInfo *tables, int max_table, const TableInfoDef *table_ary, const TableIndexDef *index_ary, const char **serial_id_ary);
+
+CatalogDatabaseInfo *catalog_database_info_get(void);
 Catalog    *catalog_get(void);
 void		catalog_reset(void);
 
-Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
+/* Functions should operate on a passed-in Catalog struct */
+static inline Oid
+catalog_get_table_id(Catalog *catalog, CatalogTable tableid)
+{
+	return catalog->tables[tableid].id;
+}
 
-Oid			catalog_get_internal_function_id(Catalog *catalog, InternalFunction func);
-
-bool		catalog_become_owner(Catalog *catalog, CatalogSecurityContext *sec_ctx);
-void		catalog_restore_user(CatalogSecurityContext *sec_ctx);
+static inline Oid
+catalog_get_index(Catalog *catalog, CatalogTable tableid, int indexid)
+{
+	return (indexid == INVALID_INDEXID) ? InvalidOid : catalog->tables[tableid].index_ids[indexid];
+}
 
 int64		catalog_table_next_seq_id(Catalog *catalog, CatalogTable table);
-Oid			catalog_table_get_id(Catalog *catalog, CatalogTable table);
-CatalogTable catalog_table_get(Catalog *catalog, Oid relid);
-const char *catalog_table_name(CatalogTable table);
+Oid			catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 
-void		catalog_insert(Relation rel, HeapTuple tuple);
+/* Functions that modify the actual catalog table on disk */
+bool		catalog_database_info_become_owner(CatalogDatabaseInfo *database_info, CatalogSecurityContext *sec_ctx);
+void		catalog_restore_user(CatalogSecurityContext *sec_ctx);
 void		catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls);
 void		catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
 void		catalog_update(Relation rel, HeapTuple tuple);

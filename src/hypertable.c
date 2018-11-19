@@ -142,8 +142,8 @@ hypertable_id_to_relid(int32 hypertable_id)
 	Oid			relid = InvalidOid;
 	ScanKeyData scankey[1];
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[HYPERTABLE].id,
-		.index = catalog->tables[HYPERTABLE].index_ids[HYPERTABLE_ID_INDEX],
+		.table = catalog_get_table_id(catalog, HYPERTABLE),
+		.index = catalog_get_index(catalog, HYPERTABLE, HYPERTABLE_ID_INDEX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = hypertable_tuple_get_relid,
@@ -187,8 +187,8 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[HYPERTABLE].id,
-		.index = CATALOG_INDEX(catalog, HYPERTABLE, indexid),
+		.table = catalog_get_table_id(catalog, HYPERTABLE),
+		.index = catalog_get_index(catalog, HYPERTABLE, indexid),
 		.nkeys = num_scankeys,
 		.scankey = scankey,
 		.data = scandata,
@@ -260,7 +260,7 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 
 	copy = heap_form_tuple(ti->desc, values, nulls);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_update_tid(ti->scanrel, &ti->tuple->t_self, copy);
 	catalog_restore_user(&sec_ctx);
 
@@ -349,7 +349,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	chunk_delete_by_hypertable_id(hypertable_id);
 	dimension_delete_by_hypertable_id(hypertable_id, true);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -409,7 +409,7 @@ reset_associated_tuple_found(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 
 	namestrcpy(&form->associated_schema_name, INTERNAL_SCHEMA_NAME);
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_update(ti->scanrel, tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -578,7 +578,7 @@ hypertable_insert_relation(Relation rel,
 
 	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] = Int64GetDatum(chunk_target_size);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), HYPERTABLE));
 
 	if (NULL != associated_table_prefix)
@@ -611,7 +611,7 @@ hypertable_insert(Name schema_name,
 	Catalog    *catalog = catalog_get();
 	Relation	rel;
 
-	rel = heap_open(catalog->tables[HYPERTABLE].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel,
 							   schema_name,
 							   table_name,
@@ -1578,7 +1578,7 @@ hypertables_rename_schema_name(const char *old_name, const char *new_name)
 	Catalog    *catalog = catalog_get();
 
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[HYPERTABLE].id,
+		.table = catalog_get_table_id(catalog, HYPERTABLE),
 		.index = InvalidOid,
 		.tuple_found = hypertable_rename_schema_name,
 		.data = schema_names,
