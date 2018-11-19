@@ -331,7 +331,7 @@ chunk_index_insert_relation(Relation rel,
 	values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(parent_index));
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);
 
@@ -351,7 +351,7 @@ chunk_index_insert(int32 chunk_id,
 	Relation	rel;
 	bool		result;
 
-	rel = heap_open(catalog->tables[CHUNK_INDEX].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, CHUNK_INDEX), RowExclusiveLock);
 	result = chunk_index_insert_relation(rel, chunk_id, chunk_index, hypertable_id, hypertable_index);
 	heap_close(rel, RowExclusiveLock);
 
@@ -517,8 +517,8 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanCtx = {
-		.table = catalog->tables[CHUNK_INDEX].id,
-		.index = CATALOG_INDEX(catalog, CHUNK_INDEX, indexid),
+		.table = catalog_get_table_id(catalog, CHUNK_INDEX),
+		.index = catalog_get_index(catalog, CHUNK_INDEX, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,

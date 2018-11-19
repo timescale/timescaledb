@@ -794,7 +794,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	/* Update the hypertable entry */
 	ht->fd.chunk_target_size = info.target_size_bytes;
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	hypertable_update(ht);
 	catalog_restore_user(&sec_ctx);
 

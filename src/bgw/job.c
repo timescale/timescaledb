@@ -122,7 +122,7 @@ bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.alloc_size = alloc_size,
 	};
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[BGW_JOB].id,
+		.table = catalog_get_table_id(catalog, BGW_JOB),
 		.index = InvalidOid,
 		.data = &list_data,
 		.tuple_found = bgw_job_accum_tuple_found,
@@ -141,8 +141,8 @@ bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[BGW_JOB].id,
-		.index = CATALOG_INDEX(catalog, BGW_JOB, indexid),
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(catalog, BGW_JOB, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,

@@ -38,6 +38,7 @@ extern BgwJob *bgw_job_find(int job_id, MemoryContext mctx);
 extern bool bgw_job_has_timeout(BgwJob *job);
 extern TimestampTz bgw_job_timeout_at(BgwJob *job, TimestampTz start_time);
 
+bool		bgw_job_delete_by_id(int32 job_id);
 
 bool		bgw_job_execute(BgwJob *job);
 

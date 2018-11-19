@@ -62,7 +62,7 @@ chunk_insert_relation(Relation rel, Chunk *chunk)
 	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&chunk->fd.schema_name);
 	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&chunk->fd.table_name);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);
 }
@@ -73,7 +73,7 @@ chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 	Catalog    *catalog = catalog_get();
 	Relation	rel;
 
-	rel = heap_open(catalog->tables[CHUNK].id, lock);
+	rel = heap_open(catalog_get_table_id(catalog, CHUNK), lock);
 	chunk_insert_relation(rel, chunk);
 	heap_close(rel, lock);
 }
@@ -497,7 +497,6 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 static Oid
 chunk_create_table(Chunk *chunk, Hypertable *ht)
 {
-	Catalog    *catalog = catalog_get();
 	Relation	rel;
 	ObjectAddress objaddr;
 	int			sec_ctx;
@@ -518,7 +517,7 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 	 * owner, otherwise become the hypertable owner
 	 */
 	if (namestrcmp(&chunk->fd.schema_name, INTERNAL_SCHEMA_NAME) == 0)
-		uid = catalog->owner_uid;
+		uid = catalog_database_info_get()->owner_uid;
 	else
 		uid = rel->rd_rel->relowner;
 
@@ -575,7 +574,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	chunk_collision_resolve(hs, cube, p);
 
 	/* Create a new chunk based on the hypercube */
-	catalog_become_owner(catalog, &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	chunk = chunk_create_stub(catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
 	catalog_restore_user(&sec_ctx);
 
@@ -684,8 +683,8 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	Catalog    *catalog = catalog_get();
 	int			num_found;
 	ScannerCtx	ctx = {
-		.table = catalog->tables[CHUNK].id,
-		.index = catalog->tables[CHUNK].index_ids[CHUNK_ID_INDEX],
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = chunk_stub,
@@ -1046,8 +1045,8 @@ chunk_scan_internal(int indexid,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	ctx = {
-		.table = catalog->tables[CHUNK].id,
-		.index = catalog->tables[CHUNK].index_ids[indexid],
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, indexid),
 		.nkeys = nkeys,
 		.data = data,
 		.scankey = scankey,
@@ -1279,7 +1278,7 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 			dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
 	}
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -1373,7 +1372,7 @@ chunk_tuple_update(TupleInfo *ti, void *data)
 	namecpy(&form->schema_name, &update->schema_name);
 	namecpy(&form->table_name, &update->table_name);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_update(ti->scanrel, tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -1441,8 +1440,8 @@ chunks_rename_schema_name(char *old_schema, char *new_schema)
 	Catalog    *catalog = catalog_get();
 
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[CHUNK].id,
-		.index = CATALOG_INDEX(catalog, CHUNK, CHUNK_SCHEMA_NAME_INDEX),
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_SCHEMA_NAME_INDEX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = chunk_rename_schema_name,

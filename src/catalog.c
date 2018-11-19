@@ -27,12 +27,6 @@
 #include <utils/regproc.h>
 #endif
 
-typedef struct
-{
-	const char *schema_name;
-	const char *table_name;
-} TableInfoDef;
-
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[HYPERTABLE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
@@ -79,12 +73,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.table_name = "invalid table",
 	},
 };
-
-typedef struct TableIndexDef
-{
-	int			length;
-	char	  **names;
-} TableIndexDef;
 
 static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = {
@@ -191,13 +179,17 @@ static const char *cache_proxy_table_names[_MAX_CACHE_TYPES] = {
 
 /* Catalog information for the current database. */
 static Catalog catalog = {
+	.initialized = false,
+};
+
+static CatalogDatabaseInfo database_info = {
 	.database_id = InvalidOid,
 };
 
-bool
+static bool
 catalog_is_valid(Catalog *catalog)
 {
-	return catalog != NULL && OidIsValid(catalog->database_id);
+	return catalog != NULL && catalog->initialized;
 }
 
 /*
@@ -224,6 +216,97 @@ catalog_owner(void)
 	return owner_oid;
 }
 
+static const char *
+catalog_table_name(CatalogTable table)
+{
+	return catalog_table_names[table].table_name;
+}
+
+static void
+catalog_database_info_init(CatalogDatabaseInfo *info)
+{
+	info->database_id = MyDatabaseId;
+	StrNCpy(info->database_name, get_database_name(MyDatabaseId), NAMEDATALEN);
+	info->schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
+	info->owner_uid = catalog_owner();
+
+	if (info->schema_id == InvalidOid)
+		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
+}
+
+CatalogDatabaseInfo *
+catalog_database_info_get()
+{
+	if (!extension_is_loaded())
+		elog(ERROR, "tried calling catalog_database_info_get when extension isn't loaded");
+
+	if (!OidIsValid(database_info.database_id))
+	{
+		if (!IsTransactionState())
+			elog(ERROR, "cannot initialize catalog_database_info outside of a transaction");
+
+		memset(&database_info, 0, sizeof(CatalogDatabaseInfo));
+		catalog_database_info_init(&database_info);
+	}
+
+	return &database_info;
+}
+
+/*
+ * The rest of the arguments are used to populate the first arg.
+ */
+void
+catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const TableInfoDef *table_ary, const TableIndexDef *index_ary, const char **serial_id_ary)
+{
+	int			i;
+
+	for (i = 0; i < max_tables; i++)
+	{
+		Oid			schema_oid;
+		Oid			id;
+		const char *sequence_name;
+		Size		number_indexes,
+					j;
+
+		schema_oid = get_namespace_oid(table_ary[i].schema_name, false);
+		id = get_relname_relid(table_ary[i].table_name, schema_oid);
+
+		if (id == InvalidOid)
+			elog(ERROR, "OID lookup failed for table \"%s.%s\"", table_ary[i].schema_name, table_ary[i].table_name);
+
+		tables_info[i].id = id;
+
+		number_indexes = index_ary[i].length;
+		Assert(number_indexes <= _MAX_TABLE_INDEXES);
+
+		for (j = 0; j < number_indexes; j++)
+		{
+			id = get_relname_relid(index_ary[i].names[j],
+								   schema_oid);
+
+			if (id == InvalidOid)
+				elog(ERROR, "OID lookup failed for table index \"%s\"",
+					 index_ary[i].names[j]);
+
+			tables_info[i].index_ids[j] = id;
+		}
+
+		tables_info[i].name = table_ary[i].table_name;
+		tables_info[i].schema_name = table_ary[i].schema_name;
+		sequence_name = serial_id_ary[i];
+
+		if (NULL != sequence_name)
+		{
+			RangeVar   *sequence;
+
+			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name));
+			tables_info[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
+		}
+		else
+			tables_info[i].serial_relid = InvalidOid;
+	}
+}
+
 Catalog *
 catalog_get(void)
 {
@@ -232,66 +315,14 @@ catalog_get(void)
 	if (!OidIsValid(MyDatabaseId))
 		elog(ERROR, "invalid database ID");
 
-	if (MyDatabaseId == catalog.database_id)
-		return &catalog;
+	if (!extension_is_loaded())
+		elog(ERROR, "tried calling catalog_get when extension isn't loaded");
 
-	if (!extension_is_loaded() || !IsTransactionState())
+	if (catalog.initialized || !IsTransactionState())
 		return &catalog;
 
 	memset(&catalog, 0, sizeof(Catalog));
-	catalog.database_id = MyDatabaseId;
-	StrNCpy(catalog.database_name, get_database_name(MyDatabaseId), NAMEDATALEN);
-	catalog.schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
-	catalog.owner_uid = catalog_owner();
-
-	if (catalog.schema_id == InvalidOid)
-		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
-
-	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
-	{
-		Oid			schema_oid;
-		Oid			id;
-		const char *sequence_name;
-		Size		number_indexes,
-					j;
-
-		schema_oid = get_namespace_oid(catalog_table_names[i].schema_name, false);
-		id = get_relname_relid(catalog_table_name(i), schema_oid);
-
-		if (id == InvalidOid)
-			elog(ERROR, "OID lookup failed for table \"%s.%s\"", catalog_table_names[i].schema_name, catalog_table_name(i));
-
-		catalog.tables[i].id = id;
-
-		number_indexes = catalog_table_index_definitions[i].length;
-		Assert(number_indexes <= _MAX_TABLE_INDEXES);
-
-		for (j = 0; j < number_indexes; j++)
-		{
-			id = get_relname_relid(catalog_table_index_definitions[i].names[j],
-								   schema_oid);
-
-			if (id == InvalidOid)
-				elog(ERROR, "OID lookup failed for table index \"%s\"",
-					 catalog_table_index_definitions[i].names[j]);
-
-			catalog.tables[i].index_ids[j] = id;
-		}
-
-		catalog.tables[i].name = catalog_table_name(i);
-		catalog.tables[i].schema_name = catalog_table_names[i].schema_name;
-		sequence_name = catalog_table_serial_id_names[i];
-
-		if (NULL != sequence_name)
-		{
-			RangeVar   *sequence;
-
-			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name));
-			catalog.tables[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
-		}
-		else
-			catalog.tables[i].serial_relid = InvalidOid;
-	}
+	catalog_table_info_init(catalog.tables, _MAX_CATALOG_TABLES, catalog_table_names, catalog_table_index_definitions, catalog_table_serial_id_names);
 
 	catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
 
@@ -314,7 +345,7 @@ catalog_get(void)
 
 		catalog.functions[i].function_id = funclist->oid;
 	}
-
+	catalog.initialized = true;
 
 	return &catalog;
 }
@@ -322,7 +353,47 @@ catalog_get(void)
 void
 catalog_reset(void)
 {
-	catalog.database_id = InvalidOid;
+	catalog.initialized = false;
+	database_info.database_id = InvalidOid;
+}
+
+static CatalogTable
+catalog_get_table(Catalog *catalog, Oid relid)
+{
+	unsigned int i;
+
+	if (!catalog_is_valid(catalog))
+	{
+		const char *schema_name = get_namespace_name(get_rel_namespace(relid));
+		const char *relname = get_rel_name(relid);
+
+		for (i = 0; i < _MAX_CATALOG_TABLES; i++)
+			if (strcmp(catalog_table_names[i].schema_name, schema_name) == 0
+				&& strcmp(catalog_table_name(i), relname) == 0)
+				return (CatalogTable) i;
+
+		return INVALID_CATALOG_TABLE;
+	}
+
+	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
+		if (catalog->tables[i].id == relid)
+			return (CatalogTable) i;
+
+	return INVALID_CATALOG_TABLE;
+}
+
+/*
+ * Get the next serial ID for a catalog table, if one exists for the given table.
+ */
+int64
+catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
+{
+	Oid			relid = catalog->tables[table].serial_relid;
+
+	if (!OidIsValid(relid))
+		elog(ERROR, "no serial ID column for table \"%s.%s\"", catalog_table_names[table].schema_name, catalog_table_name(table));
+
+	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }
 
 Oid
@@ -351,12 +422,6 @@ catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 	return catalog->caches[type].inval_proxy_id;
 }
 
-Oid
-catalog_get_internal_function_id(Catalog *catalog, InternalFunction func)
-{
-	return catalog->functions[func].function_id;
-}
-
 /*
  * Become the user that owns the catalog schema.
  *
@@ -368,13 +433,13 @@ catalog_get_internal_function_id(Catalog *catalog, InternalFunction func)
  * with catalog_restore_user().
  */
 bool
-catalog_become_owner(Catalog *catalog, CatalogSecurityContext *sec_ctx)
+catalog_database_info_become_owner(CatalogDatabaseInfo *database_info, CatalogSecurityContext *sec_ctx)
 {
 	GetUserIdAndSecContext(&sec_ctx->saved_uid, &sec_ctx->saved_security_context);
 
-	if (sec_ctx->saved_uid != catalog->owner_uid)
+	if (sec_ctx->saved_uid != database_info->owner_uid)
 	{
-		SetUserIdAndSecContext(catalog->owner_uid,
+		SetUserIdAndSecContext(database_info->owner_uid,
 							   sec_ctx->saved_security_context | SECURITY_LOCAL_USERID_CHANGE);
 		return true;
 	}
@@ -385,63 +450,12 @@ catalog_become_owner(Catalog *catalog, CatalogSecurityContext *sec_ctx)
 /*
  * Restore the security context of the original user after becoming the catalog
  * owner. The user should pass the original CatalogSecurityContext that was used
- * with catalog_become_owner().
+ * with catalog_database_info_become_owner().
  */
 void
 catalog_restore_user(CatalogSecurityContext *sec_ctx)
 {
 	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
-}
-
-Oid
-catalog_table_get_id(Catalog *catalog, CatalogTable table)
-{
-	return catalog->tables[table].id;
-}
-
-CatalogTable
-catalog_table_get(Catalog *catalog, Oid relid)
-{
-	unsigned int i;
-
-	if (!catalog_is_valid(catalog))
-	{
-		const char *schema_name = get_namespace_name(get_rel_namespace(relid));
-		const char *relname = get_rel_name(relid);
-
-		for (i = 0; i < _MAX_CATALOG_TABLES; i++)
-			if (strcmp(catalog_table_names[i].schema_name, schema_name) == 0
-				&& strcmp(catalog_table_name(i), relname) == 0)
-				return (CatalogTable) i;
-
-		return INVALID_CATALOG_TABLE;
-	}
-
-	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
-		if (catalog->tables[i].id == relid)
-			return (CatalogTable) i;
-
-	return INVALID_CATALOG_TABLE;
-}
-
-const char *
-catalog_table_name(CatalogTable table)
-{
-	return catalog_table_names[table].table_name;
-}
-
-/*
- * Get the next serial ID for a catalog table, if one exists for the given table.
- */
-int64
-catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
-{
-	Oid			relid = catalog->tables[table].serial_relid;
-
-	if (!OidIsValid(relid))
-		elog(ERROR, "no serial ID column for table \"%s.%s\"", catalog_table_names[table].schema_name, catalog_table_name(table));
-
-	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }
 
 #if PG96
@@ -465,7 +479,7 @@ catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 /*
  * Insert a new row into a catalog table.
  */
-void
+static void
 catalog_insert(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleInsert(rel, tuple);
@@ -547,7 +561,7 @@ void
 catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 {
 	Catalog    *catalog = catalog_get();
-	CatalogTable table = catalog_table_get(catalog, catalog_relid);
+	CatalogTable table = catalog_get_table(catalog, catalog_relid);
 	Oid			relid;
 
 	switch (table)
