@@ -329,8 +329,8 @@ dimension_scan_internal(ScanKeyData *scankey,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[DIMENSION].id,
-		.index = catalog->tables[DIMENSION].index_ids[dimension_index],
+		.table = catalog_get_table_id(catalog, DIMENSION),
+		.index = catalog_get_index(catalog, DIMENSION, dimension_index),
 		.nkeys = nkeys,
 		.limit = limit,
 		.scankey = scankey,
@@ -418,8 +418,8 @@ dimension_scan_update(int32 dimension_id, tuple_found_func tuple_found, void *da
 	Catalog    *catalog = catalog_get();
 	ScanKeyData scankey[1];
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[DIMENSION].id,
-		.index = catalog->tables[DIMENSION].index_ids[DIMENSION_ID_IDX],
+		.table = catalog_get_table_id(catalog, DIMENSION),
+		.index = catalog_get_index(catalog, DIMENSION, DIMENSION_ID_IDX),
 		.nkeys = 1,
 		.limit = 1,
 		.scankey = scankey,
@@ -449,7 +449,7 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 	if (NULL != delete_slices && *delete_slices)
 		dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id), false);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -502,7 +502,7 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 
 	tuple = heap_form_tuple(ti->desc, values, nulls);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_update_tid(ti->scanrel, &ti->tuple->t_self, tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -545,7 +545,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id,
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] = true;
 	}
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	dimension_id = Int32GetDatum(catalog_table_next_seq_id(catalog_get(), DIMENSION));
 	values[AttrNumberGetAttrOffset(Anum_dimension_id)] = dimension_id;
 	catalog_insert_values(rel, desc, values, nulls);
@@ -566,7 +566,7 @@ dimension_insert(int32 hypertable_id,
 	Relation	rel;
 	int32		dimension_id;
 
-	rel = heap_open(catalog->tables[DIMENSION].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, DIMENSION), RowExclusiveLock);
 	dimension_id = dimension_insert_relation(rel, hypertable_id, colname, coltype, num_slices, partitioning_func, interval_length);
 	heap_close(rel, RowExclusiveLock);
 	return dimension_id;
@@ -1180,7 +1180,7 @@ dimensions_rename_schema_name(char *old_name, char *new_name)
 	Catalog    *catalog = catalog_get();
 
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[DIMENSION].id,
+		.table = catalog_get_table_id(catalog, DIMENSION),
 		.index = InvalidOid,
 		.nkeys = 1,
 		.scankey = scankey,

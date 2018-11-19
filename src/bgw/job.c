@@ -122,8 +122,8 @@ bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.alloc_size = alloc_size,
 	};
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[BGW_JOB].id,
-		.index = CATALOG_INDEX(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = InvalidOid,
 		.data = &list_data,
 		.tuple_found = bgw_job_accum_tuple_found,
 		.lockmode = AccessShareLock,
@@ -141,8 +141,8 @@ bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[BGW_JOB].id,
-		.index = CATALOG_INDEX(catalog, BGW_JOB, indexid),
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(catalog, BGW_JOB, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
@@ -203,7 +203,7 @@ bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule
 	CatalogSecurityContext sec_ctx;
 	bool		nulls[Natts_bgw_job] = {false};
 
-	rel = heap_open(catalog->tables[BGW_JOB].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 
 	desc = RelationGetDescr(rel);
 
@@ -214,7 +214,7 @@ bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
 
-	catalog_become_owner(catalog, &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = catalog_table_next_seq_id(catalog, BGW_JOB);
 	catalog_insert_values(rel, desc, values, nulls);
 	catalog_restore_user(&sec_ctx);
@@ -241,7 +241,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	/* Also delete the bgw_stat entry */
 	bgw_job_stat_delete(((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -254,8 +254,8 @@ bgw_job_delete_scan(ScanKeyData *scankey)
 	Catalog    *catalog = catalog_get();
 
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[BGW_JOB].id,
-		.index = CATALOG_INDEX(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = NULL,
@@ -274,7 +274,7 @@ bgw_job_delete_scan(ScanKeyData *scankey)
 	return scanner_scan(&scanctx);
 }
 
-static bool
+bool
 bgw_job_delete_by_id(int32 job_id)
 {
 	ScanKeyData scankey[1];

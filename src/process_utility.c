@@ -1178,7 +1178,7 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 		 * Change user since chunk's are typically located in an internal
 		 * schema and chunk indexes require metadata changes
 		 */
-		catalog_become_owner(catalog_get(), &sec_ctx);
+		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and create a corresponding index */
 		foreach_chunk(ht, process_index_chunk, &info);
@@ -2081,7 +2081,7 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 	{
 		CatalogSecurityContext sec_ctx;
 
-		catalog_become_owner(catalog_get(), &sec_ctx);
+		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and drop the corresponding constraint */
 		foreach_chunk(ht, process_drop_constraint_on_chunk, constraint->constraint_name);

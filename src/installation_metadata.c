@@ -100,8 +100,8 @@ installation_metadata_get_value_internal(Datum metadata_key,
 	};
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[INSTALLATION_METADATA].id,
-		.index = CATALOG_INDEX(catalog, INSTALLATION_METADATA, INSTALLATION_METADATA_PKEY_IDX),
+		.table = catalog_get_table_id(catalog, INSTALLATION_METADATA),
+		.index = catalog_get_index(catalog, INSTALLATION_METADATA, INSTALLATION_METADATA_PKEY_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = installation_metadata_tuple_get_value,
@@ -152,7 +152,7 @@ installation_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_va
 	Catalog    *catalog = catalog_get();
 	Relation	rel;
 
-	rel = heap_open(catalog->tables[INSTALLATION_METADATA].id, ShareRowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, INSTALLATION_METADATA), ShareRowExclusiveLock);
 
 	/* Check for row existence while we have the lock */
 	existing_value = installation_metadata_get_value_internal(metadata_key,

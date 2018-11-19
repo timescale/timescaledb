@@ -124,8 +124,8 @@ tablespace_scan_internal(int indexid,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[TABLESPACE].id,
-		.index = CATALOG_INDEX(catalog, TABLESPACE, indexid),
+		.table = catalog_get_table_id(catalog, TABLESPACE),
+		.index = catalog_get_index(catalog, TABLESPACE, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.tuple_found = tuple_found,
@@ -163,7 +163,7 @@ tablespace_scan(int32 hypertable_id)
 
 typedef struct TablespaceScanInfo
 {
-	Catalog    *catalog;
+	CatalogDatabaseInfo *database_info;
 	Cache	   *hcache;
 	Oid			userid;
 	int			num_filtered;
@@ -203,7 +203,7 @@ static void
 tablespace_validate_revoke_internal(const char *tspcname, tuple_found_func tuple_found, void *stmt)
 {
 	TablespaceScanInfo info = {
-		.catalog = catalog_get(),
+		.database_info = catalog_database_info_get(),
 		.hcache = hypertable_cache_pin(),
 		.data = stmt,
 	};
@@ -344,7 +344,7 @@ tablespace_insert(int32 hypertable_id, const char *tspcname)
 	Relation	rel;
 	int32		id;
 
-	rel = heap_open(catalog->tables[TABLESPACE].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, TABLESPACE), RowExclusiveLock);
 	id = tablespace_insert_relation(rel, hypertable_id, tspcname);
 	heap_close(rel, RowExclusiveLock);
 
@@ -357,7 +357,7 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 	TablespaceScanInfo *info = data;
 	CatalogSecurityContext sec_ctx;
 
-	catalog_become_owner(info->catalog, &sec_ctx);
+	catalog_database_info_become_owner(info->database_info, &sec_ctx);
 	catalog_delete_only(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -370,7 +370,7 @@ tablespace_delete(int32 hypertable_id, const char *tspcname)
 {
 	ScanKeyData scankey[2];
 	TablespaceScanInfo info = {
-		.catalog = catalog_get(),
+		.database_info = catalog_database_info_get(),
 		.stopcount = (NULL != tspcname),
 	};
 	int			num_deleted,
@@ -428,7 +428,7 @@ tablespace_delete_from_all(const char *tspcname, Oid userid)
 {
 	ScanKeyData scankey[1];
 	TablespaceScanInfo info = {
-		.catalog = catalog_get(),
+		.database_info = catalog_database_info_get(),
 		.hcache = hypertable_cache_pin(),
 		.userid = userid,
 	};
@@ -555,7 +555,7 @@ tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attach
 	}
 	else
 	{
-		catalog_become_owner(catalog_get(), &sec_ctx);
+		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 		tablespace_insert(ht->fd.id, NameStr(*tspcname));
 		catalog_restore_user(&sec_ctx);
 	}

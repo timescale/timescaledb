@@ -128,8 +128,8 @@ dimension_slice_scan_limit_direction_internal(int indexid,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[DIMENSION_SLICE].id,
-		.index = catalog->tables[DIMENSION_SLICE].index_ids[indexid],
+		.table = catalog_get_table_id(catalog, DIMENSION_SLICE),
+		.index = catalog_get_index(catalog, DIMENSION_SLICE, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.data = scandata,
@@ -377,7 +377,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 	if (NULL != delete_constraints && *delete_constraints)
 		chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	catalog_delete(ti->scanrel, ti->tuple);
 	catalog_restore_user(&sec_ctx);
 
@@ -597,7 +597,7 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 		/* Slice already exists in table */
 		return false;
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
 	slice->fd.id = catalog_table_next_seq_id(catalog_get(), DIMENSION_SLICE);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(slice->fd.id);
@@ -621,7 +621,7 @@ dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 	Relation	rel;
 	Size		i;
 
-	rel = heap_open(catalog->tables[DIMENSION_SLICE].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
 
 	for (i = 0; i < num_slices; i++)
 		dimension_slice_insert_relation(rel, slices[i]);

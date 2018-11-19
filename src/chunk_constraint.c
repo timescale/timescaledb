@@ -98,7 +98,7 @@ chunk_constraint_choose_name(Name dst,
 
 		Assert(hypertable_constraint_name != NULL);
 
-		catalog_become_owner(catalog_get(), &sec_ctx);
+		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 		snprintf(constrname,
 				 100,
 				 "%d_" INT64_FORMAT "_%s",
@@ -188,9 +188,9 @@ chunk_constraints_insert(ChunkConstraints *ccs)
 	Relation	rel;
 	int			i;
 
-	rel = heap_open(catalog->tables[CHUNK_CONSTRAINT].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 
 	for (i = 0; i < ccs->num_constraints; i++)
 		chunk_constraint_insert_relation(rel, &ccs->constraints[i]);
@@ -209,9 +209,9 @@ chunk_constraint_insert(ChunkConstraint *constraint)
 	CatalogSecurityContext sec_ctx;
 	Relation	rel;
 
-	rel = heap_open(catalog->tables[CHUNK_CONSTRAINT].id, RowExclusiveLock);
+	rel = heap_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	chunk_constraint_insert_relation(rel, constraint);
 	catalog_restore_user(&sec_ctx);
 	heap_close(rel, RowExclusiveLock);
@@ -263,11 +263,11 @@ chunk_constraint_create_on_table(ChunkConstraint *cc, Oid chunk_oid)
 
 	chunk_constraint_fill_tuple_values(cc, values, nulls);
 
-	rel = RelationIdGetRelation(catalog_table_get_id(catalog_get(), CHUNK_CONSTRAINT));
+	rel = RelationIdGetRelation(catalog_get_table_id(catalog_get(), CHUNK_CONSTRAINT));
 	tuple = heap_form_tuple(RelationGetDescr(rel), values, nulls);
 	RelationClose(rel);
 
-	catalog_become_owner(catalog_get(), &sec_ctx);
+	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
 	CatalogInternalCall1(DDL_ADD_CHUNK_CONSTRAINT, HeapTupleGetDatum(tuple));
 	catalog_restore_user(&sec_ctx);
 
@@ -382,8 +382,8 @@ chunk_constraint_scan_internal(int indexid,
 {
 	Catalog    *catalog = catalog_get();
 	ScannerCtx	scanctx = {
-		.table = catalog->tables[CHUNK_CONSTRAINT].id,
-		.index = CATALOG_INDEX(catalog, CHUNK_CONSTRAINT, indexid),
+		.table = catalog_get_table_id(catalog, CHUNK_CONSTRAINT),
+		.index = catalog_get_index(catalog, CHUNK_CONSTRAINT, indexid),
 		.nkeys = nkeys,
 		.scankey = scankey,
 		.data = data,
