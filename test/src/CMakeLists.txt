@@ -19,8 +19,4 @@ add_subdirectory(bgw)
 add_subdirectory(net)
 add_subdirectory(telemetry)
 
-if (NOT WIN32)
-  # The loader tests currently do not build on Windows due to a
-  # reference to IsParallelWorker, which is not an exported symbol
-  add_subdirectory(loader)
-endif (NOT WIN32)
+add_subdirectory(loader)
