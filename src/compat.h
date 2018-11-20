@@ -18,6 +18,13 @@
 #define PG96 is_supported_pg_version_96(PG_VERSION_NUM)
 #define PG10 is_supported_pg_version_10(PG_VERSION_NUM)
 
+/* TupleDescAttr was only backpatched to 9.6.5. Make it work under 9.6.3 and 9.6.4 */
+#if ((PG_VERSION_NUM >= 90603) && PG_VERSION_NUM < 90605)
+#define TupleDescAttrCompat(tupdesc, i) ((tupdesc)->attrs[(i)])
+#else
+#define TupleDescAttrCompat(tupdesc, i) TupleDescAttr(tupdesc, i)
+#endif
+
 #if PG10
 
 #define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes) \
