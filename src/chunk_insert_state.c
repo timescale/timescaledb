@@ -278,7 +278,7 @@ adjust_hypertable_tlist(List *tlist, TupleConversionMap *map)
 
 	for (chunk_attrno = 1; chunk_attrno <= chunk_tupdesc->natts; chunk_attrno++)
 	{
-		Form_pg_attribute att_tup = TupleDescAttr(chunk_tupdesc, chunk_attrno - 1);
+		Form_pg_attribute att_tup = TupleDescAttrCompat(chunk_tupdesc, chunk_attrno - 1);
 		TargetEntry *tle;
 
 		if (attrMap[chunk_attrno - 1] != InvalidAttrNumber)
