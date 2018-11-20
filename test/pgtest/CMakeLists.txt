@@ -21,6 +21,7 @@ file(READ
 
 # Tests to ignore
 set(PG_IGNORE_TESTS
+  rules
   tablespace
   opr_sanity
   sanity_check)

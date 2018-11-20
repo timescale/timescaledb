@@ -10,6 +10,7 @@ DROP EXTENSION timescaledb;
 \dx
 SELECT 1;
 
+\c single :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-1';
 SELECT 1;
 \dx

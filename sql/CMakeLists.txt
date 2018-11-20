@@ -42,6 +42,7 @@ set(SOURCE_FILES
   cache.sql
   bgw_scheduler.sql
   installation_metadata.sql
+  views.sql
 )
 
 # These files should be pre-pended to update scripts so that they are

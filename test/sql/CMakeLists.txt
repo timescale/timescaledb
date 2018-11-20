@@ -56,7 +56,9 @@ set(TEST_FILES
   upsert.sql
   util.sql
   vacuum.sql
-  version.sql)
+  version.sql
+  views.sql
+)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES

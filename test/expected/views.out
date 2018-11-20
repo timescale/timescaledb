@@ -1,0 +1,99 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------+----------------+------------+------------+------------+------------+------------
+(0 rows)
+
+-- create simple hypertable with 1 chunk
+CREATE TABLE ht1(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('ht1','time');
+ create_hypertable 
+-------------------
+ (1,public,ht1,t)
+(1 row)
+
+INSERT INTO ht1 SELECT '2000-01-01'::TIMESTAMPTZ;
+-- create simple hypertable with 1 chunk and toasted data
+CREATE TABLE ht2(time TIMESTAMPTZ NOT NULL, data TEXT);
+SELECT create_hypertable('ht2','time');
+ create_hypertable 
+-------------------
+ (2,public,ht2,t)
+(1 row)
+
+INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
+(2 rows)
+
+\c single :ROLE_SUPERUSER
+-- create schema open and hypertable with 3 chunks
+CREATE SCHEMA open;
+GRANT USAGE ON SCHEMA open TO :ROLE_DEFAULT_PERM_USER;
+CREATE TABLE open.open_ht(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('open.open_ht','time');
+ create_hypertable  
+--------------------
+ (3,open,open_ht,t)
+(1 row)
+
+INSERT INTO open.open_ht SELECT '2000-01-01'::TIMESTAMPTZ;
+INSERT INTO open.open_ht SELECT '2001-01-01'::TIMESTAMPTZ;
+INSERT INTO open.open_ht SELECT '2002-01-01'::TIMESTAMPTZ;
+-- create schema closed and hypertable
+CREATE SCHEMA closed;
+CREATE TABLE closed.closed_ht(time TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('closed.closed_ht','time');
+   create_hypertable    
+------------------------
+ (4,closed,closed_ht,t)
+(1 row)
+
+INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
+ open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB
+ closed       | closed_ht  | super_user        |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+(4 rows)
+
+\c single :ROLE_DEFAULT_PERM_USER
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+ public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
+ open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB
+ closed       | closed_ht  | super_user        |              1 |          1 |            |            |            | 
+(4 rows)
+
+-- filter by schema
+SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed';
+ table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------+----------------+------------+------------+------------+------------+------------
+ closed       | closed_ht  | super_user  |              1 |          1 |            |            |            | 
+(1 row)
+
+-- filter by table name
+SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1';
+ table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------------+----------------+------------+------------+------------+------------+------------
+ public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
+(1 row)
+
+-- filter by owner
+SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user';
+ table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+------------+-------------+----------------+------------+------------+------------+------------+------------
+ open         | open_ht    | super_user  |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB
+ closed       | closed_ht  | super_user  |              1 |          1 |            |            |            | 
+(2 rows)
+
