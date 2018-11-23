@@ -27,10 +27,14 @@ INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
 INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 
 --check some error conditions
+SELECT attach_tablespace(NULL,NULL);
 SELECT attach_tablespace('tablespace2', NULL);
 SELECT attach_tablespace(NULL, 'tspace_2dim');
 SELECT attach_tablespace('none_existing_tablespace', 'tspace_2dim');
 SELECT attach_tablespace('tablespace2', 'none_existing_table');
+SELECT detach_tablespace(NULL);
+SELECT detach_tablespaces(NULL);
+SELECT show_tablespaces(NULL);
 
 --attach another tablespace without first creating it --> should generate error
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');

@@ -31,6 +31,8 @@ INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
 (1 row)
 
 --check some error conditions
+SELECT attach_tablespace(NULL,NULL);
+ERROR:  invalid tablespace name
 SELECT attach_tablespace('tablespace2', NULL);
 ERROR:  invalid hypertable
 SELECT attach_tablespace(NULL, 'tspace_2dim');
@@ -39,6 +41,15 @@ SELECT attach_tablespace('none_existing_tablespace', 'tspace_2dim');
 ERROR:  tablespace "none_existing_tablespace" does not exist
 SELECT attach_tablespace('tablespace2', 'none_existing_table');
 ERROR:  relation "none_existing_table" does not exist at character 41
+SELECT detach_tablespace(NULL);
+ERROR:  invalid tablespace name
+SELECT detach_tablespaces(NULL);
+ERROR:  invalid argument
+SELECT show_tablespaces(NULL);
+ show_tablespaces 
+------------------
+(0 rows)
+
 --attach another tablespace without first creating it --> should generate error
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
 ERROR:  tablespace "tablespace2" does not exist

@@ -59,3 +59,12 @@ SELECT * FROM hypertable_approximate_row_count('approx_count');
 
 -- all hypertables
 SELECT * FROM hypertable_approximate_row_count();
+SELECT * FROM hypertable_approximate_row_count(NULL);
+
+SELECT * FROM chunk_relation_size(NULL);
+SELECT * FROM chunk_relation_size_pretty(NULL);
+SELECT * FROM hypertable_relation_size(NULL);
+SELECT * FROM hypertable_relation_size_pretty(NULL);
+SELECT * FROM indexes_relation_size(NULL);
+SELECT * FROM indexes_relation_size_pretty(NULL);
+
