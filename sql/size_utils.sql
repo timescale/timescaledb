@@ -25,7 +25,7 @@ RETURNS TABLE (table_bytes BIGINT,
                index_bytes BIGINT,
                toast_bytes BIGINT,
                total_bytes BIGINT
-               ) LANGUAGE PLPGSQL STABLE
+               ) LANGUAGE PLPGSQL STABLE STRICT
                AS
 $BODY$
 DECLARE
@@ -102,7 +102,7 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.partitioning_column_to_pretty(
     d   _timescaledb_catalog.dimension
 )
-    RETURNS TEXT LANGUAGE PLPGSQL STABLE AS
+    RETURNS TEXT LANGUAGE PLPGSQL STABLE STRICT AS
 $BODY$
 DECLARE
 BEGIN
@@ -133,7 +133,7 @@ CREATE OR REPLACE FUNCTION hypertable_relation_size_pretty(
 RETURNS TABLE (table_size  TEXT,
                index_size  TEXT,
                toast_size  TEXT,
-               total_size  TEXT) LANGUAGE PLPGSQL STABLE
+               total_size  TEXT) LANGUAGE PLPGSQL STABLE STRICT
                AS
 $BODY$
 DECLARE
@@ -182,7 +182,7 @@ RETURNS TABLE (chunk_id INT,
                index_bytes BIGINT,
                toast_bytes BIGINT,
                total_bytes BIGINT)
-               LANGUAGE PLPGSQL STABLE
+               LANGUAGE PLPGSQL STABLE STRICT
                AS
 $BODY$
 DECLARE
@@ -281,7 +281,7 @@ RETURNS TABLE (chunk_id INT,
                toast_size  TEXT,
                total_size  TEXT
                )
-               LANGUAGE PLPGSQL STABLE
+               LANGUAGE PLPGSQL STABLE STRICT
                AS
 $BODY$
 DECLARE
@@ -363,7 +363,7 @@ CREATE OR REPLACE FUNCTION indexes_relation_size(
 )
 RETURNS TABLE (index_name TEXT,
                total_bytes BIGINT)
-               LANGUAGE PLPGSQL STABLE
+               LANGUAGE PLPGSQL STABLE STRICT
                AS
 $BODY$
 <<main>>
@@ -410,7 +410,7 @@ CREATE OR REPLACE FUNCTION indexes_relation_size_pretty(
     main_table              REGCLASS
 )
 RETURNS TABLE (index_name TEXT,
-               total_size TEXT) LANGUAGE PLPGSQL STABLE
+               total_size TEXT) LANGUAGE PLPGSQL STABLE STRICT
                AS
 $BODY$
 BEGIN
