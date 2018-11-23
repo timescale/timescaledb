@@ -209,3 +209,43 @@ SELECT * FROM hypertable_approximate_row_count();
  public      | two_Partitions          |            0
 (5 rows)
 
+SELECT * FROM hypertable_approximate_row_count(NULL);
+ schema_name |       table_name        | row_estimate 
+-------------+-------------------------+--------------
+ public      | approx_count            |           10
+ public      | timestamp_partitioned   |            0
+ public      | timestamp_partitioned_2 |            0
+ public      | toast_test              |            0
+ public      | two_Partitions          |            0
+(5 rows)
+
+SELECT * FROM chunk_relation_size(NULL);
+ chunk_id | chunk_table | partitioning_columns | partitioning_column_types | partitioning_hash_functions | ranges | table_bytes | index_bytes | toast_bytes | total_bytes 
+----------+-------------+----------------------+---------------------------+-----------------------------+--------+-------------+-------------+-------------+-------------
+(0 rows)
+
+SELECT * FROM chunk_relation_size_pretty(NULL);
+ chunk_id | chunk_table | partitioning_columns | partitioning_column_types | partitioning_hash_functions | ranges | table_size | index_size | toast_size | total_size 
+----------+-------------+----------------------+---------------------------+-----------------------------+--------+------------+------------+------------+------------
+(0 rows)
+
+SELECT * FROM hypertable_relation_size(NULL);
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+(0 rows)
+
+SELECT * FROM hypertable_relation_size_pretty(NULL);
+ table_size | index_size | toast_size | total_size 
+------------+------------+------------+------------
+(0 rows)
+
+SELECT * FROM indexes_relation_size(NULL);
+ index_name | total_bytes 
+------------+-------------
+(0 rows)
+
+SELECT * FROM indexes_relation_size_pretty(NULL);
+ index_name | total_size 
+------------+------------
+(0 rows)
+

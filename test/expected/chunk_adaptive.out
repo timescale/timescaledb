@@ -34,6 +34,11 @@ SELECT * FROM test.set_memory_cache_size('2GB');
             2147483648
 (1 row)
 
+-- test NULL handling
+\set ON_ERROR_STOP 0
+SELECT * FROM set_adaptive_chunking(NULL,NULL);
+ERROR:  invalid hypertable: cannot be NULL
+\set ON_ERROR_STOP 1
 CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
 \set ON_ERROR_STOP 0
 -- Bad signature of sizing func should fail

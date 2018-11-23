@@ -33,6 +33,11 @@ $BODY$;
 -- (independent of available machine memory)
 SELECT * FROM test.set_memory_cache_size('2GB');
 
+-- test NULL handling
+\set ON_ERROR_STOP 0
+SELECT * FROM set_adaptive_chunking(NULL,NULL);
+\set ON_ERROR_STOP 1
+
 CREATE TABLE test_adaptive(time timestamptz, temp float, location int);
 
 \set ON_ERROR_STOP 0

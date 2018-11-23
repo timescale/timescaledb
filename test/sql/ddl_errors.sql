@@ -11,6 +11,8 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 
 \set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable(NULL, NULL);
+SELECT * FROM create_hypertable('"public"."Hypertable_1"', NULL);
 SELECT * FROM create_hypertable('"public"."Hypertable_1_mispelled"', 'time', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
@@ -115,4 +117,16 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_rule"', 'time', chunk_ti
 
 \set ON_ERROR_STOP 0
 CREATE RULE notify_me AS ON UPDATE TO "Hypertable_1_rule" DO ALSO NOTIFY "Hypertable_1_rule";
+\set ON_ERROR_STOP 1
+
 \set ON_ERROR_STOP 0
+SELECT add_dimension(NULL,NULL);
+\set ON_ERROR_STOP 1
+
+\set ON_ERROR_STOP 0
+SELECT attach_tablespace(NULL,NULL);
+\set ON_ERROR_STOP 1
+
+\set ON_ERROR_STOP 0
+select set_number_partitions(NULL,NULL);
+\set ON_ERROR_STOP 1
