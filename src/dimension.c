@@ -858,6 +858,11 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	Name		colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 	int16		num_slices;
 
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid main_table: cannot be NULL")));
+
 	hypertable_permissions_check(table_relid, GetUserId());
 
 	if (PG_ARGISNULL(1) || !IS_VALID_NUM_SLICES(num_slices_arg))
@@ -880,12 +885,28 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 
 TS_FUNCTION_INFO_V1(ts_dimension_set_interval);
 
+/*
+ * Update chunk_time_interval for a hypertable.
+ *
+ * main_table - The OID of the table corresponding to a hypertable whose time
+ *     interval should be updated
+ * chunk_time_interval - The new time interval. For hypertables with integral
+ *     time columns, this must be an integral type. For hypertables with a
+ *     TIMESTAMP/TIMESTAMPTZ/DATE type, it can be integral which is treated as
+ *     microseconds, or an INTERVAL type.
+ * dimension_name - The name of the dimension
+ */
 Datum
 ts_dimension_set_interval(PG_FUNCTION_ARGS)
 {
 	Oid			table_relid = PG_GETARG_OID(0);
 	Datum		interval = PG_GETARG_DATUM(1);
 	Name		colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid main_table: cannot be NULL")));
 
 	hypertable_permissions_check(table_relid, GetUserId());
 
@@ -1065,6 +1086,11 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
 	};
 	Datum		retval = 0;
+
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid main_table: cannot be NULL")));
 
 	hypertable_permissions_check(info.table_relid, GetUserId());
 

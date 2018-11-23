@@ -739,6 +739,11 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	Datum		values[2];
 	bool		nulls[2] = {false, false};
 
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypertable: cannot be NULL")));
+
 	if (!OidIsValid(info.table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
