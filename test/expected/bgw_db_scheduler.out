@@ -1040,6 +1040,13 @@ SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
  
 (1 row)
 
+-- test null handling in delete_job
+SELECT delete_job(NULL);
+ delete_job 
+------------
+ 
+(1 row)
+
 SELECT ts_bgw_params_reset_time(200000, true);
  ts_bgw_params_reset_time 
 --------------------------
@@ -1148,5 +1155,11 @@ select * from _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
 --------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
    1026 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+(1 row)
+
+SELECT * FROM insert_job(NULL,NULL,NULL,NULL,NULL,NULL);
+ insert_job 
+------------
+ 
 (1 row)
 

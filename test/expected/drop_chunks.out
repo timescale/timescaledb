@@ -144,6 +144,10 @@ CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chu
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(2);
 ERROR:  cannot drop table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+SELECT drop_chunks(NULL::interval);
+ERROR:  can only use drop_chunks with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
+SELECT drop_chunks(NULL::int);
+ERROR:  the timestamp provided to drop_chunks cannot be NULL
 \set ON_ERROR_STOP 1
 -- show created constraints and dimension slices for each chunk
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end

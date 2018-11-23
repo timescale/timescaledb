@@ -207,6 +207,8 @@ ORDER BY d.id;
 (2 rows)
 
 \set ON_ERROR_STOP 0
+select set_chunk_time_interval(NULL,NULL::interval);
+ERROR:  invalid main_table: cannot be NULL
 -- should fail since time column is an int
 SELECT set_chunk_time_interval('chunk_test', INTERVAL '1 minute');
 ERROR:  invalid interval: must be an integer type for integer dimensions

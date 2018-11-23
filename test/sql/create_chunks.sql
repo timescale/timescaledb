@@ -113,6 +113,7 @@ WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test2'
 ORDER BY d.id;
 
 \set ON_ERROR_STOP 0
+select set_chunk_time_interval(NULL,NULL::interval);
 -- should fail since time column is an int
 SELECT set_chunk_time_interval('chunk_test', INTERVAL '1 minute');
 -- should fail since its not a valid way to represent time

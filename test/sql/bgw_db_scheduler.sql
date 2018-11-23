@@ -470,6 +470,9 @@ SELECT wait_for_job_1_to_run(2);
 select * from _timescaledb_internal.bgw_job_stat;
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
 
+-- test null handling in delete_job
+SELECT delete_job(NULL);
+
 SELECT ts_bgw_params_reset_time(200000, true);
 SELECT wait_for_timer_to_run(200000);
 
@@ -495,3 +498,5 @@ SELECT ts_bgw_params_reset_time(500000, true);
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 SELECT * FROM bgw_log;
 select * from _timescaledb_internal.bgw_job_stat;
+
+SELECT * FROM insert_job(NULL,NULL,NULL,NULL,NULL,NULL);

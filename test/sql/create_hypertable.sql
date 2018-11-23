@@ -282,3 +282,4 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
 
 -- A valid function should work:
 select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');
+

@@ -63,6 +63,8 @@ CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chu
 
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(2);
+SELECT drop_chunks(NULL::interval);
+SELECT drop_chunks(NULL::int);
 \set ON_ERROR_STOP 1
 
 -- show created constraints and dimension slices for each chunk
