@@ -1280,6 +1280,16 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	Relation	rel;
 	Datum		retval;
 
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid main_table: cannot be NULL")));
+
+	if (PG_ARGISNULL(1))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_column_name: cannot be NULL")));
+
 	/* quick exit in the easy if-not-exists case to avoid all locking */
 	if (if_not_exists && is_hypertable(table_relid))
 	{
