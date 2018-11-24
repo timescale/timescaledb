@@ -780,19 +780,19 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	if (OidIsValid(info.func))
 	{
 		ht->chunk_sizing_func = info.func;
-		values[0] = DatumGetObjectId(info.func);
+		values[0] = ObjectIdGetDatum(info.func);
 	}
 	else if (OidIsValid(ht->chunk_sizing_func))
 	{
 		chunk_sizing_func_validate(ht->chunk_sizing_func, &info);
-		values[0] = DatumGetObjectId(ht->chunk_sizing_func);
+		values[0] = ObjectIdGetDatum(ht->chunk_sizing_func);
 	}
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION),
 				 errmsg("invalid chunk sizing function")));
 
-	values[1] = DatumGetInt64(info.target_size_bytes);
+	values[1] = Int64GetDatum(info.target_size_bytes);
 
 	/* Update the hypertable entry */
 	ht->fd.chunk_target_size = info.target_size_bytes;

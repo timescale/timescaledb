@@ -247,7 +247,7 @@ calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
 	}
 
 	coord = p->coordinates[i];
-	datum = OidFunctionCall3(ht->chunk_sizing_func, dim->fd.id, coord, ht->fd.chunk_target_size);
+	datum = OidFunctionCall3(ht->chunk_sizing_func, Int32GetDatum(dim->fd.id), Int64GetDatum(coord), Int64GetDatum(ht->fd.chunk_target_size));
 	chunk_interval = DatumGetInt64(datum);
 
 	/* Check if the function didn't set and interval or nothing changed */
