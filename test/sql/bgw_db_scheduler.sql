@@ -85,6 +85,9 @@ CREATE TABLE public.bgw_log(
     msg TEXT
 );
 
+CREATE VIEW sorted_bgw_log AS
+    SELECT * FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -100,7 +103,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
 -- empty
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --
 -- Test running a normal job
@@ -117,19 +120,19 @@ select * from _timescaledb_config.bgw_job;
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --Test that the scheduler will not run job again if not enough time has passed
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --After enough time has passed the scheduler will run the job again
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 50);
 SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --Now it runs it one more time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(120, 100);
@@ -137,7 +140,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(120, 100);
 SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --
 -- Test what happens when running a job that throws an error
@@ -155,30 +158,30 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --Scheduler runs the job again, sees another error, and increases the wait time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(125);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --The job runs and fails again a few more times increasing the wait time each time.
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(225);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(425);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --Once the wait time reaches 500ms it stops increasion
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --
 -- Test timeout logic
@@ -199,7 +202,7 @@ SELECT ts_bgw_params_mock_wait_returns_immediately(:IMMEDIATELY_SET_UNTIL);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --Check that the scheduler does not kill a job with infinite timeout
 \c single :ROLE_SUPERUSER
@@ -215,7 +218,7 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(550);
 SELECT job_id, last_finish-next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
 
@@ -238,7 +241,7 @@ SELECT ts_bgw_db_scheduler_test_run(300);
 SELECT pg_terminate_backend(wait_application_pid('test_job_3_long'));
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
@@ -248,7 +251,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(900);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --Test that sending SIGTERM to scheduler terminates the jobs as well
 \c single :ROLE_SUPERUSER
@@ -272,7 +275,7 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 SELECT job_id, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 --After a SIGTERM to scheduler and jobs, the jobs are considered crashed and there is a imposed wait of 5 min before a job can be run.
 --See that there is no run again because of the crash-imposed wait (not run with the 10ms retry_period)
@@ -284,7 +287,7 @@ FROM _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 
 --
@@ -335,7 +338,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 -- Now just make sure that the job actually runs in 200ms
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
@@ -344,7 +347,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(200);
 SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 
 -- Test updating jobs list
 TRUNCATE bgw_log;
@@ -506,7 +509,7 @@ SELECT wait_for_job_1_to_run(4);
 
 SELECT ts_bgw_params_reset_time(500000, true);
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
 select * from _timescaledb_internal.bgw_job_stat;
 
 SELECT * FROM insert_job(NULL,NULL,NULL,NULL,NULL,NULL);

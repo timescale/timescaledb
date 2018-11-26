@@ -78,6 +78,8 @@ CREATE TABLE public.bgw_log(
     application_name TEXT,
     msg TEXT
 );
+CREATE VIEW sorted_bgw_log AS
+    SELECT * FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -104,7 +106,7 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 (0 rows)
 
 -- empty
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                   msg                    
 --------+-----------+------------------+------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Wait until 50000, started at 0
@@ -144,7 +146,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1000 | Fri Dec 31 16:00:00.1 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                    msg                     
 --------+-----------+------------------+--------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -166,7 +168,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1000 | @ 0.1 secs | t                |          1 |               1 |              0 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                     msg                      
 --------+-----------+------------------+----------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -189,7 +191,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1000 | Fri Dec 31 16:00:00.2 1999 PST | Fri Dec 31 16:00:00.1 1999 PST | t                |          2 |               2 |              0 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -216,7 +218,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1000 | Fri Dec 31 16:00:00.3 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          3 |               3 |              0 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -263,7 +265,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1001 | @ 0.1 secs | f                |          1 |               0 |              1 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                    msg                     
 --------+-----------+------------------+--------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -285,7 +287,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1001 | @ 0.2 secs | f                |          2 |               0 |              2 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -311,7 +313,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1001 | @ 0.4 secs | f                |          3 |               0 |              3 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -340,7 +342,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1001 | @ 0.5 secs | f                |          4 |               0 |              4 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -374,7 +376,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1001 | @ 0.5 secs | f                |          5 |               0 |              5 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                       msg                        
 --------+-----------+------------------+--------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -435,7 +437,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1002 | Fri Dec 31 16:00:00.2 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | f                |          1 |               0 |              1 |             0 |                   0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                              msg                               
 --------+-----------+------------------+----------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -472,7 +474,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1003 | @ 5 secs ago | t                |          1 |               1 |              0 |             0 |                   0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                    msg                     
 --------+-----------+------------------+--------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -524,7 +526,7 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
  
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                                          msg                                          
 --------+-----------+------------------+---------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -556,7 +558,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1004 | @ 5 secs   | t                |          2 |               1 |              1 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                                          msg                                          
 --------+-----------+------------------+---------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -619,13 +621,13 @@ FROM _timescaledb_internal.bgw_job_stat;
    1005 | -infinity   | f                |          1 |               0 |              0 |             1 |                   1
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                                            msg                                             
 --------+-----------+------------------+--------------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
-      0 |         0 | test_job_3_long  | Before sleep job 3
       2 |         0 | DB Scheduler     | terminating background worker "ts_bgw_db_scheduler_test_main" due to administrator command
+      0 |         0 | test_job_3_long  | Before sleep job 3
       1 |         0 | test_job_3_long  | Job got term signal
       2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
       3 |         0 | test_job_3_long  | terminating connection due to administrator command
@@ -660,17 +662,17 @@ FROM _timescaledb_internal.bgw_job_stat;
    1005 | Fri Dec 31 16:05:00.5 1999 PST | Fri Dec 31 16:05:05.5 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                                            msg                                             
 --------+-----------+------------------+--------------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
-      0 |         0 | test_job_3_long  | Before sleep job 3
       2 |         0 | DB Scheduler     | terminating background worker "ts_bgw_db_scheduler_test_main" due to administrator command
+      0 |         0 | test_job_3_long  | Before sleep job 3
       1 |         0 | test_job_3_long  | Job got term signal
       2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
       3 |         0 | test_job_3_long  | terminating connection due to administrator command
-      0 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
       0 |    500000 | DB Scheduler     | [TESTING] Wait until 300500000, started at 500000
       1 | 300500000 | DB Scheduler     | [TESTING] Registered new background worker
       2 | 300500000 | DB Scheduler     | [TESTING] Wait until 400500000, started at 300500000
@@ -779,7 +781,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1013 | @ 0.2 secs | t                |          1 |               1 |              0 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                    msg                     
 --------+-----------+------------------+--------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -803,7 +805,7 @@ FROM _timescaledb_internal.bgw_job_stat;
    1013 | Fri Dec 31 16:00:00.4 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          2 |               2 |              0 |             0
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
@@ -1138,7 +1140,7 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
  
 (1 row)
 
-SELECT * FROM bgw_log;
+SELECT * FROM sorted_bgw_log;
  msg_no | mock_time | application_name |                      msg                       
 --------+-----------+------------------+------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
