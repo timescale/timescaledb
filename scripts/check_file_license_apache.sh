@@ -11,16 +11,16 @@ FIRST_COMMENT=
 
 if [[ "${FLAG}" == '-c' ]]; then
     LICENSE_FILE=${SCRIPTPATH}/c_license_header.h
-    LICENSE_STRING=`awk 'BEGIN {ORS="\0"}{if($1 == "*/") {print; exit;}} {print}' ${LICENSE_FILE}`
-    FIRST_COMMENT=`awk 'BEGIN {ORS="\0"}{if($1 == "*/") {print; exit;}} {print}' ${FILE}`
+    LICENSE_STRING=`awk 'BEGIN {ORS=""}{if($1 == "*/") {print; exit;}} {print}' ${LICENSE_FILE}`
+    FIRST_COMMENT=`awk 'BEGIN {ORS=""}{if($1 == "*/") {print; exit;}} {print}' ${FILE}`
 elif [[ "${FLAG}" == '-s' ]]; then
     LICENSE_FILE=${SCRIPTPATH}/sql_license.sql
-    LICENSE_STRING=`awk 'BEGIN {ORS="\0"}{if($1 == "") {print; exit;}} {print}' ${SCRIPTPATH}/sql_license.sql`
-    FIRST_COMMENT=`awk 'BEGIN {ORS="\0"}{if($1 == "") {print; exit;}} {print}' ${FILE}`
+    LICENSE_STRING=`awk 'BEGIN {ORS=""}{if($1 == "") {print; exit;}} {print}' ${SCRIPTPATH}/sql_license.sql`
+    FIRST_COMMENT=`awk 'BEGIN {ORS=""}{if($1 == "") {print; exit;}} {print}' ${FILE}`
 elif [[ "${FLAG}" == '-t' ]]; then
     LICENSE_FILE=${SCRIPTPATH}/test_license.sql
-    LICENSE_STRING=`awk 'BEGIN {ORS="\0"}{if($1 == "") {print; exit;}} {print}' ${SCRIPTPATH}/test_license.sql`
-    FIRST_COMMENT=`awk 'BEGIN {ORS="\0"}{if($1 == "") {print; exit;}} {print}' ${FILE}`
+    LICENSE_STRING=`awk 'BEGIN {ORS=""}{if($1 == "") {print; exit;}} {print}' ${SCRIPTPATH}/test_license.sql`
+    FIRST_COMMENT=`awk 'BEGIN {ORS=""}{if($1 == "") {print; exit;}} {print}' ${FILE}`
 else
     echo "Unkown flag" ${1}
     exit 1;
