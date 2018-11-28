@@ -14,6 +14,9 @@ $BODY$
           d.interval_length IS NOT NULL
 $BODY$;
 
+-- Make sure drop_chunks when there are no tables succeeds
+SELECT drop_chunks(INTERVAL '1 hour');
+
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test3(time bigint, temp float8, device_id text);
@@ -84,6 +87,7 @@ SELECT * FROM show_chunks('drop_chunk_test2');
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chunk;
 
 \set ON_ERROR_STOP 0
+SELECT drop_chunks();
 SELECT drop_chunks(2);
 SELECT drop_chunks(NULL::interval);
 SELECT drop_chunks(NULL::int);
@@ -189,14 +193,6 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 
 \dt "_timescaledb_internal"._hyper*
 \set ON_ERROR_STOP 0
--- should fail because too dangerous to assume anything
--- Note that currently this failure is triggered by SQL typecheker when it tries and fails to resolve
--- ANYELEMENT args to a concrete type. Explicit error checking may be necessary if drop_chunks implementation
--- is fully ported to C.
--- commented out because there is discrepancy between postgres 9.6 and postgres 10 error messages for this case
--- SELECT drop_chunks();
-
-
 -- should error because no hypertable
 SELECT drop_chunks(5, 'drop_chunk_test4');
 SELECT show_chunks('drop_chunk_test4');

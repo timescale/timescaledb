@@ -1595,3 +1595,62 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 
 	ts_scanner_scan(&scanctx);
 }
+
+typedef struct AccumHypertable
+{
+	List	   *ht_oids;
+	Name		schema_name;
+	Name		table_name;
+} AccumHypertable;
+
+
+static ScanTupleResult
+hypertable_tuple_match_name(TupleInfo *ti, void *data)
+{
+	Oid			relid;
+	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
+	AccumHypertable *accum = data;
+	Oid			schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
+
+	if (!OidIsValid(schema_oid))
+		return SCAN_CONTINUE;
+
+	relid = get_relname_relid(NameStr(form->table_name), schema_oid);
+	if (!OidIsValid(relid))
+		return SCAN_CONTINUE;
+
+	if ((accum->schema_name == NULL ||
+		 DatumGetBool(DirectFunctionCall2(nameeq, NameGetDatum(accum->schema_name), NameGetDatum(&form->schema_name)))) &&
+		(accum->table_name == NULL ||
+		 DatumGetBool(DirectFunctionCall2(nameeq, NameGetDatum(accum->table_name), NameGetDatum(&form->table_name)))))
+		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
+
+	return SCAN_CONTINUE;
+}
+
+/*
+ * Used for drop_chunks. Either name can be NULL, which indicates matching on
+ * all possible names.
+ */
+List *
+ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx)
+{
+	Catalog    *catalog = ts_catalog_get();
+	AccumHypertable data = {
+		.ht_oids = NIL,
+		.schema_name = schema_name,
+		.table_name = table_name,
+	};
+
+	hypertable_scan_limit_internal(NULL,
+								   0,
+								   catalog_get_index(catalog, HYPERTABLE, INVALID_INDEXID),
+								   hypertable_tuple_match_name,
+								   &data,
+								   -1,
+								   AccessShareLock,
+								   false,
+								   mctx);
+
+	return data.ht_oids;
+}
