@@ -72,6 +72,7 @@ extern char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
 extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset);
 extern bool ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
+extern List *ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock) \
 	ts_hypertable_scan_with_memory_context(schema, table, tuple_found, data, lockmode, tuplock, CurrentMemoryContext)

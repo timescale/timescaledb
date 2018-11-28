@@ -64,27 +64,17 @@ CREATE OR REPLACE FUNCTION  set_number_partitions(
     dimension_name          NAME = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_num_slices' LANGUAGE C VOLATILE;
 
--- Drop chunks that are older than a timestamp or newer than a timestamp.
+-- Drop chunks older than the given timestamp. If a hypertable name is given,
+-- drop only chunks associated with this table. Any of the first three arguments
+-- can be NULL meaning "all values".
 CREATE OR REPLACE FUNCTION drop_chunks(
-    older_than ANYELEMENT = NULL,
+    older_than "any" = NULL,
     table_name  NAME = NULL,
     schema_name NAME = NULL,
     cascade  BOOLEAN = FALSE,
-    newer_than ANYELEMENT = NULL
-)
-    RETURNS VOID LANGUAGE PLPGSQL VOLATILE AS
-$BODY$
-DECLARE
-    older_than_internal BIGINT;
-    newer_than_internal BIGINT;
-BEGIN
-    IF older_than IS NULL AND newer_than IS NULL THEN
-        RAISE 'older_than and newer_than timestamps provided to drop_chunks cannot both be NULL';
-    END IF;
-    PERFORM _timescaledb_internal.drop_chunks_impl(older_than, table_name, schema_name, cascade,
-    newer_than_time => newer_than);
-END
-$BODY$;
+    newer_than "any" = NULL
+) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+LANGUAGE C STABLE PARALLEL SAFE;
 
 -- show chunks older than or newer than a specific time.
 -- `hypertable` argument can be a valid hypertable or NULL.

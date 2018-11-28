@@ -39,6 +39,7 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "errors.h"
 #include "partitioning.h"
 #include "hypertable.h"
 #include "hypercube.h"
@@ -51,6 +52,7 @@
 #include "cache.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
+TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -65,7 +67,7 @@ static void chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube);
 static int	chunk_scan_ctx_foreach_chunk(ChunkScanCtx *ctx, on_chunk_func on_chunk, uint16 limit);
-static void chunk_show_chunks_first_call(FunctionCallInfo fcinfo);
+static Chunk **chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, char *caller_name, MemoryContext mctx, uint64 *num_chunks_returned);
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int	chunk_cmp(const void *ch1, const void *ch2);
 
@@ -1041,7 +1043,7 @@ chunks_find_all_in_range_limit(Hyperspace *hs,
 							   StrategyNumber end_strategy,
 							   int64 end_value,
 							   int limit,
-							   long *num_found)
+							   uint64 *num_found)
 {
 	ChunkScanCtx *ctx = palloc(sizeof(ChunkScanCtx));
 	DimensionVec *slices;
@@ -1081,7 +1083,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs,
 											 int limit,
 											 MemoryContext multi_call_memory_ctx,
 											 char *caller_name,
-											 long *num_found)
+											 uint64 *num_found)
 {
 	ChunkScanCtx *chunk_ctx = NULL;
 	int64		older_than = -1;
@@ -1197,20 +1199,36 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 	 * after doing some computation first
 	 */
 	if (SRF_IS_FIRSTCALL())
-		chunk_show_chunks_first_call(fcinfo);
+	{
+		FuncCallContext *funcctx;
+
+		Oid			table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+		Datum		older_than_datum = PG_GETARG_DATUM(1);
+		Datum		newer_than_datum = PG_GETARG_DATUM(2);
+
+		/*
+		 * get_fn_expr_argtype defaults to UNKNOWNOID if argument is NULL but
+		 * making it InvalidOid makes the logic simpler later
+		 */
+		Oid			older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+		Oid			newer_than_type = PG_ARGISNULL(2) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 2);
+
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		funcctx->user_fctx = chunk_get_chunks_in_time_range(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, "show_chunks", funcctx->multi_call_memory_ctx, &funcctx->max_calls);
+	}
 
 	return chunks_return_srf(fcinfo);
 }
 
-/* Implementation of show_chunks logic that is carried out on the first call of
- * show_chunks set returning function
- * */
-static void
-chunk_show_chunks_first_call(FunctionCallInfo fcinfo)
+static Chunk **
+chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, char *caller_name, MemoryContext mctx, uint64 *num_chunks_returned)
 {
-	FuncCallContext *funcctx;
-	char	   *caller_name;
-
+	ListCell   *lc;
+	MemoryContext oldcontext;
+	ChunkScanCtx **chunk_scan_ctxs;
+	Chunk	  **chunks;
+	Chunk	  **current;
 	Cache	   *hypertable_cache;
 	Hypertable *ht;
 	Dimension  *time_dim;
@@ -1218,45 +1236,12 @@ chunk_show_chunks_first_call(FunctionCallInfo fcinfo)
 
 	/*
 	 * contains the list of hypertables which need to be considred. this is a
-	 * list containing a single hypertable if PG_ARGISNULL(0) is false.
-	 * Otherwise, it will have the list of all hypertables in the system
+	 * list containing a single hypertable if we are passed an invalid table
+	 * OID. Otherwise, it will have the list of all hypertables in the system
 	 */
 	List	   *hypertables = NIL;
-	ListCell   *lc;
 	int			ht_index = 0;
-	long		num_chunks = 0;
-	MemoryContext oldcontext;
-	ChunkScanCtx **chunk_scan_ctxs;
-	Chunk	  **chunks;
-	Chunk	  **current;
-
-
-	Oid			table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Datum		older_than_datum = PG_GETARG_DATUM(1);
-	Datum		newer_than_datum = PG_GETARG_DATUM(2);
-
-	/*
-	 * get_fn_expr_argtype defaults to UNKNOWNOID if argument is NULL but
-	 * making it InvalidOid makes the logic simpler later
-	 */
-	Oid			older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
-	Oid			newer_than_type = PG_ARGISNULL(2) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 2);
-
-	funcctx = SRF_FIRSTCALL_INIT();
-
-	/*
-	 * The caller name is passed as argument so error messages refer to the
-	 * function that the user actually called. This is necessary because
-	 * show_chunk_impl is used by drop_chunks and export_chunks
-	 */
-	caller_name = PG_NARGS() <= 3 ? "show_chunks" : NameStr(*PG_GETARG_NAME(3));
-
-	if (PG_NARGS() > 3 && PG_ARGISNULL(3))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("When calling the internal function for show_chunks "
-						"caller_name cannot be null")
-				 ));
+	uint64		num_chunks = 0;
 
 	if (older_than_type != InvalidOid &&
 		newer_than_type != InvalidOid &&
@@ -1271,7 +1256,7 @@ chunk_show_chunks_first_call(FunctionCallInfo fcinfo)
 	 * returned will still be valid in foreach block below
 	 */
 	hypertable_cache = ts_hypertable_cache_pin();
-	if (PG_ARGISNULL(0))
+	if (!OidIsValid(table_relid))
 	{
 		hypertables = ts_hypertable_get_all();
 	}
@@ -1287,7 +1272,7 @@ chunk_show_chunks_first_call(FunctionCallInfo fcinfo)
 		hypertables = list_make1(ht);
 	}
 
-	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+	oldcontext = MemoryContextSwitchTo(mctx);
 	chunk_scan_ctxs = palloc(sizeof(ChunkScanCtx *) * list_length(hypertables));
 	MemoryContextSwitchTo(oldcontext);
 	foreach(lc, hypertables)
@@ -1326,12 +1311,12 @@ chunk_show_chunks_first_call(FunctionCallInfo fcinfo)
 																				   newer_than_datum,
 																				   newer_than_type,
 																				   -1,
-																				   funcctx->multi_call_memory_ctx,
+																				   mctx,
 																				   caller_name,
 																				   &num_chunks);
 
 	}
-	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+	oldcontext = MemoryContextSwitchTo(mctx);
 
 	/*
 	 * num_chunks can safely be 0 as palloc protects against unportable
@@ -1357,9 +1342,10 @@ chunk_show_chunks_first_call(FunctionCallInfo fcinfo)
 	}
 
 	qsort(chunks, num_chunks, sizeof(Chunk *), chunk_cmp);
-	funcctx->user_fctx = chunks;
-	funcctx->max_calls = num_chunks;
+
+	*num_chunks_returned = num_chunks;
 	ts_cache_release(hypertable_cache);
+	return chunks;
 }
 
 Chunk *
@@ -1859,4 +1845,68 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_NEXT(funcctx, result_set[call_cntr]->table_id);
 	else						/* do when there is no more left */
 		SRF_RETURN_DONE(funcctx);
+}
+
+static void
+do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, bool cascade)
+{
+	int			i = 0;
+	uint64		num_chunks = 0;
+	Chunk	  **chunks = chunk_get_chunks_in_time_range(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, "drop_chunks", CurrentMemoryContext, &num_chunks);
+
+	for (; i < num_chunks; i++)
+	{
+		ObjectAddress objaddr = {
+			.classId = RelationRelationId,
+			.objectId = chunks[i]->table_id,
+		};
+
+		/* Remove the chunk from the hypertable table */
+		ts_chunk_delete_by_relid(chunks[i]->table_id);
+
+		/* Drop the table */
+		performDeletion(&objaddr, cascade, 0);
+	}
+}
+
+Datum
+ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
+{
+	ListCell   *lc;
+	List	   *ht_oids;
+	Name		table_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
+	Name		schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	Datum		older_than_datum = PG_GETARG_DATUM(0);
+	Datum		newer_than_datum = PG_GETARG_DATUM(4);
+
+	/* Making types InvalidOid makes the logic simpler later */
+	Oid			older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
+	Oid			newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
+	bool		cascade = PG_GETARG_BOOL(3);
+
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(4))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("older_than and newer_than timestamps provided to drop_chunks cannot both be NULL")
+				 ));
+
+	ht_oids = ts_hypertable_get_all_by_name(schema_name, table_name, CurrentMemoryContext);
+
+	if (table_name != NULL)
+	{
+		if (ht_oids == NIL)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("hypertable \"%s\" does not exist", NameStr(*table_name))
+					 ));
+	}
+
+	foreach(lc, ht_oids)
+	{
+		Oid			table_relid = lfirst_oid(lc);
+
+		do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade);
+	}
+
+	PG_RETURN_NULL();
 }
