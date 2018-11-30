@@ -15,7 +15,6 @@
 
 #include "chunk_dispatch_plan.h"
 #include "chunk_dispatch_state.h"
-#include "chunk_dispatch_info.h"
 
 /*
  * Create a ChunkDispatchState node from this plan. This is the full execution
@@ -25,7 +24,7 @@
 static Node *
 create_chunk_dispatch_state(CustomScan *cscan)
 {
-	return (Node *) chunk_dispatch_state_create(linitial(cscan->custom_private),
+	return (Node *) chunk_dispatch_state_create(linitial_oid(cscan->custom_private),
 												linitial(cscan->custom_plans));
 }
 
@@ -117,8 +116,8 @@ build_customscan_targetlist(Relation rel, List *targetlist)
  * in a hypertable.
  *
  * Note that CustomScan nodes cannot be extended (by struct embedding) because
- * they might be copied, therefore we pass any extra info as a ChunkDispatchInfo
- * in the custom_private field.
+ * they might be copied, therefore we pass hypertable_relid in the
+ * custom_private field.
  *
  * The chunk dispatch plan takes the original tuple-producing subplan, which was
  * part of a ModifyTable node, and imposes itself inbetween the ModifyTable plan
@@ -130,10 +129,9 @@ CustomScan *
 chunk_dispatch_plan_create(Plan *subplan, Index hypertable_rti, Oid hypertable_relid, Query *parse)
 {
 	CustomScan *cscan = makeNode(CustomScan);
-	ChunkDispatchInfo *info = chunk_dispatch_info_create(hypertable_relid, parse);
 	Relation	rel;
 
-	cscan->custom_private = list_make1(info);
+	cscan->custom_private = list_make1_oid(hypertable_relid);
 	cscan->methods = &chunk_dispatch_plan_methods;
 	cscan->custom_plans = list_make1(subplan);
 	cscan->scan.scanrelid = 0;	/* Indicate this is not a real relation we are

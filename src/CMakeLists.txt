@@ -7,7 +7,6 @@ set(SOURCES
   chunk_adaptive.c
   chunk_constraint.c
   chunk_dispatch.c
-  chunk_dispatch_info.c
   chunk_dispatch_plan.c
   chunk_dispatch_state.c
   chunk_index.c
