@@ -385,27 +385,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-hypertable_delete_by_id(int32 hypertable_id)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
-				BTEqualStrategyNumber, F_INT4EQ,
-				Int32GetDatum(hypertable_id));
-
-	return hypertable_scan_limit_internal(scankey,
-										  1,
-										  HYPERTABLE_ID_INDEX,
-										  hypertable_tuple_delete,
-										  NULL,
-										  1,
-										  RowExclusiveLock,
-										  false,
-										  CurrentMemoryContext);
-}
-
-
-int
 hypertable_delete_by_name(const char *schema_name, const char *table_name)
 {
 	ScanKeyData scankey[2];
