@@ -207,48 +207,6 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 	}
 }
 
-/* Make a RangeVar from a regclass Oid */
-RangeVar *
-makeRangeVarFromRelid(Oid relid)
-{
-	Oid			namespace = get_rel_namespace(relid);
-	char	   *tableName = get_rel_name(relid);
-	char	   *schemaName = get_namespace_name(namespace);
-
-	return makeRangeVar(schemaName, tableName, -1);
-}
-
-int
-int_cmp(const void *a, const void *b)
-{
-	const int  *ia = (const int *) a;
-	const int  *ib = (const int *) b;
-
-	return *ia - *ib;
-}
-
-FmgrInfo *
-create_fmgr(char *schema, char *function_name, int num_args)
-{
-	FmgrInfo   *finfo = palloc(sizeof(FmgrInfo));
-	FuncCandidateList func_list = FuncnameGetCandidates(list_make2(makeString(schema),
-																   makeString(function_name)),
-														num_args, NULL, false, false, false);
-
-	if (func_list == NULL)
-	{
-		elog(ERROR, "could not find the function \"%s.%s\"", schema, function_name);
-	}
-	if (func_list->next != NULL)
-	{
-		elog(ERROR, "multiple functions found");
-	}
-
-	fmgr_info(func_list->oid, finfo);
-
-	return finfo;
-}
-
 /* Returns approximate period in microseconds */
 int64
 get_interval_period_approx(Interval *interval)
