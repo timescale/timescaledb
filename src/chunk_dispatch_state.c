@@ -12,7 +12,6 @@
 
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
-#include "chunk_dispatch_info.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
 #include "chunk.h"
@@ -147,12 +146,12 @@ static CustomExecMethods chunk_dispatch_state_methods = {
 };
 
 ChunkDispatchState *
-chunk_dispatch_state_create(ChunkDispatchInfo *info, Plan *subplan)
+chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
 {
 	ChunkDispatchState *state;
 
 	state = (ChunkDispatchState *) newNode(sizeof(ChunkDispatchState), T_CustomScanState);
-	state->hypertable_relid = info->hypertable_relid;
+	state->hypertable_relid = hypertable_relid;
 	state->subplan = subplan;
 	state->cscan_state.methods = &chunk_dispatch_state_methods;
 	return state;

@@ -12,7 +12,6 @@
 #include <nodes/parsenodes.h>
 
 typedef struct ChunkDispatch ChunkDispatch;
-typedef struct ChunkDispatchInfo ChunkDispatchInfo;
 typedef struct Cache Cache;
 
 /* State used for every tuple in an insert statement */
@@ -39,7 +38,7 @@ typedef struct ChunkDispatchState
 
 #define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
 
-ChunkDispatchState *chunk_dispatch_state_create(ChunkDispatchInfo *, Plan *);
+ChunkDispatchState *chunk_dispatch_state_create(Oid, Plan *);
 void
 			chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
 
