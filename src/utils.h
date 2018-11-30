@@ -38,9 +38,6 @@ extern int64 date_trunc_interval_period_approx(text *units);
  */
 extern int64 get_interval_period_approx(Interval *interval);
 
-extern FmgrInfo *create_fmgr(char *schema, char *function_name, int num_args);
-extern RangeVar *makeRangeVarFromRelid(Oid relid);
-extern int	int_cmp(const void *a, const void *b);
 extern Oid	inheritance_parent_relid(Oid relid);
 
 void	   *create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size);
