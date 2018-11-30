@@ -14,7 +14,6 @@
 #include <catalog/pg_type.h>
 
 #include "hypertable_insert.h"
-#include "chunk_dispatch_info.h"
 #include "chunk_dispatch_state.h"
 
 /*

@@ -23,9 +23,6 @@
 PG_MODULE_MAGIC;
 #endif
 
-extern void _chunk_dispatch_info_init(void);
-extern void _chunk_dispatch_info_fini(void);
-
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
 
@@ -71,7 +68,6 @@ _PG_init(void)
 	extension_check_server_version();
 	bgw_check_loader_api_version();
 
-	_chunk_dispatch_info_init();
 	_cache_init();
 	_hypertable_cache_init();
 	_cache_invalidate_init();
@@ -109,5 +105,4 @@ _PG_fini(void)
 	_cache_invalidate_fini();
 	_hypertable_cache_fini();
 	_cache_fini();
-	_chunk_dispatch_info_fini();
 }
