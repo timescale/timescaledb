@@ -26,7 +26,7 @@ The launcher implements a simple message queue to be notified when it should
 take certain actions, like starting or restarting a scheduler for a given
 database.
 
-##Message types sent to the launcher:
+## Message types sent to the launcher:
 
 `start`: Used to start the scheduler by the user. It is meant to be an
 idempotent start, as in, if it is run multiple times, it is the same as if it
