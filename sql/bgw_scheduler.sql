@@ -22,12 +22,3 @@ INSERT INTO _timescaledb_config.bgw_job (id, application_name, job_type, schedul
 (1, 'Telemetry Reporter', 'telemetry_and_version_check_if_enabled', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h')
 ON CONFLICT (id) DO NOTHING;
 
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME, job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL)
-RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_bgw_job_insert_relation'
-LANGUAGE C VOLATILE STRICT;
-
-CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER)
-RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_bgw_job_delete_by_id'
-LANGUAGE C VOLATILE STRICT;
