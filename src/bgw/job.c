@@ -193,46 +193,6 @@ bgw_job_find(int32 bgw_job_id, MemoryContext mctx)
 	return job_stat;
 }
 
-static bool
-bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period)
-{
-	Catalog    *catalog = catalog_get();
-	Relation	rel;
-	TupleDesc	desc;
-	Datum		values[Natts_bgw_job];
-	CatalogSecurityContext sec_ctx;
-	bool		nulls[Natts_bgw_job] = {false};
-
-	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
-
-	desc = RelationGetDescr(rel);
-
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_job_type)] = NameGetDatum(job_type);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = IntervalPGetDatum(schedule_interval);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = IntervalPGetDatum(max_runtime);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
-
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = catalog_table_next_seq_id(catalog, BGW_JOB);
-	catalog_insert_values(rel, desc, values, nulls);
-	catalog_restore_user(&sec_ctx);
-	heap_close(rel, RowExclusiveLock);
-
-	return true;
-}
-
-TS_FUNCTION_INFO_V1(ts_bgw_job_insert_relation);
-
-Datum
-ts_bgw_job_insert_relation(PG_FUNCTION_ARGS)
-{
-	bgw_job_insert_relation(PG_GETARG_NAME(0), PG_GETARG_NAME(1), PG_GETARG_INTERVAL_P(2), PG_GETARG_INTERVAL_P(3), PG_GETARG_INT32(4), PG_GETARG_INTERVAL_P(5));
-
-	PG_RETURN_NULL();
-}
-
 static ScanTupleResult
 bgw_job_tuple_delete(TupleInfo *ti, void *data)
 {
@@ -284,15 +244,6 @@ bgw_job_delete_by_id(int32 job_id)
 				Int32GetDatum(job_id));
 
 	return bgw_job_delete_scan(scankey);
-}
-
-TS_FUNCTION_INFO_V1(ts_bgw_job_delete_by_id);
-
-Datum
-ts_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
-{
-	bgw_job_delete_by_id(PG_GETARG_INT32(0));
-	PG_RETURN_NULL();
 }
 
 bool
