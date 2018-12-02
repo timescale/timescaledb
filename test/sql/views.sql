@@ -37,7 +37,7 @@ INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 SELECT * FROM timescaledb_information.hypertable;
 
 \c single :ROLE_DEFAULT_PERM_USER
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
 
 -- filter by schema
 SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed';
@@ -46,5 +46,5 @@ SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed';
 SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1';
 
 -- filter by owner
-SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user';
+SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
 
