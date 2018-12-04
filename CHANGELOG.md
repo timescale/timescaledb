@@ -4,6 +4,17 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.0.1 (2018-12-05)
+
+This commit contains bugfixes and optimizations for 1.0.0
+
+**Notable commits**
+
+* [6553aa4] Make a number of size utility functions to `STRICT`
+* [bb1d748] Add checks for NULL arguments to `set_adaptive_chunking`, `set_number_partitions`, `set_chunk_time_interval`, `add_dimension`, and `create_hypertable`
+* [a534ed4] Fix upsert TLE translation when mapping variable numbers
+* [aecd55b] Check extension exists for DROP OWNED and DROP EXTENSION
+
 ## 1.0.0 (2018-10-30)
 
 **This is our 1.0 release!**
