@@ -53,7 +53,7 @@ void		_cache_invalidate_fini(void);
 static void
 cache_invalidate_all(void)
 {
-	hypertable_cache_invalidate_callback();
+	ts_hypertable_cache_invalidate_callback();
 }
 
 /*
@@ -65,22 +65,22 @@ cache_invalidate_callback(Datum arg, Oid relid)
 {
 	Catalog    *catalog;
 
-	if (extension_invalidate(relid))
+	if (ts_extension_invalidate(relid))
 	{
 		cache_invalidate_all();
 		return;
 	}
 
-	if (!extension_is_loaded())
+	if (!ts_extension_is_loaded())
 		return;
 
-	catalog = catalog_get();
+	catalog = ts_catalog_get();
 
-	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
-		hypertable_cache_invalidate_callback();
+	if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
+		ts_hypertable_cache_invalidate_callback();
 
-	if (relid == catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
-		bgw_job_cache_invalidate_callback();
+	if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
+		ts_bgw_job_cache_invalidate_callback();
 }
 
 TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
@@ -97,7 +97,7 @@ TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
 Datum
 ts_timescaledb_invalidate_cache(PG_FUNCTION_ARGS)
 {
-	catalog_invalidate_cache(PG_GETARG_OID(0), CMD_UPDATE);
+	ts_catalog_invalidate_cache(PG_GETARG_OID(0), CMD_UPDATE);
 	PG_RETURN_VOID();
 }
 

@@ -21,6 +21,6 @@ typedef struct ConnOps
 	const char *(*errmsg) (Connection *conn);
 } ConnOps;
 
-extern int	connection_register(ConnectionType type, ConnOps *ops);
+extern int	ts_connection_register(ConnectionType type, ConnOps *ops);
 
 #endif							/* TIMESCALEDB_CONN_INTERNAL_H */

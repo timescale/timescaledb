@@ -57,46 +57,46 @@ typedef enum HttpError
 typedef struct HttpRequest HttpRequest;
 typedef struct Connection Connection;
 
-HttpVersion http_version_from_string(const char *version);
-const char *http_version_string(HttpVersion version);
+extern HttpVersion ts_http_version_from_string(const char *version);
+extern const char *ts_http_version_string(HttpVersion version);
 
-void		http_request_init(HttpRequest *req, HttpRequestMethod method);
-HttpRequest *http_request_create(HttpRequestMethod method);
-void		http_request_destroy(HttpRequest *req);
+extern void ts_http_request_init(HttpRequest *req, HttpRequestMethod method);
+extern HttpRequest *ts_http_request_create(HttpRequestMethod method);
+extern void ts_http_request_destroy(HttpRequest *req);
 
 /* Assume that uri is null-terminated */
-void		http_request_set_uri(HttpRequest *req, const char *uri);
-void		http_request_set_version(HttpRequest *req, HttpVersion version);
+extern void ts_http_request_set_uri(HttpRequest *req, const char *uri);
+extern void ts_http_request_set_version(HttpRequest *req, HttpVersion version);
 
 /* Assume that name and value are null-terminated */
-void		http_request_set_header(HttpRequest *req, const char *name, const char *valuue);
-void		http_request_set_body(HttpRequest *req, const char *body, size_t body_len);
+extern void ts_http_request_set_header(HttpRequest *req, const char *name, const char *valuue);
+extern void ts_http_request_set_body(HttpRequest *req, const char *body, size_t body_len);
 
 /*  Serialize the request into char *dst. Return the length of request in optional size pointer*/
-const char *http_request_build(HttpRequest *req, size_t *buf_size);
+extern const char *ts_http_request_build(HttpRequest *req, size_t *buf_size);
 
 /******* http_response.c *******/
 
 typedef struct HttpResponseState HttpResponseState;
 
-void		http_response_state_init(HttpResponseState *state);
-HttpResponseState *http_response_state_create(void);
-void		http_response_state_destroy(HttpResponseState *state);
+extern void ts_http_response_state_init(HttpResponseState *state);
+extern HttpResponseState *ts_http_response_state_create(void);
+extern void ts_http_response_state_destroy(HttpResponseState *state);
 
 /*  Accessor Functions */
-bool		http_response_state_is_done(HttpResponseState *state);
-bool		http_response_state_valid_status(HttpResponseState *state);
-char	   *http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize);
-ssize_t		http_response_state_buffer_remaining(HttpResponseState *state);
-const char *http_response_state_body_start(HttpResponseState *state);
-size_t		http_response_state_content_length(HttpResponseState *state);
-int			http_response_state_status_code(HttpResponseState *state);
-HttpHeader *http_response_state_headers(HttpResponseState *state);
+extern bool ts_http_response_state_is_done(HttpResponseState *state);
+extern bool ts_http_response_state_valid_status(HttpResponseState *state);
+extern char *ts_http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize);
+extern ssize_t ts_http_response_state_buffer_remaining(HttpResponseState *state);
+extern const char *ts_http_response_state_body_start(HttpResponseState *state);
+extern size_t ts_http_response_state_content_length(HttpResponseState *state);
+extern int	ts_http_response_state_status_code(HttpResponseState *state);
+extern HttpHeader *ts_http_response_state_headers(HttpResponseState *state);
 
 /*  Returns false if encountered an error during parsing */
-bool		http_response_state_parse(HttpResponseState *state, size_t bytes);
+extern bool ts_http_response_state_parse(HttpResponseState *state, size_t bytes);
 
-const char *http_strerror(HttpError http_errno);
-HttpError	http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state);
+extern const char *ts_http_strerror(HttpError http_errno);
+extern HttpError ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state);
 
 #endif							/* TIMESCALEDB_HTTP_H */

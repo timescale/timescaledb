@@ -56,7 +56,7 @@ params_register_dsm_handle(dsm_handle handle)
 	tuple = heap_copytuple(heap_getnext(scan, ForwardScanDirection));
 	fd = (FormData_bgw_dsm_handle *) GETSTRUCT(tuple);
 	fd->handle = handle;
-	catalog_update(rel, tuple);
+	ts_catalog_update(rel, tuple);
 	heap_freetuple(tuple);
 	heap_endscan(scan);
 	heap_close(rel, RowExclusiveLock);
@@ -139,7 +139,7 @@ params_close_wrapper(TestParamsWrapper *wrapper)
 }
 
 TestParams *
-params_get()
+ts_params_get()
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 	TestParams *res;
@@ -160,7 +160,7 @@ params_get()
 };
 
 void
-params_set_time(int64 new_val, bool set_latch)
+ts_params_set_time(int64 new_val, bool set_latch)
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
@@ -177,7 +177,7 @@ params_set_time(int64 new_val, bool set_latch)
 }
 
 void
-initialize_timer_latch()
+ts_initialize_timer_latch()
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
@@ -193,7 +193,7 @@ initialize_timer_latch()
 }
 
 void
-reset_and_wait_timer_latch()
+ts_reset_and_wait_timer_latch()
 {
 	TestParamsWrapper *wrapper = params_open_wrapper();
 
@@ -225,7 +225,7 @@ TS_FUNCTION_INFO_V1(ts_bgw_params_reset_time);
 Datum
 ts_bgw_params_reset_time(PG_FUNCTION_ARGS)
 {
-	params_set_time(PG_GETARG_INT64(0), PG_GETARG_BOOL(1));
+	ts_params_set_time(PG_GETARG_INT64(0), PG_GETARG_BOOL(1));
 
 	PG_RETURN_VOID();
 }

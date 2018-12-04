@@ -24,9 +24,9 @@ typedef enum TelemetryLevel
 static const TelemetryLevel on_level = TELEMETRY_BASIC;
 
 bool
-telemetry_on()
+ts_telemetry_on()
 {
-	return guc_telemetry_level == on_level;
+	return ts_guc_telemetry_level == on_level;
 }
 
 static const struct config_enum_entry telemetry_level_options[] =
@@ -36,19 +36,19 @@ static const struct config_enum_entry telemetry_level_options[] =
 	{NULL, 0, false}
 };
 
-bool		guc_disable_optimizations = false;
-bool		guc_optimize_non_hypertables = false;
-bool		guc_restoring = false;
-bool		guc_constraint_aware_append = true;
-int			guc_max_open_chunks_per_insert = 10;
-int			guc_max_cached_chunks_per_hypertable = 10;
-int			guc_telemetry_level = TELEMETRY_BASIC;
+bool		ts_guc_disable_optimizations = false;
+bool		ts_guc_optimize_non_hypertables = false;
+bool		ts_guc_restoring = false;
+bool		ts_guc_constraint_aware_append = true;
+int			ts_guc_max_open_chunks_per_insert = 10;
+int			ts_guc_max_cached_chunks_per_hypertable = 10;
+int			ts_guc_telemetry_level = TELEMETRY_BASIC;
 
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
 {
 	/* invalidate the hypertable cache to reset */
-	hypertable_cache_invalidate_callback();
+	ts_hypertable_cache_invalidate_callback();
 }
 
 void
@@ -57,7 +57,7 @@ _guc_init(void)
 	/* Main database to connect to. */
 	DefineCustomBoolVariable("timescaledb.disable_optimizations", "Disable all timescale query optimizations",
 							 NULL,
-							 &guc_disable_optimizations,
+							 &ts_guc_disable_optimizations,
 							 false,
 							 PGC_USERSET,
 							 0,
@@ -66,7 +66,7 @@ _guc_init(void)
 							 NULL);
 	DefineCustomBoolVariable("timescaledb.optimize_non_hypertables", "Apply timescale query optimization to plain tables",
 							 "Apply timescale query optimization to plain tables in addition to hypertables",
-							 &guc_optimize_non_hypertables,
+							 &ts_guc_optimize_non_hypertables,
 							 false,
 							 PGC_USERSET,
 							 0,
@@ -76,7 +76,7 @@ _guc_init(void)
 
 	DefineCustomBoolVariable("timescaledb.restoring", "Install timescale in restoring mode",
 							 "Used for running pg_restore",
-							 &guc_restoring,
+							 &ts_guc_restoring,
 							 false,
 							 PGC_SUSET,
 							 0,
@@ -86,7 +86,7 @@ _guc_init(void)
 
 	DefineCustomBoolVariable("timescaledb.constraint_aware_append", "Enable constraint-aware append scans",
 							 "Enable constraint exclusion at execution time",
-							 &guc_constraint_aware_append,
+							 &ts_guc_constraint_aware_append,
 							 true,
 							 PGC_USERSET
 							 ,
@@ -98,7 +98,7 @@ _guc_init(void)
 	DefineCustomIntVariable("timescaledb.max_open_chunks_per_insert",
 							"Maximum open chunks per insert",
 							"Maximum number of open chunk tables per insert",
-							&guc_max_open_chunks_per_insert,
+							&ts_guc_max_open_chunks_per_insert,
 							work_mem * 1024L / 25000L,	/* Measurements via
 														 * `MemoryContextStats(TopMemoryContext)`
 														 * show chunk insert
@@ -117,7 +117,7 @@ _guc_init(void)
 	DefineCustomIntVariable("timescaledb.max_cached_chunks_per_hypertable",
 							"Maximum cached chunks",
 							"Maximum number of chunks stored in the cache",
-							&guc_max_cached_chunks_per_hypertable,
+							&ts_guc_max_cached_chunks_per_hypertable,
 							100,
 							0,
 							65536,
@@ -129,7 +129,7 @@ _guc_init(void)
 	DefineCustomEnumVariable("timescaledb.telemetry_level",
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
-							 &guc_telemetry_level,
+							 &ts_guc_telemetry_level,
 							 TELEMETRY_BASIC,
 							 telemetry_level_options,
 							 PGC_USERSET,

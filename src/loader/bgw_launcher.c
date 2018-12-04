@@ -129,7 +129,7 @@ report_bgw_limit_exceeded(DbHashEntry *entry)
 {
 	if (entry->state_transition_failures == 0)
 		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					  errmsg("TimescaleDB background worker limit of %d exceeded", guc_max_background_workers),
+					  errmsg("TimescaleDB background worker limit of %d exceeded", ts_guc_max_background_workers),
 					  errhint("Consider increasing timescaledb.max_background_workers.")));
 	entry->state_transition_failures++;
 }
@@ -225,7 +225,7 @@ terminate_background_worker(BackgroundWorkerHandle *handle)
 }
 
 extern void
-bgw_cluster_launcher_register(void)
+ts_bgw_cluster_launcher_register(void)
 {
 	BackgroundWorker worker;
 
@@ -286,7 +286,7 @@ init_database_htab(void)
 		.entrysize = sizeof(DbHashEntry)
 	};
 
-	return hash_create("launcher_db_htab", guc_max_background_workers, &info, HASH_BLOBS | HASH_ELEM);
+	return hash_create("launcher_db_htab", ts_guc_max_background_workers, &info, HASH_BLOBS | HASH_ELEM);
 }
 
 /* Insert a scheduler entry into the hash table. Correctly set entry values. */
@@ -381,7 +381,7 @@ scheduler_state_trans_enabled_to_allocated(DbHashEntry *entry)
 {
 	Assert(entry->state == ENABLED);
 	/* Reserve a spot for this scheduler with BGW counter */
-	if (!bgw_total_workers_increment())
+	if (!ts_bgw_total_workers_increment())
 	{
 		report_bgw_limit_exceeded(entry);
 		return;
@@ -427,7 +427,7 @@ static void
 scheduler_state_trans_allocated_to_disabled(DbHashEntry *entry)
 {
 	Assert(entry->state == ALLOCATED);
-	bgw_total_workers_decrement();
+	ts_bgw_total_workers_decrement();
 	scheduler_modify_state(entry, DISABLED);
 }
 
@@ -436,7 +436,7 @@ scheduler_state_trans_started_to_disabled(DbHashEntry *entry)
 {
 	Assert(entry->state == STARTED);
 	Assert(get_background_worker_pid(entry->db_scheduler_handle, NULL) == BGWH_STOPPED);
-	bgw_total_workers_decrement();
+	ts_bgw_total_workers_decrement();
 	scheduler_modify_state(entry, DISABLED);
 }
 
@@ -684,8 +684,8 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher started")));
 
 	/* set counter back to zero on restart */
-	bgw_counter_reinit();
-	if (!bgw_total_workers_increment())
+	ts_bgw_counter_reinit();
+	if (!ts_bgw_total_workers_increment())
 	{
 		/*
 		 * Should be the first thing happening so if we already exceeded our
@@ -815,11 +815,11 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	 * so, as we don't want to run in template dbs.
 	 */
 	database_is_template_check();
-	ts_installed = loader_extension_exists();
+	ts_installed = ts_loader_extension_exists();
 	if (ts_installed)
-		StrNCpy(version, loader_extension_version(), MAX_VERSION_LEN);
+		StrNCpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
 
-	loader_extension_check();
+	ts_loader_extension_check();
 	CommitTransactionCommand();
 	if (ts_installed)
 	{

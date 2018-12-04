@@ -64,9 +64,9 @@ _PG_init(void)
 	 * Check extension_is loaded to catch certain errors such as calls to
 	 * functions defined on the wrong extension version
 	 */
-	extension_check_version(TIMESCALEDB_VERSION_MOD);
-	extension_check_server_version();
-	bgw_check_loader_api_version();
+	ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
+	ts_extension_check_server_version();
+	ts_bgw_check_loader_api_version();
 
 	_cache_init();
 	_hypertable_cache_init();

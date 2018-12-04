@@ -39,7 +39,7 @@ tablespaces_alloc(int capacity)
 }
 
 Tablespace *
-tablespaces_add(Tablespaces *tspcs, FormData_tablespace *form, Oid tspc_oid)
+ts_tablespaces_add(Tablespaces *tspcs, FormData_tablespace *form, Oid tspc_oid)
 {
 	Tablespace *tspc;
 
@@ -57,7 +57,7 @@ tablespaces_add(Tablespaces *tspcs, FormData_tablespace *form, Oid tspc_oid)
 }
 
 int
-tablespaces_clear(Tablespaces *tspcs)
+ts_tablespaces_clear(Tablespaces *tspcs)
 {
 	int			num = tspcs->num_tablespaces;
 
@@ -67,7 +67,7 @@ tablespaces_clear(Tablespaces *tspcs)
 }
 
 bool
-tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid)
+ts_tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid)
 {
 	int			i;
 
@@ -87,7 +87,7 @@ tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid)
 }
 
 bool
-tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid)
+ts_tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid)
 {
 	int			i;
 
@@ -107,7 +107,7 @@ tablespace_tuple_found(TupleInfo *ti, void *data)
 	Oid			tspcoid = get_tablespace_oid(NameStr(form->tablespace_name), true);
 
 	if (NULL != tspcs)
-		tablespaces_add(tspcs, form, tspcoid);
+		ts_tablespaces_add(tspcs, form, tspcoid);
 
 	return SCAN_CONTINUE;
 }
@@ -122,7 +122,7 @@ tablespace_scan_internal(int indexid,
 						 int limit,
 						 LOCKMODE lockmode)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, TABLESPACE),
 		.index = catalog_get_index(catalog, TABLESPACE, indexid),
@@ -136,11 +136,11 @@ tablespace_scan_internal(int indexid,
 		.scandirection = ForwardScanDirection,
 	};
 
-	return scanner_scan(&scanctx);
+	return ts_scanner_scan(&scanctx);
 }
 
 Tablespaces *
-tablespace_scan(int32 hypertable_id)
+ts_tablespace_scan(int32 hypertable_id)
 {
 	Tablespaces *tspcs = tablespaces_alloc(TABLESPACE_DEFAULT_CAPACITY);
 	ScanKeyData scankey[1];
@@ -194,7 +194,7 @@ tablespace_scan_by_name(const char *tspcname, tuple_found_func tuple_found, void
 }
 
 int
-tablespace_count_attached(const char *tspcname)
+ts_tablespace_count_attached(const char *tspcname)
 {
 	return tablespace_scan_by_name(tspcname, NULL, NULL);
 }
@@ -203,14 +203,14 @@ static void
 tablespace_validate_revoke_internal(const char *tspcname, tuple_found_func tuple_found, void *stmt)
 {
 	TablespaceScanInfo info = {
-		.database_info = catalog_database_info_get(),
-		.hcache = hypertable_cache_pin(),
+		.database_info = ts_catalog_database_info_get(),
+		.hcache = ts_hypertable_cache_pin(),
 		.data = stmt,
 	};
 
 	tablespace_scan_by_name(tspcname, tuple_found, &info);
 
-	cache_release(info.hcache);
+	ts_cache_release(info.hcache);
 }
 
 static void
@@ -240,8 +240,8 @@ revoke_tuple_found(TupleInfo *ti, void *data)
 	ListCell   *lc_role;
 	Form_tablespace form = (Form_tablespace) GETSTRUCT(ti->tuple);
 	Oid			tspcoid = get_tablespace_oid(NameStr(form->tablespace_name), false);
-	Hypertable *ht = hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
-	Oid			relowner = rel_get_owner(ht->main_table_relid);
+	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
+	Oid			relowner = ts_rel_get_owner(ht->main_table_relid);
 
 	foreach(lc_role, stmt->grantees)
 	{
@@ -263,7 +263,7 @@ revoke_tuple_found(TupleInfo *ti, void *data)
 }
 
 void
-tablespace_validate_revoke(GrantStmt *stmt)
+ts_tablespace_validate_revoke(GrantStmt *stmt)
 {
 	tablespace_validate_revoke_internal(strVal(linitial(stmt->objects)),
 										revoke_tuple_found, stmt);
@@ -282,8 +282,8 @@ revoke_role_tuple_found(TupleInfo *ti, void *data)
 	GrantRoleStmt *stmt = info->data;
 	Form_tablespace form = (Form_tablespace) GETSTRUCT(ti->tuple);
 	Oid			tspcoid = get_tablespace_oid(NameStr(form->tablespace_name), false);
-	Hypertable *ht = hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
-	Oid			relowner = rel_get_owner(ht->main_table_relid);
+	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
+	Oid			relowner = ts_rel_get_owner(ht->main_table_relid);
 	ListCell   *lc_role;
 
 	foreach(lc_role, stmt->grantee_roles)
@@ -312,7 +312,7 @@ revoke_role_tuple_found(TupleInfo *ti, void *data)
 }
 
 void
-tablespace_validate_revoke_role(GrantRoleStmt *stmt)
+ts_tablespace_validate_revoke_role(GrantRoleStmt *stmt)
 {
 	tablespace_validate_revoke_internal(NULL, revoke_role_tuple_found, stmt);
 }
@@ -326,13 +326,13 @@ tablespace_insert_relation(Relation rel, int32 hypertable_id, const char *tspcna
 	int32		id;
 
 	memset(values, 0, sizeof(values));
-	id = catalog_table_next_seq_id(catalog_get(), TABLESPACE);
+	id = ts_catalog_table_next_seq_id(ts_catalog_get(), TABLESPACE);
 	values[AttrNumberGetAttrOffset(Anum_tablespace_id)] = Int32GetDatum(id);
 	values[AttrNumberGetAttrOffset(Anum_tablespace_hypertable_id)] = Int32GetDatum(hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_tablespace_tablespace_name)] =
 		DirectFunctionCall1(namein, CStringGetDatum(tspcname));
 
-	catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_insert_values(rel, desc, values, nulls);
 
 	return id;
 }
@@ -340,7 +340,7 @@ tablespace_insert_relation(Relation rel, int32 hypertable_id, const char *tspcna
 static int32
 tablespace_insert(int32 hypertable_id, const char *tspcname)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	Relation	rel;
 	int32		id;
 
@@ -357,20 +357,20 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 	TablespaceScanInfo *info = data;
 	CatalogSecurityContext sec_ctx;
 
-	catalog_database_info_become_owner(info->database_info, &sec_ctx);
-	catalog_delete_only(ti->scanrel, ti->tuple);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_database_info_become_owner(info->database_info, &sec_ctx);
+	ts_catalog_delete_only(ti->scanrel, ti->tuple);
+	ts_catalog_restore_user(&sec_ctx);
 
 	return (info->stopcount == 0 || ti->count < info->stopcount) ? SCAN_CONTINUE : SCAN_DONE;
 }
 
 int
-tablespace_delete(int32 hypertable_id, const char *tspcname)
+ts_tablespace_delete(int32 hypertable_id, const char *tspcname)
 
 {
 	ScanKeyData scankey[2];
 	TablespaceScanInfo info = {
-		.database_info = catalog_database_info_get(),
+		.database_info = ts_catalog_database_info_get(),
 		.stopcount = (NULL != tspcname),
 	};
 	int			num_deleted,
@@ -411,11 +411,11 @@ tablespace_tuple_owner_filter(TupleInfo *ti, void *data)
 	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(ti->tuple);
 	Hypertable *ht;
 
-	ht = hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
+	ht = ts_hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
 
 	Assert(NULL != ht);
 
-	if (hypertable_has_privs_of(ht->main_table_relid, info->userid))
+	if (ts_hypertable_has_privs_of(ht->main_table_relid, info->userid))
 		return SCAN_INCLUDE;
 
 	info->num_filtered++;
@@ -428,8 +428,8 @@ tablespace_delete_from_all(const char *tspcname, Oid userid)
 {
 	ScanKeyData scankey[1];
 	TablespaceScanInfo info = {
-		.database_info = catalog_database_info_get(),
-		.hcache = hypertable_cache_pin(),
+		.database_info = ts_catalog_database_info_get(),
+		.hcache = ts_hypertable_cache_pin(),
 		.userid = userid,
 	};
 	int			num_deleted;
@@ -447,7 +447,7 @@ tablespace_delete_from_all(const char *tspcname, Oid userid)
 										   &info,
 										   0,
 										   RowExclusiveLock);
-	cache_release(info.hcache);
+	ts_cache_release(info.hcache);
 
 	if (num_deleted > 0)
 		CommandCounterIncrement();
@@ -472,13 +472,13 @@ ts_tablespace_attach(PG_FUNCTION_ARGS)
 	if (PG_NARGS() < 2 || PG_NARGS() > 3)
 		elog(ERROR, "invalid number of arguments");
 
-	tablespace_attach_internal(tspcname, hypertable_oid, if_not_attached);
+	ts_tablespace_attach_internal(tspcname, hypertable_oid, if_not_attached);
 
 	PG_RETURN_VOID();
 }
 
 void
-tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attached)
+ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attached)
 {
 	Cache	   *hcache;
 	Hypertable *ht;
@@ -502,7 +502,7 @@ tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attach
 				 errhint("The tablespace needs to be created"
 						 " before attaching it to a hypertable.")));
 
-	ownerid = hypertable_permissions_check(hypertable_oid, GetUserId());
+	ownerid = ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
 
 	/*
@@ -531,8 +531,8 @@ tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attach
 					 errmsg("permission denied for tablespace \"%s\" by table owner \"%s\"",
 							NameStr(*tspcname), GetUserNameFromId(ownerid, true))));
 	}
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
 
 	if (NULL == ht)
 		ereport(ERROR,
@@ -540,7 +540,7 @@ tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attach
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(hypertable_oid))));
 
-	if (hypertable_has_tablespace(ht, tspc_oid))
+	if (ts_hypertable_has_tablespace(ht, tspc_oid))
 	{
 		if (if_not_attached)
 			ereport(NOTICE,
@@ -555,12 +555,12 @@ tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_attach
 	}
 	else
 	{
-		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		tablespace_insert(ht->fd.id, NameStr(*tspcname));
-		catalog_restore_user(&sec_ctx);
+		ts_catalog_restore_user(&sec_ctx);
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static int
@@ -570,10 +570,10 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 	Hypertable *ht;
 	int			ret = 0;
 
-	hypertable_permissions_check(hypertable_oid, GetUserId());
+	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
 
 	if (NULL == ht)
 		ereport(ERROR,
@@ -581,8 +581,8 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(hypertable_oid))));
 
-	if (hypertable_has_tablespace(ht, tspcoid))
-		ret = tablespace_delete(ht->fd.id, tspcname);
+	if (ts_hypertable_has_tablespace(ht, tspcoid))
+		ret = ts_tablespace_delete(ht->fd.id, tspcname);
 	else if (if_attached)
 		ereport(NOTICE,
 				(errcode(ERRCODE_TS_TABLESPACE_NOT_ATTACHED),
@@ -594,7 +594,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 				 errmsg("tablespace \"%s\" is not attached to hypertable \"%s\"",
 						tspcname, get_rel_name(hypertable_oid))));
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return ret;
 }
@@ -606,10 +606,10 @@ tablespace_detach_all(Oid hypertable_oid)
 	Hypertable *ht;
 	int			ret;
 
-	hypertable_permissions_check(hypertable_oid, GetUserId());
+	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
 
 	if (NULL == ht)
 		ereport(ERROR,
@@ -617,9 +617,9 @@ tablespace_detach_all(Oid hypertable_oid)
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(hypertable_oid))));
 
-	ret = tablespace_delete(ht->fd.id, NULL);
+	ret = ts_tablespace_delete(ht->fd.id, NULL);
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return ret;
 }
@@ -698,13 +698,13 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-		funcctx->user_fctx = hypertable_cache_pin();
+		funcctx->user_fctx = ts_hypertable_cache_pin();
 		MemoryContextSwitchTo(oldcontext);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
 	hcache = funcctx->user_fctx;
-	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
 
 	if (NULL == ht)
 		ereport(ERROR,
@@ -712,7 +712,7 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 				 errmsg("table \"%s\" is not a hypertable",
 						get_rel_name(hypertable_oid))));
 
-	tspcs = tablespace_scan(ht->fd.id);
+	tspcs = ts_tablespace_scan(ht->fd.id);
 
 	if (NULL != tspcs && funcctx->call_cntr < (uint64) tspcs->num_tablespaces)
 	{
@@ -727,7 +727,7 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		cache_release(hcache);
+		ts_cache_release(hcache);
 		SRF_RETURN_DONE(funcctx);
 	}
 }

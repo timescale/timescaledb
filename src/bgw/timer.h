@@ -19,11 +19,11 @@ typedef struct Timer
 
 } Timer;
 
-extern bool timer_wait(TimestampTz until);
-extern TimestampTz timer_get_current_timestamp(void);
+extern bool ts_timer_wait(TimestampTz until);
+extern TimestampTz ts_timer_get_current_timestamp(void);
 
 #ifdef TS_DEBUG
-extern void timer_set(const Timer *timer);
+extern void ts_timer_set(const Timer *timer);
 #endif
 
 #endif							/* BGW_TIMER_H */

@@ -48,7 +48,7 @@ typedef struct Dimension
 	(type == TIMESTAMPOID || type == TIMESTAMPTZOID || type == DATEOID)
 
 #define IS_VALID_OPEN_DIM_TYPE(type)					\
-	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || type_is_int8_binary_compatible(type))
+	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || ts_type_is_int8_binary_compatible(type))
 
 /*
  * A hyperspace defines how to partition in a N-dimensional space.
@@ -128,26 +128,26 @@ enum Anum_add_dimension
 #define Natts_add_dimension \
 	(_Anum_add_dimension_max - 1)
 
-extern Hyperspace *dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension, MemoryContext mctx);
-extern DimensionSlice *dimension_calculate_default_slice(Dimension *dim, int64 value);
-extern Point *hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
-extern Dimension *hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
-extern Dimension *hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
-extern Dimension *hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
-extern DimensionVec *dimension_get_slices(Dimension *dim);
-extern int32 dimension_get_hypertable_id(int32 dimension_id);
-extern int	dimension_set_type(Dimension *dim, Oid newtype);
-extern int	dimension_set_name(Dimension *dim, const char *newname);
-extern int	dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
-extern int	dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
-extern void dimension_validate_info(DimensionInfo *info);
-extern void dimension_open_typecheck(Oid arg_type, Oid time_column_type, char *caller_name);
-extern void dimension_add_from_info(DimensionInfo *info);
-extern void dimensions_rename_schema_name(char *oldname, char *newname);
+extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension, MemoryContext mctx);
+extern DimensionSlice *ts_dimension_calculate_default_slice(Dimension *dim, int64 value);
+extern Point *ts_hyperspace_calculate_point(Hyperspace *h, HeapTuple tuple, TupleDesc tupdesc);
+extern Dimension *ts_hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
+extern Dimension *ts_hyperspace_get_dimension(Hyperspace *hs, DimensionType type, Index n);
+extern Dimension *ts_hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
+extern DimensionVec *ts_dimension_get_slices(Dimension *dim);
+extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
+extern int	ts_dimension_set_type(Dimension *dim, Oid newtype);
+extern int	ts_dimension_set_name(Dimension *dim, const char *newname);
+extern int	ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
+extern int	ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
+extern void ts_dimension_validate_info(DimensionInfo *info);
+extern void ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type, char *caller_name);
+extern void ts_dimension_add_from_info(DimensionInfo *info);
+extern void ts_dimensions_rename_schema_name(char *oldname, char *newname);
 
 #define hyperspace_get_open_dimension(space, i)				\
-	hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)
+	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)
 #define hyperspace_get_closed_dimension(space, i)				\
-	hyperspace_get_dimension(space, DIMENSION_TYPE_CLOSED, i)
+	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_CLOSED, i)
 
 #endif							/* TIMESCALEDB_DIMENSION_H */

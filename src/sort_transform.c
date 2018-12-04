@@ -25,7 +25,7 @@
  * to an ordering on time.
  */
 
-extern void sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
+extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 static Expr *sort_transform_expr(Expr *orig_expr);
 
 static Expr *
@@ -367,7 +367,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
  *	an ordering of time.
  */
 void
-sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
+ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 {
 	/*
 	 * We attack this problem in three steps:

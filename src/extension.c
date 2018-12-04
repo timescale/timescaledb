@@ -60,7 +60,7 @@ extension_loader_present()
 }
 
 void
-extension_check_version(const char *so_version)
+ts_extension_check_version(const char *so_version)
 {
 	char	   *sql_version;
 
@@ -84,7 +84,7 @@ extension_check_version(const char *so_version)
 }
 
 void
-extension_check_server_version()
+ts_extension_check_server_version()
 {
 	/*
 	 * This is a load-time check for the correct server version since the
@@ -117,13 +117,13 @@ extension_set_state(enum ExtensionState newstate)
 		case EXTENSION_STATE_UNKNOWN:
 			break;
 		case EXTENSION_STATE_CREATED:
-			extension_check_version(TIMESCALEDB_VERSION_MOD);
+			ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
 			extension_proxy_oid = get_relname_relid(EXTENSION_PROXY_TABLE, get_namespace_oid(CACHE_SCHEMA_NAME, false));
-			catalog_reset();
+			ts_catalog_reset();
 			break;
 		case EXTENSION_STATE_NOT_INSTALLED:
 			extension_proxy_oid = InvalidOid;
-			catalog_reset();
+			ts_catalog_reset();
 			break;
 	}
 	extstate = newstate;
@@ -138,7 +138,7 @@ extension_update_state()
 }
 
 Oid
-extension_schema_oid(void)
+ts_extension_schema_oid(void)
 {
 	Datum		result;
 	Relation	rel;
@@ -183,7 +183,7 @@ extension_schema_oid(void)
  *	Returns whether or not to invalidate the entire extension.
  */
 bool
-extension_invalidate(Oid relid)
+ts_extension_invalidate(Oid relid)
 {
 	switch (extstate)
 	{
@@ -222,10 +222,10 @@ extension_invalidate(Oid relid)
 }
 
 bool
-extension_is_loaded(void)
+ts_extension_is_loaded(void)
 {
 	/* when restoring deactivate extension */
-	if (guc_restoring)
+	if (ts_guc_restoring)
 		return false;
 
 	if (EXTENSION_STATE_UNKNOWN == extstate || EXTENSION_STATE_TRANSITIONING == extstate)
@@ -255,7 +255,7 @@ extension_is_loaded(void)
 }
 
 char *
-extension_get_so_name()
+ts_extension_get_so_name()
 {
 	/* TODO: after merge check whether this is the right place */
 	return EXTENSION_NAME "-" TIMESCALEDB_VERSION_MOD;

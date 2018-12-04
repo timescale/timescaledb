@@ -30,7 +30,7 @@ TS_FUNCTION_INFO_V1(ts_bgw_db_workers_stop);
 TS_FUNCTION_INFO_V1(ts_bgw_db_workers_restart);
 
 void
-bgw_interface_register_api_version()
+ts_bgw_interface_register_api_version()
 {
 	void	  **versionptr = find_rendezvous_variable(RENDEZVOUS_BGW_LOADER_API_VERSION);
 
@@ -41,13 +41,13 @@ bgw_interface_register_api_version()
 Datum
 ts_bgw_worker_reserve(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_BOOL(bgw_total_workers_increment());
+	PG_RETURN_BOOL(ts_bgw_total_workers_increment());
 }
 
 Datum
 ts_bgw_worker_release(PG_FUNCTION_ARGS)
 {
-	bgw_total_workers_decrement();
+	ts_bgw_total_workers_decrement();
 	PG_RETURN_VOID();
 }
 
@@ -56,7 +56,7 @@ ts_bgw_num_unreserved(PG_FUNCTION_ARGS)
 {
 	int			unreserved_workers;
 
-	unreserved_workers = guc_max_background_workers - bgw_total_workers_get();
+	unreserved_workers = ts_guc_max_background_workers - ts_bgw_total_workers_get();
 	PG_RETURN_INT32(unreserved_workers);
 }
 

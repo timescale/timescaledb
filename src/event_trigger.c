@@ -29,13 +29,13 @@ static FmgrInfo dropped_objects_fmgrinfo;
 /*
  * Get a list of executed DDL commands in an event trigger.
  *
- * This function calls the function pg_event_trigger_ddl_commands(), which is
+ * This function calls the function pg_ts_event_trigger_ddl_commands(), which is
  * part of the event trigger API, and retrieves the DDL commands executed in
  * relation to the event trigger. It is only valid to call this function from
  * within an event trigger.
  */
 List *
-event_trigger_ddl_commands(void)
+ts_event_trigger_ddl_commands(void)
 {
 	ReturnSetInfo rsinfo;
 	FunctionCallInfoData fcinfo;
@@ -194,7 +194,7 @@ make_event_trigger_drop_trigger(char *trigger_name, char *schema, char *table)
 
 
 List *
-event_trigger_dropped_objects(void)
+ts_event_trigger_dropped_objects(void)
 {
 	ReturnSetInfo rsinfo;
 	FunctionCallInfoData fcinfo;

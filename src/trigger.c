@@ -50,7 +50,7 @@ trigger_by_name_relation(Relation rel, const char *trigname, bool missing_ok)
 }
 
 Trigger *
-trigger_by_name(Oid relid, const char *trigname, bool missing_ok)
+ts_trigger_by_name(Oid relid, const char *trigname, bool missing_ok)
 {
 	Relation	rel;
 	Trigger    *trigger;
@@ -75,7 +75,7 @@ trigger_by_name(Oid relid, const char *trigname, bool missing_ok)
  * checks.
  */
 void
-trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name)
+ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name)
 {
 	Datum		datum_def = DirectFunctionCall1(pg_get_triggerdef, ObjectIdGetDatum(trigger_oid));
 	const char *def = TextDatumGetCString(datum_def);
@@ -154,9 +154,9 @@ create_trigger_handler(Trigger *trigger, void *arg)
 				 errmsg("hypertables do not support transition tables in triggers")));
 #endif
 	if (trigger_is_chunk_trigger(trigger))
-		trigger_create_on_chunk(trigger->tgoid,
-								NameStr(chunk->fd.schema_name),
-								NameStr(chunk->fd.table_name));
+		ts_trigger_create_on_chunk(trigger->tgoid,
+								   NameStr(chunk->fd.schema_name),
+								   NameStr(chunk->fd.table_name));
 
 	return true;
 }
@@ -174,7 +174,7 @@ create_trigger_handler(Trigger *trigger, void *arg)
  * chunk.
  */
 void
-trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
+ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 {
 	int			sec_ctx;
 	Oid			saved_uid;
@@ -219,7 +219,7 @@ check_for_transition_table(Trigger *trigger, void *arg)
 #endif
 
 bool
-relation_has_transition_table_trigger(Oid relid)
+ts_relation_has_transition_table_trigger(Oid relid)
 {
 	bool		found = false;
 

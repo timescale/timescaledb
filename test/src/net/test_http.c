@@ -90,14 +90,14 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 	{
 		for (i = 0; i < num_test_strings(); i++)
 		{
-			HttpResponseState *state = http_response_state_create();
+			HttpResponseState *state = ts_http_response_state_create();
 			bool		success;
 			ssize_t		bufsize = 0;
 			char	   *buf;
 
 			bytes = rand() % (strlen(TEST_RESPONSES[i]) + 1);
 
-			buf = http_response_state_next_buffer(state, &bufsize);
+			buf = ts_http_response_state_next_buffer(state, &bufsize);
 
 			Assert(bufsize >= bytes);
 
@@ -105,15 +105,15 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 			memcpy(buf, TEST_RESPONSES[i], bytes);
 
 			/* Now do the parse */
-			success = http_response_state_parse(state, bytes);
+			success = ts_http_response_state_parse(state, bytes);
 
 			Assert(success);
 
-			success = http_response_state_is_done(state);
+			success = ts_http_response_state_is_done(state);
 
 			Assert(bytes < strlen(TEST_RESPONSES[i]) ? !success : success);
 
-			http_response_state_destroy(state);
+			ts_http_response_state_destroy(state);
 		}
 	}
 	PG_RETURN_NULL();
@@ -132,11 +132,11 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < num_test_strings(); i++)
 	{
-		HttpResponseState *state = http_response_state_create();
+		HttpResponseState *state = ts_http_response_state_create();
 		ssize_t		bufsize = 0;
 		char	   *buf;
 
-		buf = http_response_state_next_buffer(state, &bufsize);
+		buf = ts_http_response_state_next_buffer(state, &bufsize);
 
 		bytes = strlen(TEST_RESPONSES[i]);
 
@@ -146,24 +146,24 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 		memcpy(buf, TEST_RESPONSES[i], bytes);
 
 		/* Now do the parse */
-		Assert(http_response_state_parse(state, bytes));
+		Assert(ts_http_response_state_parse(state, bytes));
 
-		Assert(http_response_state_is_done(state));
-		Assert(http_response_state_content_length(state) == TEST_LENGTHS[i]);
+		Assert(ts_http_response_state_is_done(state));
+		Assert(ts_http_response_state_content_length(state) == TEST_LENGTHS[i]);
 		/* Make sure we read the right message body */
-		Assert(!strncmp(MESSAGE_BODY[i], http_response_state_body_start(state), http_response_state_content_length(state)));
+		Assert(!strncmp(MESSAGE_BODY[i], ts_http_response_state_body_start(state), ts_http_response_state_content_length(state)));
 
-		http_response_state_destroy(state);
+		ts_http_response_state_destroy(state);
 	}
 
 	/* Now do the bad responses */
 	for (i = 0; i < 3; i++)
 	{
-		HttpResponseState *state = http_response_state_create();
+		HttpResponseState *state = ts_http_response_state_create();
 		ssize_t		bufsize = 0;
 		char	   *buf;
 
-		buf = http_response_state_next_buffer(state, &bufsize);
+		buf = ts_http_response_state_next_buffer(state, &bufsize);
 
 		bytes = strlen(BAD_RESPONSES[i]);
 
@@ -171,10 +171,10 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 
 		memcpy(buf, BAD_RESPONSES[i], bytes);
 
-		Assert(!http_response_state_parse(state, bytes) ||
-			   !http_response_state_valid_status(state));
+		Assert(!ts_http_response_state_parse(state, bytes) ||
+			   !ts_http_response_state_valid_status(state));
 
-		http_response_state_destroy(state);
+		ts_http_response_state_destroy(state);
 	}
 	PG_RETURN_NULL();
 }
@@ -187,56 +187,56 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 	const char *expected_response = "GET /v1/alerts HTTP/1.1\r\n"
 	"Host: herp.com\r\nContent-Length: 0\r\n\r\n";
 	char	   *host = "herp.com";
-	HttpRequest *req = http_request_create(HTTP_GET);
+	HttpRequest *req = ts_http_request_create(HTTP_GET);
 
-	http_request_set_uri(req, "/v1/alerts");
-	http_request_set_version(req, HTTP_VERSION_11);
-	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
-	http_request_set_header(req, HTTP_HOST, host);
+	ts_http_request_set_uri(req, "/v1/alerts");
+	ts_http_request_set_version(req, HTTP_VERSION_11);
+	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
+	ts_http_request_set_header(req, HTTP_HOST, host);
 
-	serialized = http_request_build(req, &request_len);
+	serialized = ts_http_request_build(req, &request_len);
 
 	Assert(!strncmp(expected_response, serialized, request_len));
-	http_request_destroy(req);
+	ts_http_request_destroy(req);
 
 	expected_response = "GET /tmp/path/to/uri HTTP/1.0\r\n"
 		"Content-Length: 0\r\nHost: herp.com\r\nContent-Type: application/json\r\n\r\n";
 
-	req = http_request_create(HTTP_GET);
-	http_request_set_uri(req, "/tmp/path/to/uri");
-	http_request_set_version(req, HTTP_VERSION_10);
-	http_request_set_header(req, HTTP_CONTENT_TYPE, "application/json");
-	http_request_set_header(req, HTTP_HOST, host);
-	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
+	req = ts_http_request_create(HTTP_GET);
+	ts_http_request_set_uri(req, "/tmp/path/to/uri");
+	ts_http_request_set_version(req, HTTP_VERSION_10);
+	ts_http_request_set_header(req, HTTP_CONTENT_TYPE, "application/json");
+	ts_http_request_set_header(req, HTTP_HOST, host);
+	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
 
-	serialized = http_request_build(req, &request_len);
+	serialized = ts_http_request_build(req, &request_len);
 
 	Assert(!strncmp(expected_response, serialized, request_len));
-	http_request_destroy(req);
+	ts_http_request_destroy(req);
 
 	expected_response = "POST /tmp/status/1234 HTTP/1.1\r\n"
 		"Content-Length: 0\r\nHost: herp.com\r\n\r\n";
 
-	req = http_request_create(HTTP_POST);
-	http_request_set_uri(req, "/tmp/status/1234");
-	http_request_set_version(req, HTTP_VERSION_11);
-	http_request_set_header(req, HTTP_HOST, host);
-	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
+	req = ts_http_request_create(HTTP_POST);
+	ts_http_request_set_uri(req, "/tmp/status/1234");
+	ts_http_request_set_version(req, HTTP_VERSION_11);
+	ts_http_request_set_header(req, HTTP_HOST, host);
+	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
 
-	serialized = http_request_build(req, &request_len);
+	serialized = ts_http_request_build(req, &request_len);
 
 	Assert(!strncmp(expected_response, serialized, request_len));
-	http_request_destroy(req);
+	ts_http_request_destroy(req);
 
 	/* Check that content-length checking works */
-	req = http_request_create(HTTP_POST);
-	http_request_set_uri(req, "/tmp/status/1234");
-	http_request_set_version(req, HTTP_VERSION_11);
-	http_request_set_header(req, HTTP_HOST, host);
-	http_request_set_header(req, HTTP_CONTENT_LENGTH, "9");
+	req = ts_http_request_create(HTTP_POST);
+	ts_http_request_set_uri(req, "/tmp/status/1234");
+	ts_http_request_set_version(req, HTTP_VERSION_11);
+	ts_http_request_set_header(req, HTTP_HOST, host);
+	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, "9");
 
-	Assert(!http_request_build(req, &request_len));
-	http_request_destroy(req);
+	Assert(!ts_http_request_build(req, &request_len));
+	ts_http_request_destroy(req);
 
 	PG_RETURN_NULL();
 }

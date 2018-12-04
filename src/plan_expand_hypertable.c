@@ -104,7 +104,7 @@ find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmod
 	 * Using the HRI only makes sense if we are not using all the chunks,
 	 * otherwise using the cached inheritance hierarchy is faster.
 	 */
-	if (!hypertable_restrict_info_has_restrictions(hri))
+	if (!ts_hypertable_restrict_info_has_restrictions(hri))
 		return find_all_inheritors(ht->main_table_relid, lockmode, NULL);;
 
 	/* always include parent again, just as find_all_inheritors does */
@@ -112,14 +112,14 @@ find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmod
 
 	/* add chunks */
 	result = list_concat(result,
-						 hypertable_restrict_info_get_chunk_oids(hri,
-																 ht,
-																 lockmode));
+						 ts_hypertable_restrict_info_get_chunk_oids(hri,
+																	ht,
+																	lockmode));
 	return result;
 }
 
 bool
-plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte)
+ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte)
 {
 	if (ht == NULL ||
 	/* inheritance enabled */
@@ -136,11 +136,11 @@ plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti,
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
 void
-plan_expand_hypertable_chunks(Hypertable *ht,
-							  PlannerInfo *root,
-							  Oid parent_oid,
-							  bool inhparent,
-							  RelOptInfo *rel)
+ts_plan_expand_hypertable_chunks(Hypertable *ht,
+								 PlannerInfo *root,
+								 Oid parent_oid,
+								 bool inhparent,
+								 RelOptInfo *rel)
 {
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	List	   *inh_oids;
@@ -174,8 +174,8 @@ plan_expand_hypertable_chunks(Hypertable *ht,
 	 * infrastructure to deduce the appropriate chunks using our range
 	 * exclusion
 	 */
-	hri = hypertable_restrict_info_create(rel, ht);
-	hypertable_restrict_info_add(hri, root, restrictinfo);
+	hri = ts_hypertable_restrict_info_create(rel, ht);
+	ts_hypertable_restrict_info_add(hri, root, restrictinfo);
 	inh_oids = find_children_oids(hri, ht, AccessShareLock);
 
 	/*
@@ -238,8 +238,8 @@ plan_expand_hypertable_chunks(Hypertable *ht,
 		appinfo->child_relid = child_rtindex;
 		appinfo->parent_reltype = oldrelation->rd_rel->reltype;
 		appinfo->child_reltype = newrelation->rd_rel->reltype;
-		make_inh_translation_list(oldrelation, newrelation, child_rtindex,
-								  &appinfo->translated_vars);
+		ts_make_inh_translation_list(oldrelation, newrelation, child_rtindex,
+									 &appinfo->translated_vars);
 		appinfo->parent_reloid = parent_oid;
 		appinfos = lappend(appinfos, appinfo);
 

@@ -12,7 +12,7 @@ cmp_slices(const void *left, const void *right)
 	const DimensionSlice *left_slice = *((DimensionSlice **) left);
 	const DimensionSlice *right_slice = *((DimensionSlice **) right);
 
-	return dimension_slice_cmp(left_slice, right_slice);
+	return ts_dimension_slice_cmp(left_slice, right_slice);
 }
 
 static int
@@ -21,7 +21,7 @@ cmp_coordinate_and_slice(const void *left, const void *right)
 	int64		coord = *((int64 *) left);
 	const DimensionSlice *slice = *((DimensionSlice **) right);
 
-	return dimension_slice_cmp_coordinate(slice, coord);
+	return ts_dimension_slice_cmp_coordinate(slice, coord);
 }
 
 static DimensionVec *
@@ -41,7 +41,7 @@ dimension_vec_expand(DimensionVec *vec, int32 new_capacity)
 }
 
 DimensionVec *
-dimension_vec_create(int32 initial_num_slices)
+ts_dimension_vec_create(int32 initial_num_slices)
 {
 	DimensionVec *vec = dimension_vec_expand(NULL, initial_num_slices);
 
@@ -52,7 +52,7 @@ dimension_vec_create(int32 initial_num_slices)
 }
 
 DimensionVec *
-dimension_vec_sort(DimensionVec **vecptr)
+ts_dimension_vec_sort(DimensionVec **vecptr)
 {
 	DimensionVec *vec = *vecptr;
 
@@ -62,7 +62,7 @@ dimension_vec_sort(DimensionVec **vecptr)
 }
 
 DimensionVec *
-dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
+ts_dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec = *vecptr;
 
@@ -78,34 +78,34 @@ dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 }
 
 DimensionVec *
-dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
+ts_dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec = *vecptr;
 
-	int32		existing_slice_index = dimension_vec_find_slice_index(vec, slice->fd.id);
+	int32		existing_slice_index = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
 
 	if (existing_slice_index == -1)
 	{
-		return dimension_vec_add_slice(vecptr, slice);
+		return ts_dimension_vec_add_slice(vecptr, slice);
 	}
 	return vec;
 }
 
 DimensionVec *
-dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
+ts_dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec;
 
-	*vecptr = vec = dimension_vec_add_slice(vecptr, slice);
-	return dimension_vec_sort(vecptr);
+	*vecptr = vec = ts_dimension_vec_add_slice(vecptr, slice);
+	return ts_dimension_vec_sort(vecptr);
 }
 
 void
-dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
+ts_dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 {
 	DimensionVec *vec = *vecptr;
 
-	dimension_slice_free(vec->slices[index]);
+	ts_dimension_slice_free(vec->slices[index]);
 	memmove(vec->slices + index, vec->slices + (index + 1), sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
 	vec->num_slices--;
 }
@@ -128,7 +128,7 @@ dimension_vec_is_sorted(DimensionVec *vec)
 #endif
 
 DimensionSlice *
-dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
+ts_dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 {
 	DimensionSlice **res;
 
@@ -147,7 +147,7 @@ dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 }
 
 int
-dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
+ts_dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
 {
 	int			i;
 
@@ -159,7 +159,7 @@ dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
 }
 
 DimensionSlice *
-dimension_vec_get(DimensionVec *vec, int32 index)
+ts_dimension_vec_get(DimensionVec *vec, int32 index)
 {
 	if (index >= vec->num_slices)
 		return NULL;
@@ -168,11 +168,11 @@ dimension_vec_get(DimensionVec *vec, int32 index)
 }
 
 void
-dimension_vec_free(DimensionVec *vec)
+ts_dimension_vec_free(DimensionVec *vec)
 {
 	int			i;
 
 	for (i = 0; i < vec->num_slices; i++)
-		dimension_slice_free(vec->slices[i]);
+		ts_dimension_slice_free(vec->slices[i]);
 	pfree(vec);
 }

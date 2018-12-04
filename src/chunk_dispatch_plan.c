@@ -24,8 +24,8 @@
 static Node *
 create_chunk_dispatch_state(CustomScan *cscan)
 {
-	return (Node *) chunk_dispatch_state_create(linitial_oid(cscan->custom_private),
-												linitial(cscan->custom_plans));
+	return (Node *) ts_chunk_dispatch_state_create(linitial_oid(cscan->custom_private),
+												   linitial(cscan->custom_plans));
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -126,7 +126,7 @@ build_customscan_targetlist(Relation rel, List *targetlist)
  * node.
  */
 CustomScan *
-chunk_dispatch_plan_create(Plan *subplan, Index hypertable_rti, Oid hypertable_relid, Query *parse)
+ts_chunk_dispatch_plan_create(Plan *subplan, Index hypertable_rti, Oid hypertable_relid, Query *parse)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 	Relation	rel;

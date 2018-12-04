@@ -22,20 +22,20 @@ typedef struct ChunkIndexMapping
 	Oid			hypertableoid;
 } ChunkIndexMapping;
 
-extern void chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid);
-extern Oid	chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid, int32 hypertable_id, Oid hypertable_indexrelid);
-extern int	chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool should_drop);
-extern int	chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index);
-extern int	chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index);
-extern int	chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index);
-extern void chunk_index_delete_by_name(const char *schema, const char *index_name, bool drop_index);
-extern int	chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname);
-extern int	chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *newname);
-extern int	chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char *tablespace);
-extern void chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constaint, int32 chunk_id, Oid chunk_constraint);
-extern List *chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid);
-extern ChunkIndexMapping *chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid);
-extern void chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
+extern void ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid);
+extern Oid	ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid, int32 hypertable_id, Oid hypertable_indexrelid);
+extern int	ts_chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool should_drop);
+extern int	ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index);
+extern int	ts_chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index);
+extern int	ts_chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index);
+extern void ts_chunk_index_delete_by_name(const char *schema, const char *index_name, bool drop_index);
+extern int	ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname);
+extern int	ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *newname);
+extern int	ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char *tablespace);
+extern void ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constaint, int32 chunk_id, Oid chunk_constraint);
+extern List *ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid);
+extern ChunkIndexMapping *ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid);
+extern void ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
 
 /* chunk_index_recreate  is a process akin to reindex
  * except that indexes are created in 2 steps

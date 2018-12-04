@@ -165,13 +165,13 @@ ts_time_to_internal(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	PG_RETURN_INT64(time_value_to_internal(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 0), false));
+	PG_RETURN_INT64(ts_time_value_to_internal(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 0), false));
 }
 
 
 /* Convert valid timescale time column type to internal representation */
 int64
-time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
+ts_time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 {
 	Datum		res,
 				tz;
@@ -203,7 +203,7 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 
 			return DatumGetInt64(res);
 		default:
-			if (type_is_int8_binary_compatible(type_oid))
+			if (ts_type_is_int8_binary_compatible(type_oid))
 				return DatumGetInt64(time_val);
 			if (!failure_ok)
 				elog(ERROR, "unknown time type OID %d", type_oid);
@@ -219,7 +219,7 @@ time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
  * time to internal int64 representation
  */
 int64
-interval_from_now_to_internal(Datum interval, Oid type_oid)
+ts_interval_from_now_to_internal(Datum interval, Oid type_oid)
 {
 	TimestampTz now;
 	Datum		res;
@@ -254,14 +254,14 @@ interval_from_now_to_internal(Datum interval, Oid type_oid)
 			res = TimestampTzGetDatum(now);
 			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
 
-			return time_value_to_internal(res, type_oid, false);
+			return ts_time_value_to_internal(res, type_oid, false);
 		case DATEOID:
 			res = TimestampTzGetDatum(now);
 
 			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
 			res = DirectFunctionCall1(timestamp_date, res);
 
-			return time_value_to_internal(res, type_oid, false);
+			return ts_time_value_to_internal(res, type_oid, false);
 		case INT8OID:
 		case INT4OID:
 		case INT2OID:
@@ -286,7 +286,7 @@ interval_from_now_to_internal(Datum interval, Oid type_oid)
 
 /* Returns approximate period in microseconds */
 int64
-get_interval_period_approx(Interval *interval)
+ts_get_interval_period_approx(Interval *interval)
 {
 	return interval->time + (((interval->month * DAYS_PER_MONTH) + interval->day) * USECS_PER_DAY);
 }
@@ -299,7 +299,7 @@ get_interval_period_approx(Interval *interval)
 
 /* Returns approximate period in microseconds */
 int64
-date_trunc_interval_period_approx(text *units)
+ts_date_trunc_interval_period_approx(text *units)
 {
 	int			decode_type,
 				val;
@@ -350,7 +350,7 @@ date_trunc_interval_period_approx(text *units)
 }
 
 Oid
-inheritance_parent_relid(Oid relid)
+ts_inheritance_parent_relid(Oid relid)
 {
 	Relation	catalog;
 	SysScanDesc scan;
@@ -376,7 +376,7 @@ inheritance_parent_relid(Oid relid)
 
 
 bool
-type_is_int8_binary_compatible(Oid sourcetype)
+ts_type_is_int8_binary_compatible(Oid sourcetype)
 {
 	HeapTuple	tuple;
 	Form_pg_cast castForm;
@@ -399,7 +399,7 @@ type_is_int8_binary_compatible(Oid sourcetype)
  * that might have variable lengths.
  */
 void *
-create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size)
+ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size)
 {
 	void	   *struct_ptr = MemoryContextAllocZero(mctx, alloc_size);
 

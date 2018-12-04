@@ -123,7 +123,7 @@ static void
 mark_job_as_started(ScheduledBgwJob *sjob)
 {
 	Assert(!sjob->may_need_mark_end);
-	bgw_job_stat_mark_start(sjob->job.fd.id);
+	ts_bgw_job_stat_mark_start(sjob->job.fd.id);
 	sjob->may_need_mark_end = true;
 }
 
@@ -131,7 +131,7 @@ static void
 mark_job_as_ended(ScheduledBgwJob *sjob, JobResult res)
 {
 	Assert(sjob->may_need_mark_end);
-	bgw_job_stat_mark_end(&sjob->job, res);
+	ts_bgw_job_stat_mark_end(&sjob->job, res);
 	sjob->may_need_mark_end = false;
 }
 
@@ -158,17 +158,17 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 	 */
 	if (sjob->reserved_worker)
 	{
-		bgw_worker_release();
+		ts_bgw_worker_release();
 		sjob->reserved_worker = false;
 	}
 
 	if (sjob->may_need_mark_end)
 	{
-		BgwJobStat *job_stat = bgw_job_stat_find(sjob->job.fd.id);
+		BgwJobStat *job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
 		Assert(job_stat != NULL);
 
-		if (!bgw_job_stat_end_was_marked(job_stat))
+		if (!ts_bgw_job_stat_end_was_marked(job_stat))
 		{
 			/*
 			 * Usually the job process will mark the end, but if the job gets
@@ -177,7 +177,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 */
 			mark_job_as_ended(sjob, JOB_FAILURE);
 			/* reload updated value */
-			job_stat = bgw_job_stat_find(sjob->job.fd.id);
+			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 		}
 		else
 		{
@@ -210,16 +210,16 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 
 			worker_state_cleanup(sjob);
 
-			job_stat = bgw_job_stat_find(sjob->job.fd.id);
+			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
-			if (!bgw_job_stat_should_execute(job_stat, &sjob->job))
+			if (!ts_bgw_job_stat_should_execute(job_stat, &sjob->job))
 			{
 				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_DISABLED);
 				return;
 			}
 
 			Assert(!sjob->reserved_worker);
-			sjob->next_start = bgw_job_stat_next_start(job_stat, &sjob->job);
+			sjob->next_start = ts_bgw_job_stat_next_start(job_stat, &sjob->job);
 			break;
 		case JOB_STATE_STARTED:
 			Assert(prev_state == JOB_STATE_SCHEDULED);
@@ -233,13 +233,13 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			 * are always registerd
 			 */
 			mark_job_as_started(sjob);
-			if (bgw_job_has_timeout(&sjob->job))
-				sjob->timeout_at = bgw_job_timeout_at(&sjob->job, timer_get_current_timestamp());
+			if (ts_bgw_job_has_timeout(&sjob->job))
+				sjob->timeout_at = ts_bgw_job_timeout_at(&sjob->job, ts_timer_get_current_timestamp());
 			else
 				sjob->timeout_at = DT_NOEND;
 			CommitTransactionCommand();
 
-			sjob->reserved_worker = bgw_worker_reserve();
+			sjob->reserved_worker = ts_bgw_worker_reserve();
 			if (!sjob->reserved_worker)
 			{
 				elog(WARNING, "failed to launch job %d \"%s\": out of background workers", sjob->job.fd.id, NameStr(sjob->job.fd.application_name));
@@ -249,7 +249,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 
 			elog(DEBUG1, "launching job %d \"%s\"", sjob->job.fd.id, NameStr(sjob->job.fd.application_name));
 
-			sjob->handle = bgw_job_start(&sjob->job);
+			sjob->handle = ts_bgw_job_start(&sjob->job);
 			if (sjob->handle == NULL)
 			{
 				elog(WARNING, "failed to launch job %d \"%s\": failed to start a background worker", sjob->job.fd.id, NameStr(sjob->job.fd.application_name));
@@ -298,7 +298,7 @@ bgw_scheduler_on_postmaster_death(void)
 * from within a transaction.
 */
 static void
-scheduled_bgw_job_start(ScheduledBgwJob *sjob, register_background_worker_callback_type bgw_register)
+scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob, register_background_worker_callback_type bgw_register)
 {
 	pid_t		pid;
 	BgwHandleStatus status;
@@ -352,9 +352,9 @@ terminate_and_cleanup_job(ScheduledBgwJob *sjob)
  *  Note that this function call will destroy cur_jobs_list and return a new list.
  */
 List *
-update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
+ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 {
-	List	   *new_jobs = bgw_job_get_all(sizeof(ScheduledBgwJob), mctx);
+	List	   *new_jobs = ts_bgw_job_get_all(sizeof(ScheduledBgwJob), mctx);
 	ListCell   *new_ptr = list_head(new_jobs);
 	ListCell   *cur_ptr = list_head(cur_jobs_list);
 
@@ -421,7 +421,7 @@ update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 #ifdef TS_DEBUG
 /* Only used by test code */
 void
-populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
+ts_populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
 {
 	if (sjob == NULL)
 		return;
@@ -449,8 +449,8 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 	{
 		ScheduledBgwJob *sjob = lfirst(lc);
 
-		if (sjob->state == JOB_STATE_SCHEDULED && sjob->next_start <= timer_get_current_timestamp())
-			scheduled_bgw_job_start(sjob, bgw_register);
+		if (sjob->state == JOB_STATE_SCHEDULED && sjob->next_start <= ts_timer_get_current_timestamp())
+			scheduled_ts_bgw_job_start(sjob, bgw_register);
 	}
 }
 
@@ -513,7 +513,7 @@ terminate_all_jobs_and_release_workers()
 
 		if (sjob->reserved_worker)
 		{
-			bgw_worker_release();
+			ts_bgw_worker_release();
 			sjob->reserved_worker = false;
 		}
 	}
@@ -543,7 +543,7 @@ check_for_stopped_and_timed_out_jobs()
 		BgwHandleStatus status;
 		pid_t		pid;
 		ScheduledBgwJob *sjob = lfirst(lc);
-		TimestampTz now = timer_get_current_timestamp();
+		TimestampTz now = ts_timer_get_current_timestamp();
 
 		if (sjob->state != JOB_STATE_STARTED && sjob->state != JOB_STATE_TERMINATING)
 			continue;
@@ -585,15 +585,15 @@ check_for_stopped_and_timed_out_jobs()
  * run forever (or until the process gets a signal).
  */
 void
-bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_callback_type bgw_register)
+ts_bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_callback_type bgw_register)
 {
-	TimestampTz start = timer_get_current_timestamp();
+	TimestampTz start = ts_timer_get_current_timestamp();
 	TimestampTz quit_time = DT_NOEND;
 	MemoryContext scheduler_mctx = CurrentMemoryContext;
 
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
-	scheduled_jobs = update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
+	scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
 	CommitTransactionCommand();
 
 	jobs_list_needs_update = false;
@@ -602,7 +602,7 @@ bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_call
 		quit_time = TimestampTzPlusMilliseconds(start, run_for_interval_ms);
 
 	ereport(DEBUG1, (errmsg("database scheduler starting for database %d", MyDatabaseId)));
-	while (quit_time > timer_get_current_timestamp())
+	while (quit_time > ts_timer_get_current_timestamp())
 	{
 		TimestampTz next_wakeup = quit_time;
 
@@ -611,7 +611,7 @@ bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_call
 		next_wakeup = least_timestamp(next_wakeup, earliest_time_to_start_next_job());
 		next_wakeup = least_timestamp(next_wakeup, earliest_job_timeout());
 
-		timer_wait(next_wakeup);
+		ts_timer_wait(next_wakeup);
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -625,7 +625,7 @@ bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_call
 		if (jobs_list_needs_update)
 		{
 			StartTransactionCommand();
-			scheduled_jobs = update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
+			scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
 			CommitTransactionCommand();
 			jobs_list_needs_update = false;
 		}
@@ -644,7 +644,7 @@ bgw_scheduler_before_shmem_exit_callback(int code, Datum arg)
 }
 
 void
-bgw_scheduler_setup_callbacks()
+ts_bgw_scheduler_setup_callbacks()
 {
 	before_shmem_exit(bgw_scheduler_before_shmem_exit_callback, PointerGetDatum(NULL));
 }
@@ -675,17 +675,17 @@ ts_bgw_scheduler_main(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, handle_sigterm);
 	BackgroundWorkerUnblockSignals();
 
-	bgw_scheduler_setup_callbacks();
+	ts_bgw_scheduler_setup_callbacks();
 
 	pgstat_report_appname(SCHEDULER_APPNAME);
 
-	bgw_scheduler_process(-1, NULL);
+	ts_bgw_scheduler_process(-1, NULL);
 
 	PG_RETURN_VOID();
 };
 
 void
-bgw_job_cache_invalidate_callback()
+ts_bgw_job_cache_invalidate_callback()
 {
 	jobs_list_needs_update = true;
 }

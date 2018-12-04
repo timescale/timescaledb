@@ -23,44 +23,44 @@ get_uuid_by_key(const char *key)
 	bool		isnull;
 	Datum		uuid;
 
-	uuid = installation_metadata_get_value(CStringGetDatum(key), CSTRINGOID, UUIDOID, &isnull);
+	uuid = ts_installation_metadata_get_value(CStringGetDatum(key), CSTRINGOID, UUIDOID, &isnull);
 
 	if (isnull)
-		uuid = installation_metadata_insert(CStringGetDatum(key),
-											CSTRINGOID,
-											UUIDPGetDatum(uuid_create()),
-											UUIDOID);
+		uuid = ts_installation_metadata_insert(CStringGetDatum(key),
+											   CSTRINGOID,
+											   UUIDPGetDatum(ts_uuid_create()),
+											   UUIDOID);
 	return uuid;
 }
 
 Datum
-metadata_get_uuid(void)
+ts_metadata_get_uuid(void)
 {
 	return get_uuid_by_key(INSTALLATION_METADATA_UUID_KEY_NAME);
 }
 
 Datum
-metadata_get_exported_uuid(void)
+ts_metadata_get_exported_uuid(void)
 {
 	return get_uuid_by_key(INSTALLATION_METADATA_EXPORTED_UUID_KEY_NAME);
 }
 
 Datum
-metadata_get_install_timestamp(void)
+ts_metadata_get_install_timestamp(void)
 {
 	bool		isnull;
 	Datum		timestamp;
 
-	timestamp = installation_metadata_get_value(CStringGetDatum(INSTALLATION_METADATA_TIMESTAMP_KEY_NAME),
-												CSTRINGOID,
-												TIMESTAMPTZOID,
-												&isnull);
+	timestamp = ts_installation_metadata_get_value(CStringGetDatum(INSTALLATION_METADATA_TIMESTAMP_KEY_NAME),
+												   CSTRINGOID,
+												   TIMESTAMPTZOID,
+												   &isnull);
 
 	if (isnull)
-		timestamp = installation_metadata_insert(CStringGetDatum(INSTALLATION_METADATA_TIMESTAMP_KEY_NAME),
-												 CSTRINGOID,
-												 TimestampTzGetDatum(GetCurrentTimestamp()),
-												 TIMESTAMPTZOID);
+		timestamp = ts_installation_metadata_insert(CStringGetDatum(INSTALLATION_METADATA_TIMESTAMP_KEY_NAME),
+													CSTRINGOID,
+													TimestampTzGetDatum(GetCurrentTimestamp()),
+													TIMESTAMPTZOID);
 
 	return timestamp;
 }

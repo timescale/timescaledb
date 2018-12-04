@@ -24,9 +24,9 @@ typedef struct TestParams
 	MockWaitType mock_wait_type;
 } TestParams;
 
-extern TestParams *params_get(void);
-extern void params_set_time(int64 new_val, bool set_latch);
-void		initialize_timer_latch(void);
-void		reset_and_wait_timer_latch(void);
+extern TestParams *ts_params_get(void);
+extern void ts_params_set_time(int64 new_val, bool set_latch);
+extern void ts_initialize_timer_latch(void);
+extern void ts_reset_and_wait_timer_latch(void);
 
 #endif							/* TEST_BGW_PARAMS_H */

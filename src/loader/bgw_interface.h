@@ -9,7 +9,7 @@
 
 #include <postgres.h>
 
-extern void bgw_interface_register_api_version(void);
+extern void ts_bgw_interface_register_api_version(void);
 extern const int32 ts_bgw_loader_api_version;
 
 #endif

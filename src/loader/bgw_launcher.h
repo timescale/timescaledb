@@ -11,7 +11,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-extern void bgw_cluster_launcher_register(void);
+extern void ts_bgw_cluster_launcher_register(void);
 
 /*called by postmaster at launcher bgw startup*/
 PGDLLEXPORT extern Datum ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS);

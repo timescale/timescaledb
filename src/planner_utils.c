@@ -70,7 +70,7 @@ static void
 }
 
 void
-			planned_stmt_walker(PlannedStmt *stmt, void (*walker) (Plan **, void *), void *context)
+			ts_planned_stmt_walker(PlannedStmt *stmt, void (*walker) (Plan **, void *), void *context)
 {
 	ListCell   *lc;
 

@@ -102,7 +102,7 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
 	BackgroundWorkerUnblockSignals();
-	bgw_scheduler_setup_callbacks();
+	ts_bgw_scheduler_setup_callbacks();
 
 	deserialize_test_parameters(MyBgworkerEntry->bgw_extra, &ttl);
 
@@ -111,20 +111,20 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	BackgroundWorkerInitializeConnectionByOid(db_oid, InvalidOid);
 
 	StartTransactionCommand();
-	params_get();
-	initialize_timer_latch();
+	ts_params_get();
+	ts_initialize_timer_latch();
 	CommitTransactionCommand();
 
-	bgw_log_set_application_name("DB Scheduler");
-	register_emit_log_hook();
+	ts_bgw_log_set_application_name("DB Scheduler");
+	ts_register_emit_log_hook();
 
-	timer_set(&mock_timer);
+	ts_timer_set(&mock_timer);
 
-	bgw_job_set_job_entrypoint_function_name("ts_bgw_job_execute_test");
+	ts_bgw_job_set_job_entrypoint_function_name("ts_bgw_job_execute_test");
 
 	pgstat_report_appname("DB Scheduler Test");
 
-	bgw_scheduler_process(ttl, timer_mock_register_bgw_handle);
+	ts_bgw_scheduler_process(ttl, timer_mock_register_bgw_handle);
 
 	PG_RETURN_VOID();
 }
@@ -136,7 +136,7 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	BackgroundWorkerHandle *worker_handle;
 	pid_t		pid;
 
-	worker_handle = bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
+	worker_handle = ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
 
 	Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(worker_handle, &pid));
 	Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(worker_handle));
@@ -154,7 +154,7 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	MemoryContext old_ctx;
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
-	current_handle = bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
+	current_handle = ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
 	MemoryContextSwitchTo(old_ctx);
 
 
@@ -253,11 +253,11 @@ get_test_job_type_from_name(Name job_type_name)
 static bool
 test_job_dispatcher(BgwJob *job)
 {
-	register_emit_log_hook();
-	bgw_log_set_application_name(NameStr(job->fd.application_name));
+	ts_register_emit_log_hook();
+	ts_bgw_log_set_application_name(NameStr(job->fd.application_name));
 
 	StartTransactionCommand();
-	params_get();
+	ts_params_get();
 	CommitTransactionCommand();
 
 	switch (get_test_job_type_from_name(&job->fd.job_type))
@@ -273,7 +273,7 @@ test_job_dispatcher(BgwJob *job)
 				/* Set next_start to 200ms */
 				Interval   *new_interval = DatumGetIntervalP(DirectFunctionCall7(make_interval, Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Float8GetDatum(0.2)));
 
-				return bgw_job_run_and_set_next_start(job, test_job_4, 3, new_interval);
+				return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, new_interval);
 			}
 		case _MAX_TEST_JOB_TYPE:
 			elog(ERROR, "unrecognized test job type: %s", NameStr(job->fd.job_type));
@@ -284,8 +284,8 @@ test_job_dispatcher(BgwJob *job)
 Datum
 ts_bgw_job_execute_test(PG_FUNCTION_ARGS)
 {
-	timer_set(&mock_timer);
-	bgw_job_set_unknown_job_type_hook(test_job_dispatcher);
+	ts_timer_set(&mock_timer);
+	ts_bgw_job_set_unknown_job_type_hook(test_job_dispatcher);
 
 	return ts_bgw_job_entrypoint(fcinfo);
 }
@@ -293,7 +293,7 @@ ts_bgw_job_execute_test(PG_FUNCTION_ARGS)
 static bool
 bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	Relation	rel;
 	TupleDesc	desc;
 	Datum		values[Natts_bgw_job];
@@ -311,10 +311,10 @@ bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
 
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = catalog_table_next_seq_id(catalog, BGW_JOB);
-	catalog_insert_values(rel, desc, values, nulls);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = ts_catalog_table_next_seq_id(catalog, BGW_JOB);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
 	heap_close(rel, RowExclusiveLock);
 
 	return true;
@@ -331,6 +331,6 @@ ts_bgw_job_insert_relation(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
 {
-	bgw_job_delete_by_id(PG_GETARG_INT32(0));
+	ts_bgw_job_delete_by_id_internal(PG_GETARG_INT32(0));
 	PG_RETURN_NULL();
 }

@@ -30,51 +30,51 @@ ts_test_conn(PG_FUNCTION_ARGS)
 	char	   *host = "postman-echo.com";
 
 	/* Test connection_init/destroy */
-	conn = connection_create(CONNECTION_PLAIN);
-	connection_destroy(conn);
+	conn = ts_connection_create(CONNECTION_PLAIN);
+	ts_connection_destroy(conn);
 
 	/* Check pass NULL won't crash */
-	connection_destroy(NULL);
+	ts_connection_destroy(NULL);
 
 	/* Check that delays on the socket are properly handled */
-	conn = connection_create(CONNECTION_PLAIN);
+	conn = ts_connection_create(CONNECTION_PLAIN);
 
-	connection_set_timeout_millis(conn, 200);
+	ts_connection_set_timeout_millis(conn, 200);
 
 	/* This is a brittle assert function because we might not necessarily have */
 	/* connectivity on the server running this test? */
-	ret = connection_connect(conn, host, NULL, port);
+	ret = ts_connection_connect(conn, host, NULL, port);
 
 	if (ret < 0)
-		elog(ERROR, "%s", connection_get_and_clear_error(conn));
+		elog(ERROR, "%s", ts_connection_get_and_clear_error(conn));
 
 	/* should timeout */
-	ret = connection_read(conn, response, 1);
+	ret = ts_connection_read(conn, response, 1);
 
 	if (ret == 0)
 		elog(ERROR, "Expected timeout");
 
-	connection_close(conn);
-	connection_destroy(conn);
+	ts_connection_close(conn);
+	ts_connection_destroy(conn);
 
 #ifdef TS_USE_OPENSSL
 	/* Now test ssl_ops */
-	conn = connection_create(CONNECTION_SSL);
+	conn = ts_connection_create(CONNECTION_SSL);
 
-	connection_set_timeout_millis(conn, 200);
+	ts_connection_set_timeout_millis(conn, 200);
 
-	ret = connection_connect(conn, host, NULL, ssl_port);
+	ret = ts_connection_connect(conn, host, NULL, ssl_port);
 
 	if (ret < 0)
-		elog(ERROR, "%s", connection_get_and_clear_error(conn));
+		elog(ERROR, "%s", ts_connection_get_and_clear_error(conn));
 
-	ret = connection_read(conn, response, 1);
+	ret = ts_connection_read(conn, response, 1);
 
 	if (ret == 0)
 		elog(ERROR, "Expected timeout");
 
-	connection_close(conn);
-	connection_destroy(conn);
+	ts_connection_close(conn);
+	ts_connection_destroy(conn);
 #endif
 
 	PG_RETURN_NULL();

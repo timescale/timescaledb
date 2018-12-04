@@ -9,12 +9,12 @@
 #include <postgres.h>
 #include "extension_constants.h"
 
-bool		extension_invalidate(Oid relid);
-bool		extension_is_loaded(void);
-void		extension_check_version(const char *so_version);
-void		extension_check_server_version(void);
-Oid			extension_schema_oid(void);
+extern bool ts_extension_invalidate(Oid relid);
+extern bool ts_extension_is_loaded(void);
+extern void ts_extension_check_version(const char *so_version);
+extern void ts_extension_check_server_version(void);
+extern Oid	ts_extension_schema_oid(void);
 
-char	   *extension_get_so_name(void);
+extern char *ts_extension_get_so_name(void);
 
 #endif							/* TIMESCALEDB_EXTENSION_H */

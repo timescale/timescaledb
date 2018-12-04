@@ -25,9 +25,9 @@
  * */
 
 /* Can we use hypertable expansion here */
-extern bool plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte);
+extern bool ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte);
 
 /* Do the expansion */
-extern void plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid relation_objectid, bool inhparent, RelOptInfo *rel);
+extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid relation_objectid, bool inhparent, RelOptInfo *rel);
 
 #endif							/* TIMESCALEDB_PLAN_EXPAND_HYPERTABLE_H */

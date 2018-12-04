@@ -71,7 +71,7 @@ char_in_valid_version_digits(const char c)
  * Returns false if either of these conditions are false.
  */
 bool
-validate_server_version(const char *json, VersionResult *result)
+ts_validate_server_version(const char *json, VersionResult *result)
 {
 	int			i;
 	Datum		version = DirectFunctionCall2(json_object_field_text,
@@ -125,7 +125,7 @@ process_response(const char *json)
 		elog(NOTICE, "the \"%s\" extension is up-to-date", EXTENSION_NAME);
 	else
 	{
-		if (!validate_server_version(json, &result))
+		if (!ts_validate_server_version(json, &result))
 		{
 			elog(WARNING, "server did not return a valid TimescaleDB version: %s", result.errhint);
 			return;
@@ -143,7 +143,7 @@ get_num_hypertables()
 {
 	StringInfo	buf = makeStringInfo();
 
-	appendStringInfo(buf, "%d", number_of_hypertables());
+	appendStringInfo(buf, "%d", ts_number_of_hypertables());
 	return buf->data;
 }
 
@@ -210,15 +210,15 @@ build_version_body(void)
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
 
 	jsonb_add_pair(parseState, REQ_DB_UUID,
-				   DatumGetCString(DirectFunctionCall1(uuid_out, metadata_get_uuid())));
+				   DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_uuid())));
 	jsonb_add_pair(parseState, REQ_EXPORTED_DB_UUID,
-				   DatumGetCString(DirectFunctionCall1(uuid_out, metadata_get_exported_uuid())));
+				   DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_exported_uuid())));
 	jsonb_add_pair(parseState, REQ_INSTALL_TIME,
-				   DatumGetCString(DirectFunctionCall1(timestamptz_out, metadata_get_install_timestamp())));
+				   DatumGetCString(DirectFunctionCall1(timestamptz_out, ts_metadata_get_install_timestamp())));
 
 	jsonb_add_pair(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
-	if (version_get_os_info(&osinfo))
+	if (ts_version_get_os_info(&osinfo))
 	{
 		jsonb_add_pair(parseState, REQ_OS, osinfo.sysname);
 		jsonb_add_pair(parseState, REQ_OS_VERSION, osinfo.version);
@@ -255,7 +255,7 @@ build_version_body(void)
 }
 
 HttpRequest *
-build_version_request(const char *host, const char *path)
+ts_build_version_request(const char *host, const char *path)
 {
 	char		body_len_string[5];
 	HttpRequest *req;
@@ -264,28 +264,28 @@ build_version_request(const char *host, const char *path)
 	snprintf(body_len_string, 5, "%d", jtext->len);
 
 	/* Fill in HTTP request */
-	req = http_request_create(HTTP_POST);
+	req = ts_http_request_create(HTTP_POST);
 
-	http_request_set_uri(req, path);
-	http_request_set_version(req, HTTP_VERSION_10);
-	http_request_set_header(req, HTTP_CONTENT_TYPE, TIMESCALE_TYPE);
-	http_request_set_header(req, HTTP_CONTENT_LENGTH, body_len_string);
-	http_request_set_header(req, HTTP_HOST, host);
-	http_request_set_body(req, jtext->data, jtext->len);
+	ts_http_request_set_uri(req, path);
+	ts_http_request_set_version(req, HTTP_VERSION_10);
+	ts_http_request_set_header(req, HTTP_CONTENT_TYPE, TIMESCALE_TYPE);
+	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, body_len_string);
+	ts_http_request_set_header(req, HTTP_HOST, host);
+	ts_http_request_set_body(req, jtext->data, jtext->len);
 
 	return req;
 }
 
 Connection *
-telemetry_connect(const char *host, const char *service)
+ts_telemetry_connect(const char *host, const char *service)
 {
 	Connection *conn = NULL;
 	int			ret;
 
 	if (strcmp("http", service) == 0)
-		conn = connection_create(CONNECTION_PLAIN);
+		conn = ts_connection_create(CONNECTION_PLAIN);
 	else if (strcmp("https", service) == 0)
-		conn = connection_create(CONNECTION_SSL);
+		conn = ts_connection_create(CONNECTION_SSL);
 	else
 		ereport(WARNING,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -295,13 +295,13 @@ telemetry_connect(const char *host, const char *service)
 	if (conn == NULL)
 		return NULL;
 
-	ret = connection_connect(conn, host, service, 0);
+	ret = ts_connection_connect(conn, host, service, 0);
 
 	if (ret < 0)
 	{
-		const char *errstr = connection_get_and_clear_error(conn);
+		const char *errstr = ts_connection_get_and_clear_error(conn);
 
-		connection_destroy(conn);
+		ts_connection_destroy(conn);
 		conn = NULL;
 
 		ereport(WARNING,
@@ -314,13 +314,13 @@ telemetry_connect(const char *host, const char *service)
 }
 
 bool
-telemetry_main_wrapper()
+ts_telemetry_main_wrapper()
 {
-	return telemetry_main(TELEMETRY_HOST, TELEMETRY_PATH, TELEMETRY_SCHEME);
+	return ts_telemetry_main(TELEMETRY_HOST, TELEMETRY_PATH, TELEMETRY_SCHEME);
 }
 
 bool
-telemetry_main(const char *host, const char *path, const char *service)
+ts_telemetry_main(const char *host, const char *path, const char *service)
 {
 	HttpError	err;
 	Connection *conn;
@@ -328,7 +328,7 @@ telemetry_main(const char *host, const char *path, const char *service)
 	HttpResponseState *rsp;
 	bool		started = false;
 
-	if (!telemetry_on())
+	if (!ts_telemetry_on())
 		return true;
 
 	if (!IsTransactionOrTransactionBlock())
@@ -337,30 +337,30 @@ telemetry_main(const char *host, const char *path, const char *service)
 		StartTransactionCommand();
 	}
 
-	conn = telemetry_connect(host, service);
+	conn = ts_telemetry_connect(host, service);
 
 	if (conn == NULL)
 		goto cleanup;
 
-	req = build_version_request(host, path);
+	req = ts_build_version_request(host, path);
 
-	rsp = http_response_state_create();
+	rsp = ts_http_response_state_create();
 
-	err = http_send_and_recv(conn, req, rsp);
+	err = ts_http_send_and_recv(conn, req, rsp);
 
-	http_request_destroy(req);
-	connection_destroy(conn);
+	ts_http_request_destroy(req);
+	ts_connection_destroy(conn);
 
 	if (err != HTTP_ERROR_NONE)
 	{
-		elog(WARNING, "telemetry error: %s", http_strerror(err));
+		elog(WARNING, "telemetry error: %s", ts_http_strerror(err));
 		goto cleanup;
 	}
 
-	if (!http_response_state_valid_status(rsp))
+	if (!ts_http_response_state_valid_status(rsp))
 	{
 		elog(WARNING, "telemetry got unexpected HTTP response status: %d",
-			 http_response_state_status_code(rsp));
+			 ts_http_response_state_status_code(rsp));
 		goto cleanup;
 	}
 
@@ -368,9 +368,9 @@ telemetry_main(const char *host, const char *path, const char *service)
 	 * Do the version-check. Response is the body of a well-formed HTTP
 	 * response, since otherwise the previous line will throw an error.
 	 */
-	process_response(http_response_state_body_start(rsp));
+	process_response(ts_http_response_state_body_start(rsp));
 
-	http_response_state_destroy(rsp);
+	ts_http_response_state_destroy(rsp);
 
 	if (started)
 		CommitTransactionCommand();

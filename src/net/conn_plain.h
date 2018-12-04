@@ -16,9 +16,9 @@ typedef struct Connection Connection;
 #define IS_SOCKET_ERROR(err) (err < 0)
 #endif
 
-extern int	plain_connect(Connection *conn, const char *host, const char *servname, int port);
-extern void plain_close(Connection *conn);
-extern int	plain_set_timeout(Connection *conn, unsigned long millis);
-extern const char *plain_errmsg(Connection *conn);
+extern int	ts_plain_connect(Connection *conn, const char *host, const char *servname, int port);
+extern void ts_plain_close(Connection *conn);
+extern int	ts_plain_set_timeout(Connection *conn, unsigned long millis);
+extern const char *ts_plain_errmsg(Connection *conn);
 
 #endif							/* TIMESCALEDB_CONN_PLAIN_H */

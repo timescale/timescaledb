@@ -44,16 +44,16 @@ typedef struct PartitioningInfo
 } PartitioningInfo;
 
 
-extern Oid	partitioning_func_get_default(void);
-extern bool partitioning_func_is_default(const char *schema, const char *funcname);
-extern bool partitioning_func_is_valid(regproc funcoid);
+extern Oid	ts_partitioning_func_get_default(void);
+extern bool ts_partitioning_func_is_default(const char *schema, const char *funcname);
+extern bool ts_partitioning_func_is_valid(regproc funcoid);
 
-extern PartitioningInfo *partitioning_info_create(const char *schema,
-						 const char *partfunc,
-						 const char *partcol,
-						 Oid relid);
-extern List *partitioning_func_qualified_name(PartitioningFunc *pf);
-extern int32 partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
-extern int32 partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
+extern PartitioningInfo *ts_partitioning_info_create(const char *schema,
+							const char *partfunc,
+							const char *partcol,
+							Oid relid);
+extern List *ts_partitioning_func_qualified_name(PartitioningFunc *pf);
+extern int32 ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
+extern int32 ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc);
 
 #endif							/* TIMESCALEDB_PARTITIONING_H */

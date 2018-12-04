@@ -56,7 +56,7 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 				{
 					ChunkDispatchState *cdstate = (ChunkDispatchState *) mtstate->mt_plans[i];
 
-					chunk_dispatch_state_set_parent(cdstate, mtstate);
+					ts_chunk_dispatch_state_set_parent(cdstate, mtstate);
 				}
 			}
 		}
@@ -107,7 +107,7 @@ static CustomScanMethods hypertable_insert_plan_methods = {
 };
 
 Plan *
-hypertable_insert_plan_create(ModifyTable *mt)
+ts_hypertable_insert_plan_create(ModifyTable *mt)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 

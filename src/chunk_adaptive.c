@@ -426,31 +426,31 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	elog(DEBUG1, "[adaptive] chunk_target_size_bytes=" UINT64_FORMAT,
 		 chunk_target_size_bytes);
 
-	hypertable_id = dimension_get_hypertable_id(dimension_id);
+	hypertable_id = ts_dimension_get_hypertable_id(dimension_id);
 
 	if (hypertable_id <= 0)
 		elog(ERROR, "could not find a matching hypertable for dimension %u", dimension_id);
 
-	ht = hypertable_get_by_id(hypertable_id);
+	ht = ts_hypertable_get_by_id(hypertable_id);
 
 	Assert(ht != NULL);
 
-	dim = hyperspace_get_dimension_by_id(ht->space, dimension_id);
+	dim = ts_hyperspace_get_dimension_by_id(ht->space, dimension_id);
 
 	Assert(dim != NULL);
 
 	current_interval = dim->fd.interval_length;
 
 	/* Get a window of recent chunks */
-	chunks = chunk_get_window(dimension_id,
-							  dimension_coord,
-							  DEFAULT_CHUNK_WINDOW,
-							  CurrentMemoryContext);
+	chunks = ts_chunk_get_window(dimension_id,
+								 dimension_coord,
+								 DEFAULT_CHUNK_WINDOW,
+								 CurrentMemoryContext);
 
 	foreach(lc, chunks)
 	{
 		Chunk	   *chunk = lfirst(lc);
-		DimensionSlice *slice = hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
+		DimensionSlice *slice = ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
 		int64		chunk_size,
 					slice_interval;
 		Datum		minmax[2];
@@ -466,8 +466,8 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 
 		if (chunk_get_minmax(chunk->table_id, dim->fd.column_type, attno, minmax))
 		{
-			int64		min = time_value_to_internal(minmax[0], dim->fd.column_type, false);
-			int64		max = time_value_to_internal(minmax[1], dim->fd.column_type, false);
+			int64		min = ts_time_value_to_internal(minmax[0], dim->fd.column_type, false);
+			int64		max = ts_time_value_to_internal(minmax[1], dim->fd.column_type, false);
 			double		interval_fillfactor,
 						size_fillfactor;
 			int64		extrapolated_chunk_size;
@@ -665,7 +665,7 @@ chunk_target_size_in_bytes(const text *target_size_text)
 #define MB (1024*1024)
 
 void
-chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
+ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 {
 	AttrNumber	attnum;
 	NameData	attname;
@@ -749,8 +749,8 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("table does not exist")));
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, info.table_relid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, info.table_relid);
 
 	if (NULL == ht)
 		ereport(ERROR,
@@ -759,7 +759,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 						get_rel_name(info.table_relid))));
 
 	/* Get the first open dimension that we will adapt on */
-	dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 
 	if (NULL == dim)
 		ereport(ERROR,
@@ -768,7 +768,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	info.colname = NameStr(dim->fd.column_name);
 
-	chunk_adaptive_sizing_info_validate(&info);
+	ts_chunk_adaptive_sizing_info_validate(&info);
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "function returning record called in context that cannot accept type record");
@@ -794,11 +794,11 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	/* Update the hypertable entry */
 	ht->fd.chunk_target_size = info.target_size_bytes;
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
-	hypertable_update(ht);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_hypertable_update(ht);
+	ts_catalog_restore_user(&sec_ctx);
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
