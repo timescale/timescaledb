@@ -30,20 +30,20 @@ extern void PGDLLEXPORT _PG_fini(void);
 
 post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
-bool		extension_invalidate(Oid relid);
-bool		extension_is_loaded(void);
-void		extension_check_version(const char *actual_version);
+bool		ts_extension_invalidate(Oid relid);
+bool		ts_extension_is_loaded(void);
+void		ts_extension_check_version(const char *actual_version);
 
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
-	extension_invalidate(relid);
+	ts_extension_invalidate(relid);
 }
 
 static void
 post_analyze_hook(ParseState *pstate, Query *query)
 {
-	if (extension_is_loaded())
+	if (ts_extension_is_loaded())
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
 
 	/*
@@ -65,7 +65,7 @@ _PG_init(void)
 	 * Check extension_is loaded to catch certain errors such as calls to
 	 * functions defined on the wrong extension version
 	 */
-	extension_check_version(TIMESCALEDB_VERSION_MOD);
+	ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
 	elog(WARNING, "mock init " STR(TIMESCALEDB_VERSION_MOD));
 	prev_post_parse_analyze_hook = post_parse_analyze_hook;
 
@@ -89,16 +89,16 @@ _PG_fini(void)
 }
 
 /* mock for extension.c */
-void		catalog_reset(void);
+void		ts_catalog_reset(void);
 void
-catalog_reset()
+ts_catalog_reset()
 {
 }
 
 /* mock for guc.c */
-void		hypertable_cache_invalidate_callback(void);
+void		ts_hypertable_cache_invalidate_callback(void);
 void
-hypertable_cache_invalidate_callback(void)
+ts_hypertable_cache_invalidate_callback(void)
 {
 }
 

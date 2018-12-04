@@ -20,7 +20,7 @@
  * like time_bucket and date_trunc. This optimization fixes the statistics and adds the HashAggregate plan if appropriate.
  * */
 
-extern void plan_add_hashagg(PlannerInfo *root,
-				 RelOptInfo *input_rel,
-				 RelOptInfo *output_rel);
+extern void ts_plan_add_hashagg(PlannerInfo *root,
+					RelOptInfo *input_rel,
+					RelOptInfo *output_rel);
 #endif							/* TIMESCALEDB_PLAN_ADD_HASHAGG_H */

@@ -103,7 +103,7 @@ extern void _conn_mock_fini(void);
 void
 _conn_mock_init(void)
 {
-	connection_register(CONNECTION_MOCK, &mock_ops);
+	ts_connection_register(CONNECTION_MOCK, &mock_ops);
 }
 
 void

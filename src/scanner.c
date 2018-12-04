@@ -162,7 +162,7 @@ static Scanner scanners[] = {
  * Return the number of tuples that where found.
  */
 int
-scanner_scan(ScannerCtx *ctx)
+ts_scanner_scan(ScannerCtx *ctx)
 {
 	TupleDesc	tuple_desc;
 	bool		is_valid;
@@ -240,9 +240,9 @@ scanner_scan(ScannerCtx *ctx)
 }
 
 bool
-scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
+ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
 {
-	int			num_found = scanner_scan(ctx);
+	int			num_found = ts_scanner_scan(ctx);
 
 	ctx->limit = 2;
 

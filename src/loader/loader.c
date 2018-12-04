@@ -105,13 +105,13 @@ static void call_extension_post_parse_analyze_hook(ParseState *pstate,
 
 
 extern char *
-loader_extension_version(void)
+ts_loader_extension_version(void)
 {
 	return extension_version();
 }
 
 extern bool
-loader_extension_exists(void)
+ts_loader_extension_exists(void)
 {
 	return extension_exists();
 }
@@ -393,7 +393,7 @@ timescale_shmem_startup_hook(void)
 {
 	if (prev_shmem_startup_hook)
 		prev_shmem_startup_hook();
-	bgw_counter_shmem_startup();
+	ts_bgw_counter_shmem_startup();
 	bgw_message_queue_shmem_startup();
 }
 
@@ -416,11 +416,11 @@ _PG_init(void)
 
 	elog(INFO, "timescaledb loaded");
 
-	bgw_counter_shmem_alloc();
+	ts_bgw_counter_shmem_alloc();
 	bgw_message_queue_alloc();
-	bgw_cluster_launcher_register();
-	bgw_counter_setup_gucs();
-	bgw_interface_register_api_version();
+	ts_bgw_cluster_launcher_register();
+	ts_bgw_counter_setup_gucs();
+	ts_bgw_interface_register_api_version();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME, "Disable the loading of the actual extension",
@@ -550,7 +550,7 @@ extension_check()
 }
 
 extern void
-loader_extension_check(void)
+ts_loader_extension_check(void)
 {
 	extension_check();
 }

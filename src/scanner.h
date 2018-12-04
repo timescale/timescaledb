@@ -103,8 +103,8 @@ typedef struct ScannerCtx
 
 /* Performs an index scan or heap scan and returns the number of matching
  * tuples. */
-int			scanner_scan(ScannerCtx *ctx);
-bool		scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type);
+extern int	ts_scanner_scan(ScannerCtx *ctx);
+extern bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type);
 
 
 #endif							/* TIMESCALEDB_SCANNER_H */

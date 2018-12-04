@@ -31,8 +31,8 @@ typedef struct ChunkInsertState
 
 typedef struct ChunkDispatch ChunkDispatch;
 
-extern HeapTuple chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple, TupleTableSlot **existing_slot);
-extern ChunkInsertState *chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);
-extern void chunk_insert_state_destroy(ChunkInsertState *state);
+extern HeapTuple ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple, TupleTableSlot **existing_slot);
+extern ChunkInsertState *ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);
+extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 
 #endif							/* TIMESCALEDB_CHUNK_INSERT_STATE_H */

@@ -98,7 +98,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 	foreach(item, dimValues->values)
 	{
 		Datum		datum = PointerGetDatum(lfirst(item));
-		int64		value = time_value_to_internal(datum, dimValues->type, false);
+		int64		value = ts_time_value_to_internal(datum, dimValues->type, false);
 
 		switch (strategy)
 		{
@@ -145,7 +145,7 @@ dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, List *v
 	foreach(item, values)
 	{
 		Datum		datum = PointerGetDatum(lfirst(item));
-		int32		partition = partitioning_func_apply(dri->base.dimension->partitioning, datum);
+		int32		partition = ts_partitioning_func_apply(dri->base.dimension->partitioning, datum);
 
 		partitions = list_append_unique_int(partitions, partition);
 	}
@@ -215,7 +215,7 @@ static DimensionVec *
 dimension_restrict_info_open_slices(DimensionRestrictInfoOpen *dri)
 {
 	/* basic idea: slice_end > lower_bound && slice_start < upper_bound */
-	return dimension_slice_scan_range_limit(dri->base.dimension->fd.id, dri->upper_strategy, dri->upper_bound, dri->lower_strategy, dri->lower_bound, 0);
+	return ts_dimension_slice_scan_range_limit(dri->base.dimension->fd.id, dri->upper_strategy, dri->upper_bound, dri->lower_strategy, dri->lower_bound, 0);
 }
 
 static DimensionVec *
@@ -225,32 +225,32 @@ dimension_restrict_info_closed_slices(DimensionRestrictInfoClosed *dri)
 	{
 		/* slice_end >= value && slice_start <= value */
 		ListCell   *cell;
-		DimensionVec *dim_vec = dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
+		DimensionVec *dim_vec = ts_dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
 
 		foreach(cell, dri->partitions)
 		{
 			int			i;
 			int32		partition = lfirst_int(cell);
-			DimensionVec *tmp = dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
-																 BTLessEqualStrategyNumber,
-																 partition,
-																 BTGreaterEqualStrategyNumber,
-																 partition,
-																 0);
+			DimensionVec *tmp = ts_dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
+																	BTLessEqualStrategyNumber,
+																	partition,
+																	BTGreaterEqualStrategyNumber,
+																	partition,
+																	0);
 
 			for (i = 0; i < tmp->num_slices; i++)
-				dim_vec = dimension_vec_add_unique_slice(&dim_vec, tmp->slices[i]);
+				dim_vec = ts_dimension_vec_add_unique_slice(&dim_vec, tmp->slices[i]);
 		}
 		return dim_vec;
 	}
 
 	/* get all slices */
-	return dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
-											InvalidStrategy,
-											-1,
-											InvalidStrategy,
-											-1,
-											0);
+	return ts_dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
+											   InvalidStrategy,
+											   -1,
+											   InvalidStrategy,
+											   -1,
+											   0);
 }
 
 static DimensionVec *
@@ -279,7 +279,7 @@ typedef struct HypertableRestrictInfo
 
 
 HypertableRestrictInfo *
-hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
+ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
 	int			num_dimensions = ht->space->num_dimensions;
 	HypertableRestrictInfo *res = palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
@@ -465,9 +465,9 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 }
 
 void
-hypertable_restrict_info_add(HypertableRestrictInfo *hri,
-							 PlannerInfo *root,
-							 List *base_restrict_infos)
+ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri,
+								PlannerInfo *root,
+								List *base_restrict_infos)
 {
 	ListCell   *lc;
 
@@ -480,13 +480,13 @@ hypertable_restrict_info_add(HypertableRestrictInfo *hri,
 }
 
 bool
-hypertable_restrict_info_has_restrictions(HypertableRestrictInfo *hri)
+ts_hypertable_restrict_info_has_restrictions(HypertableRestrictInfo *hri)
 {
 	return hri->num_base_restrictions > 0;
 }
 
 List *
-hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode)
+ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode)
 {
 	int			i;
 	List	   *dimension_vecs = NIL;
@@ -514,5 +514,5 @@ hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable 
 	}
 
 	Assert(list_length(dimension_vecs) == ht->space->num_dimensions);
-	return chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
+	return ts_chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
 }

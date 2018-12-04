@@ -15,7 +15,7 @@
 #define MIN_LOADER_API_VERSION 1
 
 extern bool
-bgw_worker_reserve(void)
+ts_bgw_worker_reserve(void)
 {
 	PGFunction	reserve = load_external_function(EXTENSION_NAME, "ts_bgw_worker_reserve", true, NULL);
 
@@ -23,7 +23,7 @@ bgw_worker_reserve(void)
 }
 
 extern void
-bgw_worker_release(void)
+ts_bgw_worker_release(void)
 {
 	PGFunction	release = load_external_function(EXTENSION_NAME, "ts_bgw_worker_release", true, NULL);
 
@@ -31,7 +31,7 @@ bgw_worker_release(void)
 }
 
 extern int
-bgw_num_unreserved(void)
+ts_bgw_num_unreserved(void)
 {
 	PGFunction	unreserved = load_external_function(EXTENSION_NAME, "ts_bgw_num_unreserved", true, NULL);
 
@@ -39,7 +39,7 @@ bgw_num_unreserved(void)
 }
 
 extern int
-bgw_loader_api_version(void)
+ts_bgw_loader_api_version(void)
 {
 	void	  **versionptr = find_rendezvous_variable(RENDEZVOUS_BGW_LOADER_API_VERSION);
 
@@ -49,9 +49,9 @@ bgw_loader_api_version(void)
 }
 
 extern void
-bgw_check_loader_api_version()
+ts_bgw_check_loader_api_version()
 {
-	int			version = bgw_loader_api_version();
+	int			version = ts_bgw_loader_api_version();
 
 	if (version < MIN_LOADER_API_VERSION)
 		ereport(ERROR,

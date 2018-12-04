@@ -76,7 +76,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, vo
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
 	ccstate->estate = estate;
-	ccstate->dispatch = chunk_dispatch_create(ht, estate);
+	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate);
 	ccstate->fromctx.data = fromctx;
 	ccstate->next_copy_from = from_func;
 
@@ -86,7 +86,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, vo
 static void
 copy_chunk_state_destroy(CopyChunkState *ccstate)
 {
-	chunk_dispatch_destroy(ccstate->dispatch);
+	ts_chunk_dispatch_destroy(ccstate->dispatch);
 	FreeExecutorState(ccstate->estate);
 }
 
@@ -271,14 +271,14 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			HeapTupleSetOid(tuple, loaded_oid);
 
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
-		point = hyperspace_calculate_point(ht->space, tuple, tupDesc);
+		point = ts_hyperspace_calculate_point(ht->space, tuple, tupDesc);
 
 		/* Save the main table's (hypertable's) ResultRelInfo */
 		if (NULL == dispatch->hypertable_result_rel_info)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
 		Assert(cis != NULL);
 
@@ -298,7 +298,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
 
 		/* Convert the tuple to match the chunk's rowtype */
-		tuple = chunk_insert_state_convert_tuple(cis, tuple, &slot);
+		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, &slot);
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.

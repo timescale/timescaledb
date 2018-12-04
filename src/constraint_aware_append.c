@@ -401,7 +401,7 @@ remove_parent_subpath(PlannerInfo *root, List *subpaths, Oid parent_relid)
 }
 
 Path *
-constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *subpath)
+ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *subpath)
 {
 	ConstraintAwareAppendPath *path;
 	AppendRelInfo *appinfo;

@@ -23,6 +23,6 @@ typedef struct ChunkSizingInfo
 	int64		target_size_bytes;
 } ChunkSizingInfo;
 
-void		chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info);
+extern void ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info);
 
 #endif							/* TIMESCALEDB_CHUNK_ADAPTIVE_H */

@@ -16,6 +16,6 @@ typedef struct HypertableInsertState
 	ModifyTable *mt;
 } HypertableInsertState;
 
-Plan	   *hypertable_insert_plan_create(ModifyTable *mt);
+extern Plan *ts_hypertable_insert_plan_create(ModifyTable *mt);
 
 #endif							/* TIMESCALEDB_HYPERTABLE_INSERT_H */

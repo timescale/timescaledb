@@ -44,7 +44,7 @@ ts_get_git_commit(PG_FUNCTION_ARGS)
 #include <Windows.h>
 
 bool
-version_get_os_info(VersionOSInfo *info)
+ts_version_get_os_info(VersionOSInfo *info)
 {
 	DWORD		bufsize;
 	void	   *buffer;
@@ -84,7 +84,7 @@ error:
 #include <sys/utsname.h>
 
 bool
-version_get_os_info(VersionOSInfo *info)
+ts_version_get_os_info(VersionOSInfo *info)
 {
 	/* Get the OS name  */
 	struct utsname os_info;
@@ -100,7 +100,7 @@ version_get_os_info(VersionOSInfo *info)
 }
 #else
 bool
-version_get_os_info(VersionOSInfo *info)
+ts_version_get_os_info(VersionOSInfo *info)
 {
 	memset(info, 0, sizeof(VersionOSInfo));
 	return false;
@@ -124,7 +124,7 @@ ts_get_os_info(PG_FUNCTION_ARGS)
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
 
-	if (version_get_os_info(&info))
+	if (ts_version_get_os_info(&info))
 	{
 		values[0] = CStringGetTextDatum(info.sysname);
 		values[1] = CStringGetTextDatum(info.version);

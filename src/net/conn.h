@@ -31,17 +31,17 @@ typedef struct Connection
 	int			err;
 } Connection;
 
-extern Connection *connection_create(ConnectionType type);
-extern int	connection_connect(Connection *conn, const char *host, const char *servname, int port);
-extern ssize_t connection_read(Connection *conn, char *buf, size_t buflen);
-extern ssize_t connection_write(Connection *conn, const char *buf, size_t writelen);
-extern void connection_close(Connection *conn);
-extern void connection_destroy(Connection *conn);
-extern int	connection_set_timeout_millis(Connection *conn, unsigned long millis);
-extern const char *connection_get_and_clear_error(Connection *conn);
+extern Connection *ts_connection_create(ConnectionType type);
+extern int	ts_connection_connect(Connection *conn, const char *host, const char *servname, int port);
+extern ssize_t ts_connection_read(Connection *conn, char *buf, size_t buflen);
+extern ssize_t ts_connection_write(Connection *conn, const char *buf, size_t writelen);
+extern void ts_connection_close(Connection *conn);
+extern void ts_connection_destroy(Connection *conn);
+extern int	ts_connection_set_timeout_millis(Connection *conn, unsigned long millis);
+extern const char *ts_connection_get_and_clear_error(Connection *conn);
 
 /*  Called in init.c */
-extern void _connection_init(void);
-extern void _connection_fini(void);
+extern void ts_connection_init(void);
+extern void ts_connection_fini(void);
 
 #endif							/* TIMESCALEDB_NET_CONN_H */

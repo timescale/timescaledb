@@ -44,7 +44,7 @@ static bool
 bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 					  tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, BGW_JOB_STAT),
 		.index = catalog_get_index(catalog, BGW_JOB_STAT, indexid),
@@ -57,7 +57,7 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 		.scandirection = ForwardScanDirection,
 	};
 
-	return scanner_scan_one(&scanctx, false, "bgw job stat");
+	return ts_scanner_scan_one(&scanctx, false, "bgw job stat");
 }
 
 static inline bool
@@ -73,7 +73,7 @@ bgw_job_stat_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_f
 }
 
 BgwJobStat *
-bgw_job_stat_find(int32 bgw_job_id)
+ts_bgw_job_stat_find(int32 bgw_job_id)
 {
 	BgwJobStat *job_stat = NULL;
 
@@ -85,13 +85,13 @@ bgw_job_stat_find(int32 bgw_job_id)
 static ScanTupleResult
 bgw_job_stat_tuple_delete(TupleInfo *ti, void *const data)
 {
-	catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete(ti->scanrel, ti->tuple);
 
 	return SCAN_CONTINUE;
 }
 
 void
-bgw_job_stat_delete(int32 bgw_job_id)
+ts_bgw_job_stat_delete(int32 bgw_job_id)
 {
 	bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_delete, NULL, NULL, RowExclusiveLock);
 }
@@ -109,7 +109,7 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	HeapTuple	tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
 
-	fd->last_start = timer_get_current_timestamp();
+	fd->last_start = ts_timer_get_current_timestamp();
 	fd->last_finish = DT_NOBEGIN;
 	fd->next_start = DT_NOBEGIN;
 
@@ -133,7 +133,7 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	fd->total_crashes++;
 	fd->consecutive_crashes++;
 
-	catalog_update(ti->scanrel, tuple);
+	ts_catalog_update(ti->scanrel, tuple);
 	heap_freetuple(tuple);
 
 	return SCAN_DONE;
@@ -188,7 +188,7 @@ calculate_next_start_on_failure(TimestampTz last_finish, int consecutive_failure
 static TimestampTz
 calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
 {
-	TimestampTz now = timer_get_current_timestamp();
+	TimestampTz now = ts_timer_get_current_timestamp();
 	TimestampTz failure_calc = calculate_next_start_on_failure(now, consecutive_crashes, job);
 	TimestampTz min_time = TimestampTzPlusMilliseconds(now, MIN_WAIT_AFTER_CRASH_MS);
 
@@ -205,7 +205,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
 	Interval   *duration;
 
-	fd->last_finish = timer_get_current_timestamp();
+	fd->last_finish = ts_timer_get_current_timestamp();
 
 	duration = DatumGetIntervalP(DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(fd->last_finish), TimestampTzGetDatum(fd->last_start)));
 	fd->total_duration = *DatumGetIntervalP(DirectFunctionCall2(interval_pl, IntervalPGetDatum(&fd->total_duration), IntervalPGetDatum(duration)));
@@ -236,7 +236,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish, fd->consecutive_failures, result_ctx->job);
 	}
 
-	catalog_update(ti->scanrel, tuple);
+	ts_catalog_update(ti->scanrel, tuple);
 	heap_freetuple(tuple);
 
 	return SCAN_DONE;
@@ -251,7 +251,7 @@ bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 
 	fd->next_start = *next_start;
 
-	catalog_update(ti->scanrel, tuple);
+	ts_catalog_update(ti->scanrel, tuple);
 	heap_freetuple(tuple);
 
 	return SCAN_DONE;
@@ -268,7 +268,7 @@ bgw_job_stat_insert_mark_start_relation(Relation rel,
 	Interval	zero_ival = {.time = 0,};
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_job_id)] = Int32GetDatum(bgw_job_id);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] = TimestampGetDatum(timer_get_current_timestamp());
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] = TimestampGetDatum(ts_timer_get_current_timestamp());
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_finish)] = TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] = Int64GetDatum(1);
@@ -282,9 +282,9 @@ bgw_job_stat_insert_mark_start_relation(Relation rel,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_crashes)] = Int64GetDatum(1);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_crashes)] = Int32GetDatum(1);
 
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
-	catalog_insert_values(rel, desc, values, nulls);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
 
 	return true;
 }
@@ -292,7 +292,7 @@ bgw_job_stat_insert_mark_start_relation(Relation rel,
 static bool
 bgw_job_stat_insert_mark_start(int32 bgw_job_id)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	Relation	rel;
 	bool		result;
 
@@ -305,7 +305,7 @@ bgw_job_stat_insert_mark_start(int32 bgw_job_id)
 
 
 void
-bgw_job_stat_mark_start(int32 bgw_job_id)
+ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
 	if (!bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_mark_start, NULL, NULL, RowExclusiveLock))
 		bgw_job_stat_insert_mark_start(bgw_job_id);
@@ -313,7 +313,7 @@ bgw_job_stat_mark_start(int32 bgw_job_id)
 }
 
 void
-bgw_job_stat_mark_end(BgwJob *job, JobResult result)
+ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 {
 	JobResultCtx res =
 	{
@@ -327,13 +327,13 @@ bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 }
 
 bool
-bgw_job_stat_end_was_marked(BgwJobStat *jobstat)
+ts_bgw_job_stat_end_was_marked(BgwJobStat *jobstat)
 {
 	return !TIMESTAMP_IS_NOBEGIN(jobstat->fd.last_finish);
 }
 
 void
-bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
+ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 {
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (next_start == DT_NOBEGIN)
@@ -345,7 +345,7 @@ bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 }
 
 bool
-bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
+ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
 {
 	/*
 	 * Stub to allow the system to disable jobs based on the number of crashes
@@ -355,7 +355,7 @@ bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
 }
 
 TimestampTz
-bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
+ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
 {
 	if (jobstat == NULL)
 		/* Never previously run - run right away */

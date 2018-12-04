@@ -36,7 +36,7 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 		TupleDesc	tupdesc;
 
 		/* Use top-level memory context to preserve the global static list */
-		cur_scheduled_jobs = update_scheduled_jobs_list(cur_scheduled_jobs, TopMemoryContext);
+		cur_scheduled_jobs = ts_update_scheduled_jobs_list(cur_scheduled_jobs, TopMemoryContext);
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
@@ -67,7 +67,7 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 		Datum	   *values = palloc(sizeof(*values) * funcctx->tuple_desc->natts);
 		bool	   *nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
 
-		populate_scheduled_job_tuple(lfirst(lc), values);
+		ts_populate_scheduled_job_tuple(lfirst(lc), values);
 		memset(nulls, 0, sizeof(*nulls) * funcctx->tuple_desc->natts);
 		tuple = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 

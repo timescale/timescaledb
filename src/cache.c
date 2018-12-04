@@ -35,7 +35,7 @@ cache_reset_pinned_caches(void)
 }
 
 void
-cache_init(Cache *cache)
+ts_cache_init(Cache *cache)
 {
 	if (cache->htab != NULL)
 	{
@@ -47,7 +47,7 @@ cache_init(Cache *cache)
 	 * The cache object should have been created in its own context so that
 	 * cache_destroy can just delete the context to free everything.
 	 */
-	Assert(MemoryContextContains(cache_memory_ctx(cache), cache));
+	Assert(MemoryContextContains(ts_cache_memory_ctx(cache), cache));
 
 	cache->htab = hash_create(cache->name, cache->numelements,
 							  &cache->hctl, cache->flags);
@@ -72,7 +72,7 @@ cache_destroy(Cache *cache)
 }
 
 void
-cache_invalidate(Cache *cache)
+ts_cache_invalidate(Cache *cache)
 {
 	if (cache == NULL)
 		return;
@@ -91,7 +91,7 @@ cache_invalidate(Cache *cache)
  *
  */
 extern Cache *
-cache_pin(Cache *cache)
+ts_cache_pin(Cache *cache)
 {
 	MemoryContext old = MemoryContextSwitchTo(pinned_caches_mctx);
 	CachePin   *cp = palloc(sizeof(CachePin));
@@ -143,25 +143,25 @@ cache_release_subtxn(Cache *cache, SubTransactionId subtxnid)
 }
 
 extern int
-cache_release(Cache *cache)
+ts_cache_release(Cache *cache)
 {
 	return cache_release_subtxn(cache, GetCurrentSubTransactionId());
 }
 
 MemoryContext
-cache_memory_ctx(Cache *cache)
+ts_cache_memory_ctx(Cache *cache)
 {
 	return cache->hctl.hcxt;
 }
 
 MemoryContext
-cache_switch_to_memory_context(Cache *cache)
+ts_cache_switch_to_memory_context(Cache *cache)
 {
 	return MemoryContextSwitchTo(cache->hctl.hcxt);
 }
 
 void *
-cache_fetch(Cache *cache, CacheQuery *query)
+ts_cache_fetch(Cache *cache, CacheQuery *query)
 {
 	bool		found;
 	HASHACTION	action = cache->create_entry == NULL ? HASH_FIND : HASH_ENTER;
@@ -193,7 +193,7 @@ cache_fetch(Cache *cache, CacheQuery *query)
 }
 
 bool
-cache_remove(Cache *cache, void *key)
+ts_cache_remove(Cache *cache, void *key)
 {
 	bool		found;
 
@@ -257,11 +257,11 @@ release_subtxn_pinned_caches(SubTransactionId subtxnid, bool abort)
  * Transaction end callback that cleans up any pinned caches. This is a
  * safeguard that protects against indefinitely pinned caches (memory leaks)
  * that may occur if a transaction ends (normally or abnormally) while a pin is
- * held. Without this, a cache_pin() call always needs to be paired with a
- * cache_release() call and wrapped in a PG_TRY() block to capture and handle
+ * held. Without this, a ts_cache_pin() call always needs to be paired with a
+ * ts_cache_release() call and wrapped in a PG_TRY() block to capture and handle
  * any exceptions that occur.
  *
- * Note that this checks that cache_release() is always called by the end
+ * Note that this checks that ts_cache_release() is always called by the end
  * of a non-aborted transaction unless cache->release_on_commit is set to true.
  * */
 static void
@@ -277,7 +277,7 @@ cache_xact_end(XactEvent event, void *arg)
 			{
 				/*
 				 * Make a copy of the list of pinned caches since
-				 * cache_release() can manipulate the original list.
+				 * ts_cache_release() can manipulate the original list.
 				 */
 				List	   *pinned_caches_copy = list_copy(pinned_caches);
 				ListCell   *lc;
@@ -300,7 +300,7 @@ cache_xact_end(XactEvent event, void *arg)
 					 * Assert is turned off. In that case, release.
 					 */
 					if (cp->cache->release_on_commit)
-						cache_release(cp->cache);
+						ts_cache_release(cp->cache);
 				}
 
 				list_free(pinned_caches_copy);

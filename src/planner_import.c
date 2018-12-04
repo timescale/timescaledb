@@ -31,9 +31,9 @@
 
 /* copied verbatim from prepunion.c */
 void
-make_inh_translation_list(Relation oldrelation, Relation newrelation,
-						  Index newvarno,
-						  List **translated_vars)
+ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
+							 Index newvarno,
+							 List **translated_vars)
 {
 	List	   *vars = NIL;
 	TupleDesc	old_tupdesc = RelationGetDescr(oldrelation);
@@ -128,9 +128,9 @@ make_inh_translation_list(Relation oldrelation, Relation newrelation,
 
 /* copied exactly from planner.c */
 size_t
-estimate_hashagg_tablesize(struct Path *path,
-						   const struct AggClauseCosts *agg_costs,
-						   double dNumGroups)
+ts_estimate_hashagg_tablesize(struct Path *path,
+							  const struct AggClauseCosts *agg_costs,
+							  double dNumGroups)
 {
 	size_t		hashentrysize;
 
@@ -154,7 +154,7 @@ estimate_hashagg_tablesize(struct Path *path,
 
 /* copied verbatim from planner.c */
 struct PathTarget *
-make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_target)
+ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_target)
 {
 	struct Query *parse = root->parse;
 	PathTarget *partial_target;
@@ -251,8 +251,8 @@ make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_targ
 #if PG96
 /* copied verbatim from selfuncs.c */
 bool
-get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-				   Datum *min, Datum *max)
+ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
+					  Datum *min, Datum *max)
 {
 	uintptr_t	tmin = 0;
 	uintptr_t	tmax = 0;
@@ -390,8 +390,8 @@ get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 #else
 /* copied verbatim from selfuncs.c */
 bool
-get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-				   Datum *min, Datum *max)
+ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
+					  Datum *min, Datum *max)
 {
 	Datum		tmin = 0;
 	Datum		tmax = 0;

@@ -234,9 +234,9 @@ catalog_database_info_init(CatalogDatabaseInfo *info)
 }
 
 CatalogDatabaseInfo *
-catalog_database_info_get()
+ts_catalog_database_info_get()
 {
-	if (!extension_is_loaded())
+	if (!ts_extension_is_loaded())
 		elog(ERROR, "tried calling catalog_database_info_get when extension isn't loaded");
 
 	if (!OidIsValid(database_info.database_id))
@@ -255,7 +255,7 @@ catalog_database_info_get()
  * The rest of the arguments are used to populate the first arg.
  */
 void
-catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const TableInfoDef *table_ary, const TableIndexDef *index_ary, const char **serial_id_ary)
+ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const TableInfoDef *table_ary, const TableIndexDef *index_ary, const char **serial_id_ary)
 {
 	int			i;
 
@@ -307,21 +307,21 @@ catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const Tab
 }
 
 Catalog *
-catalog_get(void)
+ts_catalog_get(void)
 {
 	int			i;
 
 	if (!OidIsValid(MyDatabaseId))
 		elog(ERROR, "invalid database ID");
 
-	if (!extension_is_loaded())
+	if (!ts_extension_is_loaded())
 		elog(ERROR, "tried calling catalog_get when extension isn't loaded");
 
 	if (catalog.initialized || !IsTransactionState())
 		return &catalog;
 
 	memset(&catalog, 0, sizeof(Catalog));
-	catalog_table_info_init(catalog.tables, _MAX_CATALOG_TABLES, catalog_table_names, catalog_table_index_definitions, catalog_table_serial_id_names);
+	ts_catalog_table_info_init(catalog.tables, _MAX_CATALOG_TABLES, catalog_table_names, catalog_table_index_definitions, catalog_table_serial_id_names);
 
 	catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
 
@@ -350,7 +350,7 @@ catalog_get(void)
 }
 
 void
-catalog_reset(void)
+ts_catalog_reset(void)
 {
 	catalog.initialized = false;
 	database_info.database_id = InvalidOid;
@@ -385,7 +385,7 @@ catalog_get_table(Catalog *catalog, Oid relid)
  * Get the next serial ID for a catalog table, if one exists for the given table.
  */
 int64
-catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
+ts_catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 {
 	Oid			relid = catalog->tables[table].serial_relid;
 
@@ -396,7 +396,7 @@ catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 }
 
 Oid
-catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
+ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 {
 	if (!catalog_is_valid(catalog))
 	{
@@ -429,10 +429,10 @@ catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
  *
  * The caller should pass a CatalogSecurityContext where the current security
  * context will be saved. The original security context can later be restored
- * with catalog_restore_user().
+ * with ts_catalog_restore_user().
  */
 bool
-catalog_database_info_become_owner(CatalogDatabaseInfo *database_info, CatalogSecurityContext *sec_ctx)
+ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info, CatalogSecurityContext *sec_ctx)
 {
 	GetUserIdAndSecContext(&sec_ctx->saved_uid, &sec_ctx->saved_security_context);
 
@@ -449,10 +449,10 @@ catalog_database_info_become_owner(CatalogDatabaseInfo *database_info, CatalogSe
 /*
  * Restore the security context of the original user after becoming the catalog
  * owner. The user should pass the original CatalogSecurityContext that was used
- * with catalog_database_info_become_owner().
+ * with ts_catalog_database_info_become_owner().
  */
 void
-catalog_restore_user(CatalogSecurityContext *sec_ctx)
+ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
 {
 	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
 }
@@ -482,7 +482,7 @@ static void
 catalog_insert(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleInsert(rel, tuple);
-	catalog_invalidate_cache(RelationGetRelid(rel), CMD_INSERT);
+	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_INSERT);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -491,7 +491,7 @@ catalog_insert(Relation rel, HeapTuple tuple)
  * Insert a new row into a catalog table.
  */
 void
-catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls)
+ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls)
 {
 	HeapTuple	tuple = heap_form_tuple(tupdesc, values, nulls);
 
@@ -500,36 +500,36 @@ catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *null
 }
 
 void
-catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
+ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
 {
 	CatalogTupleUpdate(rel, tid, tuple);
-	catalog_invalidate_cache(RelationGetRelid(rel), CMD_UPDATE);
+	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_UPDATE);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
 
 void
-catalog_update(Relation rel, HeapTuple tuple)
+ts_catalog_update(Relation rel, HeapTuple tuple)
 {
-	catalog_update_tid(rel, &tuple->t_self, tuple);
+	ts_catalog_update_tid(rel, &tuple->t_self, tuple);
 }
 
 void
-catalog_delete_tid(Relation rel, ItemPointer tid)
+ts_catalog_delete_tid(Relation rel, ItemPointer tid)
 {
 	CatalogTupleDelete(rel, tid);
-	catalog_invalidate_cache(RelationGetRelid(rel), CMD_DELETE);
+	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_DELETE);
 	CommandCounterIncrement();
 }
 
 void
-catalog_delete(Relation rel, HeapTuple tuple)
+ts_catalog_delete(Relation rel, HeapTuple tuple)
 {
-	catalog_delete_tid(rel, &tuple->t_self);
+	ts_catalog_delete_tid(rel, &tuple->t_self);
 }
 
 void
-catalog_delete_only(Relation rel, HeapTuple tuple)
+ts_catalog_delete_only(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleDelete(rel, &tuple->t_self);
 }
@@ -557,9 +557,9 @@ catalog_delete_only(Relation rel, HeapTuple tuple)
  * involved (e.g., INSERT, UPDATE, DELETE).
  */
 void
-catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
+ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	CatalogTable table = catalog_get_table(catalog, catalog_relid);
 	Oid			relid;
 
@@ -570,17 +570,17 @@ catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 		case DIMENSION_SLICE:
 			if (operation == CMD_UPDATE || operation == CMD_DELETE)
 			{
-				relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
+				relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 				CacheInvalidateRelcacheByRelid(relid);
 			}
 			break;
 		case HYPERTABLE:
 		case DIMENSION:
-			relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
+			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;
 		case BGW_JOB:
-			relid = catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB);
+			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;
 		case CHUNK_INDEX:

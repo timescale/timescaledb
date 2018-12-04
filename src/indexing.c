@@ -75,7 +75,7 @@ index_has_attribute(List *indexelems, const char *attrname)
  * the index columns.
  */
 void
-indexing_verify_columns(Hyperspace *hs, List *indexelems)
+ts_indexing_verify_columns(Hyperspace *hs, List *indexelems)
 {
 	int			i;
 
@@ -97,10 +97,10 @@ indexing_verify_columns(Hyperspace *hs, List *indexelems)
  * We only care about UNIQUE, PRIMARY KEY or EXCLUSION indexes.
  */
 void
-indexing_verify_index(Hyperspace *hs, IndexStmt *stmt)
+ts_indexing_verify_index(Hyperspace *hs, IndexStmt *stmt)
 {
 	if (stmt->unique || stmt->excludeOpNames != NULL)
-		indexing_verify_columns(hs, stmt->indexParams);
+		ts_indexing_verify_columns(hs, stmt->indexParams);
 }
 
 /*
@@ -187,8 +187,8 @@ static void
 indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default, bool verify)
 {
 	Relation	tblrel = relation_open(ht->main_table_relid, AccessShareLock);
-	Dimension  *time_dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
-	Dimension  *space_dim = hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
+	Dimension  *time_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	Dimension  *space_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 	List	   *indexlist = RelationGetIndexList(tblrel);
 	bool		has_time_idx = false;
 	bool		has_time_space_idx = false;
@@ -199,7 +199,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 		Relation	idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
 
 		if (verify && (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion))
-			indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
+			ts_indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
 
 		/* Check for existence of "default" indexes */
 		if (create_default && NULL != time_dim)
@@ -234,14 +234,14 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 }
 
 void
-indexing_verify_indexes(Hypertable *ht)
+ts_indexing_verify_indexes(Hypertable *ht)
 {
 	indexing_create_and_verify_hypertable_indexes(ht, false, true);
 }
 
 
 void
-indexing_create_default_indexes(Hypertable *ht)
+ts_indexing_create_default_indexes(Hypertable *ht)
 {
 	indexing_create_and_verify_hypertable_indexes(ht, true, false);
 }

@@ -29,16 +29,16 @@ typedef struct VersionResult
 	const char *errhint;
 } VersionResult;
 
-HttpRequest *build_version_request(const char *host, const char *path);
-Connection *telemetry_connect(const char *host, const char *service);
-bool		validate_server_version(const char *json, VersionResult *result);
+extern HttpRequest *ts_build_version_request(const char *host, const char *path);
+extern Connection *ts_telemetry_connect(const char *host, const char *service);
+extern bool ts_validate_server_version(const char *json, VersionResult *result);
 
 /*
  *	This function is intended as the main function for a BGW.
  *  Its job is to send metrics and fetch the most up-to-date version of
  *  Timescale via HTTPS.
  */
-bool		telemetry_main(const char *host, const char *path, const char *service);
-bool		telemetry_main_wrapper(void);
+extern bool ts_telemetry_main(const char *host, const char *path, const char *service);
+extern bool ts_telemetry_main_wrapper(void);
 
 #endif							/* TIMESCALEDB_TELEMETRY_TELEMETRY_H */

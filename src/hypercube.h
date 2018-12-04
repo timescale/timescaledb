@@ -28,14 +28,14 @@ typedef struct Hypercube
 	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
 
 
-extern Hypercube *hypercube_alloc(int16 num_dimensions);
-extern void hypercube_free(Hypercube *hc);
-extern void hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
-extern Hypercube *hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx);
-extern Hypercube *hypercube_calculate_from_point(Hyperspace *hs, Point *p);
-extern bool hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
-extern DimensionSlice *hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id);
-extern Hypercube *hypercube_copy(Hypercube *hc);
-extern void hypercube_slice_sort(Hypercube *hc);
+extern Hypercube *ts_hypercube_alloc(int16 num_dimensions);
+extern void ts_hypercube_free(Hypercube *hc);
+extern void ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
+extern Hypercube *ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx);
+extern Hypercube *ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p);
+extern bool ts_hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
+extern DimensionSlice *ts_hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id);
+extern Hypercube *ts_hypercube_copy(Hypercube *hc);
+extern void ts_hypercube_slice_sort(Hypercube *hc);
 
 #endif							/* TIMESCALEDB_HYPERCUBE_H */

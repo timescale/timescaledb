@@ -28,7 +28,7 @@ set_error(int err)
 
 /*  Create socket and connect */
 int
-plain_connect(Connection *conn, const char *host, const char *servname, int port)
+ts_plain_connect(Connection *conn, const char *host, const char *servname, int port)
 {
 	char		strport[6];
 	struct addrinfo *ainfo,
@@ -96,7 +96,7 @@ plain_connect(Connection *conn, const char *host, const char *servname, int port
 	 * Set send / recv timeout so that write and read don't block forever. Set
 	 * separately so that one of the actions failing doesn't block the other.
 	 */
-	if (plain_set_timeout(conn, DEFAULT_TIMEOUT_MSEC) < 0)
+	if (ts_plain_set_timeout(conn, DEFAULT_TIMEOUT_MSEC) < 0)
 	{
 		ret = SOCKET_ERROR;
 		goto out_addrinfo;
@@ -178,7 +178,7 @@ plain_read(Connection *conn, char *buf, size_t buflen)
 }
 
 void
-plain_close(Connection *conn)
+ts_plain_close(Connection *conn)
 {
 #ifdef WIN32
 	closesocket(conn->sock);
@@ -188,7 +188,7 @@ plain_close(Connection *conn)
 }
 
 int
-plain_set_timeout(Connection *conn, unsigned long millis)
+ts_plain_set_timeout(Connection *conn, unsigned long millis)
 {
 #ifdef WIN32
 	/* Timeout is in milliseconds on Windows */
@@ -220,7 +220,7 @@ plain_set_timeout(Connection *conn, unsigned long millis)
 }
 
 const char *
-plain_errmsg(Connection *conn)
+ts_plain_errmsg(Connection *conn)
 {
 	const char *errmsg = "no connection error";
 
@@ -240,11 +240,11 @@ plain_errmsg(Connection *conn)
 static ConnOps plain_ops = {
 	.size = sizeof(Connection),
 	.init = NULL,
-	.connect = plain_connect,
-	.close = plain_close,
+	.connect = ts_plain_connect,
+	.close = ts_plain_close,
 	.write = plain_write,
 	.read = plain_read,
-	.errmsg = plain_errmsg,
+	.errmsg = ts_plain_errmsg,
 };
 
 extern void _conn_plain_init(void);
@@ -271,7 +271,7 @@ _conn_plain_init(void)
 		return;
 	}
 #endif
-	connection_register(CONNECTION_PLAIN, &plain_ops);
+	ts_connection_register(CONNECTION_PLAIN, &plain_ops);
 }
 
 void

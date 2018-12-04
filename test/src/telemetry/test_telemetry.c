@@ -35,15 +35,15 @@ static char *test_string;
 static HttpRequest *
 build_request(int status)
 {
-	HttpRequest *req = http_request_create(HTTP_GET);
+	HttpRequest *req = ts_http_request_create(HTTP_GET);
 	char		uri[20];
 
 	snprintf(uri, 20, "/status/%d", status);
 
-	http_request_set_uri(req, uri);
-	http_request_set_version(req, HTTP_VERSION_10);
-	http_request_set_header(req, HTTP_HOST, TEST_ENDPOINT);
-	http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
+	ts_http_request_set_uri(req, uri);
+	ts_http_request_set_version(req, HTTP_VERSION_10);
+	ts_http_request_set_header(req, HTTP_HOST, TEST_ENDPOINT);
+	ts_http_request_set_header(req, HTTP_CONTENT_LENGTH, "0");
 	return req;
 }
 
@@ -56,16 +56,16 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	HttpError	err;
 	Datum		json;
 
-	conn = connection_create(type);
+	conn = ts_connection_create(type);
 
 	if (conn == NULL)
 		return CStringGetTextDatum("could not initialize a connection");
 
-	if (connection_connect(conn, host, NULL, port) < 0)
+	if (ts_connection_connect(conn, host, NULL, port) < 0)
 	{
-		const char *err_msg = connection_get_and_clear_error(conn);
+		const char *err_msg = ts_connection_get_and_clear_error(conn);
 
-		connection_destroy(conn);
+		ts_connection_destroy(conn);
 		elog(ERROR, "connection error: %s", err_msg);
 	}
 
@@ -76,23 +76,23 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 	req = build_request(status);
 
-	rsp = http_response_state_create();
+	rsp = ts_http_response_state_create();
 
-	err = http_send_and_recv(conn, req, rsp);
+	err = ts_http_send_and_recv(conn, req, rsp);
 
-	http_request_destroy(req);
-	connection_destroy(conn);
+	ts_http_request_destroy(req);
+	ts_connection_destroy(conn);
 
 	if (err != HTTP_ERROR_NONE)
-		elog(ERROR, "%s", http_strerror(err));
+		elog(ERROR, "%s", ts_http_strerror(err));
 
-	if (!http_response_state_valid_status(rsp))
+	if (!ts_http_response_state_valid_status(rsp))
 		elog(ERROR, "endpoint sent back unexpected HTTP status: %d",
-			 http_response_state_status_code(rsp));
+			 ts_http_response_state_status_code(rsp));
 
-	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(http_response_state_body_start(rsp)));
+	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
 
-	http_response_state_destroy(rsp);
+	ts_http_response_state_destroy(rsp);
 
 	return json;
 }
@@ -149,7 +149,7 @@ ts_test_validate_server_version(PG_FUNCTION_ARGS)
 	text	   *response = PG_GETARG_TEXT_P(0);
 	VersionResult result;
 
-	if (validate_server_version(text_to_cstring(response), &result))
+	if (ts_validate_server_version(text_to_cstring(response), &result))
 		PG_RETURN_TEXT_P(cstring_to_text(result.versionstr));
 
 	PG_RETURN_NULL();
@@ -170,7 +170,7 @@ ts_test_telemetry_main_conn(PG_FUNCTION_ARGS)
 	scheme = "http";
 #endif
 
-	PG_RETURN_BOOL(telemetry_main(text_to_cstring(host), text_to_cstring(path), scheme));
+	PG_RETURN_BOOL(ts_telemetry_main(text_to_cstring(host), text_to_cstring(path), scheme));
 }
 
 Datum
@@ -197,18 +197,18 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 	else
 		elog(ERROR, "invalid service type '%s'", servname);
 
-	conn = connection_create(conntype);
+	conn = ts_connection_create(conntype);
 
 	if (conn == NULL)
 		elog(ERROR, "could not create telemetry connection");
 
-	ret = connection_connect(conn, host, servname, port);
+	ret = ts_connection_connect(conn, host, servname, port);
 
 	if (ret < 0)
 	{
-		const char *errstr = connection_get_and_clear_error(conn);
+		const char *errstr = ts_connection_get_and_clear_error(conn);
 
-		connection_destroy(conn);
+		ts_connection_destroy(conn);
 
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -216,31 +216,31 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 				 errdetail("%s", errstr)));
 	}
 
-	req = build_version_request(host, TELEMETRY_PATH);
+	req = ts_build_version_request(host, TELEMETRY_PATH);
 
-	rsp = http_response_state_create();
+	rsp = ts_http_response_state_create();
 
-	err = http_send_and_recv(conn, req, rsp);
+	err = ts_http_send_and_recv(conn, req, rsp);
 
-	http_request_destroy(req);
-	connection_destroy(conn);
+	ts_http_request_destroy(req);
+	ts_connection_destroy(conn);
 
 	if (err != HTTP_ERROR_NONE)
 	{
-		http_response_state_destroy(rsp);
-		elog(ERROR, "telemetry error: %s", http_strerror(err));
+		ts_http_response_state_destroy(rsp);
+		elog(ERROR, "telemetry error: %s", ts_http_strerror(err));
 	}
 
-	if (!http_response_state_valid_status(rsp))
+	if (!ts_http_response_state_valid_status(rsp))
 	{
-		http_response_state_destroy(rsp);
+		ts_http_response_state_destroy(rsp);
 		elog(ERROR, "telemetry got unexpected HTTP response status: %d",
-			 http_response_state_status_code(rsp));
+			 ts_http_response_state_status_code(rsp));
 	}
 
-	json_body = DirectFunctionCall1(jsonb_in, CStringGetDatum(http_response_state_body_start(rsp)));
+	json_body = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
 
-	http_response_state_destroy(rsp);
+	ts_http_response_state_destroy(rsp);
 
 	PG_RETURN_JSONB(json_body);
 }

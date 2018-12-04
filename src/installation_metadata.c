@@ -98,7 +98,7 @@ installation_metadata_get_value_internal(Datum metadata_key,
 		.typeid = value_type,
 		.isnull = true,
 	};
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, INSTALLATION_METADATA),
 		.index = catalog_get_index(catalog, INSTALLATION_METADATA, INSTALLATION_METADATA_PKEY_IDX),
@@ -113,7 +113,7 @@ installation_metadata_get_value_internal(Datum metadata_key,
 	ScanKeyInit(&scankey[0], Anum_installation_metadata_key,
 				BTEqualStrategyNumber, F_NAMEEQ, convert_type_to_name(metadata_key, key_type));
 
-	scanner_scan(&scanctx);
+	ts_scanner_scan(&scanctx);
 
 	if (NULL != isnull)
 		*isnull = dv.isnull;
@@ -122,10 +122,10 @@ installation_metadata_get_value_internal(Datum metadata_key,
 }
 
 Datum
-installation_metadata_get_value(Datum metadata_key,
-								Oid key_type,
-								Oid value_type,
-								bool *isnull)
+ts_installation_metadata_get_value(Datum metadata_key,
+								   Oid key_type,
+								   Oid value_type,
+								   bool *isnull)
 {
 	return installation_metadata_get_value_internal(metadata_key,
 													key_type,
@@ -143,13 +143,13 @@ installation_metadata_get_value(Datum metadata_key,
  *  the existing value if nothing was inserted.
  */
 Datum
-installation_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid value_type)
+ts_installation_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid value_type)
 {
 	Datum		existing_value;
 	Datum		values[Natts_installation_metadata];
 	bool		nulls[Natts_installation_metadata] = {false};
 	bool		isnull = false;
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	Relation	rel;
 
 	rel = heap_open(catalog_get_table_id(catalog, INSTALLATION_METADATA), ShareRowExclusiveLock);
@@ -173,7 +173,7 @@ installation_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_va
 	values[AttrNumberGetAttrOffset(Anum_installation_metadata_value)] =
 		convert_type_to_text(metadata_value, value_type);
 
-	catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
+	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 
 	heap_close(rel, ShareRowExclusiveLock);
 

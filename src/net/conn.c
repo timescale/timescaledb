@@ -33,7 +33,7 @@ connection_internal_create(ConnectionType type, ConnOps *ops)
 }
 
 Connection *
-connection_create(ConnectionType type)
+ts_connection_create(ConnectionType type)
 {
 	Connection *conn;
 
@@ -67,7 +67,7 @@ connection_create(ConnectionType type)
  * 'servname' (e.g., 'http'), unless a valid port number is given.
  */
 int
-connection_connect(Connection *conn, const char *host, const char *servname, int port)
+ts_connection_connect(Connection *conn, const char *host, const char *servname, int port)
 {
 /* Windows defines 'connect()' as a macro, so we need to undef it here to use it in ops->connect */
 #ifdef WIN32
@@ -77,26 +77,26 @@ connection_connect(Connection *conn, const char *host, const char *servname, int
 }
 
 ssize_t
-connection_write(Connection *conn, const char *buf, size_t writelen)
+ts_connection_write(Connection *conn, const char *buf, size_t writelen)
 {
 	return conn->ops->write(conn, buf, writelen);
 }
 
 ssize_t
-connection_read(Connection *conn, char *buf, size_t buflen)
+ts_connection_read(Connection *conn, char *buf, size_t buflen)
 {
 	return conn->ops->read(conn, buf, buflen);
 }
 
 void
-connection_close(Connection *conn)
+ts_connection_close(Connection *conn)
 {
 	if (NULL != conn->ops)
 		conn->ops->close(conn);
 }
 
 int
-connection_set_timeout_millis(Connection *conn, unsigned long millis)
+ts_connection_set_timeout_millis(Connection *conn, unsigned long millis)
 {
 	if (NULL != conn->ops->set_timeout)
 		return conn->ops->set_timeout(conn, millis);
@@ -105,18 +105,18 @@ connection_set_timeout_millis(Connection *conn, unsigned long millis)
 }
 
 void
-connection_destroy(Connection *conn)
+ts_connection_destroy(Connection *conn)
 {
 	if (conn == NULL)
 		return;
 
-	connection_close(conn);
+	ts_connection_close(conn);
 	conn->ops = NULL;
 	pfree(conn);
 }
 
 int
-connection_register(ConnectionType type, ConnOps *ops)
+ts_connection_register(ConnectionType type, ConnOps *ops)
 {
 	if (type == _CONNECTION_MAX)
 		return -1;
@@ -127,7 +127,7 @@ connection_register(ConnectionType type, ConnOps *ops)
 }
 
 const char *
-connection_get_and_clear_error(Connection *conn)
+ts_connection_get_and_clear_error(Connection *conn)
 {
 	if (NULL != conn->ops->errmsg)
 		return conn->ops->errmsg(conn);

@@ -18,6 +18,6 @@ typedef struct VersionOSInfo
 	char		release[VERSION_INFO_LEN];
 } VersionOSInfo;
 
-extern bool version_get_os_info(VersionOSInfo *info);
+extern bool ts_version_get_os_info(VersionOSInfo *info);
 
 #endif							/* TIMESCALEDB_VERSION_H */

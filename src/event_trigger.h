@@ -60,8 +60,8 @@ typedef struct EventTriggerDropTrigger
 	char	   *table;
 } EventTriggerDropTrigger;
 
-extern List *event_trigger_dropped_objects(void);
-extern List *event_trigger_ddl_commands(void);
+extern List *ts_event_trigger_dropped_objects(void);
+extern List *ts_event_trigger_ddl_commands(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
 

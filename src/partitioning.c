@@ -74,7 +74,7 @@ partitioning_func_get(const char *schema, const char *funcname)
 }
 
 bool
-partitioning_func_is_valid(regproc funcoid)
+ts_partitioning_func_is_valid(regproc funcoid)
 {
 	HeapTuple	tuple;
 	bool		isvalid;
@@ -92,14 +92,14 @@ partitioning_func_is_valid(regproc funcoid)
 }
 
 Oid
-partitioning_func_get_default(void)
+ts_partitioning_func_get_default(void)
 {
 	return partitioning_func_get(DEFAULT_PARTITIONING_FUNC_SCHEMA,
 								 DEFAULT_PARTITIONING_FUNC_NAME);
 }
 
 bool
-partitioning_func_is_default(const char *schema, const char *funcname)
+ts_partitioning_func_is_default(const char *schema, const char *funcname)
 {
 	Assert(schema != NULL && funcname != NULL);
 
@@ -125,7 +125,7 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf)
 }
 
 List *
-partitioning_func_qualified_name(PartitioningFunc *pf)
+ts_partitioning_func_qualified_name(PartitioningFunc *pf)
 {
 	return list_make2(makeString(pf->schema), makeString(pf->name));
 }
@@ -152,10 +152,10 @@ find_text_coercion_func(Oid type)
 #define TYPECACHE_HASH_FLAGS (TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO)
 
 PartitioningInfo *
-partitioning_info_create(const char *schema,
-						 const char *partfunc,
-						 const char *partcol,
-						 Oid relid)
+ts_partitioning_info_create(const char *schema,
+							const char *partfunc,
+							const char *partcol,
+							Oid relid)
 {
 	PartitioningInfo *pinfo;
 	TypeCacheEntry *tce;
@@ -186,7 +186,7 @@ partitioning_info_create(const char *schema,
 	columntype = get_atttype(relid, pinfo->column_attnum);
 	tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-	if (tce->hash_proc == InvalidOid && partitioning_func_is_default(schema, partfunc))
+	if (tce->hash_proc == InvalidOid && ts_partitioning_func_is_default(schema, partfunc))
 		elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
 
 	partitioning_func_set_func_fmgr(&pinfo->partfunc);
@@ -219,13 +219,13 @@ partitioning_info_create(const char *schema,
  * We support partitioning functions with the signature (anyelement) -> int.
  */
 int32
-partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
+ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
 	return DatumGetInt32(FunctionCall1(&pinfo->partfunc.func_fmgr, value));
 }
 
 int32
-partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc)
+ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc)
 {
 	Datum		value;
 	bool		isnull;
@@ -235,7 +235,7 @@ partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDes
 	if (isnull)
 		return 0;
 
-	return partitioning_func_apply(pinfo, value);
+	return ts_partitioning_func_apply(pinfo, value);
 }
 
 /*

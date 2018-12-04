@@ -16,18 +16,18 @@
 #define NEW_LINE	'\n'
 
 /*  So that http_response.c can find this function */
-HttpHeader *http_header_create(const char *name,
-				   size_t name_len,
-				   const char *value,
-				   size_t value_len,
-				   HttpHeader *next);
+HttpHeader *ts_http_header_create(const char *name,
+					  size_t name_len,
+					  const char *value,
+					  size_t value_len,
+					  HttpHeader *next);
 
 HttpHeader *
-http_header_create(const char *name,
-				   size_t name_len,
-				   const char *value,
-				   size_t value_len,
-				   HttpHeader *next)
+ts_http_header_create(const char *name,
+					  size_t name_len,
+					  const char *value,
+					  size_t value_len,
+					  HttpHeader *next)
 {
 	HttpHeader *new_header = palloc(sizeof(HttpHeader));
 
@@ -66,16 +66,16 @@ static const char *http_method_strings[] = {
 };
 
 #define METHOD_STRING(x)	http_method_strings[x]
-#define VERSION_STRING(x)	http_version_string(x)
+#define VERSION_STRING(x)	ts_http_version_string(x)
 
 void
-http_request_init(HttpRequest *req, HttpRequestMethod method)
+ts_http_request_init(HttpRequest *req, HttpRequestMethod method)
 {
 	req->method = method;
 }
 
 HttpRequest *
-http_request_create(HttpRequestMethod method)
+ts_http_request_create(HttpRequestMethod method)
 {
 	MemoryContext request_context = AllocSetContextCreate(CurrentMemoryContext,
 														  "Http Request",
@@ -84,20 +84,20 @@ http_request_create(HttpRequestMethod method)
 	HttpRequest *req = palloc0(sizeof(HttpRequest));
 
 	req->context = request_context;
-	http_request_init(req, method);
+	ts_http_request_init(req, method);
 
 	MemoryContextSwitchTo(old);
 	return req;
 }
 
 void
-http_request_destroy(HttpRequest *req)
+ts_http_request_destroy(HttpRequest *req)
 {
 	MemoryContextDelete(req->context);
 }
 
 void
-http_request_set_uri(HttpRequest *req, const char *uri)
+ts_http_request_set_uri(HttpRequest *req, const char *uri)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
 	int			uri_len = strlen(uri);
@@ -110,26 +110,26 @@ http_request_set_uri(HttpRequest *req, const char *uri)
 }
 
 void
-http_request_set_version(HttpRequest *req, HttpVersion version)
+ts_http_request_set_version(HttpRequest *req, HttpVersion version)
 {
 	req->version = version;
 }
 
 void
-http_request_set_header(HttpRequest *req, const char *name, const char *value)
+ts_http_request_set_header(HttpRequest *req, const char *name, const char *value)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
 	int			name_len = strlen(name);
 	int			value_len = strlen(value);
 	HttpHeader *new_header =
-	http_header_create(name, name_len, value, value_len, req->headers);
+	ts_http_header_create(name, name_len, value, value_len, req->headers);
 
 	req->headers = new_header;
 	MemoryContextSwitchTo(old);
 }
 
 void
-http_request_set_body(HttpRequest *req, const char *body, size_t body_len)
+ts_http_request_set_body(HttpRequest *req, const char *body, size_t body_len)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
 
@@ -194,7 +194,7 @@ http_header_get_content_length(HttpHeader *header)
 }
 
 const char *
-http_request_build(HttpRequest *req, size_t *buf_size)
+ts_http_request_build(HttpRequest *req, size_t *buf_size)
 {
 	/* serialize into this buf, which is allocated on caller's memory context */
 	StringInfoData buf;

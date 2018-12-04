@@ -18,17 +18,17 @@
  * manipulations.
  */
 
-extern void make_inh_translation_list(Relation oldrelation, Relation newrelation,
-						  Index newvarno,
-						  List **translated_vars);
-size_t estimate_hashagg_tablesize(struct Path *path,
-						   const struct AggClauseCosts *agg_costs,
-						   double dNumGroups);
+extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
+							 Index newvarno,
+							 List **translated_vars);
+extern size_t ts_estimate_hashagg_tablesize(struct Path *path,
+							  const struct AggClauseCosts *agg_costs,
+							  double dNumGroups);
 
-struct PathTarget *make_partial_grouping_target(struct PlannerInfo *root,
-							 PathTarget *grouping_target);
+extern struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *root,
+								PathTarget *grouping_target);
 
-bool get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-				   Datum *min, Datum *max);
+extern bool ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
+					  Datum *min, Datum *max);
 
 #endif							/* TIMESCALEDB_PLANNER_IMPORT_H */

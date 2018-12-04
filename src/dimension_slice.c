@@ -53,7 +53,7 @@ dimension_slice_from_tuple(HeapTuple tuple)
 }
 
 DimensionSlice *
-dimension_slice_create(int dimension_id, int64 range_start, int64 range_end)
+ts_dimension_slice_create(int dimension_id, int64 range_start, int64 range_end)
 {
 	DimensionSlice *slice = dimension_slice_alloc();
 
@@ -65,7 +65,7 @@ dimension_slice_create(int dimension_id, int64 range_start, int64 range_end)
 }
 
 int
-dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right)
+ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right)
 {
 	if (left->fd.range_start == right->fd.range_start)
 	{
@@ -86,7 +86,7 @@ dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right)
 
 
 int
-dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
+ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
 {
 	coord = REMAP_LAST_COORDINATE(coord);
 	if (coord < slice->fd.range_start)
@@ -110,7 +110,7 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 	DimensionVec **slices = data;
 	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
 
-	*slices = dimension_vec_add_slice(slices, slice);
+	*slices = ts_dimension_vec_add_slice(slices, slice);
 
 	return SCAN_CONTINUE;
 }
@@ -126,7 +126,7 @@ dimension_slice_scan_limit_direction_internal(int indexid,
 											  LOCKMODE lockmode,
 											  MemoryContext mctx)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, DIMENSION_SLICE),
 		.index = catalog_get_index(catalog, DIMENSION_SLICE, indexid),
@@ -140,7 +140,7 @@ dimension_slice_scan_limit_direction_internal(int indexid,
 		.result_mctx = mctx,
 	};
 
-	return scanner_scan(&scanctx);
+	return ts_scanner_scan(&scanctx);
 }
 
 
@@ -171,10 +171,10 @@ dimension_slice_scan_limit_internal(int indexid,
  * Returns a dimension vector of slices that enclose the coordinate.
  */
 DimensionVec *
-dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
+ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 {
 	ScanKeyData scankey[3];
-	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
 	coordinate = REMAP_LAST_COORDINATE(coordinate);
 
@@ -198,7 +198,7 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 										AccessShareLock,
 										CurrentMemoryContext);
 
-	return dimension_vec_sort(&slices);
+	return ts_dimension_vec_sort(&slices);
 }
 
 /*
@@ -206,10 +206,10 @@ dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
  *
  */
 DimensionVec *
-dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit)
+ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit)
 {
 	ScanKeyData scankey[3];
-	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 	int			nkeys = 1;
 
 	/*
@@ -277,7 +277,7 @@ dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strate
 										AccessShareLock,
 										CurrentMemoryContext);
 
-	return dimension_vec_sort(&slices);
+	return ts_dimension_vec_sort(&slices);
 }
 
 /*
@@ -286,10 +286,10 @@ dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strate
  * Returns a dimension vector of colliding slices.
  */
 DimensionVec *
-dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit)
+ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int64 range_end, int limit)
 {
 	ScanKeyData scankey[3];
-	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
@@ -307,14 +307,14 @@ dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, int6
 										AccessShareLock,
 										CurrentMemoryContext);
 
-	return dimension_vec_sort(&slices);
+	return ts_dimension_vec_sort(&slices);
 }
 
 DimensionVec *
-dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
+ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 {
 	ScanKeyData scankey[1];
-	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
@@ -328,7 +328,7 @@ dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 										AccessShareLock,
 										CurrentMemoryContext);
 
-	return dimension_vec_sort(&slices);
+	return ts_dimension_vec_sort(&slices);
 }
 
 /*
@@ -338,10 +338,10 @@ dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
  * the returned dimension vector is allocated on the current memory context.
  */
 DimensionVec *
-dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, int limit, ScanDirection scandir, MemoryContext mctx)
+ts_dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, int limit, ScanDirection scandir, MemoryContext mctx)
 {
 	ScanKeyData scankey[3];
-	DimensionVec *slices = dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
 	ScanKeyInit(&scankey[0], Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(dimension_id));
@@ -360,7 +360,7 @@ dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, 
 												  AccessShareLock,
 												  mctx);
 
-	return dimension_vec_sort(&slices);
+	return ts_dimension_vec_sort(&slices);
 }
 
 static ScanTupleResult
@@ -375,17 +375,17 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 
 	/* delete chunk constraints */
 	if (NULL != delete_constraints && *delete_constraints)
-		chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
+		ts_chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
 
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
-	catalog_delete(ti->scanrel, ti->tuple);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
 
 int
-dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints)
+ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints)
 {
 	ScanKeyData scankey[1];
 
@@ -406,7 +406,7 @@ dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constrain
 }
 
 int
-dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
+ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
 {
 	ScanKeyData scankey[1];
 
@@ -440,7 +440,7 @@ dimension_slice_fill(TupleInfo *ti, void *data)
  * and range. If a match is found, the given slice is updated with slice ID.
  */
 DimensionSlice *
-dimension_slice_scan_for_existing(DimensionSlice *slice)
+ts_dimension_slice_scan_for_existing(DimensionSlice *slice)
 {
 	ScanKeyData scankey[3];
 
@@ -470,7 +470,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 }
 
 DimensionSlice *
-dimension_slice_scan_by_id(int32 dimension_slice_id, MemoryContext mctx)
+ts_dimension_slice_scan_by_id(int32 dimension_slice_id, MemoryContext mctx)
 {
 	DimensionSlice *slice = NULL;
 	ScanKeyData scankey[1];
@@ -491,7 +491,7 @@ dimension_slice_scan_by_id(int32 dimension_slice_id, MemoryContext mctx)
 }
 
 DimensionSlice *
-dimension_slice_copy(const DimensionSlice *original)
+ts_dimension_slice_copy(const DimensionSlice *original)
 {
 	DimensionSlice *new = palloc(sizeof(DimensionSlice));
 
@@ -509,7 +509,7 @@ dimension_slice_copy(const DimensionSlice *original)
  * Returns true if the slices collide, otherwise false.
  */
 bool
-dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
+ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
 {
 	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);
 
@@ -526,7 +526,7 @@ dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
  * Returns true if the slices have identical ranges, otherwise false.
  */
 bool
-dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2)
+ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2)
 {
 	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);
 
@@ -551,7 +551,7 @@ dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2)
  * Returns true if the slice was cut, otherwise false.
  */
 bool
-dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
+ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 {
 	Assert(to_cut->fd.dimension_id == other->fd.dimension_id);
 
@@ -578,7 +578,7 @@ dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
 }
 
 void
-dimension_slice_free(DimensionSlice *slice)
+ts_dimension_slice_free(DimensionSlice *slice)
 {
 	if (slice->storage_free != NULL)
 		slice->storage_free(slice->storage);
@@ -597,16 +597,16 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 		/* Slice already exists in table */
 		return false;
 
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
-	slice->fd.id = catalog_table_next_seq_id(catalog_get(), DIMENSION_SLICE);
+	slice->fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION_SLICE);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(slice->fd.id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)] = Int32GetDatum(slice->fd.dimension_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] = Int64GetDatum(slice->fd.range_start);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)] = Int64GetDatum(slice->fd.range_end);
 
-	catalog_insert_values(rel, desc, values, nulls);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
 
 	return true;
 }
@@ -615,9 +615,9 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
  * Insert slices into the catalog.
  */
 void
-dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
+ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	Relation	rel;
 	Size		i;
 

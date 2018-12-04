@@ -10,6 +10,6 @@
 #include <postgres.h>
 #include <utils/uuid.h>
 
-extern pg_uuid_t *uuid_create(void);
+extern pg_uuid_t *ts_uuid_create(void);
 
 #endif							/* TIMESCALEDB_TELEMETRY_UUID_H */

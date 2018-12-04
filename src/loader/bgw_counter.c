@@ -20,7 +20,7 @@
 
 #define BGW_COUNTER_STATE_NAME "ts_bgw_counter_state"
 
-int			guc_max_background_workers = 8;
+int			ts_guc_max_background_workers = 8;
 
 /*
  * We need a bit of shared state here to deal with keeping track of the total
@@ -60,14 +60,14 @@ bgw_counter_state_init()
 }
 
 extern void
-bgw_counter_setup_gucs(void)
+ts_bgw_counter_setup_gucs(void)
 {
 
 	DefineCustomIntVariable("timescaledb.max_background_workers",
 							"Maximum background worker processes allocated to TimescaleDB",
 							"Max background worker processes allocated to TimescaleDB - set to at least 1 + number of databases in Postgres instance to use background workers ",
-							&guc_max_background_workers,
-							guc_max_background_workers,
+							&ts_guc_max_background_workers,
+							ts_guc_max_background_workers,
 							0,
 							1000,	/* no reasonable way to have more than
 									 * 1000 background workers */
@@ -83,19 +83,19 @@ bgw_counter_setup_gucs(void)
  * shared_preload_libraries time
  */
 extern void
-bgw_counter_shmem_alloc(void)
+ts_bgw_counter_shmem_alloc(void)
 {
 	RequestAddinShmemSpace(sizeof(CounterState));
 }
 
 extern void
-bgw_counter_shmem_startup(void)
+ts_bgw_counter_shmem_startup(void)
 {
 	bgw_counter_state_init();
 }
 
 extern void
-bgw_counter_reinit(void)
+ts_bgw_counter_reinit(void)
 {
 	/* set counter back to zero on startup */
 	SpinLockAcquire(&ct->mutex);
@@ -104,10 +104,10 @@ bgw_counter_reinit(void)
 }
 
 extern bool
-bgw_total_workers_increment_by(int increment_by)
+ts_bgw_total_workers_increment_by(int increment_by)
 {
 	bool		incremented = false;
-	int			max_workers = guc_max_background_workers;
+	int			max_workers = ts_guc_max_background_workers;
 
 	SpinLockAcquire(&ct->mutex);
 	if (ct->total_workers + increment_by <= max_workers)
@@ -120,13 +120,13 @@ bgw_total_workers_increment_by(int increment_by)
 }
 
 extern bool
-bgw_total_workers_increment()
+ts_bgw_total_workers_increment()
 {
-	return bgw_total_workers_increment_by(1);
+	return ts_bgw_total_workers_increment_by(1);
 }
 
 extern void
-bgw_total_workers_decrement_by(int decrement_by)
+ts_bgw_total_workers_decrement_by(int decrement_by)
 {
 	/*
 	 * Launcher is 1 worker, and when it dies we reinitialize, so we should
@@ -147,13 +147,13 @@ bgw_total_workers_decrement_by(int decrement_by)
 }
 
 extern void
-bgw_total_workers_decrement()
+ts_bgw_total_workers_decrement()
 {
-	bgw_total_workers_decrement_by(1);
+	ts_bgw_total_workers_decrement_by(1);
 }
 
 extern int
-bgw_total_workers_get()
+ts_bgw_total_workers_get()
 {
 	int			nworkers;
 

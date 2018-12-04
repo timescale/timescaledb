@@ -19,7 +19,7 @@
 static char *application_name = "unset";
 
 void
-bgw_log_set_application_name(char *name)
+ts_bgw_log_set_application_name(char *name)
 {
 	application_name = name;
 }
@@ -33,11 +33,11 @@ bgw_log_insert_relation(Relation rel, char *msg)
 	bool		nulls[4] = {false, false, false};
 
 	values[0] = Int32GetDatum(msg_no++);
-	values[1] = Int64GetDatum((int64) params_get()->current_time);
+	values[1] = Int64GetDatum((int64) ts_params_get()->current_time);
 	values[2] = CStringGetTextDatum(application_name);
 	values[3] = CStringGetTextDatum(msg);
 
-	catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_insert_values(rel, desc, values, nulls);
 
 	return true;
 }
@@ -111,7 +111,7 @@ emit_log_hook_callback(ErrorData *edata)
 }
 
 void
-register_emit_log_hook()
+ts_register_emit_log_hook()
 {
 	prev_emit_log_hook = emit_log_hook;
 	emit_log_hook = emit_log_hook_callback;

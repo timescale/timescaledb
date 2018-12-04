@@ -111,7 +111,7 @@ ssl_connect(Connection *conn, const char *host, const char *servname, int port)
 	int			ret;
 
 	/* First do the base connection setup */
-	ret = plain_connect(conn, host, servname, port);
+	ret = ts_plain_connect(conn, host, servname, port);
 
 	if (ret < 0)
 		return -1;
@@ -162,7 +162,7 @@ ssl_close(Connection *conn)
 		sslconn->ssl_ctx = NULL;
 	}
 
-	plain_close(conn);
+	ts_plain_close(conn);
 }
 
 static const char *
@@ -209,7 +209,7 @@ ssl_errmsg(Connection *conn)
 					{
 						/* reset error for plan_errmsg() */
 						conn->err = err;
-						return plain_errmsg(conn);
+						return ts_plain_errmsg(conn);
 					}
 					else
 						return "unknown SSL syscall error";
@@ -227,7 +227,7 @@ ssl_errmsg(Connection *conn)
 		{
 			/* reset error for plan_errmsg() */
 			conn->err = err;
-			return plain_errmsg(conn);
+			return ts_plain_errmsg(conn);
 		}
 
 		return "no SSL error";
@@ -250,7 +250,7 @@ static ConnOps ssl_ops = {
 	.close = ssl_close,
 	.write = ssl_write,
 	.read = ssl_read,
-	.set_timeout = plain_set_timeout,
+	.set_timeout = ts_plain_set_timeout,
 	.errmsg = ssl_errmsg,
 };
 
@@ -263,7 +263,7 @@ _conn_ssl_init(void)
 	SSL_library_init();
 	/* Always returns 1 */
 	SSL_load_error_strings();
-	connection_register(CONNECTION_SSL, &ssl_ops);
+	ts_connection_register(CONNECTION_SSL, &ssl_ops);
 }
 
 void

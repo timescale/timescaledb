@@ -28,13 +28,13 @@ static const char *http_version_strings[] = {
 };
 
 const char *
-http_strerror(HttpError http_errno)
+ts_http_strerror(HttpError http_errno)
 {
 	return http_error_strings[http_errno];
 }
 
 HttpVersion
-http_version_from_string(const char *version)
+ts_http_version_from_string(const char *version)
 {
 	int			i;
 
@@ -46,7 +46,7 @@ http_version_from_string(const char *version)
 }
 
 const char *
-http_version_string(HttpVersion version)
+ts_http_version_string(HttpVersion version)
 {
 	return http_version_strings[version];
 }
@@ -57,7 +57,7 @@ http_version_string(HttpVersion version)
  * Returns HTTP_ERROR_NONE (0) on success or a HTTP-specfic error on failure.
  */
 HttpError
-http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state)
+ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state)
 {
 	const char *built_request;
 	size_t		request_len;
@@ -65,14 +65,14 @@ http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state)
 	HttpError	err = HTTP_ERROR_NONE;
 	int			ret;
 
-	built_request = http_request_build(req, &request_len);
+	built_request = ts_http_request_build(req, &request_len);
 
 	if (NULL == built_request)
 		return HTTP_ERROR_REQUEST_BUILD;
 
 	while (request_len > 0)
 	{
-		ret = connection_write(conn, built_request + write_off, request_len);
+		ret = ts_connection_write(conn, built_request + write_off, request_len);
 
 		if (ret < 0 || ret > request_len)
 			return HTTP_ERROR_WRITE;
@@ -84,10 +84,10 @@ http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state)
 		request_len -= ret;
 	}
 
-	while (err == HTTP_ERROR_NONE && !http_response_state_is_done(state))
+	while (err == HTTP_ERROR_NONE && !ts_http_response_state_is_done(state))
 	{
 		ssize_t		remaining = 0;
-		char	   *buf = http_response_state_next_buffer(state, &remaining);
+		char	   *buf = ts_http_response_state_next_buffer(state, &remaining);
 
 		if (remaining < 0)
 			err = HTTP_ERROR_INVALID_BUFFER_STATE;
@@ -95,14 +95,14 @@ http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state)
 			err = HTTP_ERROR_RESPONSE_INCOMPLETE;
 		else
 		{
-			ssize_t		bytes_read = connection_read(conn, buf, remaining);
+			ssize_t		bytes_read = ts_connection_read(conn, buf, remaining);
 
 			if (bytes_read < 0)
 				err = HTTP_ERROR_READ;
 			/* Check for error or closed socket/EOF (ret == 0) */
 			else if (bytes_read == 0)
 				err = HTTP_ERROR_CONN_CLOSED;
-			else if (!http_response_state_parse(state, bytes_read))
+			else if (!ts_http_response_state_parse(state, bytes_read))
 				err = HTTP_ERROR_RESPONSE_PARSE;
 		}
 	}

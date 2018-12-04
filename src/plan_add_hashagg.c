@@ -184,7 +184,7 @@ static void
 initialize_custom_estimate_func_info()
 {
 	int			i = 0;
-	Oid			extension_schema = extension_schema_oid();
+	Oid			extension_schema = ts_extension_schema_oid();
 	char	   *extension_schema_name = get_namespace_name(extension_schema);
 
 
@@ -263,14 +263,14 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 
 	examine_variable(root, (Node *) var, 0, &vardata);
 	get_sort_group_operators(var->vartype, true, false, false, &ltop, NULL, NULL, NULL);
-	valid = get_variable_range(root, &vardata, ltop, &min_datum, &max_datum);
+	valid = ts_get_variable_range(root, &vardata, ltop, &min_datum, &max_datum);
 	ReleaseVariableStats(vardata);
 
 	if (!valid)
 		return INVALID_ESTIMATE;
 
-	max = time_value_to_internal(max_datum, var->vartype, true);
-	min = time_value_to_internal(min_datum, var->vartype, true);
+	max = ts_time_value_to_internal(max_datum, var->vartype, true);
+	min = ts_time_value_to_internal(min_datum, var->vartype, true);
 
 	if (max < 0 || min < 0)
 		return INVALID_ESTIMATE;
@@ -366,7 +366,7 @@ custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr, double path
 			period = (double) DatumGetInt64(c->constvalue);
 			break;
 		case INTERVALOID:
-			period = (double) get_interval_period_approx(DatumGetIntervalP(c->constvalue));
+			period = (double) ts_get_interval_period_approx(DatumGetIntervalP(c->constvalue));
 			break;
 		default:
 			return INVALID_ESTIMATE;
@@ -391,7 +391,7 @@ custom_group_estimate_date_trunc(PlannerInfo *root, FuncExpr *expr, double path_
 
 	c = (Const *) first_arg;
 	interval = DatumGetTextPP(c->constvalue);
-	return custom_group_estimate_expr_interval(root, second_arg, (double) date_trunc_interval_period_approx(interval));
+	return custom_group_estimate_expr_interval(root, second_arg, (double) ts_date_trunc_interval_period_approx(interval));
 }
 
 /* if performing integer division number of groups is less than the spread divided by the divisor.
@@ -524,7 +524,7 @@ plan_add_parallel_hashagg(PlannerInfo *root,
 	Query	   *parse = root->parse;
 	Path	   *cheapest_partial_path = linitial(input_rel->partial_pathlist);
 	PathTarget *target = root->upper_targets[UPPERREL_GROUP_AGG];
-	PathTarget *partial_grouping_target = make_partial_grouping_target(root, target);
+	PathTarget *partial_grouping_target = ts_make_partial_grouping_target(root, target);
 	AggClauseCosts agg_partial_costs;
 	AggClauseCosts agg_final_costs;
 	Size		hashagg_table_size;
@@ -558,9 +558,9 @@ plan_add_parallel_hashagg(PlannerInfo *root,
 	}
 
 	hashagg_table_size =
-		estimate_hashagg_tablesize(cheapest_partial_path,
-								   &agg_partial_costs,
-								   d_num_partial_groups);
+		ts_estimate_hashagg_tablesize(cheapest_partial_path,
+									  &agg_partial_costs,
+									  d_num_partial_groups);
 
 	/*
 	 * Tentatively produce a partial HashAgg Path, depending on if it looks as
@@ -612,9 +612,9 @@ plan_add_parallel_hashagg(PlannerInfo *root,
  * it looks like a highly modified create_grouping_paths function
  * in the postgres planner. */
 void
-plan_add_hashagg(PlannerInfo *root,
-				 RelOptInfo *input_rel,
-				 RelOptInfo *output_rel)
+ts_plan_add_hashagg(PlannerInfo *root,
+					RelOptInfo *input_rel,
+					RelOptInfo *output_rel)
 {
 	Query	   *parse = root->parse;
 	Path	   *cheapest_path = input_rel->cheapest_total_path;
@@ -649,9 +649,9 @@ plan_add_hashagg(PlannerInfo *root,
 	if (!IS_VALID_ESTIMATE(d_num_groups))
 		return;
 
-	hashaggtablesize = estimate_hashagg_tablesize(cheapest_path,
-												  &agg_costs,
-												  d_num_groups);
+	hashaggtablesize = ts_estimate_hashagg_tablesize(cheapest_path,
+													 &agg_costs,
+													 d_num_groups);
 
 	if (hashaggtablesize >= work_mem * 1024L)
 		return;

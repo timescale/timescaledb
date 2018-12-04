@@ -99,9 +99,9 @@ create_chunk_range_table_entry(ChunkDispatch *dispatch, Relation rel)
  * chunks can have different attnums for columns.
  */
 HeapTuple
-chunk_insert_state_convert_tuple(ChunkInsertState *state,
-								 HeapTuple tuple,
-								 TupleTableSlot **existing_slot)
+ts_chunk_insert_state_convert_tuple(ChunkInsertState *state,
+									HeapTuple tuple,
+									TupleTableSlot **existing_slot)
 {
 	Relation	chunkrel = state->result_relation_info->ri_RelationDesc;
 
@@ -435,8 +435,8 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
 	foreach(lc, dispatch->arbiter_indexes)
 	{
 		Oid			hypertable_index = lfirst_oid(lc);
-		Chunk	   *chunk = chunk_get_by_relid(RelationGetRelid(chunk_rel), 0, true);
-		ChunkIndexMapping *cim = chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index);
+		Chunk	   *chunk = ts_chunk_get_by_relid(RelationGetRelid(chunk_rel), 0, true);
+		ChunkIndexMapping *cim = ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index);
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim->indexoid);
 	}
@@ -449,7 +449,7 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
+ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
 	Relation	rel,
@@ -529,7 +529,7 @@ chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 }
 
 extern void
-chunk_insert_state_destroy(ChunkInsertState *state)
+ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
 	if (state == NULL)
 		return;

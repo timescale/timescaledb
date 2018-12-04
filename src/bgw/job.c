@@ -33,7 +33,7 @@ static unknown_job_type_hook_type unknown_job_type_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 
 BackgroundWorkerHandle *
-bgw_start_worker(const char *function, const char *name, const char *extra)
+ts_bgw_start_worker(const char *function, const char *name, const char *extra)
 {
 	BackgroundWorker worker = {
 		.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION,
@@ -45,7 +45,7 @@ bgw_start_worker(const char *function, const char *name, const char *extra)
 	BackgroundWorkerHandle *handle = NULL;
 
 	StrNCpy(worker.bgw_name, name, BGW_MAXLEN);
-	StrNCpy(worker.bgw_library_name, extension_get_so_name(), BGW_MAXLEN);
+	StrNCpy(worker.bgw_library_name, ts_extension_get_so_name(), BGW_MAXLEN);
 	StrNCpy(worker.bgw_function_name, function, BGW_MAXLEN);
 
 	Assert(strlen(extra) < BGW_EXTRALEN);
@@ -57,13 +57,13 @@ bgw_start_worker(const char *function, const char *name, const char *extra)
 }
 
 BackgroundWorkerHandle *
-bgw_job_start(BgwJob *job)
+ts_bgw_job_start(BgwJob *job)
 {
 	char	   *job_id_text;
 
 	job_id_text = DatumGetCString(DirectFunctionCall1(int4out, Int32GetDatum(job->fd.id)));
 
-	return bgw_start_worker(job_entrypoint_function_name, NameStr(job->fd.application_name), job_id_text);
+	return ts_bgw_start_worker(job_entrypoint_function_name, NameStr(job->fd.application_name), job_id_text);
 }
 
 static JobType
@@ -87,7 +87,7 @@ bgw_job_from_tuple(HeapTuple tuple, size_t alloc_size, MemoryContext mctx)
 	 * the STRUCT_FROM_TUPLE macro
 	 */
 	Assert(alloc_size >= sizeof(BgwJob));
-	job = (BgwJob *) create_struct_from_tuple(tuple, mctx, alloc_size, sizeof(FormData_bgw_job));
+	job = (BgwJob *) ts_create_struct_from_tuple(tuple, mctx, alloc_size, sizeof(FormData_bgw_job));
 	job->bgw_type = get_job_type_from_name(&job->fd.job_type);
 
 	return job;
@@ -114,9 +114,9 @@ bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 
 
 extern List *
-bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
+ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	AccumData	list_data = {
 		.list = NIL,
 		.alloc_size = alloc_size,
@@ -131,7 +131,7 @@ bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.result_mctx = mctx,
 	};
 
-	scanner_scan(&scanctx);
+	ts_scanner_scan(&scanctx);
 	return list_data.list;
 }
 
@@ -139,7 +139,7 @@ static void
 bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 				 tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, MemoryContext mctx, LOCKMODE lockmode)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, BGW_JOB),
 		.index = catalog_get_index(catalog, BGW_JOB, indexid),
@@ -153,7 +153,7 @@ bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 		.result_mctx = mctx,
 	};
 
-	scanner_scan_one(&scanctx, true, "bgw job");
+	ts_scanner_scan_one(&scanctx, true, "bgw job");
 }
 
 static inline void
@@ -184,7 +184,7 @@ bgw_job_tuple_found(TupleInfo *ti, void *const data)
 }
 
 BgwJob *
-bgw_job_find(int32 bgw_job_id, MemoryContext mctx)
+ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx)
 {
 	BgwJob	   *job_stat = NULL;
 
@@ -199,11 +199,11 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 
 	/* Also delete the bgw_stat entry */
-	bgw_job_stat_delete(((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id);
+	ts_bgw_job_stat_delete(((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id);
 
-	catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
-	catalog_delete(ti->scanrel, ti->tuple);
-	catalog_restore_user(&sec_ctx);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
 }
@@ -211,7 +211,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 static bool
 bgw_job_delete_scan(ScanKeyData *scankey)
 {
-	Catalog    *catalog = catalog_get();
+	Catalog    *catalog = ts_catalog_get();
 
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, BGW_JOB),
@@ -231,11 +231,11 @@ bgw_job_delete_scan(ScanKeyData *scankey)
 		}
 	};
 
-	return scanner_scan(&scanctx);
+	return ts_scanner_scan(&scanctx);
 }
 
 bool
-bgw_job_delete_by_id(int32 job_id)
+ts_bgw_job_delete_by_id_internal(int32 job_id)
 {
 	ScanKeyData scankey[1];
 
@@ -247,7 +247,7 @@ bgw_job_delete_by_id(int32 job_id)
 }
 
 bool
-bgw_job_execute(BgwJob *job)
+ts_bgw_job_execute(BgwJob *job)
 {
 	switch (job->bgw_type)
 	{
@@ -260,7 +260,7 @@ bgw_job_execute(BgwJob *job)
 				 */
 				Interval   *one_hour = DatumGetIntervalP(DirectFunctionCall7(make_interval, Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(1), Int32GetDatum(0), Float8GetDatum(0)));
 
-				return bgw_job_run_and_set_next_start(job, telemetry_main_wrapper, TELEMETRY_INITIAL_NUM_RUNS, one_hour);
+				return ts_bgw_job_run_and_set_next_start(job, ts_telemetry_main_wrapper, TELEMETRY_INITIAL_NUM_RUNS, one_hour);
 			}
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)
@@ -276,7 +276,7 @@ bgw_job_execute(BgwJob *job)
 }
 
 bool
-bgw_job_has_timeout(BgwJob *job)
+ts_bgw_job_has_timeout(BgwJob *job)
 {
 	Interval	zero_val = {.time = 0,};
 
@@ -285,7 +285,7 @@ bgw_job_has_timeout(BgwJob *job)
 
 /* Return the timestamp at which to kill the job due to a timeout */
 TimestampTz
-bgw_job_timeout_at(BgwJob *job, TimestampTz start_time)
+ts_bgw_job_timeout_at(BgwJob *job, TimestampTz start_time)
 {
 	/* timestamptz plus interval */
 	return DatumGetTimestampTz(DirectFunctionCall2(
@@ -335,7 +335,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	BackgroundWorkerInitializeConnectionByOid(db_oid, InvalidOid);
 
 	StartTransactionCommand();
-	job = bgw_job_find(job_id, TopMemoryContext);
+	job = ts_bgw_job_find(job_id, TopMemoryContext);
 	CommitTransactionCommand();
 
 	if (job == NULL)
@@ -345,7 +345,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	PG_TRY();
 	{
-		res = bgw_job_execute(job);
+		res = ts_bgw_job_execute(job);
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
 			elog(ERROR, "TimescaleDB background job \"%s\" failed to end the transaction", NameStr(job->fd.application_name));
@@ -363,7 +363,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * Note that the mark_start happens in the scheduler right before the
 		 * job is launched
 		 */
-		bgw_job_stat_mark_end(job, JOB_FAILURE);
+		ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
 		CommitTransactionCommand();
 
 		/*
@@ -383,7 +383,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * Note that the mark_start happens in the scheduler right before the job
 	 * is launched
 	 */
-	bgw_job_stat_mark_end(job, res);
+	ts_bgw_job_stat_mark_end(job, res);
 	CommitTransactionCommand();
 
 	elog(DEBUG1, "exiting job %d with %s", job_id, (res == JOB_SUCCESS ? "success" : "failure"));
@@ -392,19 +392,19 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 }
 
 void
-bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook)
+ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook)
 {
 	unknown_job_type_hook = hook;
 }
 
 void
-bgw_job_set_job_entrypoint_function_name(char *func_name)
+ts_bgw_job_set_job_entrypoint_function_name(char *func_name)
 {
 	job_entrypoint_function_name = func_name;
 }
 
 bool
-bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs, Interval *next_interval)
+ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs, Interval *next_interval)
 {
 	BgwJobStat *job_stat;
 	bool		ret = func();
@@ -412,7 +412,7 @@ bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_ru
 	/* Now update next_start. */
 	StartTransactionCommand();
 
-	job_stat = bgw_job_stat_find(job->fd.id);
+	job_stat = ts_bgw_job_stat_find(job->fd.id);
 
 	/*
 	 * Note that setting next_start explicitly from this function will
@@ -422,7 +422,7 @@ bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_ru
 	{
 		TimestampTz next_start = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval, TimestampTzGetDatum(job_stat->fd.last_start), IntervalPGetDatum(next_interval)));
 
-		bgw_job_stat_set_next_start(job, next_start);
+		ts_bgw_job_stat_set_next_start(job, next_start);
 	}
 	CommitTransactionCommand();
 

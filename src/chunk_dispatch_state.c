@@ -28,18 +28,18 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	Cache	   *hypertable_cache;
 	PlanState  *ps;
 
-	hypertable_cache = hypertable_cache_pin();
+	hypertable_cache = ts_hypertable_cache_pin();
 
-	ht = hypertable_cache_get_entry(hypertable_cache, state->hypertable_relid);
+	ht = ts_hypertable_cache_get_entry(hypertable_cache, state->hypertable_relid);
 
 	if (NULL == ht)
 	{
-		cache_release(hypertable_cache);
+		ts_cache_release(hypertable_cache);
 		elog(ERROR, "no hypertable for relid %d", state->hypertable_relid);
 	}
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = chunk_dispatch_create(ht, estate);
+	state->dispatch = ts_chunk_dispatch_create(ht, estate);
 	node->custom_ps = list_make1(ps);
 }
 
@@ -70,7 +70,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		tuple = ExecFetchSlotTuple(slot);
 
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
-		point = hyperspace_calculate_point(ht->space, tuple, tupdesc);
+		point = ts_hyperspace_calculate_point(ht->space, tuple, tupdesc);
 
 		/* Save the main table's (hypertable's) ResultRelInfo */
 		if (NULL == dispatch->hypertable_result_rel_info)
@@ -83,7 +83,7 @@ chunk_dispatch_exec(CustomScanState *node)
 
 
 		/* Find or create the insert state matching the point */
-		cis = chunk_dispatch_get_chunk_insert_state(dispatch, point);
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
 		/*
 		 * Update the arbiter indexes for ON CONFLICT statements so that they
@@ -112,7 +112,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		MemoryContextSwitchTo(old);
 
 		/* Convert the tuple to the chunk's rowtype, if necessary */
-		tuple = chunk_insert_state_convert_tuple(cis, tuple, &slot);
+		tuple = ts_chunk_insert_state_convert_tuple(cis, tuple, &slot);
 	}
 
 	return slot;
@@ -125,8 +125,8 @@ chunk_dispatch_end(CustomScanState *node)
 	PlanState  *substate = linitial(node->custom_ps);
 
 	ExecEndNode(substate);
-	chunk_dispatch_destroy(state->dispatch);
-	cache_release(state->hypertable_cache);
+	ts_chunk_dispatch_destroy(state->dispatch);
+	ts_cache_release(state->hypertable_cache);
 }
 
 static void
@@ -146,7 +146,7 @@ static CustomExecMethods chunk_dispatch_state_methods = {
 };
 
 ChunkDispatchState *
-chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
+ts_chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
 {
 	ChunkDispatchState *state;
 
@@ -158,7 +158,7 @@ chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
 }
 
 void
-chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent)
+ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent)
 {
 	ModifyTable *mt_plan;
 

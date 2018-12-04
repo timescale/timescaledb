@@ -15,7 +15,7 @@
 #define SEP_CHAR		':'
 #define HTTP_VERSION_BUFFER_SIZE 128
 
-extern HttpHeader *http_header_create(const char *name, size_t name_len, const char *value, size_t value_len, HttpHeader *next);
+extern HttpHeader *ts_http_header_create(const char *name, size_t name_len, const char *value, size_t value_len, HttpHeader *next);
 
 typedef enum HttpParseState
 {
@@ -49,14 +49,14 @@ typedef struct HttpResponseState
 } HttpResponseState;
 
 void
-http_response_state_init(HttpResponseState *state)
+ts_http_response_state_init(HttpResponseState *state)
 {
 	state->status_code = -1;
 	state->state = HTTP_STATE_STATUS;
 }
 
 HttpResponseState *
-http_response_state_create()
+ts_http_response_state_create()
 {
 	MemoryContext context = AllocSetContextCreate(CurrentMemoryContext,
 												  "Http Response",
@@ -67,19 +67,19 @@ http_response_state_create()
 	memset(ret, 0, sizeof(*ret));
 
 	ret->context = context;
-	http_response_state_init(ret);
+	ts_http_response_state_init(ret);
 	MemoryContextSwitchTo(old);
 	return ret;
 }
 
 void
-http_response_state_destroy(HttpResponseState *state)
+ts_http_response_state_destroy(HttpResponseState *state)
 {
 	MemoryContextDelete(state->context);
 }
 
 bool
-http_response_state_valid_status(HttpResponseState *state)
+ts_http_response_state_valid_status(HttpResponseState *state)
 {
 	/* If the status code hasn't been parsed yet, return */
 	if (state->status_code == -1)
@@ -91,7 +91,7 @@ http_response_state_valid_status(HttpResponseState *state)
 }
 
 bool
-http_response_state_is_done(HttpResponseState *state)
+ts_http_response_state_is_done(HttpResponseState *state)
 {
 	return (state->state == HTTP_STATE_DONE);
 }
@@ -103,7 +103,7 @@ http_response_state_is_done(HttpResponseState *state)
  *
  */
 ssize_t
-http_response_state_buffer_remaining(HttpResponseState *state)
+ts_http_response_state_buffer_remaining(HttpResponseState *state)
 {
 	Assert(state->offset <= MAX_RAW_BUFFER_SIZE);
 
@@ -116,12 +116,12 @@ http_response_state_buffer_remaining(HttpResponseState *state)
  * Optionally, return the buffer size via the bufsize parameter.
  */
 char *
-http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize)
+ts_http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize)
 {
 	Assert(state->offset <= MAX_RAW_BUFFER_SIZE);
 
 	if (NULL != bufsize)
-		*bufsize = http_response_state_buffer_remaining(state);
+		*bufsize = ts_http_response_state_buffer_remaining(state);
 
 	/*
 	 * This should not happen, be we return NULL in this case and let caller
@@ -134,25 +134,25 @@ http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize)
 }
 
 const char *
-http_response_state_body_start(HttpResponseState *state)
+ts_http_response_state_body_start(HttpResponseState *state)
 {
 	return state->body_start;
 }
 
 int
-http_response_state_status_code(HttpResponseState *state)
+ts_http_response_state_status_code(HttpResponseState *state)
 {
 	return state->status_code;
 }
 
 size_t
-http_response_state_content_length(HttpResponseState *state)
+ts_http_response_state_content_length(HttpResponseState *state)
 {
 	return state->content_length;
 }
 
 HttpHeader *
-http_response_state_headers(HttpResponseState *state)
+ts_http_response_state_headers(HttpResponseState *state)
 {
 	return state->headers;
 }
@@ -160,7 +160,7 @@ http_response_state_headers(HttpResponseState *state)
 static bool
 http_parse_version(HttpResponseState *state)
 {
-	return http_version_from_string(state->version) != HTTP_VERSION_INVALID;
+	return ts_http_version_from_string(state->version) != HTTP_VERSION_INVALID;
 }
 
 static void
@@ -211,8 +211,8 @@ http_response_state_add_header(HttpResponseState *state,
 							   size_t value_len)
 {
 	MemoryContext old = MemoryContextSwitchTo(state->context);
-	HttpHeader *new_header = http_header_create(name, name_len, value, value_len,
-												state->headers);
+	HttpHeader *new_header = ts_http_header_create(name, name_len, value, value_len,
+												   state->headers);
 
 	state->headers = new_header;
 	MemoryContextSwitchTo(old);
@@ -334,7 +334,7 @@ http_parse_almost_done(HttpResponseState *state, const char next)
 }
 
 bool
-http_response_state_parse(HttpResponseState *state, size_t bytes)
+ts_http_response_state_parse(HttpResponseState *state, size_t bytes)
 {
 	state->offset += bytes;
 

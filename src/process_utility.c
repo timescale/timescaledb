@@ -126,7 +126,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 	if (expect_chunk_modification)
 		return;
 
-	if (chunk_exists_relid(relid))
+	if (ts_chunk_exists_relid(relid))
 	{
 		bool		all_allowed = true;
 		ListCell   *lc;
@@ -193,20 +193,20 @@ process_alterobjectschema(Node *parsetree)
 	if (!OidIsValid(relid))
 		return;
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 	if (ht == NULL)
 	{
-		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+		Chunk	   *chunk = ts_chunk_get_by_relid(relid, 0, false);
 
 		if (NULL != chunk)
-			chunk_set_schema(chunk, alterstmt->newschema);
+			ts_chunk_set_schema(chunk, alterstmt->newschema);
 	}
 	else
-		hypertable_set_schema(ht, alterstmt->newschema);
+		ts_hypertable_set_schema(ht, alterstmt->newschema);
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static bool
@@ -230,12 +230,12 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 	if (!OidIsValid(relid))
 		return false;
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 	if (ht == NULL)
 	{
-		cache_release(hcache);
+		ts_cache_release(hcache);
 		return false;
 	}
 
@@ -245,7 +245,7 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 		snprintf(completion_tag, COMPLETION_TAG_BUFSIZE,
 				 "COPY " UINT64_FORMAT, processed);
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return true;
 }
@@ -282,13 +282,13 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 static int
 foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 {
-	Cache	   *hcache = hypertable_cache_pin();
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	Cache	   *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
 	int			ret;
 
 	if (NULL == ht)
 	{
-		cache_release(hcache);
+		ts_cache_release(hcache);
 		return -1;
 	}
 
@@ -296,7 +296,7 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 	ret = foreach_chunk(ht, process_chunk, arg);
 	hcache->release_on_commit = true;
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return ret;
 }
@@ -318,7 +318,7 @@ static void
 vacuum_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	VacuumCtx  *ctx = (VacuumCtx *) arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
 	ctx->stmt->relation->relname = NameStr(chunk->fd.table_name);
 	ctx->stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
@@ -343,7 +343,7 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 		/* Vacuum is for all tables */
 		return false;
 
-	hypertable_oid = hypertable_relid(stmt->relation);
+	hypertable_oid = ts_hypertable_relid(stmt->relation);
 
 	if (!OidIsValid(hypertable_oid))
 		return false;
@@ -351,15 +351,15 @@ process_vacuum(Node *parsetree, ProcessUtilityContext context)
 	PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ?
 								 "VACUUM" : "ANALYZE");
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, hypertable_oid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_oid);
 
 	/* allow vacuum to be cross-commit */
 	hcache->release_on_commit = false;
 	foreach_chunk(ht, vacuum_chunk, &ctx);
 	hcache->release_on_commit = true;
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	/*
 	 * You still want the parent to be vacuumed in order to update statistics
@@ -414,7 +414,7 @@ static bool
 process_truncate(ProcessUtilityArgs *args)
 {
 	TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
-	Cache	   *hcache = hypertable_cache_pin();
+	Cache	   *hcache = ts_hypertable_cache_pin();
 	ListCell   *cell;
 
 	/* Call standard process utility first to truncate all tables */
@@ -433,7 +433,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 		if (OidIsValid(relid))
 		{
-			Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+			Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 			if (ht != NULL)
 			{
@@ -445,7 +445,7 @@ process_truncate(ProcessUtilityArgs *args)
 									 " only on the chunks directly.")));
 
 				/* Delete the metadata */
-				chunk_delete_by_hypertable_id(ht->fd.id);
+				ts_chunk_delete_by_hypertable_id(ht->fd.id);
 
 				/* Drop the chunk tables */
 				foreach_chunk(ht, process_truncate_chunk, stmt);
@@ -453,7 +453,7 @@ process_truncate(ProcessUtilityArgs *args)
 		}
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return true;
 }
@@ -478,7 +478,7 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 static bool
 process_drop_hypertable_chunks(DropStmt *stmt)
 {
-	Cache	   *hcache = hypertable_cache_pin();
+	Cache	   *hcache = ts_hypertable_cache_pin();
 	ListCell   *lc;
 	bool		handled = false;
 
@@ -497,7 +497,7 @@ process_drop_hypertable_chunks(DropStmt *stmt)
 		{
 			Hypertable *ht;
 
-			ht = hypertable_cache_get_entry(hcache, relid);
+			ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 			if (NULL != ht)
 			{
@@ -512,7 +512,7 @@ process_drop_hypertable_chunks(DropStmt *stmt)
 		}
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return handled;
 }
@@ -523,7 +523,7 @@ static void
 process_drop_tablespace(Node *parsetree)
 {
 	DropTableSpaceStmt *stmt = (DropTableSpaceStmt *) parsetree;
-	int			count = tablespace_count_attached(stmt->tablespacename);
+	int			count = ts_tablespace_count_attached(stmt->tablespacename);
 
 	if (count > 0)
 		ereport(ERROR,
@@ -556,7 +556,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 	switch (stmt->objtype)
 	{
 		case ACL_OBJECT_TABLESPACE:
-			tablespace_validate_revoke(stmt);
+			ts_tablespace_validate_revoke(stmt);
 			break;
 		default:
 			break;
@@ -580,7 +580,7 @@ process_grant_and_revoke_role(ProcessUtilityArgs *args)
 	if (stmt->is_grant)
 		return true;
 
-	tablespace_validate_revoke_role(stmt);
+	ts_tablespace_validate_revoke_role(stmt);
 
 	return true;
 }
@@ -604,7 +604,7 @@ static void
 reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	ReindexStmt *stmt = (ReindexStmt *) arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
 	switch (stmt->kind)
 	{
@@ -643,12 +643,12 @@ process_reindex(Node *parsetree)
 	if (!OidIsValid(relid))
 		return false;
 
-	hcache = hypertable_cache_pin();
+	hcache = ts_hypertable_cache_pin();
 
 	switch (stmt->kind)
 	{
 		case REINDEX_OBJECT_TABLE:
-			ht = hypertable_cache_get_entry(hcache, relid);
+			ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 			if (NULL != ht)
 			{
@@ -659,7 +659,7 @@ process_reindex(Node *parsetree)
 			}
 			break;
 		case REINDEX_OBJECT_INDEX:
-			ht = hypertable_cache_get_entry(hcache, IndexGetRelation(relid, true));
+			ht = ts_hypertable_cache_get_entry(hcache, IndexGetRelation(relid, true));
 
 			if (NULL != ht)
 			{
@@ -679,7 +679,7 @@ process_reindex(Node *parsetree)
 			break;
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return ret;
 }
@@ -690,28 +690,28 @@ process_reindex(Node *parsetree)
 static void
 process_rename_table(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 	if (NULL == ht)
 	{
-		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+		Chunk	   *chunk = ts_chunk_get_by_relid(relid, 0, false);
 
 		if (NULL != chunk)
-			chunk_set_name(chunk, stmt->newname);
+			ts_chunk_set_name(chunk, stmt->newname);
 	}
 	else
-		hypertable_set_name(ht, stmt->newname);
+		ts_hypertable_set_name(ht, stmt->newname);
 }
 
 static void
 process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
-	Hypertable *ht = hypertable_cache_get_entry(hcache, relid);
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
 	Dimension  *dim;
 
 	if (NULL == ht)
 	{
-		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+		Chunk	   *chunk = ts_chunk_get_by_relid(relid, 0, false);
 
 		if (NULL != chunk)
 			ereport(ERROR,
@@ -722,12 +722,12 @@ process_rename_column(Cache *hcache, Oid relid, RenameStmt *stmt)
 		return;
 	}
 
-	dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
+	dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
 
 	if (NULL == dim)
 		return;
 
-	dimension_set_name(dim, stmt->newname);
+	ts_dimension_set_name(dim, stmt->newname);
 }
 
 static void
@@ -739,16 +739,16 @@ process_rename_index(Cache *hcache, Oid relid, RenameStmt *stmt)
 	if (!OidIsValid(tablerelid))
 		return;
 
-	ht = hypertable_cache_get_entry(hcache, tablerelid);
+	ht = ts_hypertable_cache_get_entry(hcache, tablerelid);
 
 	if (NULL != ht)
-		chunk_index_rename_parent(ht, relid, stmt->newname);
+		ts_chunk_index_rename_parent(ht, relid, stmt->newname);
 	else
 	{
-		Chunk	   *chunk = chunk_get_by_relid(tablerelid, 0, false);
+		Chunk	   *chunk = ts_chunk_get_by_relid(tablerelid, 0, false);
 
 		if (NULL != chunk)
-			chunk_index_rename(chunk, relid, stmt->newname);
+			ts_chunk_index_rename(chunk, relid, stmt->newname);
 	}
 }
 
@@ -770,18 +770,18 @@ process_rename_schema(RenameStmt *stmt)
 		}
 	}
 
-	chunks_rename_schema_name(stmt->subname, stmt->newname);
-	dimensions_rename_schema_name(stmt->subname, stmt->newname);
-	hypertables_rename_schema_name(stmt->subname, stmt->newname);
+	ts_chunks_rename_schema_name(stmt->subname, stmt->newname);
+	ts_dimensions_rename_schema_name(stmt->subname, stmt->newname);
+	ts_hypertables_rename_schema_name(stmt->subname, stmt->newname);
 }
 
 static void
 rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	RenameStmt *stmt = (RenameStmt *) arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
+	ts_chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
 }
 
 static void
@@ -795,7 +795,7 @@ alter_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 	cmd_constraint = (Constraint *) cmd->def;
 	hypertable_constraint_name = cmd_constraint->conname;
 
-	cmd_constraint->conname = chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, hypertable_constraint_name);
+	cmd_constraint->conname = ts_chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, hypertable_constraint_name);
 
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 
@@ -809,7 +809,7 @@ validate_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 	AlterTableCmd *cmd = (AlterTableCmd *) arg;
 	AlterTableCmd *chunk_cmd = copyObject(cmd);
 
-	chunk_cmd->name = chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, cmd->name);
+	chunk_cmd->name = ts_chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, cmd->name);
 
 	/* do not pass down the VALIDATE RECURSE subtype */
 	chunk_cmd->subtype = AT_ValidateConstraint;
@@ -821,7 +821,7 @@ process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht;
 
-	ht = hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 	if (NULL != ht)
 	{
@@ -830,7 +830,7 @@ process_rename_constraint(Cache *hcache, Oid relid, RenameStmt *stmt)
 	}
 	else
 	{
-		Chunk	   *chunk = chunk_get_by_relid(relid, 0, false);
+		Chunk	   *chunk = ts_chunk_get_by_relid(relid, 0, false);
 
 		if (NULL != chunk)
 			ereport(ERROR,
@@ -864,7 +864,7 @@ process_rename(Node *parsetree)
 			return;
 	}
 
-	hcache = hypertable_cache_pin();
+	hcache = ts_hypertable_cache_pin();
 
 	switch (stmt->renameType)
 	{
@@ -887,7 +887,7 @@ process_rename(Node *parsetree)
 			break;
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static void
@@ -911,9 +911,9 @@ static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	Oid			hypertable_constraint_oid = *((Oid *) arg);
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	chunk_constraint_create_on_chunk(chunk, hypertable_constraint_oid);
+	ts_chunk_constraint_create_on_chunk(chunk, hypertable_constraint_oid);
 }
 
 static void
@@ -982,12 +982,12 @@ verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
 
 	Assert(IsA(constr, Constraint));
 
-	hcache = hypertable_cache_pin();
+	hcache = ts_hypertable_cache_pin();
 
 	switch (constr->contype)
 	{
 		case CONSTR_FOREIGN:
-			ht = hypertable_cache_get_entry_rv(hcache, constr->pktable);
+			ht = ts_hypertable_cache_get_entry_rv(hcache, constr->pktable);
 
 			if (NULL != ht)
 				ereport(ERROR,
@@ -998,7 +998,7 @@ verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
 			break;
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 /*
@@ -1054,10 +1054,10 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 			if (indexname != NULL)
 				return;
 
-			indexing_verify_columns(ht->space, keys);
+			ts_indexing_verify_columns(ht->space, keys);
 			break;
 		case CONSTR_EXCLUSION:
-			indexing_verify_columns(ht->space, keys);
+			ts_indexing_verify_columns(ht->space, keys);
 			break;
 		default:
 			break;
@@ -1067,15 +1067,15 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 static void
 verify_constraint(RangeVar *relation, Constraint *constr)
 {
-	Cache	   *hcache = hypertable_cache_pin();
-	Hypertable *ht = hypertable_cache_get_entry_rv(hcache, relation);
+	Cache	   *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry_rv(hcache, relation);
 
 	if (NULL == ht)
 		verify_constraint_plaintable(relation, constr);
 	else
 		verify_constraint_hypertable(ht, (Node *) constr);
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static void
@@ -1108,9 +1108,9 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
 	IndexStmt  *stmt = transformIndexStmt(chunk_relid, info->stmt, NULL);
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
-	chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, ht->fd.id, info->obj.objectId);
+	ts_chunk_index_create_from_stmt(stmt, chunk->fd.id, chunk_relid, ht->fd.id, info->obj.objectId);
 }
 
 static void
@@ -1122,8 +1122,8 @@ process_index_start(Node *parsetree)
 
 	Assert(IsA(stmt, IndexStmt));
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
 	if (NULL != ht)
 	{
@@ -1134,10 +1134,10 @@ process_index_start(Node *parsetree)
 					 errmsg("hypertables do not support concurrent "
 							"index creation")));
 
-		indexing_verify_index(ht->space, stmt);
+		ts_indexing_verify_index(ht->space, stmt);
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static bool
@@ -1151,8 +1151,8 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 
 	Assert(IsA(stmt, IndexStmt));
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
 	if (NULL != ht)
 	{
@@ -1178,16 +1178,16 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 		 * Change user since chunk's are typically located in an internal
 		 * schema and chunk indexes require metadata changes
 		 */
-		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and create a corresponding index */
 		foreach_chunk(ht, process_index_chunk, &info);
 
-		catalog_restore_user(&sec_ctx);
+		ts_catalog_restore_user(&sec_ctx);
 		handled = true;
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 
 	return handled;
 }
@@ -1256,8 +1256,8 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 	if (NULL == stmt->relation)
 		return false;
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
 	if (NULL != ht)
 	{
@@ -1287,7 +1287,7 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 		if (!OidIsValid(index_relid))
 		{
 			/* Let regular process utility handle */
-			cache_release(hcache);
+			ts_cache_release(hcache);
 			return false;
 		}
 
@@ -1304,7 +1304,7 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 		 * hypertable's index
 		 */
 		old = MemoryContextSwitchTo(mcxt);
-		chunk_indexes = chunk_index_get_mappings(ht, index_relid);
+		chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
 		MemoryContextSwitchTo(old);
 
 		hcache->release_on_commit = false;
@@ -1328,7 +1328,7 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 			 * rechecked (due to new transaction) to already have that mark
 			 * set
 			 */
-			chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+			ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
 
 			/* Do the job. */
 			cluster_rel(cim->chunkoid, cim->indexoid, true, stmt->verbose);
@@ -1344,7 +1344,7 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 		MemoryContextDelete(mcxt);
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 	return false;
 }
 
@@ -1427,29 +1427,29 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	ColumnDef  *coldef = (ColumnDef *) cmd->def;
 	Oid			new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
-	Dimension  *dim = hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, cmd->name);
+	Dimension  *dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, cmd->name);
 
 	if (NULL == dim)
 		return;
 
-	dimension_set_type(dim, new_type);
-	process_utility_set_expect_chunk_modification(true);
-	chunk_recreate_all_constraints_for_dimension(ht->space, dim->fd.id);
-	process_utility_set_expect_chunk_modification(false);
+	ts_dimension_set_type(dim, new_type);
+	ts_process_utility_set_expect_chunk_modification(true);
+	ts_chunk_recreate_all_constraints_for_dimension(ht->space, dim->fd.id);
+	ts_process_utility_set_expect_chunk_modification(false);
 }
 
 static void
 process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	Oid			index_relid = get_relname_relid(cmd->name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
-	List	   *chunk_indexes = chunk_index_get_mappings(ht, index_relid);
+	List	   *chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
 	ListCell   *lc;
 
 	foreach(lc, chunk_indexes)
 	{
 		ChunkIndexMapping *cim = lfirst(lc);
 
-		chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+		ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
 	}
 }
 
@@ -1474,7 +1474,7 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	namestrcpy(&tspc_name, cmd->name);
 
-	tspcs = tablespace_scan(ht->fd.id);
+	tspcs = ts_tablespace_scan(ht->fd.id);
 
 	if (tspcs->num_tablespaces > 1)
 		ereport(ERROR,
@@ -1486,11 +1486,11 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	if (tspcs->num_tablespaces == 1)
 	{
-		Assert(hypertable_has_tablespace(ht, tspcs->tablespaces[0].tablespace_oid));
-		tablespace_delete(ht->fd.id, NameStr(tspcs->tablespaces[0].fd.tablespace_name));
+		Assert(ts_hypertable_has_tablespace(ht, tspcs->tablespaces[0].tablespace_oid));
+		ts_tablespace_delete(ht->fd.id, NameStr(tspcs->tablespaces[0].fd.tablespace_name));
 	}
 
-	tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
+	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
 	foreach_chunk(ht, process_altertable_chunk, cmd);
 }
 
@@ -1506,9 +1506,9 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	if (!OidIsValid(tablerelid))
 		return;
 
-	hcache = hypertable_cache_pin();
+	hcache = ts_hypertable_cache_pin();
 
-	ht = hypertable_cache_get_entry(hcache, tablerelid);
+	ht = ts_hypertable_cache_get_entry(hcache, tablerelid);
 
 	if (NULL != ht)
 	{
@@ -1521,7 +1521,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 			switch (cmd->subtype)
 			{
 				case AT_SetTableSpace:
-					chunk_index_set_tablespace(ht, indexrelid, cmd->name);
+					ts_chunk_index_set_tablespace(ht, indexrelid, cmd->name);
 					break;
 				default:
 					break;
@@ -1529,7 +1529,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 		}
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static void
@@ -1546,8 +1546,8 @@ process_altertable_start_table(Node *parsetree)
 
 	check_chunk_alter_table_operation_allowed(relid, stmt);
 
-	hcache = hypertable_cache_pin();
-	ht = hypertable_cache_get_entry(hcache, relid);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
 	if (ht != NULL)
 		relation_not_only(stmt->relation);
 
@@ -1618,7 +1618,7 @@ process_altertable_start_table(Node *parsetree)
 					relation = partstmt->name;
 					Assert(NULL != relation);
 
-					if (InvalidOid != hypertable_relid(relation))
+					if (InvalidOid != ts_hypertable_relid(relation))
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1632,7 +1632,7 @@ process_altertable_start_table(Node *parsetree)
 		}
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static void
@@ -1866,9 +1866,9 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 	if (!OidIsValid(relid))
 		return;
 
-	hcache = hypertable_cache_pin();
+	hcache = ts_hypertable_cache_pin();
 
-	ht = hypertable_cache_get_entry(hcache, relid);
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
 
 	if (NULL != ht)
 	{
@@ -1885,7 +1885,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 		}
 	}
 
-	cache_release(hcache);
+	ts_cache_release(hcache);
 }
 
 static void
@@ -1914,7 +1914,7 @@ create_trigger_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	char	   *relschema = get_namespace_name(get_rel_namespace(chunk_relid));
 	char	   *relname = get_rel_name(chunk_relid);
 
-	trigger_create_on_chunk(trigger_oid, relschema, relname);
+	ts_trigger_create_on_chunk(trigger_oid, relschema, relname);
 }
 
 static void
@@ -1925,7 +1925,7 @@ process_create_trigger_start(Node *parsetree)
 	if (!stmt->row)
 		return;
 
-	if (hypertable_relid(stmt->relation) == InvalidOid)
+	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
 		return;
 
 #if PG10
@@ -1941,7 +1941,7 @@ process_create_rule_start(Node *parsetree)
 {
 	RuleStmt   *stmt = (RuleStmt *) parsetree;
 
-	if (hypertable_relid(stmt->relation) == InvalidOid)
+	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
 		return;
 
 
@@ -2059,10 +2059,10 @@ static void
 process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	char	   *hypertable_constraint_name = arg;
-	Chunk	   *chunk = chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
+	Chunk	   *chunk = ts_chunk_get_by_relid(chunk_relid, ht->space->num_dimensions, true);
 
 	/* drop both metadata and table; sql_drop won't be called recursively */
-	chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name, true, true);
+	ts_chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id, hypertable_constraint_name, true, true);
 }
 
 static void
@@ -2075,18 +2075,18 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 	constraint = (EventTriggerDropTableConstraint *) obj;
 
 	/* do not use relids because underlying table could be gone */
-	ht = hypertable_get_by_name(constraint->schema, constraint->table);
+	ht = ts_hypertable_get_by_name(constraint->schema, constraint->table);
 
 	if (ht != NULL)
 	{
 		CatalogSecurityContext sec_ctx;
 
-		catalog_database_info_become_owner(catalog_database_info_get(), &sec_ctx);
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and drop the corresponding constraint */
 		foreach_chunk(ht, process_drop_constraint_on_chunk, constraint->constraint_name);
 
-		catalog_restore_user(&sec_ctx);
+		ts_catalog_restore_user(&sec_ctx);
 	}
 	else
 	{
@@ -2094,7 +2094,7 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 
 		if (NULL != chunk)
 		{
-			chunk_constraint_delete_by_constraint_name(chunk->fd.id, constraint->constraint_name, true, false);
+			ts_chunk_constraint_delete_by_constraint_name(chunk->fd.id, constraint->constraint_name, true, false);
 		}
 	}
 }
@@ -2107,7 +2107,7 @@ process_drop_index(EventTriggerDropObject *obj)
 	Assert(obj->type == EVENT_TRIGGER_DROP_INDEX);
 	index = (EventTriggerDropIndex *) obj;
 
-	chunk_index_delete_by_name(index->schema, index->index_name, true);
+	ts_chunk_index_delete_by_name(index->schema, index->index_name, true);
 }
 
 static void
@@ -2118,8 +2118,8 @@ process_drop_table(EventTriggerDropObject *obj)
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE);
 	table = (EventTriggerDropTable *) obj;
 
-	hypertable_delete_by_name(table->schema, table->table_name);
-	chunk_delete_by_name(table->schema, table->table_name);
+	ts_hypertable_delete_by_name(table->schema, table->table_name);
+	ts_chunk_delete_by_name(table->schema, table->table_name);
 }
 
 static void
@@ -2143,7 +2143,7 @@ process_drop_schema(EventTriggerDropObject *obj)
 	 * associated schema. For matches, we reset their associated schema to the
 	 * INTERNAL schema
 	 */
-	count = hypertable_reset_associated_schema_name(schema->schema);
+	count = ts_hypertable_reset_associated_schema_name(schema->schema);
 
 	if (count > 0)
 		ereport(NOTICE,
@@ -2174,7 +2174,7 @@ process_drop_trigger(EventTriggerDropObject *obj)
 	trigger_event = (EventTriggerDropTrigger *) obj;
 
 	/* do not use relids because underlying table could be gone */
-	ht = hypertable_get_by_name(trigger_event->schema, trigger_event->table);
+	ht = ts_hypertable_get_by_name(trigger_event->schema, trigger_event->table);
 
 	if (ht != NULL)
 	{
@@ -2254,7 +2254,7 @@ timescaledb_ddl_command_start(
 	 * We don't want to load the extension if we just got the command to alter
 	 * it.
 	 */
-	if (altering_timescaledb || !extension_is_loaded())
+	if (altering_timescaledb || !ts_extension_is_loaded())
 	{
 		prev_ProcessUtility(&args);
 		return;
@@ -2279,7 +2279,7 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 		case T_CreateTrigStmt:
 		case T_CreateStmt:
 		case T_IndexStmt:
-			foreach(lc, event_trigger_ddl_commands())
+			foreach(lc, ts_event_trigger_ddl_commands())
 				process_ddl_command_end(lfirst(lc));
 			break;
 		default:
@@ -2303,14 +2303,14 @@ ts_timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
 	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
 		elog(ERROR, "not fired by event trigger manager");
 
-	if (!extension_is_loaded())
+	if (!ts_extension_is_loaded())
 		PG_RETURN_NULL();
 
 	if (strcmp("ddl_command_end", trigdata->event) == 0)
 		process_ddl_event_command_end(trigdata);
 	else if (strcmp("sql_drop", trigdata->event) == 0)
 	{
-		foreach(lc, event_trigger_dropped_objects())
+		foreach(lc, ts_event_trigger_dropped_objects())
 			process_ddl_sql_drop(lfirst(lc));
 	}
 
@@ -2318,7 +2318,7 @@ ts_timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
 }
 
 extern void
-process_utility_set_expect_chunk_modification(bool expect)
+ts_process_utility_set_expect_chunk_modification(bool expect)
 {
 	expect_chunk_modification = expect;
 }

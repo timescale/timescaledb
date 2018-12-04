@@ -97,20 +97,20 @@ timer_get()
 }
 
 bool
-timer_wait(TimestampTz until)
+ts_timer_wait(TimestampTz until)
 {
 	return timer_get()->wait(until);
 }
 
 TimestampTz
-timer_get_current_timestamp()
+ts_timer_get_current_timestamp()
 {
 	return timer_get()->get_current_timestamp();
 }
 
 #ifdef TS_DEBUG
 void
-timer_set(const Timer *timer)
+ts_timer_set(const Timer *timer)
 {
 	current_timer_implementation = timer;
 }

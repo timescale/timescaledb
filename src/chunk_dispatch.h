@@ -45,8 +45,8 @@ typedef struct ChunkDispatch
 typedef struct Point Point;
 typedef struct ChunkInsertState ChunkInsertState;
 
-ChunkDispatch *chunk_dispatch_create(Hypertable *ht, EState *estate);
-void		chunk_dispatch_destroy(ChunkDispatch *dispatch);
-ChunkInsertState *chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p);
+extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
+void		ts_chunk_dispatch_destroy(ChunkDispatch *dispatch);
+extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p);
 
 #endif							/* TIMESCALEDB_CHUNK_DISPATCH_H */

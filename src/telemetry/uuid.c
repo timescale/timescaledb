@@ -18,10 +18,10 @@
 /*
  * Generates a v4 UUID. Based on function pg_random_uuid() in the pgcrypto contrib module.
  *
- * Note that clib on Mac has a uuid_generate() function, so we call this uuid_create().
+ * Note that clib on Mac has a uuid_generate() function, so we call this ts_uuid_create().
  */
 pg_uuid_t *
-uuid_create(void)
+ts_uuid_create(void)
 {
 	/*
 	 * PG9.6 doesn't expose the internals of pg_uuid_t, so we just treat it as
@@ -61,5 +61,5 @@ TS_FUNCTION_INFO_V1(ts_uuid_generate);
 Datum
 ts_uuid_generate(PG_FUNCTION_ARGS)
 {
-	return UUIDPGetDatum(uuid_create());
+	return UUIDPGetDatum(ts_uuid_create());
 }
