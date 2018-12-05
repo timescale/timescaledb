@@ -90,21 +90,21 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
 			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
-		}
+		},
 	},
 	[DIMENSION] = {
 		.length = _MAX_DIMENSION_INDEX,
 		.names = (char *[]) {
 			[DIMENSION_ID_IDX] = "dimension_pkey",
 			[DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX] = "dimension_hypertable_id_column_name_key",
-		}
+		},
 	},
 	[DIMENSION_SLICE] = {
 		.length = _MAX_DIMENSION_SLICE_INDEX,
 		.names = (char *[]) {
 			[DIMENSION_SLICE_ID_IDX] = "dimension_slice_pkey",
 			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_key",
-		}
+		},
 	},
 	[CHUNK] = {
 		.length = _MAX_CHUNK_INDEX,
@@ -112,67 +112,67 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
 			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
-		}
+		},
 	},
 	[CHUNK_CONSTRAINT] = {
 		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
 		.names = (char *[]) {
 			[CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX] = "chunk_constraint_chunk_id_constraint_name_key",
 			[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_chunk_id_dimension_slice_id_idx",
-		}
+		},
 	},
 	[CHUNK_INDEX] = {
 		.length = _MAX_CHUNK_INDEX_INDEX,
 		.names = (char *[]) {
 			[CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX] = "chunk_index_chunk_id_index_name_key",
 			[CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX] = "chunk_index_hypertable_id_hypertable_index_name_idx",
-		}
+		},
 	},
 	[TABLESPACE] = {
 		.length = _MAX_TABLESPACE_INDEX,
 		.names = (char *[]) {
 			[TABLESPACE_PKEY_IDX] = "tablespace_pkey",
 			[TABLESPACE_HYPERTABLE_ID_TABLESPACE_NAME_IDX] = "tablespace_hypertable_id_tablespace_name_key",
-		}
+		},
 	},
 	[BGW_JOB] = {
 		.length = _MAX_BGW_JOB_INDEX,
 		.names = (char *[]) {
 			[BGW_JOB_PKEY_IDX] = "bgw_job_pkey",
-		}
+		},
 	},
 	[BGW_JOB_STAT] = {
 		.length = _MAX_BGW_JOB_STAT_INDEX,
 		.names = (char *[]) {
 			[BGW_JOB_STAT_PKEY_IDX] = "bgw_job_stat_pkey",
-		}
+		},
 	},
 	[INSTALLATION_METADATA] = {
 		.length = _MAX_INSTALLATION_METADATA_INDEX,
 		.names = (char *[]) {
 			[INSTALLATION_METADATA_PKEY_IDX] = "installation_metadata_pkey",
-		}
+		},
 	},
 	[BGW_POLICY_REORDER] = {
 		.length = _MAX_BGW_POLICY_REORDER_INDEX,
 		.names = (char *[]) {
 			[BGW_POLICY_REORDER_PKEY_IDX] = "bgw_policy_reorder_pkey",
 			[BGW_POLICY_REORDER_HYPERTABLE_ID_IDX] = "bgw_policy_reorder_hypertable_id_key",
-		}
+		},
 	},
 	[BGW_POLICY_DROP_CHUNKS] = {
 		.length = _MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
 		.names = (char *[]) {
 			[BGW_POLICY_DROP_CHUNKS_PKEY_IDX] = "bgw_policy_drop_chunks_pkey",
 			[BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_IDX] = "bgw_policy_drop_chunks_hypertable_id_key",
-		}
+		},
 	},
 	[BGW_POLICY_CHUNK_STATS] = {
 		.length = _MAX_BGW_POLICY_CHUNK_STATS_INDEX,
 		.names = (char *[]) {
 			[BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX] = "bgw_policy_chunk_stats_job_id_chunk_id_key",
-		}
-	}
+		},
+	},
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
@@ -199,7 +199,7 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,
-	}
+	},
 };
 
 /* Names for proxy tables used for cache invalidation. Must match names in

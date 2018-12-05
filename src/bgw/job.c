@@ -33,7 +33,7 @@ static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
 	[JOB_TYPE_REORDER] = "reorder",
 	[JOB_TYPE_DROP_CHUNKS] = "drop_chunks",
-	[JOB_TYPE_UNKNOWN] = "unknown"
+	[JOB_TYPE_UNKNOWN] = "unknown",
 };
 
 static unknown_job_type_hook_type unknown_job_type_hook = NULL;
@@ -243,7 +243,7 @@ bgw_job_delete_scan(ScanKeyData *scankey)
 			.waitpolicy = LockWaitBlock,
 			.lockmode = LockTupleExclusive,
 			.enabled = false,
-		}
+		},
 	};
 
 	return ts_scanner_scan(&scanctx);
