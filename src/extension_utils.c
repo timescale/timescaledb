@@ -73,7 +73,7 @@ extension_version(void)
 	HeapTuple	tuple;
 	ScanKeyData entry[1];
 	bool		is_null = true;
-	static char *sql_version = NULL;
+	char	   *sql_version = NULL;
 
 	rel = heap_open(ExtensionRelationId, AccessShareLock);
 
@@ -95,7 +95,7 @@ extension_version(void)
 
 		if (!is_null)
 		{
-			sql_version = strdup(TextDatumGetCString(result));
+			sql_version = pstrdup(TextDatumGetCString(result));
 		}
 	}
 
