@@ -1,6 +1,7 @@
 set(SOURCES
   init.c
-  license.c)
+  license.c
+  telemetry.c)
 
 # Add test source code in Debug builds
 if (CMAKE_BUILD_TYPE MATCHES Debug)

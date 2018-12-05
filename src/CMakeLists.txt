@@ -30,6 +30,7 @@ set(SOURCES
   indexing.c
   init.c
   installation_metadata.c
+  jsonb_utils.c
   license_guc.c
   partitioning.c
   planner.c

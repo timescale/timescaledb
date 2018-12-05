@@ -29,6 +29,8 @@ typedef enum LicenseType
 	LICENSE_TYPE_ENTERPRISE = 'E',
 }			LicenseType;
 
+#define TS_APACHE_ONLY_LICENSE "ApacheOnly"
+
 /*
  * If compiled with ApacheOnly, default to using only Apache code.
  * For tests we generally want to test all the code, but we don't want

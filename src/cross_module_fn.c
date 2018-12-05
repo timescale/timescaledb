@@ -39,6 +39,12 @@ tsl_license_on_assign_default_fn(const char *newval, const void *license)
 	error_no_default_fn();
 }
 
+static void
+add_telemetry_default(JsonbParseState *parseState)
+{
+	error_no_default_fn();
+}
+
 
 /*
  * Define cross-module functions' default values:
@@ -49,7 +55,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.tsl_license_on_assign = tsl_license_on_assign_default_fn,
 	.enterprise_enabled_internal = error_no_default_fn_bool_void,
 	.check_tsl_loaded = error_no_default_fn_bool_void,
-	.tsl_module_shutdown = error_no_default_fn
+	.tsl_module_shutdown = error_no_default_fn,
+	.add_tsl_license_info_telemetry = add_telemetry_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

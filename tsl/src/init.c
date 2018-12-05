@@ -8,8 +8,10 @@
 #include <fmgr.h>
 
 #include <export.h>
-#include <license.h>
 #include <cross_module_fn.h>
+
+#include "license.h"
+#include "telemetry.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -33,8 +35,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.tsl_license_on_assign = tsl_license_on_assign,
 	.enterprise_enabled_internal = enterprise_enabled_internal,
 	.check_tsl_loaded = check_tsl_loaded,
-	.tsl_module_shutdown = tsl_module_shutdown
-
+	.tsl_module_shutdown = tsl_module_shutdown,
+	.add_tsl_license_info_telemetry = tsl_telemetry_add_license_info,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
