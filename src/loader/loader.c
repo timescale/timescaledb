@@ -467,7 +467,6 @@ do_load()
 	post_parse_analyze_hook_type old_hook;
 
 	StrNCpy(soversion, version, MAX_VERSION_LEN);
-	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_NAME, version);
 
 	/*
 	 * An inval_relcache callback can be called after previous checks of
@@ -478,6 +477,8 @@ do_load()
 	 */
 	if (loaded)
 		return;
+
+	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_NAME, version);
 
 	/*
 	 * Set to true whether or not the load succeeds to prevent reloading if
