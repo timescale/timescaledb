@@ -5,9 +5,9 @@
 SELECT _timescaledb_internal.current_license_key();
 WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
-                    current_license_key                     
-------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+                                                                            current_license_key                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
 (1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();
@@ -27,9 +27,9 @@ SELECT _timescaledb_internal.enterprise_enabled();
 SET timescaledb.license_key='CommunityLicense';
 ERROR:  permission denied to set parameter "timescaledb.license_key"
 SELECT _timescaledb_internal.current_license_key();
-                    current_license_key                     
-------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+                                                                            current_license_key                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
 (1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();
@@ -49,9 +49,9 @@ SELECT _timescaledb_internal.enterprise_enabled();
 SELECT _timescaledb_internal.current_license_key();
 WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
-                    current_license_key                     
-------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+                                                                            current_license_key                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
 (1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();
@@ -70,9 +70,9 @@ SELECT _timescaledb_internal.enterprise_enabled();
 SET timescaledb.license_key='ApacheOnly';
 ERROR:  invalid value for parameter "timescaledb.license_key": "ApacheOnly"
 SELECT _timescaledb_internal.current_license_key();
-                    current_license_key                     
-------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+                                                                            current_license_key                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
 (1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();
@@ -112,9 +112,9 @@ SET timescaledb.license_key=Default;
 WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
 SELECT _timescaledb_internal.current_license_key();
-                    current_license_key                     
-------------------------------------------------------------
- E1eyJlbmRfdGltZSI6IjIwMTgvMTAvMjYiLCAibm9uY2UiOiJRUVEifQ==
+                                                                            current_license_key                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K
 (1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();

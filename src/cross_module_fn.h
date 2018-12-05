@@ -18,14 +18,16 @@
  * This will allow the function to be called from this codebase as
  *     ts_cm_functions-><function name>
  */
+
+typedef struct JsonbParseState JsonbParseState;
+
 typedef struct CrossModuleFunctions
 {
 	void		(*tsl_license_on_assign) (const char *newval, const void *license);
 	bool		(*enterprise_enabled_internal) (void);
 	bool		(*check_tsl_loaded) (void);
 	void		(*tsl_module_shutdown) (void);
-
-
+	void		(*add_tsl_license_info_telemetry) (JsonbParseState *parseState);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

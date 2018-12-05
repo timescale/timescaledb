@@ -14,18 +14,27 @@
 #include <access/xact.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
-#include <utils/json.h>
-#include <utils/jsonb.h>
-#include <utils/jsonapi.h>
 #include <utils/datetime.h>
 
 #include <license_guc.h>
 #include <base64_compat.h>
+#include <jsonb_utils.h>
 
 #include "license.h"
 
+#define LICENSE_MAX_ID_LEN 40
+#define LICENSE_MAX_KIND_LEN 16
+
 typedef struct LicenseInfo
 {
+	/*
+	 * Leaving id and kind a strings for now since they're only used for
+	 * telemetry. If we start introspecting on one of them we should switch it
+	 * to a more structured type.
+	 */
+	char		id[LICENSE_MAX_ID_LEN];
+	char		kind[LICENSE_MAX_KIND_LEN];
+	TimestampTz start_time;
 	TimestampTz end_time;
 	bool		enterprise_features_enabled;
 } LicenseInfo;
@@ -37,15 +46,24 @@ static bool validate_license_info(const LicenseInfo *license);
 
 static LicenseInfo current_license =
 {
-	.end_time = DT_NOBEGIN,.enterprise_features_enabled = false,
+	.id = {0},
+	.kind = {0},
+	.end_time = DT_NOBEGIN,
+	.enterprise_features_enabled = false,
 };
 
 static const LicenseInfo no_license = {
+	.id = "",
+	.kind = {""},
+	.start_time = DT_NOBEGIN,
 	.end_time = DT_NOBEGIN,
 	.enterprise_features_enabled = false,
 };
 
 static const LicenseInfo community_license = {
+	.id = "",
+	.kind = {""},
+	.start_time = DT_NOBEGIN,
 	.end_time = DT_NOEND,
 	.enterprise_features_enabled = false
 };
@@ -130,7 +148,15 @@ license_deserialize_enterprise(char *license_key, LicenseInfo *license_out)
 static bool
 validate_license_info(const LicenseInfo *license)
 {
-	/* currently a nop since all syntactically valid licenses are valid */
+	if (license->enterprise_features_enabled)
+	{
+		if (!(strcmp(license->kind, "trial") || strcmp(license->kind, "commercial")))
+			return false;
+	}
+
+	if (timestamp_cmp_internal(license->end_time, license->start_time) < 0)
+		return false;
+
 	return true;
 }
 
@@ -179,67 +205,62 @@ base64_decode(char *license_key)
  *****************************************************************************/
 
 /*
- * JSON license encoding
- *
- * {
- *    "end_time": string datetime; missing means license is infinite,
- * }
- *
+ * JSON license decoding
  */
 
+#define ID_FIELD "id"
+#define KIND_FIELD "kind"
+#define START_TIME_FIELD "start_time"
 #define END_TIME_FIELD "end_time"
+#define FIELD_NOT_FOUND_ERRSTRING "invalid license key for TimescaleDB, could not find field \"%s\""
 
+static char *json_get_id(Jsonb *license);
+static char *json_get_kind(Jsonb *license);
+static TimestampTz json_get_start_time(Jsonb *license);
 static TimestampTz json_get_end_time(Jsonb *license);
-static text *jsonb_get_text_field(Jsonb *json, text *field_name);
 
 static void
 license_info_init_from_jsonb(Jsonb *json_license, LicenseInfo *out)
 {
+	StrNCpy(out->id, json_get_id(json_license), sizeof(out->id));
+	StrNCpy(out->kind, json_get_kind(json_license), sizeof(out->kind));
+	out->start_time = json_get_start_time(json_license);
 	out->end_time = json_get_end_time(json_license);
 	out->enterprise_features_enabled = true;
+}
+
+static char *
+json_get_id(Jsonb *license)
+{
+	return ts_jsonb_get_str_field(license, cstring_to_text(ID_FIELD));
+}
+
+static char *
+json_get_kind(Jsonb *license)
+{
+	return ts_jsonb_get_str_field(license, cstring_to_text(KIND_FIELD));
+}
+
+static TimestampTz
+json_get_start_time(Jsonb *license)
+{
+	bool		found = false;
+	TimestampTz start_time = ts_jsonb_get_time_field(license, cstring_to_text(START_TIME_FIELD), &found);
+
+	if (!found)
+		elog(ERRCODE_FEATURE_NOT_SUPPORTED, FIELD_NOT_FOUND_ERRSTRING, START_TIME_FIELD);
+	return start_time;
 }
 
 static TimestampTz
 json_get_end_time(Jsonb *license)
 {
-	Datum		end_time_datum;
-	text	   *end_time_str = jsonb_get_text_field(license, cstring_to_text(END_TIME_FIELD));
+	bool		found = false;
+	TimestampTz end_time = ts_jsonb_get_time_field(license, cstring_to_text(END_TIME_FIELD), &found);
 
-	/* TODO or throw an exception? */
-	if (end_time_str == NULL)
-		elog(ERRCODE_FEATURE_NOT_SUPPORTED, "invalid license key for TimescaleDB could not find field \"end_time\"");
-
-	end_time_datum = DirectFunctionCall3(timestamptz_in,
-										  /* str= */ CStringGetDatum(text_to_cstring(end_time_str)),
-										  /* unused */ Int32GetDatum(-1),
-										  /* typmod= */ Int32GetDatum(-1));
-
-	return DatumGetTimestampTz(end_time_datum);
-}
-
-static text *
-jsonb_get_text_field(Jsonb *json, text *field_name)
-{
-	/*
-	 * `jsonb_object_field_text` returns NULL when the field is not found so
-	 * we cannot use `DirectFunctionCall`
-	 */
-	FunctionCallInfoData fcinfo;
-	Datum		result;
-
-	InitFunctionCallInfoData(fcinfo, NULL, 2, InvalidOid, NULL, NULL);
-
-	fcinfo.arg[0] = PointerGetDatum(json);
-	fcinfo.arg[1] = PointerGetDatum(field_name);
-	fcinfo.argnull[0] = false;
-	fcinfo.argnull[1] = false;
-
-	result = jsonb_object_field_text(&fcinfo);
-
-	if (fcinfo.isnull)
-		return NULL;
-
-	return DatumGetTextP(result);
+	if (!found)
+		elog(ERRCODE_FEATURE_NOT_SUPPORTED, FIELD_NOT_FOUND_ERRSTRING, END_TIME_FIELD);
+	return end_time;
 }
 
 /*****************************************************************************
@@ -314,4 +335,28 @@ bool
 license_enterprise_enabled(void)
 {
 	return current_license.enterprise_features_enabled;
+}
+
+char *
+license_kind_str(void)
+{
+	return current_license.kind;
+}
+
+char *
+license_id_str(void)
+{
+	return current_license.id;
+}
+
+TimestampTz
+license_start_time(void)
+{
+	return current_license.start_time;
+}
+
+TimestampTz
+license_end_time(void)
+{
+	return current_license.end_time;
 }

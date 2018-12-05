@@ -22,6 +22,10 @@
 #include "hypertable.h"
 #include "extension.h"
 #include "net/http.h"
+#include "jsonb_utils.h"
+#include "license_guc.h"
+
+#include "cross_module_fn.h"
 
 #define TS_VERSION_JSON_FIELD "current_timescaledb_version"
 #define TS_IS_UPTODATE_JSON_FIELD "is_up_to_date"
@@ -44,6 +48,8 @@
 #define REQ_DATA_VOLUME				"data_volume"
 #define REQ_NUM_HYPERTABLES			"num_hypertables"
 #define REQ_RELATED_EXTENSIONS		"related_extensions"
+#define REQ_LICENSE_INFO			"license"
+#define REQ_LICENSE_EDITION		    "edition"
 
 #define PG_PROMETHEUS	"pg_prometheus"
 #define POSTGIS			"postgis"
@@ -159,28 +165,6 @@ get_database_size()
 }
 
 static void
-jsonb_add_pair(JsonbParseState *state, const char *key, const char *value)
-{
-	JsonbValue	json_key;
-	JsonbValue	json_value;
-
-	/* If there is a null entry, don't add it to the JSON */
-	if (value == NULL)
-		return;
-
-	json_key.type = jbvString;
-	json_key.val.string.val = (char *) key;
-	json_key.val.string.len = strlen(key);
-
-	json_value.type = jbvString;
-	json_value.val.string.val = (char *) value;
-	json_value.val.string.len = strlen(value);
-
-	pushJsonbValue(&state, WJB_KEY, &json_key);
-	pushJsonbValue(&state, WJB_VALUE, &json_value);
-}
-
-static void
 add_related_extensions(JsonbParseState *state)
 {
 	int			i;
@@ -191,8 +175,21 @@ add_related_extensions(JsonbParseState *state)
 	{
 		const char *ext = related_extensions[i];
 
-		jsonb_add_pair(state, ext, OidIsValid(get_extension_oid(ext, true)) ? "true" : "false");
+		ts_jsonb_add_str(state, ext, OidIsValid(get_extension_oid(ext, true)) ? "true" : "false");
 	}
+
+	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+}
+
+static void
+add_license_info(JsonbParseState *state)
+{
+	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+
+	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
+		ts_jsonb_add_str(state, REQ_LICENSE_EDITION, TS_APACHE_ONLY_LICENSE);
+	else
+		ts_cm_functions->add_tsl_license_info_telemetry(state);
 
 	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 }
@@ -201,6 +198,7 @@ static StringInfo
 build_version_body(void)
 {
 	JsonbValue	ext_key;
+	JsonbValue	license_info_key;
 	JsonbValue *result;
 	Jsonb	   *jb;
 	StringInfo	jtext;
@@ -209,34 +207,34 @@ build_version_body(void)
 
 	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
 
-	jsonb_add_pair(parseState, REQ_DB_UUID,
-				   DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_uuid())));
-	jsonb_add_pair(parseState, REQ_EXPORTED_DB_UUID,
-				   DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_exported_uuid())));
-	jsonb_add_pair(parseState, REQ_INSTALL_TIME,
-				   DatumGetCString(DirectFunctionCall1(timestamptz_out, ts_metadata_get_install_timestamp())));
+	ts_jsonb_add_str(parseState, REQ_DB_UUID,
+					 DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_uuid())));
+	ts_jsonb_add_str(parseState, REQ_EXPORTED_DB_UUID,
+					 DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_exported_uuid())));
+	ts_jsonb_add_str(parseState, REQ_INSTALL_TIME,
+					 DatumGetCString(DirectFunctionCall1(timestamptz_out, ts_metadata_get_install_timestamp())));
 
-	jsonb_add_pair(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
+	ts_jsonb_add_str(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
 	if (ts_version_get_os_info(&osinfo))
 	{
-		jsonb_add_pair(parseState, REQ_OS, osinfo.sysname);
-		jsonb_add_pair(parseState, REQ_OS_VERSION, osinfo.version);
-		jsonb_add_pair(parseState, REQ_OS_RELEASE, osinfo.release);
+		ts_jsonb_add_str(parseState, REQ_OS, osinfo.sysname);
+		ts_jsonb_add_str(parseState, REQ_OS_VERSION, osinfo.version);
+		ts_jsonb_add_str(parseState, REQ_OS_RELEASE, osinfo.release);
 	}
 	else
-		jsonb_add_pair(parseState, REQ_OS, "Unknown");
+		ts_jsonb_add_str(parseState, REQ_OS, "Unknown");
 
 	/*
 	 * PACKAGE_VERSION does not include extra details that some systems (e.g.,
 	 * Ubuntu) sometimes include in PG_VERSION
 	 */
-	jsonb_add_pair(parseState, REQ_PS_VERSION, PACKAGE_VERSION);
-	jsonb_add_pair(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
-	jsonb_add_pair(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
-	jsonb_add_pair(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
-	jsonb_add_pair(parseState, REQ_DATA_VOLUME, get_database_size());
-	jsonb_add_pair(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
+	ts_jsonb_add_str(parseState, REQ_PS_VERSION, PACKAGE_VERSION);
+	ts_jsonb_add_str(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
+	ts_jsonb_add_str(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
+	ts_jsonb_add_str(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
+	ts_jsonb_add_str(parseState, REQ_DATA_VOLUME, get_database_size());
+	ts_jsonb_add_str(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
 
 	/* Add related extensions, which is a nested JSON */
 	ext_key.type = jbvString;
@@ -244,6 +242,12 @@ build_version_body(void)
 	ext_key.val.string.len = strlen(REQ_RELATED_EXTENSIONS);
 	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
 	add_related_extensions(parseState);
+
+	license_info_key.type = jbvString;
+	license_info_key.val.string.val = REQ_LICENSE_INFO;
+	license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
+	pushJsonbValue(&parseState, WJB_KEY, &license_info_key);
+	add_license_info(parseState);
 
 	result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
 

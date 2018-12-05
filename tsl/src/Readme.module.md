@@ -68,7 +68,10 @@ It is JSON corresponding to:
 
 ```JSON
 {
-    "end_time":"2018/10/31" //datetime at which the license expires, or left out if the license is valid forever
+    "id":"5D96CF28-87A6-48B5-AE8E-99CF851ABE0C", //uuid identifying the license
+    "type":"trial", // either "trial" or "commercial"
+    "start_time":"2018/10/01", //datetime at which the license was generated
+    "end_time":"2018/10/31" //datetime at which the license expires
 }
 ```
 
