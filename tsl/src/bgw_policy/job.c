@@ -8,13 +8,132 @@
 #include <postgres.h>
 #include <funcapi.h>
 #include <utils/timestamp.h>
+#include <access/xact.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_type.h>
+#include <utils/lsyscache.h>
 
-#include "bgw_policy/recluster.h"
+#include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
+#include "bgw_policy/recluster.h"
 #include "errors.h"
 #include "job.h"
+#include "hypertable.h"
+#include "chunk.h"
+#include "dimension_slice.h"
+#include "dimension_vector.h"
+#include "dimension.h"
+#include "bgw/timer.h"
 
 #define ALTER_JOB_SCHEDULE_NUM_COLS	5
+#define RECLUSTER_SKIP_RECENT_DIM_SLICES_N	3
+
+/*
+ * Returns the ID of a chunk to recluster. Eligible chunks must be at least the
+ * 3rd newest chunk in the hypertable (not entirely exact because we use the number
+ * of dimension slices as a proxy for the number of chunks) and hasn't been
+ * reclustered recently. For this version of automatic reclustering, "not reclustered
+ * recently" means the chunk has not been reclustered at all. This information
+ * is available in the bgw_policy_chunk_stats metadata table.
+ */
+static int
+get_chunk_id_to_recluster(int32 job_id, Hypertable *ht)
+{
+	Dimension  *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
+	DimensionSlice *nth_dimension = ts_dimension_slice_nth_latest_slice(time_dimension->fd.id, RECLUSTER_SKIP_RECENT_DIM_SLICES_N);
+
+	if (!nth_dimension)
+		return -1;
+
+	Assert(time_dimension != NULL);
+
+	return ts_dimension_slice_oldest_chunk_without_executed_job(job_id,
+																time_dimension->fd.id,
+																BTLessEqualStrategyNumber,
+																nth_dimension->fd.range_start,
+																InvalidStrategy,
+																-1);
+}
+
+bool
+execute_recluster_policy(int32 job_id, recluster_func recluster)
+{
+	int			chunk_id;
+	bool		started = false;
+	BgwPolicyRecluster *args;
+	Hypertable *ht;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+	}
+
+	/* Get the arguments from the recluster_policy table */
+	args = ts_bgw_policy_recluster_find_by_job(job_id);
+
+	if (args == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("could not run recluster policy #%d because no args in policy table",
+						job_id)));
+
+	ht = ts_hypertable_get_by_id(args->fd.hypertable_id);
+
+	/* Find a chunk to recluster in the selected hypertable */
+	chunk_id = get_chunk_id_to_recluster(args->fd.job_id, ht);
+
+	if (chunk_id == -1)
+	{
+		elog(NOTICE, "didn't find a chunk that needed reclustering");
+		goto commit;
+	}
+
+	/*
+	 * NOTE: We pass the Oid of the hypertable's index, and the true recluster
+	 * function should translate this to the Oid of the index on the specific
+	 * chunk.
+	 */
+	recluster((ts_chunk_get_by_id(chunk_id, 0, false))->table_id, get_relname_relid(NameStr(args->fd.hypertable_index_name), get_namespace_oid(NameStr(ht->fd.schema_name), false)), false, InvalidOid);
+
+	/* Now update chunk_stats table */
+	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id, chunk_id, ts_timer_get_current_timestamp());
+
+commit:
+	if (started)
+		CommitTransactionCommand();
+
+	return true;
+}
+
+bool
+execute_drop_chunks_policy(int32 job_id)
+{
+	bool		started = false;
+	BgwPolicyDropChunks *args;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+	}
+
+	/* Get the arguments from the drop_chunks_policy table */
+	args = ts_bgw_policy_drop_chunks_find_by_job(job_id);
+
+	if (args == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("could not run drop_chunks policy #%d because no args in policy table",
+						job_id)));
+
+	ts_chunk_do_drop_chunks(ts_hypertable_id_to_relid(args->fd.hypertable_id), IntervalPGetDatum(&args->fd.older_than), 0, INTERVALOID, InvalidOid, args->fd.cascade);
+
+	if (started)
+		CommitTransactionCommand();
+	return true;
+}
+
 
 bool
 tsl_bgw_policy_job_execute(BgwJob *job)
@@ -22,41 +141,19 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_RECLUSTER:
-			{
-				/* Get the arguments from the recluster_policy table */
-				BgwPolicyRecluster *args = ts_bgw_policy_recluster_find_by_job(job->fd.id);
 
-				if (args == NULL)
-					ereport(ERROR,
-							(errcode(ERRCODE_TS_INTERNAL_ERROR),
-							 errmsg("could not run recluster policy #%d because no args in policy table",
-									job->fd.id)));
+			/*
+			 * TODO: Uncomment the following line when merging with the
+			 * timescale_recluster_rel function
+			 */
 
-				/* TODO: Call the recluster_main function */
-				/* Call it on a chunk in the selected hypertable */
-				/* cluster_rel( */
-				elog(WARNING, "Hi, supposed to run a recluster job...");
-				return true;
-			}
+			/*
+			 * return execute_recluster_policy(job->fd.id,
+			 * timescale_recluster_rel);
+			 */
+			return true;
 		case JOB_TYPE_DROP_CHUNKS:
-			{
-				/* Get the arguments from the drop_chunks_policy table */
-				BgwPolicyDropChunks *args = ts_bgw_policy_drop_chunks_find_by_job(job->fd.id);
-
-				if (args == NULL)
-					ereport(ERROR,
-							(errcode(ERRCODE_TS_INTERNAL_ERROR),
-							 errmsg("could not run drop_chunks policy #%d because no args in policy table",
-									job->fd.id)));
-
-				elog(WARNING, "Hi, supposed to run a drop_chunks job...");
-
-				/*
-				 * drop_chunks_main_wrapper(args->fd.hypertable_id,
-				 * IntervalPGetDatum(&args->fd.older_than), args->fd.cascade);
-				 */
-				return true;
-			}
+			return execute_drop_chunks_policy(job->fd.id);
 		default:
 			elog(ERROR, "scheduler tried to run an invalid enterprise job type: \"%s\"", NameStr(job->fd.job_type));
 	}
@@ -86,8 +183,8 @@ bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS)
 		}
 		else
 			ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
 	}
 
 	if (!PG_ARGISNULL(1))

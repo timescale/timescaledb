@@ -49,6 +49,9 @@ extern void ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_sli
 extern int	ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int	ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 
+extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n);
+extern TSDLLEXPORT int ts_dimension_slice_oldest_chunk_without_executed_job(int32 job_id, int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value);
+
 #define dimension_slice_insert(slice) \
 	ts_dimension_slice_insert_multi(&(slice), 1)
 

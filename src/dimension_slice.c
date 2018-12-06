@@ -16,13 +16,15 @@
 #include <catalog/pg_opfamily.h>
 #include <catalog/pg_type.h>
 
+#include "bgw_policy/chunk_stats.h"
 #include "catalog.h"
+#include "chunk.h"
+#include "chunk_constraint.h"
+#include "dimension.h"
 #include "dimension_slice.h"
+#include "dimension_vector.h"
 #include "hypertable.h"
 #include "scanner.h"
-#include "dimension.h"
-#include "chunk_constraint.h"
-#include "dimension_vector.h"
 
 
 /* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
@@ -143,7 +145,6 @@ dimension_slice_scan_limit_direction_internal(int indexid,
 	return ts_scanner_scan(&scanctx);
 }
 
-
 static int
 dimension_slice_scan_limit_internal(int indexid,
 									ScanKeyData *scankey,
@@ -201,15 +202,10 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit)
 	return ts_dimension_vec_sort(&slices);
 }
 
-/*
- * Look for all dimension slices where (lower_bound, upper_bound) of the dimension_slice contains the given (start_value, end_value) range
- *
- */
-DimensionVec *
-ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit)
+static void
+dimension_slice_scan_with_strategies(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, void *data, tuple_found_func tuple_found, int limit)
 {
 	ScanKeyData scankey[3];
-	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 	int			nkeys = 1;
 
 	/*
@@ -271,11 +267,23 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 										scankey,
 										nkeys,
-										dimension_vec_tuple_found,
-										&slices,
+										tuple_found,
+										data,
 										limit,
 										AccessShareLock,
 										CurrentMemoryContext);
+}
+
+/*
+ * Look for all dimension slices where (lower_bound, upper_bound) of the dimension_slice contains the given (start_value, end_value) range
+ *
+ */
+DimensionVec *
+ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value, int limit)
+{
+	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+
+	dimension_slice_scan_with_strategies(dimension_id, start_strategy, start_value, end_strategy, end_value, &slices, dimension_vec_tuple_found, limit);
 
 	return ts_dimension_vec_sort(&slices);
 }
@@ -627,4 +635,87 @@ ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 		dimension_slice_insert_relation(rel, slices[i]);
 
 	heap_close(rel, RowExclusiveLock);
+}
+
+static ScanTupleResult
+dimension_slice_nth_tuple_found(TupleInfo *ti, void *data)
+{
+	DimensionSlice **slice = data;
+	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
+
+	*slice = dimension_slice_from_tuple(ti->tuple);
+	MemoryContextSwitchTo(old);
+	return SCAN_CONTINUE;
+}
+
+DimensionSlice *
+ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n)
+{
+	ScanKeyData scankey[1];
+	int			num_tuples;
+	DimensionSlice *ret = NULL;
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+
+	num_tuples = dimension_slice_scan_limit_direction_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+															   scankey,
+															   1,
+															   dimension_slice_nth_tuple_found,
+															   &ret,
+															   n,
+															   BackwardScanDirection,
+															   AccessShareLock,
+															   CurrentMemoryContext);
+	if (num_tuples < n)
+		return NULL;
+
+	return ret;
+}
+
+typedef struct ChunkStatInfo
+{
+	int32		chunk_id;
+	int32		job_id;
+} ChunkStatInfo;
+
+static ScanTupleResult
+dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
+{
+	ListCell   *lc;
+	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	List	   *chunk_ids = NIL;
+	ChunkStatInfo *info = data;
+
+	ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
+
+	foreach(lc, chunk_ids)
+	{
+		BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(info->job_id, lfirst_int(lc));
+
+		if (chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0)
+		{
+			/* Save the chunk_id */
+			info->chunk_id = lfirst_int(lc);
+			return SCAN_DONE;
+		}
+	}
+
+	return SCAN_CONTINUE;
+}
+
+int
+ts_dimension_slice_oldest_chunk_without_executed_job(int32 job_id, int32 dimension_id, StrategyNumber start_strategy, int64 start_value, StrategyNumber end_strategy, int64 end_value)
+{
+	ChunkStatInfo info = {
+		.job_id = job_id,
+		.chunk_id = -1,
+	};
+
+	dimension_slice_scan_with_strategies(dimension_id, start_strategy, start_value, end_strategy, end_value, &info, dimension_slice_check_chunk_stats_tuple_found, -1);
+
+	return info.chunk_id;
 }

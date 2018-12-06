@@ -1839,8 +1839,8 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_DONE(funcctx);
 }
 
-static void
-do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, bool cascade)
+void
+ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, bool cascade)
 {
 	int			i = 0;
 	uint64		num_chunks = 0;
@@ -1942,7 +1942,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		{
 			LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
 		}
-		do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade);
+		ts_chunk_do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade);
 	}
 
 	PG_RETURN_NULL();
