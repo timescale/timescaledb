@@ -250,7 +250,7 @@ find_program(PGINDENT pgindent
 # Configuration for running pgindent
 if (PGINDENT)
   message(STATUS "Using pgindent ${PGINDENT}")
-  file(WRITE ${CMAKE_BINARY_DIR}/pgindent_excludes "\\..*/\n")
+  file(WRITE ${CMAKE_BINARY_DIR}/pgindent_excludes "^\\..*/\n")
 
   add_custom_command(OUTPUT typedefs.list
     DEPENDS ${PROJECT_NAME}
