@@ -101,8 +101,8 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 	{
 		if (!if_exists)
 			ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("cannot remove drop chunks policy, no such policy exists")));
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("cannot remove drop chunks policy, no such policy exists")));
 		else
 		{
 			ereport(NOTICE, (errmsg("drop chunks policy does not exist on hypertable \"%s\", skipping", get_rel_name(hypertable_oid))));

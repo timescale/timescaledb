@@ -11,6 +11,7 @@
 #include <utils/timestamp.h>
 
 #include "config.h"
+#include "export.h"
 
 typedef struct Timer
 {
@@ -20,7 +21,7 @@ typedef struct Timer
 } Timer;
 
 extern bool ts_timer_wait(TimestampTz until);
-extern TimestampTz ts_timer_get_current_timestamp(void);
+extern TSDLLEXPORT TimestampTz ts_timer_get_current_timestamp(void);
 
 #ifdef TS_DEBUG
 extern void ts_timer_set(const Timer *timer);

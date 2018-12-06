@@ -1,4 +1,5 @@
 set(TEST_FILES
+	bgw_policy.sql
     edition.sql
     tsl_tables.sql
     gapfill.sql

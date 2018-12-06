@@ -75,7 +75,8 @@ extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMO
 extern Chunk *ts_chunk_copy(Chunk *chunk);
 extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name, int16 num_constraints, MemoryContext mctx, bool fail_if_not_found);
 extern Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found);
-extern Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found);
+extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern int	ts_chunk_delete_by_relid(Oid chunk_oid);
@@ -85,6 +86,7 @@ extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern List *ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
+extern TSDLLEXPORT void ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, bool cascade);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found) \
 	ts_chunk_get_by_name_with_memory_context(schema_name, table_name, num_constraints, \

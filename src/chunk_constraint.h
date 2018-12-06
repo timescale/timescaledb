@@ -44,6 +44,7 @@ extern ChunkConstraints *ts_chunk_constraints_alloc(int size_hint, MemoryContext
 extern ChunkConstraints *ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint, MemoryContext mctx);
 extern ChunkConstraints *ts_chunk_constraints_copy(ChunkConstraints *constraints);
 extern int	ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx, MemoryContext mctx);
+extern int	ts_chunk_constraint_scan_by_dimension_slice_to_list(DimensionSlice *slice, List **list, MemoryContext mctx);
 extern int	ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs, MemoryContext mctx);
 extern int	ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id, Hypercube *cube);
 extern int	ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id, Oid hypertable_oid);

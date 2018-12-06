@@ -51,6 +51,7 @@ typedef enum ScanFilterResult
 
 typedef ScanTupleResult (*tuple_found_func) (TupleInfo *ti, void *data);
 typedef ScanFilterResult (*tuple_filter_func) (TupleInfo *ti, void *data);
+typedef void (*postscan_func) (int num_tuples, void *data);
 
 typedef struct ScannerCtx
 {

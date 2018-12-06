@@ -571,6 +571,32 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 									  mctx);
 }
 
+static ScanTupleResult
+chunk_constraint_dimension_slice_id_save_chunk_id(TupleInfo *ti, void *data)
+{
+	List	  **list = data;
+	bool		is_null;
+	int32		chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &is_null);
+
+	Assert(!is_null);
+
+	*list = lappend_int(*list, chunk_id);
+	return SCAN_CONTINUE;
+}
+
+/*
+ * Similar to chunk_constraint_scan_by_dimension_slice, but stores only chunk_ids
+ * in a list, which is easier to traverse and provides deterministic chunk selection.
+ */
+int
+ts_chunk_constraint_scan_by_dimension_slice_to_list(DimensionSlice *slice, List **list, MemoryContext mctx)
+{
+	return scan_by_dimension_slice_id(slice->fd.id,
+									  chunk_constraint_dimension_slice_id_save_chunk_id,
+									  list,
+									  mctx);
+}
+
 /*
  * Scan for chunk constraints given a dimension slice ID.
  *
