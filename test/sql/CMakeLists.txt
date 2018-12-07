@@ -14,7 +14,6 @@ set(TEST_FILES
   create_chunks.sql
   create_hypertable.sql
   create_table.sql
-  custom_type.sql
   ddl_alter_column.sql
   ddl_errors.sql
   ddl_single.sql
@@ -59,6 +58,12 @@ set(TEST_FILES
   version.sql
   views.sql
 )
+
+# only test custom type if we are in 64-bit architecture
+if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+  list(APPEND TEST_FILES
+    custom_type.sql)
+endif()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
