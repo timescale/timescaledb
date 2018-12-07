@@ -1,0 +1,38 @@
+#!/bin/bash
+
+if [ ! -x "@NM@" ];
+then
+  echo "Cannot check export format because nm is not installed" >&2
+  exit 1
+fi
+
+DEFINED_ONLY="--defined-only"
+EXTERN_ONLY="--extern-only"
+
+if nm --help | grep -q llvm; then
+    DEFINED_ONLY="-defined-only"
+    EXTERN_ONLY="-extern-only"
+fi
+
+# this script outputs all symbols not starting with an allowed prefix
+# exported symbols are allowed to start with
+#    ts_      for regular timescaledb functions
+#    pg_finfo for metadata defined by PG_FUNCTION_INFO_V1
+# we also whitelist a couple of special symbols
+#    _PG_init          the postgres extension startup function
+#    _PG_fini          the postgres extension shutdown function
+#    Pg_magic_func     used by postgres to check extension compatability
+#    timescaledb_hello used to test that our name collision resitsance works
+#    loader_hello      used to test that our name collision resitsance works
+# all of these symbols start with an additional leading '_' on macos
+find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
+    | xargs -0 @NM@ ${DEFINED_ONLY} ${EXTERN_ONLY} \
+    | sed -e 's:^/.*$::' -e '/^$/d' -e 's/[a-f0-9]* [A-Za-z] //' \
+    | grep -v \
+        -e '^_\?ts_' \
+        -e '^_\?pg_finfo' \
+        -e '^_\?_.*_init$' \
+        -e '^_\?_.*_fini$' \
+        -e '^_\?Pg_magic_func$' \
+        -e '^_\?timescaledb_' \
+        -e '^_\?loader_hello$'

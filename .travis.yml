@@ -66,6 +66,7 @@ jobs:
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/src /tmp/timescale_src'
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/test/src /tmp/timescale_test_src'
         - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make licensecheck'
+        - "test -z \"`./build/scripts/export_prefix_check.sh`\" || (echo \"functions missing 'ts_' prefix\"; ./build/scripts/export_prefix_check.sh; exit 1)"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
