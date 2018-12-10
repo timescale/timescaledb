@@ -275,7 +275,9 @@ SELECT create_hypertable('public.drop_chunk_test_tstz', 'time', chunk_time_inter
 
 SET timezone = '+1';
 INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()+INTERVAL '5 minutes', 1.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()+INTERVAL '5 minutes', 1.0, 'dev1');
 
 SELECT * FROM test.show_subtables('drop_chunk_test_ts');
 SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
