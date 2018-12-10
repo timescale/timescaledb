@@ -10,14 +10,37 @@ EXE_DIR=$(dirname $0)
 PG_REGRESS=${PG_REGRESS:-pg_regress}
 TEST_SCHEDULE=${TEST_SCHEDULE:-}
 TESTS=${TESTS:-}
+IGNORES=${IGNORES:-}
+
+contains() {
+    # a list contains a value foo if the regex ".* foo .*" holds true
+    [[ $1 =~ (.*[[:space:]]|^)$2([[:space:]].*|$) ]];
+    return $?
+}
 
 if [[ -z ${TESTS} ]]; then
     if [[ -z ${TEST_SCHEDULE} ]]; then
         for t in ${EXE_DIR}/sql/*.sql; do
             t=${t##${EXE_DIR}/sql/}
             t=${t%.sql}
-            TESTS="${TESTS} $t"
+
+            if ! contains "${IGNORES}" "${t}"; then
+                TESTS="${TESTS} ${t}"
+            fi
         done
+    elif [[ -n ${IGNORES} ]]; then
+        # get the tests from the test schedule, but ignore our IGNORES
+        while read t; do
+            if [[ t =~ ignore:* ]]; then
+                t=${t##ignore:* }
+                IGNORES="${t} ${IGNORES}"
+                continue
+            fi
+            t=${t##test: }
+            if ! contains "${IGNORES}" "${t}"; then
+                TESTS="${TESTS} ${t}"
+            fi
+        done < ${TEST_SCHEDULE}
     else
         PG_REGRESS_OPTS="${PG_REGRESS_OPTS} --schedule=${TEST_SCHEDULE}"
     fi
@@ -31,15 +54,8 @@ else
     for t in ${EXE_DIR}/sql/*.sql; do
         t=${t##${EXE_DIR}/sql/}
         t=${t%.sql}
-        # we use the following chain of comparisons to properly handle the case
-        # where a test name is a substring of another
-        if [[ $FILTER = "$t" ]]; then # one test
-            TESTS="${TESTS} $t"
-        elif [[ $FILTER = "$t "* ]]; then # first test in the list
-            TESTS="${TESTS} $t"
-        elif [[ $FILTER = *" $t" ]]; then # last test in the list
-            TESTS="${TESTS} $t"
-        elif [[ $FILTER = *" $t "* ]]; then # test in middle of the list
+
+        if contains "${FILTER}" "${t}" && ! contains "${IGNORES}" "${t}"; then
             TESTS="${TESTS} $t"
         fi
     done
