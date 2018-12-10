@@ -61,7 +61,7 @@ jobs:
         - docker exec -it pgbuild /bin/bash -c 'diff -r /build/src /tmp/timescale_src'
         - docker exec -it pgbuild /bin/bash -c 'diff -r /build/test/src /tmp/timescale_test_src'
       script:
-        - "[[ `git log --oneline --format=%B -n1 | head -n1` == [A-Z]* ]] || (echo "commit message must start with a capital letter"; exit 1)"
+        - "[[ `git log --oneline --format=%B -n1 | head -n1` == [A-Z]* ]] || (echo \"commit message must start with a capital letter\"; exit 1)"
         - docker exec -it pgbuild /bin/bash -c 'cp -R /build/src/ /tmp/timescale_src && cp -R /build/test/src/ /tmp/timescale_test_src'
         - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make pgindent'
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/src /tmp/timescale_src'
