@@ -221,44 +221,22 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid, bool failure_ok)
 int64
 ts_interval_from_now_to_internal(Datum interval, Oid type_oid)
 {
-	TimestampTz now;
-	Datum		res;
-
-	/*
-	 * This is really confusing but looks like it is how postgres works. Event
-	 * though there is a function called Datum now() that calls
-	 * GetCurrentTransactionStartTimestamp and returns TimestampTz, that is
-	 * not the same as now() function in SQL and even though return type is
-	 * Timestamp WITH TIMEZONE, GetCurrentTransactionStartTimestamp does not
-	 * incorporate current session timezone infromation in the returned value.
-	 * In order to take this timezone value set by the user into account, I
-	 * convert timestamp to POSIX time structure using timestamp2tm *which has
-	 * access to current timezone* setting through session_timezone variable
-	 * and incorporates it in the returned structure. I then convert it back
-	 * to TimestampTz through a similar function which takes this timezone
-	 * information int account.
-	 */
-	int			tzoff;
-	struct pg_tm tm;
-	fsec_t		fsec;
-	const char *tzn;
-
-	timestamp2tm(GetCurrentTransactionStartTimestamp(),
-				 &tzoff, &tm, &fsec, &tzn, NULL);
-	tm2timestamp(&tm, fsec, NULL, &now);
+	Datum		res = TimestampTzGetDatum(GetCurrentTimestamp());
 
 	switch (type_oid)
 	{
 		case TIMESTAMPOID:
+			res = DirectFunctionCall1(timestamptz_timestamp, res);
+			res = DirectFunctionCall2(timestamp_mi_interval, res, interval);
+
+			return ts_time_value_to_internal(res, type_oid, false);
 		case TIMESTAMPTZOID:
-			res = TimestampTzGetDatum(now);
 			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
 
 			return ts_time_value_to_internal(res, type_oid, false);
 		case DATEOID:
-			res = TimestampTzGetDatum(now);
-
-			res = DirectFunctionCall2(timestamptz_mi_interval, res, interval);
+			res = DirectFunctionCall1(timestamptz_timestamp, res);
+			res = DirectFunctionCall2(timestamp_mi_interval, res, interval);
 			res = DirectFunctionCall1(timestamp_date, res);
 
 			return ts_time_value_to_internal(res, type_oid, false);

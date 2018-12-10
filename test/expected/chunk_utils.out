@@ -838,25 +838,30 @@ NOTICE:  adding not-null constraint to column "time"
 
 SET timezone = '+1';
 INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()+INTERVAL '5 minutes', 1.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
+INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()+INTERVAL '5 minutes', 1.0, 'dev1');
 SELECT * FROM test.show_subtables('drop_chunk_test_ts');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_4_19_chunk | 
-(1 row)
+ _timescaledb_internal._hyper_4_20_chunk | 
+(2 rows)
 
 SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
                   Child                  | Tablespace 
 -----------------------------------------+------------
- _timescaledb_internal._hyper_5_20_chunk | 
-(1 row)
+ _timescaledb_internal._hyper_5_21_chunk | 
+ _timescaledb_internal._hyper_5_22_chunk | 
+(2 rows)
 
 BEGIN;
     SELECT show_chunks('drop_chunk_test_ts');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_4_19_chunk
-(1 row)
+ _timescaledb_internal._hyper_4_20_chunk
+(2 rows)
 
     SELECT show_chunks('drop_chunk_test_ts', now()::timestamp-interval '1 minute');
                show_chunks               
@@ -896,24 +901,26 @@ BEGIN;
     SELECT show_chunks('drop_chunk_test_tstz');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_5_20_chunk
-(1 row)
+ _timescaledb_internal._hyper_5_21_chunk
+ _timescaledb_internal._hyper_5_22_chunk
+(2 rows)
 
     SELECT show_chunks('drop_chunk_test_tstz', now() - interval '1 minute', now() - interval '6 minute');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_5_20_chunk
+ _timescaledb_internal._hyper_5_21_chunk
 (1 row)
 
     SELECT show_chunks('drop_chunk_test_tstz', newer_than => now() - interval '1 minute');
- show_chunks 
--------------
-(0 rows)
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_5_22_chunk
+(1 row)
 
     SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_5_20_chunk
+ _timescaledb_internal._hyper_5_21_chunk
 (1 row)
 
     SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_tstz');
@@ -923,9 +930,10 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
- Child | Tablespace 
--------+------------
-(0 rows)
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_5_22_chunk | 
+(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -949,9 +957,10 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
- Child | Tablespace 
--------+------------
-(0 rows)
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_4_20_chunk | 
+(1 row)
 
     SELECT drop_chunks(interval '1 minute', 'drop_chunk_test_tstz');
  drop_chunks 
@@ -960,9 +969,10 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
- Child | Tablespace 
--------+------------
-(0 rows)
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_5_22_chunk | 
+(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -973,9 +983,10 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
- Child | Tablespace 
--------+------------
-(0 rows)
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_4_20_chunk | 
+(1 row)
 
     SELECT drop_chunks(now()-interval '1 minute', 'drop_chunk_test_tstz');
  drop_chunks 
@@ -984,9 +995,10 @@ BEGIN;
 (1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
- Child | Tablespace 
--------+------------
-(0 rows)
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_5_22_chunk | 
+(1 row)
 
 ROLLBACK;
 \dt "_timescaledb_internal"._hyper*
@@ -998,8 +1010,10 @@ ROLLBACK;
  _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_4_19_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_5_20_chunk | table | default_perm_user
-(6 rows)
+ _timescaledb_internal | _hyper_4_20_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_5_21_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_5_22_chunk | table | default_perm_user
+(8 rows)
 
 SELECT show_chunks();
                show_chunks               
@@ -1009,8 +1023,10 @@ SELECT show_chunks();
  _timescaledb_internal._hyper_2_11_chunk
  _timescaledb_internal._hyper_2_12_chunk
  _timescaledb_internal._hyper_4_19_chunk
- _timescaledb_internal._hyper_5_20_chunk
-(6 rows)
+ _timescaledb_internal._hyper_4_20_chunk
+ _timescaledb_internal._hyper_5_21_chunk
+ _timescaledb_internal._hyper_5_22_chunk
+(8 rows)
 
 \set ON_ERROR_STOP 0
 SELECT show_chunks(older_than=>4);
@@ -1037,8 +1053,10 @@ ERROR:  time constraint arguments of "drop_chunks" should have same type as time
  _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_4_19_chunk | table | default_perm_user
- _timescaledb_internal | _hyper_5_20_chunk | table | default_perm_user
-(6 rows)
+ _timescaledb_internal | _hyper_4_20_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_5_21_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_5_22_chunk | table | default_perm_user
+(8 rows)
 
 CREATE TABLE PUBLIC.drop_chunk_test_date(time date, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
