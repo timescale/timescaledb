@@ -12,7 +12,7 @@ CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
 PG_VERSION=${PG_VERSION:-9.6.5} # Need 9.6.x version since we are
                                 # upgrading the extension from
                                 # versions that didn't support PG10.
-GIT_ID=$(git -C ${BASE_DIR} describe --dirty | sed -e "s|/|_|g")
+GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
