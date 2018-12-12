@@ -21,49 +21,6 @@
 #include <parser/analyze.h>
 #endif
 
-static Trigger *
-trigger_by_name_relation(Relation rel, const char *trigname, bool missing_ok)
-{
-	TriggerDesc *trigdesc = rel->trigdesc;
-	Trigger    *trigger = NULL;
-
-	if (trigdesc != NULL)
-	{
-		int			i;
-
-		for (i = 0; i < trigdesc->numtriggers; i++)
-		{
-			trigger = &trigdesc->triggers[i];
-
-			if (strncmp(trigger->tgname, trigname, NAMEDATALEN) == 0)
-				break;
-
-			trigger = NULL;
-		}
-	}
-
-	if (!missing_ok && NULL == trigger)
-		elog(ERROR, "no trigger \"%s\" for relation \"%s\"",
-			 trigname, get_rel_name(rel->rd_id));
-
-	return trigger;
-}
-
-Trigger *
-ts_trigger_by_name(Oid relid, const char *trigname, bool missing_ok)
-{
-	Relation	rel;
-	Trigger    *trigger;
-
-	rel = relation_open(relid, AccessShareLock);
-
-	trigger = trigger_by_name_relation(rel, trigname, missing_ok);
-
-	relation_close(rel, AccessShareLock);
-
-	return trigger;
-}
-
 /*
  * Replicate a trigger on a chunk.
  *
