@@ -28,7 +28,7 @@ PG_MODULE_MAGIC;
 extern void PGDLLEXPORT _PG_init(void);
 extern void PGDLLEXPORT _PG_fini(void);
 
-post_parse_analyze_hook_type prev_post_parse_analyze_hook;
+static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
 bool		ts_extension_invalidate(Oid relid);
 bool		ts_extension_is_loaded(void);

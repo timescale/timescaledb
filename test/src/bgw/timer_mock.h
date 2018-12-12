@@ -12,8 +12,8 @@
 
 #include "bgw/timer.h"
 
-extern void timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle);
+extern void ts_timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle);
 
-const Timer mock_timer;
+const Timer ts_mock_timer;
 
 #endif							/* tTIME_MOCK_H */

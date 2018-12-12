@@ -497,7 +497,7 @@ launcher_pre_shmem_cleanup(int code, Datum arg)
 	 * Reset our pid in the queue so that others know we've died and don't
 	 * wait forever
 	 */
-	bgw_message_queue_shmem_cleanup();
+	ts_bgw_message_queue_shmem_cleanup();
 }
 
 /*
@@ -609,7 +609,7 @@ message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId 
 static bool
 launcher_handle_message(HTAB *db_htab)
 {
-	BgwMessage *message = bgw_message_receive();
+	BgwMessage *message = ts_bgw_message_receive();
 	PGPROC	   *sender;
 	VirtualTransactionId vxid;
 	AckResult	action_result = ACK_FAILURE;
@@ -639,7 +639,7 @@ launcher_handle_message(HTAB *db_htab)
 			break;
 	}
 
-	bgw_message_send_ack(message, action_result);
+	ts_bgw_message_send_ack(message, action_result);
 	return true;
 }
 
@@ -703,7 +703,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 	ereport(LOG, (errmsg("TimescaleDB background worker launcher connected to shared catalogs")));
 
-	bgw_message_queue_set_reader();
+	ts_bgw_message_queue_set_reader();
 	db_htab = init_database_htab();
 	populate_database_htab(db_htab);
 

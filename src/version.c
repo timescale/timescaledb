@@ -20,7 +20,7 @@
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
 
-const char *git_commit = STR(EXT_GIT_COMMIT);
+static const char *git_commit = STR(EXT_GIT_COMMIT);
 
 TS_FUNCTION_INFO_V1(ts_get_git_commit);
 

@@ -31,13 +31,13 @@ static BackgroundWorkerHandle *bgw_handle = NULL;
 static bool mock_wait(TimestampTz until);
 static TimestampTz mock_current_time(void);
 
-const Timer mock_timer = {
+const Timer ts_mock_timer = {
 	.get_current_timestamp = mock_current_time,
 	.wait = mock_wait,
 };
 
 void
-timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle)
+ts_timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle)
 {
 	elog(WARNING, "[TESTING] Registered new background worker");
 	bgw_handle = handle;

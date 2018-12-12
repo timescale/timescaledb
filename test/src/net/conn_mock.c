@@ -85,7 +85,7 @@ static ConnOps mock_ops = {
 };
 
 ssize_t
-connection_mock_set_recv_buf(Connection *conn, char *buf, size_t buf_len)
+ts_connection_mock_set_recv_buf(Connection *conn, char *buf, size_t buf_len)
 {
 	MockConnection *mock = (MockConnection *) conn;
 

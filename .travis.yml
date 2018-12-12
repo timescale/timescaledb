@@ -26,7 +26,7 @@ install:
   # First build without OpenSSL
   - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres && make install"
   # Now build with OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres && make install"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${ADDITIONAL_CMAKE_FLAGS:-} && make install"
   # Ensure postgres user has permissions
   - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /build/"
 script:
@@ -53,7 +53,7 @@ jobs:
       stage: test
       name: "pgindent and license check"
       env:
-        - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+        - PG_VERSION=10.2 PG_GIT_TAG=REL_10_2 ADDITIONAL_CMAKE_FLAGS="-DUSE_DEFAULT_VISIBILITY=1"
       before_install:
         - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres timescaledev/pgindent:10-alpine
@@ -66,7 +66,7 @@ jobs:
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/src /tmp/timescale_src'
         - docker exec -it pgbuild /bin/bash -c 'diff -r -q /build/test/src /tmp/timescale_test_src'
         - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make licensecheck'
-        - "test -z \"`./build/scripts/export_prefix_check.sh`\" || (echo \"functions missing 'ts_' prefix\"; ./build/scripts/export_prefix_check.sh; exit 1)"
+        - "test -z \"`./build/scripts/export_prefix_check.sh`\" || (echo \"functions missing 'ts_' prefix or should be static\"; ./build/scripts/export_prefix_check.sh; exit 1)"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
@@ -77,7 +77,7 @@ jobs:
       stage: test
       name: "Regression 10"
       env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
-    
+
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
       stage: test
       name: "Regression 11"
@@ -128,7 +128,7 @@ jobs:
       script:
         # There is a breakage of ABI between 10.1->10.2 so test starting at 10.2
         - PG_MAJOR=10 PG_MINOR_COMPILE=2 bash -x ./scripts/docker-run-abi-test.sh
-    
+
     - if: type = cron
       stage: test
       name: "ABI breakage smoketest 11"

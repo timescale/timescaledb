@@ -1,5 +1,7 @@
 # Hide symbols by default in shared libraries
-set(CMAKE_C_VISIBILITY_PRESET "hidden")
+if(NOT USE_DEFAULT_VISIBILITY)
+  set(CMAKE_C_VISIBILITY_PRESET "hidden")
+endif()
 
 if (UNIX)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
