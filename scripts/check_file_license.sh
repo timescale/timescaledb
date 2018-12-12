@@ -65,7 +65,7 @@ check_file() {
 args=`getopt "c:e:s:t:u:" $*`; errcode=$?; set -- $args
 
 if [[ ${errcode} != 0 ]]; then
-        echo 'Usage: check_file_licesne ((-c|-e|-s|-t|-u) <filename> ...)'
+        echo 'Usage: check_file_license ((-c|-e|-s|-t|-u) <filename> ...)'
         return 2
 fi
 
