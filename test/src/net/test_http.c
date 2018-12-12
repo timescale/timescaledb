@@ -17,7 +17,7 @@
 
 /*  Tests for auxiliary HttpResponseState functions in http_parsing.h */
 
-const char *TEST_RESPONSES[] = {
+static const char *TEST_RESPONSES[] = {
 	"HTTP/1.1 200 OK\r\n"
 	"Content-Type: application/json; charset=utf-8\r\n"
 	"Date: Thu, 12 Jul 2018 18:33:04 GMT\r\n"
@@ -46,7 +46,7 @@ const char *TEST_RESPONSES[] = {
 	"{\"status\":201}",
 };
 
-const char *const BAD_RESPONSES[] = {
+static const char *const BAD_RESPONSES[] = {
 	"HTTP/1.1 200 OK\r\n"
 	"Content-Type: application/json; charset=utf-8\r\n"
 	"Date: Thu, 12 Jul 2018 18:33:04 GMT\r\n"
@@ -62,8 +62,8 @@ const char *const BAD_RESPONSES[] = {
 	NULL
 };
 
-int			TEST_LENGTHS[] = {14, 14, 14, 14};
-const char *MESSAGE_BODY[] = {"{\"status\":200}", "{\"status\":200}", "{\"status\":200}", "{\"status\":201}"};
+static int	TEST_LENGTHS[] = {14, 14, 14, 14};
+static const char *MESSAGE_BODY[] = {"{\"status\":200}", "{\"status\":200}", "{\"status\":200}", "{\"status\":201}"};
 
 TS_FUNCTION_INFO_V1(ts_test_http_parsing);
 TS_FUNCTION_INFO_V1(ts_test_http_parsing_full);

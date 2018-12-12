@@ -63,18 +63,18 @@ ts_bgw_num_unreserved(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_db_workers_start(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_BOOL(bgw_message_send_and_wait(START, MyDatabaseId));
+	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(START, MyDatabaseId));
 }
 
 Datum
 ts_bgw_db_workers_stop(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_BOOL(bgw_message_send_and_wait(STOP, MyDatabaseId));
+	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(STOP, MyDatabaseId));
 }
 
 
 Datum
 ts_bgw_db_workers_restart(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_BOOL(bgw_message_send_and_wait(RESTART, MyDatabaseId));
+	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(RESTART, MyDatabaseId));
 }

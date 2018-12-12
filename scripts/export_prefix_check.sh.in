@@ -19,11 +19,12 @@ fi
 #    ts_      for regular timescaledb functions
 #    pg_finfo for metadata defined by PG_FUNCTION_INFO_V1
 # we also whitelist a couple of special symbols
-#    _PG_init          the postgres extension startup function
-#    _PG_fini          the postgres extension shutdown function
-#    Pg_magic_func     used by postgres to check extension compatability
-#    timescaledb_hello used to test that our name collision resitsance works
-#    loader_hello      used to test that our name collision resitsance works
+#    _.*_init             module startup functions
+#    _.*_fini             module shutdown functions
+#    Pg_magic_func        used by postgres to check extension compatability
+#    timescaledb_hello    used to test that our name collision resitsance works
+#    loader_hello         used to test that our name collision resitsance works
+#    test_symbol_conflict used to test that our name collision resitsance works
 # all of these symbols start with an additional leading '_' on macos
 find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
     | xargs -0 @NM@ ${DEFINED_ONLY} ${EXTERN_ONLY} \
@@ -35,4 +36,5 @@ find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
         -e '^_\?_.*_fini$' \
         -e '^_\?Pg_magic_func$' \
         -e '^_\?timescaledb_' \
-        -e '^_\?loader_hello$'
+        -e '^_\?loader_hello$' \
+        -e '^_\?test_symbol_conflict$' \

@@ -55,7 +55,7 @@ TS_FUNCTION_INFO_V1(ts_bgw_scheduler_main);
  * Global so the invalidate cache message can set. Don't need to protect
  * access with a lock because it's accessed only by the scheduler process.
  */
-bool		jobs_list_needs_update;
+static bool jobs_list_needs_update;
 
 /* has to be global to shutdown jobs on exit */
 static List *scheduled_jobs = NIL;

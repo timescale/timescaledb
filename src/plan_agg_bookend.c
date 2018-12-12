@@ -134,8 +134,8 @@ typedef struct FuncStrategy
 
 static Oid	first_last_arg_types[] = {ANYELEMENTOID, ANYOID};
 
-struct FuncStrategy first_func_strategy = {.func_oid = InvalidOid,.strategy = BTLessStrategyNumber};
-struct FuncStrategy last_func_strategy = {.func_oid = InvalidOid,.strategy = BTGreaterStrategyNumber};
+static struct FuncStrategy first_func_strategy = {.func_oid = InvalidOid,.strategy = BTLessStrategyNumber};
+static struct FuncStrategy last_func_strategy = {.func_oid = InvalidOid,.strategy = BTGreaterStrategyNumber};
 
 static Oid
 get_function_oid(char *name, int nargs, Oid arg_types[])

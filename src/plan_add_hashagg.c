@@ -165,7 +165,7 @@ static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
 };
 #define _MAX_HASHAGG_FUNCTIONS (sizeof(custom_estimate_func_info)/sizeof(custom_estimate_func_info[0]))
 
-HTAB	   *custom_estimate_func_hash = NULL;
+static HTAB *custom_estimate_func_hash = NULL;
 
 static void
 initialize_custom_estimate_func_info()

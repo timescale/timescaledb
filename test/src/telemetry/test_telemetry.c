@@ -73,7 +73,7 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 #ifdef TS_DEBUG
 	if (type == CONNECTION_MOCK)
-		connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
+		ts_connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
 #endif
 
 	req = build_request(status);

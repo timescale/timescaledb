@@ -83,7 +83,7 @@ queue_init()
 /* This gets called when shared memory is initialized in a backend
  * (shmem_startup_hook) */
 extern void
-bgw_message_queue_shmem_startup(void)
+ts_bgw_message_queue_shmem_startup(void)
 {
 	queue_init();
 }
@@ -91,7 +91,7 @@ bgw_message_queue_shmem_startup(void)
 /* This is called in the loader during server startup to allocate a shared
  * memory segment*/
 extern void
-bgw_message_queue_alloc(void)
+ts_bgw_message_queue_alloc(void)
 {
 	RequestAddinShmemSpace(sizeof(MessageQueue));
 	RequestNamedLWLockTranche(BGW_MQ_TRANCHE_NAME, 1);
@@ -291,7 +291,7 @@ enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message, shm_mq_ha
  * consumes message and deallocates
  */
 extern bool
-bgw_message_send_and_wait(BgwMessageType message_type, Oid db_oid)
+ts_bgw_message_send_and_wait(BgwMessageType message_type, Oid db_oid)
 {
 	shm_mq	   *ack_queue;
 	dsm_segment *seg;
@@ -318,13 +318,13 @@ bgw_message_send_and_wait(BgwMessageType message_type, Oid db_oid)
  * Called only by the launcher
  */
 extern BgwMessage *
-bgw_message_receive(void)
+ts_bgw_message_receive(void)
 {
 	return queue_remove(mq);
 }
 
 extern void
-bgw_message_queue_set_reader(void)
+ts_bgw_message_queue_set_reader(void)
 {
 	queue_set_reader(mq);
 }
@@ -387,7 +387,7 @@ send_ack(dsm_segment *seg, bool success)
  * consumes message and deallocates
  */
 extern void
-bgw_message_send_ack(BgwMessage *message, bool success)
+ts_bgw_message_send_ack(BgwMessage *message, bool success)
 {
 	dsm_segment *seg;
 
@@ -432,7 +432,7 @@ queue_shmem_cleanup(MessageQueue *queue)
 }
 
 extern void
-bgw_message_queue_shmem_cleanup(void)
+ts_bgw_message_queue_shmem_cleanup(void)
 {
 	queue_shmem_cleanup(mq);
 }

@@ -24,7 +24,7 @@
 
 #define TELEMETRY_INITIAL_NUM_RUNS	12
 
-const char *job_type_names[_MAX_JOB_TYPE] = {
+static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
 	[JOB_TYPE_UNKNOWN] = "unknown"
 };

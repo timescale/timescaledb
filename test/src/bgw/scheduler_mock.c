@@ -48,7 +48,7 @@ typedef enum TestJobType
 	_MAX_TEST_JOB_TYPE
 } TestJobType;
 
-const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
+static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_1] = "bgw_test_job_1",
 	[TEST_JOB_TYPE_JOB_2_ERROR] = "bgw_test_job_2_error",
 	[TEST_JOB_TYPE_JOB_3_LONG] = "bgw_test_job_3_long",
@@ -118,13 +118,13 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	ts_bgw_log_set_application_name("DB Scheduler");
 	ts_register_emit_log_hook();
 
-	ts_timer_set(&mock_timer);
+	ts_timer_set(&ts_mock_timer);
 
 	ts_bgw_job_set_job_entrypoint_function_name("ts_bgw_job_execute_test");
 
 	pgstat_report_appname("DB Scheduler Test");
 
-	ts_bgw_scheduler_process(ttl, timer_mock_register_bgw_handle);
+	ts_bgw_scheduler_process(ttl, ts_timer_mock_register_bgw_handle);
 
 	PG_RETURN_VOID();
 }
@@ -284,7 +284,7 @@ test_job_dispatcher(BgwJob *job)
 Datum
 ts_bgw_job_execute_test(PG_FUNCTION_ARGS)
 {
-	ts_timer_set(&mock_timer);
+	ts_timer_set(&ts_mock_timer);
 	ts_bgw_job_set_unknown_job_type_hook(test_job_dispatcher);
 
 	return ts_bgw_job_entrypoint(fcinfo);

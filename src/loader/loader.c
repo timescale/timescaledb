@@ -328,7 +328,7 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 	if (dropped_db_oid != InvalidOid)
 	{
 		ereport(LOG, (errmsg("TimescaleDB background worker scheduler for database %u will be stopped", dropped_db_oid)));
-		bgw_message_send_and_wait(STOP, dropped_db_oid);
+		ts_bgw_message_send_and_wait(STOP, dropped_db_oid);
 	}
 	return;
 }
@@ -356,12 +356,12 @@ post_analyze_hook(ParseState *pstate, Query *query)
 					 * a rollback) the scheduler
 					 */
 				{
-					bgw_message_send_and_wait(RESTART, MyDatabaseId);
+					ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
 				}
 				break;
 			case T_DropOwnedStmt:
 				if (drop_owned_statement_drops_extension((DropOwnedStmt *) query->utilityStmt))
-					bgw_message_send_and_wait(RESTART, MyDatabaseId);
+					ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
 				break;
 			default:
 
@@ -394,7 +394,7 @@ timescale_shmem_startup_hook(void)
 	if (prev_shmem_startup_hook)
 		prev_shmem_startup_hook();
 	ts_bgw_counter_shmem_startup();
-	bgw_message_queue_shmem_startup();
+	ts_bgw_message_queue_shmem_startup();
 }
 
 static void
@@ -417,7 +417,7 @@ _PG_init(void)
 	elog(INFO, "timescaledb loaded");
 
 	ts_bgw_counter_shmem_alloc();
-	bgw_message_queue_alloc();
+	ts_bgw_message_queue_alloc();
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
