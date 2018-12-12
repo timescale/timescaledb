@@ -34,60 +34,6 @@
 #include <utils/fmgrprotos.h>
 #endif
 
-TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_microseconds);
-
-/*
- * Convert a Postgres TIMESTAMP to BIGINT microseconds relative the Postgres epoch.
- */
-Datum
-ts_pg_timestamp_to_microseconds(PG_FUNCTION_ARGS)
-{
-	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	int64		microseconds;
-
-	if (!IS_VALID_TIMESTAMP(timestamp))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-				 errmsg("timestamp out of range")));
-
-#ifdef HAVE_INT64_TIMESTAMP
-	microseconds = timestamp;
-#else
-	if (1)
-	{
-		int64		seconds = (int64) timestamp;
-
-		microseconds = (seconds * USECS_PER_SEC) + ((timestamp - seconds) * USECS_PER_SEC);
-	}
-#endif
-	PG_RETURN_INT64(microseconds);
-}
-
-TS_FUNCTION_INFO_V1(ts_pg_microseconds_to_timestamp);
-
-/*
- * Convert BIGINT microseconds relative the UNIX epoch to a Postgres TIMESTAMP.
- */
-Datum
-ts_pg_microseconds_to_timestamp(PG_FUNCTION_ARGS)
-{
-	int64		microseconds = PG_GETARG_INT64(0);
-	TimestampTz timestamp;
-
-#ifdef HAVE_INT64_TIMESTAMP
-	timestamp = microseconds;
-#else
-	timestamp = microseconds / USECS_PER_SEC;
-#endif
-
-	if (!IS_VALID_TIMESTAMP(timestamp))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-				 errmsg("timestamp out of range")));
-
-	PG_RETURN_TIMESTAMPTZ(timestamp);
-}
-
 TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_unix_microseconds);
 
 /*
@@ -156,18 +102,6 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 #endif
 	PG_RETURN_TIMESTAMPTZ(timestamp);
 }
-
-TS_FUNCTION_INFO_V1(ts_time_to_internal);
-
-Datum
-ts_time_to_internal(PG_FUNCTION_ARGS)
-{
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
-	PG_RETURN_INT64(ts_time_value_to_internal(PG_GETARG_DATUM(0), get_fn_expr_argtype(fcinfo->flinfo, 0), false));
-}
-
 
 /* Convert valid timescale time column type to internal representation */
 int64

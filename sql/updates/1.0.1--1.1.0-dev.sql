@@ -5,3 +5,6 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.drop_chunks_impl(BIGINT, NAME, NAM
 DROP FUNCTION IF EXISTS _timescaledb_internal.drop_chunks_type_check(REGTYPE, NAME, NAME);
 DROP FUNCTION IF EXISTS _timescaledb_internal.dimension_get_time(INTEGER);
 DROP FUNCTION IF EXISTS create_hypertable(regclass, name, name, integer, name, name, anyelement, boolean, boolean, regproc, boolean, text, regproc);
+DROP FUNCTION IF EXISTS _timescaledb_internal.to_microseconds(TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS _timescaledb_internal.to_timestamp_pg(BIGINT);
+DROP FUNCTION IF EXISTS _timescaledb_internal.time_to_internal(anyelement);
