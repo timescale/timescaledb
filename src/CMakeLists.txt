@@ -11,7 +11,6 @@ set(SOURCES
   chunk_dispatch_state.c
   chunk_index.c
   chunk_insert_state.c
-  compat.c
   constraint_aware_append.c
   copy.c
   dimension.c
