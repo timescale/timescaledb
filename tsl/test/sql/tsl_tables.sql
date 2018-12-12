@@ -253,3 +253,30 @@ select remove_recluster_policy('test_table');
 -- Row should be gone
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'recluster');
+
+-- Now test if alter_job_schedule works
+select add_recluster_policy('test_table', 'test_table_time_idx') as job_id \gset
+ select * from _timescaledb_config.bgw_job where id=:job_id;
+-- No change
+select * from alter_policy_schedule(:job_id);
+-- Changes expected
+select * from alter_policy_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
+select * from alter_policy_schedule(:job_id, INTERVAL '123 years');
+select * from alter_policy_schedule(:job_id, retry_period => INTERVAL '33 hours');
+select * from alter_policy_schedule(:job_id, max_runtime => INTERVAL '456 sec');
+select * from alter_policy_schedule(:job_id, max_retries => 0);
+select * from alter_policy_schedule(:job_id, max_retries => -1);
+select * from alter_policy_schedule(:job_id, max_retries => 20);
+
+-- No change
+select * from alter_policy_schedule(:job_id, max_runtime => NULL);
+select * from alter_policy_schedule(:job_id, max_retries => NULL);
+
+-- Check if_exists boolean works correctly
+select * from alter_policy_schedule(1234, if_exists => TRUE);
+
+\set ON_ERROR_STOP 0
+select * from alter_policy_schedule(1234);
+\set ON_ERROR_STOP 1
+
+select remove_recluster_policy('test_table');

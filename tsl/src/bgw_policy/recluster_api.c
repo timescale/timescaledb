@@ -139,7 +139,9 @@ recluster_remove_policy(PG_FUNCTION_ARGS)
 	if (policy == NULL)
 	{
 		if (!if_exists)
-			elog(ERROR, "could not remove recluster policy, no such policy exists");
+			ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("cannot remove recluster policy, no such policy exists")));
 		else
 		{
 			ereport(NOTICE, (errmsg("recluster policy does not exist on hypertable \"%s\", skipping", get_rel_name(hypertable_oid))));

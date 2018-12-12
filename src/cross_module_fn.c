@@ -18,6 +18,7 @@ TS_FUNCTION_INFO_V1(ts_add_drop_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_add_recluster_policy);
 TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_remove_recluster_policy);
+TS_FUNCTION_INFO_V1(ts_alter_policy_schedule);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -41,6 +42,12 @@ Datum
 ts_remove_recluster_policy(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->remove_recluster_policy(fcinfo));
+}
+
+Datum
+ts_alter_policy_schedule(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->alter_policy_schedule(fcinfo));
 }
 
 /*
@@ -127,6 +134,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.gapfill_date_time_bucket = error_no_default_fn_pg_function,
 	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_function,
 	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_function,
+	.alter_policy_schedule = error_no_default_fn_pg,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

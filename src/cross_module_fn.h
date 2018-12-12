@@ -44,6 +44,7 @@ typedef struct CrossModuleFunctions
 	PGFunction	gapfill_date_time_bucket;
 	PGFunction	gapfill_timestamp_time_bucket;
 	PGFunction	gapfill_timestamptz_time_bucket;
+	Datum		(*alter_policy_schedule) (PG_FUNCTION_ARGS);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

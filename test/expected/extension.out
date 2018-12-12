@@ -18,6 +18,7 @@ ORDER BY proname;
  add_dimension
  add_drop_chunks_policy
  add_recluster_policy
+ alter_policy_schedule
  attach_tablespace
  chunk_relation_size
  chunk_relation_size_pretty
@@ -45,5 +46,5 @@ ORDER BY proname;
  show_tablespaces
  time_bucket
  time_bucket_gapfill
-(30 rows)
+(31 rows)
 
