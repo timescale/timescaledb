@@ -36,13 +36,14 @@ extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job);
 
 extern List *ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx);
 
-extern BgwJob *ts_bgw_job_find(int job_id, MemoryContext mctx);
+TSDLLEXPORT BgwJob *ts_bgw_job_find(int job_id, MemoryContext mctx, bool fail_if_not_found);
 
 extern bool ts_bgw_job_has_timeout(BgwJob *job);
 extern TimestampTz ts_bgw_job_timeout_at(BgwJob *job, TimestampTz start_time);
 
 extern TSDLLEXPORT bool ts_bgw_job_delete_by_id(int32 job_id);
 extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period);
+extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_job);
 
 extern bool ts_bgw_job_execute(BgwJob *job);
 

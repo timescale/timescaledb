@@ -37,3 +37,15 @@ LANGUAGE C VOLATILE STRICT;
 CREATE OR REPLACE FUNCTION remove_recluster_policy(main_table REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_remove_recluster_policy'
 LANGUAGE C VOLATILE STRICT;
+
+-- Returns the updated job schedule values
+CREATE OR REPLACE FUNCTION alter_policy_schedule(
+    job_id INTEGER,
+    schedule_interval INTERVAL = NULL,
+    max_runtime INTERVAL = NULL,
+    max_retries INTEGER = NULL,
+    retry_period INTERVAL = NULL,
+    if_exists BOOL = FALSE)
+RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL)
+AS '@MODULE_PATHNAME@', 'ts_alter_policy_schedule'
+LANGUAGE C VOLATILE;

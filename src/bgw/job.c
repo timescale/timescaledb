@@ -144,7 +144,7 @@ ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 
 static void
 bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
-				 tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, MemoryContext mctx, LOCKMODE lockmode)
+				 tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, MemoryContext mctx, LOCKMODE lockmode, bool fail_if_not_found)
 {
 	Catalog    *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
@@ -160,12 +160,12 @@ bgw_job_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 		.result_mctx = mctx,
 	};
 
-	ts_scanner_scan_one(&scanctx, true, "bgw job");
+	ts_scanner_scan_one(&scanctx, fail_if_not_found, "bgw job");
 }
 
 static inline void
 bgw_job_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_filter_func tuple_filter,
-					void *data, MemoryContext mctx, LOCKMODE lockmode)
+					void *data, MemoryContext mctx, LOCKMODE lockmode, bool fail_if_not_found)
 {
 	ScanKeyData scankey[1];
 
@@ -173,7 +173,7 @@ bgw_job_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_filter
 				Anum_bgw_job_stat_pkey_idx_job_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(bgw_job_id));
 	bgw_job_scan_one(BGW_JOB_STAT_PKEY_IDX,
-					 scankey, 1, tuple_found, tuple_filter, data, mctx, lockmode);
+					 scankey, 1, tuple_found, tuple_filter, data, mctx, lockmode, fail_if_not_found);
 }
 
 static ScanTupleResult
@@ -191,11 +191,11 @@ bgw_job_tuple_found(TupleInfo *ti, void *const data)
 }
 
 BgwJob *
-ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx)
+ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 {
 	BgwJob	   *job_stat = NULL;
 
-	bgw_job_scan_job_id(bgw_job_id, bgw_job_tuple_found, NULL, &job_stat, mctx, AccessShareLock);
+	bgw_job_scan_job_id(bgw_job_id, bgw_job_tuple_found, NULL, &job_stat, mctx, AccessShareLock, fail_if_not_found);
 
 	return job_stat;
 }
@@ -353,7 +353,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, InvalidOid);
 
 	StartTransactionCommand();
-	job = ts_bgw_job_find(job_id, TopMemoryContext);
+	job = ts_bgw_job_find(job_id, TopMemoryContext, true);
 	CommitTransactionCommand();
 
 	if (job == NULL)
@@ -474,4 +474,59 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 
 	heap_close(rel, RowExclusiveLock);
 	return values[AttrNumberGetAttrOffset(Anum_bgw_job_id)];
+}
+
+static ScanTupleResult
+bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
+{
+	BgwJob	   *updated_job = (BgwJob *) data;
+	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	FormData_bgw_job *fd = (FormData_bgw_job *) GETSTRUCT(tuple);
+
+	fd->schedule_interval = updated_job->fd.schedule_interval;
+	fd->max_runtime = updated_job->fd.max_runtime;
+	fd->max_retries = updated_job->fd.max_retries;
+	fd->retry_period = updated_job->fd.retry_period;
+
+	ts_catalog_update(ti->scanrel, tuple);
+	heap_freetuple(tuple);
+	return SCAN_DONE;
+}
+
+static bool
+bgw_job_update_scan(ScanKeyData *scankey, void *data)
+{
+	Catalog    *catalog = ts_catalog_get();
+	ScannerCtx	scanctx = {
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = data,
+		.limit = 1,
+		.tuple_found = bgw_job_tuple_update_by_id,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+		.result_mctx = CurrentMemoryContext,
+		.tuplock = {
+			.waitpolicy = LockWaitBlock,
+			.lockmode = LockTupleExclusive,
+			.enabled = false,
+		}
+	};
+
+	return ts_scanner_scan(&scanctx);
+}
+
+/* Overwrite job with specified job_id with the given fields */
+void
+ts_bgw_job_update_by_id(int32 job_id, BgwJob *job)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_bgw_job_pkey_idx_id,
+				BTEqualStrategyNumber, F_INT4EQ,
+				Int32GetDatum(job_id));
+
+	bgw_job_update_scan(scankey, (void *) job);
 }

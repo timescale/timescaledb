@@ -10,5 +10,6 @@
 
 #include  "bgw/job.h"
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);
+extern Datum bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS);
 
 #endif							/* TIMESCALEDB_BGW_POLICY_JOB_H */
