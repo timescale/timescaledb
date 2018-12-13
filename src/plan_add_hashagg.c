@@ -31,7 +31,6 @@
 #include "guc.h"
 #include "dimension.h"
 #include "chunk_dispatch_plan.h"
-#include "planner_utils.h"
 #include "hypertable_insert.h"
 #include "constraint_aware_append.h"
 #include "compat.h"

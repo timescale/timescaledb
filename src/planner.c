@@ -43,7 +43,6 @@
 #include "guc.h"
 #include "dimension.h"
 #include "chunk_dispatch_plan.h"
-#include "planner_utils.h"
 #include "hypertable_insert.h"
 #include "constraint_aware_append.h"
 #include "partitioning.h"
@@ -61,119 +60,6 @@ static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
-
-typedef struct ModifyTableWalkerCtx
-{
-	Query	   *parse;
-	Cache	   *hcache;
-	List	   *rtable;
-} ModifyTableWalkerCtx;
-
-/*
- * Traverse the plan tree to find ModifyTable nodes that indicate an INSERT
- * operation. We'd like to modify these plans to redirect tuples to chunks
- * instead of the parent table.
- *
- * From the ModifyTable description: "Each ModifyTable node contains
- * a list of one or more subplans, much like an Append node.  There
- * is one subplan per result relation."
- *
- * The subplans produce the tuples for INSERT, while the result relation is the
- * table we'd like to insert into.
- *
- * The way we redirect tuples to chunks is to insert an intermediate "chunk
- * dispatch" plan node, inbetween the ModifyTable and its subplan that produces
- * the tuples. When the ModifyTable plan is executed, it tries to read a tuple
- * from the intermediate chunk dispatch plan instead of the original
- * subplan. The chunk plan reads the tuple from the original subplan, looks up
- * the chunk, sets the executor's resultRelation to the chunk table and finally
- * returns the tuple to the ModifyTable node.
- *
- * We also need to wrap the ModifyTable plan node with a HypertableInsert node
- * to give the ChunkDispatchState node access to the ModifyTableState node in
- * the execution phase.
- *
- * Conceptually, the plan modification looks like this:
- *
- * Original plan:
- *
- *		  ^
- *		  |
- *	[ ModifyTable ] -> resultRelation
- *		  ^
- *		  | Tuple
- *		  |
- *	  [ subplan ]
- *
- *
- * Modified plan:
- *
- *	[ HypertableInsert ]
- *		  ^
- *		  |
- *	[ ModifyTable ] -> resultRelation
- *		  ^			   ^
- *		  | Tuple	  / <Set resultRelation to the matching chunk table>
- *		  |			 /
- * [ ChunkDispatch ]
- *		  ^
- *		  | Tuple
- *		  |
- *	  [ subplan ]
- */
-static void
-modifytable_plan_walker(Plan **planptr, void *pctx)
-{
-	ModifyTableWalkerCtx *ctx = (ModifyTableWalkerCtx *) pctx;
-	Plan	   *plan = *planptr;
-
-	if (IsA(plan, ModifyTable))
-	{
-		ModifyTable *mt = (ModifyTable *) plan;
-
-		if (mt->operation == CMD_INSERT)
-		{
-			bool		hypertable_found = false;
-			ListCell   *lc_plan,
-					   *lc_rel;
-
-			/*
-			 * To match up tuple-producing subplans with result relations, we
-			 * simultaneously loop over subplans and resultRelations, although
-			 * for INSERTs we expect only one of each.
-			 */
-			forboth(lc_plan, mt->plans, lc_rel, mt->resultRelations)
-			{
-				Index		rti = lfirst_int(lc_rel);
-				RangeTblEntry *rte = rt_fetch(rti, ctx->rtable);
-				Hypertable *ht = ts_hypertable_cache_get_entry(ctx->hcache, rte->relid);
-
-				if (ht != NULL)
-				{
-					void	  **subplan_ptr = &lfirst(lc_plan);
-					Plan	   *subplan = *subplan_ptr;
-
-					if (ctx->parse->onConflict != NULL &&
-						ctx->parse->onConflict->constraint != InvalidOid)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("hypertables do not support ON CONFLICT statements that reference constraints"),
-								 errhint("Use column names to infer indexes instead.")));
-
-					/*
-					 * We replace the plan with our custom chunk dispatch
-					 * plan.
-					 */
-					*subplan_ptr = ts_chunk_dispatch_plan_create(subplan, rti, rte->relid, ctx->parse);
-					hypertable_found = true;
-				}
-			}
-
-			if (hypertable_found)
-				*planptr = ts_hypertable_insert_plan_create(mt);
-		}
-	}
-}
 
 #define CTE_NAME_HYPERTABLES "hypertable_parent"
 
@@ -232,12 +118,10 @@ turn_off_inheritance_walker(Node *node, Cache *hc)
 	return expression_tree_walker(node, turn_off_inheritance_walker, hc);
 }
 
-
 static PlannedStmt *
 timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
-	PlannedStmt *plan_stmt = NULL;
-
+	PlannedStmt *stmt;
 
 	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations && parse->resultRelation == 0)
 	{
@@ -252,31 +136,24 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		ts_cache_release(hc);
 	}
 
-
 	if (prev_planner_hook != NULL)
-	{
 		/* Call any earlier hooks */
-		plan_stmt = (prev_planner_hook) (parse, cursor_opts, bound_params);
-	}
-	else
-	{
-		/* Call the standard planner */
-		plan_stmt = standard_planner(parse, cursor_opts, bound_params);
-	}
+		return (prev_planner_hook) (parse, cursor_opts, bound_params);
 
-	if (ts_extension_is_loaded())
-	{
-		ModifyTableWalkerCtx ctx = {
-			.parse = parse,
-			.hcache = ts_hypertable_cache_pin(),
-			.rtable = plan_stmt->rtable,
-		};
+	/* Call the standard planner */
+	stmt = standard_planner(parse, cursor_opts, bound_params);
 
-		ts_planned_stmt_walker(plan_stmt, modifytable_plan_walker, &ctx);
-		ts_cache_release(ctx.hcache);
-	}
+	/*
+	 * Our top-level HypertableInsert plan node that wraps ModifyTable needs
+	 * to have a final target list that is the same as the ModifyTable plan
+	 * node, and we only have access to its final target list after
+	 * set_plan_references() (setrefs.c) has run at the end of
+	 * standard_planner. Therefore, we fixup the final target list for
+	 * HypertableInsert here.
+	 */
+	stmt->planTree = ts_hypertable_insert_fixup_tlist(stmt->planTree);
 
-	return plan_stmt;
+	return stmt;
 }
 
 
@@ -523,7 +400,57 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 	}
 }
 
+
 /*
+ * Replace INSERT (ModifyTablePath) paths on hypertables.
+ *
+ * From the ModifyTable description: "Each ModifyTable node contains
+ * a list of one or more subplans, much like an Append node.  There
+ * is one subplan per result relation."
+ *
+ * The subplans produce the tuples for INSERT, while the result relation is the
+ * table we'd like to insert into.
+ *
+ * The way we redirect tuples to chunks is to insert an intermediate "chunk
+ * dispatch" plan node, inbetween the ModifyTable and its subplan that produces
+ * the tuples. When the ModifyTable plan is executed, it tries to read a tuple
+ * from the intermediate chunk dispatch plan instead of the original
+ * subplan. The chunk plan reads the tuple from the original subplan, looks up
+ * the chunk, sets the executor's resultRelation to the chunk table and finally
+ * returns the tuple to the ModifyTable node.
+ *
+ * We also need to wrap the ModifyTable plan node with a HypertableInsert node
+ * to give the ChunkDispatchState node access to the ModifyTableState node in
+ * the execution phase.
+ *
+ * Conceptually, the plan modification looks like this:
+ *
+ * Original plan:
+ *
+ *		  ^
+ *		  |
+ *	[ ModifyTable ] -> resultRelation
+ *		  ^
+ *		  | Tuple
+ *		  |
+ *	  [ subplan ]
+ *
+ *
+ * Modified plan:
+ *
+ *	[ HypertableInsert ]
+ *		  ^
+ *		  |
+ *	[ ModifyTable ] -> resultRelation
+ *		  ^			   ^
+ *		  | Tuple	  / <Set resultRelation to the matching chunk table>
+ *		  |			 /
+ * [ ChunkDispatch ]
+ *		  ^
+ *		  | Tuple
+ *		  |
+ *	  [ subplan ]
+ *
  * PG11 adds a value to the create_upper_paths_hook for FDW support. (See:
  * https://github.com/postgres/postgres/commit/7e0d64c7a57e28fbcf093b6da9310a38367c1d75).
  * Additionally, it calls the hook in a different place, once for each
@@ -531,8 +458,37 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  * https://github.com/postgres/postgres/commit/c596fadbfe20ff50a8e5f4bc4b4ff5b7c302ecc0),
  * we do not change our behavior yet, but might choose to in the future.
  */
-static
-void
+static List *
+replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
+{
+	Cache	   *htcache = ts_hypertable_cache_pin();
+	List	   *new_pathlist = NIL;
+	ListCell   *lc;
+
+	foreach(lc, pathlist)
+	{
+		Path	   *path = lfirst(lc);
+
+		if (IsA(path, ModifyTablePath) &&
+			((ModifyTablePath *) path)->operation == CMD_INSERT)
+		{
+			ModifyTablePath *mt = (ModifyTablePath *) path;
+			RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
+			Hypertable *ht = ts_hypertable_cache_get_entry(htcache, rte->relid);
+
+			if (NULL != ht)
+				path = ts_hypertable_insert_path_create(root, mt);
+		}
+
+		new_pathlist = lappend(new_pathlist, path);
+	}
+
+	ts_cache_release(htcache);
+
+	return new_pathlist;
+}
+
+static void
 #if PG96 || PG10
 timescale_create_upper_paths_hook(PlannerInfo *root,
 								  UpperRelationKind stage,
@@ -556,8 +512,14 @@ timescale_create_upper_paths_hook(PlannerInfo *root,
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
 #endif
 
-	if (!ts_extension_is_loaded() ||
-		ts_guc_disable_optimizations ||
+	if (!ts_extension_is_loaded())
+		return;
+
+	/* Modify for INSERTs on a hypertable */
+	if (output_rel != NULL && output_rel->pathlist != NIL)
+		output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
+
+	if (ts_guc_disable_optimizations ||
 		input_rel == NULL ||
 		IS_DUMMY_REL(input_rel))
 		return;
