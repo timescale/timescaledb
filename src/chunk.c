@@ -1242,6 +1242,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	List	   *hypertables = NIL;
 	int			ht_index = 0;
 	uint64		num_chunks = 0;
+	int			i;
 
 	if (older_than_type != InvalidOid &&
 		newer_than_type != InvalidOid &&
@@ -1326,7 +1327,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	current = chunks;
 
 	MemoryContextSwitchTo(oldcontext);
-	for (int i = 0; i < list_length(hypertables); i++)
+	for (i = 0; i < list_length(hypertables); i++)
 	{
 		/* Get all the chunks from the context */
 		chunk_scan_ctxs[i]->data = current;
