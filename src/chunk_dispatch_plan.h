@@ -12,6 +12,14 @@
 #include <nodes/parsenodes.h>
 #include <nodes/extensible.h>
 
-extern CustomScan *ts_chunk_dispatch_plan_create(Plan *subplan, Index hypertable_rti, Oid hypertable_relid, Query *parse);
+typedef struct ChunkDispatchPath
+{
+	CustomPath	cpath;
+	ModifyTablePath *mtpath;
+	Index		hypertable_rti;
+	Oid			hypertable_relid;
+} ChunkDispatchPath;
+
+extern Path *ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti, Oid hypertable_relid);
 
 #endif							/* TIMESCALEDB_CHUNK_DISPATCH_PLAN_H */

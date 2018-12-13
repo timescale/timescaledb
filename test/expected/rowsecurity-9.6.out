@@ -3744,7 +3744,7 @@ EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
    ->  Insert on t2
          ->  Custom Scan (ChunkDispatch)
                ->  Append
-                     ->  Seq Scan on t1
+                     ->  Seq Scan on t1 t1_1
                            Filter: ((a % 2) = 0)
                      ->  Seq Scan on _hyper_15_66_chunk
                            Filter: ((a % 2) = 0)
