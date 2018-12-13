@@ -9,7 +9,7 @@
 
 #include <compat.h>
 
-#if PG10
+#if PG10 || PG11
 
 #include <common/base64.h>
 
