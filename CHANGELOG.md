@@ -13,21 +13,21 @@ Our 1.1 release introduces beta support for PG 11, as well as several performanc
 
 **Notable Commits**
 
-[71f3a0c] Fix Datum conversion issues
-[5aa1eda] Refactor compatibility functions and code to support PG11
-[e4a4f8e] Add support for functions on open (time) dimensions
-[ed5067c] Fix interval_from_now_to_internal timestamptz handling
-[019971c] Optimize FIRST/LAST aggregate functions
-[83014ee] Implement drop_chunks in C
-[9a34028] Implement show_chunks in C and have drop_chunks use it
-[d461959] Add view to show hypertable information
-[35dee48] Remove version-checking from client-side
-[5b6a5f4] Change size utility and job functions to STRICT
-[7e55d91] Add checks for NULL arguments to DDL functions
-[c1db608] Fix upsert TLE translation when mapping variable numbers
-[55a378e] Check extension exists for DROP OWNED and DROP EXTENSION
-[0c8c085] Exclude unneeded chunks for IN/ANY/ALL operators
-[f27c0a3] Move int time_bucket functions with offset to C
+* [71f3a0c] Fix Datum conversion issues
+* [5aa1eda] Refactor compatibility functions and code to support PG11
+* [e4a4f8e] Add support for functions on open (time) dimensions
+* [ed5067c] Fix interval_from_now_to_internal timestamptz handling
+* [019971c] Optimize FIRST/LAST aggregate functions
+* [83014ee] Implement drop_chunks in C
+* [9a34028] Implement show_chunks in C and have drop_chunks use it
+* [d461959] Add view to show hypertable information
+* [35dee48] Remove version-checking from client-side
+* [5b6a5f4] Change size utility and job functions to STRICT
+* [7e55d91] Add checks for NULL arguments to DDL functions
+* [c1db608] Fix upsert TLE translation when mapping variable numbers
+* [55a378e] Check extension exists for DROP OWNED and DROP EXTENSION
+* [0c8c085] Exclude unneeded chunks for IN/ANY/ALL operators
+* [f27c0a3] Move int time_bucket functions with offset to C
 
 **Thanks**
 * @did-g for some memory improvements
