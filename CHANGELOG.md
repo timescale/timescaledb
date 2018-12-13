@@ -4,6 +4,34 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.1.0 (2018-12-13)
+
+Our 1.1 release introduces beta support for PG 11, as well as several performance optimizations aimed at improving chunk exclusion for read queries. We are also packaging our new timescale-tune tool (currently in beta) with our Debian and Linux releases. If you encounter any issues with our beta features, please file a Github issue.
+
+**Potential breaking changes**
+- In addition to optimizing first() / last() to utilize indices for non-group-by queries, we adjusted its sorting behavior to match that of PostgreSQL’s max() and min() functions. Previously, if the column being sorted had NULL values, a NULL would be returned. First() and last() now instead ignore NULL values.
+
+**Notable Commits**
+
+[71f3a0c] Fix Datum conversion issues
+[5aa1eda] Refactor compatibility functions and code to support PG11
+[e4a4f8e] Add support for functions on open (time) dimensions
+[ed5067c] Fix interval_from_now_to_internal timestamptz handling
+[019971c] Optimize FIRST/LAST aggregate functions
+[83014ee] Implement drop_chunks in C
+[9a34028] Implement show_chunks in C and have drop_chunks use it
+[d461959] Add view to show hypertable information
+[35dee48] Remove version-checking from client-side
+[5b6a5f4] Change size utility and job functions to STRICT
+[7e55d91] Add checks for NULL arguments to DDL functions
+[c1db608] Fix upsert TLE translation when mapping variable numbers
+[55a378e] Check extension exists for DROP OWNED and DROP EXTENSION
+[0c8c085] Exclude unneeded chunks for IN/ANY/ALL operators
+[f27c0a3] Move int time_bucket functions with offset to C
+
+**Thanks**
+* @did-g for some memory improvements
+
 ## 1.0.1 (2018-12-05)
 
 This commit contains bugfixes and optimizations for 1.0.0
