@@ -534,9 +534,20 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	return state;
 }
 
+static void
+chunk_insert_state_free(void *arg)
+{
+	ChunkInsertState *state = arg;
+
+	MemoryContextDelete(state->mctx);
+}
+
 extern void
 ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
+	MemoryContext deletion_context;
+	MemoryContextCallback *free_callback;
+
 	if (state == NULL)
 		return;
 
@@ -556,27 +567,30 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	 * constraint expressions in a parent context of per_tuple_exprcontext so
 	 * there is no issue, however we've run into excessive memory ussage due
 	 * to too many constraints, and want to allocate them for a shorter
-	 * lifetime. To ensure this doesn't create dangling pointers, we free the
-	 * `per_tuple_exprcontext`, and call all its callbacks, here, before the
-	 * chunk insert state memory context.
+	 * lifetime so we free them when SubspaceStore gets to full.
 	 *
-	 * This may not be entirely safe. Right now it appears that in the case
-	 * where the chunk insert both the `es_per_tuple_exprcontext` and chunk
-	 * insert state exist they are freed at approximately the same time.
-	 * However, postgres does not guarantee this (and indeed does not know
-	 * anything about `chunk_insert_state`) so this may not hold true in the
-	 * future. A better fix may be to tie the `chunk_insert_state` lifetime to
-	 * the lifetime of a known postgres memory context (possibly
-	 * tuple_exprcontext's?) and handle cases where the insert state is freed
-	 * early.
+	 * To ensure this doesn't create dangling pointers, we don't free the
+	 * ChunkInsertState immediately, but rather register it to be freed when
+	 * the current `es_per_tuple_exprcontext` or `es_query_cxt` is cleaned up.
+	 * deletion of the ChunkInsertState until the current context if freed.
 	 */
 	if (state->estate->es_per_tuple_exprcontext != NULL)
-		FreeExprContext(state->estate->es_per_tuple_exprcontext, true);
+	{
+		deletion_context = state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory;
+	}
+	else
+	{
+		deletion_context = state->estate->es_query_cxt;
+	}
 
-	state->estate->es_per_tuple_exprcontext = NULL;
+	free_callback = MemoryContextAlloc(deletion_context, sizeof(*free_callback));
+	*free_callback = (MemoryContextCallback)
+	{
+		.func = chunk_insert_state_free,
+			.arg = state,
+	};
+	MemoryContextRegisterResetCallback(deletion_context, free_callback);
 
 	if (NULL != state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
-
-	MemoryContextDelete(state->mctx);
 }
