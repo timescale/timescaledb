@@ -1,0 +1,12 @@
+-- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
+--
+-- This file is licensed under the Apache License,
+-- see LICENSE-APACHE at the top level directory.
+\set ON_ERROR_STOP 0
+SELECT locf(1);
+ERROR:  function "locf" is not supported under the current license "ApacheOnly"
+SELECT interpolate(1);
+ERROR:  function "interpolate" is not supported under the current license "ApacheOnly"
+SELECT time_bucket_gapfill(1,1,1,1);
+ERROR:  function "time_bucket_gapfill" is not supported under the current license "ApacheOnly"
+\set ON_ERROR_STOP 1

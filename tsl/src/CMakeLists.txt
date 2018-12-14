@@ -2,6 +2,7 @@ set(SOURCES
   init.c
   license.c
   telemetry.c
+  planner.c
 )
 
 # Add test source code in Debug builds
@@ -36,3 +37,4 @@ install(
 # endif(WIN32)
 
 add_subdirectory(bgw_policy)
+add_subdirectory(gapfill)

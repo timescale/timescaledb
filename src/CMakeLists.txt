@@ -20,6 +20,7 @@ set(SOURCES
   dimension_vector.c
   event_trigger.c
   extension.c
+  gapfill.c
   guc.c
   histogram.c
   hypercube.c

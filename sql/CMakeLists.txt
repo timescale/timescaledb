@@ -44,6 +44,7 @@ set(SOURCE_FILES
   bgw_scheduler.sql
   installation_metadata.sql
   views.sql
+  gapfill.sql
 )
 
 # These files should be pre-pended to update scripts so that they are

@@ -33,7 +33,9 @@ ORDER BY proname;
  hypertable_relation_size_pretty
  indexes_relation_size
  indexes_relation_size_pretty
+ interpolate
  last
+ locf
  remove_drop_chunks_policy
  remove_recluster_policy
  set_adaptive_chunking
@@ -42,5 +44,6 @@ ORDER BY proname;
  show_chunks
  show_tablespaces
  time_bucket
-(27 rows)
+ time_bucket_gapfill
+(30 rows)
 

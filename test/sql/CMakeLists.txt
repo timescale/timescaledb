@@ -27,6 +27,7 @@ set(TEST_FILES
   dump_meta.sql
   edition.sql
   extension.sql
+  gapfill.sql
   hash.sql
   histogram_test.sql
   index.sql

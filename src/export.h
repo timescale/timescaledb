@@ -58,7 +58,7 @@
 #endif
 
 #define TS_FUNCTION_INFO_V1(fn) \
-	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS); \
+	TSDLLEXPORT Datum fn(PG_FUNCTION_ARGS); \
 	PG_FUNCTION_INFO_V1(fn)
 
 #endif							/* TIMESCALEDB_EXPORT_H */

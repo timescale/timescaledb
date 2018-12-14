@@ -14,6 +14,9 @@
 #include <access/xact.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/json.h>
+#include <utils/jsonb.h>
+#include <utils/jsonapi.h>
 #include <utils/datetime.h>
 
 #include <license_guc.h>
@@ -218,7 +221,6 @@ static char *json_get_id(Jsonb *license);
 static char *json_get_kind(Jsonb *license);
 static TimestampTz json_get_start_time(Jsonb *license);
 static TimestampTz json_get_end_time(Jsonb *license);
-
 static void
 license_info_init_from_jsonb(Jsonb *json_license, LicenseInfo *out)
 {
