@@ -54,3 +54,13 @@ COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
 \set ON_ERROR_STOP 1
 
 COPY (SELECT * FROM hyper ORDER BY time, meta_id) TO STDOUT;
+
+--test that copy works with a low setting for max_open_chunks_per_insert
+set timescaledb.max_open_chunks_per_insert = 1;
+CREATE TABLE "hyper2" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10); 
+\copy hyper2 from data/copy_data.csv with csv header ;
+
