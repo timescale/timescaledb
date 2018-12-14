@@ -4,6 +4,17 @@
  * This file is licensed under the Apache License,
  * see LICENSE-APACHE at the top level directory.
  */
+
+/*
+ * This file contains source code that was copied and/or modified from
+ * the PostgreSQL database, which is licensed under the open-source
+ * PostgreSQL License. Please see the NOTICE at the top level
+ * directory for a copy of the PostgreSQL License.
+ *
+ * These function were copied from the PostgreSQL core planner, since
+ * they were declared static in the core planner, but we need them for
+ * our manipulations.
+ */
 #ifndef TIMESCALEDB_PLANNER_IMPORT_H
 #define TIMESCALEDB_PLANNER_IMPORT_H
 
@@ -11,12 +22,6 @@
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/selfuncs.h>
-
-/*
- * This file contains functions copied verbatim from the PG core planner.
- * These function had to be copied since they were declared static in the core planner, but we need them for our
- * manipulations.
- */
 
 extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
 							 Index newvarno,

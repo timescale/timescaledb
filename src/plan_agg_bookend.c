@@ -6,6 +6,13 @@
  */
 
 /*
+ * This file contains source code that was copied and/or modified from
+ * the PostgreSQL database, which is licensed under the open-source
+ * PostgreSQL License. Please see the NOTICE at the top level
+ * directory for a copy of the PostgreSQL License.
+ */
+
+/*
  *	  Optimization for FIRST/LAST aggregate functions.
  *
  * This module tries to replace FIRST/LAST aggregate functions by subqueries
