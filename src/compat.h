@@ -796,6 +796,11 @@ extern int oid_cmp(const void *p1, const void *p2);
 #define unlikely(x) ((x) != 0)
 #endif
 #endif
+#if PG96
+#define makeDefElemCompat(name, arg, location) makeDefElem(name, arg)
+#else
+#define makeDefElemCompat(name, arg, location) makeDefElem(name, arg, location)
+#endif
 
 /* Compatibility functions for table access method API introduced in PG12 */
 #if PG12_LT

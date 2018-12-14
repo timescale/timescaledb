@@ -4,6 +4,7 @@ set(SOURCES
   test_compression.c
   test_ddl_hook.c
   test_continuous_aggs.c
+  server.c
 )
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 

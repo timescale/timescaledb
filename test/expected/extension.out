@@ -18,6 +18,7 @@ ORDER BY proname;
  add_dimension
  add_drop_chunks_policy
  add_reorder_policy
+ add_server
  alter_job_schedule
  attach_tablespace
  chunk_relation_size
@@ -25,6 +26,7 @@ ORDER BY proname;
  compress_chunk
  create_hypertable
  decompress_chunk
+ delete_server
  detach_tablespace
  detach_tablespaces
  drop_chunks
@@ -54,5 +56,5 @@ ORDER BY proname;
  time_bucket_gapfill
  timescaledb_post_restore
  timescaledb_pre_restore
-(40 rows)
+(42 rows)
 

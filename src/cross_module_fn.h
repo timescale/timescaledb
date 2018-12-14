@@ -100,6 +100,9 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
+
+	PGFunction add_server;
+	PGFunction delete_server;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

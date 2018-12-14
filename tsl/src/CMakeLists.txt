@@ -5,6 +5,7 @@ set(SOURCES
   telemetry.c
   partialize_finalize.c
   planner.c
+  server.c
 )
 
 # Add test source code in Debug builds
