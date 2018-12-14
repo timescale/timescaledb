@@ -9,6 +9,8 @@
 #include <postgres.h>
 #include <fmgr.h>
 
+#define TIMESCALEDB_FDW_NAME "timescaledb_fdw"
+
 extern Datum timescaledb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum timescaledb_fdw_validator(PG_FUNCTION_ARGS);
 

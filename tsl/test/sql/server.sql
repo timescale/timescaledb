@@ -89,3 +89,58 @@ SELECT * FROM delete_server('server_3');
 
 -- Deleting non-existing server with "if_exists" set does not generate error
 SELECT * FROM delete_server('server_3', if_exists => true);
+
+SELECT * FROM show_servers();
+
+-- Test that servers are added to a hypertable
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+
+-- All servers should be added. Remote hypertable ID should be NULL since not set yet
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+DROP TABLE disttable;
+
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+
+-- Test some bad create_hypertable() parameter values for distributed hypertables
+\set ON_ERROR_STOP 0
+-- Bad replication factor
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, servers => '{ "server_2", "server_4" }');
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768);
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
+
+-- Non-existing server
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ "server_3" }');
+\set ON_ERROR_STOP 1
+
+-- Use a subset of servers
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ "server_2", "server_4" }');
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+-- Deleting a server should remove the hypertable_server mappings for that server
+SELECT * FROM delete_server('server_2', cascade => true);
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+-- Should also clean up hypertable_server when using standard DDL commands
+DROP SERVER server_4 CASCADE;
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+-- Creating a distributed hypertable without any servers should fail
+DROP TABLE disttable;
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ }');
+\set ON_ERROR_STOP 1
+
+SELECT * FROM delete_server('server_1', cascade => true);
+SELECT * FROM show_servers();
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+\set ON_ERROR_STOP 1

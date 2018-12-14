@@ -40,6 +40,7 @@
 #include "server.h"
 #include "fdw/timescaledb_fdw.h"
 #include "chunk_api.h"
+#include "hypertable.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -122,6 +123,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.delete_server = server_delete,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
+	.get_servername_list = server_get_servername_list,
+	.hypertable_make_distributed = hypertable_make_distributed,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 };

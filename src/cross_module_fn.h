@@ -12,6 +12,7 @@
 #include <optimizer/planner.h>
 #include <utils/timestamp.h>
 #include <utils/jsonb.h>
+#include <utils/array.h>
 
 #include "export.h"
 #include "bgw/job.h"
@@ -26,6 +27,9 @@
  * This will allow the function to be called from this codebase as
  *     ts_cm_functions-><function name>
  */
+
+typedef struct JsonbParseState JsonbParseState;
+typedef struct Hypertable Hypertable;
 
 typedef struct CrossModuleFunctions
 {
@@ -105,6 +109,8 @@ typedef struct CrossModuleFunctions
 	PGFunction delete_server;
 	PGFunction create_chunk;
 	PGFunction show_chunk;
+	List *(*get_servername_list)(void);
+	void (*hypertable_make_distributed)(Hypertable *ht, ArrayType *servers);
 	PGFunction timescaledb_fdw_handler;
 	PGFunction timescaledb_fdw_validator;
 } CrossModuleFunctions;

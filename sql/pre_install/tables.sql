@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     chunk_target_size        BIGINT    NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
     compressed               BOOLEAN   NOT NULL DEFAULT false,
     compressed_hypertable_id INTEGER   REFERENCES _timescaledb_catalog.hypertable(id),
+    replication_factor       SMALLINT  NULL CHECK (replication_factor > 0),
     UNIQUE (id, schema_name),
     UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
@@ -58,6 +59,15 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable','id'), '');
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_server (
+    hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
+    server_hypertable_id   INTEGER NULL,
+    server_name            NAME NOT NULL,
+    UNIQUE (server_hypertable_id, server_name),
+    UNIQUE (hypertable_id, server_name)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_server', '');
 
 -- The tablespace table maps tablespaces to hypertables.
 -- This allows spreading a hypertable's chunks across multiple disks.
@@ -203,9 +213,9 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 
 --Now we define the argument tables for available BGW policies.
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_reorder (
-    job_id          		INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-    hypertable_id   		INTEGER     UNIQUE NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-	hypertable_index_name	NAME		NOT NULL
+    job_id                  INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id           INTEGER     UNIQUE NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    hypertable_index_name	NAME		NOT NULL
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_reorder', '');
 
@@ -224,11 +234,11 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
 -- to determine whether to run a specific job on a specific chunk.
 CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (
-	job_id					INTEGER 	NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-	chunk_id				INTEGER		NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
-	num_times_job_run		INTEGER,
-	last_time_job_run		TIMESTAMPTZ,
-	UNIQUE(job_id,chunk_id)
+    job_id					INTEGER     NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    chunk_id				INTEGER		NOT NULL REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE,
+    num_times_job_run		INTEGER,
+    last_time_job_run		TIMESTAMPTZ,
+    UNIQUE(job_id,chunk_id)
 );
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.metadata (
@@ -364,4 +374,3 @@ GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_internal TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
-

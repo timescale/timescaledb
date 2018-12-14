@@ -16,6 +16,8 @@
 #include <miscadmin.h>
 #include <funcapi.h>
 
+#include <hypertable_server.h>
+
 #include "server.h"
 #include "compat.h"
 #include "catalog.h"
@@ -268,6 +270,11 @@ server_delete(PG_FUNCTION_ARGS)
 
 		RemoveObjects(&stmt);
 
+		/*
+		 * Delete all hypertable -> server mappings that reference this
+		 * foreign server
+		 */
+		ts_hypertable_server_delete_by_servername(servername);
 		deleted = true;
 	}
 
