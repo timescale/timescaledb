@@ -148,3 +148,108 @@ SELECT * FROM delete_server('server_3', if_exists => true);
  f
 (1 row)
 
+SELECT * FROM show_servers();
+ server_name |   host    | port |  dbname   
+-------------+-----------+------+-----------
+ server_1    | localhost | 5432 | server_1
+ server_2    | localhost | 5432 | db_server
+ server_4    | localhost | 5432 | server_4
+(3 rows)
+
+-- Test that servers are added to a hypertable
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | disttable  | t
+(1 row)
+
+-- All servers should be added. Remote hypertable ID should be NULL since not set yet
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             1 |                      | server_1
+             1 |                      | server_2
+             1 |                      | server_4
+(3 rows)
+
+DROP TABLE disttable;
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+-- Test some bad create_hypertable() parameter values for distributed hypertables
+\set ON_ERROR_STOP 0
+-- Bad replication factor
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, servers => '{ "server_2", "server_4" }');
+NOTICE:  adding not-null constraint to column "time"
+ERROR:  invalid replication_factor for non-empty server list
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 32768);
+ERROR:  invalid replication factor
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
+ERROR:  invalid replication factor
+-- Non-existing server
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ "server_3" }');
+NOTICE:  adding not-null constraint to column "time"
+ERROR:  server "server_3" does not exist
+\set ON_ERROR_STOP 1
+-- Use a subset of servers
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ "server_2", "server_4" }');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             4 | public      | disttable  | t
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             4 |                      | server_2
+             4 |                      | server_4
+(2 rows)
+
+-- Deleting a server should remove the hypertable_server mappings for that server
+SELECT * FROM delete_server('server_2', cascade => true);
+NOTICE:  drop cascades to user mapping for default_perm_user on server server_2
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             4 |                      | server_4
+(1 row)
+
+-- Should also clean up hypertable_server when using standard DDL commands
+DROP SERVER server_4 CASCADE;
+NOTICE:  drop cascades to user mapping for default_perm_user on server server_4
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+(0 rows)
+
+-- Creating a distributed hypertable without any servers should fail
+DROP TABLE disttable;
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1, servers => '{ }');
+NOTICE:  adding not-null constraint to column "time"
+ERROR:  no servers can be assigned to "disttable"
+\set ON_ERROR_STOP 1
+SELECT * FROM delete_server('server_1', cascade => true);
+NOTICE:  drop cascades to user mapping for super_user on server server_1
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM show_servers();
+ server_name | host | port | dbname 
+-------------+------+------+--------
+(0 rows)
+
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+NOTICE:  adding not-null constraint to column "time"
+ERROR:  no servers can be assigned to "disttable"
+\set ON_ERROR_STOP 1

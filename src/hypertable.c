@@ -27,6 +27,7 @@
 #include <commands/trigger.h>
 #include <storage/lmgr.h>
 #include <miscadmin.h>
+#include <funcapi.h>
 
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
@@ -39,11 +40,12 @@
 #endif
 
 #include "hypertable.h"
+#include "hypertable_server.h"
+#include "hypercube.h"
 #include "dimension.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
 #include "hypertable_compression.h"
-
 #include "subspace_store.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
@@ -58,11 +60,11 @@
 #include "errors.h"
 #include "copy.h"
 #include "utils.h"
-#include "funcapi.h"
-#include "utils.h"
 #include "bgw_policy/policy.h"
 #include "continuous_agg.h"
 #include "interval.h"
+#include "license_guc.h"
+#include "cross_module_fn.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -165,6 +167,11 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	else
 		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
 			Int32GetDatum(fd->compressed_hypertable_id);
+	if (fd->replication_factor < 1)
+		nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] =
+			Int16GetDatum(fd->replication_factor);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -221,6 +228,11 @@ hypertable_formdata_fill(FormData_hypertable *fd, const HeapTuple tuple, const T
 	else
 		fd->compressed_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
+	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)])
+		fd->replication_factor = INVALID_HYPERTABLE_ID;
+	else
+		fd->replication_factor =
+			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)]);
 }
 
 static Hypertable *
@@ -237,6 +249,7 @@ hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 		ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
 	h->max_ignore_invalidation_older_than = -1;
+	h->servers = ts_hypertable_server_scan(h->fd.id, mctx);
 
 	return h;
 }
@@ -649,6 +662,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
+	ts_hypertable_server_delete_by_hypertable_id(hypertable_id);
 
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
@@ -886,7 +900,8 @@ static void
 hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 				  Name associated_schema_name, Name associated_table_prefix,
 				  Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-				  int64 chunk_target_size, int16 num_dimensions, bool compressed)
+				  int64 chunk_target_size, int16 num_dimensions, bool compressed,
+				  int16 replication_factor)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -932,6 +947,9 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	/* when creating a hypertable, there is never an associated compressed dual */
 	fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+
+	/* finally, set replication factor */
+	fd.replication_factor = replication_factor;
 
 	rel = table_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel, &fd);
@@ -1063,6 +1081,40 @@ ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 	return ts_tablespaces_contain(tspcs, tspc_oid);
 }
 
+static int
+hypertable_get_chunk_slice_ordinal(Hypertable *ht, Hypercube *hc)
+{
+	Dimension *dim;
+	DimensionVec *vec;
+	DimensionSlice *slice;
+	int i;
+
+	dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	if (NULL == dim)
+		dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	Assert(NULL != dim && (IS_OPEN_DIMENSION(dim) || dim->fd.num_slices > 0));
+
+	vec = ts_dimension_get_slices(dim);
+
+	Assert(NULL != vec && (IS_OPEN_DIMENSION(dim) || vec->num_slices > 0));
+
+	slice = ts_hypercube_get_slice_by_dimension_id(hc, dim->fd.id);
+
+	Assert(NULL != slice);
+
+	/*
+	 * Find the index (ordinal) of the chunk's slice in the dimension we
+	 * picked
+	 */
+	i = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
+
+	Assert(i >= 0);
+
+	return i;
+}
+
 /*
  * Select a tablespace to use for a given chunk.
  *
@@ -1076,37 +1128,13 @@ ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 Tablespace *
 ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 {
-	Dimension *dim;
-	DimensionVec *vec;
-	DimensionSlice *slice;
 	Tablespaces *tspcs = ts_tablespace_scan(ht->fd.id);
-	int i = 0;
+	int i;
 
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)
 		return NULL;
 
-	dim = hyperspace_get_closed_dimension(ht->space, 0);
-
-	if (NULL == dim)
-		dim = hyperspace_get_open_dimension(ht->space, 0);
-
-	Assert(NULL != dim && (IS_OPEN_DIMENSION(dim) || dim->fd.num_slices > 0));
-
-	vec = ts_dimension_get_slices(dim);
-
-	Assert(NULL != vec && (IS_OPEN_DIMENSION(dim) || vec->num_slices > 0));
-
-	slice = ts_hypercube_get_slice_by_dimension_id(chunk->cube, dim->fd.id);
-
-	Assert(NULL != slice);
-
-	/*
-	 * Find the index (ordinal) of the chunk's slice in the dimension we
-	 * picked
-	 */
-	i = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
-
-	Assert(i >= 0);
+	i = hypertable_get_chunk_slice_ordinal(ht, chunk->cube);
 
 	/* Use the index of the slice to find the tablespace */
 	return &tspcs->tablespaces[i % tspcs->num_tablespaces];
@@ -1590,6 +1618,8 @@ TS_FUNCTION_INFO_V1(ts_hypertable_create);
  * chunk_sizing_func       OID = NULL
  * chunk_target_size       TEXT = NULL
  * time_partitioning_func  REGPROC = NULL
+ * replication_factor      INTEGER = NULL
+ * servers                 NAME[] = NULL
  */
 Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
@@ -1615,7 +1645,8 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 									  /* partitioning func */
 									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
 	DimensionInfo *space_dim_info = NULL;
-
+	int32 replication_factor = PG_ARGISNULL(14) ? 0 : PG_GETARG_INT32(14);
+	ArrayType *servers = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
 	ChunkSizingInfo chunk_sizing_info = {
 		.table_relid = table_relid,
 		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
@@ -1665,7 +1696,9 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 											 space_dim_info,
 											 associated_schema_name,
 											 associated_table_prefix,
-											 &chunk_sizing_info);
+											 &chunk_sizing_info,
+											 replication_factor,
+											 servers);
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 	retval = create_hypertable_datum(fcinfo, ht, created);
@@ -1685,7 +1718,8 @@ bool
 ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
 							   DimensionInfo *time_dim_info, DimensionInfo *space_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
-							   ChunkSizingInfo *chunk_sizing_info)
+							   ChunkSizingInfo *chunk_sizing_info, int32 replication_factor_in,
+							   ArrayType *servers)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -1696,6 +1730,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	NameData schema_name, table_name, default_associated_schema_name;
 	Relation rel;
 	bool if_not_exists = (flags & HYPERTABLE_CREATE_IF_NOT_EXISTS) != 0;
+	int16 replication_factor;
 
 	/* quick exit in the easy if-not-exists case to avoid all locking */
 	if (if_not_exists && ts_is_hypertable(table_relid))
@@ -1805,6 +1840,20 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 						   get_rel_name(table_relid)),
 				 errhint("Remove the rules before calling create_hypertable")));
 
+	if (replication_factor_in != 0 &&
+		(replication_factor_in < 1 || replication_factor_in > PG_INT16_MAX))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid replication factor"),
+				 errhint("A hypertable's replication factor must be between 0 and %d.",
+						 PG_INT16_MAX)));
+
+	/*
+	 * replication_factor is within bounds, so it is now safe to convert it to
+	 * a smallint/int16, which is the format in the catalog table
+	 */
+	replication_factor = (int16)(replication_factor_in & 0xFFFF);
+
 	/*
 	 * Create the associated schema where chunks are stored, or, check
 	 * permissions if it already exists
@@ -1875,7 +1924,8 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
 					  DIMENSION_INFO_IS_SET(space_dim_info) ? 2 : 1,
-					  false);
+					  false,
+					  replication_factor);
 
 	/* Get the a Hypertable object via the cache */
 	time_dim_info->ht =
@@ -1928,6 +1978,15 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
 		ts_indexing_create_default_indexes(ht);
+
+	if (replication_factor > 0)
+		ts_cm_functions->hypertable_make_distributed(ht, servers);
+	else if (servers != NULL && ARR_DIMS(servers)[0] > 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid replication_factor for non-empty server list"),
+				 errhint("The replication_factor should be 1 or greater with a non-empty server "
+						 "list")));
 
 	ts_cache_release(hcache);
 
@@ -2212,7 +2271,8 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
 					  0 /*num_dimensions*/,
-					  true);
+					  true,
+					  0 /* replication factor */);
 
 	/* No indexes are created for the compressed hypertable here */
 

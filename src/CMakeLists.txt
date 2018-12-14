@@ -34,6 +34,7 @@ set(SOURCES
   hypertable_compression.c
   hypertable_insert.c
   hypertable_restrict_info.c
+  hypertable_server.c
   indexing.c
   init.c
   interval.c

@@ -20,7 +20,6 @@ set(TEST_FILES_DEBUG
   continuous_aggs_usage.sql
   ddl_hook.sql
   tsl_tables.sql
-  server.sql
   timescaledb_fdw.sql
 )
 
@@ -62,6 +61,7 @@ if (${PG_VERSION_MAJOR} GREATER "9")
     compression_segment_meta.sql
     compression_bgw.sql
     compress_bgw_reorder_drop_chunks.sql
+    server.sql
     transparent_decompression_queries.sql
   )
 

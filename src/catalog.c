@@ -30,6 +30,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = HYPERTABLE_TABLE_NAME,
 	},
+	[HYPERTABLE_SERVER] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = HYPERTABLE_SERVER_TABLE_NAME,
+	},
 	[DIMENSION] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = DIMENSION_TABLE_NAME,
@@ -113,7 +117,7 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
-	},
+	}
 };
 
 static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] = {
@@ -123,6 +127,13 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
 			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
 		},
+	},
+	[HYPERTABLE_SERVER] = {
+		.length = _MAX_HYPERTABLE_SERVER_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX] = "hypertable_server_hypertable_id_server_name_key",
+			[HYPERTABLE_SERVER_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX] = "hypertable_server_server_hypertable_id_server_name_key",
+		}
 	},
 	[DIMENSION] = {
 		.length = _MAX_DIMENSION_INDEX,
@@ -263,6 +274,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE] = CATALOG_SCHEMA_NAME ".hypertable_id_seq",
+	[HYPERTABLE_SERVER] = NULL,
 	[DIMENSION] = CATALOG_SCHEMA_NAME ".dimension_id_seq",
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
@@ -704,6 +716,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 			}
 			break;
 		case HYPERTABLE:
+		case HYPERTABLE_SERVER:
 		case DIMENSION:
 		case CONTINUOUS_AGG:
 			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);

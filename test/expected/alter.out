@@ -620,9 +620,9 @@ ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 -- Make sure the schema name is changed in both catalog tables
 SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
- 11 | public      | my_table   | new_associated_schema  | _hyper_11               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id | replication_factor 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------+--------------------
+ 11 | public      | my_table   | new_associated_schema  | _hyper_11               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                   
 (1 row)
 
 SELECT * from _timescaledb_catalog.chunk;

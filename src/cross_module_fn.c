@@ -346,6 +346,19 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+static List *
+get_servername_list_default_fn(void)
+{
+	error_no_default_fn_community();
+	return NIL;
+}
+
+static void
+hypertable_make_distributed_default_fn(Hypertable *ht, ArrayType *servers)
+{
+	error_no_default_fn_community();
+}
+
 static Datum
 error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
 {
@@ -456,6 +469,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.delete_server = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
+	.get_servername_list = get_servername_list_default_fn,
+	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
 	.timescaledb_fdw_validator = empty_fn,
 };
