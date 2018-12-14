@@ -37,6 +37,7 @@
 #include "compression/create.h"
 #include "compression/compress_utils.h"
 #include "compression/segment_meta.h"
+#include "server.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -115,6 +116,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_compress_table = tsl_process_compress_table,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+	.add_server = server_add,
+	.delete_server = server_delete,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

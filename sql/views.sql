@@ -37,13 +37,13 @@ compht_size as
  where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
  group by srcht.id
 )
-select hts.table_schema, hts.table_name, hts.table_owner, 
+select hts.table_schema, hts.table_name, hts.table_owner,
        hts.num_dimensions, hts.num_chunks,
        pg_size_pretty( COALESCE(hts.table_bytes + compht_size.heap_bytes, hts.table_bytes)) as table_size,
        pg_size_pretty( COALESCE(hts.index_bytes + compht_size.index_bytes , hts.index_bytes, compht_size.index_bytes)) as index_size,
        pg_size_pretty( COALESCE(hts.toast_bytes + compht_size.toast_bytes, hts.toast_bytes, compht_size.toast_bytes)) as toast_size,
        pg_size_pretty( COALESCE(hts.total_bytes + compht_size.total_bytes, hts.total_bytes)) as total_size
-FROM ht_size hts LEFT OUTER JOIN compht_size 
+FROM ht_size hts LEFT OUTER JOIN compht_size
 ON hts.id = compht_size.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.license AS
@@ -104,7 +104,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
       WHEN cagg.ignore_invalidation_older_than = BIGINT '9223372036854775807'
         THEN NULL
       ELSE
-	CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
+    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
           WHEN 'TIMESTAMP'::regtype
             THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
           WHEN 'TIMESTAMPTZ'::regtype
@@ -155,7 +155,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     cagg.job_id as job_id,
     bgw_job_stat.last_start as last_run_started_at,
     bgw_job_stat.last_successful_finish as last_successful_finish,
-    CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL 
+    CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL
          WHEN bgw_job_stat.last_finish IS NOT NULL THEN
               CASE WHEN bgw_job_stat.last_run_success = 't' THEN 'Success'
                    WHEN bgw_job_stat.last_run_success = 'f' THEN 'Failed'
@@ -213,7 +213,7 @@ WITH mapq as
 CREATE OR REPLACE VIEW  timescaledb_information.compressed_hypertable_stats
 AS
   SELECT format('%1$I.%2$I', srcht.schema_name, srcht.table_name)::regclass as hypertable_name,
-  ( select count(*) from _timescaledb_catalog.chunk where hypertable_id = srcht.id) as total_chunks, 
+  ( select count(*) from _timescaledb_catalog.chunk where hypertable_id = srcht.id) as total_chunks,
   count(*) as number_compressed_chunks,
   pg_size_pretty(sum(map.uncompressed_heap_size)) as uncompressed_heap_bytes,
   pg_size_pretty(sum(map.uncompressed_index_size)) as uncompressed_index_bytes,
@@ -227,6 +227,12 @@ AS
       _timescaledb_catalog.hypertable srcht
  where map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
  group by srcht.id;
+
+CREATE OR REPLACE VIEW timescaledb_information.server AS
+  SELECT srvname AS server_name, srvowner::regrole::name AS owner, srvoptions AS options
+  FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
+  WHERE srv.srvfdw = fdw.oid
+  AND fdw.fdwname = 'postgres_fdw';
 
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

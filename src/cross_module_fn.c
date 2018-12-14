@@ -45,6 +45,9 @@ TS_FUNCTION_INFO_V1(ts_dictionary_compressor_finish);
 TS_FUNCTION_INFO_V1(ts_array_compressor_append);
 TS_FUNCTION_INFO_V1(ts_array_compressor_finish);
 
+TS_FUNCTION_INFO_V1(ts_server_add);
+TS_FUNCTION_INFO_V1(ts_server_delete);
+
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
 {
@@ -103,6 +106,18 @@ Datum
 ts_continuous_agg_invalidation_trigger(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->continuous_agg_trigfn(fcinfo));
+}
+
+Datum
+ts_server_add(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->add_server(fcinfo));
+}
+
+Datum
+ts_server_delete(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->delete_server(fcinfo));
 }
 
 /*
@@ -415,6 +430,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
+
+	.add_server = error_no_default_fn_pg_community,
+	.delete_server = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
