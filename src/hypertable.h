@@ -8,6 +8,7 @@
 
 #include <postgres.h>
 #include <nodes/primnodes.h>
+#include <utils/array.h>
 
 #include "compat.h"
 
@@ -29,6 +30,7 @@
 
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
+typedef struct Hypercube Hypercube;
 
 typedef struct Hypertable
 {
@@ -37,6 +39,12 @@ typedef struct Hypertable
 	Oid chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
+
+	/*
+	 * Allows restricting the servers to use for the hypertable. Default is to
+	 * use all available servers.
+	 */
+	List *servers;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */
@@ -63,13 +71,13 @@ typedef enum HypertableCreateFlags
 	HYPERTABLE_CREATE_MIGRATE_DATA = 1 << 2,
 } HypertableCreateFlags;
 
-extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id,
-													   uint32 flags, DimensionInfo *time_dim_info,
-													   DimensionInfo *space_dim_info,
-													   Name associated_schema_name,
-													   Name associated_table_prefix,
-													   ChunkSizingInfo *chunk_sizing_info);
+/* Alias for no replication (regular hypertable) */
+#define REPLICATION_NONE 0
 
+extern TSDLLEXPORT bool ts_hypertable_create_from_info(
+	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
+	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,
+	ChunkSizingInfo *chunk_sizing_info, int32 replication_factor, ArrayType *servers);
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(char *schema, char *name);
 extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);

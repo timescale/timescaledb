@@ -35,6 +35,7 @@
 typedef enum CatalogTable
 {
 	HYPERTABLE = 0,
+	HYPERTABLE_SERVER,
 	DIMENSION,
 	DIMENSION_SLICE,
 	CHUNK,
@@ -107,6 +108,7 @@ enum Anum_hypertable
 	Anum_hypertable_chunk_sizing_func_schema,
 	Anum_hypertable_chunk_sizing_func_name,
 	Anum_hypertable_chunk_target_size,
+	Anum_hypertable_replication_factor,
 	_Anum_hypertable_max,
 };
 
@@ -123,6 +125,7 @@ typedef struct FormData_hypertable
 	NameData chunk_sizing_func_schema;
 	NameData chunk_sizing_func_name;
 	int64 chunk_target_size;
+	int16 replication_factor;
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;
@@ -151,6 +154,60 @@ enum
 	HYPERTABLE_ID_INDEX = 0,
 	HYPERTABLE_NAME_INDEX,
 	_MAX_HYPERTABLE_INDEX,
+};
+
+#define HYPERTABLE_SERVER_TABLE_NAME "hypertable_server"
+
+enum Anum_hypertable_server
+{
+	Anum_hypertable_server_hypertable_id = 1,
+	Anum_hypertable_server_server_hypertable_id,
+	Anum_hypertable_server_server_name,
+	_Anum_hypertable_server_max,
+};
+
+#define Natts_hypertable_server (_Anum_hypertable_server_max - 1)
+
+typedef struct FormData_hypertable_server
+{
+	int32 hypertable_id;
+	int32 server_hypertable_id;
+	NameData server_name;
+} FormData_hypertable_server;
+
+typedef FormData_hypertable_server *Form_hypertable_server;
+
+enum
+{
+	HYPERTABLE_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX,
+	HYPERTABLE_SERVER_SERVER_HYPERTABLE_ID_SERVER_NAME_IDX,
+	_MAX_HYPERTABLE_SERVER_INDEX,
+};
+
+enum Anum_hypertable_server_hypertable_id_server_name_idx
+{
+	Anum_hypertable_server_hypertable_id_server_name_idx_hypertable_id = 1,
+	Anum_hypertable_server_hypertable_id_server_name_idx_server_name,
+	_Anum_hypertable_server_hypertable_id_server_name_idx_max,
+};
+
+struct FormData_hypertable_server_hypertable_id_server_name_idx
+{
+	int32 chunk_id;
+	NameData server_name;
+};
+
+enum Anum_hypertable_server_server_hypertable_id_server_name_idx
+{
+	Anum_hypertable_server_server_hypertable_id_server_name_idx_hypertable_id = 1,
+	Anum_hypertable_server_server_hypertable_id_server_name_idx_server_name,
+	_Anum_hypertable_server_server_hypertable_id_server_name_idx_max,
+};
+
+struct FormData_hypertable_server_server_hypertable_id_server_name_idx
+{
+	int32 server_chunk_id;
+	NameData server_name;
 };
 
 /******************************

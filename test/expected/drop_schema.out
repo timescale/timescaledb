@@ -30,10 +30,10 @@ NOTICE:  adding not-null constraint to column "time"
 INSERT INTO hypertable_schema.test1 VALUES ('2001-01-01 01:01:01', 23.3, 1);
 INSERT INTO hypertable_schema.test2 VALUES ('2001-01-01 01:01:01', 23.3, 1);
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
- id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | hypertable_schema | test1      | chunk_schema1          | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
+----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
+  1 | hypertable_schema | test1      | chunk_schema1          | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
@@ -53,10 +53,10 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 --show that the metadata for the table using the dropped schema is
 --changed. The other table is not affected.
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
- id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
-----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------
-  1 | hypertable_schema | test1      | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
-  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0
+ id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
+----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
+  1 | hypertable_schema | test1      | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
@@ -86,8 +86,8 @@ NOTICE:  drop cascades to 4 other objects
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --everything should be cleaned up
 SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | replication_factor 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+--------------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;

@@ -1,5 +1,6 @@
 set(SOURCES
   chunk_api.c
+  hypertable.c
   init.c
   license.c
   reorder.c

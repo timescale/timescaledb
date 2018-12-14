@@ -54,6 +54,7 @@
 #include "extension.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
+#include "hypertable_server.h"
 #include "dimension_vector.h"
 #include "indexing.h"
 #include "scan_iterator.h"
@@ -764,6 +765,25 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 	ts_cache_release(hcache);
 }
 
+static bool
+process_drop_foreign_server(DropStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach (lc, stmt->objects)
+	{
+		void *object = lfirst(lc);
+#if PG96
+		const char *servername = strVal(linitial((List *) object));
+#else
+		const char *servername = strVal((Value *) object);
+#endif
+		ts_hypertable_server_delete_by_servername(servername);
+	}
+
+	return false;
+}
+
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
  * through process_ddl_sql_drop */
 static void
@@ -898,6 +918,8 @@ process_drop(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_VIEW:
 			block_dropping_continuous_aggregates_without_cascade(args, stmt);
+		case OBJECT_FOREIGN_SERVER:
+			process_drop_foreign_server(stmt);
 			break;
 		default:
 			break;
