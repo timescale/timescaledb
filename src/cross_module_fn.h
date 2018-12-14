@@ -69,6 +69,8 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_trigfn;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	Datum (*add_server)(PG_FUNCTION_ARGS);
+	Datum (*delete_server)(PG_FUNCTION_ARGS);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

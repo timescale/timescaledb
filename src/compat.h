@@ -594,4 +594,10 @@ extern int oid_cmp(const void *p1, const void *p2);
 	WaitLatch(latch, wakeEvents, timeout, PG_WAIT_EXTENSION)
 #endif
 
+#if PG96
+#define makeDefElemCompat(name, arg, location) makeDefElem(name, arg)
+#else
+#define makeDefElemCompat(name, arg, location) makeDefElem(name, arg, location)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

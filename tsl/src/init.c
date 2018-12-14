@@ -26,6 +26,7 @@
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
 #include "process_utility.h"
+#include "server.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -82,6 +83,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_drop_chunks_by_chunk_id = ts_continuous_agg_drop_chunks_by_chunk_id,
 	.continuous_agg_trigfn = continuous_agg_trigfn,
 	.continuous_agg_update_options = continuous_agg_update_options,
+	.add_server = server_add,
+	.delete_server = server_delete,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

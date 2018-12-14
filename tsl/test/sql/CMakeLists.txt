@@ -18,6 +18,7 @@ set(TEST_FILES_DEBUG
     continuous_aggs_multi.sql
     ddl_hook.sql
     tsl_tables.sql
+    server.sql
 )
 
 set(TEST_TEMPLATES

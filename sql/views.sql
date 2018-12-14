@@ -130,5 +130,11 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold as ct
     ON ( cagg.mat_hypertable_id = ct.materialization_id);
 
+CREATE OR REPLACE VIEW timescaledb_information.server AS
+  SELECT srvname AS server_name, srvowner AS owner, srvoptions AS options
+  FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw
+  WHERE srv.srvfdw = fdw.oid
+  AND fdw.fdwname = 'postgres_fdw';
+
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

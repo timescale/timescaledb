@@ -132,3 +132,20 @@ AS '@MODULE_PATHNAME@', 'ts_tablespace_detach_all_from_hypertable' LANGUAGE C VO
 
 CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
 AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION add_server(
+    server_name            NAME,
+    host                   TEXT = 'localhost',
+    database               NAME = current_database(),
+    port                   INTEGER = 5432,
+    local_user             REGROLE = NULL,
+    remote_user            NAME = NULL,
+    if_not_exists          BOOLEAN = FALSE
+) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_server_add' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION delete_server(
+    server_name            NAME,
+    if_exists              BOOLEAN = FALSE,
+    cascade                BOOLEAN = FALSE
+) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_server_delete' LANGUAGE C VOLATILE;
