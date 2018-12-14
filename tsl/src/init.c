@@ -9,6 +9,9 @@
 
 #include <export.h>
 #include <cross_module_fn.h>
+#include "planner.h"
+#include "time_bucket.h"
+#include "gapfill/gapfill.h"
 
 #include "license.h"
 #include "telemetry.h"
@@ -45,6 +48,14 @@ CrossModuleFunctions tsl_cm_functions = {
 	.add_recluster_policy = recluster_add_policy,
 	.remove_drop_chunks_policy = drop_chunks_remove_policy,
 	.remove_recluster_policy = recluster_remove_policy,
+	.create_upper_paths_hook = tsl_create_upper_paths_hook,
+	.gapfill_marker = gapfill_marker,
+	.gapfill_int16_time_bucket = ts_int16_bucket,
+	.gapfill_int32_time_bucket = ts_int32_bucket,
+	.gapfill_int64_time_bucket = ts_int64_bucket,
+	.gapfill_date_time_bucket = ts_date_bucket,
+	.gapfill_timestamp_time_bucket = ts_timestamp_bucket,
+	.gapfill_timestamptz_time_bucket = ts_timestamptz_bucket,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

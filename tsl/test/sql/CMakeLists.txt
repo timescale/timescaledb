@@ -1,6 +1,9 @@
 set(TEST_FILES
     edition.sql
-	tsl_tables.sql)
+    tsl_tables.sql
+    gapfill.sql
+    plan_gapfill.sql
+)
 
 list(SORT TEST_FILES)
 file(REMOVE ${TEST_SCHEDULE})

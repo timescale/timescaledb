@@ -37,6 +37,8 @@
 #endif
 #include "compat-msvc-exit.h"
 
+#include "cross_module_fn.h"
+#include "license_guc.h"
 #include "hypertable_cache.h"
 #include "extension.h"
 #include "utils.h"
@@ -514,6 +516,9 @@ timescale_create_upper_paths_hook(PlannerInfo *root,
 
 	if (!ts_extension_is_loaded())
 		return;
+
+	if (ts_cm_functions->create_upper_paths_hook != NULL)
+		ts_cm_functions->create_upper_paths_hook(root, stage, input_rel, output_rel);
 
 	/* Modify for INSERTs on a hypertable */
 	if (output_rel != NULL && output_rel->pathlist != NIL)

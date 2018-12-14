@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <utils/timestamp.h>
+#include <utils/lsyscache.h>
 
 #include "export.h"
 #include "cross_module_fn.h"
@@ -90,6 +91,18 @@ bgw_policy_job_execute_default_fn(BgwJob *job)
 	return false;
 }
 
+static Datum
+error_no_default_fn_pg_function(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
+					get_func_name(fcinfo->flinfo->fn_oid),
+					ts_guc_license_key),
+			 errhint("Buy a Timescale license to enable the functionality")));
+	PG_RETURN_NULL();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -106,6 +119,14 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.add_recluster_policy = error_no_default_fn_pg,
 	.remove_drop_chunks_policy = error_no_default_fn_pg,
 	.remove_recluster_policy = error_no_default_fn_pg,
+	.create_upper_paths_hook = NULL,
+	.gapfill_marker = error_no_default_fn_pg_function,
+	.gapfill_int16_time_bucket = error_no_default_fn_pg_function,
+	.gapfill_int32_time_bucket = error_no_default_fn_pg_function,
+	.gapfill_int64_time_bucket = error_no_default_fn_pg_function,
+	.gapfill_date_time_bucket = error_no_default_fn_pg_function,
+	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_function,
+	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_function,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
