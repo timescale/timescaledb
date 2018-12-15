@@ -1,11 +1,11 @@
 #!/bin/bash
 
 get_c_license() {
-    awk 'BEGIN {ORS="\0"}{if($1 == "*/") {print; exit;}} {print}' $1
+    awk 'BEGIN {ORS=""}{if($1 == "*/") {print; exit;}} {print}' $1
 }
 
 get_sql_license() {
-    awk 'BEGIN {ORS="\0"}{if($1 == "") {print; exit;}} {print}' $1
+    awk 'BEGIN {ORS=""}{if($1 == "") {print; exit;}} {print}' $1
 }
 
 check_file() {
