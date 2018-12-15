@@ -56,36 +56,6 @@ ts_tablespaces_add(Tablespaces *tspcs, FormData_tablespace *form, Oid tspc_oid)
 	return tspc;
 }
 
-int
-ts_tablespaces_clear(Tablespaces *tspcs)
-{
-	int			num = tspcs->num_tablespaces;
-
-	tspcs->num_tablespaces = 0;
-
-	return num;
-}
-
-bool
-ts_tablespaces_delete(Tablespaces *tspcs, Oid tspc_oid)
-{
-	int			i;
-
-	for (i = 0; i < tspcs->num_tablespaces; i++)
-	{
-		if (tspc_oid == tspcs->tablespaces[i].tablespace_oid)
-		{
-			memcpy(&tspcs->tablespaces[i],
-				   &tspcs->tablespaces[i + 1],
-				   sizeof(Tablespace) * (tspcs->num_tablespaces - i - 1));
-			tspcs->num_tablespaces--;
-			return true;
-		}
-	}
-
-	return false;
-}
-
 bool
 ts_tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid)
 {

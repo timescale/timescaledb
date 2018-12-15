@@ -24,10 +24,8 @@ typedef struct ChunkIndexMapping
 
 extern void ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid);
 extern Oid	ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid, int32 hypertable_id, Oid hypertable_indexrelid);
-extern int	ts_chunk_index_delete_children_of(Hypertable *ht, Oid hypertable_indexrelid, bool should_drop);
 extern int	ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index);
 extern int	ts_chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index);
-extern int	ts_chunk_index_delete_by_hypertable_id(int32 hypertable_id, bool drop_index);
 extern void ts_chunk_index_delete_by_name(const char *schema, const char *index_name, bool drop_index);
 extern int	ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *newname);
 extern int	ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *newname);

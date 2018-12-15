@@ -53,7 +53,6 @@ extern bool ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid);
 extern Oid	ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid);
 extern Hypertable *ts_hypertable_from_tupleinfo(TupleInfo *ti);
 extern int	ts_hypertable_scan_with_memory_context(const char *schema, const char *table, tuple_found_func tuple_found, void *data, LOCKMODE lockmode, bool tuplock, MemoryContext mctx);
-extern int	ts_hypertable_scan_relid(Oid table_relid, tuple_found_func tuple_found, void *data, LOCKMODE lockmode, bool tuplock);
 extern HTSU_Result ts_hypertable_lock_tuple(Oid table_relid);
 extern bool ts_hypertable_lock_tuple_simple(Oid table_relid);
 extern int	ts_hypertable_update(Hypertable *ht);
