@@ -694,15 +694,6 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	return SCAN_DONE;
 }
 
-void
-ts_chunk_free(Chunk *chunk)
-{
-	if (NULL != chunk->cube)
-		ts_hypercube_free(chunk->cube);
-
-	pfree(chunk);
-}
-
 /* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
  * The rest of the fields will be filled in from the table data. */
 static Chunk *
@@ -1573,12 +1564,6 @@ ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
 						   num_constraints,
 						   CurrentMemoryContext,
 						   fail_if_not_found);
-}
-
-bool
-ts_chunk_exists(const char *schema_name, const char *table_name)
-{
-	return chunk_get_by_name(schema_name, table_name, 0, false) != NULL;
 }
 
 bool

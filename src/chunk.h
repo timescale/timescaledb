@@ -70,14 +70,12 @@ typedef struct ChunkScanEntry
 
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints);
-extern void ts_chunk_free(Chunk *chunk);
 extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p);
 extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
 extern Chunk *ts_chunk_copy(Chunk *chunk);
 extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name, int16 num_constraints, MemoryContext mctx, bool fail_if_not_found);
 extern Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found);
 extern Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found);
-extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern int	ts_chunk_delete_by_relid(Oid chunk_oid);

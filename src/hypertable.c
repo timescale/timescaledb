@@ -369,21 +369,6 @@ ts_hypertable_scan_with_memory_context(const char *schema,
 										  mctx);
 }
 
-int
-ts_hypertable_scan_relid(Oid table_relid,
-						 tuple_found_func tuple_found,
-						 void *data,
-						 LOCKMODE lockmode,
-						 bool tuplock)
-{
-	return hypertable_scan(get_namespace_name(get_rel_namespace(table_relid)),
-						   get_rel_name(table_relid),
-						   tuple_found,
-						   data,
-						   lockmode,
-						   tuplock);
-}
-
 static ScanTupleResult
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {

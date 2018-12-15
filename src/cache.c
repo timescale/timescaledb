@@ -154,12 +154,6 @@ ts_cache_memory_ctx(Cache *cache)
 	return cache->hctl.hcxt;
 }
 
-MemoryContext
-ts_cache_switch_to_memory_context(Cache *cache)
-{
-	return MemoryContextSwitchTo(cache->hctl.hcxt);
-}
-
 void *
 ts_cache_fetch(Cache *cache, CacheQuery *query)
 {
