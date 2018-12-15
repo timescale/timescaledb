@@ -741,7 +741,7 @@ static Node *
 gapfill_aggref_mutator(Node *node, void *context)
 {
 	if (node == NULL)
-		return false;
+		return NULL;
 
 	if (IsA(node, Aggref))
 		return (Node *) makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, (Datum) 0, true, false);
