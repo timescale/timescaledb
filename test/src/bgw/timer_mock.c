@@ -47,7 +47,7 @@ ts_timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle)
 static bool
 mock_wait(TimestampTz until)
 {
-	elog(WARNING, "[TESTING] Wait until %ld, started at %ld", until, ts_params_get()->current_time);
+	elog(WARNING, "[TESTING] Wait until " INT64_FORMAT ", started at " INT64_FORMAT, until, ts_params_get()->current_time);
 
 	switch (ts_params_get()->mock_wait_type)
 	{
