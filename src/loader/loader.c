@@ -8,6 +8,7 @@
 #include <pg_config.h>
 #include <access/xact.h>
 #include "../compat-msvc-enter.h"
+#include <postmaster/bgworker.h>
 #include <commands/extension.h>
 #include <commands/user.h>
 #include <miscadmin.h>
@@ -18,12 +19,7 @@
 #include <utils/inval.h>
 #include <nodes/print.h>
 #include <commands/dbcommands.h>
-
-
-
-
-/* for setting our wait event during waitlatch*/
-#include <pgstat.h>
+#include <access/parallel.h>
 
 #include "../extension_utils.c"
 #include "../export.h"
@@ -76,7 +72,25 @@ PG_MODULE_MAGIC;
 #endif
 
 #define GUC_DISABLE_LOAD_NAME "timescaledb.disable_load"
+/*
+ * The loader really shouldn't load if we're in a parallel worker as there is a
+ * separate infrastructure for loading libraries inside of parallel workers. The
+ * issue is that IsParallelWorker() doesn't work on Windows because the var used
+ * is not dll exported correctly, so we have an alternate macro that looks for
+ * the parallel worker flags in MyBgworkerEntry, if it exists. These flags only
+ * exist in PG10 and above, so we have to have switch back to IsParallelWorker()
+ * for 9.6 and, unfortunately, can't do much about 9.6 Windows installs.
+ */
 
+#if PG96
+#ifdef WIN32
+#define CalledInParallelWorker() false
+#else
+#define CalledInParallelWorker() IsParallelWorker()
+#endif							/* WIN32 */
+#else
+#define CalledInParallelWorker() (MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
+#endif							/* PG96 */
 extern void PGDLLEXPORT _PG_init(void);
 extern void PGDLLEXPORT _PG_fini(void);
 
@@ -478,13 +492,21 @@ do_load()
 	if (loaded)
 		return;
 
-	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_NAME, version);
+	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
 
 	/*
 	 * Set to true whether or not the load succeeds to prevent reloading if
 	 * failure happened after partial load.
 	 */
 	loaded = true;
+
+	/*
+	 * In a parallel worker, we're not responsible for loading libraries, it's
+	 * handled by the parallel worker infrastructure which restores the
+	 * library state.
+	 */
+	if (CalledInParallelWorker())
+		return;
 
 	/*
 	 * Set the config option to let versions 0.9.0 and 0.9.1 know that the

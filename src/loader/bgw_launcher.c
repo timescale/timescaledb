@@ -826,7 +826,7 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 		char		soname[MAX_SO_NAME_LEN];
 		PGFunction	versioned_scheduler_main;
 
-		snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_NAME, version);
+		snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
 		versioned_scheduler_main = load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
 		if (versioned_scheduler_main == NULL)
 			ereport(LOG, (errmsg("TimescaleDB version %s does not have a background worker, exiting", soname)));
