@@ -49,7 +49,7 @@ such.
 #### Creating a hypertable
 
 ```sql
--- First, do not forget to create timescaledb extention
+-- First, do not forget to create timescaledb extension
 CREATE EXTENSION timescaledb;
 
 -- We start by creating a regular SQL table
