@@ -28,6 +28,7 @@ set(PG_IGNORE_TESTS
   rules
   opr_sanity
   sanity_check
+  foreign_data
 )
 
 # Modify the test schedule to ignore some tests
