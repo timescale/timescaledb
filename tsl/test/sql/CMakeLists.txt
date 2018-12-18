@@ -19,6 +19,7 @@ set(TEST_FILES_DEBUG
     ddl_hook.sql
     tsl_tables.sql
     server.sql
+    timescaledb_fdw.sql
 )
 
 set(TEST_TEMPLATES

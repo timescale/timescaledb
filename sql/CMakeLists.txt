@@ -41,6 +41,7 @@ set(SOURCE_FILES
   maintenance_utils.sql
   partialize_finalize.sql
   restoring.sql
+  timescaledb_fdw.sql
 )
 
 # These files should be pre-pended to update scripts so that they are

@@ -42,3 +42,4 @@ install(
 add_subdirectory(bgw_policy)
 add_subdirectory(gapfill)
 add_subdirectory(continuous_aggs)
+add_subdirectory(fdw)

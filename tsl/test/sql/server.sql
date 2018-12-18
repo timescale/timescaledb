@@ -5,8 +5,7 @@
 
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
-CREATE EXTENSION IF NOT EXISTS postgres_fdw;
-GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 
 CREATE OR REPLACE FUNCTION show_servers()
 RETURNS TABLE(server_name NAME, host TEXT, port INT, dbname NAME)
@@ -17,7 +16,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Create server with DDL statements as reference. NOTE, 'IF NOT
 -- EXISTS' on 'CREATE SERVER' and 'CREATE USER MAPPING' is not
 -- supported on PG 9.6
-CREATE SERVER server_1 FOREIGN DATA WRAPPER postgres_fdw
+CREATE SERVER server_1 FOREIGN DATA WRAPPER timescaledb_fdw
 OPTIONS (host 'localhost', port '5432', dbname 'server_1');
 
 -- Create a user mapping for the server
@@ -40,7 +39,7 @@ SELECT * FROM add_server('server_2', if_not_exists => true);
 SELECT * FROM add_server('server_3', host => '192.168.3.4', database => 'server_2', remote_user => 'cluster_user_2');
 
 -- Server exists, but no user mapping
-CREATE SERVER server_4 FOREIGN DATA WRAPPER postgres_fdw
+CREATE SERVER server_4 FOREIGN DATA WRAPPER timescaledb_fdw
 OPTIONS (host 'localhost', port '5432', dbname 'server_4');
 
 -- User mapping should be added with NOTICE

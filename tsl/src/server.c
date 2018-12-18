@@ -21,7 +21,7 @@
 #include "compat.h"
 #include "catalog.h"
 
-#define TS_FOREIGN_DATA_WRAPPER_NAME "postgres_fdw"
+#define TS_FOREIGN_DATA_WRAPPER_NAME "timescaledb_fdw"
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
