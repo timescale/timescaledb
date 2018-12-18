@@ -10,8 +10,10 @@
 /* No function definitions here, only potentially globally available defines as this is used by the loader*/
 
 #define EXTENSION_NAME "timescaledb"
+#define EXTENSION_SO "$libdir/"EXTENSION_NAME
 #define MAX_VERSION_LEN (NAMEDATALEN+1)
-#define MAX_SO_NAME_LEN (NAMEDATALEN+1+MAX_VERSION_LEN) /* extname+"-"+version */
+#define MAX_SO_NAME_LEN (8+NAMEDATALEN+1+MAX_VERSION_LEN)	/* "$libdir/"+extname+"-"+version
+															 * */
 
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 #define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
