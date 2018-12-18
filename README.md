@@ -49,6 +49,9 @@ such.
 #### Creating a hypertable
 
 ```sql
+-- First, do not forget to create timescaledb extention
+CREATE EXTENSION timescaledb;
+
 -- We start by creating a regular SQL table
 CREATE TABLE conditions (
   time        TIMESTAMPTZ       NOT NULL,
