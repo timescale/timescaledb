@@ -54,7 +54,9 @@ ORDER BY proname;
  show_tablespaces
  time_bucket
  time_bucket_gapfill
+ timescaledb_fdw_handler
+ timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(42 rows)
+(44 rows)
 

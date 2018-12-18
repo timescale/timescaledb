@@ -47,6 +47,8 @@ TS_FUNCTION_INFO_V1(ts_array_compressor_finish);
 
 TS_FUNCTION_INFO_V1(ts_server_add);
 TS_FUNCTION_INFO_V1(ts_server_delete);
+TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
+TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -118,6 +120,18 @@ Datum
 ts_server_delete(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->delete_server(fcinfo));
+}
+
+Datum
+ts_timescaledb_fdw_handler(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->timescaledb_fdw_handler(fcinfo));
+}
+
+Datum
+ts_timescaledb_fdw_validator(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->timescaledb_fdw_validator(fcinfo));
 }
 
 /*
@@ -351,6 +365,7 @@ process_cagg_viewstmt_default(ViewStmt *stmt, const char *query_string, void *ps
 {
 	return error_no_default_fn_bool_void_community();
 }
+
 static void
 continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *with_clause_options)
 {
@@ -366,6 +381,12 @@ continuous_agg_drop_chunks_by_chunk_id_default(int32 raw_hypertable_id, Chunk **
 											   bool user_supplied_table_name)
 {
 	error_no_default_fn_community();
+}
+
+static Datum
+empty_fn(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_VOID();
 }
 
 /*
@@ -433,6 +454,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.add_server = error_no_default_fn_pg_community,
 	.delete_server = error_no_default_fn_pg_community,
+	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
+	.timescaledb_fdw_validator = empty_fn,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

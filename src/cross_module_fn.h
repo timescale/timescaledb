@@ -103,6 +103,8 @@ typedef struct CrossModuleFunctions
 
 	PGFunction add_server;
 	PGFunction delete_server;
+	PGFunction timescaledb_fdw_handler;
+	PGFunction timescaledb_fdw_validator;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
