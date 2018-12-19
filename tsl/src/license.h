@@ -22,5 +22,6 @@ char	   *license_kind_str(void);
 char	   *license_id_str(void);
 TimestampTz license_start_time(void);
 TimestampTz license_end_time(void);
+void		license_enforce_enterprise_enabled(void);
 
 #endif							/* TIMESCALEDB_TSL_LICENSE_H */
