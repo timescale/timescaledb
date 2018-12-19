@@ -247,7 +247,7 @@ calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
 	}
 
 	coord = p->coordinates[i];
-	datum = OidFunctionCall3(ht->chunk_sizing_func, dim->fd.id, coord, ht->fd.chunk_target_size);
+	datum = OidFunctionCall3(ht->chunk_sizing_func, Int32GetDatum(dim->fd.id), Int64GetDatum(coord), Int64GetDatum(ht->fd.chunk_target_size));
 	chunk_interval = DatumGetInt64(datum);
 
 	/* Check if the function didn't set and interval or nothing changed */
@@ -694,14 +694,6 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	return SCAN_DONE;
 }
 
-void
-ts_chunk_free(Chunk *chunk)
-{
-	if (NULL != chunk->cube)
-		ts_hypercube_free(chunk->cube);
-
-	pfree(chunk);
-}
 
 /* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
  * The rest of the fields will be filled in from the table data. */
@@ -1242,6 +1234,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	List	   *hypertables = NIL;
 	int			ht_index = 0;
 	uint64		num_chunks = 0;
+	int			i;
 
 	if (older_than_type != InvalidOid &&
 		newer_than_type != InvalidOid &&
@@ -1326,7 +1319,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	current = chunks;
 
 	MemoryContextSwitchTo(oldcontext);
-	for (int i = 0; i < list_length(hypertables); i++)
+	for (i = 0; i < list_length(hypertables); i++)
 	{
 		/* Get all the chunks from the context */
 		chunk_scan_ctxs[i]->data = current;
@@ -1572,12 +1565,6 @@ ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
 						   num_constraints,
 						   CurrentMemoryContext,
 						   fail_if_not_found);
-}
-
-bool
-ts_chunk_exists(const char *schema_name, const char *table_name)
-{
-	return chunk_get_by_name(schema_name, table_name, 0, false) != NULL;
 }
 
 bool
@@ -1863,8 +1850,8 @@ do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, 
 
 		/* Remove the chunk from the hypertable table */
 		ts_chunk_delete_by_relid(chunks[i]->table_id);
-		
-                /* Drop the table */
+
+		/* Drop the table */
 		performDeletion(&objaddr, cascade, 0);
 	}
 }
@@ -1900,29 +1887,29 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 					 errmsg("hypertable \"%s\" does not exist", NameStr(*table_name))
 					 ));
 	}
-        
+
 	foreach(lc, ht_oids)
 	{
 		Oid			table_relid = lfirst_oid(lc);
-                List                    *fk_relids = NIL;  
-                ListCell		*lf ;
+		List                    *fk_relids = NIL;
+		ListCell		*lf ;
                 /* get foreign key tables associated with the hypertable */
                 {
-                	List *cachedfkeys = NIL ; 
-	        	ListCell   *lf;
-                	Relation table_rel;
-                	table_rel = heap_open(table_relid, AccessShareLock);
-                	cachedfkeys = RelationGetFKeyList(table_rel);
-                	/* save the corresponding relids and close the heap here */
-                	foreach(lf, cachedfkeys)
-                	{
-               	       		ForeignKeyCacheInfo *cachedfk = (ForeignKeyCacheInfo *) lfirst(lf);
-     
-                          /* conrelid should always be that of the table we're considering */
-                        	Assert(cachedfk->conrelid == RelationGetRelid(table_rel));
-                        	fk_relids = lappend_oid( fk_relids, cachedfk->confrelid );
-                 	}
-                 	heap_close(table_rel, AccessShareLock);
+			List *cachedfkeys = NIL ;
+			ListCell   *lf;
+			Relation table_rel;
+			table_rel = heap_open(table_relid, AccessShareLock);
+			cachedfkeys = RelationGetFKeyList(table_rel);
+			/* save the corresponding relids and close the heap here */
+			foreach(lf, cachedfkeys)
+			{
+				ForeignKeyCacheInfo *cachedfk = (ForeignKeyCacheInfo *) lfirst(lf);
+
+				/* conrelid should always be that of the table we're considering */
+				Assert(cachedfk->conrelid == RelationGetRelid(table_rel));
+				fk_relids = lappend_oid( fk_relids, cachedfk->confrelid );
+			}
+			heap_close(table_rel, AccessShareLock);
                 }
                 /* We have a FK between hypertable H and PAR. Hypertable H has number of chunks
                    C1, C2, etc. When we execute "drop table C", PG acquires locks on C and PAR.
@@ -1934,8 +1921,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
                 */
                 foreach(lf, fk_relids)
                 {
-              		LockRelationOid( lfirst_oid(lf), AccessExclusiveLock);
-                } 
+			LockRelationOid( lfirst_oid(lf), AccessExclusiveLock);
+                }
 		do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade);
 	}
 
