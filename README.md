@@ -47,10 +47,18 @@ From the perspective of both use and management, TimescaleDB just
 looks and feels like PostgreSQL, and can be managed and queried as
 such.
 
+#### Before you start
+
+PostgreSQL's out-of-the-box settings are typically too conservative for modern
+servers and TimescaleDB. You should make sure your `postgresql.conf`
+settings are tuned, either by using [timescaledb-tune](https://github.com/timescale/timescaledb-tune) or doing it manually.
 
 #### Creating a hypertable
 
 ```sql
+-- Do not forget to create timescaledb extension
+CREATE EXTENSION timescaledb;
+
 -- We start by creating a regular SQL table
 CREATE TABLE conditions (
   time        TIMESTAMPTZ       NOT NULL,
@@ -95,11 +103,15 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 
 ### Installation
 
-TimescaleDB can be installed via a variety of ways:
+TimescaleDB is available pre-packaged for several platforms:
 
-- Linux: [yum](https://docs.timescale.com/latest/getting-started/installation/linux/installation-yum), [apt (Ubuntu)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-ubuntu), [apt (Debian)](https://docs.timescale.com/latest/getting-started/installation/linux/installation-apt-debian), [Docker](https://docs.timescale.com/latest/getting-started/installation/linux/installation-docker)
-- MacOS: [brew](https://docs.timescale.com/latest/getting-started/installation/mac/installation-homebrew), [Docker](https://docs.timescale.com/latest/getting-started/installation/mac/installation-docker)
-- Windows: [Docker](https://docs.timescale.com/latest/getting-started/installation/windows/installation-docker)
+- Linux:
+    - [RedHat / CentOS](https://docs.timescale.com/getting-started/installation/rhel-centos/installation-yum)
+    - [Ubuntu](https://docs.timescale.com/getting-started/installation/ubuntu/installation-apt-ubuntu)
+    - [Debian](https://docs.timescale.com/getting-started/installation/debian/installation-apt-debian)
+- [Docker](https://docs.timescale.com/getting-started/installation/docker/installation-docker)
+- [MacOS (Homebrew)](https://docs.timescale.com/getting-started/installation/macos/installation-homebrew)
+- [Windows](https://docs.timescale.com/getting-started/installation/windows/installation-windows)
 
 We recommend following our detailed [installation instructions](https://docs.timescale.com/latest/getting-started/installation).
 
@@ -121,16 +133,12 @@ for Linux, Postgres.app for MacOS)
 ```bash
 git clone git@github.com:timescale/timescaledb.git
 cd timescaledb
-
-# Find the latest release and checkout, e.g. for 0.8.0:
-git checkout 0.8.0
-
+# Find the latest release and checkout, e.g. for 1.0.0:
+git checkout 1.0.0
 # Bootstrap the build system
 ./bootstrap
-
 # To build the extension
 cd build && make
-
 # To install
 make install
 ```
@@ -152,7 +160,7 @@ See the Releases tab for the latest release.
 - OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git
-- Make sure all relevant binaries are in your PATH: `pg_config`, `cmake`, `MSBuild`
+- Make sure all relevant binaries are in your PATH: `pg_config` and `cmake`
 
 If using Visual Studio 2017 with the CMake and Git components, you
 should be able to simply clone the repo and open the folder in
@@ -164,22 +172,25 @@ be built in the following way:
 git clone git@github.com:timescale/timescaledb.git
 cd timescaledb
 
-# Find the latest release and checkout, e.g. for 0.8.0:
-git checkout 0.8.0
-
+# Find the latest release and checkout, e.g. for 1.0.0:
+git checkout 1.0.0
 # Bootstrap the build system
 bootstrap.bat
-
 # To build the extension from command line
 cmake --build ./build --config Release
-
 # To install
 cmake --build ./build --config Release --target install
 
-
-# Alternatively, build in Visual Studio via its built-in support for CMake or by
-# opening the generated build/timescaledb.sln solution file.
+# Alternatively, build in Visual Studio via its built-in support for
+# CMake or by opening the generated build/timescaledb.sln solution file.
 ```
+
+### Useful tools
+
+- [timescaledb-tune](https://github.com/timescale/timescaledb-tune): Helps
+set your PostgreSQL configuration settings based on your system's resources.
+- [timescaledb-parallel-copy](https://github.com/timescale/timescaledb-parallel-copy): Parallelize your initial bulk loading by using PostgreSQL's
+`COPY` across multiple workers.
 
 ### Additional documentation
 
