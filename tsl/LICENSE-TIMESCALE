@@ -1,0 +1,423 @@
+TIMESCALE LICENSE AGREEMENT
+
+Posted Date:  December 19, 2018
+
+PLEASE READ CAREFULLY THIS TIMESCALE LICENSE AGREEMENT ("TSL Agreement"), WHICH
+CONSTITUTES A LEGALLY BINDING AGREEMENT AND GOVERNS USE OF THE TIMESCALE
+TIME-SERIES DATABASE SOFTWARE AND RELATED SOFTWARE THAT IS PROVIDED SUBJECT TO
+THIS TSL AGREEMENT.  BY INSTALLING OR USING SUCH SOFTWARE, YOU AGREE THAT YOU
+HAVE READ AND AGREE TO BE BOUND BY THE TERMS AND CONDITIONS OF THIS TSL
+AGREEMENT.  IF YOU DO NOT AGREE WITH SUCH TERMS AND CONDITIONS, YOU MAY NOT
+INSTALL OR USE SUCH SOFTWARE.  IF YOU ARE INSTALLING OR USING SUCH SOFTWARE ON
+BEHALF OF A LEGAL ENTITY, YOU REPRESENT AND WARRANT THAT YOU HAVE THE AUTHORITY
+TO AGREE TO THE TERMS AND CONDITIONS OF THIS TSL AGREEMENT ON BEHALF OF THAT
+LEGAL ENTITY AND THE RIGHT TO BIND THAT LEGAL ENTITY TO THIS TSL AGREEMENT.
+
+This TSL Agreement is entered into by and between Timescale, Inc. ("Timescale")
+and you or the legal entity on whose behalf you are accepting this TSL
+Agreement ("You").
+
+0. BACKGROUND
+
+   The Timescale time-series database software and related software is offered
+   as "open code" or "source-available" code.  This means that all source code
+   of the software is available for inspection and download at
+   https://github.com/timescale.  The Timescale software is composed of two
+   major pieces.
+
+   The first, core piece (referred to herein as the Timescale Open Source
+   Software, as defined below) is open source software that is licensed under
+   the Apache Version 2.0 license.
+
+   The second piece (referred to herein as the TSL Licensed Software, as
+   defined below) is all of the Timescale Software other than the Timescale
+   Open Source Software.
+
+   Certain functions or features of the TSL Licensed Software (referred to
+   herein as Community Features, as defined below) may be used under this TSL
+   Agreement without charge, in some cases subject to certain usage limits that
+   may be imposed by a software license key and/or technical restrictions in
+   the code.
+
+   Certain other functions or features of the TSL Licensed Software (referred
+   to herein as Enterprise Features, as defined below) may be used either
+   solely under a Commercial License Agreement subject to charge, or under this
+   TSL Agreement without charge only for a limited time trial period.  In order
+   to use such features, You must obtain an appropriate license key.
+
+   You may find more information at https://www.timescale.com/pricing about
+   which functions and features of the TSL Licensed Software are classified as
+   Community Features and Enterprise Features, details about any applicable
+   usage limits and trial periods, and a description of how You can obtain any
+   required license keys and enter into a Commercial License Agreement with
+   Timescale.
+
+1. GOVERNING LICENSES
+
+   1.1 Source Code.  The source code for all Timescale Software is made
+   publicly available by Timescale at https://github.com/timescale.  However,
+   different license agreements govern the use of different parts of the
+   Timescale Software source code.  The use of Timescale Open Source Software,
+   in both source and executable forms, is governed by the terms of the Apache
+   License Version 2.0, a copy of which is available at
+   https://opensource.org/licenses/Apache-2.0.  The use of all other Timescale
+   Software in source code form is governed by this TSL Agreement and/or a
+   Commercial License Agreement, as applicable.
+
+   1.2 Commercial License Rights.  If You desire to use Community Features
+   beyond applicable Usage Limits, or to use Enterprise Features beyond an
+   applicable trial period (or those Enterprise Features that are not available
+   for use under this TSL Agreement at all), as the case may be, You must
+   obtain an appropriate License Key and enter into a Commercial License
+   Agreement with Timescale, subject to applicable charges.
+
+   1.3 License Rights to Your Customers.  As set forth in Section 2.1 below,
+   the use by Your customers of the Timescale Software as part of any Value
+   Added Products or Services that You distribute will be subject to the most
+   current version of this TSL Agreement, including any applicable Usage Limits
+   and restrictions on the use of Enterprise Features.  If Your customers
+   desire to use any functions or features of the Timescale Software beyond
+   applicable Usage Limits, or to use Enterprise Features, they must enter into
+   a Commercial License Agreement with Timescale and obtain any necessary
+   License Keys.
+
+2. GRANT OF LICENSES
+
+   2.1 Grant.  Conditioned upon compliance with all of the terms and conditions
+   of this TSL Agreement, Timescale grants to You at no charge the following
+   limited, non-exclusive, non-transferable, fully paid up, worldwide licenses,
+   without the right to grant or authorize sublicenses (except as set forth in
+   Section 2.3):
+
+      (a) Internal Use.  A license to copy, compile, install, and use the
+      Timescale Software in unmodified form: (i) solely for Your own internal
+      business purposes in a manner that does not expose or give access to,
+      directly or indirectly (e.g., via a wrapper), the Timescale Data
+      Definition Interfaces or the Timescale Data Manipulation Interfaces to
+      any person or entity other than You or Your employees and Contractors
+      working on Your behalf, and (ii) solely in compliance with all applicable
+      Usage Limits and any limits imposed on the use of Enterprise Features by
+      a License Key or the Timescale Software itself.  You agree not to use the
+      Community Features in any manner or extent beyond the Usage Limits or use
+      the Enterprise Features in any manner or extent beyond the limits imposed
+      by a License Key or the Timescale Software itself, except as may be
+      permitted by a Commercial License Agreement that You and Timescale may
+      enter into.
+
+      (b) Value Added Products or Services.  A license (i) to copy, compile,
+      install, and use the Timescale Software solely in unmodified form to
+      develop and maintain Your Value Added Products or Services, and (ii) to
+      utilize (in the case of services) or distribute (in the case of products
+      that are distributed to Your customers) copies of the Timescale Software
+      or parts thereof solely in unmodified form and solely as incorporated
+      into or utilized with Your Value Added Products or Services; provided
+      that (1) You notify Your customers that use of such Timescale Software is
+      subject to this TSL Agreement and You provide to each such customer a
+      copy of the most current version of this TSL Agreement or a URL from
+      which the most current version of this TSL Agreement may be obtained, and
+      (2) the customer is prohibited, either contractually or technically, from
+      defining, redefining, or modifying the database schema or other
+      structural aspects of database objects, such as through use of the
+      Timescale Data Definition Interfaces, in a Timescale Database utilized by
+      such Value Added Products or Services.
+
+      (c) Distribution of Source Code or Binaries in Standalone Form.  Subject
+      to the prohibitions in Section 2.2 below, a license to copy and
+      distribute the Timescale Software Source Code and the Timescale Software
+      Binaries solely in unmodified standalone form and subject to the terms
+      and conditions of the most current version of this TSL Agreement.  You
+      may not distribute the TSL Licensed Software Source Code or the TSL
+      Licensed Software Binaries in combination with or for use with any other
+      software except for Your Value Added Products or Services.
+
+      (d) Derivative Works.  A license to prepare, compile, and test Derivative
+      Works of the TSL Licensed Software Source Code solely in a Non-Production
+      Environment, provided that (i) neither such Derivative Works nor any
+      binary executable versions thereof are utilized in a production capacity
+      or outside a Non-Production Environment, (ii) such Derivative Works do
+      not violate any of the prohibitions on circumvention of Technological
+      Protection Measures set forth in Section 2.5, and (iii) such Derivative
+      Works are not distributed to any third person or entity other than as a
+      contribution back to Timescale under Timescale's Contributor Agreement
+      for potential incorporation into Timescale's maintained code base at its
+      sole discretion.
+
+   2.2 Prohibitions.  Notwithstanding any other provision in this TSL
+   Agreement, You are prohibited from (i) using any TSL Licensed Software to
+   provide time-sharing services or database-as-a-service services, or to
+   provide any form of software-as-a-service or service offering in which the
+   TSL Licensed Software is offered or made available to third parties to
+   provide time-series database functions or operations, other than as part of
+   Your Value Added Products or Services, or (ii) copying or distributing any
+   TSL Licensed Software for use in any of the foregoing ways.  In addition,
+   You agree not to, except as expressly permitted in Section 2.1(d), prepare
+   Derivative Works of any TSL Licensed Software or, except as expressly
+   permitted herein, transfer, sell, rent, lease, sublicense, loan, or
+   otherwise transfer or make available any TSL Licensed Software, whether in
+   source code or binary executable form.  If You have any question as to
+   whether a specific use You intend to make of the TSL Licensed Software
+   complies with the foregoing prohibitions, please contact
+   licensing@timescale.com.
+
+   2.3 Affiliates and Contractors.  You may permit Your Contractors and
+   Affiliates to exercise the licenses set forth in Section 2.1, provided that
+   such exercise by Contractors must be solely for your benefit and/or the
+   benefit of Your Affiliates, and You shall be responsible for all acts and
+   omissions of such Contractors and Affiliates in connection with such
+   exercise of the licenses, including but not limited to breach of any
+   applicable Usage Limits, limits imposed by a License Key, or other terms of
+   this TSL Agreement.
+
+   2.4 Reservation of Rights.  Except as expressly set forth in Section 2.1, no
+   other license or rights to the Timescale Software are granted to You under
+   this TSL Agreement, whether by implication, estoppel, or otherwise.
+
+   2.5 Circumvention of Technological Protection Measures.  You agree not to
+   descramble, decrypt, alter, avoid, bypass, remove, deactivate, impair, or
+   otherwise circumvent any Technological Protection Measure protecting the
+   Timescale Software or any portion thereof, including but not limited to any
+   License Key.
+
+3. DEFINITIONS
+
+   In addition to other terms defined elsewhere in this TSL Agreement, the
+   terms below have the following meanings:
+
+   3.1 "Affiliate" means, if You are a legal entity, any legal entity that
+   controls, is controlled by, or which is under common control with, You,
+   where "control" means ownership of at least fifty percent (50%) of the
+   outstanding voting shares of the legal entity, or the contractual right to
+   establish policy for, and manage the operations of, the legal entity.
+
+   3.2 "Commercial License Agreement" means a license agreement offered by
+   Timescale separate from this TSL Agreement that grants license rights, for
+   applicable charges, to (i) activate and use one or more Enterprise Features
+   that Timescale does not make available for access and use under this TSL
+   Agreement at all, (ii) use one or more Enterprise Features beyond expiration
+   of a limited time trial period, and/or (iii) use one or more Community
+   Features beyond applicable Usage Limits.
+
+   3.3 "Community Features" means those functions or features of the TSL
+   Licensed Software that Timescale designates from time to time at
+   https://www.timescale.com/pricing as available for access and use under this
+   TSL Agreement without charge, subject to any applicable Usage Limits.
+
+   3.4 "Contractor" means a person or entity engaged as a consultant or
+   contractor to perform work on Your behalf, but only to the extent such
+   person or entity is performing such work on Your behalf.
+
+   3.5 "Derivative Work" means any modification or enhancement made by You to
+   the TSL Licensed Software, whether in source code, executable, intermediate,
+   or other form.
+
+   3.6 "Enterprise Features" means certain functions or features of the TSL
+   Licensed Software that Timescale designates from time to time at
+   https://www.timescale.com/pricing as (i) available for activation and use
+   solely under a Commercial License Agreement with a License Key and subject
+   to applicable charges, or (ii) available for use without charge under this
+   TSL Agreement only on a limited time trial basis with a License Key.
+
+   3.7 "License Key" means a software license key issued by Timescale that
+   allows (i) activation and use of certain Enterprise Features either under a
+   Commercial License Agreement or without charge for a limited time trial
+   period under this TSL Agreement, or (ii) use of certain Community Features
+   beyond applicable Usage Limits.
+
+   3.8 "Non-Production Environment" means an environment for development,
+   testing, or quality assurance, where software is not used for production
+   purposes.
+
+   3.9 "Technological Protection Measure" means a technological measure,
+   including but not limited to a License Key, encryption, scrambling,
+   procedure, or process, that controls access to and/or restricts or limits
+   the use of any function, feature, or portion of the Timescale Software.
+
+   3.10 "Timescale Database" means a time-series database that is created
+   and/or used by the Timescale Software.
+
+   3.11 "Timescale Data Definition Interfaces" means SQL commands and other
+   interfaces of the Timescale Software that can be used to define or modify
+   the database schema and other structural aspects of database objects in a
+   Timescale Database, including Data Definition Language (DDL) commands such
+   as CREATE, DROP, ALTER, TRUNCATE, COMMENT, and RENAME.
+
+   3.12 "Timescale Data Manipulation Interfaces" means SQL commands and
+   analytical function, procedural, and other types of application programming
+   interfaces or commands, that allow the use, manipulation, and control of
+   data present in a Timescale Database, including Data Manipulation Language
+   (DDL) commands such as SELECT, INSERT, UPDATE, and DELETE, Data Control
+   Language (DCL) commands such as GRANT and REVOKE, and Transaction Control
+   Language (TCL) commands such as COMMIT, ROLLBACK, SAVEPOINT, and SET
+   TRANSACTION.
+
+   3.13 "Timescale Open Source Software" means those portions of the Timescale
+   Software that Timescale makes publicly available from time to time as open
+   source software under the terms of the Apache License Version 2.0 or, in
+   some limited instances, under other open source licenses (such as the
+   PostgreSQL license) as identified in the applicable source code files and/or
+   accompanying notices.
+
+   3.14 "Timescale Software" means, collectively, all time-series database
+   software and related software made publicly available by Timescale from time
+   to time, in both source code and binary executable form, which includes the
+   Timescale Open Source Software and the TSL Licensed Software.
+
+   3.15 "Timescale Software Binaries" means the binary executable form of the
+   Timescale Software that Timescale makes publicly available from time to
+   time.
+
+   3.16 "Timescale Software Source Code" means the source code of the Timescale
+   Software that Timescale makes publicly available from time to time.
+
+   3.17 "TSL Licensed Software" means those parts of the Timescale Software
+   other than the Timescale Open Source Software.
+
+   3.18 "TSL Licensed Software Binaries" means the TSL Licensed Software or any
+   portion thereof in binary executable form.
+
+   3.19 "TSL Licensed Software Source Code" means the TSL Licensed Software or
+   any portion thereof in source code form.
+
+   3.20 "Usage Limits" means limits, such as capability restrictions or usage
+   metrics, that Timescale may place from time to time on the use under this
+   TSL Agreement of certain Community Features.  Usage Limits may be set by a
+   License Key and/or by limits implemented in the TSL Licensed Software code
+   itself.
+
+   3.21 "Value Added Products or Services" means products or services developed
+   by or for You that utilize (for example, as a back-end function or part of a
+   software stack) all or parts of the Timescale Software to provide
+   time-series database storage and operations in support of larger value-added
+   products or services (for example, an IoT platform or vertical-specific
+   application) with respect to which all of the following are true:
+
+      (i) such value-added products or services are not primarily database
+      storage or operations products or services;
+
+      (ii) such value-added products or services add substantial value of a
+      different nature to the time-series database storage and operations
+      afforded by the Timescale Software and are the key functions upon which
+      such products or services are offered and marketed; and
+
+      (iii) users of such Value Added Products or Services are prohibited,
+      either contractually or technically, from defining, redefining, or
+      modifying the database schema or other structural aspects of database
+      objects, such as through use of the Timescale Data Definition Interfaces,
+      in a Timescale Database utilized by such Value Added Products or
+      Services.
+
+4. SUPPORT
+
+   From time to time, in its sole discretion, Timescale may offer professional
+   services or support for the TSL Licensed Software pursuant to a separate
+   support or maintenance agreement, which may now or in the future be subject
+   to fees.  Please see https://www.timescale.com/pricing for a description of
+   professional services or support that may be available from Timescale.
+
+5. TERMINATION
+
+   This TSL Agreement will automatically terminate, whether or not You receive
+   notice of such termination from Timescale, in the event You breach any of
+   its terms or conditions.  In accordance with Section 7 below, Timescale
+   shall have no liability for any damage, loss, or expense of any kind,
+   whether consequential, indirect, or direct, suffered or incurred by You
+   arising from or incident to the termination of this TSL Agreement, whether
+   or not Timescale has been advised or is aware of any such potential damage,
+   loss, or expense.
+
+6. DISCLAIMER OF WARRANTIES
+
+   TO THE MAXIMUM EXTENT PERMITTED UNDER APPLICABLE LAW, ALL TIMESCALE SOFTWARE
+   PROVIDED UNDER THIS TSL AGREEMENT, INCLUDING ALL PORTIONS OF THE TIMESCALE
+   SOFTWARE SUPPLIED ON A TRIAL BASIS, ARE PROVIDED "AS IS" WITHOUT WARRANTY OF
+   ANY KIND AND TIMESCALE DISCLAIMS ALL SUCH WARRANTIES, WHETHER EXPRESS,
+   STATUTORY, OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+   MERCHANTABILITY, TITLE, FITNESS FOR A PARTICULAR PURPOSE, OR
+   NON-INFRINGEMENT, AND ANY IMPLIED WARRANTIES ARISING FROM USAGE OF TRADE,
+   COURSE OF DEALING, OR COURSE OF PERFORMANCE.  WITHOUT LIMITING THE
+   FOREGOING, TIMESCALE MAKES NO WARRANTY OR REPRESENTATION AS TO THE
+   RELIABILITY, TIMELINESS, QUALITY, SUITABILITY, PROFITABILITY, SUPPORT,
+   PERFORMANCE, LOSS OF USE OR LOSS OF DATA, AVAILABILITY, OR ACCURACY OF THE
+   TIMESCALE SOFTWARE.  YOU ACKNOWLEDGE THAT CHANGES MADE BY TIMESCALE TO THE
+   TIMESCALE SOFTWARE MAY DISRUPT INTEROPERATION WITH YOUR VALUE ADDED PRODUCTS
+   OR SERVICES.  TIMESCALE AND ITS LICENSORS DO NOT WARRANT THAT THE TIMESCALE
+   SOFTWARE, OR ANY PORTION THEREOF, IS ERROR FREE OR WILL OPERATE WITHOUT
+   INTERRUPTION, OR THAT ANY VALUE ADDED PRODUCT OR SERVICE INTEROPERATING WITH
+   THE TIMESCALE SOFTWARE WILL NOT EXPERIENCE LOSS OF USE OR LOSS OF DATA.  YOU
+   ACKNOWLEDGE THAT IN ENTERING INTO THIS TSL AGREEMENT, YOU HAVE NOT RELIED ON
+   ANY PROMISE, WARRANTY, OR REPRESENTATION NOT EXPRESSLY SET FORTH IN THIS
+   AGREEMENT.
+
+7. LIMITATION OF LIABILITY
+
+   TO THE MAXIMUM EXTENT PERMITTED UNDER APPLICABLE LAW, IN NO EVENT SHALL
+   TIMESCALE OR ITS LICENSORS BE LIABLE TO YOU OR ANY THIRD PARTY FOR ANY
+   DIRECT OR INDIRECT DAMAGES, INCLUDING BUT NOT LIMITED TO ANY LOSS OF PROFITS
+   OR REVENUE, LOSS OF USE, BUSINESS INTERRUPTION, LOSS OF DATA, COST OF COVER
+   OR SUBSTITUTE GOODS OR SERVICES, OR FOR ANY SPECIAL, INCIDENTAL,
+   CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES OF ANY KIND, HOWEVER CAUSED,
+   RELATED TO, OR ARISING OUT OF THIS TSL AGREEMENT, ITS TERMINATION OR THE
+   PERFORMANCE OR FAILURE TO PERFORM THIS TSL AGREEMENT, OR THE USE OR
+   INABILITY TO USE THE TIMESCALE SOFTWARE, WHETHER ALLEGED AS A BREACH OF
+   CONTRACT, BREACH OF WARRANTY, TORTIOUS CONDUCT, INCLUDING NEGLIGENCE, OR ANY
+   OTHER LEGAL THEORY, EVEN IF TIMESCALE HAS BEEN ADVISED OR IS AWARE OF THE
+   POSSIBILITY OF SUCH DAMAGES.
+
+8. GENERAL
+
+   8.1 Complete Agreement.  This TSL Agreement completely and exclusively
+   states the entire agreement of the parties regarding the subject matter
+   hereof and supersedes all prior proposals, agreements, or other
+   communications between the parties, oral or written, regarding such subject
+   matter.
+
+   8.2 Modification.  This TSL Agreement may be modified by Timescale from time
+   to time, and any such modifications will be effective upon the "Posted Date"
+   set forth at the top of the modified agreement. The modified agreement shall
+   govern any new version of the TSL Licensed Software (and all its constituent
+   source code and binaries) that is officially released as a complete version
+   release by Timescale on or after such Posted Date. Except as set forth in
+   this Section 8.2, this TSL Agreement may not be amended except by a writing
+   executed by both parties.
+
+   8.3 Governing Law.  This TSL Agreement shall be governed by and construed
+   solely under the laws of the State of New York, without application of any
+   choice of law rules or principles that would lead to the applicability of
+   the law of any other jurisdiction.  None of the provisions of either the
+   United Nations Convention on Contracts for the International Sale of Goods
+   or the Uniform Computer Information Transactions Act shall apply.
+
+   8.4 Unenforceability.  If any provision of this TSL Agreement is held
+   unenforceable, the remaining provisions of this TSL Agreement shall remain
+   in effect and the unenforceable provision shall be replaced by an
+   enforceable provision that best reflects the original intent of the parties.
+
+   8.5 Injunctive Relief.  You acknowledge that a breach or threatened breach
+   of any provision of this TSL Agreement will cause irreparable harm to
+   Timescale for which damages at law will not provide adequate relief, and
+   Timescale shall therefore be entitled to injunctive relief against such
+   breach or threatened breach without being required to post a bond.
+
+   8.6 Assignment.  You may not assign this TSL Agreement, including by
+   operation of law in connection with a merger or acquisition or otherwise, in
+   whole or in part, without the prior written consent of Timescale, which
+   Timescale may grant or withhold in its sole and absolute discretion.  Any
+   assignment in violation of the preceding sentence is void.
+
+   8.7 Independent Contractors.  The parties to this TSL Agreement are
+   independent contractors and this TSL Agreement does not establish any
+   relationship of partnership, joint venture, employment, franchise, or agency
+   between the parties.
+
+   8.8 U.S. Government Rights.  The Timescale Software and related
+   documentation are "Commercial Items", as that term is defined at 48
+   C.F.R. §2.101, consisting of "Commercial Computer Software" and "Commercial
+   Computer Software Documentation," as such terms are used in 48
+   C.F.R. §12.212 or 48 C.F.R. §227.7202, as applicable. Consistent with 48
+   C.F.R. §12.212 or 48 C.F.R. §227.7202-1 through 227.7202-4, as applicable,
+   the Commercial Computer Software and Commercial Computer Software
+   Documentation are being licensed to U.S. Government end users (a) only as
+   Commercial Items and (b) with only those rights as are granted to all other
+   end users pursuant to the terms and conditions of this TSL Agreement.
+   Unpublished – rights reserved under the copyright laws of the United States.
+
