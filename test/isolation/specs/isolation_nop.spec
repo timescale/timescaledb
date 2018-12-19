@@ -1,6 +1,6 @@
 setup{
     CREATE TABLE ts_cluster_test(time timestamptz, temp float, location int);
-    SELECT create_hypertable('ts_cluster_test', 'time', chunk_time_interval => interval '1 day');
+    SELECT table_name from create_hypertable('ts_cluster_test', 'time', chunk_time_interval => interval '1 day');
 }
 
 teardown {

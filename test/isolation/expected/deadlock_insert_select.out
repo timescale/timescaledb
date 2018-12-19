@@ -1,0 +1,128 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1a s1b s2a s2b
+count          
+
+31             
+step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'hourly_tssensor_data');
+drop_chunks    
+
+               
+step s1b: COMMIT;
+step s2a: SELECT st.type, sl.location, hsd.measurementtime, hsd.measurementvalues
+                FROM hourly_tssensor_data hsd
+                JOIN tssensor_location sl on sl.sensorlocationid = hsd.sensorlocationid
+                JOIN tssensor_type st on st.sensortypeid = hsd.sensortypeid
+                WHERE hsd.measurementtime >= '2018-12-01 03:00:00+00'
+                AND hsd.measurementtime <= '2018-12-01 04:00:00+00'
+                AND st.type = 'Type 1'
+                order by st.type, sl.location, hsd.measurementtime ;
+type           location       measurementtimemeasurementvalues
+
+step s2b: COMMIT;
+
+starting permutation: s1a s2a s1b s2b
+count          
+
+31             
+step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'hourly_tssensor_data');
+drop_chunks    
+
+               
+step s2a: SELECT st.type, sl.location, hsd.measurementtime, hsd.measurementvalues
+                FROM hourly_tssensor_data hsd
+                JOIN tssensor_location sl on sl.sensorlocationid = hsd.sensorlocationid
+                JOIN tssensor_type st on st.sensortypeid = hsd.sensortypeid
+                WHERE hsd.measurementtime >= '2018-12-01 03:00:00+00'
+                AND hsd.measurementtime <= '2018-12-01 04:00:00+00'
+                AND st.type = 'Type 1'
+                order by st.type, sl.location, hsd.measurementtime ; <waiting ...>
+step s1b: COMMIT;
+step s2a: <... completed>
+type           location       measurementtimemeasurementvalues
+
+step s2b: COMMIT;
+
+starting permutation: s1a s2a s2b s1b
+count          
+
+31             
+step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'hourly_tssensor_data');
+drop_chunks    
+
+               
+step s2a: SELECT st.type, sl.location, hsd.measurementtime, hsd.measurementvalues
+                FROM hourly_tssensor_data hsd
+                JOIN tssensor_location sl on sl.sensorlocationid = hsd.sensorlocationid
+                JOIN tssensor_type st on st.sensortypeid = hsd.sensortypeid
+                WHERE hsd.measurementtime >= '2018-12-01 03:00:00+00'
+                AND hsd.measurementtime <= '2018-12-01 04:00:00+00'
+                AND st.type = 'Type 1'
+                order by st.type, sl.location, hsd.measurementtime ; <waiting ...>
+step s2a: <... completed>
+ERROR:  canceling statement due to user request
+step s2b: COMMIT;
+step s1b: COMMIT;
+
+starting permutation: s2a s1a s1b s2b
+count          
+
+31             
+step s2a: SELECT st.type, sl.location, hsd.measurementtime, hsd.measurementvalues
+                FROM hourly_tssensor_data hsd
+                JOIN tssensor_location sl on sl.sensorlocationid = hsd.sensorlocationid
+                JOIN tssensor_type st on st.sensortypeid = hsd.sensortypeid
+                WHERE hsd.measurementtime >= '2018-12-01 03:00:00+00'
+                AND hsd.measurementtime <= '2018-12-01 04:00:00+00'
+                AND st.type = 'Type 1'
+                order by st.type, sl.location, hsd.measurementtime ;
+type           location       measurementtimemeasurementvalues
+
+step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'hourly_tssensor_data'); <waiting ...>
+step s1a: <... completed>
+ERROR:  canceling statement due to user request
+step s1b: COMMIT;
+step s2b: COMMIT;
+
+starting permutation: s2a s1a s2b s1b
+count          
+
+31             
+step s2a: SELECT st.type, sl.location, hsd.measurementtime, hsd.measurementvalues
+                FROM hourly_tssensor_data hsd
+                JOIN tssensor_location sl on sl.sensorlocationid = hsd.sensorlocationid
+                JOIN tssensor_type st on st.sensortypeid = hsd.sensortypeid
+                WHERE hsd.measurementtime >= '2018-12-01 03:00:00+00'
+                AND hsd.measurementtime <= '2018-12-01 04:00:00+00'
+                AND st.type = 'Type 1'
+                order by st.type, sl.location, hsd.measurementtime ;
+type           location       measurementtimemeasurementvalues
+
+step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'hourly_tssensor_data'); <waiting ...>
+step s2b: COMMIT;
+step s1a: <... completed>
+drop_chunks    
+
+               
+step s1b: COMMIT;
+
+starting permutation: s2a s2b s1a s1b
+count          
+
+31             
+step s2a: SELECT st.type, sl.location, hsd.measurementtime, hsd.measurementvalues
+                FROM hourly_tssensor_data hsd
+                JOIN tssensor_location sl on sl.sensorlocationid = hsd.sensorlocationid
+                JOIN tssensor_type st on st.sensortypeid = hsd.sensortypeid
+                WHERE hsd.measurementtime >= '2018-12-01 03:00:00+00'
+                AND hsd.measurementtime <= '2018-12-01 04:00:00+00'
+                AND st.type = 'Type 1'
+                order by st.type, sl.location, hsd.measurementtime ;
+type           location       measurementtimemeasurementvalues
+
+step s2b: COMMIT;
+step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'hourly_tssensor_data');
+drop_chunks    
+
+               
+step s1b: COMMIT;
