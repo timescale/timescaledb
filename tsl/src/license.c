@@ -362,3 +362,10 @@ license_end_time(void)
 {
 	return current_license.end_time;
 }
+
+void
+license_enforce_enterprise_enabled(void)
+{
+	if (!license_enterprise_enabled())
+		elog(ERROR, "cannot execute an enterprise function with an invalid enterprise license");
+}

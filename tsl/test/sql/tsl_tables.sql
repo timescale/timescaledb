@@ -280,3 +280,15 @@ select * from alter_policy_schedule(1234);
 \set ON_ERROR_STOP 1
 
 select remove_recluster_policy('test_table');
+
+\c single :ROLE_SUPERUSER
+set session timescaledb.license_key='Community';
+
+-- Now make sure everything fails in the Community (non-enterprise) edition
+\set ON_ERROR_STOP 0 
+select add_recluster_policy('test_table', 'test_table_time_idx');
+select add_drop_chunks_policy('test_table', INTERVAL '4 months', true);
+select remove_recluster_policy('test_table');
+select remove_drop_chunks_policy('test_table');
+select alter_policy_schedule(12345);
+\set ON_ERROR_STOP 1

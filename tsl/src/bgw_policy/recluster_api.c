@@ -12,12 +12,13 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include "bgw/job.h"
+#include "bgw_policy/recluster.h"
 #include "errors.h"
+#include "hypertable.h"
+#include "license.h"
 #include "recluster_api.h"
 #include "utils.h"
-#include "hypertable.h"
-#include "bgw/job.h"
-#include <bgw_policy/recluster.h>
 
 /*
  * Default scheduled interval for recluster jobs should be 1/2 of the default chunk length.
@@ -75,6 +76,8 @@ recluster_add_policy(PG_FUNCTION_ARGS)
 			.hypertable_index_name = *index_name,
 		}
 	};
+
+	license_enforce_enterprise_enabled();
 
 	/* First verify that the hypertable corresponds to a valid table */
 	if (!ts_is_hypertable(ht_oid))
@@ -135,6 +138,8 @@ recluster_remove_policy(PG_FUNCTION_ARGS)
 	/* Remove the job, then remove the policy */
 	int			ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 	BgwPolicyRecluster *policy = ts_bgw_policy_recluster_find_by_hypertable(ht_id);
+
+	license_enforce_enterprise_enabled();
 
 	if (policy == NULL)
 	{

@@ -13,17 +13,18 @@
 #include <catalog/pg_type.h>
 #include <utils/lsyscache.h>
 
+#include "bgw/timer.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/recluster.h"
-#include "errors.h"
-#include "job.h"
-#include "hypertable.h"
 #include "chunk.h"
+#include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "dimension.h"
-#include "bgw/timer.h"
+#include "errors.h"
+#include "hypertable.h"
+#include "job.h"
+#include "license.h"
 
 #define ALTER_JOB_SCHEDULE_NUM_COLS	5
 #define RECLUSTER_SKIP_RECENT_DIM_SLICES_N	3
@@ -138,6 +139,8 @@ execute_drop_chunks_policy(int32 job_id)
 bool
 tsl_bgw_policy_job_execute(BgwJob *job)
 {
+	license_enforce_enterprise_enabled();
+
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_RECLUSTER:
@@ -170,6 +173,8 @@ bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS)
 
 	int			job_id = PG_GETARG_INT32(0);
 	bool		if_exists = PG_GETARG_BOOL(5);
+
+	license_enforce_enterprise_enabled();
 
 	/* First get the job */
 	job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);

@@ -11,12 +11,13 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
-#include "errors.h"
-#include "drop_chunks_api.h"
-#include "utils.h"
-#include "hypertable.h"
 #include "bgw/job.h"
-#include <bgw_policy/drop_chunks.h>
+#include "bgw_policy/drop_chunks.h"
+#include "drop_chunks_api.h"
+#include "errors.h"
+#include "hypertable.h"
+#include "license.h"
+#include "utils.h"
 
 /* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 #define DEFAULT_SCHEDULE_INTERVAL	DatumGetIntervalP(DirectFunctionCall7(make_interval, Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(1), Int32GetDatum(0), Int32GetDatum(0), Float8GetDatum(0)))
@@ -47,6 +48,8 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 			.cascade = cascade,
 		}
 	};
+
+	license_enforce_enterprise_enabled();
 
 	/* First verify that the hypertable corresponds to a valid table */
 	if (!ts_is_hypertable(ht_oid))
@@ -96,6 +99,8 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 	/* Remove the job, then remove the policy */
 	int			ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 	BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_hypertable(ht_id);
+
+	license_enforce_enterprise_enabled();
 
 	if (policy == NULL)
 	{

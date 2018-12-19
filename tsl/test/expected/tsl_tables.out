@@ -756,3 +756,21 @@ select remove_recluster_policy('test_table');
  
 (1 row)
 
+\c single :ROLE_SUPERUSER
+set session timescaledb.license_key='Community';
+WARNING:  starting TimescaleDB code that requires the Timescale License
+WARNING:  Timescale License expired
+WARNING:  starting TimescaleDB code that requires the Timescale License
+-- Now make sure everything fails in the Community (non-enterprise) edition
+\set ON_ERROR_STOP 0 
+select add_recluster_policy('test_table', 'test_table_time_idx');
+ERROR:  cannot execute an enterprise function with an invalid enterprise license
+select add_drop_chunks_policy('test_table', INTERVAL '4 months', true);
+ERROR:  cannot execute an enterprise function with an invalid enterprise license
+select remove_recluster_policy('test_table');
+ERROR:  cannot execute an enterprise function with an invalid enterprise license
+select remove_drop_chunks_policy('test_table');
+ERROR:  cannot execute an enterprise function with an invalid enterprise license
+select alter_policy_schedule(12345);
+ERROR:  cannot execute an enterprise function with an invalid enterprise license
+\set ON_ERROR_STOP 1
