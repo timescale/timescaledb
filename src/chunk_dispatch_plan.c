@@ -35,85 +35,6 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
 	.CreateCustomScanState = create_chunk_dispatch_state,
 };
 
-/*
- * Build a target list for a CustomScan node.
- *
- * The CustomScan node needs to provide a modified target list in case of
- * subplan nodes that have target lists with expressions that involve, e.g.,
- * aggregates. Such target lists need a matching parent node type (e.g., a
- * target list with an AggDef needs a Agg node parent). If we simply use the
- * subplan's target list on a CustomScan parent node, there might be a mismatch.
- *
- * The code here is similar to ExecCheckPlanOutput() in nodeModifyTable.c in the
- * PostgreSQL source code, but here we construct a modified target list for the
- * CustomScan node instead of simply just checking validity.
- *
- */
-static List *
-build_customscan_targetlist(Relation rel, List *targetlist)
-{
-	TupleDesc	tupdesc = RelationGetDescr(rel);
-	List	   *new_targetlist = NIL;
-	ListCell   *lc;
-	int			attno = 0;
-
-	foreach(lc, targetlist)
-	{
-		TargetEntry *te = lfirst(lc);
-		Form_pg_attribute attr;
-		Expr	   *expr;
-
-		/* Ignore junk items */
-		if (te->resjunk)
-			continue;
-
-		if (attno >= tupdesc->natts)
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("table row type and query-specified row type do not match"),
-					 errdetail("Query has too many columns.")));
-
-		attr = TupleDescAttr(tupdesc, attno);
-		attno++;
-
-		if (attr->attisdropped)
-			expr = &makeConst(INT4OID,
-							  -1,
-							  InvalidOid,
-							  sizeof(int32),
-							  (Datum) 0,
-							  true,
-							  true)->xpr;
-		else
-
-			/*
-			 * According to nodes/primnodes.h, the INDEX_VAR Var type is
-			 * abused in CustomScan nodes to reference custom scan tuple
-			 * types.
-			 */
-			expr = &makeVar(INDEX_VAR,
-							attno,
-							exprType((Node *) te->expr),
-							exprTypmod((Node *) te->expr),
-							exprCollation((Node *) te->expr),
-							0)->xpr;
-
-		new_targetlist = lappend(new_targetlist,
-								 makeTargetEntry(expr,
-												 attno,
-												 NULL,
-												 te->resjunk));
-	}
-
-	if (attno != tupdesc->natts)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("table row type and query-specified row type do not match"),
-				 errdetail("Query has too few columns.")));
-
-	return new_targetlist;
-}
-
 /* Create a chunk dispatch plan node in the form of a CustomScan node. The
  * purpose of this plan node is to dispatch (route) tuples to the correct chunk
  * in a hypertable.
@@ -122,45 +43,67 @@ build_customscan_targetlist(Relation rel, List *targetlist)
  * they might be copied, therefore we pass hypertable_relid in the
  * custom_private field.
  *
- * The chunk dispatch plan takes the original tuple-producing subplan, which was
- * part of a ModifyTable node, and imposes itself inbetween the ModifyTable plan
- * and the subplan. During execution, the subplan will produce the new tuples
- * that the chunk dispatch node routes before passing them up to the ModifyTable
- * node.
+ * The chunk dispatch plan takes the original tuple-producing subplan, which
+ * was part of a ModifyTable node, and imposes itself inbetween the
+ * ModifyTable plan and the subplan. During execution, the subplan will
+ * produce the new tuples that the chunk dispatch node routes before passing
+ * them up to the ModifyTable node.
  */
-CustomScan *
-ts_chunk_dispatch_plan_create(Plan *subplan, Index hypertable_rti, Oid hypertable_relid, Query *parse)
+static Plan *
+chunk_dispatch_plan_create(PlannerInfo *root,
+						   RelOptInfo *relopt,
+						   struct CustomPath *best_path,
+						   List *tlist,
+						   List *clauses,
+						   List *custom_plans)
 {
+	ChunkDispatchPath *cdpath = (ChunkDispatchPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
-	Relation	rel;
+	ListCell   *lc;
 
-	cscan->custom_private = list_make1_oid(hypertable_relid);
+	foreach(lc, custom_plans)
+	{
+		Plan	   *subplan = lfirst(lc);
+
+		cscan->scan.plan.startup_cost += subplan->startup_cost;
+		cscan->scan.plan.total_cost += subplan->total_cost;
+		cscan->scan.plan.plan_rows += subplan->plan_rows;
+		cscan->scan.plan.plan_width += subplan->plan_width;
+	}
+
+	cscan->custom_private = list_make1_oid(cdpath->hypertable_relid);
 	cscan->methods = &chunk_dispatch_plan_methods;
-	cscan->custom_plans = list_make1(subplan);
+	cscan->custom_plans = custom_plans;
 	cscan->scan.scanrelid = 0;	/* Indicate this is not a real relation we are
 								 * scanning */
-
-	/* Copy costs from the original plan */
-	cscan->scan.plan.startup_cost = subplan->startup_cost;
-	cscan->scan.plan.total_cost = subplan->total_cost;
-	cscan->scan.plan.plan_rows = subplan->plan_rows;
-	cscan->scan.plan.plan_width = subplan->plan_width;
+	cscan->scan.plan.targetlist = tlist;
 
 	/*
-	 * Create a modified target list for the CustomScan based on the subplan's
-	 * original target list
+	 * We need to set a custom_scan_tlist for EXPLAIN (verbose).
 	 */
-	rel = relation_open(hypertable_relid, AccessShareLock);
-	cscan->scan.plan.targetlist = build_customscan_targetlist(rel, subplan->targetlist);
-	RelationClose(rel);
+	cscan->custom_scan_tlist = tlist;
 
-	/*
-	 * We need to set a custom_scan_tlist for EXPLAIN (verbose). But this
-	 * target list needs to reference the proper rangetable entry so we must
-	 * replace all INDEX_VAR attnos with the hypertable's rangetable index.
-	 */
-	cscan->custom_scan_tlist = copyObject(cscan->scan.plan.targetlist);
-	ChangeVarNodes((Node *) cscan->custom_scan_tlist, INDEX_VAR, hypertable_rti, 0);
+	return &cscan->scan.plan;
+}
 
-	return cscan;
+static CustomPathMethods chunk_dispatch_path_methods = {
+	.CustomName = "ChunkDispatchPath",
+	.PlanCustomPath = chunk_dispatch_plan_create,
+};
+
+Path *
+ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti, Oid hypertable_relid)
+{
+	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
+
+	memcpy(&path->cpath.path, subpath, sizeof(Path));
+	path->cpath.path.type = T_CustomPath;
+	path->cpath.path.pathtype = T_CustomScan;
+	path->cpath.methods = &chunk_dispatch_path_methods;
+	path->cpath.custom_paths = list_make1(subpath);
+	path->mtpath = mtpath;
+	path->hypertable_rti = hypertable_rti;
+	path->hypertable_relid = hypertable_relid;
+
+	return &path->cpath.path;
 }

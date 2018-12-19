@@ -305,7 +305,7 @@ GROUP BY period, device;
  Custom Scan (HypertableInsert)
    ->  Insert on public.many_partitions_test_1m
          ->  Custom Scan (ChunkDispatch)
-               Output: many_partitions_test_1m."time", many_partitions_test_1m.temp, many_partitions_test_1m.device
+               Output: "*SELECT*".period, "*SELECT*".avg, "*SELECT*".device
                ->  HashAggregate
                      Output: (time_bucket('@ 1 min'::interval, many_partitions_test."time")), avg(many_partitions_test.temp), many_partitions_test.device
                      Group Key: time_bucket('@ 1 min'::interval, many_partitions_test."time"), many_partitions_test.device

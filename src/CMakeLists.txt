@@ -34,7 +34,6 @@ set(SOURCES
   plan_add_hashagg.c
   plan_agg_bookend.c
   planner_import.c
-  planner_utils.c
   process_utility.c
   scanner.c
   sort_transform.c

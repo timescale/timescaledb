@@ -338,15 +338,15 @@ WITH "3dim_insert" AS (
                                   QUERY PLAN                                  
 ------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
+   CTE 3dim_insert
+     ->  Custom Scan (HypertableInsert)
+           ->  Insert on "3dim"
+                 ->  Custom Scan (ChunkDispatch)
+                       ->  Result
+   CTE regular_insert
+     ->  Insert on regular_table
+           ->  Result
    ->  Insert on "1dim"
-         CTE 3dim_insert
-           ->  Custom Scan (HypertableInsert)
-                 ->  Insert on "3dim"
-                       ->  Custom Scan (ChunkDispatch)
-                             ->  Result
-         CTE regular_insert
-           ->  Insert on regular_table
-                 ->  Result
          ->  Custom Scan (ChunkDispatch)
                ->  Unique
                      ->  Sort
