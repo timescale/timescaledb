@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -o pipefail
+set +e # Should not exit immediately on failure
 
 SCRIPT_DIR=$(dirname $0)
 TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test' || mkdir -p /tmp/$RANDOM )}
@@ -15,16 +16,23 @@ PG_VERSION=${PG_VERSION:-9.6.5} # Need 9.6.x version since we are
                                 # versions that didn't support PG10.
 
 FAILED_TEST=
+KEEP_TEMP_DIRS=false
+TEST_UPDATE_FROM_TAGS_EXTRA_ARGS=
 
 # Declare a hash table to keep test names keyed by pid
 declare -A tests
 
-while getopts "c" opt;
+while getopts "cd" opt;
 do
     case $opt in
         c)
             echo "Forcing cleanup of build image"
             docker rmi -f ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+            ;;
+        d)
+            echo "Keeping temporary directory"
+            KEEP_TEMP_DIRS=true
+            TEST_UPDATE_FROM_TAGS_EXTRA_ARGS="-d"
             ;;
     esac
 done
@@ -38,7 +46,10 @@ cleanup() {
         echo "###### Failed test log below #####"
         cat ${TEST_TMPDIR}/${FAILED_TEST}.log
     fi
-    rm -rf ${TEST_TMPDIR}
+    if [ "$KEEP_TEMP_DIRS" = "false" ]; then
+        echo "Cleaning up temporary directory"
+        rm -rf ${TEST_TMPDIR}
+    fi
     echo "exit code is $exit_code"
     return $exit_code
 }
@@ -71,20 +82,20 @@ IMAGE_NAME=${UPDATE_TO_IMAGE} TAG_NAME=${UPDATE_TO_TAG} PG_VERSION=${PG_VERSION}
 # Run update tests in parallel
 for tag in ${TAGS};
 do
-    UPDATE_FROM_TAG=${tag} TEST_VERSION=${TEST_VERSION} $(dirname $0)/test_update_from_tag.sh > ${TEST_TMPDIR}/${tag}.log 2>&1 &
+    UPDATE_FROM_TAG=${tag} TEST_VERSION=${TEST_VERSION} $(dirname $0)/test_update_from_tag.sh ${TEST_UPDATE_FROM_TAGS_EXTRA_ARGS} > ${TEST_TMPDIR}/${tag}.log 2>&1 &
 
     tests[$!]=${tag}
     echo "Launched test ${tag} with pid $!"
 done
 
 # Need to wait on each pid in a loop to return the exit status of each
-echo "Waiting for tests to finish..."
 
 # Since we are iterating a hash table, the tests are not going to be
 # in order started. But it doesn't matter.
 for pid in ${!tests[@]};
 do
-    wait $pid;
+    echo "Waiting for test pid $pid"
+    wait $pid
     exit_code=$?
     echo "Test ${tests[$pid]} (pid $pid) exited with code $exit_code"
 
