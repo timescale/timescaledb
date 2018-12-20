@@ -61,4 +61,8 @@ else
     done
 fi
 
+if [[ -z ${TESTS} ]] && [[ -z ${TEST_SCHEDULE} ]]; then
+    exit 0;
+fi
+
 ${PG_REGRESS} $@ ${PG_REGRESS_OPTS} ${TESTS}
