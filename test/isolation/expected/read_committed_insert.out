@@ -1,18 +1,18 @@
 Parsed test spec with 2 sessions
 
 starting permutation: s1a s1c s2a s2b
-create_hypertable
+table_name     
 
-(2,public,ts_cluster_test,t)
+ts_cluster_test
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
 step s1c: COMMIT;
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s2b: COMMIT;
 
 starting permutation: s1a s2a s1c s2b
-create_hypertable
+table_name     
 
-(3,public,ts_cluster_test,t)
+ts_cluster_test
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1); <waiting ...>
 step s1c: COMMIT;
@@ -20,9 +20,9 @@ step s2a: <... completed>
 step s2b: COMMIT;
 
 starting permutation: s1a s2a s2b s1c
-create_hypertable
+table_name     
 
-(4,public,ts_cluster_test,t)
+ts_cluster_test
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1); <waiting ...>
 step s2a: <... completed>
@@ -31,9 +31,9 @@ step s2b: COMMIT;
 step s1c: COMMIT;
 
 starting permutation: s2a s1a s1c s2b
-create_hypertable
+table_name     
 
-(5,public,ts_cluster_test,t)
+ts_cluster_test
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1); <waiting ...>
 step s1a: <... completed>
@@ -42,9 +42,9 @@ step s1c: COMMIT;
 step s2b: COMMIT;
 
 starting permutation: s2a s1a s2b s1c
-create_hypertable
+table_name     
 
-(6,public,ts_cluster_test,t)
+ts_cluster_test
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1); <waiting ...>
 step s2b: COMMIT;
@@ -52,9 +52,9 @@ step s1a: <... completed>
 step s1c: COMMIT;
 
 starting permutation: s2a s2b s1a s1c
-create_hypertable
+table_name     
 
-(7,public,ts_cluster_test,t)
+ts_cluster_test
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s2b: COMMIT;
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
