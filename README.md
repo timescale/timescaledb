@@ -10,10 +10,15 @@ time-series data. It is engineered up from PostgreSQL, providing automatic
 partitioning across time and space (partitioning key), as well as full
 SQL support.
 
-TimescaleDB is packaged as a PostgreSQL extension and released under both
-the Apache 2 open-source license and the [Timescale License](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE). Source
-code licensed under the latter is contained in the "tsl" subdirectory. All code files will  
-be labelled with the associated license in the header. [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
+TimescaleDB is packaged as a PostgreSQL extension.  All code is licensed 
+under the Apache-2 open-source license, with the exception of source code 
+under the `\tsl` subdirectory, which is licensed under 
+the [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE).  
+For clarity, all code files reference licensing in their header.  [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
+
+Once TSL-licensed code is released, users will be able to build either a 
+pure Apache-2 licensed binary (using only Apache-2 source code) or 
+a TSL-Licensed binary (that includes both Apache-2 and TSL source code).
 
 Below is an introduction to TimescaleDB. For more information, please check out these other resources:
 - [Developer Documentation](https://docs.timescale.com/)
