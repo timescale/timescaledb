@@ -41,7 +41,7 @@ script:
   - ci_env=`bash <(curl -s https://codecov.io/env)`
   - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) || echo \"Codecov did not collect coverage reports\" "
 after_failure:
-  - docker exec -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regressions.diffs
+  - docker exec -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regressions.diffs /build/debug/test/isolation/regression.diffs
 after_script:
   - docker rm -f pgbuild
 
