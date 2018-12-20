@@ -64,9 +64,8 @@ ts_extension_check_version(const char *so_version)
 {
 	char	   *sql_version;
 
-	if (!IsNormalProcessingMode() || !IsTransactionState())
+	if (!IsNormalProcessingMode() || !IsTransactionState() || !extension_exists())
 		return;
-
 	sql_version = extension_version();
 
 	if (strcmp(sql_version, so_version) != 0)
