@@ -17,7 +17,7 @@ ORDER BY proname;
 ----------------------------------
  add_dimension
  add_drop_chunks_policy
- add_recluster_policy
+ add_reorder_policy
  alter_policy_schedule
  attach_tablespace
  chunk_relation_size
@@ -38,7 +38,8 @@ ORDER BY proname;
  last
  locf
  remove_drop_chunks_policy
- remove_recluster_policy
+ remove_reorder_policy
+ reorder_chunk
  set_adaptive_chunking
  set_chunk_time_interval
  set_number_partitions
@@ -46,5 +47,5 @@ ORDER BY proname;
  show_tablespaces
  time_bucket
  time_bucket_gapfill
-(31 rows)
+(32 rows)
 

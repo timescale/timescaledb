@@ -8,7 +8,12 @@
 #define TIMESCALEDB_CROSS_MODULE_FN_H
 
 #include <c.h>
+#include <postgres.h>
+#include <fmgr.h>
+
 #include <utils/timestamp.h>
+#include <utils/jsonb.h>
+
 #include <optimizer/planner.h>
 
 #include "export.h"
@@ -22,8 +27,6 @@
  *     ts_cm_functions-><function name>
  */
 
-typedef struct JsonbParseState JsonbParseState;
-
 typedef struct CrossModuleFunctions
 {
 	void		(*tsl_license_on_assign) (const char *newval, const void *license);
@@ -33,9 +36,9 @@ typedef struct CrossModuleFunctions
 	void		(*add_tsl_license_info_telemetry) (JsonbParseState *parseState);
 	bool		(*bgw_policy_job_execute) (BgwJob *job);
 	Datum		(*add_drop_chunks_policy) (PG_FUNCTION_ARGS);
-	Datum		(*add_recluster_policy) (PG_FUNCTION_ARGS);
+	Datum		(*add_reorder_policy) (PG_FUNCTION_ARGS);
 	Datum		(*remove_drop_chunks_policy) (PG_FUNCTION_ARGS);
-	Datum		(*remove_recluster_policy) (PG_FUNCTION_ARGS);
+	Datum		(*remove_reorder_policy) (PG_FUNCTION_ARGS);
 	void		(*create_upper_paths_hook) (PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
 	PGFunction	gapfill_marker;
 	PGFunction	gapfill_int16_time_bucket;
@@ -44,7 +47,8 @@ typedef struct CrossModuleFunctions
 	PGFunction	gapfill_date_time_bucket;
 	PGFunction	gapfill_timestamp_time_bucket;
 	PGFunction	gapfill_timestamptz_time_bucket;
-	Datum		(*alter_policy_schedule) (PG_FUNCTION_ARGS);
+	PGFunction	alter_policy_schedule;
+	PGFunction	reorder_chunk;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

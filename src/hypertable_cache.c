@@ -129,7 +129,7 @@ ts_hypertable_cache_invalidate_callback(void)
 }
 
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
-Hypertable *
+TSDLLEXPORT Hypertable *
 ts_hypertable_cache_get_entry(Cache *cache, Oid relid)
 {
 	if (!OidIsValid(relid))
@@ -163,7 +163,7 @@ ts_hypertable_cache_get_entry_with_table(Cache *cache, Oid relid, const char *sc
 	return entry->hypertable;
 }
 
-extern Cache *
+extern TSDLLEXPORT Cache *
 ts_hypertable_cache_pin()
 {
 	return ts_cache_pin(hypertable_cache_current);

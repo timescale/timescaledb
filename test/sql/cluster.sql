@@ -25,7 +25,7 @@ SELECT indexrelid::regclass, indisclustered
 FROM pg_index
 WHERE indisclustered = true ORDER BY 1;
 
--- Recluster just our table
+-- Reorder just our table
 CLUSTER VERBOSE cluster_test;
 
 -- Show clustered indexes, including new chunk
@@ -33,7 +33,7 @@ SELECT indexrelid::regclass, indisclustered
 FROM pg_index
 WHERE indisclustered = true ORDER BY 1;
 
--- Recluster all tables (although will only be our test table)
+-- Reorder all tables (although will only be our test table)
 CLUSTER VERBOSE;
 
 -- Change the clustered index

@@ -2,7 +2,7 @@
 include("${PRIMARY_TEST_DIR}/test-defs.cmake")
 
 add_custom_target(installcheck-t
-  DEPENDS regresscheck-t)
+  DEPENDS regresscheck-t isolationcheck-t)
   #TODO after we have isolation checks isolationcheck-t)
 
 add_custom_target(regresscheck-t
@@ -55,3 +55,4 @@ add_custom_target(isolationchecklocal-t
 
 add_subdirectory(sql)
 add_subdirectory(src)
+add_subdirectory(isolation)

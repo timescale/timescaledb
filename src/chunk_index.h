@@ -11,6 +11,8 @@
 #include <nodes/parsenodes.h>
 #include <fmgr.h>
 
+#include <export.h>
+
 typedef struct Chunk Chunk;
 typedef struct Hypertable Hypertable;
 
@@ -32,8 +34,13 @@ extern int	ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexreli
 extern int	ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char *tablespace);
 extern void ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constaint, int32 chunk_id, Oid chunk_constraint);
 extern List *ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid);
-extern ChunkIndexMapping *ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid);
-extern void ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
+extern TSDLLEXPORT bool
+			ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid, ChunkIndexMapping *cim_out);
+extern TSDLLEXPORT bool ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid, ChunkIndexMapping *cim_out);
+
+extern TSDLLEXPORT void ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
+
+extern TSDLLEXPORT List *ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_index_oids);
 
 /* chunk_index_recreate  is a process akin to reindex
  * except that indexes are created in 2 steps

@@ -15,10 +15,11 @@
 #include "bgw/job.h"
 
 TS_FUNCTION_INFO_V1(ts_add_drop_chunks_policy);
-TS_FUNCTION_INFO_V1(ts_add_recluster_policy);
+TS_FUNCTION_INFO_V1(ts_add_reorder_policy);
 TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
-TS_FUNCTION_INFO_V1(ts_remove_recluster_policy);
+TS_FUNCTION_INFO_V1(ts_remove_reorder_policy);
 TS_FUNCTION_INFO_V1(ts_alter_policy_schedule);
+TS_FUNCTION_INFO_V1(ts_reorder_chunk);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -27,9 +28,9 @@ ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
 }
 
 Datum
-ts_add_recluster_policy(PG_FUNCTION_ARGS)
+ts_add_reorder_policy(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->add_recluster_policy(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->add_reorder_policy(fcinfo));
 }
 
 Datum
@@ -39,15 +40,21 @@ ts_remove_drop_chunks_policy(PG_FUNCTION_ARGS)
 }
 
 Datum
-ts_remove_recluster_policy(PG_FUNCTION_ARGS)
+ts_remove_reorder_policy(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(ts_cm_functions->remove_recluster_policy(fcinfo));
+	PG_RETURN_DATUM(ts_cm_functions->remove_reorder_policy(fcinfo));
 }
 
 Datum
 ts_alter_policy_schedule(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->alter_policy_schedule(fcinfo));
+}
+
+Datum
+ts_reorder_chunk(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->reorder_chunk(fcinfo));
 }
 
 /*
@@ -63,13 +70,6 @@ error_no_default_fn()
 			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
 			 errhint("Buy a Timescale license to enable the functionality")));
 
-}
-
-static Datum
-error_no_default_fn_pg(PG_FUNCTION_ARGS)
-{
-	error_no_default_fn();
-	PG_RETURN_VOID();
 }
 
 static bool
@@ -99,7 +99,7 @@ bgw_policy_job_execute_default_fn(BgwJob *job)
 }
 
 static Datum
-error_no_default_fn_pg_function(PG_FUNCTION_ARGS)
+error_no_default_fn_pg(PG_FUNCTION_ARGS)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -123,18 +123,19 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.add_tsl_license_info_telemetry = add_telemetry_default,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
 	.add_drop_chunks_policy = error_no_default_fn_pg,
-	.add_recluster_policy = error_no_default_fn_pg,
+	.add_reorder_policy = error_no_default_fn_pg,
 	.remove_drop_chunks_policy = error_no_default_fn_pg,
-	.remove_recluster_policy = error_no_default_fn_pg,
+	.remove_reorder_policy = error_no_default_fn_pg,
 	.create_upper_paths_hook = NULL,
-	.gapfill_marker = error_no_default_fn_pg_function,
-	.gapfill_int16_time_bucket = error_no_default_fn_pg_function,
-	.gapfill_int32_time_bucket = error_no_default_fn_pg_function,
-	.gapfill_int64_time_bucket = error_no_default_fn_pg_function,
-	.gapfill_date_time_bucket = error_no_default_fn_pg_function,
-	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_function,
-	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_function,
+	.gapfill_marker = error_no_default_fn_pg,
+	.gapfill_int16_time_bucket = error_no_default_fn_pg,
+	.gapfill_int32_time_bucket = error_no_default_fn_pg,
+	.gapfill_int64_time_bucket = error_no_default_fn_pg,
+	.gapfill_date_time_bucket = error_no_default_fn_pg,
+	.gapfill_timestamp_time_bucket = error_no_default_fn_pg,
+	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg,
 	.alter_policy_schedule = error_no_default_fn_pg,
+	.reorder_chunk = error_no_default_fn_pg,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

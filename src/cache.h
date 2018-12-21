@@ -11,6 +11,8 @@
 #include <utils/memutils.h>
 #include <utils/hsearch.h>
 
+#include "export.h"
+
 typedef struct CacheQuery
 {
 	void	   *result;
@@ -50,7 +52,7 @@ extern bool ts_cache_remove(Cache *cache, void *key);
 extern MemoryContext ts_cache_memory_ctx(Cache *cache);
 
 extern Cache *ts_cache_pin(Cache *cache);
-extern int	ts_cache_release(Cache *cache);
+extern TSDLLEXPORT int ts_cache_release(Cache *cache);
 
 extern void _cache_init(void);
 extern void _cache_fini(void);

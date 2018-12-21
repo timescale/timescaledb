@@ -41,7 +41,7 @@ WHERE indisclustered = true ORDER BY 1;
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
 (3 rows)
 
--- Recluster just our table
+-- Reorder just our table
 CLUSTER VERBOSE cluster_test;
 INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using index scan on "_hyper_1_3_chunk_cluster_test_time_idx"
 INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
@@ -63,7 +63,7 @@ WHERE indisclustered = true ORDER BY 1;
  _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
 (4 rows)
 
--- Recluster all tables (although will only be our test table)
+-- Reorder all tables (although will only be our test table)
 CLUSTER VERBOSE;
 INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
 INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages

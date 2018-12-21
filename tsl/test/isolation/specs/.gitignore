@@ -1,0 +1,4 @@
+/recluster_deadlock.spec
+/reorder_vs_insert_other_chunk.spec
+/recluster_vs_insert.spec
+/recluster_vs_select.spec

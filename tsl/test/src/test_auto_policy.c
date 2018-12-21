@@ -13,28 +13,30 @@
 
 #include "bgw_policy/job.h"
 #include "chunk.h"
+#include "reorder.h"
 
-#define NUM_RECLUSTER_RET_VALS	2
+#define NUM_REORDER_RET_VALS	2
 
-TS_FUNCTION_INFO_V1(ts_test_auto_recluster);
+TS_FUNCTION_INFO_V1(ts_test_auto_reorder);
 TS_FUNCTION_INFO_V1(ts_test_auto_drop_chunks);
 
 static Oid chunk_oid;
 static Oid index_oid;
 
-static void dummy_recluster_func(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id) {
+static void dummy_reorder_func(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id) {
 	chunk_oid = tableOid;
 	index_oid = indexOid;
+	reorder_chunk(tableOid, indexOid, true, wait_id);
 }
 
 Datum
-ts_test_auto_recluster(PG_FUNCTION_ARGS)
+ts_test_auto_reorder(PG_FUNCTION_ARGS)
 {
 	TupleDesc tupdesc;
 	HeapTuple	tuple;
 	int32 job_id = PG_GETARG_INT32(0);
-	Datum	   values[NUM_RECLUSTER_RET_VALS];
-	bool	   nulls[NUM_RECLUSTER_RET_VALS] = {false};
+	Datum	   values[NUM_REORDER_RET_VALS];
+	bool	   nulls[NUM_REORDER_RET_VALS] = {false};
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 	{
@@ -44,7 +46,7 @@ ts_test_auto_recluster(PG_FUNCTION_ARGS)
 					 "that cannot accept type record")));
 	}
 
-	execute_recluster_policy(job_id, dummy_recluster_func);
+	execute_reorder_policy(job_id, dummy_reorder_func);
 
 	values[0] = ObjectIdGetDatum(chunk_oid);
 	values[1] = ObjectIdGetDatum(index_oid);
