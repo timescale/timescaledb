@@ -4,6 +4,28 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.1.1 (2018-12-20)
+
+This release contains bugfixes.
+
+**High-level changes**
+* Fix issue when upgrading with pg_upgrade
+* Fix a segfault that sometimes appeared in long COPYs
+* Other bug and stability fixes
+
+**Notable commits**
+
+[f99b540] Avoid loading twice in parallel workers and load only from $libdir
+[e310f7d] Don't throw errors when extension is loaded but not installed yet
+[8498416] Free ChunkInsertStates when the es_per_tuple_exprcontext is freed
+[937eefe] Set C standard to C11
+
+**Thanks**
+
+* @costigator for reporting the pg_upgrade bug
+* @FireAndIce68 for reporting the parallel workers issue
+* @damirda for reporting the copy bug
+
 ## 1.1.0 (2018-12-13)
 
 Our 1.1 release introduces beta support for PG 11, as well as several performance optimizations aimed at improving chunk exclusion for read queries. We are also packaging our new timescale-tune tool (currently in beta) with our Debian and Linux releases. If you encounter any issues with our beta features, please file a Github issue.
