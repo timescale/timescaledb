@@ -208,6 +208,12 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	path = (GapFillPath *) newNode(sizeof(GapFillPath), T_CustomPath);
 	path->cpath.path.pathtype = T_CustomScan;
 	path->cpath.methods = &gapfill_path_methods;
+
+	/*
+	 * parallel_safe must be false because it is not safe to execute this node
+	 * in parallel, but it is safe for child nodes to be parallel
+	 */
+	Assert(!path->cpath.path.parallel_safe);
 	path->cpath.path.rows = subpath->rows;
 	path->cpath.path.parent = subpath->parent;
 	path->cpath.path.param_info = subpath->param_info;
@@ -270,6 +276,14 @@ plan_add_gapfill(PlannerInfo *root,
 	if (CMD_SELECT != parse->commandType || parse->groupClause == NIL)
 		return;
 
+	/*
+	 * look for time_bucket_gapfill function call
+	 */
+	expression_tree_walker((Node *) parse->targetList, gapfill_function_call_walker, &context);
+
+	if (context.num_calls == 0)
+		return;
+
 #ifndef HAVE_INT64_TIMESTAMP
 
 	/*
@@ -280,8 +294,6 @@ plan_add_gapfill(PlannerInfo *root,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("gapfill functionality cannot be used on postgres compiled with non integer timestamps")));
 #endif
-
-	expression_tree_walker((Node *) parse->targetList, gapfill_function_call_walker, &context);
 
 	if (context.num_calls > 1)
 		ereport(ERROR,
