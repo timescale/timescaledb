@@ -26,16 +26,16 @@ CREATE OR REPLACE FUNCTION add_drop_chunks_policy(main_table REGCLASS, older_tha
 AS '@MODULE_PATHNAME@', 'ts_add_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION add_recluster_policy(main_table REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_add_recluster_policy'
+CREATE OR REPLACE FUNCTION add_reorder_policy(main_table REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_add_reorder_policy'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION remove_drop_chunks_policy(main_table REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_remove_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_recluster_policy(main_table REGCLASS, if_exists BOOL = false) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_remove_recluster_policy'
+CREATE OR REPLACE FUNCTION remove_reorder_policy(main_table REGCLASS, if_exists BOOL = false) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_remove_reorder_policy'
 LANGUAGE C VOLATILE STRICT;
 
 -- Returns the updated job schedule values

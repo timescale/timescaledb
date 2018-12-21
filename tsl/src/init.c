@@ -14,9 +14,10 @@
 #include "gapfill/gapfill.h"
 
 #include "license.h"
+#include "reorder.h"
 #include "telemetry.h"
 #include "bgw_policy/job.h"
-#include "bgw_policy/recluster_api.h"
+#include "bgw_policy/reorder_api.h"
 #include "bgw_policy/drop_chunks_api.h"
 
 #ifdef PG_MODULE_MAGIC
@@ -45,9 +46,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.add_tsl_license_info_telemetry = tsl_telemetry_add_license_info,
 	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.add_drop_chunks_policy = drop_chunks_add_policy,
-	.add_recluster_policy = recluster_add_policy,
+	.add_reorder_policy = reorder_add_policy,
 	.remove_drop_chunks_policy = drop_chunks_remove_policy,
-	.remove_recluster_policy = recluster_remove_policy,
+	.remove_reorder_policy = reorder_remove_policy,
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.gapfill_marker = gapfill_marker,
 	.gapfill_int16_time_bucket = ts_int16_bucket,
@@ -57,6 +58,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_timestamp_time_bucket = ts_timestamp_bucket,
 	.gapfill_timestamptz_time_bucket = ts_timestamptz_bucket,
 	.alter_policy_schedule = bgw_policy_alter_policy_schedule,
+	.reorder_chunk = tsl_reorder_chunk,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

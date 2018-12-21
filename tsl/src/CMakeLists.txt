@@ -1,6 +1,7 @@
 set(SOURCES
   init.c
   license.c
+  reorder.c
   telemetry.c
   planner.c
 )

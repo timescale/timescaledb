@@ -1,9 +1,10 @@
 set(TEST_FILES
 	bgw_policy.sql
     edition.sql
-    tsl_tables.sql
     gapfill.sql
     plan_gapfill.sql
+    reorder.sql
+    tsl_tables.sql
 )
 
 list(SORT TEST_FILES)

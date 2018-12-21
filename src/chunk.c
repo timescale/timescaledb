@@ -1536,7 +1536,7 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 						   num_constraints, mctx, fail_if_not_found);
 }
 
-Chunk *
+TSDLLEXPORT Chunk *
 ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found)
 {
 	char	   *schema;

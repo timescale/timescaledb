@@ -12,6 +12,7 @@
 #include <access/tupdesc.h>
 #include <utils/hsearch.h>
 
+#include "export.h"
 #include "catalog.h"
 #include "chunk_constraint.h"
 #include "hypertable.h"
@@ -76,6 +77,7 @@ extern Chunk *ts_chunk_copy(Chunk *chunk);
 extern Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name, int16 num_constraints, MemoryContext mctx, bool fail_if_not_found);
 extern Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found);
+extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints, bool fail_if_not_found);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);

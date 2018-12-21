@@ -7,12 +7,12 @@
 SELECT _timescaledb_internal.stop_background_workers();
 SET timescaledb.license_key='CommunityLicense';
 
-CREATE OR REPLACE FUNCTION test_recluster(job_id INTEGER)
+CREATE OR REPLACE FUNCTION test_reorder(job_id INTEGER)
 RETURNS TABLE(
 chunk_oid INTEGER,
 index_oid INTEGER
 )
-AS :TSL_MODULE_PATHNAME, 'ts_test_auto_recluster'
+AS :TSL_MODULE_PATHNAME, 'ts_test_auto_reorder'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION test_drop_chunks(job_id INTEGER)
@@ -54,55 +54,55 @@ INSERT INTO test_table VALUES (now() - INTERVAL '8 months', 5);
 
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table';
 
--- Make sure recluster correctly selects chunks to recluster
+-- Make sure reorder correctly selects chunks to reorder
 -- by starting with oldest chunks
-select add_recluster_policy('test_table', 'test_table_time_idx') as recluster_job_id \gset
-select * from _timescaledb_config.bgw_policy_recluster where job_id=:recluster_job_id;
+select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
+select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
 
-select * from _timescaledb_config.bgw_job where job_type IN ('recluster');
+select * from _timescaledb_config.bgw_job where job_type IN ('reorder');
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
--- Make a manual calls to recluster: make sure the correct chunk is called
+-- Make a manual calls to reorder: make sure the correct chunk is called
 -- Chunk 5 should be first
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
--- Confirm that recluster was called on the correct chunk Oid
-select check_chunk_oid(5, :recluster_chunk_oid);
-select check_index_oid(:recluster_index_oid, 'test_table'::REGCLASS);
+-- Confirm that reorder was called on the correct chunk Oid
+select check_chunk_oid(5, :reorder_chunk_oid);
+select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
 
 -- Chunk 3 is next
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select check_chunk_oid(3, :recluster_chunk_oid);
-select check_index_oid(:recluster_index_oid, 'test_table'::REGCLASS);
+select check_chunk_oid(3, :reorder_chunk_oid);
+select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
 
 -- Chunk 4 is next
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select check_chunk_oid(4, :recluster_chunk_oid);
-select check_index_oid(:recluster_index_oid, 'test_table'::REGCLASS);
+select check_chunk_oid(4, :reorder_chunk_oid);
+select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
 
--- The following calls should not recluster any chunk, because they're all too new
-select * from test_recluster(:recluster_job_id) \gset recluster_
+-- The following calls should not reorder any chunk, because they're all too new
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
 INSERT INTO test_table VALUES (now() - INTERVAL '8 days', 6);
 
--- This call should recluster chunk 1
-select * from test_recluster(:recluster_job_id) \gset recluster_
+-- This call should reorder chunk 1
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select check_chunk_oid(1, :recluster_chunk_oid);
-select check_index_oid(:recluster_index_oid, 'test_table'::REGCLASS);
+select check_chunk_oid(1, :reorder_chunk_oid);
+select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
 
--- Should not recluster anything, because all chunks are too new
-select * from test_recluster(:recluster_job_id) \gset recluster_
+-- Should not reorder anything, because all chunks are too new
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
-select remove_recluster_policy('test_table');
+select remove_reorder_policy('test_table');
 
 -- Now do drop_chunks test
 select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
@@ -134,9 +134,9 @@ select :before_count=:after_count;
 
 select remove_drop_chunks_policy('test_table');
 
--- Now test recluster chunk selection when there is space partitioning
+-- Now test reorder chunk selection when there is space partitioning
 TRUNCATE test_table;
-SELECT add_dimension('public.test_table', 'chunk_id', 2); 
+SELECT add_dimension('public.test_table', 'chunk_id', 2);
 
 INSERT INTO test_table VALUES (now() - INTERVAL '3 weeks', 1);
 INSERT INTO test_table VALUES (now(), 2);
@@ -146,73 +146,73 @@ INSERT INTO test_table VALUES (now() - INTERVAL '3 months', -4);
 INSERT INTO test_table VALUES (now() - INTERVAL '8 months', 5);
 INSERT INTO test_table VALUES (now() - INTERVAL '8 months', -5);
 
-select add_recluster_policy('test_table', 'test_table_time_idx') as recluster_job_id \gset
+select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 -- Should be nothing in the chunk_stats table
-select count(*) from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id;
+select count(*) from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id;
 
--- Make a manual calls to recluster: make sure the correct (oldest) chunk is called
+-- Make a manual calls to reorder: make sure the correct (oldest) chunk is called
 select chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
-select * from test_recluster(:recluster_job_id) \gset recluster_
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id and chunk_id=:oldest_chunk_id;
+select * from test_reorder(:reorder_job_id) \gset  reorder_
+select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
 
--- Confirm that recluster was called on the correct chunk Oid
-select check_chunk_oid(:oldest_chunk_id, :recluster_chunk_oid);
+-- Confirm that reorder was called on the correct chunk Oid
+select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
--- Now run recluster again and pick the next oldest chunk
+-- Now run reorder again and pick the next oldest chunk
 select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
-select * from test_recluster(:recluster_job_id) \gset recluster_
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id and chunk_id=:oldest_chunk_id;
+select * from test_reorder(:reorder_job_id) \gset  reorder_
+select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
 
--- Confirm that recluster was called on the correct chunk Oid
-select check_chunk_oid(:oldest_chunk_id, :recluster_chunk_oid);
+-- Confirm that reorder was called on the correct chunk Oid
+select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Again
 select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
-select * from test_recluster(:recluster_job_id) \gset recluster_
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id and chunk_id=:oldest_chunk_id;
+select * from test_reorder(:reorder_job_id) \gset  reorder_
+select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
 
-select check_chunk_oid(:oldest_chunk_id, :recluster_chunk_oid);
-
--- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
-
-select * from test_recluster(:recluster_job_id) \gset recluster_
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id and chunk_id=:oldest_chunk_id;
-
-select check_chunk_oid(:oldest_chunk_id, :recluster_chunk_oid);
+select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Again
 select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
-select * from test_recluster(:recluster_job_id) \gset recluster_
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id and chunk_id=:oldest_chunk_id;
+select * from test_reorder(:reorder_job_id) \gset  reorder_
+select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
 
-select check_chunk_oid(:oldest_chunk_id, :recluster_chunk_oid);
+select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+
+-- Again
+select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+
+select * from test_reorder(:reorder_job_id) \gset  reorder_
+select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+
+select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Ran out of chunks, so should be a noop
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 
--- Corner case: when there are no recent-enough chunks to recluster,
--- DO NOT recluster any new chunks created by space partitioning.
--- We only want to recluster when new dimension_slices on time are created.
+-- Corner case: when there are no recent-enough chunks to reorder,
+-- DO NOT reorder any new chunks created by space partitioning.
+-- We only want to reorder when new dimension_slices on time are created.
 INSERT INTO test_table VALUES (now() - INTERVAL '5 months', -5);
 INSERT INTO test_table VALUES (now() - INTERVAL '3 weeks', -5);
 INSERT INTO test_table VALUES (now(), -25);
 
 -- Should be noop
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_
 
--- But if we create a new time dimension, recluster it
+-- But if we create a new time dimension, reorder it
 INSERT INTO test_table VALUES (now() - INTERVAL '1 year', 1);
 select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
-select * from test_recluster(:recluster_job_id) \gset recluster_
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:recluster_job_id and chunk_id=:oldest_chunk_id;
+select * from test_reorder(:reorder_job_id) \gset  reorder_
+select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
 
-select check_chunk_oid(:oldest_chunk_id, :recluster_chunk_oid);
+select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Should be noop again
-select * from test_recluster(:recluster_job_id) \gset recluster_
+select * from test_reorder(:reorder_job_id) \gset  reorder_

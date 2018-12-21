@@ -715,12 +715,14 @@ chunk_index_tuple_found(TupleInfo *ti, void *const data)
 }
 
 
-static ChunkIndexMapping *
-chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
+bool
+ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid, ChunkIndexMapping *cim_out)
 {
+	int			tuples_found;
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(chunk_indexrelid);
-	ChunkIndexMapping *cim = palloc(sizeof(ChunkIndexMapping));
+
+	Assert(cim_out != NULL);
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
@@ -729,10 +731,10 @@ chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid)
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
 				BTEqualStrategyNumber, F_NAMEEQ, DirectFunctionCall1(namein, CStringGetDatum(indexname)));
 
-	chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-					 scankey, 2, chunk_index_tuple_found, NULL, cim, AccessShareLock);
+	tuples_found = chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
+									scankey, 2, chunk_index_tuple_found, NULL, cim_out, AccessShareLock);
 
-	return cim;
+	return tuples_found > 0;
 }
 
 static ScanFilterResult
@@ -748,22 +750,24 @@ chunk_hypertable_index_name_filter(TupleInfo *ti, void *data)
 	return SCAN_EXCLUDE;
 }
 
-ChunkIndexMapping *
-ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid)
+TSDLLEXPORT bool
+ts_chunk_index_get_by_hypertable_indexrelid(Chunk *chunk, Oid hypertable_indexrelid, ChunkIndexMapping *cim_out)
 {
+	int			tuples_found;
 	ScanKeyData scankey[1];
-	ChunkIndexMapping *cim = palloc(sizeof(ChunkIndexMapping));
 
-	cim->parent_indexoid = hypertable_indexrelid;
+	Assert(cim_out != NULL);
+
+	cim_out->parent_indexoid = hypertable_indexrelid;
 
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
 				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(chunk->fd.id));
 
-	chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-					 scankey, 1, chunk_index_tuple_found, chunk_hypertable_index_name_filter, cim, AccessShareLock);
+	tuples_found = chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
+									scankey, 1, chunk_index_tuple_found, chunk_hypertable_index_name_filter, cim_out, AccessShareLock);
 
-	return cim;
+	return tuples_found > 0;
 }
 
 
@@ -892,7 +896,7 @@ ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const c
 								   (char *) tablespace);
 }
 
-void
+TSDLLEXPORT void
 ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 {
 	Relation	rel = heap_open(chunkrelid, AccessShareLock);
@@ -904,6 +908,70 @@ ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 
 TS_FUNCTION_INFO_V1(ts_chunk_index_clone);
 
+static Oid
+chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk_index_oid, Relation dest_chunk_rel)
+{
+	Relation	chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
+	ChunkIndexMapping cim;
+	Oid			constraint_oid;
+	Oid			new_chunk_indexrelid;
+
+	ts_chunk_index_get_by_indexrelid(src_chunk, chunk_index_oid, &cim);
+
+	constraint_oid = get_index_constraint(cim.parent_indexoid);
+
+	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel, chunk_index_rel,
+													   dest_chunk_rel, OidIsValid(constraint_oid));
+
+	relation_close(chunk_index_rel, NoLock);
+	return new_chunk_indexrelid;
+}
+
+/*
+ * Create versions of every index over src_chunkrelid over chunkrelid.
+ * Returns the relids of the new indexes created.
+ * New indexes are in the same order as RelationGetIndexList.
+ */
+TSDLLEXPORT List *
+ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_index_oids)
+{
+	Relation	hypertable_rel = NULL;
+	Relation	src_chunk_rel;
+	Relation	dest_chunk_rel;
+	List	   *index_oids;
+	ListCell   *index_elem;
+	List	   *new_index_oids = NIL;
+	Chunk	   *src_chunk;
+
+	/* TODO lock order? */
+	src_chunk_rel = heap_open(src_chunkrelid, AccessShareLock);
+	dest_chunk_rel = heap_open(dest_chunkrelid, ShareLock);
+
+	src_chunk = ts_chunk_get_by_relid(src_chunkrelid, 0, true);
+
+	hypertable_rel = heap_open(src_chunk->hypertable_relid, AccessShareLock);
+
+	index_oids = RelationGetIndexList(src_chunk_rel);
+	foreach(index_elem, index_oids)
+	{
+		Oid			chunk_index_oid = lfirst_oid(index_elem);
+		Oid			new_chunk_indexrelid = chunk_index_duplicate_index(hypertable_rel, src_chunk, chunk_index_oid, dest_chunk_rel);
+
+		new_index_oids = lappend_oid(new_index_oids, new_chunk_indexrelid);
+	}
+
+	heap_close(hypertable_rel, AccessShareLock);
+
+	heap_close(dest_chunk_rel, NoLock);
+	heap_close(src_chunk_rel, NoLock);
+
+	if (src_index_oids != NULL)
+		*src_index_oids = index_oids;
+
+	return new_index_oids;
+}
+
+TS_FUNCTION_INFO_V1(chunk_index_clone);
 Datum
 ts_chunk_index_clone(PG_FUNCTION_ARGS)
 {
@@ -914,19 +982,19 @@ ts_chunk_index_clone(PG_FUNCTION_ARGS)
 	Oid			constraint_oid;
 	Oid			new_chunk_indexrelid;
 	Chunk	   *chunk;
-	ChunkIndexMapping *cim;
+	ChunkIndexMapping cim;
 
 	chunk_index_rel = relation_open(chunk_index_oid, AccessShareLock);
 
 	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, 0, true);
-	cim = chunk_index_get_by_indexrelid(chunk, chunk_index_oid);
+	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid, &cim);
 
-	hypertable_rel = heap_open(cim->hypertableoid, AccessShareLock);
+	hypertable_rel = heap_open(cim.hypertableoid, AccessShareLock);
 
 	/* Need ShareLock on the heap relation we are creating indexes on */
 	chunk_rel = heap_open(chunk_index_rel->rd_index->indrelid, ShareLock);
 
-	constraint_oid = get_index_constraint(cim->parent_indexoid);
+	constraint_oid = get_index_constraint(cim.parent_indexoid);
 
 	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel, chunk_index_rel,
 													   chunk_rel, OidIsValid(constraint_oid));

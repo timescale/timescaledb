@@ -439,9 +439,11 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
 	{
 		Oid			hypertable_index = lfirst_oid(lc);
 		Chunk	   *chunk = ts_chunk_get_by_relid(RelationGetRelid(chunk_rel), 0, true);
-		ChunkIndexMapping *cim = ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index);
+		ChunkIndexMapping cim;
 
-		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim->indexoid);
+		ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim);
+
+		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
 	}
 #if !PG96 && !PG10
 	state->result_relation_info->ri_onConflictArbiterIndexes = state->arbiter_indexes;

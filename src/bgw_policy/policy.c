@@ -8,7 +8,7 @@
 #include <postgres.h>
 
 #include "policy.h"
-#include "bgw_policy/recluster.h"
+#include "bgw_policy/reorder.h"
 #include "bgw_policy/drop_chunks.h"
 #include "bgw/job.h"
 
@@ -20,10 +20,10 @@ ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id)
 	 * also need to delete the job. This means we don't actually call the
 	 * delete on the individual policy, but call the bgw_job delete function.
 	 */
-	void	   *policy = ts_bgw_policy_recluster_find_by_hypertable(hypertable_id);
+	void	   *policy = ts_bgw_policy_reorder_find_by_hypertable(hypertable_id);
 
 	if (policy)
-		ts_bgw_job_delete_by_id(((BgwPolicyRecluster *) policy)->fd.job_id);
+		ts_bgw_job_delete_by_id(((BgwPolicyReorder *) policy)->fd.job_id);
 
 	policy = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable_id);
 

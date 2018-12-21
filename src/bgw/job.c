@@ -23,7 +23,7 @@
 #include "telemetry/telemetry.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
-#include "bgw_policy/recluster.h"
+#include "bgw_policy/reorder.h"
 
 #include <cross_module_fn.h>
 
@@ -31,7 +31,7 @@
 
 static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
-	[JOB_TYPE_RECLUSTER] = "recluster",
+	[JOB_TYPE_REORDER] = "reorder",
 	[JOB_TYPE_DROP_CHUNKS] = "drop_chunks",
 	[JOB_TYPE_UNKNOWN] = "unknown"
 };
@@ -210,7 +210,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	ts_bgw_job_stat_delete(job_id);
 
 	/* Delete any policy args associated with this job */
-	ts_bgw_policy_recluster_delete_row_only_by_job_id(job_id);
+	ts_bgw_policy_reorder_delete_row_only_by_job_id(job_id);
 	ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(job_id);
 
 	/* Delete any stats in bgw_policy_chunk_stats related to this job */
@@ -277,7 +277,7 @@ ts_bgw_job_execute(BgwJob *job)
 
 				return ts_bgw_job_run_and_set_next_start(job, ts_telemetry_main_wrapper, TELEMETRY_INITIAL_NUM_RUNS, one_hour);
 			}
-		case JOB_TYPE_RECLUSTER:
+		case JOB_TYPE_REORDER:
 		case JOB_TYPE_DROP_CHUNKS:
 			return ts_cm_functions->bgw_policy_job_execute(job);
 		case JOB_TYPE_UNKNOWN:

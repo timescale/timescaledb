@@ -1,0 +1,33 @@
+# reorder should not be blocked by an insert into another chunk
+setup
+{
+ CREATE TABLE ts_reorder_test(time int, temp float, location int);
+ SELECT create_hypertable('ts_reorder_test', 'time', chunk_time_interval => 10);
+ INSERT INTO ts_reorder_test VALUES (1, 23.4, 1),
+       (11, 21.3, 2),
+       (21, 19.5, 3);
+ -- we need to use the waiting variant of reorder in order to work in a tranaction
+ CREATE TABLE waiter(i INTEGER);
+ CREATE OR REPLACE FUNCTION reorder_chunk_i(
+      chunk REGCLASS,
+      index REGCLASS=NULL,
+      verbose BOOLEAN=FALSE,
+      wait_on REGCLASS='waiter'
+  ) RETURNS VOID AS '@TS_MODULE_PATHNAME@', 'ts_reorder_chunk' LANGUAGE C VOLATILE;
+}
+
+teardown {
+      DROP TABLE ts_reorder_test;
+      DROP TABLE waiter CASCADE;
+}
+
+session "I"
+setup		{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "I1"	{ INSERT INTO ts_reorder_test VALUES (11, 19.5, 3); }
+step "Ic"	{ COMMIT; }
+
+session "R"
+setup		{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms'; }
+step "R1"	{ SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx'); }
+step "Rc"	{ COMMIT; }
+

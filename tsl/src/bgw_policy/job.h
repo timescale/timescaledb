@@ -12,11 +12,11 @@
 #include "hypertable.h"
 #include "bgw_policy/chunk_stats.h"
 
-/* Recluster function type. Necessary for testing */
-typedef void (*recluster_func) (Oid tableOid, Oid indexOid, bool verbose, Oid wait_id);
+/* Reorder function type. Necessary for testing */
+typedef void (*reorder_func) (Oid tableOid, Oid indexOid, bool verbose, Oid wait_id);
 
 /* Functions exposed only for testing */
-extern bool execute_recluster_policy(int32 job_id, recluster_func recluster);
+extern bool execute_reorder_policy(int32 job_id, reorder_func reorder);
 extern bool execute_drop_chunks_policy(int32 job_id);
 
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);

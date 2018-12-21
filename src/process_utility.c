@@ -1300,48 +1300,6 @@ process_index_end(Node *parsetree, CollectedCommand *cmd)
 	return handled;
 }
 
-static Oid
-find_clustered_index(Oid table_relid)
-{
-	Relation	rel;
-	ListCell   *index;
-	Oid			index_relid = InvalidOid;
-
-	rel = heap_open(table_relid, NoLock);
-
-	/* We need to find the index that has indisclustered set. */
-	foreach(index, RelationGetIndexList(rel))
-	{
-		HeapTuple	idxtuple;
-		Form_pg_index indexForm;
-
-		index_relid = lfirst_oid(index);
-		idxtuple = SearchSysCache1(INDEXRELID,
-								   ObjectIdGetDatum(index_relid));
-		if (!HeapTupleIsValid(idxtuple))
-			elog(ERROR, "cache lookup failed for index %u", index_relid);
-		indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
-
-		if (indexForm->indisclustered)
-		{
-			ReleaseSysCache(idxtuple);
-			break;
-		}
-		ReleaseSysCache(idxtuple);
-		index_relid = InvalidOid;
-	}
-
-	heap_close(rel, NoLock);
-
-	if (!OidIsValid(index_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("there is no previously clustered index for table \"%s\"",
-						get_rel_name(table_relid))));
-
-	return index_relid;
-}
-
 /*
  * Cluster a hypertable.
  *
@@ -1392,7 +1350,14 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 		PreventInTransactionBlock(is_top_level, "CLUSTER");
 
 		if (NULL == stmt->indexname)
-			index_relid = find_clustered_index(ht->main_table_relid);
+		{
+			index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
+			if (!OidIsValid(index_relid))
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("there is no previously clustered index for table \"%s\"",
+								get_rel_name(ht->main_table_relid))));
+		}
 		else
 			index_relid = get_relname_relid(stmt->indexname,
 											get_rel_namespace(ht->main_table_relid));

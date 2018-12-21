@@ -11,6 +11,7 @@
 #include <catalog/index.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <commands/defrem.h>
 #include <commands/tablespace.h>
 #include <fmgr.h>
@@ -270,4 +271,40 @@ void
 ts_indexing_create_default_indexes(Hypertable *ht)
 {
 	indexing_create_and_verify_hypertable_indexes(ht, true, false);
+}
+
+TSDLLEXPORT Oid
+ts_indexing_find_clustered_index(Oid table_relid)
+{
+	Relation	rel;
+	ListCell   *index;
+	Oid			index_relid = InvalidOid;
+
+	rel = heap_open(table_relid, AccessShareLock);
+
+	/* We need to find the index that has indisclustered set. */
+	foreach(index, RelationGetIndexList(rel))
+	{
+		HeapTuple	idxtuple;
+		Form_pg_index indexForm;
+
+		index_relid = lfirst_oid(index);
+		idxtuple = SearchSysCache1(INDEXRELID,
+								   ObjectIdGetDatum(index_relid));
+		if (!HeapTupleIsValid(idxtuple))
+			elog(ERROR, "cache lookup failed for index %u", index_relid);
+		indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
+
+		if (indexForm->indisclustered)
+		{
+			ReleaseSysCache(idxtuple);
+			break;
+		}
+		ReleaseSysCache(idxtuple);
+		index_relid = InvalidOid;
+	}
+
+	heap_close(rel, AccessShareLock);
+
+	return index_relid;
 }

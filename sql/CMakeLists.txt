@@ -45,6 +45,7 @@ set(SOURCE_FILES
   installation_metadata.sql
   views.sql
   gapfill.sql
+  maintenance_utils.sql
 )
 
 # These files should be pre-pended to update scripts so that they are
@@ -92,6 +93,8 @@ set(MOD_FILES
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
+
+set(TS_MODULE_PATHNAME ${MODULE_PATHNAME} PARENT_SCOPE)
 
 # Function to replace @MODULE_PATHNAME@ in source files, producing an
 # output file in the build dir

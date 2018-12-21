@@ -42,7 +42,7 @@ typedef enum CatalogTable
 	BGW_JOB,
 	BGW_JOB_STAT,
 	INSTALLATION_METADATA,
-	BGW_POLICY_RECLUSTER,
+	BGW_POLICY_REORDER,
 	BGW_POLICY_DROP_CHUNKS,
 	BGW_POLICY_CHUNK_STATS,
 	_MAX_CATALOG_TABLES,
@@ -648,57 +648,57 @@ enum
 	_MAX_INSTALLATION_METADATA_INDEX,
 };
 
-/****** BGW_POLICY_RECLUSTER TABLE definitions */
-#define BGW_POLICY_RECLUSTER_TABLE_NAME	"bgw_policy_recluster"
+/****** BGW_POLICY_REORDER TABLE definitions */
+#define BGW_POLICY_REORDER_TABLE_NAME	"bgw_policy_reorder"
 
-enum Anum_bgw_policy_recluster
+enum Anum_bgw_policy_reorder
 {
-	Anum_bgw_policy_recluster_job_id = 1,
-	Anum_bgw_policy_recluster_hypertable_id,
-	Anum_bgw_policy_recluster_hypertable_index_name,
-	_Anum_bgw_policy_recluster_max,
+	Anum_bgw_policy_reorder_job_id = 1,
+	Anum_bgw_policy_reorder_hypertable_id,
+	Anum_bgw_policy_reorder_hypertable_index_name,
+	_Anum_bgw_policy_reorder_max,
 };
 
-#define Natts_bgw_policy_recluster \
-	(_Anum_bgw_policy_recluster_max - 1)
+#define Natts_bgw_policy_reorder \
+	(_Anum_bgw_policy_reorder_max - 1)
 
-typedef struct FormData_bgw_policy_recluster
+typedef struct FormData_bgw_policy_reorder
 {
 	int32		job_id;
 	int32		hypertable_id;
 	NameData	hypertable_index_name;
-} FormData_bgw_policy_recluster;
+} FormData_bgw_policy_reorder;
 
-typedef FormData_bgw_policy_recluster *Form_bgw_policy_recluster;
+typedef FormData_bgw_policy_reorder *Form_bgw_policy_reorder;
 
 enum
 {
-	BGW_POLICY_RECLUSTER_PKEY_IDX = 0,
-	BGW_POLICY_RECLUSTER_HYPERTABLE_ID_IDX,
-	_MAX_BGW_POLICY_RECLUSTER_INDEX,
+	BGW_POLICY_REORDER_PKEY_IDX = 0,
+	BGW_POLICY_REORDER_HYPERTABLE_ID_IDX,
+	_MAX_BGW_POLICY_REORDER_INDEX,
 };
 
-enum Anum_bgw_policy_recluster_pkey_idx
+enum Anum_bgw_policy_reorder_pkey_idx
 {
-	Anum_bgw_policy_recluster_pkey_idx_job_id = 1,
-	_Anum_bgw_policy_recluster_pkey_idx_max,
+	Anum_bgw_policy_reorder_pkey_idx_job_id = 1,
+	_Anum_bgw_policy_reorder_pkey_idx_max,
 };
 
-typedef struct FormData_bgw_policy_recluster_pkey_idx
+typedef struct FormData_bgw_policy_reorder_pkey_idx
 {
 	int32		job_id;
-}			FormData_bgw_policy_recluster_pkey_idx;
+}			FormData_bgw_policy_reorder_pkey_idx;
 
-enum Anum_bgw_policy_recluster_hypertable_id_idx
+enum Anum_bgw_policy_reorder_hypertable_id_idx
 {
-	Anum_bgw_policy_recluster_hypertable_id_idx_hypertable_id = 1,
-	_Anum_bgw_policy_recluster_hypertable_id_idx_max,
+	Anum_bgw_policy_reorder_hypertable_id_idx_hypertable_id = 1,
+	_Anum_bgw_policy_reorder_hypertable_id_idx_max,
 };
 
-typedef struct FormData_bgw_policy_recluster_hypertable_id_idx
+typedef struct FormData_bgw_policy_reorder_hypertable_id_idx
 {
 	int32		hypertable_id;
-}			FormData_bgw_policy_recluster_hypertable_id_idx;
+}			FormData_bgw_policy_reorder_hypertable_id_idx;
 
 /****** BGW_POLICY_DROP_CHUNKS TABLE definitions */
 #define BGW_POLICY_DROP_CHUNKS_TABLE_NAME	"bgw_policy_drop_chunks"

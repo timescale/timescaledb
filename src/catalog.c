@@ -67,9 +67,9 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = INSTALLATION_METADATA_TABLE_NAME,
 	},
-	[BGW_POLICY_RECLUSTER] = {
+	[BGW_POLICY_REORDER] = {
 		.schema_name = CONFIG_SCHEMA_NAME,
-		.table_name = BGW_POLICY_RECLUSTER_TABLE_NAME,
+		.table_name = BGW_POLICY_REORDER_TABLE_NAME,
 	},
 	[BGW_POLICY_DROP_CHUNKS] = {
 		.schema_name = CONFIG_SCHEMA_NAME,
@@ -154,11 +154,11 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[INSTALLATION_METADATA_PKEY_IDX] = "installation_metadata_pkey",
 		}
 	},
-	[BGW_POLICY_RECLUSTER] = {
-		.length = _MAX_BGW_POLICY_RECLUSTER_INDEX,
+	[BGW_POLICY_REORDER] = {
+		.length = _MAX_BGW_POLICY_REORDER_INDEX,
 		.names = (char *[]) {
-			[BGW_POLICY_RECLUSTER_PKEY_IDX] = "bgw_policy_recluster_pkey",
-			[BGW_POLICY_RECLUSTER_HYPERTABLE_ID_IDX] = "bgw_policy_recluster_hypertable_id_key",
+			[BGW_POLICY_REORDER_PKEY_IDX] = "bgw_policy_reorder_pkey",
+			[BGW_POLICY_REORDER_HYPERTABLE_ID_IDX] = "bgw_policy_reorder_hypertable_id_key",
 		}
 	},
 	[BGW_POLICY_DROP_CHUNKS] = {
@@ -186,7 +186,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
-	[BGW_POLICY_RECLUSTER] = NULL,
+	[BGW_POLICY_REORDER] = NULL,
 	[BGW_POLICY_DROP_CHUNKS] = NULL,
 };
 

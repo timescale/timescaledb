@@ -16,7 +16,11 @@
 #include "bgw/timer.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
-#include "bgw_policy/recluster.h"
+
+#include "bgw_policy/reorder.h"
+#include "errors.h"
+#include "job.h"
+#include "hypertable.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -25,23 +29,24 @@
 #include "hypertable.h"
 #include "job.h"
 #include "license.h"
+#include "reorder.h"
 
 #define ALTER_JOB_SCHEDULE_NUM_COLS	5
-#define RECLUSTER_SKIP_RECENT_DIM_SLICES_N	3
+#define REORDER_SKIP_RECENT_DIM_SLICES_N	3
 
 /*
- * Returns the ID of a chunk to recluster. Eligible chunks must be at least the
+ * Returns the ID of a chunk to reorder. Eligible chunks must be at least the
  * 3rd newest chunk in the hypertable (not entirely exact because we use the number
  * of dimension slices as a proxy for the number of chunks) and hasn't been
- * reclustered recently. For this version of automatic reclustering, "not reclustered
- * recently" means the chunk has not been reclustered at all. This information
+ * reordered recently. For this version of automatic reordering, "not reordered
+ * recently" means the chunk has not been reordered at all. This information
  * is available in the bgw_policy_chunk_stats metadata table.
  */
 static int
-get_chunk_id_to_recluster(int32 job_id, Hypertable *ht)
+get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 {
 	Dimension  *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	DimensionSlice *nth_dimension = ts_dimension_slice_nth_latest_slice(time_dimension->fd.id, RECLUSTER_SKIP_RECENT_DIM_SLICES_N);
+	DimensionSlice *nth_dimension = ts_dimension_slice_nth_latest_slice(time_dimension->fd.id, REORDER_SKIP_RECENT_DIM_SLICES_N);
 
 	if (!nth_dimension)
 		return -1;
@@ -57,11 +62,11 @@ get_chunk_id_to_recluster(int32 job_id, Hypertable *ht)
 }
 
 bool
-execute_recluster_policy(int32 job_id, recluster_func recluster)
+execute_reorder_policy(int32 job_id, reorder_func reorder)
 {
 	int			chunk_id;
 	bool		started = false;
-	BgwPolicyRecluster *args;
+	BgwPolicyReorder *args;
 	Hypertable *ht;
 
 	if (!IsTransactionOrTransactionBlock())
@@ -70,32 +75,32 @@ execute_recluster_policy(int32 job_id, recluster_func recluster)
 		StartTransactionCommand();
 	}
 
-	/* Get the arguments from the recluster_policy table */
-	args = ts_bgw_policy_recluster_find_by_job(job_id);
+	/* Get the arguments from the reorder_policy table */
+	args = ts_bgw_policy_reorder_find_by_job(job_id);
 
 	if (args == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("could not run recluster policy #%d because no args in policy table",
+				 errmsg("could not run reorder policy #%d because no args in policy table",
 						job_id)));
 
 	ht = ts_hypertable_get_by_id(args->fd.hypertable_id);
 
-	/* Find a chunk to recluster in the selected hypertable */
-	chunk_id = get_chunk_id_to_recluster(args->fd.job_id, ht);
+	/* Find a chunk to reorder in the selected hypertable */
+	chunk_id = get_chunk_id_to_reorder(args->fd.job_id, ht);
 
 	if (chunk_id == -1)
 	{
-		elog(NOTICE, "didn't find a chunk that needed reclustering");
+		elog(NOTICE, "didn't find a chunk that needed reordering");
 		goto commit;
 	}
 
 	/*
-	 * NOTE: We pass the Oid of the hypertable's index, and the true recluster
+	 * NOTE: We pass the Oid of the hypertable's index, and the true reorder
 	 * function should translate this to the Oid of the index on the specific
 	 * chunk.
 	 */
-	recluster((ts_chunk_get_by_id(chunk_id, 0, false))->table_id, get_relname_relid(NameStr(args->fd.hypertable_index_name), get_namespace_oid(NameStr(ht->fd.schema_name), false)), false, InvalidOid);
+	reorder(ts_chunk_get_by_id(chunk_id, 0, false)->table_id, get_relname_relid(NameStr(args->fd.hypertable_index_name), get_namespace_oid(NameStr(ht->fd.schema_name), false)), false, InvalidOid);
 
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id, chunk_id, ts_timer_get_current_timestamp());
@@ -143,18 +148,8 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 
 	switch (job->bgw_type)
 	{
-		case JOB_TYPE_RECLUSTER:
-
-			/*
-			 * TODO: Uncomment the following line when merging with the
-			 * timescale_recluster_rel function
-			 */
-
-			/*
-			 * return execute_recluster_policy(job->fd.id,
-			 * timescale_recluster_rel);
-			 */
-			return true;
+		case JOB_TYPE_REORDER:
+			return execute_reorder_policy(job->fd.id, reorder_chunk);
 		case JOB_TYPE_DROP_CHUNKS:
 			return execute_drop_chunks_policy(job->fd.id);
 		default:

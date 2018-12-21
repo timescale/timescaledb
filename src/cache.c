@@ -142,7 +142,7 @@ cache_release_subtxn(Cache *cache, SubTransactionId subtxnid)
 	return refcount;
 }
 
-extern int
+extern TSDLLEXPORT int
 ts_cache_release(Cache *cache)
 {
 	return cache_release_subtxn(cache, GetCurrentSubTransactionId());
