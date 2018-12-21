@@ -86,7 +86,7 @@ ts_cache_invalidate(Cache *cache)
  * Each call to cache_pin MUST BE paired with a call to cache_release.
  *
  */
-extern Cache *
+extern TSDLLEXPORT Cache *
 ts_cache_pin(Cache *cache)
 {
 	MemoryContext old = MemoryContextSwitchTo(pinned_caches_mctx);

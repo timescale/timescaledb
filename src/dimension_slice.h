@@ -61,14 +61,15 @@ extern DimensionVec *ts_dimension_slice_scan_by_dimension_before_point(int32 dim
 																	   MemoryContext mctx);
 extern int ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints);
 extern int ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints);
-extern DimensionSlice *ts_dimension_slice_create(int dimension_id, int64 range_start,
-												 int64 range_end);
+extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_create(int dimension_id, int64 range_start,
+															 int64 range_end);
 extern DimensionSlice *ts_dimension_slice_copy(const DimensionSlice *original);
 extern bool ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);
 extern bool ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2);
 extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);
-extern void ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
+extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices,
+										   bool only_non_existing);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 

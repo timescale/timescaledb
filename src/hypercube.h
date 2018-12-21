@@ -7,6 +7,7 @@
 #define TIMESCALEDB_HYPERCUBE_H
 
 #include <postgres.h>
+#include <utils/jsonb.h>
 
 #include "dimension_slice.h"
 
@@ -26,14 +27,15 @@ typedef struct Hypercube
 #define HYPERCUBE_SIZE(num_dimensions)                                                             \
 	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
 
-extern Hypercube *ts_hypercube_alloc(int16 num_dimensions);
+extern TSDLLEXPORT Hypercube *ts_hypercube_alloc(int16 num_dimensions);
 extern void ts_hypercube_free(Hypercube *hc);
-extern void ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
+extern TSDLLEXPORT void ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
 extern Hypercube *ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx);
 extern Hypercube *ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p);
 extern bool ts_hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
 extern DimensionSlice *ts_hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id);
 extern Hypercube *ts_hypercube_copy(Hypercube *hc);
+extern bool ts_hypercube_equal(Hypercube *hc1, Hypercube *hc2);
 extern void ts_hypercube_slice_sort(Hypercube *hc);
 
 #endif /* TIMESCALEDB_HYPERCUBE_H */

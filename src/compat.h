@@ -513,13 +513,16 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #endif
 
 /*
- * PG_RETURN_JSONB -> PG_RETURN_JSONB_P
+ * JsonB-related macros.
  *
  * PG11 fixes some functions that return pointers to follow convention and end
  * with P.
  */
 #if PG96 || PG10
-#define PG_RETURN_JSONB_P PG_RETURN_JSONB
+#define PG_RETURN_JSONB_P(x) PG_RETURN_JSONB(x)
+#define PG_GETARG_JSONB_P(x) PG_GETARG_JSONB(x)
+#define JsonbPGetDatum(x) JsonbGetDatum(x)
+#define DatumGetJsonbP(x) DatumGetJsonb(d)
 #endif
 
 /*

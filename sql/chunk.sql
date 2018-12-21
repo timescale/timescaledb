@@ -35,3 +35,17 @@ AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
 --given a chunk's relid, return the id. Error out if not a chunk relid.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_id_from_relid(relid OID) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+-- Show the definition of a chunk.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.show_chunk(chunk REGCLASS)
+RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, slices JSONB)
+AS '@MODULE_PATHNAME@', 'ts_chunk_show' LANGUAGE C VOLATILE;
+
+-- Create a chunk with the given dimensional constraints (slices) as given in the JSONB.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk(
+       hypertable REGCLASS,
+       slices JSONB,
+       schema_name NAME = NULL,
+       table_prefix NAME = NULL)
+RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, slices JSONB, created BOOLEAN)
+AS '@MODULE_PATHNAME@', 'ts_chunk_create' LANGUAGE C VOLATILE;

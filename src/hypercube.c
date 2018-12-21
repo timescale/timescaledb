@@ -3,6 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#include <postgres.h>
+#include <utils/jsonb.h>
+#include <utils/numeric.h>
+
+#include "export.h"
 #include "hypercube.h"
 #include "dimension_vector.h"
 
@@ -19,7 +24,7 @@
  * when the partitioning configuration has changed (e.g., the time interval or
  * number of partitions in a particular dimension changed).
  */
-Hypercube *
+TSDLLEXPORT Hypercube *
 ts_hypercube_alloc(int16 num_dimensions)
 {
 	Hypercube *hc = palloc0(HYPERCUBE_SIZE(num_dimensions));
@@ -72,6 +77,21 @@ ts_hypercube_copy(Hypercube *hc)
 	return copy;
 }
 
+bool
+ts_hypercube_equal(Hypercube *hc1, Hypercube *hc2)
+{
+	int i;
+
+	if (hc1->num_slices != hc2->num_slices)
+		return false;
+
+	for (i = 0; i < hc1->num_slices; i++)
+		if (ts_dimension_slice_cmp(hc1->slices[i], hc2->slices[i]) != 0)
+			return false;
+
+	return true;
+}
+
 static int
 cmp_slices_by_dimension_id(const void *left, const void *right)
 {
@@ -85,7 +105,7 @@ cmp_slices_by_dimension_id(const void *left, const void *right)
 	return 1;
 }
 
-void
+TSDLLEXPORT void
 ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice)
 {
 	Assert(hc->capacity > hc->num_slices);

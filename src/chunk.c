@@ -11,6 +11,7 @@
 #include <catalog/toasting.h>
 #include <commands/trigger.h>
 #include <commands/tablecmds.h>
+#include <commands/defrem.h>
 #include <tcop/tcopprot.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
@@ -35,6 +36,7 @@
 #include "export.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "cross_module_fn.h"
 #include "catalog.h"
 #include "continuous_agg.h"
 #include "cross_module_fn.h"
@@ -53,11 +55,14 @@
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "bgw_policy/chunk_stats.h"
+#include "errors.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
+TS_FUNCTION_INFO_V1(ts_chunk_show);
+TS_FUNCTION_INFO_V1(ts_chunk_create);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -111,13 +116,80 @@ chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 }
 
 static void
-chunk_fill(Chunk *chunk, HeapTuple tuple)
+chunk_fill(Chunk *chunk, HeapTuple tuple, TupleDesc desc)
 {
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
 	chunk->hypertable_relid = ts_inheritance_parent_relid(chunk->table_id);
 }
+
+static ScanTupleResult
+chunk_tuple_found(TupleInfo *ti, void *arg)
+{
+	Chunk *chunk = arg;
+
+	chunk_fill(chunk, ti->tuple, ti->desc);
+	return SCAN_DONE;
+}
+
+/* Fill in a chunk stub. The stub data structure needs the chunk ID and
+ * constraints set.  The rest of the fields will be filled in from the table
+ * data. */
+static Chunk *
+chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
+{
+	ScanKeyData scankey[1];
+	Catalog *catalog = ts_catalog_get();
+	int num_found;
+	ScannerCtx	ctx = {
+		.table = catalog->tables[CHUNK].id,
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = chunk_stub,
+		.tuple_found = chunk_tuple_found,
+		.lockmode = AccessShareLock,
+		.tuplock = {
+			.lockmode = LockTupleShare,
+			.enabled = tuplock,
+		},
+		.scandirection = ForwardScanDirection,
+	};
+
+	/*
+	 * Perform an index scan on chunk ID.
+	 */
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk_stub->fd.id));
+
+	num_found = ts_scanner_scan(&ctx);
+
+	if (num_found != 1)
+		elog(ERROR, "no chunk found with ID %d", chunk_stub->fd.id);
+
+	if (NULL == chunk_stub->cube)
+		chunk_stub->cube =
+			ts_hypercube_from_constraints(chunk_stub->constraints, CurrentMemoryContext);
+	else
+
+		/*
+		 * The hypercube slices were filled in during the scan. Now we need to
+		 * sort them in dimension order.
+		 */
+		ts_hypercube_slice_sort(chunk_stub->cube);
+
+	return chunk_stub;
+}
+
+typedef struct CollisionInfo
+{
+	Hypercube *cube;
+	Chunk *colliding_chunk;
+} CollisionInfo;
 
 /*-
  * Align a chunk's hypercube in 'aligned' dimensions.
@@ -177,7 +249,8 @@ chunk_fill(Chunk *chunk, HeapTuple tuple)
 static ChunkResult
 do_dimension_alignment(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	Hypercube *cube = scanctx->data;
+	CollisionInfo *info = scanctx->data;
+	Hypercube *cube = info->cube;
 	Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
@@ -281,7 +354,8 @@ calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
 static ChunkResult
 do_collision_resolution(ChunkScanCtx *scanctx, Chunk *chunk)
 {
-	Hypercube *cube = scanctx->data;
+	CollisionInfo *info = scanctx->data;
+	Hypercube *cube = info->cube;
 	Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
@@ -304,6 +378,7 @@ do_collision_resolution(ChunkScanCtx *scanctx, Chunk *chunk)
 			ts_dimension_slices_collide(cube_slice, chunk_slice))
 		{
 			ts_dimension_slice_cut(cube_slice, chunk_slice, coord);
+			info->colliding_chunk = chunk;
 			res = CHUNK_PROCESSED;
 
 			/*
@@ -318,6 +393,53 @@ do_collision_resolution(ChunkScanCtx *scanctx, Chunk *chunk)
 	Assert(!ts_hypercubes_collide(cube, chunk->cube));
 
 	return res;
+}
+
+static ChunkResult
+check_for_collisions(ChunkScanCtx *scanctx, Chunk *chunk)
+{
+	CollisionInfo *info = scanctx->data;
+	Hypercube *cube = info->cube;
+	Hyperspace *space = scanctx->space;
+
+	/* Check if this chunk collides with our hypercube */
+	if (chunk->cube->num_slices == space->num_dimensions &&
+		ts_hypercubes_collide(cube, chunk->cube))
+	{
+		info->colliding_chunk = chunk;
+		return CHUNK_DONE;
+	}
+
+	return CHUNK_IGNORED;
+}
+
+/*
+ * Check if a (tentative) chunk collides with existing chunks.
+ *
+ * Return the colliding chunk. Note that the chunk is a stub that needs to be
+ * filled.
+ */
+static Chunk *
+chunk_collides(Hyperspace *hs, Hypercube *hc)
+{
+	ChunkScanCtx scanctx;
+	CollisionInfo info = {
+		.cube = hc,
+		.colliding_chunk = NULL,
+	};
+
+	chunk_scan_ctx_init(&scanctx, hs, NULL);
+
+	/* Scan for all chunks that collide with the hypercube of the new chunk */
+	chunk_collision_scan(&scanctx, hc);
+	scanctx.data = &info;
+
+	/* Find chunks that collide */
+	chunk_scan_ctx_foreach_chunk(&scanctx, check_for_collisions, 0);
+
+	chunk_scan_ctx_destroy(&scanctx);
+
+	return info.colliding_chunk;
 }
 
 /*-
@@ -369,12 +491,16 @@ static void
 chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 {
 	ChunkScanCtx scanctx;
+	CollisionInfo info = {
+		.cube = cube,
+		.colliding_chunk = NULL,
+	};
 
 	chunk_scan_ctx_init(&scanctx, hs, p);
 
 	/* Scan for all chunks that collide with the hypercube of the new chunk */
 	chunk_collision_scan(&scanctx, cube);
-	scanctx.data = cube;
+	scanctx.data = &info;
 
 	/* Cut the hypercube in any aligned dimensions */
 	chunk_scan_ctx_foreach_chunk(&scanctx, do_dimension_alignment, 0);
@@ -584,25 +710,13 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 }
 
 static Chunk *
-chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema,
+							   const char *prefix)
 {
 	Hyperspace *hs = ht->space;
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
-	Hypercube *cube;
 	Chunk *chunk;
-
-	/*
-	 * If the user has enabled adaptive chunking, call the function to
-	 * calculate and set the new chunk time interval.
-	 */
-	calculate_and_set_new_chunk_interval(ht, p);
-
-	/* Calculate the hypercube for a new chunk that covers the tuple's point */
-	cube = ts_hypercube_calculate_from_point(hs, p);
-
-	/* Resolve collisions with other chunks by cutting the new hypercube */
-	chunk_collision_resolve(hs, cube, p);
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -610,7 +724,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	ts_catalog_restore_user(&sec_ctx);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
-	chunk->cube = cube;
+	chunk->cube = hc;
 	chunk->hypertable_relid = ht->main_table_relid;
 	namestrcpy(&chunk->fd.schema_name, schema);
 	snprintf(chunk->fd.table_name.data, NAMEDATALEN, "%s_%d_chunk", prefix, chunk->fd.id);
@@ -619,7 +733,7 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* Insert any new dimension slices */
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
+	ts_dimension_slice_insert_multi(hc->slices, hc->num_slices, true);
 
 	/* Add metadata for dimensional and inheritable constraints */
 	chunk_add_constraints(chunk);
@@ -647,8 +761,73 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	return chunk;
 }
 
+static Chunk *
+chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+{
+	Hyperspace *hs = ht->space;
+	Hypercube *cube;
+
+	/*
+	 * If the user has enabled adaptive chunking, call the function to
+	 * calculate and set the new chunk time interval.
+	 */
+	calculate_and_set_new_chunk_interval(ht, p);
+
+	/* Calculate the hypercube for a new chunk that covers the tuple's point */
+	cube = ts_hypercube_calculate_from_point(hs, p);
+
+	/* Resolve collisions with other chunks by cutting the new hypercube */
+	chunk_collision_resolve(hs, cube, p);
+
+	return ts_chunk_create_from_hypercube(ht, cube, schema, prefix);
+}
+
+TSDLLEXPORT Chunk *
+ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema,
+									 const char *prefix, bool *created)
+{
+	Chunk *chunk;
+
+	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
+
+	chunk = chunk_collides(ht->space, hc);
+
+	if (NULL == chunk)
+	{
+		chunk = ts_chunk_create_from_hypercube(ht, hc, schema, prefix);
+
+		if (NULL != created)
+			*created = true;
+	}
+	else
+	{
+		if (!ts_hypercube_equal(chunk->cube, hc))
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_CHUNK_COLLISION),
+					 errmsg("chunk creation failed due to collision")));
+
+		/* chunk_collides only returned a stub, so need to fill it */
+		chunk_fill_stub(chunk, false);
+
+		/*
+		 * We only scanned for dimensional constraints, so we now need to
+		 * rescan the constraints to also get the inherited constraints.
+		 */
+		chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id,
+																  ht->space->num_dimensions,
+																  CurrentMemoryContext);
+
+		if (NULL != created)
+			*created = false;
+	}
+
+	Assert(chunk != NULL);
+
+	return chunk;
+}
+
 Chunk *
-ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const char *prefix)
 {
 	Chunk *chunk;
 
@@ -683,66 +862,6 @@ ts_chunk_create_stub(int32 id, int16 num_constraints)
 		chunk->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
 
 	return chunk;
-}
-
-static ScanTupleResult
-chunk_tuple_found(TupleInfo *ti, void *arg)
-{
-	Chunk *chunk = arg;
-
-	chunk_fill(chunk, ti->tuple);
-	return SCAN_DONE;
-}
-
-/* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
- * The rest of the fields will be filled in from the table data. */
-static Chunk *
-chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
-{
-	ScanKeyData scankey[1];
-	Catalog *catalog = ts_catalog_get();
-	int num_found;
-	ScannerCtx	ctx = {
-		.table = catalog_get_table_id(catalog, CHUNK),
-		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = chunk_stub,
-		.tuple_found = chunk_tuple_found,
-		.lockmode = AccessShareLock,
-		.tuplock = {
-			.lockmode = LockTupleShare,
-			.enabled = tuplock,
-		},
-		.scandirection = ForwardScanDirection,
-	};
-
-	/*
-	 * Perform an index scan on chunk ID.
-	 */
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk_stub->fd.id));
-
-	num_found = ts_scanner_scan(&ctx);
-
-	if (num_found != 1)
-		elog(ERROR, "no chunk found with ID %d", chunk_stub->fd.id);
-
-	if (NULL == chunk_stub->cube)
-		chunk_stub->cube =
-			ts_hypercube_from_constraints(chunk_stub->constraints, CurrentMemoryContext);
-	else
-
-		/*
-		 * The hypercube slices were filled in during the scan. Now we need to
-		 * sort them in dimension order.
-		 */
-		ts_hypercube_slice_sort(chunk_stub->cube);
-
-	return chunk_stub;
 }
 
 /*
@@ -1634,9 +1753,6 @@ chunk_tuple_delete(TupleInfo *ti, void *data)
 			ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
 	}
 
-	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
-	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form->id);
-
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete(ti->scanrel, ti->tuple);
 	ts_catalog_restore_user(&sec_ctx);
@@ -2068,4 +2184,16 @@ ts_chunks_in(PG_FUNCTION_ARGS)
 			 errhint("chunks_in function must appear in the WHERE clause and can only be combined "
 					 "with AND operator")));
 	pg_unreachable();
+}
+
+Datum
+ts_chunk_show(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->show_chunk(fcinfo);
+}
+
+Datum
+ts_chunk_create(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->create_chunk(fcinfo);
 }

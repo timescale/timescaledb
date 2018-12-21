@@ -11,11 +11,13 @@
 #include "export.h"
 #include "cache.h"
 #include "hypertable.h"
+#include "export.h"
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_cache_get_entry(Cache *cache, Oid relid);
-extern Hypertable *ts_hypertable_cache_get_entry_rv(Cache *cache, RangeVar *rv);
-extern Hypertable *ts_hypertable_cache_get_entry_with_table(Cache *cache, Oid relid,
-															const char *schema, const char *table);
+extern TSDLLEXPORT Hypertable *ts_hypertable_cache_get_entry_rv(Cache *cache, RangeVar *rv);
+extern TSDLLEXPORT Hypertable *ts_hypertable_cache_get_entry_with_table(Cache *cache, Oid relid,
+																		const char *schema,
+																		const char *table);
 extern TSDLLEXPORT Hypertable *ts_hypertable_cache_get_entry_by_id(Cache *cache,
 																   int32 hypertable_id);
 

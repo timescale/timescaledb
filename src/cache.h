@@ -50,7 +50,7 @@ extern bool ts_cache_remove(Cache *cache, void *key);
 
 extern MemoryContext ts_cache_memory_ctx(Cache *cache);
 
-extern Cache *ts_cache_pin(Cache *cache);
+extern TSDLLEXPORT Cache *ts_cache_pin(Cache *cache);
 extern TSDLLEXPORT int ts_cache_release(Cache *cache);
 
 extern void _cache_init(void);

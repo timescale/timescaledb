@@ -51,7 +51,7 @@ ts_hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id)
 	return bsearch(&dim, hs->dimensions, hs->num_dimensions, sizeof(Dimension), cmp_dimension_id);
 }
 
-Dimension *
+TSDLLEXPORT Dimension *
 ts_hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name)
 {
 	int i;
