@@ -437,9 +437,8 @@ remote_connection_drain(PGconn *conn, TimestampTz endtime)
 
 			/* If timeout has expired, give up, else get sleep time. */
 			if (now >= endtime)
-			{
 				return false;
-			}
+
 			TimestampDifference(now, endtime, &secs, &microsecs);
 
 			/* To protect against clock skew, limit sleep to one minute. */
