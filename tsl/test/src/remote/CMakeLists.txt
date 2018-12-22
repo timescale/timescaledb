@@ -5,4 +5,4 @@ set(SOURCES
 )
 
 target_sources(${TSL_TESTS_LIB_NAME} PRIVATE ${SOURCES})
-target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src/remote)
+target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src/remote ${PG_INCLUDEDIR})

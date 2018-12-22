@@ -3,3 +3,4 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/connection.c
   )
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
+target_include_directories(${TSL_LIBRARY_NAME} PRIVATE ${PG_INCLUDEDIR})
