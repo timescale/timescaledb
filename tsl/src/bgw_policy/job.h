@@ -4,12 +4,14 @@
  * This file is licensed under the Timescale License,
  * see LICENSE-TIMESCALE at the top of the tsl directory.
  */
-#ifndef TIMESCALEDB_BGW_POLICY_JOB_H
-#define TIMESCALEDB_BGW_POLICY_JOB_H
+#ifndef TIMESCALEDB_TSL_BGW_POLICY_JOB_H
+#define TIMESCALEDB_TSL_BGW_POLICY_JOB_H
+
 #include <c.h>
 
-#include  "bgw/job.h"
-#include "hypertable.h"
+#include <bgw/job.h>
+#include <hypertable.h>
+
 #include "bgw_policy/chunk_stats.h"
 
 /* Reorder function type. Necessary for testing */
@@ -22,4 +24,4 @@ extern bool execute_drop_chunks_policy(int32 job_id);
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);
 extern Datum bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS);
 
-#endif							/* TIMESCALEDB_BGW_POLICY_JOB_H */
+#endif							/* TIMESCALEDB_TSL_BGW_POLICY_JOB_H */
