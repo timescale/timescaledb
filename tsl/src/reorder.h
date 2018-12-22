@@ -5,8 +5,8 @@
  * see LICENSE-TIMESCALE at the top of the tsl directory.
  */
 
-#ifndef TIMESCALEDB_REORDER_H
-#define TIMESCALEDB_REORDER_H
+#ifndef TIMESCALEDB_TSL_REORDER_H
+#define TIMESCALEDB_TSL_REORDER_H
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -17,4 +17,4 @@
 extern Datum tsl_reorder_chunk(PG_FUNCTION_ARGS);
 extern void reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id);
 
-#endif							/* TIMESCALEDB_REORDER_H */
+#endif							/* TIMESCALEDB_TSL_REORDER_H */
