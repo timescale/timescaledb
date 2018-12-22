@@ -4,8 +4,8 @@
  * This file is licensed under the Timescale License,
  * see LICENSE-TIMESCALE at the top of the tsl directory.
  */
-#ifndef ASYNC_PROCESSOR_H
-#define ASYNC_PROCESSOR_H
+#ifndef TIMESCALEDB_TSL_REMOTE_ASYNC_H
+#define TIMESCALEDB_TSL_REMOTE_ASYNC_H
 
 #include <postgres.h>
 #include <libpq-fe.h>
@@ -110,4 +110,4 @@ extern AsyncResponseResult *async_request_set_wait_any_result(AsyncRequestSet *s
 /* Prepared Statements */
 extern void prepared_stmt_close(PreparedStmt *stmt);
 
-#endif /* ASYNC_PROCESSOR_H */
+#endif /* TIMESCALEDB_TSL_REMOTE_ASYNC_H */
