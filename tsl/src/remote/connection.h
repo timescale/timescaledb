@@ -4,8 +4,8 @@
  * This file is licensed under the Timescale License,
  * see LICENSE-TIMESCALE at the top of the tsl directory.
  */
-#ifndef REMOTE_CONNECTION_H
-#define REMOTE_CONNECTION_H
+#ifndef TIMESCALEDB_TSL_REMOTE_CONNECTION_H
+#define TIMESCALEDB_TSL_REMOTE_CONNECTION_H
 
 #include <postgres.h>
 #include <foreign/foreign.h>
@@ -59,4 +59,4 @@ extern bool remote_connection_cancel_query(PGconn *conn);
 
 #define remote_connection_result_close(res) PQclear(res);
 
-#endif /* REMOTE_CONNECTION_H */
+#endif /* TIMESCALEDB_TSL_REMOTE_CONNECTION_H */
