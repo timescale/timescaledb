@@ -16,7 +16,7 @@ file(COPY
   ${CMAKE_CURRENT_BINARY_DIR})
 
 file(READ
-  ${PG_REGRESS_DIR}/serial_schedule
+  ${PG_REGRESS_DIR}/parallel_schedule
   PG_TEST_SCHEDULE)
 
 # Tests to ignore
@@ -36,13 +36,13 @@ endforeach(IGNORE_TEST)
 
 # Write the final test schedule
 file(WRITE
-  ${CMAKE_CURRENT_BINARY_DIR}/serial_schedule
+  ${CMAKE_CURRENT_BINARY_DIR}/schedule
   ${PG_TEST_SCHEDULE})
 
 # Need --dlpath set to PostgreSQL's test directory so that the tests
 # can load libraries there
 set(PG_REGRESS_OPTS_PGTEST
-  --schedule=${CMAKE_CURRENT_BINARY_DIR}/serial_schedule
+  --schedule=${CMAKE_CURRENT_BINARY_DIR}/schedule
   --load-extension=timescaledb
   --dlpath=${PG_REGRESS_DIR})
 
