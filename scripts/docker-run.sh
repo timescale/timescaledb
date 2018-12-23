@@ -8,7 +8,7 @@ fi
 
 DOCKER_HOST=${DOCKER_HOST:-localhost}
 CONTAINER_NAME=${CONTAINER_NAME:-timescaledb}
-DATA_DIR=${DATA_DIR-$PWD/data}
+DATA_DIR=${DATA_DIR:-$PWD/data}
 BIN_CMD=${BIN_CMD:-postgres}
 PGPORT=${PGPORT:=5432}
 
@@ -19,10 +19,11 @@ fi
 docker run -d \
   --name $CONTAINER_NAME $VOLUME_MOUNT \
   -p ${PGPORT}:5432 \
+  -e POSTGRES_PASSWORD=password \
   -e PGDATA=/var/lib/postgresql/data/timescaledb \
   $IMAGE_NAME $BIN_CMD \
   -cshared_preload_libraries=timescaledb \
-  -clog_line_prefix="%m [%p]: [%l-1] %u@%d" \
+  -clog_line_prefix='%m [%p]: [%l-1] %u@%d' \
   -clog_error_verbosity=VERBOSE
 
 set +e
