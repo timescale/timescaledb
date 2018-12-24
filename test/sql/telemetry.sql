@@ -120,3 +120,6 @@ SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
 SET timescaledb.telemetry_level=off;
+
+
+select json_object_keys(get_telemetry_report()::json);

@@ -283,3 +283,22 @@ WARNING:  telemetry could not connect to "noservice.timescale.com"
 (1 row)
 
 SET timescaledb.telemetry_level=off;
+select json_object_keys(get_telemetry_report()::json);
+  json_object_keys   
+---------------------
+ db_uuid
+ os_name
+ os_release
+ os_version
+ data_volume
+ build_os_name
+ install_method
+ installed_time
+ num_hypertables
+ build_os_version
+ exported_db_uuid
+ postgresql_version
+ related_extensions
+ timescaledb_version
+(14 rows)
+
