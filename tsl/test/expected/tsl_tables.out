@@ -4,7 +4,6 @@
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 \c single :ROLE_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
  stop_background_workers 
 -------------------------
@@ -12,7 +11,6 @@ WARNING:  Timescale License expired
 (1 row)
 
 SET timescaledb.license_key='CommunityLicense';
-WARNING:  starting TimescaleDB code that requires the Timescale License
 CREATE OR REPLACE FUNCTION ts_test_chunk_stats_insert(job_id INTEGER, chunk_id INTEGER, num_times_run INTEGER, last_time_run TIMESTAMPTZ = NULL) RETURNS VOID
 AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER)
@@ -21,7 +19,6 @@ AS :TSL_MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
 LANGUAGE C VOLATILE STRICT;
 \c single :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_config.bgw_policy_drop_chunks;
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
  job_id | hypertable_id | older_than | cascade 
 --------+---------------+------------+---------
@@ -518,12 +515,10 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 
 \c single :ROLE_SUPERUSER
 TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
 \c single :ROLE_DEFAULT_PERM_USER
 -- Now test chunk_stat cascade deletion is correct
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
@@ -758,9 +753,7 @@ select remove_reorder_policy('test_table');
 
 \c single :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
-WARNING:  starting TimescaleDB code that requires the Timescale License
 -- Now make sure everything fails in the Community (non-enterprise) edition
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table', 'test_table_time_idx');

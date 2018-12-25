@@ -4,12 +4,13 @@
  * This file is licensed under the Timescale License,
  * see LICENSE-TIMESCALE at the top of the tsl directory.
  */
+
  /*
- * This file contains source code that was copied and/or modified from
- * the PostgreSQL database, which is licensed under the open-source
- * PostgreSQL License. Please see the NOTICE at the top level
- * directory for a copy of the PostgreSQL License.
- */
+  * This file contains source code that was copied and/or modified from the
+  * PostgreSQL database, which is licensed under the open-source PostgreSQL
+  * License. Please see the NOTICE at the top level directory for a copy of
+  * the PostgreSQL License.
+  */
 
 /* see postgres commit ab5e9caa4a3ec4765348a0482e88edcf3f6aab4a */
 
@@ -177,9 +178,9 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id)
 	Assert(cim.chunkoid == chunk_id);
 
 	/*
-	 * We must mark each chunk index as clustered before calling
-	 * reorder_rel() because it expects indexes that need to be rechecked
-	 * (due to new transaction) to already have that mark set
+	 * We must mark each chunk index as clustered before calling reorder_rel()
+	 * because it expects indexes that need to be rechecked (due to new
+	 * transaction) to already have that mark set
 	 */
 	ts_chunk_index_mark_clustered(cim.chunkoid, cim.indexoid);
 	/* TODO allow users to set verbosity? */
@@ -666,12 +667,13 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 				isdead = false;
 				break;
 			case HEAPTUPLE_INSERT_IN_PROGRESS:
+
 				/*
 				 * Since we hold a lock on this relation, and do not allow
 				 * reorder within a transaction, we should never be here
 				 */
 				elog(ERROR, "concurrent insert in progress within table \"%s\"",
-						 RelationGetRelationName(OldHeap));
+					 RelationGetRelationName(OldHeap));
 
 				isdead = false;
 				break;
@@ -681,7 +683,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 				 * Similar situation to INSERT_IN_PROGRESS case.
 				 */
 				elog(ERROR, "concurrent delete in progress within table \"%s\"",
-						RelationGetRelationName(OldHeap));
+					 RelationGetRelationName(OldHeap));
 				/* treat as recently dead */
 				tups_recently_dead += 1;
 				isdead = false;

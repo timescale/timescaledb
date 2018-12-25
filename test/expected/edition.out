@@ -5,13 +5,13 @@
 SELECT _timescaledb_internal.current_license_key();
  current_license_key 
 ---------------------
- ApacheOnly
+ CommunityLicense
 (1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();
  tsl_loaded 
 ------------
- f
+ t
 (1 row)
 
 SELECT _timescaledb_internal.enterprise_enabled();

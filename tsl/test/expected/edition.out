@@ -3,7 +3,6 @@
 -- This file is licensed under the Timescale License,
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 SELECT _timescaledb_internal.current_license_key();
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
                                                                             current_license_key                                                                             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -47,7 +46,6 @@ SELECT _timescaledb_internal.enterprise_enabled();
 \set ON_ERROR_STOP 1
 \c single :ROLE_SUPERUSER
 SELECT _timescaledb_internal.current_license_key();
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
                                                                             current_license_key                                                                             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -89,7 +87,6 @@ SELECT _timescaledb_internal.enterprise_enabled();
 
 \set ON_ERROR_STOP 1
 SET timescaledb.license_key='CommunityLicense';
-WARNING:  starting TimescaleDB code that requires the Timescale License
 SELECT _timescaledb_internal.current_license_key();
  current_license_key 
 ---------------------
@@ -109,7 +106,6 @@ SELECT _timescaledb_internal.enterprise_enabled();
 (1 row)
 
 SET timescaledb.license_key=Default;
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
 SELECT _timescaledb_internal.current_license_key();
                                                                             current_license_key                                                                             

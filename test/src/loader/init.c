@@ -36,6 +36,8 @@ void		ts_extension_check_version(const char *actual_version);
 bool		ts_license_update_check(char **newval, void **extra, GucSource source);
 void		ts_license_on_assign(const char *newval, void *extra);
 
+TS_FUNCTION_INFO_V1(ts_post_load_init);
+
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
@@ -111,6 +113,12 @@ ts_mock_function(PG_FUNCTION_ARGS)
 {
 	elog(WARNING, "mock function call " STR(TIMESCALEDB_VERSION_MOD));
 	PG_RETURN_VOID();
+}
+
+TSDLLEXPORT Datum
+ts_post_load_init(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_CHAR(0);
 }
 
 bool

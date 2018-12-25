@@ -18,7 +18,7 @@
 
 /* This is where versioned-extension facing functions live. They shouldn't live anywhere else. */
 
-const int32 ts_bgw_loader_api_version = 1;
+const int32 ts_bgw_loader_api_version = 2;
 
 TS_FUNCTION_INFO_V1(ts_bgw_worker_reserve);
 TS_FUNCTION_INFO_V1(ts_bgw_worker_release);

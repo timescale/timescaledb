@@ -7,6 +7,7 @@
 #ifndef TIMESCALEDB_CROSS_MODULE_FN_H
 #define TIMESCALEDB_CROSS_MODULE_FN_H
 
+#include <postgres.h>
 #include <c.h>
 #include <postgres.h>
 #include <fmgr.h>
@@ -32,7 +33,7 @@ typedef struct CrossModuleFunctions
 	void		(*tsl_license_on_assign) (const char *newval, const void *license);
 	bool		(*enterprise_enabled_internal) (void);
 	bool		(*check_tsl_loaded) (void);
-	void		(*tsl_module_shutdown) (void);
+	void		(*module_shutdown) (void);
 	void		(*add_tsl_license_info_telemetry) (JsonbParseState *parseState);
 	bool		(*bgw_policy_job_execute) (BgwJob *job);
 	Datum		(*add_drop_chunks_policy) (PG_FUNCTION_ARGS);

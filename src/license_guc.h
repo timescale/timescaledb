@@ -30,20 +30,15 @@ typedef enum LicenseType
 }			LicenseType;
 
 #define TS_APACHE_ONLY_LICENSE "ApacheOnly"
+#define TS_COMMUNITY_LICENSE "CommunityLicense"
 
 /*
- * If compiled with ApacheOnly, default to using only Apache code.
- * For tests we generally want to test all the code, but we don't want
- * tsl startup messages spamming the log, so we default to Apache there too.
- * In a later PR we can decide if we want to default to Community for everything
- * and change all the tests.
+ * If compiled with APACHE_ONLY, default to using only Apache code.
  */
-#ifdef ApacheOnly
-#define TS_DEFAULT_LICENSE "ApacheOnly"
-#elif defined(TS_DEBUG)
-#define TS_DEFAULT_LICENSE "ApacheOnly"
+#ifdef APACHE_ONLY
+#define TS_DEFAULT_LICENSE TS_APACHE_ONLY_LICENSE
 #else
-#define TS_DEFAULT_LICENSE "CommunityLicense"
+#define TS_DEFAULT_LICENSE TS_COMMUNITY_LICENSE
 #endif
 
 #define TS_LICENSE_TYPE_IS_VALID(license) \
@@ -69,7 +64,9 @@ typedef enum LicenseType
  */
 
 /* Each of these functions takes a LicenseUpdateExtra for their extra param */
-bool		ts_license_update_check(char **newval, void **extra, GucSource source);
-void		ts_license_on_assign(const char *newval, void *extra);
+extern bool ts_license_update_check(char **newval, void **extra, GucSource source);
+extern void ts_license_on_assign(const char *newval, void *extra);
+
+extern void ts_license_enable_module_loading(void);
 
 #endif							/* LICENSE_GUC */

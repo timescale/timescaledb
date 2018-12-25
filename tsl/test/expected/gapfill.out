@@ -5,7 +5,6 @@
 \set ON_ERROR_STOP 0
 -- test locf and interpolate call errors out when used outside gapfill context
 SELECT locf(1);
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
 ERROR:  locf can only be used in an aggregation query with time_bucket_gapfill
 SELECT interpolate(1);

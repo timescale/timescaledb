@@ -71,7 +71,9 @@
 PG_MODULE_MAGIC;
 #endif
 
+#define POST_LOAD_INIT_FN "ts_post_load_init"
 #define GUC_DISABLE_LOAD_NAME "timescaledb.disable_load"
+
 /*
  * The loader really shouldn't load if we're in a parallel worker as there is a
  * separate infrastructure for loading libraries inside of parallel workers. The
@@ -531,7 +533,9 @@ do_load()
 	 */
 	PG_TRY();
 	{
-		load_file(soname, false);
+		PGFunction	ts_post_load_init = load_external_function(soname, POST_LOAD_INIT_FN, true, NULL);
+
+		DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
 	}
 	PG_CATCH();
 	{
