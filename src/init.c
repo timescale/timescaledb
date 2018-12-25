@@ -10,6 +10,7 @@
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include <utils/guc.h>
+#include <parser/analyze.h>
 
 #include "extension.h"
 #include "bgw/launcher_interface.h"
@@ -18,6 +19,7 @@
 #include "version.h"
 #include "compat.h"
 #include "config.h"
+#include "license_guc.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -56,6 +58,8 @@ extern void _conn_mock_fini();
 
 extern void TSDLLEXPORT _PG_init(void);
 extern void TSDLLEXPORT _PG_fini(void);
+
+TS_FUNCTION_INFO_V1(ts_post_load_init);
 
 void
 _PG_init(void)
@@ -105,4 +109,18 @@ _PG_fini(void)
 	_cache_invalidate_fini();
 	_hypertable_cache_fini();
 	_cache_fini();
+}
+
+
+TSDLLEXPORT Datum
+ts_post_load_init(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Unfortunately, if we load the tsl during _PG_init parallel workers try
+	 * to load the tsl before timescale itself, causing link-time errors. To
+	 * prevent this we defer loading until here.
+	 */
+	ts_license_enable_module_loading();
+
+	PG_RETURN_VOID();
 }

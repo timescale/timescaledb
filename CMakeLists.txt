@@ -28,10 +28,6 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif ()
 
-if (NOT DEFINED APACHE_ONLY)
-  set(APACHE_ONLY FALSE)
-endif ()
-
 message(STATUS "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}")
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
@@ -306,10 +302,10 @@ add_subdirectory(test)
 add_subdirectory(sql)
 add_subdirectory(src)
 
+option(APACHE_ONLY "only compile apache code" off)
+
 if(NOT APACHE_ONLY)
   add_subdirectory(tsl)
-else()
-  add_compile_definitions(APACHE_ONLY)
 endif()
 
 if(NOT APACHE_ONLY)

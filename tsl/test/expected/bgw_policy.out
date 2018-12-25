@@ -4,7 +4,6 @@
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 \c single :ROLE_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
  stop_background_workers 
 -------------------------
@@ -12,7 +11,6 @@ WARNING:  Timescale License expired
 (1 row)
 
 SET timescaledb.license_key='CommunityLicense';
-WARNING:  starting TimescaleDB code that requires the Timescale License
 CREATE OR REPLACE FUNCTION test_reorder(job_id INTEGER)
 RETURNS TABLE(
 chunk_oid INTEGER,
@@ -34,7 +32,6 @@ BEGIN
 	return (count = 1);
 END
 $BODY$;
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
 CREATE FUNCTION check_index_oid(index_oid REGCLASS, hypertable_oid REGCLASS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$

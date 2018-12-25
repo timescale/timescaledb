@@ -2,11 +2,20 @@
 --
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
-\set ON_ERROR_STOP 0
+\unset ECHO
+SELECT allow_downgrade_to_apache();
+ allow_downgrade_to_apache 
+---------------------------
+ 
+(1 row)
+
+SET timescaledb.license_key='ApacheOnly';
 SELECT locf(1);
 ERROR:  function "locf" is not supported under the current license "ApacheOnly"
+HINT:  Buy a Timescale license to enable the functionality
 SELECT interpolate(1);
 ERROR:  function "interpolate" is not supported under the current license "ApacheOnly"
+HINT:  Buy a Timescale license to enable the functionality
 SELECT time_bucket_gapfill(1,1,1,1);
 ERROR:  function "time_bucket_gapfill" is not supported under the current license "ApacheOnly"
-\set ON_ERROR_STOP 1
+HINT:  Buy a Timescale license to enable the functionality

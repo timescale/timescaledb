@@ -17,10 +17,14 @@
 TS_FUNCTION_INFO_V1(ts_enterprise_enabled);
 TS_FUNCTION_INFO_V1(ts_current_license_key);
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
+TS_FUNCTION_INFO_V1(ts_allow_downgrade_to_apache);
 
+static bool downgrade_to_apache_enabled = false;
 static void *tsl_handle = NULL;
 static PGFunction tsl_validate_license_fn = NULL;
 static PGFunction tsl_startup_fn = NULL;
+static bool can_load = false;
+static GucSource load_source = PGC_S_DEFAULT;
 
 /*
  * License Functions
@@ -37,6 +41,9 @@ static bool load_tsl();
 static bool
 current_license_can_downgrade_to_apache(void)
 {
+	if (downgrade_to_apache_enabled)
+		return true;
+
 	return (ts_guc_license_key == NULL || TS_CURRENT_LICENSE_IS_APACHE_ONLY()) &&
 		tsl_handle == NULL;
 }
@@ -65,7 +72,30 @@ current_license_can_downgrade_to_apache(void)
  * (Community and Enterprise) to one that does not (ApacheOnly). Currently only
  * upgrading is allowed within a session; downgrading requires starting a new
  * session.
+ *
+ * In order for restoring libraries to work (e.g. in parallel workers), loading
+ * the submodule must happen strictly after the main timescaledb module is
+ * loaded. In order to ensure that the initial value doesn't break this, we
+ * disable loading submodules until the post_load_init.
  */
+
+void
+ts_license_enable_module_loading(void)
+{
+	int			result;
+
+	can_load = true;
+	/* re-set the license key to actually load the submodule if needed */
+	result = set_config_option("timescaledb.license_key",
+							   ts_guc_license_key,
+							   PGC_SUSET,
+							   load_source,
+							   GUC_ACTION_SET,
+							   true, 0, false);
+
+	if (result <= 0)
+		elog(ERROR, "invalid value for timescaledb.license_key");
+}
 
 /*
  * `ts_license_update_check`
@@ -96,6 +126,12 @@ ts_license_update_check(char **newval, void **extra, GucSource source)
 		return false;
 	}
 
+	if (!can_load)
+	{
+		load_source = source;
+		return true;
+	}
+
 	if (!load_tsl())
 	{
 		GUC_check_errdetail("Could not find additional timescaledb module");
@@ -122,11 +158,15 @@ ts_license_update_check(char **newval, void **extra, GucSource source)
 void
 ts_license_on_assign(const char *newval, void *extra)
 {
+	if (!can_load)
+		return;
+
 	Assert(TS_LICENSE_TYPE_IS_VALID(newval));
 	if (TS_LICENSE_IS_APACHE_ONLY(newval))
 	{
 		Assert(current_license_can_downgrade_to_apache());
 		Assert(extra == NULL);
+		ts_cm_functions->module_shutdown();
 		return;
 	}
 
@@ -170,7 +210,7 @@ load_tsl(void)
 		goto get_validation_function;
 	}
 
-	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", TSL_LIBRARY_NAME, TIMESCALEDB_VERSION_MOD);
+	snprintf(soname, MAX_SO_NAME_LEN, TS_LIBDIR "%s-%s", TSL_LIBRARY_NAME, TIMESCALEDB_VERSION_MOD);
 
 	tsl_startup_fn = load_external_function(
 											 /* filename= */ soname,
@@ -229,4 +269,16 @@ ts_current_license_key(PG_FUNCTION_ARGS)
 {
 	Assert(ts_guc_license_key != NULL);
 	PG_RETURN_TEXT_P(cstring_to_text(ts_guc_license_key));
+}
+
+/*
+ * For testing purposes we occasionally need the ability to set the license to
+ * Apache only. This function allows us to bypass the test that usually disables
+ * that.
+ */
+Datum
+ts_allow_downgrade_to_apache(PG_FUNCTION_ARGS)
+{
+	downgrade_to_apache_enabled = true;
+	PG_RETURN_VOID();
 }

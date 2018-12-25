@@ -24,7 +24,11 @@
 PG_MODULE_MAGIC;
 #endif
 
-static void tsl_module_shutdown(void);
+#ifdef ApacheOnly
+#error "cannot compile the TSL for ApacheOnly mode"
+#endif
+
+static void module_shutdown(void);
 static bool enterprise_enabled_internal(void);
 static bool check_tsl_loaded(void);
 
@@ -42,7 +46,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.tsl_license_on_assign = tsl_license_on_assign,
 	.enterprise_enabled_internal = enterprise_enabled_internal,
 	.check_tsl_loaded = check_tsl_loaded,
-	.tsl_module_shutdown = tsl_module_shutdown,
+	.module_shutdown = module_shutdown,
 	.add_tsl_license_info_telemetry = tsl_telemetry_add_license_info,
 	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.add_drop_chunks_policy = drop_chunks_add_policy,
@@ -68,8 +72,6 @@ TS_FUNCTION_INFO_V1(ts_module_init);
 PGDLLEXPORT Datum
 ts_module_init(PG_FUNCTION_ARGS)
 {
-	elog(WARNING, "starting TimescaleDB code that requires the Timescale License");
-
 	ts_cm_functions = &tsl_cm_functions;
 
 	PG_RETURN_BOOL(true);
@@ -80,9 +82,8 @@ ts_module_init(PG_FUNCTION_ARGS)
  * but if we did, this would be the function we'd use.
  */
 static void
-tsl_module_shutdown(void)
+module_shutdown(void)
 {
-	elog(WARNING, "shutting down timescaledb TSL library");
 	ts_cm_functions = &ts_cm_functions_default;
 }
 

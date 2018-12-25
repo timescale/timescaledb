@@ -4,7 +4,6 @@
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 \set EXPLAIN 'EXPLAIN (COSTS OFF)'
 CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
-WARNING:  starting TimescaleDB code that requires the Timescale License
 WARNING:  Timescale License expired
 SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
     table_name     

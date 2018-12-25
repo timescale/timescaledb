@@ -20,6 +20,10 @@ elseif (WIN32)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /MANIFEST:NO")
 endif (APPLE)
 
+if(APACHE_ONLY)
+  add_compile_definitions(APACHE_ONLY)
+endif()
+
 include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_BINARY_DIR}/src ${PG_INCLUDEDIR_SERVER})
 
 # Only Windows and FreeBSD need the base include/ dir instead of include/server/, and including
