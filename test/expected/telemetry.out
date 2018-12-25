@@ -287,6 +287,7 @@ select json_object_keys(get_telemetry_report()::json);
   json_object_keys   
 ---------------------
  db_uuid
+ license
  os_name
  os_release
  os_version
@@ -300,5 +301,5 @@ select json_object_keys(get_telemetry_report()::json);
  postgresql_version
  related_extensions
  timescaledb_version
-(14 rows)
+(15 rows)
 
