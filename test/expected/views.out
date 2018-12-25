@@ -32,7 +32,7 @@ SELECT * FROM timescaledb_information.hypertable;
  public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB
 (2 rows)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- create schema open and hypertable with 3 chunks
 CREATE SCHEMA open;
 GRANT USAGE ON SCHEMA open TO :ROLE_DEFAULT_PERM_USER;
@@ -65,7 +65,7 @@ SELECT * FROM timescaledb_information.hypertable;
  closed       | closed_ht  | super_user        |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB
 (4 rows)
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
  table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
 --------------+------------+-------------------+----------------+------------+------------+------------+------------+------------

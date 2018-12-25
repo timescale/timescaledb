@@ -4,10 +4,10 @@
 -- see LICENSE-APACHE at the top level directory.
 
 \c postgres :ROLE_SUPERUSER
-DROP DATABASE single;
-CREATE DATABASE single;
+DROP DATABASE :TEST_DBNAME;
+CREATE DATABASE :TEST_DBNAME;
 
-\c single
+\c :TEST_DBNAME
 CREATE SCHEMA "testSchema0";
 SET client_min_messages=error;
 CREATE EXTENSION IF NOT EXISTS timescaledb SCHEMA "testSchema0";

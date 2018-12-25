@@ -7,7 +7,6 @@
 --
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
-\c single
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,

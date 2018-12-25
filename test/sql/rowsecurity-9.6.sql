@@ -9,7 +9,7 @@
 
 -- Clean up in case a prior regression run failed
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 

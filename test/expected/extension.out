@@ -2,7 +2,7 @@
 --
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
-\c single
+\c :TEST_DBNAME
 --list all extension functions in public schema
 SELECT DISTINCT proname
 FROM pg_proc

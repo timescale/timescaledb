@@ -203,7 +203,7 @@ INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
 
 DROP TABLE part_custom_dim;
 -- Now make sure that renaming partitioning_func_schema will get updated properly
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA IF NOT EXISTS my_partitioning_schema;
 
 CREATE FUNCTION my_partitioning_schema.tuple_hash(value ANYELEMENT) RETURNS INT4

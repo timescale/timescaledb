@@ -5,7 +5,7 @@
 
 \set ON_ERROR_STOP 0
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
@@ -13,7 +13,7 @@ SET client_min_messages = NOTICE;
 
 --test hypertable with tables space
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --assigning a tablespace via the main table should work
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
@@ -44,21 +44,21 @@ SELECT attach_tablespace('tablespace1', 'tspace_2dim');
 --no error if if_not_attached is given
 SELECT attach_tablespace('tablespace1', 'tspace_2dim', if_not_attached => true);
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TABLESPACE2_PATH;
-\c single :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 
 --attach without permissions on the table should fail
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --attach without permissions on the tablespace should also fail
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 GRANT :ROLE_DEFAULT_PERM_USER_2 TO :ROLE_DEFAULT_PERM_USER;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --should work with permissions on both the table and the tablespace
 SELECT attach_tablespace('tablespace2', 'tspace_2dim');
@@ -134,7 +134,7 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 SELECT detach_tablespace('tablespace2', 'tspace_2dim');
 SELECT detach_tablespaces('tspace_2dim');
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- PERM_USER_2 owns tablespace2, and PERM_USER owns the table
 -- 'tspace_2dim', which has tablespace2 attached. Revoking PERM_USER_2
 -- FROM PERM_USER should therefore fail
@@ -148,7 +148,7 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- It should now be possible to revoke PERM_USER_2 from PERM_USER
 -- since tablespace2 is no longer attched to tspace_2dim
 REVOKE :ROLE_DEFAULT_PERM_USER_2 FROM :ROLE_DEFAULT_PERM_USER;
@@ -161,7 +161,7 @@ SELECT detach_tablespace('tablespace2', 'tspace_2dim', if_attached => true);
 
 --attach tablespaces again to verify that tablespaces are cleaned up
 --when tables are dropped
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
 SELECT attach_tablespace('tablespace1', 'tspace_2dim');
 

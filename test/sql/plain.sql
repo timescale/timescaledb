@@ -25,7 +25,7 @@ ALTER TYPE rainbow RENAME TO colors;
 \dT+
 
 REINDEX TABLE regular_table;
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 REINDEX SCHEMA public;
 
 -- Not only simple statements should work

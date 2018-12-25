@@ -25,12 +25,12 @@ CREATE TABLE PUBLIC."testNs" (
 );
 CREATE INDEX ON PUBLIC."testNs" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "testNs" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * FROM create_hypertable('"public"."testNs"', 'timeCustom', 'device_id', 2, associated_schema_name=>'testNs' );
 
-\c single
+\c :TEST_DBNAME
 INSERT INTO PUBLIC."testNs"("timeCustom", device_id, series_0, series_1) VALUES
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 1),
 ('2009-11-12T01:00:00+00:00', 'dev1', 1.5, 2),
@@ -594,10 +594,10 @@ FROM unnest(ARRAY[
 -------------------------------------
 --- Test time input functions --
 -------------------------------------
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION test.interval_to_internal(coltype REGTYPE, value ANYELEMENT = NULL::BIGINT) RETURNS BIGINT
 AS :MODULE_PATHNAME, 'ts_dimension_interval_to_internal_test' LANGUAGE C VOLATILE;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT test.interval_to_internal('TIMESTAMP'::regtype, INTERVAL '1 day');
 SELECT test.interval_to_internal('TIMESTAMP'::regtype, 86400000000);

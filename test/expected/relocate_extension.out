@@ -3,9 +3,9 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 \c postgres :ROLE_SUPERUSER
-DROP DATABASE single;
-CREATE DATABASE single;
-\c single
+DROP DATABASE :TEST_DBNAME;
+CREATE DATABASE :TEST_DBNAME;
+\c :TEST_DBNAME
 CREATE SCHEMA "testSchema0";
 SET client_min_messages=error;
 CREATE EXTENSION IF NOT EXISTS timescaledb SCHEMA "testSchema0";

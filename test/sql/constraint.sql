@@ -568,7 +568,7 @@ COMMIT;
 \set ON_ERROR_STOP 1
 
 -- Make sure renaming schemas won't break dropping constraints
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLE hyper_unique (
   time BIGINT NOT NULL UNIQUE,
   device_id TEXT NOT NULL,

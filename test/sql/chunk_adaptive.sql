@@ -275,7 +275,7 @@ INSERT INTO test_adaptive_after_multiple_dims VALUES('2018-01-01T00:00:00+00'::t
 -- Now make sure renaming schema gets propagated to the func_schema
 DROP TABLE test_adaptive;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA IF NOT EXISTS my_chunk_func_schema;
 
 CREATE OR REPLACE FUNCTION my_chunk_func_schema.calculate_chunk_interval(

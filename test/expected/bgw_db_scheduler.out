@@ -5,7 +5,7 @@
 --
 -- Setup
 --
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
@@ -71,7 +71,7 @@ SELECT _timescaledb_internal.start_background_workers();
  t
 (1 row)
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE public.bgw_log(
     msg_no INT,
     mock_time BIGINT,
@@ -115,7 +115,7 @@ SELECT * FROM sorted_bgw_log;
 --
 -- Test running a normal job
 --
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time();
  ts_bgw_params_reset_time 
@@ -131,7 +131,7 @@ select * from _timescaledb_config.bgw_job;
  1000 | test_job_1       | bgw_test_job_1 | @ 0.1 secs        | @ 1 min 40 secs |           3 | @ 1 sec
 (1 row)
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --Tests that the scheduler start a job right away if it's the first time and there is no job_stat entry for it
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -238,7 +238,7 @@ SELECT * FROM sorted_bgw_log;
 --
 -- Test what happens when running a job that throws an error
 --
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
@@ -250,7 +250,7 @@ SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '100ms');
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --Run the first time and error
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -403,7 +403,7 @@ SELECT * FROM sorted_bgw_log;
 --
 -- Test timeout logic
 --
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
@@ -416,7 +416,7 @@ DELETE FROM _timescaledb_config.bgw_job;
 --set timeout lower than job length
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '20ms', 3, INTERVAL '50ms');
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT ts_bgw_params_mock_wait_returns_immediately(:IMMEDIATELY_SET_UNTIL);
  ts_bgw_params_mock_wait_returns_immediately 
 ---------------------------------------------
@@ -447,7 +447,7 @@ SELECT * FROM sorted_bgw_log;
 (4 rows)
 
 --Check that the scheduler does not kill a job with infinite timeout
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
@@ -460,7 +460,7 @@ DELETE FROM _timescaledb_config.bgw_job;
 --set timeout to 0
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '0', 3, INTERVAL '10ms');
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(550);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -493,7 +493,7 @@ SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
 -- Test signal handling
 --
 --Test sending a SIGTERM to a job
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time();
  ts_bgw_params_reset_time 
@@ -505,9 +505,9 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 DELETE FROM _timescaledb_config.bgw_job;
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '500ms');
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --escalated priv needed for access to pg_stat_activity
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT ts_bgw_db_scheduler_test_run(300);
  ts_bgw_db_scheduler_test_run 
 ------------------------------
@@ -575,7 +575,7 @@ SELECT * FROM sorted_bgw_log;
 (11 rows)
 
 --Test that sending SIGTERM to scheduler terminates the jobs as well
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
@@ -587,9 +587,9 @@ SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --escalated priv needed for access to pg_stat_activity
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT ts_bgw_db_scheduler_test_run(500);
  ts_bgw_db_scheduler_test_run 
 ------------------------------
@@ -683,7 +683,7 @@ SELECT * FROM sorted_bgw_log;
 --
 -- Test starting more jobs than availlable workers
 --
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
@@ -703,7 +703,7 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 ('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
 ('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
 ('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -748,7 +748,7 @@ SELECT ts_bgw_params_destroy();
 --
 -- Test setting next_start time within a job
 --
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
@@ -766,7 +766,7 @@ select * from _timescaledb_config.bgw_job;
  1013 | test_job_4       | bgw_test_job_4 | @ 0.1 secs        | @ 1 min 40 secs |           3 | @ 1 sec
 (1 row)
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Now run and make sure next_start is 200ms away, not 100ms
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -825,7 +825,7 @@ SELECT _timescaledb_internal.stop_background_workers();
  t
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION ts_test_job_refresh() RETURNS TABLE(
 id INTEGER,
 application_name NAME,
