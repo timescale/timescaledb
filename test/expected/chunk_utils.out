@@ -222,7 +222,7 @@ SELECT show_chunks('drop_chunk_test3', now());
 ERROR:  time constraint arguments of "show_chunks" should have same type as time column of the hypertable
 -- should error because of wrong relative order of time constraints
 SELECT show_chunks('drop_chunk_test1', older_than=>3, newer_than=>4);
-ERROR:  When both older_than and newer_than are specified, older_than must come after newer_than
+ERROR:  When both older_than and newer_than are specified, older_than must come after newer_than so that a valid overlapping range is specified
 \set ON_ERROR_STOP 1
 --should always work regardless of time column types of hypertables
 SELECT show_chunks();

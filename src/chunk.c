@@ -1118,7 +1118,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs,
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("When both older_than and newer_than are specified, "
-						"older_than must come after newer_than")
+						"older_than must come after newer_than so that a valid overlapping range is specified")
 				 ));
 
 	oldcontext = MemoryContextSwitchTo(multi_call_memory_ctx);
