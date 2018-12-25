@@ -61,14 +61,14 @@ ORDER BY c.id, d.id;
  _hyper_1_3_chunk |            2 |        3 |           1073741823 | 9223372036854775807
 (6 rows)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT set_number_partitions('chunk_test', 3);
  set_number_partitions 
 -----------------------
  
 (1 row)
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT set_chunk_time_interval('chunk_test', 1::bigint);
  set_chunk_time_interval 
 -------------------------

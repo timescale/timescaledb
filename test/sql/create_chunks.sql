@@ -47,9 +47,9 @@ LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
 WHERE h.schema_name = 'public' AND h.table_name = 'chunk_test'
 ORDER BY c.id, d.id;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT set_number_partitions('chunk_test', 3);
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT set_chunk_time_interval('chunk_test', 1::bigint);
 
 INSERT INTO chunk_test VALUES (8, 24.3, 11233, 1);

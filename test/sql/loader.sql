@@ -3,14 +3,17 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\set TEST_DBNAME_2 :TEST_DBNAME _2
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE :TEST_DBNAME_2;
 
 DROP EXTENSION timescaledb;
 --no extension
 \dx
 SELECT 1;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-1';
 SELECT 1;
 \dx
@@ -24,7 +27,7 @@ DROP EXTENSION timescaledb;
 CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-2';
 \set ON_ERROR_STOP 1
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 --no extension
 \dx
 SELECT 1;
@@ -35,7 +38,7 @@ SELECT 1;
 \dx
 
 --start new backend;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT 1;
 SELECT 1;
@@ -43,12 +46,12 @@ SELECT 1;
 SELECT mock_function();
 \dx
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --test fn call as first command
 SELECT mock_function();
 
 --use guc to prevent loading
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.disable_load = 'on';
 SELECT 1;
 SELECT 1;
@@ -58,19 +61,19 @@ SELECT 1;
 SET timescaledb.disable_load = 'not bool';
 \set ON_ERROR_STOP 1
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 RESET ALL;
 SELECT 1;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.disable_load TO DEFAULT;
 SELECT 1;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 RESET timescaledb.disable_load;
 SELECT 1;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.other = 'on';
 SELECT 1;
 
@@ -79,12 +82,12 @@ SELECT 1;
 ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
 \set ON_ERROR_STOP 1
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \dx
 CREATE EXTENSION timescaledb VERSION 'mock-1';
 \dx
 --start a new backend to update
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
 SELECT 1;
 \dx
@@ -95,18 +98,18 @@ SELECT 1;
 \dx
 
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 SELECT 1;
 \dx
 
---single still has old version
-\c single :ROLE_SUPERUSER
+-- test db 1 still has old version
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT 1;
 \dx
 
 --try a broken upgrade
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \dx
 \set ON_ERROR_STOP 0
 ALTER EXTENSION timescaledb UPDATE TO 'mock-3';
@@ -121,7 +124,7 @@ SELECT 1;
 \dx
 
 --create extension anew, only upgrade was broken
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-3';
 SELECT 1;
 \dx
@@ -129,7 +132,7 @@ DROP EXTENSION timescaledb;
 SELECT 1;
 
 --mismatched version errors
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \set ON_ERROR_STOP 0
 --mock-4 has mismatched versions, so the .so load should throw an error
 CREATE EXTENSION timescaledb VERSION 'mock-4';
@@ -142,7 +145,7 @@ CREATE EXTENSION timescaledb VERSION 'mock-4';
 CREATE EXTENSION timescaledb VERSION 'mock-5';
 \set ON_ERROR_STOP 1
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --broken version and drop
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
 
@@ -155,13 +158,13 @@ SELECT 1;
 DROP EXTENSION timescaledb;
 \set ON_ERROR_STOP 1
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --can drop extension now. Since drop first command.
 DROP EXTENSION timescaledb;
 \dx
 
 --broken version and update to fixed
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
 \set ON_ERROR_STOP 0
 --intentional broken version
@@ -170,13 +173,13 @@ SELECT 1;
 ALTER EXTENSION timescaledb UPDATE TO 'mock-5';
 \set ON_ERROR_STOP 1
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --can update extension now.
 ALTER EXTENSION timescaledb UPDATE TO 'mock-5';
 SELECT 1;
 SELECT mock_function();
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-6';
 \set ON_ERROR_STOP 0
 --The mock-5->mock_6 upgrade is intentionally broken.
@@ -188,7 +191,7 @@ SELECT mock_function();
 \dx
 
 --TEST: create extension when old .so already loaded
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 --force load of extension with (\dx)
 \dx
 DROP EXTENSION timescaledb;
@@ -199,7 +202,7 @@ CREATE EXTENSION timescaledb VERSION 'mock-2';
 \set ON_ERROR_STOP 1
 \dx
 --can create in a new session.
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 \dx
 
@@ -211,3 +214,8 @@ DISCARD ALL;
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 1;
 SELECT count(*) FROM test;
+
+-- clean up additional database
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE :TEST_DBNAME_2;
+

@@ -6,9 +6,9 @@
 \o /dev/null
 \ir include/insert_two_partitions.sql
 \o
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
-\c single
+\c :TEST_DBNAME
 ALTER TABLE PUBLIC."two_Partitions" SET SCHEMA "test_schema";
 
 -- Test that we can restore constraints
@@ -79,13 +79,13 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 -- We shell out to a script in order to grab the correct hostname from the
 -- environmental variables that originally called this psql command. Sadly
 -- vars passed to psql do not work in \! commands so we can't do it that way.
-\! utils/pg_dump_aux_dump.sh
-ALTER DATABASE single SET timescaledb.restoring='on';
-\! utils/pg_dump_aux_restore.sh
-\c single
+\! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
+\! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
+\c :TEST_DBNAME
 
 -- Set to OFF for future DB sessions.
-ALTER DATABASE single SET timescaledb.restoring='off';
+ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 
 -- Inserting with restoring ON in current session causes tuples to be
 -- inserted on main table, but this should be protected by the insert

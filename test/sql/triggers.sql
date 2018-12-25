@@ -261,7 +261,7 @@ SELECT create_hypertable('color', 'color_id', chunk_time_interval=>10);
 GRANT TRIGGER, INSERT, SELECT, UPDATE ON location TO :ROLE_DEFAULT_PERM_USER_2;
 GRANT SELECT, INSERT, UPDATE ON color TO :ROLE_DEFAULT_PERM_USER_2;
 GRANT SELECT, INSERT, UPDATE ON vehicles TO :ROLE_DEFAULT_PERM_USER_2;
-\c single :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2;
 
 CREATE TRIGGER create_vehicle_trigger
     BEFORE INSERT OR UPDATE ON location
@@ -280,7 +280,7 @@ SELECT * FROM color;
 
 -- switch back to default user to run some dropping tests
 --TODO: currently default user is postgres, who is a superuser, potentially we should change that?
-\c single :ROLE_SUPERUSER; 
+\c :TEST_DBNAME :ROLE_SUPERUSER; 
 
 \set ON_ERROR_STOP 0
 -- test that disable trigger is disallowed 

@@ -20,9 +20,9 @@ CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_0) 
 CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
 CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
 CREATE INDEX ON PUBLIC."one_Partition" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
-\c single :ROLE_SUPERUSER
+\c :DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "one_Partition" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
-\c single :ROLE_DEFAULT_PERM_USER;
+\c :DBNAME :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associated_schema_name=>'one_Partition', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
@@ -47,14 +47,14 @@ INSERT INTO "one_Partition"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 INSERT 0 1
 \set QUIET on
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 --needed for ddl ops:
 CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 --needed for ROLE_DEFAULT_PERM_USER_2 to write to the 'one_Partition' schema which
 --is owned by ROLE_DEFAULT_PERM_USER
 GRANT CREATE ON SCHEMA "one_Partition" TO :ROLE_DEFAULT_PERM_USER_2;
 --test creating and using schema as non-superuser
-\c single :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \dt
                  List of relations
  Schema |     Name      | Type  |       Owner       
@@ -435,7 +435,7 @@ ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 13
 --create column with same name as previously dropped one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_4 BIGINT NOT NULL DEFAULT 131;
 --test proper denials for all security definer functions:
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
@@ -447,7 +447,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 CREATE INDEX "ind_1" ON hypertable_su (time);
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
-\c single :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 --all of the following should produce errors
 \set ON_ERROR_STOP 0
 SELECT create_hypertable('plain_table_su', 'time');
@@ -473,9 +473,9 @@ ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
 --grant read permissions
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 GRANT SELECT ON hypertable_su TO :ROLE_DEFAULT_PERM_USER_2;
-\c single :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 SELECT * FROM hypertable_su;
            time           | temp 
 --------------------------+------
@@ -491,9 +491,9 @@ ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
 --grant read, insert permissions
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 GRANT SELECT, INSERT ON hypertable_su TO :ROLE_DEFAULT_PERM_USER_2;
-\c single :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 SELECT * FROM hypertable_su;
            time           | temp 
@@ -509,9 +509,9 @@ ALTER TABLE hypertable_su ADD COLUMN val2 integer;
 ERROR:  must be owner of relation hypertable_su
 \set ON_ERROR_STOP 1
 --change owner
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER TABLE hypertable_su OWNER TO :ROLE_DEFAULT_PERM_USER_2;
-\c single :ROLE_DEFAULT_PERM_USER_2
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
 SELECT * FROM hypertable_su;
            time           | temp 

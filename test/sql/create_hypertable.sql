@@ -3,7 +3,7 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 create schema chunk_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 
@@ -258,7 +258,7 @@ DROP TYPE test_type;
 
 
 -- Reset GRANTS
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;
 
 -- Test custom partitioning functions

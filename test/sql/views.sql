@@ -17,7 +17,7 @@ INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
 
 SELECT * FROM timescaledb_information.hypertable;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- create schema open and hypertable with 3 chunks
 CREATE SCHEMA open;
@@ -36,7 +36,7 @@ INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 
 SELECT * FROM timescaledb_information.hypertable;
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
 
 -- filter by schema

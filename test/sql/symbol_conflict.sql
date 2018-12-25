@@ -3,7 +3,7 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- Test for symbol conflicts between the loader module and the
 -- versioned extension module.

@@ -79,7 +79,7 @@ ORDER BY c.relname, a.attnum;
 SELECT * FROM alter_after;
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT * FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Rename chunk
@@ -96,7 +96,7 @@ ALTER TABLE public.new_chunk_name RENAME COLUMN time TO newtime;
 \set ON_ERROR_STOP 1
 
 -- Test that we can set tablespace of a hypertable
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
@@ -104,7 +104,7 @@ SET client_min_messages = NOTICE;
 --test hypertable with tables space
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- Test that we cannot directly change chunk tablespace
 \set ON_ERROR_STOP 0
@@ -239,7 +239,7 @@ DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 
 -- Make sure we handle ALTER SCHEMA RENAME for hypertable schemas
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 CREATE SCHEMA IF NOT EXISTS original_name;
 CREATE TABLE original_name.my_table (

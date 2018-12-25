@@ -3,14 +3,14 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_uuid() RETURNS UUID
     AS :MODULE_PATHNAME, 'ts_test_uuid' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_exported_uuid() RETURNS UUID
     AS :MODULE_PATHNAME, 'ts_test_exported_uuid' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_install_timestamp() RETURNS TIMESTAMPTZ
     AS :MODULE_PATHNAME, 'ts_test_install_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- uuid and install_timestamp should already be in the table before we generate
 SELECT COUNT(*) from _timescaledb_catalog.installation_metadata;
@@ -37,15 +37,15 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timest
 -- Now make sure that only the exported_uuid is exported on pg_dump
 \c postgres :ROLE_SUPERUSER
 
-\! pg_dump -h ${TEST_PGHOST} -U super_user -Fc single > dump/single.sql
-\! dropdb -h ${TEST_PGHOST} -U super_user single
-\! createdb -h ${TEST_PGHOST} -U super_user single
-ALTER DATABASE single SET timescaledb.restoring='on';
+\! pg_dump -h ${TEST_PGHOST} -U super_user -Fc "${TEST_DBNAME}" > dump/instmeta.sql
+\! dropdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
+\! createdb -h ${TEST_PGHOST} -U super_user "${TEST_DBNAME}"
+ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='on';
 -- Redirect to /dev/null to suppress NOTICE
-\! pg_restore -h ${TEST_PGHOST} -U super_user -d single dump/single.sql > /dev/null 2>&1
-ALTER DATABASE single SET timescaledb.restoring='off';
+\! pg_restore -h ${TEST_PGHOST} -U super_user -d "${TEST_DBNAME}" dump/instmeta.sql > /dev/null 2>&1
+ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- Should have all 3 row, because pg_dump includes the insertion of uuid and timestamp.
 SELECT COUNT(*) FROM _timescaledb_catalog.installation_metadata;

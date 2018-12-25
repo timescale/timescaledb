@@ -108,22 +108,22 @@ CREATE UNIQUE INDEX CONCURRENTLY index_test_time_device_idx ON index_test (time,
 
 -- Test tablespaces. Chunk indexes should end up in same tablespace as
 -- main index.
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 DROP TABLESPACE IF EXISTS tablespace2;
 SET client_min_messages = NOTICE;
 
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE INDEX index_test_time_idx ON index_test (time) TABLESPACE tablespace1;
 
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 ALTER INDEX index_test_time_idx SET TABLESPACE tablespace2;
 
 SELECT * FROM test.show_indexes('index_test');
@@ -175,7 +175,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 -- Cleanup
 DROP TABLE index_test CASCADE;
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 

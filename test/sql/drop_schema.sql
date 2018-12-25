@@ -3,7 +3,7 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA chunk_schema1;
 CREATE SCHEMA chunk_schema2;
 CREATE SCHEMA hypertable_schema;

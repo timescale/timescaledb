@@ -3,7 +3,7 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype AS
 'timestamptz_in'
@@ -66,7 +66,7 @@ CREATE OPERATOR >= (
 	JOIN = scalargtjoinsel
 );
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE customtype_test(time_custom customtype, val int);
 SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);

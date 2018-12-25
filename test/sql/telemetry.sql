@@ -3,7 +3,7 @@
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status(int) RETURNS JSONB
     AS :MODULE_PATHNAME, 'ts_test_status' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_status_ssl(int) RETURNS JSONB
@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, 
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT _timescaledb_internal.test_status_ssl(200);
 SELECT _timescaledb_internal.test_status_ssl(201);
 \set ON_ERROR_STOP 0

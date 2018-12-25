@@ -15,9 +15,9 @@ ALTER TABLE "two_Partitions" RENAME TO "newname";
 SELECT * FROM "newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "newschema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 ALTER TABLE "newname" SET SCHEMA "newschema";
 SELECT * FROM "newschema"."newname";

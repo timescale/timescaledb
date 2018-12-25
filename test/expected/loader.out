@@ -2,7 +2,9 @@
 --
 -- This file is licensed under the Apache License,
 -- see LICENSE-APACHE at the top level directory.
-\c single :ROLE_SUPERUSER
+\set TEST_DBNAME_2 :TEST_DBNAME _2
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE :TEST_DBNAME_2;
 DROP EXTENSION timescaledb;
 --no extension
 \dx
@@ -18,7 +20,7 @@ SELECT 1;
         1
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-1';
 WARNING:  mock init "mock-1"
 SELECT 1;
@@ -50,7 +52,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-2';
 ERROR:  extension "timescaledb" has already been loaded with another version
 \set ON_ERROR_STOP 1
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 --no extension
 \dx
                  List of installed extensions
@@ -85,7 +87,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 (2 rows)
 
 --start new backend;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT 1;
 WARNING:  mock init "mock-1"
 WARNING:  mock post_analyze_hook "mock-1"
@@ -119,7 +121,7 @@ WARNING:  mock post_analyze_hook "mock-1"
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
 (2 rows)
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --test fn call as first command
 SELECT mock_function();
 WARNING:  mock init "mock-1"
@@ -131,7 +133,7 @@ WARNING:  mock function call "mock-1"
 (1 row)
 
 --use guc to prevent loading
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.disable_load = 'on';
 SELECT 1;
  ?column? 
@@ -159,7 +161,7 @@ SET timescaledb.disable_load = 'not bool';
 WARNING:  mock post_analyze_hook "mock-1"
 ERROR:  parameter "timescaledb.disable_load" requires a Boolean value
 \set ON_ERROR_STOP 1
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 RESET ALL;
 WARNING:  mock init "mock-1"
 WARNING:  mock post_analyze_hook "mock-1"
@@ -170,7 +172,7 @@ WARNING:  mock post_analyze_hook "mock-1"
         1
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.disable_load TO DEFAULT;
 SELECT 1;
 WARNING:  mock init "mock-1"
@@ -180,7 +182,7 @@ WARNING:  mock post_analyze_hook "mock-1"
         1
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 RESET timescaledb.disable_load;
 SELECT 1;
 WARNING:  mock init "mock-1"
@@ -190,7 +192,7 @@ WARNING:  mock post_analyze_hook "mock-1"
         1
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.other = 'on';
 WARNING:  mock init "mock-1"
 WARNING:  mock post_analyze_hook "mock-1"
@@ -206,7 +208,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
 ERROR:  extension "timescaledb" cannot be updated after the old version has already been loaded
 \set ON_ERROR_STOP 1
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \dx
                  List of installed extensions
   Name   | Version |   Schema   |         Description          
@@ -226,7 +228,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 (2 rows)
 
 --start a new backend to update
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
 WARNING:  mock init "mock-2"
 SELECT 1;
@@ -261,7 +263,7 @@ SELECT 1;
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
 (1 row)
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 WARNING:  mock init "mock-2"
 SELECT 1;
@@ -280,8 +282,8 @@ WARNING:  mock post_analyze_hook "mock-2"
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
 (2 rows)
 
---single still has old version
-\c single :ROLE_SUPERUSER
+-- test db 1 still has old version
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT 1;
 WARNING:  mock init "mock-1"
 WARNING:  mock post_analyze_hook "mock-1"
@@ -300,7 +302,7 @@ WARNING:  mock post_analyze_hook "mock-1"
 (2 rows)
 
 --try a broken upgrade
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \dx
 WARNING:  mock init "mock-2"
 WARNING:  mock post_analyze_hook "mock-2"
@@ -349,7 +351,7 @@ SELECT 1;
 (1 row)
 
 --create extension anew, only upgrade was broken
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-3';
 WARNING:  mock init "mock-3"
 SELECT 1;
@@ -377,7 +379,7 @@ SELECT 1;
 (1 row)
 
 --mismatched version errors
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 \set ON_ERROR_STOP 0
 --mock-4 has mismatched versions, so the .so load should throw an error
 CREATE EXTENSION timescaledb VERSION 'mock-4';
@@ -396,7 +398,7 @@ ERROR:  extension "timescaledb" version mismatch: shared library version mock-4-
 CREATE EXTENSION timescaledb VERSION 'mock-5';
 ERROR:  extension "timescaledb" has already been loaded with another version
 \set ON_ERROR_STOP 1
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --broken version and drop
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
 WARNING:  mock init "mock-broken"
@@ -416,7 +418,7 @@ DROP EXTENSION timescaledb;
 WARNING:  mock post_analyze_hook "mock-broken"
 ERROR:  mock broken "mock-broken"
 \set ON_ERROR_STOP 1
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --can drop extension now. Since drop first command.
 DROP EXTENSION timescaledb;
 \dx
@@ -427,7 +429,7 @@ DROP EXTENSION timescaledb;
 (1 row)
 
 --broken version and update to fixed
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
 WARNING:  mock init "mock-broken"
 \set ON_ERROR_STOP 0
@@ -439,7 +441,7 @@ ERROR:  mock broken "mock-broken"
 ALTER EXTENSION timescaledb UPDATE TO 'mock-5';
 ERROR:  extension "timescaledb" cannot be updated after the old version has already been loaded
 \set ON_ERROR_STOP 1
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --can update extension now.
 ALTER EXTENSION timescaledb UPDATE TO 'mock-5';
 WARNING:  mock init "mock-5"
@@ -458,7 +460,7 @@ WARNING:  mock function call "mock-5"
  
 (1 row)
 
-\c single_2 :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-6';
 WARNING:  mock init "mock-6"
 \set ON_ERROR_STOP 0
@@ -480,7 +482,7 @@ WARNING:  mock post_analyze_hook "mock-6"
 (2 rows)
 
 --TEST: create extension when old .so already loaded
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 --force load of extension with (\dx)
 \dx
 WARNING:  mock init "mock-1"
@@ -513,7 +515,7 @@ ERROR:  extension "timescaledb" has already been loaded with another version
 (1 row)
 
 --can create in a new session.
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 WARNING:  mock init "mock-2"
 \dx
@@ -544,3 +546,8 @@ WARNING:  mock init "mock-2"
    100
 (1 row)
 
+-- clean up additional database
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE :TEST_DBNAME_2;
+WARNING:  mock init "mock-2"
+WARNING:  mock post_analyze_hook "mock-2"
