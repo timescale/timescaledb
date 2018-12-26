@@ -63,7 +63,7 @@ ts_reorder_chunk(PG_FUNCTION_ARGS)
  */
 
 static void
-error_no_default_fn()
+error_no_default_fn(void)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -73,7 +73,7 @@ error_no_default_fn()
 }
 
 static bool
-error_no_default_fn_bool_void()
+error_no_default_fn_bool_void(void)
 {
 	error_no_default_fn();
 	return false;

@@ -115,6 +115,8 @@ dimension_type(TupleInfo *ti)
 		return DIMENSION_TYPE_OPEN;
 
 	elog(ERROR, "invalid partitioning dimension");
+	/* suppress compiler warning on MSVC */
+	return DIMENSION_TYPE_ANY;
 }
 
 static void

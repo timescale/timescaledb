@@ -152,7 +152,12 @@ reorder_remove_policy(PG_FUNCTION_ARGS)
 					 errmsg("cannot remove reorder policy, no such policy exists")));
 		else
 		{
-			ereport(NOTICE, (errmsg("reorder policy does not exist on hypertable \"%s\", skipping", get_rel_name(hypertable_oid))));
+			char	   *hypertable_name = get_rel_name(hypertable_oid);
+
+			if (hypertable_name != NULL)
+				ereport(NOTICE, (errmsg("reorder policy does not exist on hypertable \"%s\", skipping", hypertable_name)));
+			else
+				ereport(NOTICE, (errmsg("reorder policy does not exist on unnamed hypertable, skipping")));
 			PG_RETURN_NULL();
 		}
 	}

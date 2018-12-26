@@ -275,7 +275,7 @@ ERROR:  relation "fake_table" does not exist at character 30
 \set ON_ERROR_STOP 0
 -- This should be noop
 select remove_reorder_policy(2, true);
-NOTICE:  reorder policy does not exist on hypertable "(null)", skipping
+NOTICE:  reorder policy does not exist on unnamed hypertable, skipping
  remove_reorder_policy 
 -----------------------
  

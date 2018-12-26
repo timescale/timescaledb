@@ -86,7 +86,7 @@ gapfill_datum_get_internal(Datum value, Oid type)
 			 * for other datatypes
 			 */
 			Assert(false);
-			break;
+			return 0;
 	}
 }
 
@@ -116,7 +116,7 @@ gapfill_internal_get_datum(int64 value, Oid type)
 			 * for other datatypes
 			 */
 			Assert(false);
-			break;
+			return Int64GetDatum(0);
 	}
 }
 
