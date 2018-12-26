@@ -142,14 +142,44 @@ ts_license_update_check(char **newval, void **extra, GucSource source)
 	Assert(tsl_handle != NULL);
 	Assert(tsl_validate_license_fn != NULL);
 	Assert(tsl_startup_fn != NULL);
+#ifdef WIN32
+
+	/*
+	 * freeing the guc extra causes heap corruption on windows so instead we
+	 * re-parse in the assign hook
+	 */
+	extra = NULL;
+#endif
 
 	module_can_start = DirectFunctionCall2(
 										   tsl_validate_license_fn,
 										   CStringGetDatum(*newval),
-										   PointerGetDatum(extra));
+										   PointerGetDatum(extra)
+		);
 
 	return DatumGetBool(module_can_start);
 }
+
+#ifdef WIN32
+static void *
+revalidate_license(const char *newval)
+{
+	void	   *extra = NULL;
+	void	  **extra_p = &extra;
+
+	Assert(extra == NULL);
+
+	/*
+	 * Due to windows issues we cannot use the extra parameter. Instead
+	 * re-call the validation function, if we reach this point the license
+	 * must be valid so the function cannot fail cannot fail.
+	 */
+	DirectFunctionCall2(tsl_validate_license_fn,
+						CStringGetDatum(newval),
+						PointerGetDatum(extra_p));
+	return extra;
+}
+#endif
 
 /*
  * `ts_license_on_assign`
@@ -161,6 +191,7 @@ ts_license_on_assign(const char *newval, void *extra)
 	if (!can_load)
 		return;
 
+	Assert(newval != NULL);
 	Assert(TS_LICENSE_TYPE_IS_VALID(newval));
 	if (TS_LICENSE_IS_APACHE_ONLY(newval))
 	{
@@ -170,7 +201,14 @@ ts_license_on_assign(const char *newval, void *extra)
 		return;
 	}
 
+	Assert(tsl_handle != NULL);
+	Assert(tsl_startup_fn != NULL);
 	DirectFunctionCall1(tsl_startup_fn, CharGetDatum(0));
+#ifdef WIN32
+	Assert(extra == NULL);
+	extra = revalidate_license(newval);
+#endif
+	Assert(extra != NULL);
 	ts_cm_functions->tsl_license_on_assign(newval, extra);
 }
 
@@ -245,7 +283,7 @@ loading_failed:
 
 /* SQL functions */
 
-Datum
+PGDLLEXPORT Datum
 ts_tsl_loaded(PG_FUNCTION_ARGS)
 {
 	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
@@ -254,7 +292,7 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(ts_cm_functions->check_tsl_loaded());
 }
 
-Datum
+PGDLLEXPORT Datum
 ts_enterprise_enabled(PG_FUNCTION_ARGS)
 {
 	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
@@ -264,7 +302,7 @@ ts_enterprise_enabled(PG_FUNCTION_ARGS)
 }
 
 
-Datum
+PGDLLEXPORT Datum
 ts_current_license_key(PG_FUNCTION_ARGS)
 {
 	Assert(ts_guc_license_key != NULL);
@@ -276,7 +314,7 @@ ts_current_license_key(PG_FUNCTION_ARGS)
  * Apache only. This function allows us to bypass the test that usually disables
  * that.
  */
-Datum
+PGDLLEXPORT Datum
 ts_allow_downgrade_to_apache(PG_FUNCTION_ARGS)
 {
 	downgrade_to_apache_enabled = true;

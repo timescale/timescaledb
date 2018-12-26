@@ -194,6 +194,9 @@ ts_interval_from_now_to_internal(Datum interval, Oid type_oid)
 					 ));
 
 	}
+	/* suppress compiler warnings on MSVC */
+	Assert(false);
+	return 0;
 }
 
 /* Returns approximate period in microseconds */

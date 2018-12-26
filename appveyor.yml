@@ -140,11 +140,21 @@ test_script:
 
     docker exec -e IGNORES="bgw_db_scheduler" -e TEST_TABLESPACE1_PATH="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PATH="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
 
-    #TESTS=drop_extension
+    $TESTS1 = $?
+
+    # TODO can we switch these to file swapping?
+
+    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.license_key = 'E1eyJlbmRfdGltZSI6IjIwMTgtMTAtMDEgKzAwMDAiLCAic3RhcnRfdGltZSI6IjIwMTgtMDktMDEgKzAwMDAiLCAiaWQiOiI0OTBGQjI2MC1BMjkyLTRBRDktOUFBMi0wMzYwODM1NzkxQjgiLCAia2luZCI6InRyaWFsIn0K'"
+
+    Restart-Service postgresql-x64-10
+
+    docker exec -e IGNORES="bgw_db_scheduler" -e TEST_TABLESPACE1_PATH="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PATH="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
+
+    if( -not $? -or -not $TESTS1 ) { exit 1 }
 
 on_failure:
   - ps: >-
-      docker exec -it pgregress cat /timescaledb/build/test/regression.diffs /timescaledb/build/test/pgtest/regressions.diffs
+      docker exec -it pgregress cat /timescaledb/build/test/regression.diffs /timescaledb/build/tsl/test/regression.diffs /timescaledb/build/test/pgtest/regressions.diffs
 
       Get-Content -Path "C:\Program Files\postgresql\10\data\pg_log\*"
 
