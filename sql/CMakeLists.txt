@@ -88,7 +88,6 @@ set(MOD_FILES
   updates/1.0.0--1.0.1.sql
   updates/1.0.1--1.1.0.sql
   updates/1.1.0--1.1.1.sql
-  updates/1.1.1--1.2.0-dev.sql
 )
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
@@ -117,6 +116,7 @@ version_files("${PRE_INSTALL_SOURCE_FILES}" PRE_INSTALL_SOURCE_FILES_VERSIONED)
 version_files("${IMMUTABLE_API_SOURCE_FILES}" IMMUTABLE_API_SOURCE_FILES_VERSIONED)
 version_files("${SOURCE_FILES}" SOURCE_FILES_VERSIONED)
 version_files("${MOD_FILES}" MOD_FILES_VERSIONED)
+version_files("updates/latest-dev.sql" LASTEST_MOD_VERSIONED)
 
 # Function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
 function(cat_files SRC_FILE_LIST OUTPUT_FILE)
@@ -150,7 +150,7 @@ add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE
 set(MOD_FILE_REGEX "([0-9]+\\.[0-9]+\\.*[0-9]+[-a-z0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]+[-a-z0-9]*).sql")
 
 # We'd like to process the updates in reverse (descending) order
-set(MOD_FILES_LIST ${MOD_FILES_VERSIONED})
+set(MOD_FILES_LIST "${MOD_FILES_VERSIONED};${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql")
 list(REVERSE MOD_FILES_LIST)
 
 # Variable that will hold the list of update scripts from every
@@ -161,7 +161,7 @@ set(UPDATE_SCRIPTS "")
 # previous version that moves us further away from the current
 # version, thus making the update path longer as we move back in
 # history
-set(CURR_MOD_FILES "")
+set(CURR_MOD_FILES ${LASTEST_MOD_VERSIONED})
 
 # Now loop through the modfiles and generate the update files
 foreach(transition_mod_file ${MOD_FILES_LIST})
