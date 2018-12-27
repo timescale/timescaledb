@@ -11,6 +11,7 @@ CONTAINER_NAME=${CONTAINER_NAME:-timescaledb}
 DATA_DIR=${DATA_DIR:-$PWD/data}
 BIN_CMD=${BIN_CMD:-postgres}
 PGPORT=${PGPORT:=5432}
+PGPASSWD=${PSPASSWD:-password}
 
 VOLUME_MOUNT=""
 if [[ -n "$DATA_DIR" ]]; then
@@ -19,7 +20,7 @@ fi
 docker run -d \
   --name $CONTAINER_NAME $VOLUME_MOUNT \
   -p ${PGPORT}:5432 \
-  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_PASSWORD="$PGPASSWD" \
   -e PGDATA=/var/lib/postgresql/data/timescaledb \
   $IMAGE_NAME $BIN_CMD \
   -cshared_preload_libraries=timescaledb \
