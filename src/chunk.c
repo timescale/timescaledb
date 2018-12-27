@@ -694,6 +694,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	return SCAN_DONE;
 }
 
+
 /* Fill in a chunk stub. The stub data structure needs the chunk ID and constraints set.
  * The rest of the fields will be filled in from the table data. */
 static Chunk *
@@ -1890,7 +1891,52 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	foreach(lc, ht_oids)
 	{
 		Oid			table_relid = lfirst_oid(lc);
+		List	   *fk_relids = NIL;
+		ListCell   *lf;
 
+		/* get foreign key tables associated with the hypertable */
+		{
+			List	   *cachedfkeys = NIL;
+			ListCell   *lf;
+			Relation	table_rel;
+
+			table_rel = heap_open(table_relid, AccessShareLock);
+
+			/*
+			 * this list is from the relcache and can disappear with a cache
+			 * flush, so no further catalog access till we save the fk relids
+			 */
+			cachedfkeys = RelationGetFKeyList(table_rel);
+			foreach(lf, cachedfkeys)
+			{
+				ForeignKeyCacheInfo *cachedfk = (ForeignKeyCacheInfo *) lfirst(lf);
+
+				/*
+				 * conrelid should always be that of the table we're
+				 * considering
+				 */
+				Assert(cachedfk->conrelid == RelationGetRelid(table_rel));
+				fk_relids = lappend_oid(fk_relids, cachedfk->confrelid);
+			}
+			heap_close(table_rel, AccessShareLock);
+		}
+
+		/*
+		 * We have a FK between hypertable H and PAR. Hypertable H has number
+		 * of chunks C1, C2, etc. When we execute "drop table C", PG acquires
+		 * locks on C and PAR. If we have a query as "select * from
+		 * hypertable", this acquires a lock on C and PAR as well. But the
+		 * order of the locks is not the same and results in deadlocks. -
+		 * github issue 865 We hope to alleviate the problem by aquiring a
+		 * lock on PAR before executing the drop table stmt. This is not
+		 * fool-proof as we could have multiple fkrelids and the order of lock
+		 * acquistion for these could differ as well. Do not unlock - let the
+		 * transaction semantics take care of it.
+		 */
+		foreach(lf, fk_relids)
+		{
+			LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
+		}
 		do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade);
 	}
 
