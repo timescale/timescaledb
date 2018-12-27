@@ -38,10 +38,11 @@ script:
   - docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
 
   - docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
+after_failure:
+  - docker exec -u postgres -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regressions.diffs /build/debug/test/isolation/regression.diffs
+after_success:
   - ci_env=`bash <(curl -s https://codecov.io/env)`
   - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) || echo \"Codecov did not collect coverage reports\" "
-after_failure:
-  - docker exec -it pgbuild cat /build/debug/test/regression.diffs /build/debug/test/pgtest/regressions.diffs /build/debug/test/isolation/regression.diffs
 after_script:
   - docker rm -f pgbuild
 
@@ -60,6 +61,7 @@ jobs:
       after_failure:
         - docker exec -it pgbuild /bin/bash -c 'diff -r /build/src /tmp/timescale_src'
         - docker exec -it pgbuild /bin/bash -c 'diff -r /build/test/src /tmp/timescale_test_src'
+      after_success:
       script:
         - docker exec -it pgbuild /bin/bash -c 'cp -R /build/src/ /tmp/timescale_src && cp -R /build/test/src/ /tmp/timescale_test_src'
         - docker exec -it pgbuild /bin/bash -c 'cd /build/debug && make pgindent'
