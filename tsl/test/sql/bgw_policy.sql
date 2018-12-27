@@ -90,7 +90,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 select * from test_reorder(:reorder_job_id) \gset  reorder_
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
-INSERT INTO test_table VALUES (now() - INTERVAL '8 days', 6);
+INSERT INTO test_table VALUES (now() - INTERVAL '7 days', 6);
 
 -- This call should reorder chunk 1
 select * from test_reorder(:reorder_job_id) \gset  reorder_
