@@ -149,7 +149,7 @@ BEGIN
         END IF;
     END LOOP;
 
-    ret := format($$SELECT create_hypertable('%I.%I', '%I'$$, schema_name, table_name, time_column);
+    ret := format($$SELECT create_hypertable('%I.%I', '%s'$$, schema_name, table_name, time_column);
     IF space_column IS NOT NULL THEN
         ret := ret || format($$, '%I', %s$$, space_column, space_partitions);
     END IF;

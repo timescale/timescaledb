@@ -260,6 +260,14 @@ BEGIN
 END
 $BODY$;
 
+CREATE OR REPLACE FUNCTION test.execute_sql(cmd TEXT)
+RETURNS TEXT LANGUAGE PLPGSQL AS $BODY$
+BEGIN
+  EXECUTE cmd;
+  RETURN cmd;
+END
+$BODY$;
+
 -- Used to set a deterministic memory setting during tests
 CREATE OR REPLACE FUNCTION test.set_memory_cache_size(memory_amount text)
 RETURNS BIGINT AS :MODULE_PATHNAME, 'ts_set_memory_cache_size' LANGUAGE C VOLATILE STRICT;

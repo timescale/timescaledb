@@ -74,9 +74,9 @@ SELECT * FROM test.show_triggers('test_schema.test_table');
 (1 row)
 
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
-                                                                 get_create_command                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_table', '"time"', 'device_id', 2, chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
+                                                                get_create_command                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
 (1 row)
 
 --test adding one more closed dimension
@@ -270,9 +270,9 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM _timescaledb_internal.get_create_command('test_1dim');
-                                                        get_create_command                                                        
-----------------------------------------------------------------------------------------------------------------------------------
- SELECT create_hypertable('test_schema.test_1dim', '"time"', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+                                                       get_create_command                                                       
+--------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_1dim', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
 (1 row)
 
 \dt "test_schema".*
@@ -551,5 +551,35 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
               add_dimension              
 -----------------------------------------
  (21,test_schema,test_partfunc,device,t)
+(1 row)
+
+-- check get_create_command produces valid command
+CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
+SELECT create_hypertable('test_schema.test_sql_cmd','time');
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (13,test_schema,test_sql_cmd,t)
+(1 row)
+
+SELECT * FROM _timescaledb_internal.get_create_command('test_sql_cmd');
+                                                        get_create_command                                                         
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+(1 row)
+
+SELECT _timescaledb_internal.get_create_command('test_sql_cmd') AS create_cmd; \gset
+                                                            create_cmd                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+(1 row)
+
+DROP TABLE test_schema.test_sql_cmd CASCADE;
+CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
+SELECT test.execute_sql(:'create_cmd');
+NOTICE:  adding not-null constraint to column "time"
+                                                            execute_sql                                                            
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
 (1 row)
 

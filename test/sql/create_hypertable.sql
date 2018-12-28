@@ -10,7 +10,6 @@ create schema chunk_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
 
-
 \set ON_ERROR_STOP 0
 -- get_create_command should fail since hypertable isn't made yet
 SELECT * FROM _timescaledb_internal.get_create_command('test_table');
@@ -328,3 +327,13 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
 
 -- A valid function should work:
 select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');
+
+-- check get_create_command produces valid command
+CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
+SELECT create_hypertable('test_schema.test_sql_cmd','time');
+SELECT * FROM _timescaledb_internal.get_create_command('test_sql_cmd');
+SELECT _timescaledb_internal.get_create_command('test_sql_cmd') AS create_cmd; \gset
+DROP TABLE test_schema.test_sql_cmd CASCADE;
+CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
+SELECT test.execute_sql(:'create_cmd');
+
