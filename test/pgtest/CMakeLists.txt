@@ -19,10 +19,12 @@ file(READ
   ${PG_REGRESS_DIR}/parallel_schedule
   PG_TEST_SCHEDULE)
 
+# create directory for tablespace test
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
+
 # Tests to ignore
 set(PG_IGNORE_TESTS
   rules
-  tablespace
   opr_sanity
   sanity_check)
 
