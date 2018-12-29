@@ -19,6 +19,8 @@ FAILED_TEST=
 KEEP_TEMP_DIRS=false
 TEST_UPDATE_FROM_TAGS_EXTRA_ARGS=
 
+FAIL_COUNT=0
+
 # Declare a hash table to keep test names keyed by pid
 declare -A tests
 
@@ -37,23 +39,6 @@ do
     esac
 done
 
-cleanup() {
-    local exit_code="$?"
-    set +e # do not exit immediately on failure
-    echo "Waiting for remaining tests to finish..."
-    wait
-    if [ -f ${TEST_TMPDIR}/${FAILED_TEST}.log ]; then
-        echo "###### Failed test log below #####"
-        cat ${TEST_TMPDIR}/${FAILED_TEST}.log
-    fi
-    if [ "$KEEP_TEMP_DIRS" = "false" ]; then
-        echo "Cleaning up temporary directory"
-        rm -rf ${TEST_TMPDIR}
-    fi
-    echo "exit code is $exit_code"
-    return $exit_code
-}
-
 kill_all_tests() {
     local exit_code="$?"
     set +e # do not exit immediately on failure
@@ -63,7 +48,6 @@ kill_all_tests() {
 }
 
 trap kill_all_tests INT HUP
-trap cleanup EXIT
 
 if [ -z "${TEST_VERSION}" ]; then
     echo "No TEST_VERSION specified"
@@ -100,9 +84,18 @@ do
     echo "Test ${tests[$pid]} (pid $pid) exited with code $exit_code"
 
     if [ $exit_code -ne 0 ]; then
+        FAIL_COUNT=$((FAIL_COUNT + 1))
         FAILED_TEST=${tests[$pid]}
-        kill_all_tests
-        exit $exit_code
+        if [ -f ${TEST_TMPDIR}/${FAILED_TEST}.log ]; then
+            echo "###### Failed test log below #####"
+            cat ${TEST_TMPDIR}/${FAILED_TEST}.log
+        fi
     fi
-    $(exit $exit_code)
 done
+
+if [ "$KEEP_TEMP_DIRS" = "false" ]; then
+    echo "Cleaning up temporary directory"
+    rm -rf ${TEST_TMPDIR}
+fi
+
+exit $FAIL_COUNT
