@@ -30,7 +30,7 @@ drop_chunks
                
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ; <waiting ...>
 step s2a: <... completed>
-ERROR:  canceling statement due to user request
+ERROR:  canceling statement due to lock timeout
 step s2b: COMMIT;
 step s1b: COMMIT;
 
@@ -40,7 +40,7 @@ typ            loc            mtim
 
 step s1a: select drop_chunks( '2018-12-25 00:00'::timestamptz, 'dt'); <waiting ...>
 step s1a: <... completed>
-ERROR:  canceling statement due to user request
+ERROR:  canceling statement due to lock timeout
 step s1b: COMMIT;
 step s2b: COMMIT;
 
