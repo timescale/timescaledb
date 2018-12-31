@@ -1227,7 +1227,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	Oid			time_dim_type = InvalidOid;
 
 	/*
-	 * contains the list of hypertables which need to be considred. this is a
+	 * contains the list of hypertables which need to be considered. this is a
 	 * list containing a single hypertable if we are passed an invalid table
 	 * OID. Otherwise, it will have the list of all hypertables in the system
 	 */
@@ -1285,7 +1285,7 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 		 * time dimension constraint given as an argument (older_than or
 		 * newer_than) we make sure all hypertables have the time dimension
 		 * type of the given type or through an error. This check is done
-		 * accross hypertables that is why it is not in the helper function
+		 * across hypertables that is why it is not in the helper function
 		 * below.
 		 */
 		if (time_dim_type != time_dim->fd.column_type &&
@@ -1387,14 +1387,14 @@ chunk_scan_internal(int indexid,
 }
 
 /*
- * Get a window of chunks that "preceed" the given dimensional point.
+ * Get a window of chunks that "precede" the given dimensional point.
  *
  * For instance, if the dimension is "time", then given a point in time the
  * function returns the recent chunks that come before the chunk that includes
  * that point. The count parameter determines the number or slices the window
  * should include in the given dimension. Note, that with multi-dimensional
  * partitioning, there might be multiple chunks in each dimensional slice that
- * all preceed the given point. For instance, the example below shows two
+ * all precede the given point. For instance, the example below shows two
  * different situations that each go "back" two slices (count = 2) in the
  * x-dimension, but returns two vs. eight chunks due to different
  * partitioning.
@@ -1415,7 +1415,7 @@ chunk_scan_internal(int indexid,
  * '|___|___|___|
  *
  * Note that the returned chunks will be allocated on the given memory
- * context, inlcuding the list itself. So, beware of not leaking the list if
+ * context, including the list itself. So, beware of not leaking the list if
  * the chunks are later cached somewhere else.
  */
 List *
@@ -1425,7 +1425,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 	DimensionVec *dimvec;
 	int			i;
 
-	/* Scan for "count" slices that preceeds the point in the given dimension */
+	/* Scan for "count" slices that precede the point in the given dimension */
 	dimvec = ts_dimension_slice_scan_by_dimension_before_point(dimension_id,
 															   point,
 															   count,
@@ -1927,10 +1927,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		 * locks on C and PAR. If we have a query as "select * from
 		 * hypertable", this acquires a lock on C and PAR as well. But the
 		 * order of the locks is not the same and results in deadlocks. -
-		 * github issue 865 We hope to alleviate the problem by aquiring a
+		 * github issue 865 We hope to alleviate the problem by acquiring a
 		 * lock on PAR before executing the drop table stmt. This is not
 		 * fool-proof as we could have multiple fkrelids and the order of lock
-		 * acquistion for these could differ as well. Do not unlock - let the
+		 * acquisition for these could differ as well. Do not unlock - let the
 		 * transaction semantics take care of it.
 		 */
 		foreach(lf, fk_relids)

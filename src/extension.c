@@ -44,7 +44,7 @@ static Oid	extension_proxy_oid = InvalidOid;
  * We use a proxy_table to be notified of extension drops/creates. Namely,
  * we rely on the fact that postgres will internally create RelCacheInvalidation
  * events when any tables are created or dropped. We rely on the following properties
- * of Postgres's dependency managment:
+ * of Postgres's dependency management:
  *	* The proxy table will be created before the extension itself.
  *	* The proxy table will be dropped before the extension itself.
  */

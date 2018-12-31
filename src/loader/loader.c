@@ -45,7 +45,7 @@
  *           (src/init.c:post_analyze_hook) and stores it in
  *           extension_post_parse_analyze_hook.
  *        d. Sets the post_parse_analyze_hook back to what it was before we
- *           loaded the versioned extention (this hook eventually called our
+ *           loaded the versioned extension (this hook eventually called our
  *           post_analyze_hook, but may not be our function, for instance, if
  *           another extension is loaded).
  *        e. Calls extension_post_parse_analyze_hook.
@@ -57,7 +57,7 @@
  * 1) We probably can't
  *	- The shared_preload_libraries is called in PostmasterMain which is way before InitPostgres is called.
  *			(Note: This happens even before the fork of the backend) -- so we don't even know which database this is for.
- *	-- This means we cannot query for the existance of the extension yet because the caches are initialized in InitPostgres.
+ *	-- This means we cannot query for the existence of the extension yet because the caches are initialized in InitPostgres.
  * 2) We actually don't want to load the extension in two cases:
  *	  a) We are upgrading the extension.
  *	  b) We set the guc timescaledb.disable_load.

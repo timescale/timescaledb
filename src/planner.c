@@ -412,7 +412,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  * table we'd like to insert into.
  *
  * The way we redirect tuples to chunks is to insert an intermediate "chunk
- * dispatch" plan node, inbetween the ModifyTable and its subplan that produces
+ * dispatch" plan node, between the ModifyTable and its subplan that produces
  * the tuples. When the ModifyTable plan is executed, it tries to read a tuple
  * from the intermediate chunk dispatch plan instead of the original
  * subplan. The chunk plan reads the tuple from the original subplan, looks up

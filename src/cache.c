@@ -206,7 +206,7 @@ release_all_pinned_caches()
 	ListCell   *lc;
 
 	/*
-	 * release once for every occurence of a cache in the pinned caches list.
+	 * release once for every occurrence of a cache in the pinned caches list.
 	 * On abort, release irrespective of cache->release_on_commit.
 	 */
 	foreach(lc, pinned_caches)

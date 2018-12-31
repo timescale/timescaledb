@@ -208,7 +208,7 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p)
 
 		/*
 		 * If this is an aligned dimension, we'd like to reuse any existing
-		 * slice that covers the coordinate in the dimenion
+		 * slice that covers the coordinate in the dimension
 		 */
 		if (dim->fd.aligned)
 		{

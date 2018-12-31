@@ -54,7 +54,7 @@ ts_http_version_string(HttpVersion version)
 /*
  * Send an HTTP request and receive the HTTP response on the given connection.
  *
- * Returns HTTP_ERROR_NONE (0) on success or a HTTP-specfic error on failure.
+ * Returns HTTP_ERROR_NONE (0) on success or a HTTP-specific error on failure.
  */
 HttpError
 ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state)

@@ -177,7 +177,7 @@ ts_hist_deserializefunc(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(state);
 }
 
-/* hist_funalfunc(internal, val REAL, MIN REAL, MAX REAL, nbuckets INTEGER) => INTEGER[] */
+/* hist_finalfunc(internal, val REAL, MIN REAL, MAX REAL, nbuckets INTEGER) => INTEGER[] */
 Datum
 ts_hist_finalfunc(PG_FUNCTION_ARGS)
 {
