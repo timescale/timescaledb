@@ -50,7 +50,7 @@ transform_date_trunc(FuncExpr *func)
 
 /*
  * Check that time_bucket period is Const and if an offset is supplied
- * that it is Const aswell
+ * that it is Const as well
  */
 #define time_bucket_has_const_period_and_offset(func) \
 	(IsA(linitial((func)->args), Const) && (list_length((func)->args) == 2 || IsA(lthird((func)->args), Const)))
@@ -293,7 +293,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 	ListCell   *lc_member;
 	EquivalenceClass *newec = NULL;
 
-	/* check all members, adding only tranformable members to new ec */
+	/* check all members, adding only transformable members to new ec */
 	foreach(lc_member, orig->ec_members)
 	{
 		EquivalenceMember *ec_mem = (EquivalenceMember *) lfirst(lc_member);

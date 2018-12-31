@@ -44,7 +44,7 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
  * custom_private field.
  *
  * The chunk dispatch plan takes the original tuple-producing subplan, which
- * was part of a ModifyTable node, and imposes itself inbetween the
+ * was part of a ModifyTable node, and imposes itself between the
  * ModifyTable plan and the subplan. During execution, the subplan will
  * produce the new tuples that the chunk dispatch node routes before passing
  * them up to the ModifyTable node.

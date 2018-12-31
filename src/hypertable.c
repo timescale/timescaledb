@@ -493,8 +493,8 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 
 			/*
 			 * Updated by the current transaction already. We equate this with
-			 * a successul lock since the tuple should be locked if updated by
-			 * us.
+			 * a successful lock since the tuple should be locked if updated
+			 * by us.
 			 */
 			return true;
 		case HeapTupleMayBeUpdated:
@@ -1325,7 +1325,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	 * with itself and RowExclusive, to prevent simultaneous inserts on the
 	 * table. Also since TRUNCATE (part of data migrations) takes an
 	 * AccessExclusiveLock take that lock level here too so that we don't have
-	 * lock upgrades, which are suceptible to deadlocks. If we aren't
+	 * lock upgrades, which are susceptible to deadlocks. If we aren't
 	 * migrating data, then shouldn't have much contention on the table thus
 	 * not worth optimizing.
 	 */
@@ -1335,7 +1335,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	if (ts_is_hypertable(table_relid))
 	{
 		/*
-		 * Unlock and return. Note that unlocking is analagous to what PG does
+		 * Unlock and return. Note that unlocking is analogous to what PG does
 		 * for ALTER TABLE ADD COLUMN IF NOT EXIST
 		 */
 		heap_close(rel, AccessExclusiveLock);

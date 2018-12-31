@@ -1478,8 +1478,8 @@ process_create_table_end(Node *parsetree)
 	verify_constraint_list(stmt->relation, stmt->constraints);
 
 	/*
-	 * Only after parse analyis does tableElts contain only ColumnDefs. So, if
-	 * we capture this in processUtility, we should be prepared to have
+	 * Only after parse analysis does tableElts contain only ColumnDefs. So,
+	 * if we capture this in processUtility, we should be prepared to have
 	 * constraint nodes and TableLikeClauses intermixed
 	 */
 	foreach(lc, stmt->tableElts)

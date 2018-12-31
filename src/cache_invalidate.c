@@ -26,7 +26,7 @@
  * way to signal all backends that they should invalidate their caches. For this
  * we use the PostgreSQL relcache mechanism that propagates relation cache
  * invalidation events to all backends. We register a callback with this
- * mechanism to recieve events on all backends whenever a relation cache entry
+ * mechanism to receive events on all backends whenever a relation cache entry
  * is invalidated.
  *
  * To know which events should trigger invalidation of our caches, we use dummy

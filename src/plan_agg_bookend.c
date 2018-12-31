@@ -230,7 +230,7 @@ contains_first_last_node(List *sortClause, List *targetList)
  *
  * Most of the code is borrowed from: preprocess_minmax_aggregates (planagg.c). Few
  * major differences:
- *  - generate FirstLastAggInfo that wrapps MinMaxAggInfo
+ *  - generate FirstLastAggInfo that wraps MinMaxAggInfo
  *  - generate subquery (path) for FIRST/LAST (we reuse MinMaxAggPath)
  *  - replace Aggref node with Param node
  * 	- reject ORDER BY on FIRST/LAST
@@ -611,7 +611,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 	 */
 
 	/*
-	 * Value and sort target entries but sort target is eleminated later on
+	 * Value and sort target entries but sort target is eliminated later on
 	 * from target list
 	 */
 	value_target = makeTargetEntry(copyObject(mminfo->target), (AttrNumber) 1, pstrdup("value"), false);

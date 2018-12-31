@@ -339,7 +339,7 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1, Inter
 	cache = transcache_get(fcinfo);
 
 	/*
-	 * manually copy all fields from state2 to state1, as per other comine
+	 * manually copy all fields from state2 to state1, as per other combine
 	 * func like int8_avg_combine
 	 */
 	if (state1 == NULL)

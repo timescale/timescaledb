@@ -139,7 +139,7 @@ static void
 worker_state_cleanup(ScheduledBgwJob *sjob)
 {
 	/*
-	 * This function needs to be safe wrt failures occuring at any point in
+	 * This function needs to be safe wrt failures occurring at any point in
 	 * the job starting process.
 	 */
 	if (sjob->handle != NULL)
@@ -230,7 +230,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 
 			/*
 			 * start the job before you can encounter any errors so that they
-			 * are always registerd
+			 * are always registered
 			 */
 			mark_job_as_started(sjob);
 			if (ts_bgw_job_has_timeout(&sjob->job))

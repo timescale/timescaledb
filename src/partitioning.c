@@ -381,10 +381,10 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
  * struct. For partitioning functions invoked on the insert path, this is
  * typically the Hypertable cache's memory context. Hence, the type cache lives
  * for the duration of the hypertable cache and can be reused across multiple
- * invokations of the partitioning function, even across transactions.
+ * invocations of the partitioning function, even across transactions.
  *
  * If the partitioning function is invoked outside the insert path, the FmgrInfo
- * and its memory context has a lifetime corresponding to that invokation.
+ * and its memory context has a lifetime corresponding to that invocation.
  */
 typedef struct PartFuncCache
 {

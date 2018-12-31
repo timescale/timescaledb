@@ -1228,7 +1228,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 	/*
 	 * The hypertable catalog table has a CHECK(num_dimensions > 0), which
 	 * means, that when this function is called from create_hypertable()
-	 * instaed of directly, num_dimension is already set to one. We therefore
+	 * instead of directly, num_dimension is already set to one. We therefore
 	 * need to lock the hypertable tuple here so that we can set the correct
 	 * number of dimensions once we've added the new dimension
 	 */
@@ -1281,7 +1281,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		/*
 		 * Need to get a fresh copy of hypertable from the database as cache
 		 * does not reflect the changes in the previous 2 lines which add a
-		 * new dimenison
+		 * new dimension
 		 */
 		info.ht = ts_hypertable_get_by_id(info.ht->fd.id);
 		ts_indexing_verify_indexes(info.ht);
