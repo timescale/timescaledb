@@ -81,7 +81,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
 	ccstate->estate = estate;
-	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate);
+	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate, 0);
 	ccstate->cstate = cstate;
 	ccstate->scandesc = scandesc;
 	ccstate->next_copy_from = from_func;

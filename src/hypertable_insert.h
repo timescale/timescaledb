@@ -15,12 +15,14 @@
 typedef struct HypertableInsertPath
 {
 	CustomPath cpath;
+	List *serveroids;
 } HypertableInsertPath;
 
 typedef struct HypertableInsertState
 {
 	CustomScanState cscan_state;
 	ModifyTable *mt;
+	List *serveroids;
 } HypertableInsertState;
 
 extern void ts_hypertable_insert_fixup_tlist(Plan *plan);

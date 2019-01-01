@@ -36,6 +36,7 @@ typedef struct Hypertable Hypertable;
 typedef struct Chunk
 {
 	FormData_chunk fd;
+	char relkind;
 	Oid table_id;
 	Oid hypertable_relid;
 
@@ -46,6 +47,12 @@ typedef struct Chunk
 	 */
 	Hypercube *cube;
 	ChunkConstraints *constraints;
+
+	/*
+	 * The servers that hold a copy of the chunk. NIL for non-distributed
+	 * hypertables.
+	 */
+	List *servers;
 } Chunk;
 
 /* This structure is used during the join of the chunk constraints to find
@@ -68,6 +75,7 @@ typedef struct ChunkStub
 typedef struct ChunkScanCtx
 {
 	HTAB *htab;
+	char relkind; /* Create chunks of this relkind */
 	Hyperspace *space;
 	Point *point;
 	unsigned int num_complete_chunks;
@@ -103,12 +111,12 @@ typedef enum CascadeToMaterializationOption
 extern Chunk *ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema,
 										 const char *prefix);
 
-extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints);
+extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
 extern Chunk *ts_chunk_find(Hypertable *ht, Point *p);
-extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
+extern Chunk **ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
-extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);
+extern List *ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode);
 extern TSDLLEXPORT int ts_chunk_add_constraints(Chunk *chunk);
 
 extern Chunk *ts_chunk_copy(Chunk *chunk);
@@ -154,6 +162,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, H
 															   const char *schema,
 															   const char *prefix, bool *created);
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(Chunk *chunk);
+extern List *ts_chunk_servers_copy(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 

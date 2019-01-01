@@ -21,6 +21,7 @@
 #include <rewrite/rewriteManip.h>
 #include <nodes/makefuncs.h>
 #include <catalog/pg_type.h>
+#include <foreign/fdwapi.h>
 
 #include "compat.h"
 #if PG12_LT
@@ -119,6 +120,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	rri->ri_onConflictSetProj = rri_orig->ri_onConflictSetProj;
 	rri->ri_onConflictSetWhere = rri_orig->ri_onConflictSetWhere;
 #endif
+	rri->ri_FdwState = NIL;
 
 	create_chunk_rri_constraint_expr(rri, rel);
 
@@ -564,7 +566,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
 
-	if (rel->rd_rel->relkind != RELKIND_RELATION)
+	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
 		elog(ERROR, "insert is not on a table");
 
 	MemoryContextSwitchTo(cis_context);
@@ -608,6 +610,30 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
 												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
+
+	/*
+	 * If this is a chunk located one or more remote servers, we setup the
+	 * foreign data wrapper state. The private fdw data was created at the
+	 * planning stage and contains, among other things, a deparsed insert
+	 * statement for the hypertable.
+	 */
+	if (rel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		ModifyTableState *mtstate = dispatch->dispatch_state->mtstate;
+		ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
+		List *fdwprivate = linitial_node(List, mt->fdwPrivLists);
+
+		if (fdwprivate != NIL)
+		{
+			resrelinfo->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
+			resrelinfo->ri_usesFdwDirectModify = false;
+			resrelinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
+														  resrelinfo,
+														  fdwprivate,
+														  0,
+														  dispatch->eflags);
+		}
+	}
 
 	MemoryContextSwitchTo(old_mcxt);
 

@@ -37,6 +37,7 @@
 #include "export.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "chunk_server.h"
 #include "catalog.h"
 #include "continuous_agg.h"
 #include "cross_module_fn.h"
@@ -46,6 +47,7 @@
 #include "errors.h"
 #include "partitioning.h"
 #include "hypertable.h"
+#include "hypertable_server.h"
 #include "hypercube.h"
 #include "scanner.h"
 #include "process_utility.h"
@@ -122,7 +124,9 @@ static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char
 	((chunk) && !(chunk)->fd.dropped && (chunk)->fd.id > 0 && (chunk)->fd.hypertable_id > 0 &&     \
 	 OidIsValid((chunk)->table_id) && OidIsValid((chunk)->hypertable_relid) &&                     \
 	 (chunk)->constraints && (chunk)->cube &&                                                      \
-	 (chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints)
+	 (chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints &&               \
+	 ((chunk)->relkind == RELKIND_RELATION ||                                                      \
+	  ((chunk)->relkind == RELKIND_FOREIGN_TABLE && (chunk)->servers != NIL)))
 
 #define ASSERT_IS_VALID_CHUNK(chunk) Assert(IS_VALID_CHUNK(chunk))
 
@@ -159,6 +163,7 @@ chunk_formdata_fill(FormData_chunk *fd, const HeapTuple tuple, const TupleDesc d
 	bool nulls[Natts_chunk];
 	Datum values[Natts_chunk];
 
+	memset(fd, 0, sizeof(FormData_chunk));
 	heap_deform_tuple(tuple, desc, values, nulls);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_id)]);
@@ -189,7 +194,6 @@ static void
 chunk_insert_relation(Relation rel, Chunk *chunk)
 {
 	HeapTuple new_tuple;
-
 	CatalogSecurityContext sec_ctx;
 
 	new_tuple = chunk_formdata_make_tuple(&chunk->fd, RelationGetDescr(rel));
@@ -444,7 +448,7 @@ check_for_collisions(ChunkScanCtx *scanctx, ChunkStub *stub)
  * chunk.
  */
 static ChunkStub *
-chunk_collides(Hyperspace *hs, Hypercube *hc)
+chunk_collides(Hypertable *ht, Hypercube *hc)
 {
 	ChunkScanCtx scanctx;
 	CollisionInfo info = {
@@ -452,7 +456,7 @@ chunk_collides(Hyperspace *hs, Hypercube *hc)
 		.colliding_chunk = NULL,
 	};
 
-	chunk_scan_ctx_init(&scanctx, hs, NULL);
+	chunk_scan_ctx_init(&scanctx, ht->space, NULL);
 
 	/* Scan for all chunks that collide with the hypercube of the new chunk */
 	chunk_collision_scan(&scanctx, hc);
@@ -512,7 +516,7 @@ chunk_collides(Hyperspace *hs, Hypercube *hc)
  * collisions. After alignment we check for any remaining collisions.
  */
 static void
-chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
+chunk_collision_resolve(Hypertable *ht, Hypercube *cube, Point *p)
 {
 	ChunkScanCtx scanctx;
 	CollisionInfo info = {
@@ -520,7 +524,7 @@ chunk_collision_resolve(Hyperspace *hs, Hypercube *cube, Point *p)
 		.colliding_chunk = NULL,
 	};
 
-	chunk_scan_ctx_init(&scanctx, hs, p);
+	chunk_scan_ctx_init(&scanctx, ht->space, p);
 
 	/* Scan for all chunks that collide with the hypercube of the new chunk */
 	chunk_collision_scan(&scanctx, cube);
@@ -707,14 +711,22 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 	int sec_ctx;
 	char *namespace = NameStr(ht->fd.schema_name);
 	char *hyper_name = NameStr(ht->fd.table_name);
-	CreateStmt stmt = {
-		.type = T_CreateStmt,
-		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
-		.inhRelations = list_make1(makeRangeVar(namespace, hyper_name, 0)),
-		.tablespacename = tablespacename ? pstrdup(tablespacename) : NULL,
-		.options = get_reloptions(ht->main_table_relid),
+
+	/*
+	 * The CreateForeignTableStmt embeds a regular CreateStmt, so we can use
+	 * it to create both regular and foreign tables
+	 */
+	CreateForeignTableStmt stmt = {
+		.base.type = T_CreateStmt,
+		.base.relation =
+			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
+		.base.inhRelations = list_make1(makeRangeVar(namespace, hyper_name, 0)),
+		.base.tablespacename = tablespacename ? pstrdup(tablespacename) : NULL,
+		.base.options = get_reloptions(chunk->hypertable_relid),
 #if PG12_GE
-		.accessMethod = get_am_name_for_rel(ht->main_table_relid),
+		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
+								 get_am_name_for_rel(chunk->hypertable_relid) :
+								 NULL,
 #endif
 	};
 	Oid uid, saved_uid;
@@ -737,8 +749,8 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
-	objaddr = DefineRelation(&stmt,
-							 RELKIND_RELATION,
+	objaddr = DefineRelation(&stmt.base,
+							 chunk->relkind,
 							 rel->rd_rel->relowner,
 							 NULL
 #if !PG96
@@ -747,11 +759,50 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 #endif
 	);
 
-	/*
-	 * need to create a toast table explicitly for some of the option setting
-	 * to work
-	 */
-	create_toast_table(&stmt, objaddr.objectId);
+	if (chunk->relkind == RELKIND_RELATION)
+	{
+		/*
+		 * need to create a toast table explicitly for some of the option
+		 * setting to work
+		 */
+		create_toast_table(&stmt.base, objaddr.objectId);
+	}
+	else if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		ChunkServer *cs;
+		ListCell *lc;
+
+		if (list_length(chunk->servers) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_NO_SERVERS),
+					 (errmsg("no servers associated with chunk \"%s\"",
+							 get_rel_name(chunk->table_id)))));
+
+		/*
+		 * Use the first chunk server as the "primary" to put in the foreign
+		 * table
+		 */
+		cs = linitial(chunk->servers);
+		stmt.base.type = T_CreateForeignServerStmt;
+		stmt.servername = NameStr(cs->fd.server_name);
+
+		/* Create the foreign table catalog information */
+		CreateForeignTable(&stmt, objaddr.objectId);
+
+		/* Create the corresponding chunks on the remote servers */
+		foreach (lc, chunk->servers)
+		{
+			cs = lfirst(lc);
+
+			/* TODO: create chunk on server and get local ID */
+
+			/* Set a bogus server_chunk_id for now */
+			cs->fd.server_chunk_id = chunk->fd.id;
+			ts_chunk_server_insert(cs);
+		}
+	}
+	else
+		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
 
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
@@ -763,6 +814,69 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 	return objaddr.objectId;
 }
 
+static List *
+chunk_assign_servers(Chunk *chunk, Hypertable *ht)
+{
+	List *htservers;
+	List *chunk_servers = NIL;
+	ListCell *lc;
+
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
+		return NIL;
+
+	if (ht->servers == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_NO_SERVERS),
+				 (errmsg("no servers associated with hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	Assert(chunk->cube != NULL);
+
+	htservers = ts_hypertable_assign_chunk_servers(ht, chunk->cube);
+
+	Assert(htservers != NIL);
+	Assert(list_length(htservers) <= ht->fd.replication_factor);
+
+	if (list_length(htservers) < ht->fd.replication_factor)
+		ereport(WARNING,
+				(errcode(ERRCODE_WARNING),
+				 errmsg("under-replicated chunk %u, lacks %d server(s)",
+						chunk->fd.id,
+						ht->fd.replication_factor - list_length(htservers)),
+				 errhint("Make sure hypertable \"%s\" has at least %d assigned server(s).",
+						 get_rel_name(ht->main_table_relid),
+						 ht->fd.replication_factor)));
+
+	foreach (lc, htservers)
+	{
+		HypertableServer *htserver = lfirst(lc);
+		ForeignServer *foreign_server =
+			GetForeignServerByName(NameStr(htserver->fd.server_name), false);
+		ChunkServer *chunk_server = palloc0(sizeof(ChunkServer));
+
+		/*
+		 * Create a stub server (partially filled in entry). This will be
+		 * fully filled in and persisted to metadata tables once we create the
+		 * remote tables during insert
+		 */
+		chunk_server->fd.chunk_id = chunk->fd.id;
+		chunk_server->fd.server_chunk_id = -1;
+		namestrcpy(&chunk_server->fd.server_name, foreign_server->servername);
+		chunk_server->foreign_server_oid = foreign_server->serverid;
+		chunk_servers = lappend(chunk_servers, chunk_server);
+	}
+
+	return chunk_servers;
+}
+
+static inline const char *
+get_chunk_name_suffix(const char relkind)
+{
+	if (relkind == RELKIND_FOREIGN_TABLE)
+		return "dist_chunk";
+	return "chunk";
+}
+
 static Chunk *
 chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *schema,
 								 const char *prefix)
@@ -771,17 +885,26 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
+	const char relkind = hypertable_chunk_relkind(ht);
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
+								 hs->num_dimensions,
+								 relkind);
+
 	ts_catalog_restore_user(&sec_ctx);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
 	chunk->hypertable_relid = ht->main_table_relid;
 	namestrcpy(&chunk->fd.schema_name, schema);
-	snprintf(chunk->fd.table_name.data, NAMEDATALEN, "%s_%d_chunk", prefix, chunk->fd.id);
+	snprintf(chunk->fd.table_name.data,
+			 NAMEDATALEN,
+			 "%s_%d_%s",
+			 prefix,
+			 chunk->fd.id,
+			 get_chunk_name_suffix(relkind));
 
 	/* Insert chunk */
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
@@ -793,6 +916,10 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 	ts_chunk_add_constraints(chunk);
 
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
+
+	/* If this is a remote chunk we assign servers */
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+		chunk->servers = chunk_assign_servers(chunk, ht);
 
 	return chunk;
 }
@@ -815,12 +942,14 @@ chunk_create_table_after_lock(Chunk *chunk, Hypertable *ht)
 								chunk->hypertable_relid,
 								chunk->fd.hypertable_id);
 
-	ts_trigger_create_all_on_chunk(chunk);
-
-	ts_chunk_index_create_all(chunk->fd.hypertable_id,
-							  chunk->hypertable_relid,
-							  chunk->fd.id,
-							  chunk->table_id);
+	if (chunk->relkind == RELKIND_RELATION)
+	{
+		ts_trigger_create_all_on_chunk(chunk);
+		ts_chunk_index_create_all(chunk->fd.hypertable_id,
+								  chunk->hypertable_relid,
+								  chunk->fd.id,
+								  chunk->table_id);
+	}
 
 	return chunk->table_id;
 }
@@ -865,7 +994,7 @@ chunk_create_from_point_after_lock(Hypertable *ht, Point *p, const char *schema,
 	cube = ts_hypercube_calculate_from_point(hs, p);
 
 	/* Resolve collisions with other chunks by cutting the new hypercube */
-	chunk_collision_resolve(hs, cube, p);
+	chunk_collision_resolve(ht, cube, p);
 
 	return chunk_create_from_hypercube_after_lock(ht, cube, schema, prefix);
 }
@@ -879,7 +1008,7 @@ ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *
 
 	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
 
-	stub = chunk_collides(ht->space, hc);
+	stub = chunk_collides(ht, hc);
 
 	if (NULL == stub)
 	{
@@ -949,13 +1078,14 @@ ts_chunk_stub_create(int32 id, int16 num_constraints)
 }
 
 Chunk *
-ts_chunk_create_base(int32 id, int16 num_constraints)
+ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind)
 {
 	Chunk *chunk;
 
 	chunk = palloc0(sizeof(Chunk));
 	chunk->fd.id = id;
 	chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
+	chunk->relkind = relkind;
 
 	if (num_constraints > 0)
 		chunk->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
@@ -1047,6 +1177,11 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
 	chunk->hypertable_relid = ts_inheritance_parent_relid(chunk->table_id);
+	chunk->relkind = get_rel_relkind(chunk->table_id);
+
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+		chunk->servers = ts_chunk_server_scan(chunk->fd.id, ti->mctx);
+
 	return SCAN_DONE;
 }
 
@@ -1111,11 +1246,10 @@ chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p)
 		.hcxt = CurrentMemoryContext,
 	};
 
+	memset(ctx, 0, sizeof(*ctx));
 	ctx->htab = hash_create("chunk-scan-context", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 	ctx->space = hs;
 	ctx->point = p;
-	ctx->num_complete_chunks = 0;
-	ctx->early_abort = false;
 	ctx->lockmode = NoLock;
 }
 
@@ -1350,7 +1484,11 @@ chunk_resurrect(Hypertable *ht, ChunkStub *stub)
 
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
+		chunk->relkind = hypertable_chunk_relkind(ht);
 		chunk->table_id = chunk_create_table_after_lock(chunk, ht);
+
+		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+			chunk->servers = ts_chunk_server_scan(chunk->fd.id, ti->mctx);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
@@ -1454,14 +1592,14 @@ ts_chunk_find(Hypertable *ht, Point *p)
  * usage.
  */
 static ChunkScanCtx *
-chunks_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim, StrategyNumber start_strategy,
+chunks_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim, StrategyNumber start_strategy,
 							   int64 start_value, StrategyNumber end_strategy, int64 end_value,
 							   int limit, uint64 *num_found)
 {
 	ChunkScanCtx *ctx = palloc(sizeof(ChunkScanCtx));
 	DimensionVec *slices;
 
-	Assert(hs != NULL);
+	Assert(ht != NULL);
 
 	/* must have been checked earlier that this is the case */
 	Assert(time_dim != NULL);
@@ -1474,7 +1612,7 @@ chunks_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim, StrategyNumb
 												 limit);
 
 	/* The scan context will keep the state accumulated during the scan */
-	chunk_scan_ctx_init(ctx, hs, NULL);
+	chunk_scan_ctx_init(ctx, ht->space, NULL);
 
 	/* No abort when the first chunk is found */
 	ctx->early_abort = false;
@@ -1522,7 +1660,7 @@ get_internal_time_from_endpoint_specifiers(Oid hypertable_relid, Dimension *time
 }
 
 static ChunkScanCtx *
-chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim,
+chunks_typecheck_and_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim,
 											 Datum older_than_datum, Oid older_than_type,
 											 Datum newer_than_datum, Oid newer_than_type, int limit,
 											 MemoryContext multi_call_memory_ctx, char *caller_name,
@@ -1541,7 +1679,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 
 	if (older_than_type != InvalidOid)
 	{
-		older_than = get_internal_time_from_endpoint_specifiers(hs->main_table_relid,
+		older_than = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
 																time_dim,
 																older_than_datum,
 																older_than_type,
@@ -1552,7 +1690,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 
 	if (newer_than_type != InvalidOid)
 	{
-		newer_than = get_internal_time_from_endpoint_specifiers(hs->main_table_relid,
+		newer_than = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
 																time_dim,
 																newer_than_datum,
 																newer_than_type,
@@ -1569,7 +1707,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 						"that a valid overlapping range is specified")));
 
 	oldcontext = MemoryContextSwitchTo(multi_call_memory_ctx);
-	chunk_ctx = chunks_find_all_in_range_limit(hs,
+	chunk_ctx = chunks_find_all_in_range_limit(ht,
 											   time_dim,
 											   start_strategy,
 											   newer_than,
@@ -1646,7 +1784,7 @@ append_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 }
 
 static void *
-chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_stub_func on_chunk, LOCKMODE lockmode,
+chunk_find_all(Hypertable *ht, List *dimension_vecs, on_chunk_stub_func on_chunk, LOCKMODE lockmode,
 			   unsigned int *num_chunks)
 {
 	ChunkScanCtx ctx;
@@ -1654,7 +1792,7 @@ chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_stub_func on_chunk
 	int num_processed;
 
 	/* The scan context will keep the state accumulated during the scan */
-	chunk_scan_ctx_init(&ctx, hs, NULL);
+	chunk_scan_ctx_init(&ctx, ht->space, NULL);
 
 	/* Do not abort the scan when one chunk is found */
 	ctx.early_abort = false;
@@ -1680,9 +1818,9 @@ chunk_find_all(Hyperspace *hs, List *dimension_vecs, on_chunk_stub_func on_chunk
 }
 
 Chunk **
-ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode, unsigned int *num_chunks)
+ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode, unsigned int *num_chunks)
 {
-	Chunk **chunks = chunk_find_all(hs, dimension_vecs, append_chunk, lockmode, num_chunks);
+	Chunk **chunks = chunk_find_all(ht, dimension_vecs, append_chunk, lockmode, num_chunks);
 
 #ifdef USE_ASSERT_CHECKING
 	/* Assert that we never return dropped chunks */
@@ -1696,9 +1834,9 @@ ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode, unsig
 }
 
 List *
-ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode)
+ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode)
 {
-	List *chunks = chunk_find_all(hs, dimension_vecs, append_chunk_oid, lockmode, NULL);
+	List *chunks = chunk_find_all(ht, dimension_vecs, append_chunk_oid, lockmode, NULL);
 
 #ifdef USE_ASSERT_CHECKING
 	/* Assert that we never return dropped chunks */
@@ -1832,7 +1970,7 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 							"when all hypertables do not have the same time dimension type",
 							caller_name)));
 
-		chunk_scan_ctxs[ht_index++] = chunks_typecheck_and_find_all_in_range_limit(ht->space,
+		chunk_scan_ctxs[ht_index++] = chunks_typecheck_and_find_all_in_range_limit(ht,
 																				   time_dim,
 																				   older_than_datum,
 																				   older_than_type,
@@ -1881,6 +2019,25 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 	return chunks;
 }
 
+List *
+ts_chunk_servers_copy(Chunk *chunk)
+{
+	List *lcopy = NIL;
+	ListCell *lc;
+
+	foreach (lc, chunk->servers)
+	{
+		ChunkServer *server = lfirst(lc);
+		ChunkServer *copy = palloc(sizeof(ChunkServer));
+
+		memcpy(copy, server, sizeof(ChunkServer));
+
+		lcopy = lappend(lcopy, copy);
+	}
+
+	return lcopy;
+}
+
 Chunk *
 ts_chunk_copy(Chunk *chunk)
 {
@@ -1895,6 +2052,8 @@ ts_chunk_copy(Chunk *chunk)
 
 	if (NULL != chunk->cube)
 		copy->cube = ts_hypercube_copy(chunk->cube);
+
+	copy->servers = ts_chunk_servers_copy(chunk);
 
 	return copy;
 }

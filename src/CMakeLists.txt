@@ -14,6 +14,7 @@ set(SOURCES
   chunk_dispatch_state.c
   chunk_index.c
   chunk_insert_state.c
+  chunk_server.c
   constraint_aware_append.c
   cross_module_fn.c
   copy.c

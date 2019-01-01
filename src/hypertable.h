@@ -131,6 +131,7 @@ extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed_id(Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
 																	  List *constraint_list);
+extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
@@ -143,5 +144,9 @@ extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable
 
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
 	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
+
+#define hypertable_is_distributed(ht) ((ht)->fd.replication_factor > 0)
+#define hypertable_chunk_relkind(ht)                                                               \
+	(hypertable_is_distributed(ht) ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION)
 
 #endif /* TIMESCALEDB_HYPERTABLE_H */
