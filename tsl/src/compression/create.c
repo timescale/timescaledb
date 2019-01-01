@@ -576,8 +576,9 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_chunk =
-		ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	compress_chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
+										  hs->num_dimensions,
+										  RELKIND_RELATION);
 	ts_catalog_restore_user(&sec_ctx);
 
 	compress_chunk->fd.hypertable_id = hs->hypertable_id;

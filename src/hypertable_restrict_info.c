@@ -560,7 +560,7 @@ ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertab
 
 	Assert(hri->num_dimensions == ht->space->num_dimensions);
 
-	return ts_chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
+	return ts_chunk_find_all_oids(ht, dimension_vecs, lockmode);
 }
 
 static Chunk **
@@ -571,7 +571,7 @@ hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht,
 
 	Assert(hri->num_dimensions == ht->space->num_dimensions);
 
-	return ts_chunk_find_all(ht->space, dimension_vecs, lockmode, num_chunks);
+	return ts_chunk_find_all(ht, dimension_vecs, lockmode, num_chunks);
 }
 
 /*

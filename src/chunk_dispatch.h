@@ -29,6 +29,8 @@ typedef struct ChunkDispatch
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
+	int eflags;
+
 	/*
 	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
 	 * will reset the pointer in EState as we lookup new chunks.
@@ -42,7 +44,7 @@ typedef struct Point Point;
 
 typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
 
-extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
+extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,

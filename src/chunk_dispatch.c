@@ -19,12 +19,13 @@
 #include "guc.h"
 
 ChunkDispatch *
-ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
+ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
 {
 	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
 	cd->hypertable = ht;
 	cd->estate = estate;
+	cd->eflags = eflags;
 	cd->hypertable_result_rel_info = NULL;
 	cd->cache =
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
@@ -113,7 +114,7 @@ destroy_chunk_insert_state(void *cis)
  */
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
-										 on_chunk_changed_func on_chunk_changed, void *data)
+										 const on_chunk_changed_func on_chunk_changed, void *data)
 {
 	ChunkInsertState *cis;
 	bool cis_changed = true;
