@@ -54,6 +54,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_INDEX_TABLE_NAME,
 	},
+	[CHUNK_SERVER] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CHUNK_SERVER_TABLE_NAME,
+	},
 	[TABLESPACE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = TABLESPACE_TABLE_NAME,
@@ -159,6 +163,13 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX] = "chunk_index_hypertable_id_hypertable_index_name_idx",
 		},
 	},
+	[CHUNK_SERVER] = {
+		.length = _MAX_CHUNK_SERVER_INDEX,
+		.names = (char *[]) {
+			[CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX] = "chunk_server_chunk_id_server_name_key",
+			[CHUNK_SERVER_SERVER_CHUNK_ID_SERVER_NAME_IDX] = "chunk_server_server_chunk_id_server_name_key",
+		}
+	},
 	[TABLESPACE] = {
 		.length = _MAX_TABLESPACE_INDEX,
 		.names = (char *[]) {
@@ -247,6 +258,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
 	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
 	[CHUNK_INDEX] = NULL,
+	[CHUNK_SERVER] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
@@ -668,6 +680,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 	{
 		case CHUNK:
 		case CHUNK_CONSTRAINT:
+		case CHUNK_SERVER:
 		case DIMENSION_SLICE:
 			if (operation == CMD_UPDATE || operation == CMD_DELETE)
 			{

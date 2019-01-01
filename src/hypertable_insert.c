@@ -20,6 +20,7 @@
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
 #include "hypertable_cache.h"
+#include "hypertable_server.h"
 
 /*
  * HypertableInsert (with corresponding executor node) is a plan node that
@@ -119,6 +120,42 @@ static CustomScanMethods hypertable_insert_plan_methods = {
 };
 
 /*
+ * Plan the private FDW data for a remote hypertable (e.g., create the deparsed
+ * INSERT statement). Note that the private data for a result relation is a
+ * list, so we return a list of lists, one for each result relation.  In case of
+ * no remote modify, we still need to return a list of empty lists.
+ */
+static List *
+plan_remote_modify(PlannerInfo *root, ModifyTable *mt, List *serveroids)
+{
+	FdwRoutine *fdwroutine = NULL;
+	List *fdw_private_list = NIL;
+	ListCell *lc;
+	int i = 0;
+
+	if (serveroids != NIL)
+
+		/*
+		 * Get the FDW routine for the first server. It should be the same for
+		 * all of them
+		 */
+		fdwroutine = GetFdwRoutineByServerId(linitial_oid(serveroids));
+
+	foreach (lc, mt->resultRelations)
+	{
+		Index rti = lfirst_int(lc);
+		List *fdwprivate = NIL;
+
+		if (NULL != fdwroutine && NULL != fdwroutine->PlanForeignModify)
+			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i++);
+
+		fdw_private_list = lappend(fdw_private_list, fdwprivate);
+	}
+
+	return fdw_private_list;
+}
+
+/*
  * This copies the target list on the ModifyTable plan node to our wrapping
  * HypertableInsert plan node after set_plan_references() has run. This ensures
  * that the top-level target list reflects the projection done in a RETURNING
@@ -149,6 +186,7 @@ static Plan *
 hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 							  List *tlist, List *clauses, List *custom_plans)
 {
+	HypertableInsertPath *hipath = (HypertableInsertPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
 	ModifyTable *mt = linitial(custom_plans);
 
@@ -163,6 +201,19 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	cscan->scan.plan.total_cost = mt->plan.total_cost;
 	cscan->scan.plan.plan_rows = mt->plan.plan_rows;
 	cscan->scan.plan.plan_width = mt->plan.plan_width;
+	cscan->custom_private = hipath->serveroids;
+
+	/*
+	 * A remote hypertable is not a foreign table since it cannot have indexes
+	 * in that case. But we run the FDW planning for the hypertable here as if
+	 * it was a foreign table. This is because when we do an FDW insert of a
+	 * foreign table chunk, we actually would like to do that as if the INSERT
+	 * happened on the root table. Thus we need the plan state from the root
+	 * table, which we can reuse on every chunk. This plan state includes,
+	 * e.g., a deparsed INSERT statement that references the hypertable
+	 * instead of a chunk.
+	 */
+	mt->fdwPrivLists = plan_remote_modify(root, mt, hipath->serveroids);
 
 	/*
 	 * Since this is the top-level plan (above ModifyTable) we need to use the
@@ -199,7 +250,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
 	Path *path = &mtpath->path;
 	Cache *hcache = ts_hypertable_cache_pin();
-	ListCell *lc_path, *lc_rel;
+	ListCell *lc, *lc_path, *lc_rel;
 	List *subpaths = NIL;
 	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
@@ -247,6 +298,13 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	hipath->cpath.methods = &hypertable_insert_path_methods;
 	path = &hipath->cpath.path;
 	mtpath->subpaths = subpaths;
+
+	foreach (lc, ht->servers)
+	{
+		HypertableServer *server = lfirst(lc);
+
+		hipath->serveroids = lappend_oid(hipath->serveroids, server->foreign_server_oid);
+	}
 
 	return path;
 }

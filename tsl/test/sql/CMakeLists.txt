@@ -9,6 +9,7 @@ set(TEST_FILES
     partialize_finalize.sql
     timescaledb_fdw.sql
     chunk_api.sql
+    hypertable_distributed.sql
 )
 
 set(TEST_FILES_DEBUG

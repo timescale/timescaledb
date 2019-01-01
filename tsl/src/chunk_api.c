@@ -192,6 +192,7 @@ enum Anum_create_chunk
 	Anum_create_chunk_hypertable_id,
 	Anum_create_chunk_schema_name,
 	Anum_create_chunk_table_name,
+	Anum_create_chunk_relkind,
 	Anum_create_chunk_slices,
 	Anum_create_chunk_created,
 	_Anum_create_chunk_max,
@@ -217,6 +218,7 @@ chunk_form_tuple(Chunk *chunk, Hypertable *ht, TupleDesc tupdesc, bool created)
 		NameGetDatum(&chunk->fd.schema_name);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)] =
 		NameGetDatum(&chunk->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_create_chunk_relkind)] = CharGetDatum(chunk->relkind);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_slices)] =
 		JsonbPGetDatum(JsonbValueToJsonb(jv));
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_created)] = BoolGetDatum(created);

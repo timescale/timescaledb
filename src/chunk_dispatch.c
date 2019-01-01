@@ -17,12 +17,13 @@
 #include "guc.h"
 
 ChunkDispatch *
-ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
+ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
 {
 	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
 	cd->hypertable = ht;
 	cd->estate = estate;
+	cd->eflags = eflags;
 	cd->hypertable_result_rel_info = NULL;
 	cd->on_conflict = ONCONFLICT_NONE;
 	cd->arbiter_indexes = NIL;

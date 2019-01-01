@@ -39,7 +39,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = ts_chunk_dispatch_create(ht, estate);
+	state->dispatch = ts_chunk_dispatch_create(ht, estate, eflags);
 	node->custom_ps = list_make1(ps);
 }
 
@@ -241,6 +241,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	state->dispatch->on_conflict = mt_plan->onConflictAction;
 	state->dispatch->on_conflict_set = mt_plan->onConflictSet;
 	state->dispatch->arbiter_indexes = mt_plan->arbiterIndexes;
+	state->dispatch->mtstate = parent;
 
 	Assert(mt_plan->onConflictWhere == NULL || IsA(mt_plan->onConflictWhere, List));
 	state->dispatch->on_conflict_where = (List *) mt_plan->onConflictWhere;

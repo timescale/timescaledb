@@ -1982,3 +1982,30 @@ ts_is_partitioning_column(Hypertable *ht, Index column_attno)
 	}
 	return false;
 }
+
+#define MIN(x, y) (x < y ? x : y)
+
+/*
+ * Assign servers to a chunk.
+ *
+ * A chunk is assigned up to replication_factor number of servers. Assignment
+ * happens similar to tablespaces, i.e., based on dimension type.
+ */
+List *
+ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube)
+{
+	List *chunk_servers = NIL;
+	int num_assigned = MIN(ht->fd.replication_factor, list_length(ht->servers));
+	int n, i;
+
+	n = hypertable_get_chunk_slice_ordinal(ht, cube);
+
+	for (i = 0; i < num_assigned; i++)
+	{
+		int j = (n + i) % list_length(ht->servers);
+
+		chunk_servers = lappend(chunk_servers, list_nth(ht->servers, j));
+	}
+
+	return chunk_servers;
+}

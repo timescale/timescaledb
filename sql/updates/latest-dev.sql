@@ -33,3 +33,15 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_server (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_server', '');
 
 GRANT SELECT ON _timescaledb_catalog.hypertable_server TO PUBLIC;
+
+-- Table for chunk -> servers mappings
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_server (
+    chunk_id               INTEGER NOT NULL     REFERENCES _timescaledb_catalog.chunk(id),
+    server_chunk_id        INTEGER NOT NULL,
+    server_name            NAME NOT NULL,
+    UNIQUE(server_chunk_id, server_name),
+    UNIQUE(chunk_id, server_name)
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_server', '');
+
+GRANT SELECT ON _timescaledb_catalog.chunk_server TO PUBLIC;

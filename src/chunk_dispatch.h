@@ -26,6 +26,8 @@ typedef struct ChunkDispatch
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
+	int eflags;
+	ModifyTableState *mtstate;
 
 	/*
 	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
@@ -45,7 +47,7 @@ typedef struct ChunkDispatch
 
 typedef struct Point Point;
 
-extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
+extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
 void ts_chunk_dispatch_destroy(ChunkDispatch *dispatch);
 extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 																  bool *cis_changed_out);

@@ -41,6 +41,7 @@ typedef enum CatalogTable
 	CHUNK,
 	CHUNK_CONSTRAINT,
 	CHUNK_INDEX,
+	CHUNK_SERVER,
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
@@ -482,6 +483,66 @@ enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id = 1,
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_max,
+};
+
+/************************************
+ *
+ * Chunk server table definitions
+ *
+ ************************************/
+
+#define CHUNK_SERVER_TABLE_NAME "chunk_server"
+
+enum Anum_chunk_server
+{
+	Anum_chunk_server_chunk_id = 1,
+	Anum_chunk_server_server_chunk_id,
+	Anum_chunk_server_server_name,
+	_Anum_chunk_server_max,
+};
+
+#define Natts_chunk_server (_Anum_chunk_server_max - 1)
+
+typedef struct FormData_chunk_server
+{
+	int32 chunk_id;
+	int32 server_chunk_id;
+	NameData server_name;
+} FormData_chunk_server;
+
+typedef FormData_chunk_server *Form_chunk_server;
+
+enum
+{
+	CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
+	CHUNK_SERVER_SERVER_CHUNK_ID_SERVER_NAME_IDX,
+	_MAX_CHUNK_SERVER_INDEX,
+};
+
+enum Anum_chunk_server_chunk_id_server_name_idx
+{
+	Anum_chunk_server_chunk_id_server_name_idx_chunk_id = 1,
+	Anum_chunk_server_chunk_id_server_name_idx_server_name,
+	_Anum_chunk_server_chunk_id_server_name_idx_max,
+};
+
+struct FormData_chunk_server_chunk_id_server_name_idx
+{
+	int32 chunk_id;
+	NameData server_name;
+};
+
+enum Anum_chunk_server_server_chunk_id_server_name_idx
+{
+	Anum_chunk_server_server_chunk_id_server_name_idx_chunk_id = 1,
+	Anum_chunk_server_server_chunk_id_server_name_idx_server_name,
+	_Anum_chunk_server_server_chunk_id_server_name_idx_max,
+};
+
+struct FormData_chunk_server_server_chunk_id_server_name_idx
+{
+	int32 server_chunk_id;
+	NameData server_name;
 };
 
 /************************************

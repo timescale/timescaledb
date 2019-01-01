@@ -36,6 +36,7 @@
 #include "export.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "chunk_server.h"
 #include "cross_module_fn.h"
 #include "catalog.h"
 #include "continuous_agg.h"
@@ -46,6 +47,7 @@
 #include "errors.h"
 #include "partitioning.h"
 #include "hypertable.h"
+#include "hypertable_server.h"
 #include "hypercube.h"
 #include "scanner.h"
 #include "process_utility.h"
@@ -118,10 +120,21 @@ chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
 static void
 chunk_fill(Chunk *chunk, HeapTuple tuple, TupleDesc desc)
 {
+	Oid schema_id;
+
 	memcpy(&chunk->fd, GETSTRUCT(tuple), sizeof(FormData_chunk));
-	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
-										get_namespace_oid(chunk->fd.schema_name.data, true));
+
+	schema_id = get_namespace_oid(NameStr(chunk->fd.schema_name), true);
+
+	Assert(OidIsValid(schema_id));
+
+	chunk->table_id = get_relname_relid(NameStr(chunk->fd.table_name), schema_id);
 	chunk->hypertable_relid = ts_inheritance_parent_relid(chunk->table_id);
+	chunk->relkind = get_rel_relkind(chunk->table_id);
+
+	Assert(OidIsValid(chunk->table_id));
+	Assert(OidIsValid(chunk->hypertable_relid));
+	Assert(chunk->relkind == 'r' || chunk->relkind == 'f');
 }
 
 static ScanTupleResult
@@ -181,6 +194,9 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 		 * sort them in dimension order.
 		 */
 		ts_hypercube_slice_sort(chunk_stub->cube);
+
+	if (chunk_stub->relkind == RELKIND_FOREIGN_TABLE)
+		chunk_stub->servers = ts_chunk_server_scan(chunk_stub->fd.id, CurrentMemoryContext);
 
 	return chunk_stub;
 }
@@ -657,13 +673,19 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 	Relation rel;
 	ObjectAddress objaddr;
 	int sec_ctx;
-	CreateStmt stmt = {
-		.type = T_CreateStmt,
-		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
-		.inhRelations =
+
+	/*
+	 * The CreateForeignTableStmt embeds a regular CreateStmt, so we can use
+	 * it to create both regular and foreign tables
+	 */
+	CreateForeignTableStmt stmt = {
+		.base.type = T_CreateStmt,
+		.base.relation =
+			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
+		.base.inhRelations =
 			list_make1(makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0)),
-		.tablespacename = ts_hypertable_select_tablespace_name(ht, chunk),
-		.options = get_reloptions(ht->main_table_relid),
+		.base.tablespacename = ts_hypertable_select_tablespace_name(ht, chunk),
+		.base.options = get_reloptions(ht->main_table_relid),
 	};
 	Oid uid, saved_uid;
 
@@ -683,8 +705,8 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
-	objaddr = DefineRelation(&stmt,
-							 RELKIND_RELATION,
+	objaddr = DefineRelation(&stmt.base,
+							 chunk->relkind,
 							 rel->rd_rel->relowner,
 							 NULL
 #if !PG96
@@ -693,11 +715,50 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 #endif
 	);
 
-	/*
-	 * need to create a toast table explicitly for some of the option setting
-	 * to work
-	 */
-	create_toast_table(&stmt, objaddr.objectId);
+	if (chunk->relkind == RELKIND_RELATION)
+	{
+		/*
+		 * need to create a toast table explicitly for some of the option
+		 * setting to work
+		 */
+		create_toast_table(&stmt.base, objaddr.objectId);
+	}
+	else if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		ChunkServer *cs;
+		ListCell *lc;
+
+		if (list_length(chunk->servers) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_NO_SERVERS),
+					 (errmsg("no servers associated with chunk \"%s\"",
+							 get_rel_name(chunk->table_id)))));
+
+		/*
+		 * Use the first chunk server as the "primary" to put in the foreign
+		 * table
+		 */
+		cs = linitial(chunk->servers);
+		stmt.base.type = T_CreateForeignServerStmt;
+		stmt.servername = NameStr(cs->fd.server_name);
+
+		/* Create the foreign table catalog information */
+		CreateForeignTable(&stmt, objaddr.objectId);
+
+		/* Create the corresponding chunks on the remote servers */
+		foreach (lc, chunk->servers)
+		{
+			cs = lfirst(lc);
+
+			/* TODO: create chunk on server and get local ID */
+
+			/* Set a bogus server_chunk_id for now */
+			cs->fd.server_chunk_id = chunk->fd.id;
+			ts_chunk_server_insert(cs);
+		}
+	}
+	else
+		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
 
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
@@ -709,6 +770,69 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 	return objaddr.objectId;
 }
 
+static List *
+chunk_assign_servers(Chunk *chunk, Hypertable *ht)
+{
+	List *htservers;
+	List *chunk_servers = NIL;
+	ListCell *lc;
+
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
+		return NIL;
+
+	if (ht->servers == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_NO_SERVERS),
+				 (errmsg("no servers associated with hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	Assert(chunk->cube != NULL);
+
+	htservers = ts_hypertable_assign_chunk_servers(ht, chunk->cube);
+
+	Assert(htservers != NIL);
+	Assert(list_length(htservers) <= ht->fd.replication_factor);
+
+	if (list_length(htservers) < ht->fd.replication_factor)
+		ereport(WARNING,
+				(errcode(ERRCODE_WARNING),
+				 errmsg("under-replicated chunk %u, lacks %d server(s)",
+						chunk->fd.id,
+						ht->fd.replication_factor - list_length(htservers)),
+				 errhint("Make sure hypertable \"%s\" has at least %d assigned server(s).",
+						 get_rel_name(ht->main_table_relid),
+						 ht->fd.replication_factor)));
+
+	foreach (lc, htservers)
+	{
+		HypertableServer *htserver = lfirst(lc);
+		ForeignServer *foreign_server =
+			GetForeignServerByName(NameStr(htserver->fd.server_name), false);
+		ChunkServer *chunk_server = palloc0(sizeof(ChunkServer));
+
+		/*
+		 * Create a stub server (partially filled in entry). This will be
+		 * fully filled in and persisted to metadata tables once we create the
+		 * remote tables during insert
+		 */
+		chunk_server->fd.chunk_id = chunk->fd.id;
+		chunk_server->fd.server_chunk_id = -1;
+		namestrcpy(&chunk_server->fd.server_name, foreign_server->servername);
+		chunk_server->foreign_server_oid = foreign_server->serverid;
+		chunk_servers = lappend(chunk_servers, chunk_server);
+	}
+
+	return chunk_servers;
+}
+
+static inline const char *
+get_chunk_name_suffix(const char relkind)
+{
+	if (relkind == RELKIND_FOREIGN_TABLE)
+		return "dist_chunk";
+	return "chunk";
+}
+
 static Chunk *
 ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema,
 							   const char *prefix)
@@ -717,17 +841,25 @@ ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
+	const char relkind = ht->fd.replication_factor > 0 ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION;
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	chunk = ts_chunk_create_stub(ts_catalog_table_next_seq_id(catalog, CHUNK), hs->num_dimensions);
+	chunk = ts_chunk_create_stub(ts_catalog_table_next_seq_id(catalog, CHUNK),
+								 hs->num_dimensions,
+								 relkind);
 	ts_catalog_restore_user(&sec_ctx);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = hc;
 	chunk->hypertable_relid = ht->main_table_relid;
 	namestrcpy(&chunk->fd.schema_name, schema);
-	snprintf(chunk->fd.table_name.data, NAMEDATALEN, "%s_%d_chunk", prefix, chunk->fd.id);
+	snprintf(chunk->fd.table_name.data,
+			 NAMEDATALEN,
+			 "%s_%d_%s",
+			 prefix,
+			 chunk->fd.id,
+			 get_chunk_name_suffix(relkind));
 
 	/* Insert chunk */
 	chunk_insert_lock(chunk, RowExclusiveLock);
@@ -737,6 +869,10 @@ ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema
 
 	/* Add metadata for dimensional and inheritable constraints */
 	chunk_add_constraints(chunk);
+
+	/* If this is a remote chunk we assign servers */
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+		chunk->servers = chunk_assign_servers(chunk, ht);
 
 	/* Create the actual table relation for the chunk */
 	chunk->table_id = chunk_create_table(chunk, ht);
@@ -751,12 +887,15 @@ ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema
 								chunk->hypertable_relid,
 								chunk->fd.hypertable_id);
 
-	ts_trigger_create_all_on_chunk(ht, chunk);
+	if (chunk->relkind == RELKIND_RELATION)
+	{
+		ts_trigger_create_all_on_chunk(ht, chunk);
 
-	ts_chunk_index_create_all(chunk->fd.hypertable_id,
-							  chunk->hypertable_relid,
-							  chunk->fd.id,
-							  chunk->table_id);
+		ts_chunk_index_create_all(chunk->fd.hypertable_id,
+								  chunk->hypertable_relid,
+								  chunk->fd.id,
+								  chunk->table_id);
+	}
 
 	return chunk;
 }
@@ -851,12 +990,13 @@ ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const c
 }
 
 Chunk *
-ts_chunk_create_stub(int32 id, int16 num_constraints)
+ts_chunk_create_stub(int32 id, int16 num_constraints, const char relkind)
 {
 	Chunk *chunk;
 
 	chunk = palloc0(sizeof(Chunk));
 	chunk->fd.id = id;
+	chunk->relkind = relkind;
 
 	if (num_constraints > 0)
 		chunk->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
@@ -1477,6 +1617,25 @@ chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum ne
 	return chunks;
 }
 
+List *
+ts_chunk_servers_copy(Chunk *chunk)
+{
+	List *lcopy = NIL;
+	ListCell *lc;
+
+	foreach (lc, chunk->servers)
+	{
+		ChunkServer *server = lfirst(lc);
+		ChunkServer *copy = palloc(sizeof(ChunkServer));
+
+		memcpy(copy, server, sizeof(ChunkServer));
+
+		lcopy = lappend(lcopy, copy);
+	}
+
+	return lcopy;
+}
+
 Chunk *
 ts_chunk_copy(Chunk *chunk)
 {
@@ -1490,6 +1649,8 @@ ts_chunk_copy(Chunk *chunk)
 
 	if (NULL != chunk->cube)
 		copy->cube = ts_hypercube_copy(chunk->cube);
+
+	copy->servers = ts_chunk_servers_copy(chunk);
 
 	return copy;
 }
@@ -1627,6 +1788,10 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, int16 num_constra
 					ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints, mctx);
 				chunk->cube = ts_hypercube_from_constraints(chunk->constraints, mctx);
 			}
+
+			if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+				chunk->servers = ts_chunk_server_scan(chunk->fd.id, mctx);
+
 			break;
 		default:
 			elog(ERROR, "unexpected number of chunks found: %d", num_found);
@@ -1718,6 +1883,94 @@ ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
 						   num_constraints,
 						   CurrentMemoryContext,
 						   fail_if_not_found);
+}
+
+static ScanTupleResult
+chunk_form_tuple_found(TupleInfo *ti, void *data)
+{
+	FormData_chunk *form = data;
+
+	memcpy(form, GETSTRUCT(ti->tuple), sizeof(FormData_chunk));
+
+	return SCAN_DONE;
+}
+
+static bool
+chunk_get_form(int32 chunk_id, FormData_chunk *form, bool missing_ok)
+{
+	ScanKeyData scankey[1];
+	int num_found;
+
+	/*
+	 * Perform an index scan on chunk id.
+	 */
+	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, chunk_id);
+
+	num_found = chunk_scan_internal(CHUNK_ID_INDEX,
+									scankey,
+									1,
+									chunk_form_tuple_found,
+									form,
+									0,
+									ForwardScanDirection,
+									AccessShareLock,
+									CurrentMemoryContext);
+
+	if (num_found == 0 && !missing_ok)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("chunk with ID %u does not exist", chunk_id)));
+
+	return num_found == 1;
+}
+
+/*
+ * Get the relid of a chunk given its ID.
+ *
+ * This is a lightweight way to get the relid of a chunk that does not require
+ * getting a full Chunk object.
+ */
+Oid
+ts_chunk_get_relid(int32 chunk_id, bool missing_ok)
+{
+	FormData_chunk form = { 0 };
+	Oid schemaid, relid;
+
+	if (chunk_get_form(chunk_id, &form, missing_ok) == 0)
+		return InvalidOid;
+
+	schemaid = get_namespace_oid(NameStr(form.schema_name), missing_ok);
+
+	if (!OidIsValid(schemaid))
+		return InvalidOid;
+
+	relid = get_relname_relid(NameStr(form.table_name), schemaid);
+
+	if (!OidIsValid(relid) && !missing_ok)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_SCHEMA),
+				 errmsg("table \"%s.%s\" does not exist",
+						NameStr(form.schema_name),
+						NameStr(form.table_name))));
+
+	return relid;
+}
+
+/*
+ * Get the schema (namespace) of a chunk given its ID.
+ *
+ * This is a lightweight way to get the schema of a chunk that does not
+ * require getting a full Chunk object.
+ */
+Oid
+ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok)
+{
+	FormData_chunk form = { 0 };
+
+	if (chunk_get_form(chunk_id, &form, missing_ok) == 0)
+		return InvalidOid;
+
+	return get_namespace_oid(NameStr(form.schema_name), missing_ok);
 }
 
 bool

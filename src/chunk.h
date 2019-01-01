@@ -34,6 +34,7 @@ typedef struct Hypertable Hypertable;
 typedef struct Chunk
 {
 	FormData_chunk fd;
+	char relkind;
 	Oid table_id;
 	Oid hypertable_relid;
 
@@ -44,6 +45,12 @@ typedef struct Chunk
 	 */
 	Hypercube *cube;
 	ChunkConstraints *constraints;
+
+	/*
+	 * The servers that hold a copy of the chunk. NIL for non-distributed
+	 * hypertables.
+	 */
+	List *servers;
 } Chunk;
 
 /*
@@ -82,7 +89,7 @@ typedef struct ChunkScanEntry
 
 extern Chunk *ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema,
 										 const char *prefix);
-extern Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints);
+extern Chunk *ts_chunk_create_stub(int32 id, int16 num_constraints, const char relkind);
 extern Chunk *ts_chunk_find(Hyperspace *hs, Point *p);
 extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
@@ -97,6 +104,8 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints,
 											 bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, int16 num_constraints,
 												bool fail_if_not_found);
+extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
+extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern Chunk *ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern bool ts_chunk_exists_relid(Oid relid);
@@ -115,6 +124,7 @@ extern TSDLLEXPORT void ts_chunk_do_drop_chunks(Oid table_relid, Datum older_tha
 extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc,
 															   const char *schema,
 															   const char *prefix, bool *created);
+extern List *ts_chunk_servers_copy(Chunk *chunk);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

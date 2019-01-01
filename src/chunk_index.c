@@ -505,9 +505,7 @@ ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
 static inline Oid
 chunk_index_get_schemaid(Form_chunk_index chunk_index, bool missing_ok)
 {
-	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, 0, true);
-
-	return get_namespace_oid(NameStr(chunk->fd.schema_name), missing_ok);
+	return ts_chunk_get_schema_id(chunk_index->chunk_id, missing_ok);
 }
 
 #define chunk_index_tuple_get_schema(tuple)                                                        \
@@ -704,7 +702,7 @@ chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 }
 
 int
-ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
+ts_chunk_index_delete(int32 chunk_id, Oid chunk_indexrelid, bool drop_index)
 {
 	ScanKeyData scankey[2];
 	const char *indexname = get_rel_name(chunk_indexrelid);
@@ -716,7 +714,7 @@ ts_chunk_index_delete(Chunk *chunk, Oid chunk_indexrelid, bool drop_index)
 				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
+				Int32GetDatum(chunk_id));
 	ScanKeyInit(&scankey[1],
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
 				BTEqualStrategyNumber,
