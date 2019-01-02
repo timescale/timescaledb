@@ -69,14 +69,13 @@ error_no_default_fn(void)
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
 			 errhint("Buy a Timescale license to enable the functionality")));
-
 }
 
 static bool
 error_no_default_fn_bool_void(void)
 {
 	error_no_default_fn();
-	return false;
+	pg_unreachable();
 }
 
 static void
@@ -95,7 +94,7 @@ static bool
 bgw_policy_job_execute_default_fn(BgwJob *job)
 {
 	error_no_default_fn();
-	return false;
+	pg_unreachable();
 }
 
 static Datum
@@ -107,7 +106,7 @@ error_no_default_fn_pg(PG_FUNCTION_ARGS)
 					get_func_name(fcinfo->flinfo->fn_oid),
 					ts_guc_license_key),
 			 errhint("Buy a Timescale license to enable the functionality")));
-	PG_RETURN_NULL();
+	pg_unreachable();
 }
 
 /*

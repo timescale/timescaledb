@@ -1610,7 +1610,7 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 		.table = catalog_get_table_id(catalog, HYPERTABLE),
 		.index = InvalidOid,
 		.tuple_found = hypertable_rename_schema_name,
-		.data = schema_names,
+		.data = (void *) schema_names,
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 	};

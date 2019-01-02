@@ -157,6 +157,7 @@ get_function_oid(char *name, int nargs, Oid arg_types[])
 		func_candidates = func_candidates->next;
 	}
 	elog(ERROR, "failed to find function %s with %d args", name, nargs);
+	pg_unreachable();
 }
 
 static FuncStrategy *

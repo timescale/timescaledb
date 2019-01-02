@@ -229,7 +229,7 @@ test_job_3_long()
 
 /* Exactly like job 1, except a wrapper will change its next_start. */
 static bool
-test_job_4()
+test_job_4(void)
 {
 	StartTransactionCommand();
 	elog(WARNING, "Execute job 4");
