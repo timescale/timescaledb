@@ -50,6 +50,7 @@
 #define REQ_RELATED_EXTENSIONS		"related_extensions"
 #define REQ_LICENSE_INFO			"license"
 #define REQ_LICENSE_EDITION		    "edition"
+#define REQ_LICENSE_EDITION_APACHE	"apache_only"
 
 #define PG_PROMETHEUS	"pg_prometheus"
 #define POSTGIS			"postgis"
@@ -187,7 +188,7 @@ add_license_info(JsonbParseState *state)
 	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
 
 	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
-		ts_jsonb_add_str(state, REQ_LICENSE_EDITION, TS_APACHE_ONLY_LICENSE);
+		ts_jsonb_add_str(state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
 	else
 		ts_cm_functions->add_tsl_license_info_telemetry(state);
 
