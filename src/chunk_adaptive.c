@@ -75,7 +75,6 @@ ts_set_memory_cache_size(PG_FUNCTION_ARGS)
 
 /*
  * Get the amount of cache memory for chunks.
- *
  * We use shared_buffers converted to bytes.
  */
 static int64
