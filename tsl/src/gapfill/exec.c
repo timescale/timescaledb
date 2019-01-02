@@ -158,6 +158,7 @@ gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg)
 			 * for other datatypes
 			 */
 			Assert(false);
+			pg_unreachable();
 			break;
 	}
 }
