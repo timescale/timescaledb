@@ -50,6 +50,8 @@
 #define REQ_LICENSE_INFO			"license"
 #define REQ_LICENSE_EDITION		    "edition"
 #define REQ_LICENSE_EDITION_APACHE	"apache_only"
+#define REQ_TS_LAST_TUNE_TIME			"last_tuned_time"
+#define REQ_TS_LAST_TUNE_VERSION		"last_tuned_version"
 
 #define PG_PROMETHEUS	"pg_prometheus"
 #define POSTGIS			"postgis"
@@ -250,6 +252,12 @@ build_version_body(void)
 	add_license_info(parseState);
 
 	result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+
+	if (ts_last_tune_time != NULL)
+		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_TIME, ts_last_tune_time);
+
+	if (ts_last_tune_time != NULL)
+		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
 
 	jb = JsonbValueToJsonb(result);
 	jtext = makeStringInfo();

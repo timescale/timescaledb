@@ -19,6 +19,8 @@ extern int	ts_guc_max_open_chunks_per_insert;
 extern int	ts_guc_max_cached_chunks_per_hypertable;
 extern int	ts_guc_telemetry_level;
 extern TSDLLEXPORT char *ts_guc_license_key;
+extern char *ts_last_tune_time;
+extern char *ts_last_tune_version;
 
 void		_guc_init(void);
 void		_guc_fini(void);
