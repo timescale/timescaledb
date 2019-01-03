@@ -245,20 +245,22 @@ build_version_body(void)
 	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
 	add_related_extensions(parseState);
 
+	/* add license info, which is a nested JSON */
 	license_info_key.type = jbvString;
 	license_info_key.val.string.val = REQ_LICENSE_INFO;
 	license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
 	pushJsonbValue(&parseState, WJB_KEY, &license_info_key);
 	add_license_info(parseState);
 
-	result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
-
+	/* add tuned info, which is optional */
 	if (ts_last_tune_time != NULL)
 		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_TIME, ts_last_tune_time);
 
-	if (ts_last_tune_time != NULL)
+	if (ts_last_tune_version != NULL)
 		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
 
+	/* end of telemetry object */
+	result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
 	jb = JsonbValueToJsonb(result);
 	jtext = makeStringInfo();
 	JsonbToCString(jtext, &jb->root, VARSIZE(jb));

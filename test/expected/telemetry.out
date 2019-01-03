@@ -295,11 +295,13 @@ select json_object_keys(get_telemetry_report()::json);
  build_os_name
  install_method
  installed_time
+ last_tuned_time
  num_hypertables
  build_os_version
  exported_db_uuid
+ last_tuned_version
  postgresql_version
  related_extensions
  timescaledb_version
-(15 rows)
+(17 rows)
 

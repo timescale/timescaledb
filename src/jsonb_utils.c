@@ -63,6 +63,7 @@ ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value)
 static void
 ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
 {
+	Assert(state != NULL);
 	Assert(key != NULL);
 	if (value == NULL)
 		return;
