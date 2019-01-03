@@ -30,10 +30,7 @@ set(PG_IGNORE_TESTS
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
-  string(REPLACE
-    "test: ${IGNORE_TEST}" "ignore: ${IGNORE_TEST}\ntest: ${IGNORE_TEST}"
-    PG_TEST_SCHEDULE
-    ${PG_TEST_SCHEDULE})
+  string(CONCAT PG_TEST_SCHEDULE "ignore: ${IGNORE_TEST}\n" ${PG_TEST_SCHEDULE})
 endforeach(IGNORE_TEST)
 
 # Write the final test schedule
