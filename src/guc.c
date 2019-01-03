@@ -45,6 +45,8 @@ int			ts_guc_max_cached_chunks_per_hypertable = 10;
 int			ts_guc_telemetry_level = TELEMETRY_BASIC;
 
 TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
+char	   *ts_last_tune_time = NULL;
+char	   *ts_last_tune_version = NULL;
 
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
@@ -149,6 +151,28 @@ _guc_init(void)
 							    /* flags= */ GUC_SUPERUSER_ONLY,
 							    /* check_hook= */ ts_license_update_check,
 							    /* assign_hook= */ ts_license_on_assign,
+							    /* show_hook= */ NULL);
+
+	DefineCustomStringVariable( /* name= */ "timescaledb.last_tuned",
+							    /* short_dec= */ "last tune run",
+							    /* long_dec= */ "records last time timescaledb-tune ran",
+							    /* valueAddr= */ &ts_last_tune_time,
+							    /* bootValue= */ NULL,
+							    /* context= */ PGC_BACKEND,
+							    /* flags= */ 0,
+							    /* check_hook= */ NULL,
+							    /* assign_hook= */ NULL,
+							    /* show_hook= */ NULL);
+
+	DefineCustomStringVariable( /* name= */ "timescaledb.last_tuned_version",
+							    /* short_dec= */ "version of timescaledb-tune",
+							    /* long_dec= */ "version of timescaledb-tune used to tune",
+							    /* valueAddr= */ &ts_last_tune_version,
+							    /* bootValue= */ NULL,
+							    /* context= */ PGC_BACKEND,
+							    /* flags= */ 0,
+							    /* check_hook= */ NULL,
+							    /* assign_hook= */ NULL,
 							    /* show_hook= */ NULL);
 }
 
