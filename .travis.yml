@@ -86,7 +86,7 @@ jobs:
       env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0
 
     # This tests the ability to upgrade to the latest version from versions without constraint support
-    - if: (type = pull_request) OR (type = cron)
+    - if: type = cron
       stage: test
       env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
       name: "Update tests (versions w/o constraints support) 9.6"
@@ -98,7 +98,7 @@ jobs:
         - bash -x ./scripts/test_updates_no_constraints.sh
 
     # This tests the ability to upgrade to the latest version from versions with constraint support
-    - if: (type = pull_request) OR (type = cron)
+    - if: type = cron
       stage: test
       env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6
       name: "Update tests (versions w/ constraints support) 9.6"
@@ -108,6 +108,18 @@ jobs:
       after_script:
       script:
         - bash -x ./scripts/test_updates_with_constraints.sh
+
+    # This tests the ability to upgrade to the latest version on pg 10
+    - if: (type = pull_request) OR (type = cron)
+      stage: test
+      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2
+      name: "Update tests PostgreSQL 10"
+      before_install:
+      install:
+      after_failure:
+      after_script:
+      script:
+        - bash ./scripts/test_updates_pg10.sh
 
     - if: type = cron
       stage: test
