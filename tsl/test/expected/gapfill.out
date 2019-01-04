@@ -145,6 +145,49 @@ GROUP BY 1;
                     
 (1 row)
 
+-- test int int2/4/8
+SELECT
+  time_bucket_gapfill(1::int2,time::int2,0::int2,6::int2)
+FROM (VALUES (1),(4)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   0
+                   1
+                   2
+                   3
+                   4
+                   5
+(6 rows)
+
+SELECT
+  time_bucket_gapfill(1::int4,time::int4,0::int4,6::int4)
+FROM (VALUES (1),(4)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   0
+                   1
+                   2
+                   3
+                   4
+                   5
+(6 rows)
+
+SELECT
+  time_bucket_gapfill(1::int8,time::int8,0::int8,6::int8)
+FROM (VALUES (1),(4)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   0
+                   1
+                   2
+                   3
+                   4
+                   5
+(6 rows)
+
 -- simple gapfill query
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
