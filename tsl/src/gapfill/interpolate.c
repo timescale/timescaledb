@@ -10,6 +10,7 @@
 #include <utils/datum.h>
 #include <utils/typcache.h>
 
+#include "compat.h"
 #include "gapfill/interpolate.h"
 #include "gapfill/exec.h"
 
