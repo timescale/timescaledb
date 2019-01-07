@@ -2,7 +2,7 @@
 --
 -- This file is licensed under the Timescale License,
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
 WARNING:  Timescale License expired
  stop_background_workers 
@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
 LANGUAGE C VOLATILE STRICT;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 WARNING:  Timescale License expired
  job_id | hypertable_id | older_than | cascade 
@@ -513,10 +513,10 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
     123 |      123 |                45
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
 WARNING:  Timescale License expired
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Now test chunk_stat cascade deletion is correct
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 WARNING:  Timescale License expired
@@ -751,7 +751,7 @@ select remove_reorder_policy('test_table');
  
 (1 row)
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';
 WARNING:  Timescale License expired
 -- Now make sure everything fails in the Community (non-enterprise) edition

@@ -10,7 +10,7 @@
 \set ECHO queries
 \set VERBOSITY default
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 SELECT allow_downgrade_to_apache();
 SET timescaledb.license_key='ApacheOnly';
@@ -20,5 +20,3 @@ SELECT locf(1);
 SELECT interpolate(1);
 SELECT time_bucket_gapfill(1,1,1,1);
 \set ON_ERROR_STOP 1
-
-\c single :ROLE_DEFAULT_PERM_USER

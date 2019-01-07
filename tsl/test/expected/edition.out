@@ -44,7 +44,7 @@ SELECT _timescaledb_internal.enterprise_enabled();
 (1 row)
 
 \set ON_ERROR_STOP 1
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.current_license_key();
 WARNING:  Timescale License expired
                                                                             current_license_key                                                                             
@@ -125,4 +125,3 @@ SELECT _timescaledb_internal.enterprise_enabled();
  t
 (1 row)
 
-\c single :ROLE_DEFAULT_PERM_USER

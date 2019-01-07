@@ -3,7 +3,7 @@
 -- This file is licensed under the Timescale License,
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
 SET timescaledb.license_key='CommunityLicense';
 
@@ -15,7 +15,7 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
 LANGUAGE C VOLATILE STRICT;
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 select * from _timescaledb_config.bgw_policy_reorder;
@@ -195,9 +195,9 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 select ts_test_chunk_stats_insert(123, 123, 45);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- Now test chunk_stat cascade deletion is correct
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
@@ -281,7 +281,7 @@ select * from alter_policy_schedule(1234);
 
 select remove_reorder_policy('test_table');
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';
 
 -- Now make sure everything fails in the Community (non-enterprise) edition
