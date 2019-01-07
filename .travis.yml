@@ -24,7 +24,7 @@ install:
   - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"
 
   # First build without OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres && make install"
+  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS} && make install"
   # Now build with OpenSSL
   - docker exec -it pgbuild /bin/sh -c "cd /build/debug && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DENABLE_CODECOVERAGE=TRUE -DPG_SOURCE_DIR=/postgres ${ADDITIONAL_CMAKE_FLAGS:-} && make install"
   # Ensure postgres user has permissions
@@ -152,6 +152,22 @@ jobs:
       after_script:
       script:
         - PG_MAJOR=11 PG_MINOR_COMPILE=0 bash -x ./scripts/docker-run-abi-test.sh
+
+    # ApacheOnly regression tests
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "ApacheOnly regression tests 11"
+      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "ApacheOnly regression tests 10.2"
+      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "ApacheOnly regression tests 9.6.6"
+      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
