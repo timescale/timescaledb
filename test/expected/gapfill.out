@@ -12,10 +12,10 @@ SELECT allow_downgrade_to_apache();
 SET timescaledb.license_key='ApacheOnly';
 SELECT locf(1);
 ERROR:  function "locf" is not supported under the current license "ApacheOnly"
-HINT:  Buy a Timescale license to enable the functionality
+HINT:  Upgrade to a Timescale-licensed binary to access this free community feature
 SELECT interpolate(1);
 ERROR:  function "interpolate" is not supported under the current license "ApacheOnly"
-HINT:  Buy a Timescale license to enable the functionality
+HINT:  Upgrade to a Timescale-licensed binary to access this free community feature
 SELECT time_bucket_gapfill(1,1,1,1);
 ERROR:  function "time_bucket_gapfill" is not supported under the current license "ApacheOnly"
-HINT:  Buy a Timescale license to enable the functionality
+HINT:  Upgrade to a Timescale-licensed binary to access this free community feature

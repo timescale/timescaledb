@@ -62,49 +62,77 @@ ts_reorder_chunk(PG_FUNCTION_ARGS)
  */
 
 static void
-error_no_default_fn(void)
+error_no_default_fn_community(void)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
-			 errhint("Buy a Timescale license to enable the functionality")));
+			 errhint("Upgrade to a Timescale-licensed binary to access this free community feature")));
+}
+
+static void
+error_no_default_fn_enterprise(void)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
+			 errhint("Request a trial license to try this feature for free or contact us for more information at https://www.timescale.com/pricing")));
 }
 
 static bool
-error_no_default_fn_bool_void(void)
+error_no_default_fn_bool_void_community(void)
 {
-	error_no_default_fn();
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
+static bool
+error_no_default_fn_bool_void_enterprise(void)
+{
+	error_no_default_fn_enterprise();
 	pg_unreachable();
 }
 
 static void
 tsl_license_on_assign_default_fn(const char *newval, const void *license)
 {
-	error_no_default_fn();
+	error_no_default_fn_community();
 }
 
 static void
 add_telemetry_default(JsonbParseState *parseState)
 {
-	error_no_default_fn();
+	error_no_default_fn_community();
 }
 
 static bool
 bgw_policy_job_execute_default_fn(BgwJob *job)
 {
-	error_no_default_fn();
+	error_no_default_fn_enterprise();
 	pg_unreachable();
 }
 
 static Datum
-error_no_default_fn_pg(PG_FUNCTION_ARGS)
+error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
 					get_func_name(fcinfo->flinfo->fn_oid),
 					ts_guc_license_key),
-			 errhint("Buy a Timescale license to enable the functionality")));
+			 errhint("Upgrade to a Timescale-licensed binary to access this free community feature")));
+	pg_unreachable();
+}
+
+static Datum
+error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
+					get_func_name(fcinfo->flinfo->fn_oid),
+					ts_guc_license_key),
+			 errhint("Request a trial license to try this feature for free or contact us for more information at https://www.timescale.com/pricing")));
 	pg_unreachable();
 }
 
@@ -115,25 +143,25 @@ error_no_default_fn_pg(PG_FUNCTION_ARGS)
  */
 TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.tsl_license_on_assign = tsl_license_on_assign_default_fn,
-	.enterprise_enabled_internal = error_no_default_fn_bool_void,
-	.check_tsl_loaded = error_no_default_fn_bool_void,
+	.enterprise_enabled_internal = error_no_default_fn_bool_void_enterprise,
+	.check_tsl_loaded = error_no_default_fn_bool_void_community,
 	.module_shutdown_hook = NULL,
 	.add_tsl_license_info_telemetry = add_telemetry_default,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
-	.add_drop_chunks_policy = error_no_default_fn_pg,
-	.add_reorder_policy = error_no_default_fn_pg,
-	.remove_drop_chunks_policy = error_no_default_fn_pg,
-	.remove_reorder_policy = error_no_default_fn_pg,
+	.add_drop_chunks_policy = error_no_default_fn_pg_enterprise,
+	.add_reorder_policy = error_no_default_fn_pg_enterprise,
+	.remove_drop_chunks_policy = error_no_default_fn_pg_enterprise,
+	.remove_reorder_policy = error_no_default_fn_pg_enterprise,
 	.create_upper_paths_hook = NULL,
-	.gapfill_marker = error_no_default_fn_pg,
-	.gapfill_int16_time_bucket = error_no_default_fn_pg,
-	.gapfill_int32_time_bucket = error_no_default_fn_pg,
-	.gapfill_int64_time_bucket = error_no_default_fn_pg,
-	.gapfill_date_time_bucket = error_no_default_fn_pg,
-	.gapfill_timestamp_time_bucket = error_no_default_fn_pg,
-	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg,
-	.alter_policy_schedule = error_no_default_fn_pg,
-	.reorder_chunk = error_no_default_fn_pg,
+	.gapfill_marker = error_no_default_fn_pg_community,
+	.gapfill_int16_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_int32_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_int64_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_date_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_community,
+	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_community,
+	.alter_policy_schedule = error_no_default_fn_pg_enterprise,
+	.reorder_chunk = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
