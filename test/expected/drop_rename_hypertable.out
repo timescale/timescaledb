@@ -206,12 +206,12 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | tablespace            | table | super_user
 (8 rows)
 
-\dt+ "_timescaledb_internal".*
-                                       List of relations
-        Schema         |          Name          | Type  |   Owner    |    Size    | Description 
------------------------+------------------------+-------+------------+------------+-------------
- _timescaledb_internal | bgw_job_stat           | table | super_user | 8192 bytes | 
- _timescaledb_internal | bgw_policy_chunk_stats | table | super_user | 0 bytes    | 
+\dt "_timescaledb_internal".*
+                          List of relations
+        Schema         |          Name          | Type  |   Owner    
+-----------------------+------------------------+-------+------------
+ _timescaledb_internal | bgw_job_stat           | table | super_user
+ _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
 (2 rows)
 
 -- Test that renaming ordinary table works

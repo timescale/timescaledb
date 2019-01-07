@@ -28,7 +28,7 @@ DROP TABLE "newschema"."newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
 \dt  "public".*
 \dt  "_timescaledb_catalog".*
-\dt+ "_timescaledb_internal".*
+\dt "_timescaledb_internal".*
 
 -- Test that renaming ordinary table works
 
