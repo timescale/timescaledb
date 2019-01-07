@@ -92,7 +92,7 @@ SET timezone = 'UTC';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
-AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
+AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC, device_id, series_1;
         timeCustom        | device_id | series_0 | series_1 | series_2 | series_bool 
 --------------------------+-----------+----------+----------+----------+-------------
  Tue Nov 10 23:00:02 2009 | dev1      |      2.5 |        3 |          | 
@@ -104,7 +104,7 @@ SET timezone = 'EST';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
-AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
+AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC, device_id, series_1;
         timeCustom        | device_id | series_0 | series_1 | series_2 | series_bool 
 --------------------------+-----------+----------+----------+----------+-------------
  Tue Nov 10 23:00:02 2009 | dev1      |      2.5 |        3 |          | 

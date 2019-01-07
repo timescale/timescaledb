@@ -67,13 +67,13 @@ SET timezone = 'UTC';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
-AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
+AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC, device_id, series_1;
 
 SET timezone = 'EST';
 SELECT *
 FROM PUBLIC."testNs"
 WHERE "timeCustom" >= TIMESTAMP '2009-11-10T23:00:00'
-AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC;
+AND "timeCustom" < TIMESTAMP '2009-11-12T01:00:00' ORDER BY "timeCustom" DESC, device_id, series_1;
 
 SET timezone = 'UTC';
 SELECT date_group("timeCustom", '1 day') AS time, sum(series_0)
