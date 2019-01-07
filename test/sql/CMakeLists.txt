@@ -61,6 +61,26 @@ set(TEST_FILES
   views.sql
 )
 
+# tests that fail or are unreliable when run in parallel
+set(SOLO_TESTS
+  bgw_db_scheduler
+  bgw_launcher
+  net
+  pg_dump_unprivileged
+  telemetry
+)
+
+# tests run in parallel after all other tests because they operate
+# on output of previous tests
+set(POST_TESTS
+  agg_bookends_results_diff
+  alternate_users-9.6
+  alternate_users-10
+  alternate_users-11
+  append_x_diff
+  sql_query_results_x_diff
+)
+
 # only test custom type if we are in 64-bit architecture
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
   list(APPEND TEST_FILES
@@ -134,10 +154,36 @@ endforeach(TEMPLATE_FILE)
 
 list(SORT TEST_FILES)
 file(REMOVE ${TEST_SCHEDULE})
+set(PARALLEL_GROUP_SIZE 20)
 
+# append solo tests to schedule first
 foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  file(APPEND ${TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
+  if(TESTS_TO_RUN IN_LIST SOLO_TESTS)
+    file(APPEND ${TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
+  endif()
 endforeach(TEST_FILE)
+
+set(GROUP_MEMBERS 0)
+foreach(TEST_FILE ${TEST_FILES})
+  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
+  if((NOT (TESTS_TO_RUN IN_LIST SOLO_TESTS)) AND (NOT (TESTS_TO_RUN IN_LIST POST_TESTS)))
+    if(GROUP_MEMBERS EQUAL 0)
+      file(APPEND ${TEST_SCHEDULE} "\ntest: ")
+    endif()
+    file(APPEND ${TEST_SCHEDULE} "${TESTS_TO_RUN} ")
+    MATH(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
+  endif()
+endforeach(TEST_FILE)
+file(APPEND ${TEST_SCHEDULE} "\n")
+
+file(APPEND ${TEST_SCHEDULE} "test: ")
+foreach(TEST_FILE ${TEST_FILES})
+  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
+  if(TESTS_TO_RUN IN_LIST POST_TESTS)
+    file(APPEND ${TEST_SCHEDULE} "${TESTS_TO_RUN} ")
+  endif()
+endforeach(TEST_FILE)
+file(APPEND ${TEST_SCHEDULE} "\n")
 
 add_subdirectory(loader)
