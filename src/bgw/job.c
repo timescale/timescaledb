@@ -330,6 +330,26 @@ handle_sigterm(SIGNAL_ARGS)
 
 TS_FUNCTION_INFO_V1(ts_bgw_job_entrypoint);
 
+static void
+zero_guc(const char *guc_name)
+{
+	int			config_change = set_config_option(guc_name,
+												  "0",
+												  PGC_SUSET,
+												  PGC_S_SESSION,
+												  GUC_ACTION_SET,
+												  true, 0, false);
+
+	if (config_change == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("guc \"%s\" does not exist", guc_name)));
+	else if (config_change < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not set \"%s\" guc", guc_name)));
+}
+
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
@@ -365,6 +385,18 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	PG_TRY();
 	{
+		/*
+		 * we do not necessarily have a valid parallel worker context in
+		 * background workers, so disable parallel execution by default
+		 */
+		zero_guc("max_parallel_workers_per_gather");
+#if !PG96
+		zero_guc("max_parallel_workers");
+#endif
+#if !(PG96 || PG10)
+		zero_guc("max_parallel_maintenance_workers");
+#endif
+
 		res = ts_bgw_job_execute(job);
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
