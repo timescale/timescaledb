@@ -18,6 +18,7 @@
 #include "extension.h"
 #include "compat.h"
 #include "job_stat.h"
+#include "license_guc.h"
 #include "utils.h"
 #include "telemetry/telemetry.h"
 #include "bgw_policy/chunk_stats.h"
@@ -350,6 +351,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	elog(DEBUG1, "started background job %d", job_id);
 
 	BackgroundWorkerInitializeConnectionByOidCompat(db_oid, InvalidOid);
+
+	ts_license_enable_module_loading();
 
 	StartTransactionCommand();
 	job = ts_bgw_job_find(job_id, TopMemoryContext, true);
