@@ -21,7 +21,7 @@ elseif (WIN32)
 endif (APPLE)
 
 if(APACHE_ONLY)
-  add_compile_definitions(APACHE_ONLY)
+  add_definitions(-DAPACHE_ONLY)
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_BINARY_DIR}/src ${PG_INCLUDEDIR_SERVER})
