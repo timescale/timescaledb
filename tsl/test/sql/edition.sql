@@ -15,7 +15,7 @@ SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
 \set ON_ERROR_STOP 1
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
@@ -38,4 +38,3 @@ SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
 
-\c single :ROLE_DEFAULT_PERM_USER

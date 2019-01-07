@@ -3,7 +3,7 @@
 -- This file is licensed under the Timescale License,
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 
-\c single :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
 SET timescaledb.license_key='CommunityLicense';
 
@@ -20,7 +20,7 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_auto_drop_chunks'
 LANGUAGE C VOLATILE STRICT;
 
-\c single :ROLE_DEFAULT_PERM_USER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE FUNCTION check_chunk_oid(chunk_id REGCLASS, chunk_oid REGCLASS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
