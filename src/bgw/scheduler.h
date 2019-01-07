@@ -29,5 +29,6 @@ extern void ts_bgw_scheduler_process(int32 run_for_interval_ms, register_backgro
 extern void ts_bgw_scheduler_setup_callbacks(void);
 
 extern void ts_bgw_job_cache_invalidate_callback(void);
+extern void ts_bgw_scheduler_register_signal_handlers(void);
 
 #endif							/* BGW_SCHEDULER_H */

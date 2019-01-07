@@ -22,6 +22,12 @@ extern TSDLLEXPORT char *ts_guc_license_key;
 extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;
 
+#ifdef TS_DEBUG
+extern bool ts_shutdown_bgw;
+#else
+#define ts_shutdown_bgw false
+#endif
+
 void		_guc_init(void);
 void		_guc_fini(void);
 

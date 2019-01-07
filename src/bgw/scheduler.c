@@ -32,6 +32,7 @@
 #include <tcop/tcopprot.h>
 
 #include "extension.h"
+#include "guc.h"
 #include "scheduler.h"
 #include "job.h"
 #include "job_stat.h"
@@ -104,6 +105,8 @@ typedef struct ScheduledBgwJob
 } ScheduledBgwJob;
 
 static void on_failure_to_start_job(ScheduledBgwJob *sjob);
+
+static volatile sig_atomic_t got_SIGHUP = false;
 
 #if USE_ASSERT_CHECKING
 static void
@@ -601,7 +604,14 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_c
 		quit_time = TimestampTzPlusMilliseconds(start, run_for_interval_ms);
 
 	ereport(DEBUG1, (errmsg("database scheduler starting for database %d", MyDatabaseId)));
-	while (quit_time > ts_timer_get_current_timestamp())
+
+	/*
+	 * on SIGTERM the process will usually die from the CHECK_FOR_INTERRUPTS
+	 * in the die() called from the sigterm handler. Child reaping is then
+	 * handled in the before_shmem_exit,
+	 * bgw_scheduler_before_shmem_exit_callback.
+	 */
+	while (quit_time > ts_timer_get_current_timestamp() && !ProcDiePending && !ts_shutdown_bgw)
 	{
 		TimestampTz next_wakeup = quit_time;
 
@@ -613,6 +623,12 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_c
 		ts_timer_wait(next_wakeup);
 
 		CHECK_FOR_INTERRUPTS();
+
+		if (got_SIGHUP)
+		{
+			got_SIGHUP = false;
+			ProcessConfigFile(PGC_SIGHUP);
+		}
 
 		/*
 		 * Process any cache invalidation message that indicates we need to
@@ -631,6 +647,13 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms, register_background_worker_c
 
 		check_for_stopped_and_timed_out_jobs();
 	}
+
+#ifdef TS_DEBUG
+	if (ts_shutdown_bgw)
+		elog(WARNING, "bgw scheduler stopped due to shutdown_bgw guc");
+#endif
+
+	CHECK_FOR_INTERRUPTS();
 
 	wait_for_all_jobs_to_shutdown();
 	check_for_stopped_and_timed_out_jobs();
@@ -661,17 +684,40 @@ handle_sigterm(SIGNAL_ARGS)
 	die(postgres_signal_arg);
 }
 
-Datum
-ts_bgw_scheduler_main(PG_FUNCTION_ARGS)
+static void
+handle_sighup(SIGNAL_ARGS)
 {
-	BackgroundWorkerBlockSignals();
-	/* Setup any signal handlers here */
+	/* based on av_sighup_handler */
+	int			save_errno = errno;
 
+	got_SIGHUP = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
+}
+
+/*
+ * Register SIGTERM and SIGHUP handlers for bgw_scheduler.
+ * This function _must_ be called with signals blocked, i.e., after calling
+ * BackgroundWorkerBlockSignals
+ */
+void
+ts_bgw_scheduler_register_signal_handlers(void)
+{
 	/*
 	 * do not use the default `bgworker_die` sigterm handler because it does
 	 * not respect critical sections
 	 */
 	pqsignal(SIGTERM, handle_sigterm);
+	pqsignal(SIGHUP, handle_sighup);
+}
+
+Datum
+ts_bgw_scheduler_main(PG_FUNCTION_ARGS)
+{
+	BackgroundWorkerBlockSignals();
+	/* Setup any signal handlers here */
+	ts_bgw_scheduler_register_signal_handlers();
 	BackgroundWorkerUnblockSignals();
 
 	ts_bgw_scheduler_setup_callbacks();

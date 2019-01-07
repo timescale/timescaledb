@@ -48,6 +48,10 @@ TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
 char	   *ts_last_tune_time = NULL;
 char	   *ts_last_tune_version = NULL;
 
+#ifdef TS_DEBUG
+bool		ts_shutdown_bgw = false;
+#endif
+
 static void
 assign_max_cached_chunks_per_hypertable_hook(int newval, void *extra)
 {
@@ -158,7 +162,7 @@ _guc_init(void)
 							    /* long_dec= */ "records last time timescaledb-tune ran",
 							    /* valueAddr= */ &ts_last_tune_time,
 							    /* bootValue= */ NULL,
-							    /* context= */ PGC_BACKEND,
+							    /* context= */ PGC_SIGHUP,
 							    /* flags= */ 0,
 							    /* check_hook= */ NULL,
 							    /* assign_hook= */ NULL,
@@ -169,11 +173,23 @@ _guc_init(void)
 							    /* long_dec= */ "version of timescaledb-tune used to tune",
 							    /* valueAddr= */ &ts_last_tune_version,
 							    /* bootValue= */ NULL,
-							    /* context= */ PGC_BACKEND,
+							    /* context= */ PGC_SIGHUP,
 							    /* flags= */ 0,
 							    /* check_hook= */ NULL,
 							    /* assign_hook= */ NULL,
 							    /* show_hook= */ NULL);
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable( /* name= */ "timescaledb.shutdown_bgw_scheduler",
+							  /* short_dec= */ "immediately shutdown the bgw scheduler",
+							  /* long_dec= */ "this is for debugging purposes",
+							  /* valueAddr= */ &ts_shutdown_bgw,
+							  /* bootValue= */ false,
+							  /* context= */ PGC_SIGHUP,
+							  /* flags= */ 0,
+							  /* check_hook= */ NULL,
+							  /* assign_hook= */ NULL,
+							  /* show_hook= */ NULL);
+#endif
 }
 
 void

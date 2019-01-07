@@ -12,6 +12,7 @@
 #include <storage/lwlock.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
+#include <utils/guc.h>
 #include <utils/jsonb.h>
 #include <utils/timestamp.h>
 #include <utils/snapmgr.h>
@@ -100,6 +101,7 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
+	ts_bgw_scheduler_register_signal_handlers();
 	BackgroundWorkerUnblockSignals();
 	ts_bgw_scheduler_setup_callbacks();
 
@@ -128,6 +130,16 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+static BackgroundWorkerHandle *
+start_test_scheduler(char *params)
+{
+	/*
+	 * TODO this is where we would increment the number of bgw used, if we
+	 * decide to do so
+	 */
+	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
+}
+
 extern Datum
 ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {
@@ -135,7 +147,7 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	BackgroundWorkerHandle *worker_handle;
 	pid_t		pid;
 
-	worker_handle = ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
+	worker_handle = start_test_scheduler(params);
 
 	Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(worker_handle, &pid));
 	Assert(BGWH_STOPPED == WaitForBackgroundWorkerShutdown(worker_handle));
@@ -153,7 +165,7 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	MemoryContext old_ctx;
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
-	current_handle = ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
+	current_handle = start_test_scheduler(params);
 	MemoryContextSwitchTo(old_ctx);
 
 

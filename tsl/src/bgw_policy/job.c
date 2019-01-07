@@ -110,8 +110,10 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id, chunk_id, ts_timer_get_current_timestamp());
 
-	if (fast_continue && get_chunk_id_to_reorder(args->fd.job_id, ht) != -1) {
+	if (fast_continue && get_chunk_id_to_reorder(args->fd.job_id, ht) != -1)
+	{
 		BgwJobStat *job_stat = ts_bgw_job_stat_find(job->fd.id);
+
 		ts_bgw_job_stat_set_next_start(job, job_stat->fd.last_start);
 		elog(LOG, "Fast catchup enabled on reorder");
 	}
