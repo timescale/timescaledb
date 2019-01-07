@@ -23,7 +23,7 @@
 PG_MODULE_MAGIC;
 #endif
 
-#ifdef ApacheOnly
+#ifdef APACHE_ONLY
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
 
@@ -45,7 +45,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.tsl_license_on_assign = tsl_license_on_assign,
 	.enterprise_enabled_internal = enterprise_enabled_internal,
 	.check_tsl_loaded = check_tsl_loaded,
-	.module_shutdown = module_shutdown,
+	.module_shutdown_hook = module_shutdown,
 	.add_tsl_license_info_telemetry = tsl_telemetry_add_license_info,
 	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.add_drop_chunks_policy = drop_chunks_add_policy,
