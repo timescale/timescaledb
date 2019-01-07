@@ -196,7 +196,8 @@ ts_license_on_assign(const char *newval, void *extra)
 	{
 		Assert(current_license_can_downgrade_to_apache());
 		Assert(extra == NULL);
-		ts_cm_functions->module_shutdown();
+		if (ts_cm_functions->module_shutdown_hook != NULL)
+			ts_cm_functions->module_shutdown_hook();
 		return;
 	}
 
