@@ -82,6 +82,19 @@ typedef enum SchedulerState
 #define BGW_LAUNCHER_POLL_TIME_MS 60000L
 #endif
 
+static volatile sig_atomic_t got_SIGHUP = false;
+
+static void
+launcher_sighup(SIGNAL_ARGS)
+{
+	/* based on av_sighup_handler */
+	int			save_errno = errno;
+
+	got_SIGHUP = true;
+	SetLatch(MyLatch);
+
+	errno = save_errno;
+}
 
 /*
  * Main bgw launcher for the cluster.
@@ -679,6 +692,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, launcher_sigterm);
+	pqsignal(SIGHUP, launcher_sighup);
 	BackgroundWorkerUnblockSignals();
 	ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher started")));
 
@@ -724,6 +738,12 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		ResetLatch(MyLatch);
 		if (wl_rc & WL_POSTMASTER_DEATH)
 			bgw_on_postmaster_death();
+
+		if (got_SIGHUP)
+		{
+			got_SIGHUP = false;
+			ProcessConfigFile(PGC_SIGHUP);
+		}
 	}
 	PG_RETURN_VOID();
 }

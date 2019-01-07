@@ -252,6 +252,35 @@ FROM _timescaledb_internal.bgw_job_stat;
 
 SELECT * FROM sorted_bgw_log;
 
+--Test sending a SIGHUP to a job
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time();
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_config.bgw_job;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+--escalated priv needed for access to pg_stat_activity
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SELECT ts_bgw_db_scheduler_test_run(-1);
+
+SHOW timescaledb.shutdown_bgw_scheduler;
+
+ALTER SYSTEM SET timescaledb.shutdown_bgw_scheduler TO 'on';
+SELECT pg_reload_conf();
+SELECT pg_sleep(0.001);
+SHOW timescaledb.shutdown_bgw_scheduler;
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
+SELECT * FROM sorted_bgw_log;
+
+ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
+SELECT pg_reload_conf();
+SELECT pg_sleep(0.001);
+SHOW timescaledb.shutdown_bgw_scheduler;
+
 --Test that sending SIGTERM to scheduler terminates the jobs as well
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
@@ -297,7 +326,8 @@ TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
---Our normal limit is 8 jobs (2 already taken up) so start 7 workers. Make the schedule_INTERVAL long and the retry period short so that the
+--Our normal limit is 8 jobs (1 already taken up by the launcher, we don't register the test scheduler)
+--so start 8 workers. Make the schedule_INTERVAL long and the retry period short so that the
 --retries happen within the scheduler run time but everything only runs once.
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_3_long_1', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
@@ -306,7 +336,8 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 ('test_job_3_long_4', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
 ('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
 ('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
+('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
+('test_job_3_long_8', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 

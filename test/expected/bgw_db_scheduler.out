@@ -573,6 +573,83 @@ SELECT * FROM sorted_bgw_log;
       1 |    800000 | test_job_3_long  | After sleep job 3
 (11 rows)
 
+--Test sending a SIGHUP to a job
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_config.bgw_job;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--escalated priv needed for access to pg_stat_activity
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT ts_bgw_db_scheduler_test_run(-1);
+ ts_bgw_db_scheduler_test_run 
+------------------------------
+ 
+(1 row)
+
+SHOW timescaledb.shutdown_bgw_scheduler;
+ timescaledb.shutdown_bgw_scheduler 
+------------------------------------
+ off
+(1 row)
+
+ALTER SYSTEM SET timescaledb.shutdown_bgw_scheduler TO 'on';
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+SELECT pg_sleep(0.001);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SHOW timescaledb.shutdown_bgw_scheduler;
+ timescaledb.shutdown_bgw_scheduler 
+------------------------------------
+ on
+(1 row)
+
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |      mock_time      | application_name |                          msg                           
+--------+---------------------+------------------+--------------------------------------------------------
+      0 |                   0 | DB Scheduler     | [TESTING] Wait until 9223372036854775807, started at 0
+      1 | 9223372036854775807 | DB Scheduler     | bgw scheduler stopped due to shutdown_bgw guc
+(2 rows)
+
+ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+SELECT pg_sleep(0.001);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SHOW timescaledb.shutdown_bgw_scheduler;
+ timescaledb.shutdown_bgw_scheduler 
+------------------------------------
+ off
+(1 row)
+
 --Test that sending SIGTERM to scheduler terminates the jobs as well
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
@@ -621,16 +698,17 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                                            msg                                             
---------+-----------+------------------+--------------------------------------------------------------------------------------------
+ msg_no | mock_time | application_name |                                          msg                                          
+--------+-----------+------------------+---------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
-      2 |         0 | DB Scheduler     | terminating background worker "ts_bgw_db_scheduler_test_main" due to administrator command
+      2 |         0 | DB Scheduler     | terminating TimescaleDB job scheduler due to administrator command
+      3 |         0 | DB Scheduler     | terminating connection due to administrator command
       0 |         0 | test_job_3_long  | Before sleep job 3
       1 |         0 | test_job_3_long  | Job got term signal
       2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
       3 |         0 | test_job_3_long  | terminating connection due to administrator command
-(7 rows)
+(8 rows)
 
 --After a SIGTERM to scheduler and jobs, the jobs are considered crashed and there is a imposed wait of 5 min before a job can be run.
 --See that there is no run again because of the crash-imposed wait (not run with the 10ms retry_period)
@@ -662,12 +740,13 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                                            msg                                             
---------+-----------+------------------+--------------------------------------------------------------------------------------------
+ msg_no | mock_time | application_name |                                          msg                                          
+--------+-----------+------------------+---------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
-      2 |         0 | DB Scheduler     | terminating background worker "ts_bgw_db_scheduler_test_main" due to administrator command
+      2 |         0 | DB Scheduler     | terminating TimescaleDB job scheduler due to administrator command
+      3 |         0 | DB Scheduler     | terminating connection due to administrator command
       0 |         0 | test_job_3_long  | Before sleep job 3
       1 |         0 | test_job_3_long  | Job got term signal
       2 |         0 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
@@ -677,7 +756,7 @@ SELECT * FROM sorted_bgw_log;
       2 | 300500000 | DB Scheduler     | [TESTING] Wait until 400500000, started at 300500000
       0 | 300500000 | test_job_3_long  | Before sleep job 3
       1 | 300500000 | test_job_3_long  | After sleep job 3
-(13 rows)
+(14 rows)
 
 --
 -- Test starting more jobs than availlable workers
@@ -692,7 +771,8 @@ SELECT ts_bgw_params_reset_time();
 (1 row)
 
 DELETE FROM _timescaledb_config.bgw_job;
---Our normal limit is 8 jobs (2 already taken up) so start 7 workers. Make the schedule_INTERVAL long and the retry period short so that the
+--Our normal limit is 8 jobs (1 already taken up by the launcher, we don't register the test scheduler)
+--so start 8 workers. Make the schedule_INTERVAL long and the retry period short so that the
 --retries happen within the scheduler run time but everything only runs once.
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_3_long_1', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
@@ -701,7 +781,8 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 ('test_job_3_long_4', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
 ('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
 ('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
+('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
+('test_job_3_long_8', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -720,8 +801,9 @@ ORDER BY job_id;
    1009 | t                |          1 |               1 |              0 |             0 |                   0
    1010 | t                |          1 |               1 |              0 |             0 |                   0
    1011 | t                |          1 |               1 |              0 |             0 |                   0
-   1012 | t                |          2 |               1 |              1 |             0 |                   0
-(7 rows)
+   1012 | t                |          1 |               1 |              0 |             0 |                   0
+   1013 | t                |          2 |               1 |              1 |             0 |                   0
+(8 rows)
 
 SELECT * FROM bgw_log WHERE application_name = 'DB Scheduler' ORDER BY mock_time, application_name, msg_no;
  msg_no | mock_time | application_name |                                   msg                                    
@@ -732,11 +814,12 @@ SELECT * FROM bgw_log WHERE application_name = 'DB Scheduler' ORDER BY mock_time
       3 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       4 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       5 |         0 | DB Scheduler     | [TESTING] Registered new background worker
-      6 |         0 | DB Scheduler     | failed to launch job 1012 "test_job_3_long_7": out of background workers
-      7 |         0 | DB Scheduler     | [TESTING] Wait until 10000, started at 0
-      8 |     10000 | DB Scheduler     | [TESTING] Registered new background worker
-      9 |     10000 | DB Scheduler     | [TESTING] Wait until 500000, started at 10000
-(10 rows)
+      6 |         0 | DB Scheduler     | [TESTING] Registered new background worker
+      7 |         0 | DB Scheduler     | failed to launch job 1013 "test_job_3_long_8": out of background workers
+      8 |         0 | DB Scheduler     | [TESTING] Wait until 10000, started at 0
+      9 |     10000 | DB Scheduler     | [TESTING] Registered new background worker
+     10 |     10000 | DB Scheduler     | [TESTING] Wait until 500000, started at 10000
+(11 rows)
 
 SELECT ts_bgw_params_destroy();
  ts_bgw_params_destroy 
@@ -762,7 +845,7 @@ INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_IN
 select * from _timescaledb_config.bgw_job;
   id  | application_name |    job_type    | schedule_interval |   max_runtime   | max_retries | retry_period 
 ------+------------------+----------------+-------------------+-----------------+-------------+--------------
- 1013 | test_job_4       | bgw_test_job_4 | @ 0.1 secs        | @ 1 min 40 secs |           3 | @ 1 sec
+ 1014 | test_job_4       | bgw_test_job_4 | @ 0.1 secs        | @ 1 min 40 secs |           3 | @ 1 sec
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -777,7 +860,7 @@ SELECT job_id, next_start - last_finish as until_next, last_run_success, total_r
 FROM _timescaledb_internal.bgw_job_stat;
  job_id | until_next | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------+------------------+------------+-----------------+----------------+---------------
-   1013 | @ 0.2 secs | t                |          1 |               1 |              0 |             0
+   1014 | @ 0.2 secs | t                |          1 |               1 |              0 |             0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -801,7 +884,7 @@ SELECT job_id, next_start, last_finish, last_run_success, total_runs, total_succ
 FROM _timescaledb_internal.bgw_job_stat;
  job_id |           next_start           |          last_finish           | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------
-   1013 | Fri Dec 31 16:00:00.4 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          2 |               2 |              0 |             0
+   1014 | Fri Dec 31 16:00:00.4 1999 PST | Fri Dec 31 16:00:00.2 1999 PST | t                |          2 |               2 |              0 |             0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
@@ -1040,7 +1123,7 @@ SELECT wait_for_job_1_to_run(2);
 select * from _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
 --------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1025 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+   1026 | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.25 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
 (1 row)
 
 SELECT delete_job(x.id) FROM (select * from _timescaledb_config.bgw_job) x;
@@ -1163,7 +1246,7 @@ SELECT * FROM sorted_bgw_log;
 select * from _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
 --------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
-   1026 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
+   1027 | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.48 1999 PST | Fri Dec 31 16:00:00.49 1999 PST | t                |          2 | @ 0            |               2 |              0 |             0 |                    0 |                   0
 (1 row)
 
 SELECT * FROM insert_job(NULL,NULL,NULL,NULL,NULL,NULL);
