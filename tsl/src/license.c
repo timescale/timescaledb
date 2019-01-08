@@ -181,6 +181,8 @@ static bool
 license_info_init_from_base64(char *license_key, LicenseInfo *out)
 {
 	char	   *expanded = base64_decode(license_key);
+	if (expanded == NULL)
+		return false;
 
 	PG_TRY();
 	{
@@ -208,6 +210,9 @@ base64_decode(char *license_key)
 	char	   *decoded = palloc(decoded_buffer_len);
 	int			decoded_len = pg_b64_decode(license_key, raw_len, decoded);
 
+	if (decoded_len < 0)
+		return NULL;
+
 	Assert(decoded_len < decoded_buffer_len);
 	decoded[decoded_len] = '\0';
 	return decoded;
@@ -233,7 +238,10 @@ static TimestampTz json_get_end_time(Jsonb *license);
 static void
 license_info_init_from_jsonb(Jsonb *json_license, LicenseInfo *out)
 {
-	StrNCpy(out->id, json_get_id(json_license), sizeof(out->id));
+	char *id_str = json_get_id(json_license);
+	if (id_str == NULL)
+		elog(ERROR, "missing id in license key");
+	StrNCpy(out->id, id_str, sizeof(out->id));
 	StrNCpy(out->kind, json_get_kind(json_license), sizeof(out->kind));
 	out->start_time = json_get_start_time(json_license);
 	out->end_time = json_get_end_time(json_license);
