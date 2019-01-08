@@ -4,7 +4,6 @@
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 \set EXPLAIN 'EXPLAIN (COSTS OFF)'
 CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
-WARNING:  Timescale License expired
 SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
     table_name     
 -------------------
@@ -20,6 +19,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 1;
+WARNING:  Timescale License expired
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
  Custom Scan (GapFill)

@@ -1,14 +1,10 @@
 Parsed test spec with 2 sessions
-WARNING:  Timescale License expired
-HINT:  Your license expired on Sun Sep 30 17:00:00 2018 PDT. Renew your license to continue using enterprise features.
-WARNING:  Timescale License expired
-HINT:  Your license expired on Sun Sep 30 17:00:00 2018 PDT. Renew your license to continue using enterprise features.
-WARNING:  Timescale License expired
-HINT:  Your license expired on Sun Sep 30 17:00:00 2018 PDT. Renew your license to continue using enterprise features.
 
 starting permutation: I1 Ic R1 Rc
 step I1: INSERT INTO ts_reorder_test VALUES (11, 19.5, 3);
 step Ic: COMMIT;
+WARNING:  Timescale License expired
+HINT:  Your license expired on Sun Sep 30 17:00:00 2018 PDT. Renew your license to continue using enterprise features.
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx');
 reorder_chunk_i
 

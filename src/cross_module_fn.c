@@ -99,6 +99,13 @@ tsl_license_on_assign_default_fn(const char *newval, const void *license)
 	error_no_default_fn_community();
 }
 
+static TimestampTz
+license_end_time_default_fn(void)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 static void
 add_telemetry_default(JsonbParseState *parseState)
 {
@@ -145,6 +152,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.tsl_license_on_assign = tsl_license_on_assign_default_fn,
 	.enterprise_enabled_internal = error_no_default_fn_bool_void_enterprise,
 	.check_tsl_loaded = error_no_default_fn_bool_void_community,
+	.license_end_time = license_end_time_default_fn,
+	.print_tsl_license_expiration_info_hook = error_no_default_fn_community,
 	.module_shutdown_hook = NULL,
 	.add_tsl_license_info_telemetry = add_telemetry_default,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,

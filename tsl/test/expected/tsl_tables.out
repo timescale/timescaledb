@@ -4,7 +4,6 @@
 -- see LICENSE-TIMESCALE at the top of the tsl directory.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
-WARNING:  Timescale License expired
  stop_background_workers 
 -------------------------
  t
@@ -19,7 +18,6 @@ AS :TSL_MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
 LANGUAGE C VOLATILE STRICT;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_config.bgw_policy_drop_chunks;
-WARNING:  Timescale License expired
  job_id | hypertable_id | older_than | cascade 
 --------+---------------+------------+---------
 (0 rows)
@@ -40,6 +38,7 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE INDEX second_index on test_table (time);
 CREATE INDEX third_index on test_table (time);
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
+WARNING:  Timescale License expired
 -- Noop for duplicate policy
 select add_reorder_policy('test_table', 'test_table_time_idx', true);
 NOTICE:  reorder policy already exists on hypertable "test_table", skipping
@@ -515,11 +514,9 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
-WARNING:  Timescale License expired
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Now test chunk_stat cascade deletion is correct
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-WARNING:  Timescale License expired
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
 (0 rows)
@@ -544,6 +541,7 @@ select c.id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertabl
 
 select c.id as chunk_id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table' LIMIT 1 \gset
 select add_reorder_policy('test_table', 'second_index') as job_id \gset
+WARNING:  Timescale License expired
 -- Simulate reorder job running and setting this stat row
 select ts_test_chunk_stats_insert(:job_id, :chunk_id, 1);
  ts_test_chunk_stats_insert 
@@ -753,7 +751,6 @@ select remove_reorder_policy('test_table');
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';
-WARNING:  Timescale License expired
 -- Now make sure everything fails in the Community (non-enterprise) edition
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table', 'test_table_time_idx');

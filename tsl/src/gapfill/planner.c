@@ -14,6 +14,7 @@
 #include <utils/lsyscache.h>
 #include <parser/parse_func.h>
 
+#include "license.h"
 #include "gapfill/gapfill.h"
 #include "gapfill/planner.h"
 #include "gapfill/exec.h"
@@ -282,6 +283,8 @@ plan_add_gapfill(PlannerInfo *root,
 
 	if (context.num_calls == 0)
 		return;
+
+	license_print_expiration_warning_if_needed();
 
 #ifndef HAVE_INT64_TIMESTAMP
 

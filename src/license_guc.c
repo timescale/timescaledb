@@ -16,6 +16,8 @@
 TS_FUNCTION_INFO_V1(ts_enterprise_enabled);
 TS_FUNCTION_INFO_V1(ts_current_license_key);
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
+TS_FUNCTION_INFO_V1(ts_print_tsl_license_expiration_info);
+TS_FUNCTION_INFO_V1(ts_license_expiration_time);
 TS_FUNCTION_INFO_V1(ts_allow_downgrade_to_apache);
 
 static bool downgrade_to_apache_enabled = false;
@@ -307,6 +309,23 @@ ts_current_license_key(PG_FUNCTION_ARGS)
 {
 	Assert(ts_guc_license_key != NULL);
 	PG_RETURN_TEXT_P(cstring_to_text(ts_guc_license_key));
+}
+
+PGDLLEXPORT Datum
+ts_print_tsl_license_expiration_info(PG_FUNCTION_ARGS)
+{
+	if (ts_cm_functions->print_tsl_license_expiration_info_hook != NULL)
+		ts_cm_functions->print_tsl_license_expiration_info_hook();
+	PG_RETURN_VOID();
+}
+
+PGDLLEXPORT Datum
+ts_license_expiration_time(PG_FUNCTION_ARGS)
+{
+	if (ts_cm_functions->print_tsl_license_expiration_info_hook == NULL)
+		PG_RETURN_NULL();
+
+	PG_RETURN_TIMESTAMPTZ(ts_cm_functions->license_end_time());
 }
 
 /*

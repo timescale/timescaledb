@@ -1,6 +1,3 @@
-# Set version in the NOTICE file
-configure_file(notice.sql.in notice.sql)
-
 set(INSTALL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
 
 # Source files that define the schemas and tables for our metadata
@@ -16,10 +13,6 @@ set(PRE_INSTALL_SOURCE_FILES
 # after everything else is loaded.
 set(IMMUTABLE_API_SOURCE_FILES
   aggregates.sql
-)
-
-set(NOTICE_FILE
-  ${CMAKE_CURRENT_BINARY_DIR}/notice.sql
 )
 
 # The rest of the source files defining mostly functions
@@ -117,6 +110,7 @@ version_files("${IMMUTABLE_API_SOURCE_FILES}" IMMUTABLE_API_SOURCE_FILES_VERSION
 version_files("${SOURCE_FILES}" SOURCE_FILES_VERSIONED)
 version_files("${MOD_FILES}" MOD_FILES_VERSIONED)
 version_files("updates/latest-dev.sql" LASTEST_MOD_VERSIONED)
+version_files("notice.sql" NOTICE_FILE)
 
 # Function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
 function(cat_files SRC_FILE_LIST OUTPUT_FILE)

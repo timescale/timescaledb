@@ -7,11 +7,13 @@
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 
+#include "license.h"
 #include "gapfill/gapfill.h"
 
 Datum
 gapfill_marker(PG_FUNCTION_ARGS)
 {
+	license_print_expiration_warning_if_needed();
 	ereport(ERROR,
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 			 errmsg("%s can only be used in an aggregation query with time_bucket_gapfill", get_func_name(fcinfo->flinfo->fn_oid))));
