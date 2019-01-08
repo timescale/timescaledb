@@ -11,3 +11,9 @@ AS '@MODULE_PATHNAME@', 'ts_current_license_key' LANGUAGE C STABLE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_loaded() RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_tsl_loaded' LANGUAGE C STABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.license_expiration_time() RETURNS TIMESTAMPTZ
+AS '@MODULE_PATHNAME@', 'ts_license_expiration_time' LANGUAGE C STABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.print_license_expiration_info() RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_print_tsl_license_expiration_info' LANGUAGE C STABLE;

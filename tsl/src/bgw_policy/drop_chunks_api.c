@@ -49,6 +49,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	};
 
 	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
 
 	/* First verify that the hypertable corresponds to a valid table */
 	if (!ts_is_hypertable(ht_oid))
@@ -100,6 +101,7 @@ drop_chunks_remove_policy(PG_FUNCTION_ARGS)
 	BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_hypertable(ht_id);
 
 	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
 
 	if (policy == NULL)
 	{

@@ -147,6 +147,7 @@ bool
 tsl_bgw_policy_job_execute(BgwJob *job)
 {
 	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
 
 	switch (job->bgw_type)
 	{
@@ -173,6 +174,7 @@ bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS)
 	bool		if_exists = PG_GETARG_BOOL(5);
 
 	license_enforce_enterprise_enabled();
+	license_print_expiration_warning_if_needed();
 
 	/* First get the job */
 	job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
