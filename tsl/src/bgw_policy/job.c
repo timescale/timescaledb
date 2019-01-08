@@ -67,6 +67,7 @@ execute_reorder_policy(int32 job_id, reorder_func reorder)
 	bool		started = false;
 	BgwPolicyReorder *args;
 	Hypertable *ht;
+	Chunk	   *chunk;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -90,7 +91,7 @@ execute_reorder_policy(int32 job_id, reorder_func reorder)
 
 	if (chunk_id == -1)
 	{
-		elog(NOTICE, "didn't find a chunk that needed reordering");
+		elog(NOTICE, "no chunks need reordering for hypertable %s.%s", ht->fd.schema_name.data, ht->fd.table_name.data);
 		goto commit;
 	}
 
@@ -99,8 +100,10 @@ execute_reorder_policy(int32 job_id, reorder_func reorder)
 	 * function should translate this to the Oid of the index on the specific
 	 * chunk.
 	 */
-	reorder(ts_chunk_get_by_id(chunk_id, 0, false)->table_id, get_relname_relid(NameStr(args->fd.hypertable_index_name), get_namespace_oid(NameStr(ht->fd.schema_name), false)), false, InvalidOid);
-
+	chunk = ts_chunk_get_by_id(chunk_id, 0, false);
+	elog(LOG, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
+	reorder(chunk->table_id, get_relname_relid(NameStr(args->fd.hypertable_index_name), get_namespace_oid(NameStr(ht->fd.schema_name), false)), false, InvalidOid);
+	elog(LOG, "completed reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id, chunk_id, ts_timer_get_current_timestamp());
 
