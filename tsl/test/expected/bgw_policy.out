@@ -155,7 +155,7 @@ select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
 
 -- The following calls should not reorder any chunk, because they're all too new
 select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  didn't find a chunk that needed reordering
+NOTICE:  no chunks need reordering for hypertable public.test_table
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
@@ -165,7 +165,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 (3 rows)
 
 select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  didn't find a chunk that needed reordering
+NOTICE:  no chunks need reordering for hypertable public.test_table
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
@@ -202,7 +202,7 @@ select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
 
 -- Should not reorder anything, because all chunks are too new
 select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  didn't find a chunk that needed reordering
+NOTICE:  no chunks need reordering for hypertable public.test_table
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
@@ -391,7 +391,7 @@ select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Ran out of chunks, so should be a noop
 select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  didn't find a chunk that needed reordering
+NOTICE:  no chunks need reordering for hypertable public.test_table
 -- Corner case: when there are no recent-enough chunks to reorder,
 -- DO NOT reorder any new chunks created by space partitioning.
 -- We only want to reorder when new dimension_slices on time are created.
@@ -400,7 +400,7 @@ INSERT INTO test_table VALUES (now() - INTERVAL '3 weeks', -5);
 INSERT INTO test_table VALUES (now(), -25);
 -- Should be noop
 select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  didn't find a chunk that needed reordering
+NOTICE:  no chunks need reordering for hypertable public.test_table
 -- But if we create a new time dimension, reorder it
 INSERT INTO test_table VALUES (now() - INTERVAL '1 year', 1);
 select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
@@ -421,4 +421,4 @@ select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Should be noop again
 select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  didn't find a chunk that needed reordering
+NOTICE:  no chunks need reordering for hypertable public.test_table
