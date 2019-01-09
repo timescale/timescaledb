@@ -36,6 +36,7 @@ ts_test_auto_reorder(PG_FUNCTION_ARGS)
 	int32 job_id = PG_GETARG_INT32(0);
 	Datum	   values[NUM_REORDER_RET_VALS];
 	bool	   nulls[NUM_REORDER_RET_VALS] = {false};
+	BgwJob	   job = { .fd = {.id = job_id} };
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 	{
@@ -45,7 +46,7 @@ ts_test_auto_reorder(PG_FUNCTION_ARGS)
 					 "that cannot accept type record")));
 	}
 
-	execute_reorder_policy(job_id, dummy_reorder_func);
+	execute_reorder_policy(&job, dummy_reorder_func, false);
 
 	values[0] = ObjectIdGetDatum(chunk_oid);
 	values[1] = ObjectIdGetDatum(index_oid);

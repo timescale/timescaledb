@@ -331,7 +331,7 @@ ts_bgw_job_stat_end_was_marked(BgwJobStat *jobstat)
 	return !TIMESTAMP_IS_NOBEGIN(jobstat->fd.last_finish);
 }
 
-void
+TSDLLEXPORT void
 ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 {
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
