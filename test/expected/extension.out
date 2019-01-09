@@ -21,6 +21,7 @@ ORDER BY proname;
  attach_tablespace
  chunk_relation_size
  chunk_relation_size_pretty
+ chunks_in
  create_hypertable
  detach_tablespace
  detach_tablespaces
@@ -46,5 +47,5 @@ ORDER BY proname;
  show_tablespaces
  time_bucket
  time_bucket_gapfill
-(32 rows)
+(33 rows)
 

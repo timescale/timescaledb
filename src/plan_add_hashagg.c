@@ -169,9 +169,6 @@ static void
 initialize_custom_estimate_func_info()
 {
 	int			i = 0;
-	Oid			extension_schema = ts_extension_schema_oid();
-	char	   *extension_schema_name = get_namespace_name(extension_schema);
-
 
 	HASHCTL		hashctl = {
 		.keysize = sizeof(Oid),
@@ -189,7 +186,7 @@ initialize_custom_estimate_func_info()
 		FuncCandidateList funclist;
 
 		if (def.extension_function)
-			funclist = FuncnameGetCandidates(list_make2(makeString(extension_schema_name), makeString(def.function_name)),
+			funclist = FuncnameGetCandidates(list_make2(makeString(ts_extension_schema_name()), makeString(def.function_name)),
 											 def.nargs, NIL, false, false, false);
 		else
 			funclist = FuncnameGetCandidates(list_make1(makeString(def.function_name)),

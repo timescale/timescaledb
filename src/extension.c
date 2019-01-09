@@ -175,6 +175,11 @@ ts_extension_schema_oid(void)
 	return schema;
 }
 
+char *
+ts_extension_schema_name(void)
+{
+	return get_namespace_name(ts_extension_schema_oid());
+}
 
 /*
  *	Called upon all Relcache invalidate events.

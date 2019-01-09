@@ -54,6 +54,7 @@
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_chunks_in);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -1950,4 +1951,19 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_NULL();
+}
+
+/**
+ * This function is used to explicitly specify chunks that are being scanned. It's being processed in the planning phase
+ * and removed from the query tree. This means that the actual function implementation will only be executed
+ * if something went wrong during explicit chunk exclusion.
+ */
+Datum
+ts_chunks_in(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("illegal invocation of chunks_in function"),
+			 errhint("chunks_in function must appear in the WHERE clause and can only be combined with AND operator")));
+	pg_unreachable();
 }
