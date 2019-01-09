@@ -26,7 +26,7 @@ extern void ts_bgw_job_stat_mark_start(int32 bgw_job_id);
 extern void ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result);
 extern bool ts_bgw_job_stat_end_was_marked(BgwJobStat *jobstat);
 
-extern void ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start);
+extern TSDLLEXPORT void ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start);
 
 extern bool ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job);
 

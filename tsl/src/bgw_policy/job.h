@@ -17,7 +17,7 @@
 typedef void (*reorder_func) (Oid tableOid, Oid indexOid, bool verbose, Oid wait_id);
 
 /* Functions exposed only for testing */
-extern bool execute_reorder_policy(int32 job_id, reorder_func reorder);
+extern bool execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue);
 extern bool execute_drop_chunks_policy(int32 job_id);
 
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);

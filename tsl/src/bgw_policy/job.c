@@ -13,6 +13,7 @@
 #include <utils/lsyscache.h>
 
 #include "bgw/timer.h"
+#include "bgw/job_stat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
 
@@ -61,13 +62,14 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 }
 
 bool
-execute_reorder_policy(int32 job_id, reorder_func reorder)
+execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 {
 	int			chunk_id;
 	bool		started = false;
 	BgwPolicyReorder *args;
 	Hypertable *ht;
 	Chunk	   *chunk;
+	int32 job_id = job->fd.id;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -104,8 +106,12 @@ execute_reorder_policy(int32 job_id, reorder_func reorder)
 	elog(LOG, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
 	reorder(chunk->table_id, get_relname_relid(NameStr(args->fd.hypertable_index_name), get_namespace_oid(NameStr(ht->fd.schema_name), false)), false, InvalidOid);
 	elog(LOG, "completed reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
+
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id, chunk_id, ts_timer_get_current_timestamp());
+
+	if (fast_continue && get_chunk_id_to_reorder(args->fd.job_id, ht) != -1)
+		ts_bgw_job_stat_set_next_start(job, GetCurrentTransactionStartTimestamp());
 
 commit:
 	if (started)
@@ -152,7 +158,7 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_REORDER:
-			return execute_reorder_policy(job->fd.id, reorder_chunk);
+			return execute_reorder_policy(job, reorder_chunk, true);
 		case JOB_TYPE_DROP_CHUNKS:
 			return execute_drop_chunks_policy(job->fd.id);
 		default:
