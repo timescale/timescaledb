@@ -40,7 +40,7 @@ THEN
   RAISE WARNING E'%\n', format('Your license expired on %s', end_time);
 ELSIF now() + INTERVAL '1 week' >= end_time
 THEN
-  RAISE WARNING E'%\n', format('Your license will expires on %s', end_time);
+  RAISE WARNING E'%\n', format('Your license will expire on %s', end_time);
 END IF;
 
 END;
