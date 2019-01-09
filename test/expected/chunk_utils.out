@@ -13,7 +13,7 @@ $BODY$
           d.interval_length IS NOT NULL
 $BODY$;
 -- Make sure drop_chunks when there are no tables succeeds
-SELECT drop_chunks(INTERVAL '1 hour');
+SELECT drop_chunks(INTERVAL '1 hour', verbose => true);
  drop_chunks 
 -------------
  
@@ -421,8 +421,10 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
  24 |            3 |                    6 |                   7
 (23 rows)
 
-SELECT drop_chunks(2, CASCADE=>true);
+SELECT drop_chunks(2, CASCADE=>true, verbose => true);
+INFO:  dropping chunk _timescaledb_internal._hyper_1_1_chunk
 NOTICE:  drop cascades to view dependent_view
+INFO:  dropping chunk _timescaledb_internal._hyper_3_13_chunk
  drop_chunks 
 -------------
  
@@ -709,7 +711,8 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 (8 rows)
 
 -- newer_than tests
-SELECT drop_chunks(table_name=>'drop_chunk_test1', newer_than=>5);
+SELECT drop_chunks(table_name=>'drop_chunk_test1', newer_than=>5, verbose => true);
+INFO:  dropping chunk _timescaledb_internal._hyper_1_5_chunk
  drop_chunks 
 -------------
  

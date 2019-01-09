@@ -69,7 +69,7 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 	BgwPolicyReorder *args;
 	Hypertable *ht;
 	Chunk	   *chunk;
-	int32 job_id = job->fd.id;
+	int32		job_id = job->fd.id;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -141,7 +141,8 @@ execute_drop_chunks_policy(int32 job_id)
 				 errmsg("could not run drop_chunks policy #%d because no args in policy table",
 						job_id)));
 
-	ts_chunk_do_drop_chunks(ts_hypertable_id_to_relid(args->fd.hypertable_id), IntervalPGetDatum(&args->fd.older_than), 0, INTERVALOID, InvalidOid, args->fd.cascade);
+	ts_chunk_do_drop_chunks(ts_hypertable_id_to_relid(args->fd.hypertable_id), IntervalPGetDatum(&args->fd.older_than), 0, INTERVALOID, InvalidOid, args->fd.cascade, LOG);
+	elog(LOG, "completed dropping chunks");
 
 	if (started)
 		CommitTransactionCommand();
