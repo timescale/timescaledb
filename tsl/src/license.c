@@ -181,6 +181,7 @@ static bool
 license_info_init_from_base64(char *license_key, LicenseInfo *out)
 {
 	char	   *expanded = base64_decode(license_key);
+
 	if (expanded == NULL)
 		return false;
 
@@ -238,7 +239,8 @@ static TimestampTz json_get_end_time(Jsonb *license);
 static void
 license_info_init_from_jsonb(Jsonb *json_license, LicenseInfo *out)
 {
-	char *id_str = json_get_id(json_license);
+	char	   *id_str = json_get_id(json_license);
+
 	if (id_str == NULL)
 		elog(ERROR, "missing id in license key");
 	StrNCpy(out->id, id_str, sizeof(out->id));

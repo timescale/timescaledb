@@ -15,7 +15,7 @@ $BODY$
 $BODY$;
 
 -- Make sure drop_chunks when there are no tables succeeds
-SELECT drop_chunks(INTERVAL '1 hour');
+SELECT drop_chunks(INTERVAL '1 hour', verbose => true);
 
 CREATE TABLE PUBLIC.drop_chunk_test1(time bigint, temp float8, device_id text);
 CREATE TABLE PUBLIC.drop_chunk_test2(time bigint, temp float8, device_id text);
@@ -142,7 +142,7 @@ FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension
 -- Only one dimension slice deleted
 SELECT * FROM _timescaledb_catalog.dimension_slice;
 
-SELECT drop_chunks(2, CASCADE=>true);
+SELECT drop_chunks(2, CASCADE=>true, verbose => true);
 
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -212,7 +212,7 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 \dt "_timescaledb_internal"._hyper*
 
 -- newer_than tests
-SELECT drop_chunks(table_name=>'drop_chunk_test1', newer_than=>5);
+SELECT drop_chunks(table_name=>'drop_chunk_test1', newer_than=>5, verbose => true);
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c

@@ -1839,7 +1839,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 void
-ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, bool cascade)
+ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_than_datum, Oid older_than_type, Oid newer_than_type, bool cascade, int32 log_level)
 {
 	int			i = 0;
 	uint64		num_chunks = 0;
@@ -1851,6 +1851,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 			.classId = RelationRelationId,
 			.objectId = chunks[i]->table_id,
 		};
+
+
+		elog(log_level, "dropping chunk %s.%s", chunks[i]->fd.schema_name.data, chunks[i]->fd.table_name.data);
 
 		/* Remove the chunk from the hypertable table */
 		ts_chunk_delete_by_relid(chunks[i]->table_id);
@@ -1874,6 +1877,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Oid			older_than_type = PG_ARGISNULL(0) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 0);
 	Oid			newer_than_type = PG_ARGISNULL(4) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 4);
 	bool		cascade = PG_GETARG_BOOL(3);
+	bool		verbose = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5);
+	int			elevel = verbose ? INFO : DEBUG2;
 
 	if (PG_ARGISNULL(0) && PG_ARGISNULL(4))
 		ereport(ERROR,
@@ -1941,7 +1946,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		{
 			LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
 		}
-		ts_chunk_do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade);
+		ts_chunk_do_drop_chunks(table_relid, older_than_datum, newer_than_datum, older_than_type, newer_than_type, cascade, elevel);
 	}
 
 	PG_RETURN_NULL();
