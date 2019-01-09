@@ -20,6 +20,8 @@
 #include <catalog/pg_inherits_fn.h>
 #endif
 #include <optimizer/pathnode.h>
+#include <catalog/pg_type.h>
+#include <utils/errcodes.h>
 
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
@@ -28,79 +30,146 @@
 #include "planner_import.h"
 #include "plan_ordered_append.h"
 #include "guc.h"
-
+#include "extension.h"
+#include "chunk.h"
 
 typedef struct CollectQualCtx
 {
 	PlannerInfo *root;
 	RelOptInfo *rel;
-	List	   *result;
+	List	   *restrictions;
+	FuncExpr   *chunk_exclusion_func;
 } CollectQualCtx;
 
+static Oid	chunk_exclusion_func = InvalidOid;
+#define CHUNK_EXCL_FUNC_NAME "chunks_in"
+static Oid	ts_chunks_arg_types[] = {RECORDOID, INT4ARRAYOID};
+
+static void
+init_chunk_exclusion_func()
+{
+	if (chunk_exclusion_func == InvalidOid)
+		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME, ts_extension_schema_name(), lengthof(ts_chunks_arg_types), ts_chunks_arg_types);
+	Assert(chunk_exclusion_func != InvalidOid);
+}
 
 static bool
-collect_quals_walker(Node *node, CollectQualCtx *ctx)
+is_chunk_exclusion_func(Node *node)
 {
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, FromExpr))
+	if (IsA(node, FuncExpr))
 	{
-		FromExpr   *f = (FromExpr *) node;
-		ListCell   *lc;
+		FuncExpr   *explicit_exclusion = (FuncExpr *) node;
 
-		foreach(lc, (List *) f->quals)
-		{
-			Node	   *qual = (Node *) lfirst(lc);
-			RestrictInfo *restrictinfo;
-
-			Relids		relids = pull_varnos(qual);
-
-			if (bms_num_members(relids) != 1 || !bms_is_member(ctx->rel->relid, relids))
-				continue;
-#if PG96
-			restrictinfo = make_restrictinfo((Expr *) qual,
-											 true,
-											 false,
-											 false,
-											 relids,
-											 NULL,
-											 NULL);
-#else
-			restrictinfo = make_restrictinfo((Expr *) qual,
-											 true,
-											 false,
-											 false,
-											 ctx->root->qual_security_level,
-											 relids,
-											 NULL,
-											 NULL);
-#endif
-			ctx->result = lappend(ctx->result, restrictinfo);
-		}
+		if (explicit_exclusion->funcid == chunk_exclusion_func)
+			return true;
 	}
-
-	return expression_tree_walker(node, collect_quals_walker, ctx);
+	return false;
 }
 
 /* Since baserestrictinfo is not yet set by the planner, we have to derive
  * it ourselves. It's safe for us to miss some restrict info clauses (this
  * will just result in more chunks being included) so this does not need
  * to be as comprehensive as the PG native derivation. This is inspired
- * by the derivation in `deconstruct_recurse` in PG */
-
-static List *
-get_restrict_info(PlannerInfo *root, RelOptInfo *rel)
+ * by the derivation in `deconstruct_recurse` in PG
+ *
+ * We also try to detect explicit chunk exclusion and validate it is properly used. If
+ * explicit chunk exclusion function is detected we'll skip adding restrictions since
+ * they will not be used anyway.
+ *
+ * This method is modifying the query tree by removing `chunks_in` function node
+ * from the WHERE caluse. This is done to prevent the function from making the
+ * planner believe that an index-only scan is not possible (since function is
+ * only used to exclude chunks we actually don't need that function to run so it
+ * can be removed).
+ */
+static Node *
+collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 {
-	CollectQualCtx ctx = {
-		.root = root,
-		.rel = rel,
-		.result = NIL,
-	};
+	if (node == NULL)
+		return NULL;
 
-	collect_quals_walker((Node *) root->parse->jointree, &ctx);
+	if (IsA(node, FromExpr))
+	{
+		FromExpr   *f = (FromExpr *) node;
+		ListCell   *lc;
+		ListCell   *prev = NULL;
+		ListCell   *next = NULL;
+		bool		func_removed = false;
 
-	return ctx.result;
+		for (lc = list_head((List *) f->quals); lc != NULL;)
+		{
+			Node	   *qual = (Node *) lfirst(lc);
+			RestrictInfo *restrictinfo;
+			Relids		relids;
+			bool		belongs_to_cur_rel = false;
+
+			next = lnext(lc);
+
+			relids = pull_varnos(qual);
+
+			belongs_to_cur_rel = bms_num_members(relids) == 1 && bms_is_member(ctx->rel->relid, relids);
+
+			if (!belongs_to_cur_rel)
+			{
+				lc = next;
+				continue;
+			}
+
+
+			if (is_chunk_exclusion_func(qual))
+			{
+				FuncExpr   *func_expr = (FuncExpr *) qual;
+
+				/* validation */
+				if (ctx->chunk_exclusion_func != NULL)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("only one chunks_in call is allowed per hypertable")));
+
+				Assert(func_expr->args->length == 2);
+				if (!IsA(linitial(func_expr->args), Var))
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("first parameter for chunks_in function needs to be a record")));
+
+				ctx->chunk_exclusion_func = func_expr;
+			}
+
+			if (ctx->chunk_exclusion_func == NULL)
+			{
+#if PG96
+				restrictinfo = make_restrictinfo((Expr *) qual,
+												 true,
+												 false,
+												 false,
+												 relids,
+												 NULL,
+												 NULL);
+#else
+				restrictinfo = make_restrictinfo((Expr *) qual,
+												 true,
+												 false,
+												 false,
+												 ctx->root->qual_security_level,
+												 relids,
+												 NULL,
+												 NULL);
+#endif
+				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
+			}
+			else if (!func_removed && ctx->chunk_exclusion_func != NULL)
+			{
+				f->quals = (Node *) list_delete_cell((List *) (f->quals), lc, prev);
+				func_removed = true;
+			}
+			prev = lc;
+			lc = next;
+		}
+		if (ctx->chunk_exclusion_func != NULL)
+			return (Node *) f;
+	}
+
+	return expression_tree_mutator(node, collect_quals_mutator, ctx);
 }
 
 static List *
@@ -158,6 +227,88 @@ ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index r
 	return true;
 }
 
+/*  get chunk oids specified by explicit chunk exclusion function */
+static List *
+get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
+{
+	List	   *chunk_oids = NIL;
+	Const	   *chunks_arg;
+	ArrayIterator chunk_id_iterator;
+	Datum		elem = (Datum) NULL;
+	bool		isnull;
+	Expr	   *expr;
+
+	Assert(ctx->chunk_exclusion_func->args->length == 2);
+	expr = lsecond(ctx->chunk_exclusion_func->args);
+	if (!IsA(expr, Const))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("second argument to chunk_in should contain only integer consts")));
+
+	chunks_arg = (Const *) expr;
+
+	/* function marked as STRICT so argument can't be NULL */
+	Assert(!chunks_arg->constisnull);
+
+	chunk_id_iterator = array_create_iterator(DatumGetArrayTypeP(chunks_arg->constvalue), 0, NULL);
+
+	while (array_iterate(chunk_id_iterator, &elem, &isnull))
+	{
+		if (!isnull)
+		{
+			int32		chunk_id = DatumGetInt32(elem);
+			Chunk	   *chunk = ts_chunk_get_by_id(chunk_id, 0, false);
+
+			if (chunk == NULL)
+				ereport(ERROR, (errmsg("chunk id %d not found", chunk_id)));
+
+			if (chunk->fd.hypertable_id != ht->fd.id)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("chunk id %d does not belong to hypertable \"%s\"", chunk_id, NameStr(ht->fd.table_name))));
+
+			chunk_oids = lappend_int(chunk_oids, chunk->table_id);
+		}
+		else
+			elog(ERROR, "chunk id can't be NULL");
+	}
+	array_free_iterator(chunk_id_iterator);
+	return chunk_oids;
+}
+
+/**
+ * Get chunk oids from either restrict info or explicit chunk exclusion. Explicit chunk exclusion
+ * takes precedence.
+ */
+static List *
+get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
+{
+	bool		reverse;
+
+	if (ctx->chunk_exclusion_func == NULL)
+	{
+		HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
+
+		/*
+		 * This is where the magic happens: use our HypertableRestrictInfo
+		 * infrastructure to deduce the appropriate chunks using our range
+		 * exclusion
+		 */
+		ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
+
+		if (should_order_append(root, rel, ht, &reverse))
+		{
+			if (rel->fdw_private != NULL)
+				((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
+			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri, ht, AccessShareLock, reverse);
+		}
+		else
+			return find_children_oids(hri, ht, AccessShareLock);
+	}
+	else
+		return get_explicit_chunk_oids(ctx, ht);
+}
+
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
 void
@@ -174,10 +325,13 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	Query	   *parse = root->parse;
 	Index		rti = rel->relid;
 	List	   *appinfos = NIL;
-	HypertableRestrictInfo *hri;
 	PlanRowMark *oldrc;
-	List	   *restrictinfo;
-	bool		reverse;
+	CollectQualCtx ctx = {
+		.root = root,
+		.rel = rel,
+		.restrictions = NIL,
+		.chunk_exclusion_func = NULL,
+	};
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
@@ -185,33 +339,15 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	if (oldrc && RowMarkRequiresRowShareLock(oldrc->markType))
 		elog(ERROR, "unexpected permissions requested");
 
-
 	/* mark the parent as an append relation */
 	rte->inh = true;
 
-	/*
-	 * rel->baserestrictinfo is not yet set at this point in the planner. So
-	 * do a simple version of that deduction here.
-	 */
-	restrictinfo = get_restrict_info(root, rel);
+	init_chunk_exclusion_func();
 
-	/*
-	 * This is where the magic happens: use our HypertableRestrictInfo
-	 * infrastructure to deduce the appropriate chunks using our range
-	 * exclusion
-	 */
-	hri = ts_hypertable_restrict_info_create(rel, ht);
-	ts_hypertable_restrict_info_add(hri, root, restrictinfo);
+	/* Walk the tree and find restrictions or chunk exclusion functions */
+	collect_quals_mutator((Node *) root->parse->jointree, &ctx);
 
-	if (should_order_append(root, rel, ht, &reverse))
-	{
-		if (rel->fdw_private != NULL)
-			((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
-		inh_oids = ts_hypertable_restrict_info_get_chunk_oids_ordered(hri, ht, AccessShareLock, reverse);
-	}
-	else
-		inh_oids = find_children_oids(hri, ht, AccessShareLock);
-
+	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
 
 	/*
 	 * the simple_*_array structures have already been set, we need to add the
@@ -220,7 +356,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	root->simple_rel_array_size += list_length(inh_oids);
 	root->simple_rel_array = repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
 	root->simple_rte_array = repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
-
 
 	foreach(l, inh_oids)
 	{

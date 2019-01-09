@@ -57,6 +57,7 @@
 #include "access/stratnum.h"
 #include "plan_agg_bookend.h"
 #include "utils.h"
+#include "extension.h"
 
 typedef struct FirstLastAggInfo
 {
@@ -143,26 +144,10 @@ static Oid	first_last_arg_types[] = {ANYELEMENTOID, ANYOID};
 static struct FuncStrategy first_func_strategy = {.func_oid = InvalidOid,.strategy = BTLessStrategyNumber};
 static struct FuncStrategy last_func_strategy = {.func_oid = InvalidOid,.strategy = BTGreaterStrategyNumber};
 
-static Oid
-get_function_oid(char *name, int nargs, Oid arg_types[])
-{
-	FuncCandidateList func_candidates;
-
-	func_candidates = FuncnameGetCandidates(list_make1(makeString(name)), nargs, NIL, false, false, false);
-	while (func_candidates != NULL)
-	{
-		if (func_candidates->nargs == nargs && ts_function_types_equal(func_candidates->args, arg_types, nargs))
-			return func_candidates->oid;
-		func_candidates = func_candidates->next;
-	}
-	elog(ERROR, "failed to find function %s with %d args", name, nargs);
-	pg_unreachable();
-}
-
 static FuncStrategy *
 initialize_func_strategy(FuncStrategy *func_strategy, char *name, int nargs, Oid arg_types[])
 {
-	func_strategy->func_oid = get_function_oid(name, nargs, arg_types);
+	func_strategy->func_oid = get_function_oid(name, ts_extension_schema_name(), nargs, arg_types);
 	return func_strategy;
 }
 
