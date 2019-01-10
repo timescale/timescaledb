@@ -6,6 +6,7 @@
 SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
+select * from timescaledb_information.license;
 
 -- changing licenses requires superuser privleges
 \set ON_ERROR_STOP 0
@@ -32,9 +33,10 @@ SET timescaledb.license_key='CommunityLicense';
 SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
+select * from timescaledb_information.license;
 
 SET timescaledb.license_key=Default;
 SELECT _timescaledb_internal.current_license_key();
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.enterprise_enabled();
-
+select * from timescaledb_information.license;

@@ -122,7 +122,7 @@ license_deserialize_enterprise(char *license_key, LicenseInfo *license_out)
 	if (license_key_len < 1)
 		return false;
 
-	switch (license_key[0])
+	switch (TS_LICENSE_TYPE(license_key))
 	{
 		case LICENSE_TYPE_APACHE_ONLY:
 			license_info = &no_license;

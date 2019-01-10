@@ -20,3 +20,17 @@ SELECT _timescaledb_internal.enterprise_enabled();
  f
 (1 row)
 
+\unset ECHO
+SELECT allow_downgrade_to_apache();
+ allow_downgrade_to_apache 
+---------------------------
+ 
+(1 row)
+
+SET timescaledb.license_key='ApacheOnly';
+select * from timescaledb_information.license;
+ edition | expired | expiration_time 
+---------+---------+-----------------
+ apache  | f       | infinity
+(1 row)
+
