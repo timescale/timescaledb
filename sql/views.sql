@@ -25,6 +25,11 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable AS
       CASE WHEN has_schema_privilege(ht.schema_name,'USAGE') THEN format('%I.%I',ht.schema_name,ht.table_name) ELSE NULL END
     ) size ON true;
 
+CREATE OR REPLACE VIEW timescaledb_information.license AS
+  SELECT _timescaledb_internal.license_edition() as edition,
+         _timescaledb_internal.license_expiration_time() <= now() AS expired,
+         _timescaledb_internal.license_expiration_time() AS expiration_time;
+
+
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
-

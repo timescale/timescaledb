@@ -18,6 +18,7 @@ TS_FUNCTION_INFO_V1(ts_current_license_key);
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 TS_FUNCTION_INFO_V1(ts_print_tsl_license_expiration_info);
 TS_FUNCTION_INFO_V1(ts_license_expiration_time);
+TS_FUNCTION_INFO_V1(ts_license_edition);
 TS_FUNCTION_INFO_V1(ts_allow_downgrade_to_apache);
 
 static bool downgrade_to_apache_enabled = false;
@@ -26,6 +27,10 @@ static PGFunction tsl_validate_license_fn = NULL;
 static PGFunction tsl_startup_fn = NULL;
 static bool can_load = false;
 static GucSource load_source = PGC_S_DEFAULT;
+
+#define TS_LICENSE_APACHE_ONLY_PRINT_TEXT "apache"
+#define TS_LICENSE_COMMUNITY_PRINT_TEXT "community"
+#define TS_LICENSE_ENTERPRISE_PRINT_TEXT "enterprise"
 
 /*
  * License Functions
@@ -323,9 +328,33 @@ PGDLLEXPORT Datum
 ts_license_expiration_time(PG_FUNCTION_ARGS)
 {
 	if (ts_cm_functions->print_tsl_license_expiration_info_hook == NULL)
-		PG_RETURN_NULL();
+		PG_RETURN_TIMESTAMPTZ(DT_NOEND);
 
 	PG_RETURN_TIMESTAMPTZ(ts_cm_functions->license_end_time());
+}
+
+PGDLLEXPORT Datum
+ts_license_edition(PG_FUNCTION_ARGS)
+{
+	char	   *edition = NULL;
+
+	switch (TS_CURRENT_LICENSE_TYPE())
+	{
+		case LICENSE_TYPE_APACHE_ONLY:
+			edition = TS_LICENSE_APACHE_ONLY_PRINT_TEXT;
+			break;
+		case LICENSE_TYPE_COMMUNITY:
+			edition = TS_LICENSE_COMMUNITY_PRINT_TEXT;
+			break;
+		case LICENSE_TYPE_ENTERPRISE:
+			edition = TS_LICENSE_ENTERPRISE_PRINT_TEXT;
+			break;
+		default:
+			elog(ERROR, "Invalid license key '%s'", ts_guc_license_key);
+			pg_unreachable();
+	}
+
+	PG_RETURN_TEXT_P(cstring_to_text(edition));
 }
 
 /*

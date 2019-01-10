@@ -20,6 +20,12 @@ SELECT _timescaledb_internal.enterprise_enabled();
  t
 (1 row)
 
+select * from timescaledb_information.license;
+  edition   | expired |       expiration_time        
+------------+---------+------------------------------
+ enterprise | t       | Sun Sep 30 17:00:00 2018 PDT
+(1 row)
+
 -- changing licenses requires superuser privleges
 \set ON_ERROR_STOP 0
 SET timescaledb.license_key='CommunityLicense';
@@ -103,6 +109,12 @@ SELECT _timescaledb_internal.enterprise_enabled();
  f
 (1 row)
 
+select * from timescaledb_information.license;
+  edition  | expired | expiration_time 
+-----------+---------+-----------------
+ community | f       | infinity
+(1 row)
+
 SET timescaledb.license_key=Default;
 SELECT _timescaledb_internal.current_license_key();
                                                                             current_license_key                                                                             
@@ -120,5 +132,11 @@ SELECT _timescaledb_internal.enterprise_enabled();
  enterprise_enabled 
 --------------------
  t
+(1 row)
+
+select * from timescaledb_information.license;
+  edition   | expired |       expiration_time        
+------------+---------+------------------------------
+ enterprise | t       | Sun Sep 30 17:00:00 2018 PDT
 (1 row)
 
