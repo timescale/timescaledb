@@ -29,6 +29,7 @@ typedef struct DimensionVec
 
 extern DimensionVec *ts_dimension_vec_create(int32 initial_num_slices);
 extern DimensionVec *ts_dimension_vec_sort(DimensionVec **vec);
+extern DimensionVec *ts_dimension_vec_sort_reverse(DimensionVec **vec);
 extern DimensionVec *ts_dimension_vec_add_slice_sort(DimensionVec **vec, DimensionSlice *slice);
 extern DimensionVec *ts_dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice);
 extern DimensionVec *ts_dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice);

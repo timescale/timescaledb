@@ -24,4 +24,6 @@ extern bool ts_hypertable_restrict_info_has_restrictions(HypertableRestrictInfo 
 /* Get a list of chunk oids for chunks whose constraints match the restriction clauses */
 extern List *ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode);
 
+extern List *ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode, bool reverse);
+
 #endif							/* TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H */

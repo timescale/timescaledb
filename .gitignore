@@ -20,6 +20,7 @@ typedef.list
 **/GSYMS
 /.vs
 /test/sql/parallel-*.sql
+/test/sql/plan_ordered_append-*.sql
 /test/sql/plan_hashagg_optimized-*.sql
 /test/sql/agg_bookends_optimized-*.sql
 /test/sql/alternate_users-*.sql

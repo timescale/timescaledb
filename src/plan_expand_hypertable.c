@@ -24,8 +24,10 @@
 #include "plan_expand_hypertable.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
+#include "planner.h"
 #include "planner_import.h"
-
+#include "plan_ordered_append.h"
+#include "guc.h"
 
 
 typedef struct CollectQualCtx
@@ -124,6 +126,23 @@ find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmod
 	return result;
 }
 
+static bool
+should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *reverse)
+{
+	/* check if optimizations are enabled */
+	if (ts_guc_disable_optimizations || !ts_guc_enable_ordered_append)
+		return false;
+
+	/*
+	 * only do this optimization for hypertables with 1 dimension and queries
+	 * with an ORDER BY and LIMIT clause
+	 */
+	if (ht->space->num_dimensions != 1 || root->parse->sortClause == NIL || root->limit_tuples == -1.0)
+		return false;
+
+	return ts_ordered_append_should_optimize(root, rel, ht, reverse);
+}
+
 bool
 ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte)
 {
@@ -158,6 +177,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	HypertableRestrictInfo *hri;
 	PlanRowMark *oldrc;
 	List	   *restrictinfo;
+	bool		reverse;
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
@@ -182,7 +202,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	 */
 	hri = ts_hypertable_restrict_info_create(rel, ht);
 	ts_hypertable_restrict_info_add(hri, root, restrictinfo);
-	inh_oids = find_children_oids(hri, ht, AccessShareLock);
+
+	if (should_order_append(root, rel, ht, &reverse))
+	{
+		if (rel->fdw_private != NULL)
+			((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
+		inh_oids = ts_hypertable_restrict_info_get_chunk_oids_ordered(hri, ht, AccessShareLock, reverse);
+	}
+	else
+		inh_oids = find_children_oids(hri, ht, AccessShareLock);
+
 
 	/*
 	 * the simple_*_array structures have already been set, we need to add the

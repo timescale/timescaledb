@@ -50,9 +50,11 @@
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "chunk.h"
+#include "planner.h"
 #include "plan_expand_hypertable.h"
 #include "plan_add_hashagg.h"
 #include "plan_agg_bookend.h"
+#include "plan_ordered_append.h"
 
 void		_planner_init(void);
 void		_planner_fini(void);
@@ -287,14 +289,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 		foreach(lc, rel->pathlist)
 		{
 			Path	  **pathptr = (Path **) &lfirst(lc);
-			Path	   *path = *pathptr;
 
-			switch (nodeTag(path))
+			switch (nodeTag(*pathptr))
 			{
 				case T_AppendPath:
+					if (should_optimize_append(*pathptr))
+						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
+					break;
 				case T_MergeAppendPath:
-					if (should_optimize_append(path))
-						*pathptr = ts_constraint_aware_append_path_create(root, ht, path);
+					if (rel->fdw_private != NULL && ((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered)
+						*pathptr = ts_ordered_append_path_create(root, rel, ht, castNode(MergeAppendPath, *pathptr));
+					if (should_optimize_append(*pathptr))
+						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
+					break;
 				default:
 					break;
 			}
@@ -342,6 +349,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root,
 		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
 
 		Assert(ht != NULL);
+
+		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
 
 		ts_plan_expand_hypertable_chunks(ht,
 										 root,
