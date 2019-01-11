@@ -38,6 +38,7 @@ set(SOURCES
   plan_expand_hypertable.c
   plan_add_hashagg.c
   plan_agg_bookend.c
+  plan_ordered_append.c
   planner_import.c
   process_utility.c
   scanner.c
@@ -47,7 +48,8 @@ set(SOURCES
   time_bucket.c
   trigger.c
   utils.c
-  version.c)
+  version.c
+)
 
 # Add test source code in Debug builds
 if (CMAKE_BUILD_TYPE MATCHES Debug)

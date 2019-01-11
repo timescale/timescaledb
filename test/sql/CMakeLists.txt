@@ -41,6 +41,7 @@ set(TEST_FILES
   plan_expand_hypertable_optimized.sql
   plan_expand_hypertable_results_diff.sql
   plan_hashagg_results_x_diff.sql
+  plan_ordered_append_results_diff.sql
   reindex.sql
   relocate_extension.sql
   reloptions.sql
@@ -133,6 +134,8 @@ set(TEST_TEMPLATES
   partitioning.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg_optimized.sql.in
+  # lateral plans are different across versions, explains run without analyze on 9.6
+  plan_ordered_append.sql.in
   )
 
 # Regression tests that vary with PostgreSQL version. Generated test

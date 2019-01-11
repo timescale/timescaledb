@@ -40,6 +40,7 @@ bool		ts_guc_disable_optimizations = false;
 bool		ts_guc_optimize_non_hypertables = false;
 bool		ts_guc_restoring = false;
 bool		ts_guc_constraint_aware_append = true;
+bool		ts_guc_enable_ordered_append = true;
 int			ts_guc_max_open_chunks_per_insert = 10;
 int			ts_guc_max_cached_chunks_per_hypertable = 10;
 int			ts_guc_telemetry_level = TELEMETRY_BASIC;
@@ -96,8 +97,17 @@ _guc_init(void)
 							 "Enable constraint exclusion at execution time",
 							 &ts_guc_constraint_aware_append,
 							 true,
-							 PGC_USERSET
-							 ,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_ordered_append", "Enable ordered append scans",
+							 "Enable ordered append optimization for queries that are ordered by the time dimension",
+							 &ts_guc_enable_ordered_append,
+							 true,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,

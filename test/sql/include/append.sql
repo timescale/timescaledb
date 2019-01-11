@@ -62,7 +62,7 @@ SELECT * FROM append_test WHERE time > now_s() - interval '2 months';
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months';
 
 -- adding ORDER BY and LIMIT should turn the plan into an optimized
--- merge append plan
+-- ordered append plan
 EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months'
 ORDER BY time LIMIT 3;

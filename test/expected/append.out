@@ -79,7 +79,6 @@ psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
-psql:include/append.sql:52: NOTICE:  Stable function now_s() called!
                 QUERY PLAN                 
 -------------------------------------------
  Limit
@@ -123,11 +122,10 @@ psql:include/append.sql:62: NOTICE:  Stable function now_s() called!
 (1 row)
 
 -- adding ORDER BY and LIMIT should turn the plan into an optimized
--- merge append plan
+-- ordered append plan
 EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months'
 ORDER BY time LIMIT 3;
-psql:include/append.sql:68: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:68: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:68: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:68: NOTICE:  Stable function now_s() called!
@@ -138,16 +136,14 @@ psql:include/append.sql:68: NOTICE:  Stable function now_s() called!
    ->  Custom Scan (ConstraintAwareAppend)
          Hypertable: append_test
          Chunks left after exclusion: 1
-         ->  Merge Append
-               Sort Key: _hyper_1_3_chunk."time"
+         ->  Append
                ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
                      Index Cond: ("time" > (now_s() - '@ 2 mons'::interval))
-(8 rows)
+(7 rows)
 
 -- the expected output should be the same as the non-optimized query
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months'
 ORDER BY time LIMIT 3;
-psql:include/append.sql:72: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:72: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:72: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:72: NOTICE:  Stable function now_s() called!

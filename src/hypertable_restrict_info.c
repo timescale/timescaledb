@@ -519,3 +519,69 @@ ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertab
 
 	return ts_chunk_find_all_oids(ht->space, dimension_vecs, lockmode);
 }
+
+List *
+ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode, bool reverse)
+{
+	/*
+	 * we only support ordered append for partitioning by 1 dimension
+	 * initially
+	 *
+	 * to support space partitioning as well here this function needs to be
+	 * adjusted
+	 */
+	DimensionRestrictInfo *dri;
+	DimensionVec *dv;
+	List	   *chunk_oids = NIL;
+	int			i;
+
+	/*
+	 * ordered append is the only user of this function which checks for
+	 * number of dimensions as well so we only assert here
+	 */
+	Assert(hri->num_dimensions == 1);
+
+	dri = hri->dimension_restriction[0];
+
+	Assert(NULL != dri);
+
+	dv = dimension_restrict_info_slices(dri);
+
+	Assert(dv->num_slices >= 0);
+
+	/*
+	 * If there are no matching slices in any single dimension, the result
+	 * will be empty
+	 */
+	if (dv->num_slices == 0)
+		return NIL;
+
+	if (reverse)
+		ts_dimension_vec_sort_reverse(&dv);
+	else
+		ts_dimension_vec_sort(&dv);
+
+	for (i = 0; i < dv->num_slices; i++)
+	{
+		ListCell   *lc;
+		List	   *chunk_ids = NIL;
+		DimensionSlice *slice = dv->slices[i];
+
+		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
+
+		/*
+		 * since we don't support space partitioning here atm, there should
+		 * only be 1 chunk per dimension slice
+		 */
+		Assert(list_length(chunk_ids) <= 1);
+
+		foreach(lc, chunk_ids)
+		{
+			Chunk	   *chunk = ts_chunk_get_by_id(lfirst_int(lc), 0, true);
+
+			chunk_oids = lappend_oid(chunk_oids, chunk->table_id);
+		}
+	}
+
+	return chunk_oids;
+}
