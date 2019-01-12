@@ -24,9 +24,11 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 
 # Tests to ignore
 set(PG_IGNORE_TESTS
+  rolenames
   rules
   opr_sanity
-  sanity_check)
+  sanity_check
+)
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
