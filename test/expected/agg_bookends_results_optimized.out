@@ -1,17 +1,15 @@
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 SET timescaledb.disable_optimizations= 'off';
 \set PREFIX ''
 \ir include/agg_bookends.sql
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 CREATE TABLE "btest"(time timestamp, time_alt timestamp, gp INTEGER, temp float, strid TEXT DEFAULT 'testing');
 SELECT 1 AS hypertable_created FROM (SELECT create_hypertable('"btest"', 'time')) t;
-psql:include/agg_bookends.sql:7: NOTICE:  adding not-null constraint to column "time"
+psql:include/agg_bookends.sql:6: NOTICE:  adding not-null constraint to column "time"
  hypertable_created 
 --------------------
                   1
@@ -164,7 +162,7 @@ CREATE TABLE btest_numeric
     quantity numeric
 );
 SELECT 1 AS hypertable_created FROM (SELECT create_hypertable('btest_numeric', 'time')) t;
-psql:include/agg_bookends.sql:64: NOTICE:  adding not-null constraint to column "time"
+psql:include/agg_bookends.sql:63: NOTICE:  adding not-null constraint to column "time"
  hypertable_created 
 --------------------
                   1

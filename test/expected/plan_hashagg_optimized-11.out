@@ -1,19 +1,17 @@
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 SET timescaledb.disable_optimizations= 'off';
 \set PREFIX 'EXPLAIN (costs off) '
 \ir include/plan_hashagg_load.sql
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 CREATE TABLE metric (id SERIAL PRIMARY KEY, value INT);
 CREATE TABLE hyper(time TIMESTAMP, time_int BIGINT, time_broken DATE, metricid int REFERENCES metric(id), VALUE double precision);
 CREATE TABLE regular(time TIMESTAMP, time_int BIGINT, time_date DATE, metricid int REFERENCES metric(id), VALUE double precision);
 SELECT create_hypertable('hyper', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE);
-psql:include/plan_hashagg_load.sql:10: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_hashagg_load.sql:9: NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (1,public,hyper,t)
@@ -81,7 +79,7 @@ $BODY$
 $BODY$;
 CREATE TABLE hyper_timefunc(time float8, metricid int REFERENCES metric(id), VALUE double precision, time_date DATE);
 SELECT create_hypertable('hyper_timefunc', 'time', chunk_time_interval => interval '20 day', create_default_indexes=>FALSE, time_partitioning_func => 'unix_to_timestamp');
-psql:include/plan_hashagg_load.sql:43: NOTICE:  adding not-null constraint to column "time"
+psql:include/plan_hashagg_load.sql:42: NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (2,public,hyper_timefunc,t)
@@ -92,10 +90,9 @@ SET client_min_messages = 'error';
 ANALYZE;
 RESET client_min_messages;
 \ir include/plan_hashagg_query.sql
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 :PREFIX SELECT time_bucket('1 minute', time) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'

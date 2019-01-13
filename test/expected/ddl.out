@@ -1,15 +1,13 @@
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 \ir include/ddl_ops_1.sql
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 CREATE TABLE PUBLIC."Hypertable_1" (
   time BIGINT NOT NULL,
   "Device_id" TEXT NOT NULL,
@@ -81,19 +79,19 @@ SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id;
 \set ON_ERROR_STOP 0
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
-psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_Unique1"
+psql:include/ddl_ops_1.sql:56: ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
-psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+psql:include/ddl_ops_1.sql:57: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
-psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
+psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
-psql:include/ddl_ops_1.sql:60: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
 CREATE TABLE my_ht (time BIGINT, val integer);
 SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-psql:include/ddl_ops_1.sql:67: NOTICE:  adding not-null constraint to column "time"
+psql:include/ddl_ops_1.sql:66: NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | my_ht      | t
@@ -111,7 +109,7 @@ SELECT * FROM test.show_columns('my_ht');
 -- Should error when adding again
 \set ON_ERROR_STOP 0
 ALTER TABLE my_ht ADD COLUMN val2 integer;
-psql:include/ddl_ops_1.sql:73: ERROR:  column "val2" of relation "my_ht" already exists
+psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already exists
 \set ON_ERROR_STOP 1
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -126,7 +124,7 @@ SELECT * FROM test.show_columns('my_ht');
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
-psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 SELECT * FROM test.show_columns('my_ht');
  Column |  Type   | Nullable 
 --------+---------+----------
@@ -148,7 +146,7 @@ SELECT * FROM test.show_columns('my_ht');
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
-psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 SELECT * FROM test.show_columns('my_ht');
  Column |  Type   | Nullable 
 --------+---------+----------
@@ -316,10 +314,9 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 (8 rows)
 
 \ir include/ddl_ops_2.sql
--- Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
---
--- This file is licensed under the Apache License,
--- see LICENSE-APACHE at the top level directory.
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN temp_f INTEGER NOT NULL DEFAULT 31;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN temp_c;
 ALTER TABLE PUBLIC."Hypertable_1" DROP COLUMN sensor_4;
