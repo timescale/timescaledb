@@ -561,14 +561,13 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 								 MultiXactCutoff, use_wal);
 
 	/*
-	 * Decide whether to use an indexscan or seqscan-and-optional-sort to scan
-	 * the OldHeap.  We know how to use a sort to duplicate the ordering of a
-	 * btree index, and will use seqscan-and-sort for that case if the planner
-	 * tells us it's cheaper.  Otherwise, always indexscan if an index is
-	 * provided, else plain seqscan.
+	 * We know how to use a sort to duplicate the ordering of a
+	 * btree index, and will use seqscan-and-sort for that.  Otherwise, always
+	 * use an indexscan for other indexes or plain seqscan if no index is
+	 * supplied.
 	 */
 	if (OldIndex != NULL && OldIndex->rd_rel->relam == BTREE_AM_OID)
-		use_sort = plan_cluster_use_sort(OIDOldHeap, OIDOldIndex);
+		use_sort = true;
 	else
 		use_sort = false;
 
