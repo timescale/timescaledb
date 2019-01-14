@@ -1,5 +1,6 @@
 set(TEST_FILES
     bgw_policy.sql
+    bgw_reorder_drop_chunks.sql
     edition.sql
     gapfill.sql
     reorder.sql
