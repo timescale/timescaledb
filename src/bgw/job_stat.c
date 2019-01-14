@@ -71,7 +71,7 @@ bgw_job_stat_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_f
 								 scankey, 1, tuple_found, tuple_filter, data, lockmode);
 }
 
-BgwJobStat *
+TSDLLEXPORT BgwJobStat *
 ts_bgw_job_stat_find(int32 bgw_job_id)
 {
 	BgwJobStat *job_stat = NULL;
