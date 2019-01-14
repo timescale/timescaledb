@@ -420,3 +420,16 @@ select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 -- Should be noop again
 select * from test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
+CREATE TABLE test_table_int(time int);
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (2,public,test_table_int,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- we cannot add a drop_chunks policy on a table whose open dimension is not time
+select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
+ERROR:  can only use "add_drop_chunks_policy" with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
+\set ON_ERROR_STOP 1
