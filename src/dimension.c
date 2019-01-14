@@ -829,7 +829,7 @@ ts_dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
  *	-	it is an INTERVAL and time column of hypertable is time or date
  *	-	it is the same as time column of hypertable
  */
-void
+TSDLLEXPORT void
 ts_dimension_open_typecheck(Oid arg_type, Oid time_column_type, char *caller_name)
 {
 	AssertArg(arg_type != InvalidOid);

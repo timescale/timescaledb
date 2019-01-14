@@ -215,3 +215,11 @@ select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
 
 -- Should be noop again
 select * from test_reorder(:reorder_job_id) \gset  reorder_
+
+CREATE TABLE test_table_int(time int);
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+
+\set ON_ERROR_STOP 0
+-- we cannot add a drop_chunks policy on a table whose open dimension is not time
+select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
+\set ON_ERROR_STOP 1
