@@ -20,7 +20,7 @@ typedef enum JobResult
 	JOB_SUCCESS = 1,
 } JobResult;
 
-extern BgwJobStat *ts_bgw_job_stat_find(int job_id);
+extern TSDLLEXPORT BgwJobStat *ts_bgw_job_stat_find(int job_id);
 extern void ts_bgw_job_stat_delete(int job_id);
 extern void ts_bgw_job_stat_mark_start(int32 bgw_job_id);
 extern void ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result);

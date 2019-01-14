@@ -6,10 +6,13 @@
 
 #include <postgres.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_type.h>
 #include <utils/builtins.h>
 #include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+
+#include <dimension.h>
 
 #include "bgw/job.h"
 #include "bgw_policy/reorder.h"
@@ -120,7 +123,7 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	 */
 	dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	if (dim)
+	if (dim && IS_TIMESTAMP_TYPE(dim->fd.column_type))
 		default_schedule_interval = DatumGetIntervalP(DirectFunctionCall7(make_interval, Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Float8GetDatum(dim->fd.interval_length / 2000000)));
 
 	job_id = ts_bgw_job_insert_relation(&application_name, &reorder_name, default_schedule_interval, DEFAULT_MAX_RUNTIME, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_PERIOD);
