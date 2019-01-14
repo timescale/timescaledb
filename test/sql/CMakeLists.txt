@@ -74,10 +74,12 @@ set(SOLO_TESTS
 # on output of previous tests
 set(POST_TESTS
   agg_bookends_results_diff
+  append_x_diff
   alternate_users-9.6
   alternate_users-10
   alternate_users-11
-  append_x_diff
+  plan_expand_hypertable_results_diff
+  plan_hashagg_results_x_diff
   sql_query_results_x_diff
 )
 
