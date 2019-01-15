@@ -23,6 +23,8 @@
 #include <export.h>
 
 #include "compat.h"
+#include "utils.h"
+#include "timescaledb_fdw.h"
 
 TS_FUNCTION_INFO_V1(timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(timescaledb_fdw_validator);
