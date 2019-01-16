@@ -14,7 +14,7 @@ before_install:
   - git clone --branch ${PG_GIT_TAG} --depth 1 https://github.com/postgres/postgres.git /tmp/postgres
   - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build -v /tmp/postgres:/postgres postgres:${PG_VERSION}-alpine
 install:
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug /build/debug-nossl"
+  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev && mkdir -p /build/debug /build/debug-nossl"
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
   # We set /usr/local as prefix so the regression tools will be able to find
   # initdb, psql, and postgres
