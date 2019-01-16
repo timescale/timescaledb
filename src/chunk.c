@@ -722,7 +722,7 @@ chunk_fill_stub(Chunk *chunk_stub, bool tuplock)
 	/*
 	 * Perform an index scan on chunk ID.
 	 */
-	ScanKeyInit(&scankey[0], Anum_chunk_id, BTEqualStrategyNumber,
+	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber,
 				F_INT4EQ, Int32GetDatum(chunk_stub->fd.id));
 
 	num_found = ts_scanner_scan(&ctx);
@@ -1482,7 +1482,7 @@ chunk_scan_find(int indexid,
 									nkeys,
 									chunk_tuple_found,
 									chunk,
-									num_constraints,
+									1,
 									ForwardScanDirection,
 									AccessShareLock,
 									mctx);
@@ -1558,7 +1558,7 @@ ts_chunk_get_by_id(int32 id, int16 num_constraints, bool fail_if_not_found)
 	 * Perform an index scan on chunk id.
 	 */
 	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber,
-				F_INT4EQ, id);
+				F_INT4EQ, Int32GetDatum(id));
 
 	return chunk_scan_find(CHUNK_ID_INDEX,
 						   scankey,
