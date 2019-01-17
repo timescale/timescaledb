@@ -121,25 +121,40 @@ static void
 queue_set_reader(MessageQueue *queue)
 {
 	volatile MessageQueue *vq = queue;
+	pid_t		reader_pid;
 
-	if (queue_get_reader(queue) == InvalidPid)
+	SpinLockAcquire(&vq->mutex);
+	if (vq->reader_pid == InvalidPid)
 	{
-		SpinLockAcquire(&vq->mutex);
 		vq->reader_pid = MyProcPid;
-		SpinLockRelease(&vq->mutex);
 	}
-	else if (queue_get_reader(queue) != MyProcPid)
-		ereport(ERROR, (errmsg("only one reader allowed for TimescaleDB background worker message queue")));
+	reader_pid = vq->reader_pid;
+	SpinLockRelease(&vq->mutex);
+	if (reader_pid != MyProcPid)
+		ereport(ERROR,
+				(errmsg("only one reader allowed for TimescaleDB background worker message queue"),
+				 errhint("Current process is %d", reader_pid)));
 }
 
 static void
 queue_reset_reader(MessageQueue *queue)
 {
 	volatile MessageQueue *vq = queue;
+	bool		reset = false;
 
 	SpinLockAcquire(&vq->mutex);
-	vq->reader_pid = InvalidPid;
+	if (vq->reader_pid == MyProcPid)
+	{
+		reset = true;
+		vq->reader_pid = InvalidPid;
+	}
 	SpinLockRelease(&vq->mutex);
+
+	if (!reset)
+		ereport(ERROR, (
+						ERRCODE_INTERNAL_ERROR,
+						errmsg("multiple TimescaleDB background worker launchers have been started when only one is allowed"),
+						errhint("this is a bug, please report it on our github page")));
 }
 
 /* Add a message to the queue - we can do this if the queue is not full */
@@ -425,8 +440,6 @@ ts_bgw_message_send_ack(BgwMessage *message, bool success)
 static void
 queue_shmem_cleanup(MessageQueue *queue)
 {
-	if (queue->reader_pid != MyProcPid)
-		ereport(ERROR, (errmsg("cannot read if not reader for TimescaleDB background worker message queue")));
 	queue_reset_reader(queue);
 }
 

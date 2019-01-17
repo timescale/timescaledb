@@ -37,6 +37,9 @@
 /* for looking up sending proc information for message handling */
 #include <storage/procarray.h>
 
+/* for allocating the htab storage */
+#include <utils/memutils.h>
+
 #include "../compat.h"
 #include "../extension_constants.h"
 #include "loader.h"
@@ -490,20 +493,24 @@ scheduler_state_trans_automatic_all(HTAB *db_htab)
 static void
 launcher_pre_shmem_cleanup(int code, Datum arg)
 {
-	HTAB	   *db_htab = (HTAB *) DatumGetPointer(arg);
+	HTAB	   *db_htab = *(HTAB **) DatumGetPointer(arg);
 	HASH_SEQ_STATUS hash_seq;
 	DbHashEntry *current_entry;
 
-	hash_seq_init(&hash_seq, db_htab);
+	/* db_htab will be NULL if we fail during init_database_htab */
+	if (db_htab != NULL)
+	{
+		hash_seq_init(&hash_seq, db_htab);
 
-	/*
-	 * Stop everyone (or at least tell the Postmaster we don't care about them
-	 * anymore)
-	 */
-	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
-		terminate_background_worker(current_entry->db_scheduler_handle);
+		/*
+		 * Stop everyone (or at least tell the Postmaster we don't care about
+		 * them anymore)
+		 */
+		while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
+			terminate_background_worker(current_entry->db_scheduler_handle);
 
-	hash_destroy(db_htab);
+		hash_destroy(db_htab);
+	}
 
 	/*
 	 * Reset our pid in the queue so that others know we've died and don't
@@ -687,6 +694,7 @@ launcher_sigterm(SIGNAL_ARGS)
 extern Datum
 ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 {
+	HTAB	  **htab_storage;
 
 	HTAB	   *db_htab;
 
@@ -716,11 +724,23 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 	ereport(LOG, (errmsg("TimescaleDB background worker launcher connected to shared catalogs")));
 
-	ts_bgw_message_queue_set_reader();
-	db_htab = init_database_htab();
-	populate_database_htab(db_htab);
+	htab_storage = MemoryContextAllocZero(TopMemoryContext, sizeof(*htab_storage));
 
-	before_shmem_exit(launcher_pre_shmem_cleanup, PointerGetDatum(db_htab));
+	/*
+	 * We must setup the cleanup function _before_ initializing any state it
+	 * touches (specifically the bgw_message_queue and db_htab). Failing to do
+	 * this can cause cascading failures when the launcher fails in
+	 * init_database_htab (eg. due to running out of shared memory) but
+	 * doesn't deregister itself from the shared bgw_message_queue.
+	 */
+	before_shmem_exit(launcher_pre_shmem_cleanup, PointerGetDatum(htab_storage));
+
+	ts_bgw_message_queue_set_reader();
+
+	db_htab = init_database_htab();
+	*htab_storage = db_htab;
+
+	populate_database_htab(db_htab);
 
 	while (true)
 	{
