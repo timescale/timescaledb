@@ -129,7 +129,7 @@ queue_set_reader(MessageQueue *queue)
 		SpinLockRelease(&vq->mutex);
 	}
 	else if (queue_get_reader(queue) != MyProcPid)
-		ereport(ERROR, (errmsg("only one reader for allowed for TimescaleDB background worker message queue")));
+		ereport(ERROR, (errmsg("only one reader allowed for TimescaleDB background worker message queue")));
 }
 
 static void
