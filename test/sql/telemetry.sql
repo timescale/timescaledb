@@ -121,4 +121,5 @@ SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com',
 SET timescaledb.telemetry_level=off;
 
 
-select json_object_keys(get_telemetry_report()::json);
+SELECT * FROM json_object_keys(get_telemetry_report()::json) AS key
+WHERE key != 'os_name_pretty';

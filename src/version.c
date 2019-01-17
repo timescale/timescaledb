@@ -9,6 +9,7 @@
 #include <utils/builtins.h>
 #include <funcapi.h>
 #include <fmgr.h>
+#include <storage/fd.h>
 
 #include "fmgr.h"
 #include "compat.h"
@@ -82,6 +83,63 @@ error:
 
 #include <sys/utsname.h>
 
+#define OS_RELEASE_FILE "/etc/os-release"
+#define MAX_READ_LEN 	1024
+
+#define NAME_FIELD "PRETTY_NAME=\""
+
+static bool
+get_pretty_version(char *pretty_version)
+{
+	FILE	   *version_file;
+	char	   *contents = palloc(MAX_READ_LEN);
+	size_t		bytes_read;
+	bool		got_pretty_version = false;
+	int			i;
+
+	memset(pretty_version, '\0', VERSION_INFO_LEN);
+
+	/* we cannot use pg_read_file because it doesn't allow absolute paths */
+	version_file = AllocateFile(OS_RELEASE_FILE, PG_BINARY_R);
+	if (version_file == NULL)
+		return false;
+
+	fseeko(version_file, 0, SEEK_SET);
+
+	bytes_read = fread(contents, 1, (size_t) MAX_READ_LEN, version_file);
+
+	if (bytes_read <= 0)
+		goto cleanup;
+
+	if (bytes_read < MAX_READ_LEN)
+		contents[bytes_read] = '\0';
+	else
+		contents[MAX_READ_LEN - 1] = '\0';
+
+	contents = strstr(contents, NAME_FIELD);
+
+	if (contents == NULL)
+		goto cleanup;
+
+	contents += sizeof(NAME_FIELD) - 1;
+
+	for (i = 0; i < (VERSION_INFO_LEN - 1); i++)
+	{
+		char		c = contents[i];
+
+		if (c == '\0' || c == '\n' || c == '\r' || c == '"')
+			break;
+
+		pretty_version[i] = c;
+	}
+
+	got_pretty_version = true;
+
+cleanup:
+	FreeFile(version_file);
+	return got_pretty_version;
+}
+
 bool
 ts_version_get_os_info(VersionOSInfo *info)
 {
@@ -94,6 +152,7 @@ ts_version_get_os_info(VersionOSInfo *info)
 	strncpy(info->sysname, os_info.sysname, VERSION_INFO_LEN - 1);
 	strncpy(info->version, os_info.version, VERSION_INFO_LEN - 1);
 	strncpy(info->release, os_info.release, VERSION_INFO_LEN - 1);
+	info->has_pretty_version = get_pretty_version(info->pretty_version);
 
 	return true;
 }
@@ -112,8 +171,8 @@ Datum
 ts_get_os_info(PG_FUNCTION_ARGS)
 {
 	TupleDesc	tupdesc;
-	Datum		values[3];
-	bool		nulls[3] = {false};
+	Datum		values[4];
+	bool		nulls[4] = {false};
 	HeapTuple	tuple;
 	VersionOSInfo info;
 
@@ -128,6 +187,10 @@ ts_get_os_info(PG_FUNCTION_ARGS)
 		values[0] = CStringGetTextDatum(info.sysname);
 		values[1] = CStringGetTextDatum(info.version);
 		values[2] = CStringGetTextDatum(info.release);
+		if (info.has_pretty_version)
+			values[3] = CStringGetTextDatum(info.pretty_version);
+		else
+			nulls[3] = true;
 	}
 	else
 		memset(nulls, true, sizeof(nulls));
