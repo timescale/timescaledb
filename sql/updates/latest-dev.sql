@@ -32,3 +32,5 @@ GRANT SELECT ON _timescaledb_internal.bgw_policy_chunk_stats TO PUBLIC;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.drop_chunks_impl(REGCLASS, "any", "any", BOOLEAN);
 DROP FUNCTION IF EXISTS drop_chunks("any", NAME, NAME, BOOLEAN, "any");
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.get_os_info();

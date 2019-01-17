@@ -40,6 +40,7 @@
 #define REQ_OS						"os_name"
 #define REQ_OS_VERSION				"os_version"
 #define REQ_OS_RELEASE				"os_release"
+#define REQ_OS_VERSION_PRETTY		"os_name_pretty"
 #define REQ_PS_VERSION				"postgresql_version"
 #define REQ_TS_VERSION				"timescaledb_version"
 #define REQ_BUILD_OS				"build_os_name"
@@ -223,6 +224,8 @@ build_version_body(void)
 		ts_jsonb_add_str(parseState, REQ_OS, osinfo.sysname);
 		ts_jsonb_add_str(parseState, REQ_OS_VERSION, osinfo.version);
 		ts_jsonb_add_str(parseState, REQ_OS_RELEASE, osinfo.release);
+		if (osinfo.has_pretty_version)
+			ts_jsonb_add_str(parseState, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
 	}
 	else
 		ts_jsonb_add_str(parseState, REQ_OS, "Unknown");
