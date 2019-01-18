@@ -13,10 +13,13 @@
 #include <utils/rel.h>
 #include <foreign/fdwapi.h>
 #include <foreign/foreign.h>
+#include <nodes/relation.h>
+#include <parser/parsetree.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/planmain.h>
 #include <access/htup_details.h>
+#include <access/sysattr.h>
 #include <executor/executor.h>
 #include <utils/builtins.h>
 
@@ -24,6 +27,7 @@
 
 #include "utils.h"
 #include "timescaledb_fdw.h"
+#include "deparse.h"
 
 TS_FUNCTION_INFO_V1(timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(timescaledb_fdw_validator);
@@ -156,8 +160,118 @@ add_foreign_update_targets(Query *parsetree, RangeTblEntry *target_rte, Relation
 static List *
 plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index)
 {
-	log_func_name(__func__);
-	return NULL;
+	CmdType operation = plan->operation;
+	RangeTblEntry *rte = planner_rt_fetch(resultRelation, root);
+	Relation rel;
+	StringInfoData sql;
+	List *targetAttrs = NIL;
+	List *returningList = NIL;
+	List *retrieved_attrs = NIL;
+	bool doNothing = false;
+
+	initStringInfo(&sql);
+
+	/*
+	 * Core code already has some lock on each rel being planned, so we can
+	 * use NoLock here.
+	 */
+	rel = heap_open(rte->relid, NoLock);
+
+	/*
+	 * In an INSERT, we transmit all columns that are defined in the foreign
+	 * table.  In an UPDATE, we transmit only columns that were explicitly
+	 * targets of the UPDATE, so as to avoid unnecessary data transmission.
+	 * (We can't do that for INSERT since we would miss sending default values
+	 * for columns not listed in the source statement.)
+	 */
+	if (operation == CMD_INSERT)
+	{
+		TupleDesc tupdesc = RelationGetDescr(rel);
+		int attnum;
+
+		for (attnum = 1; attnum <= tupdesc->natts; attnum++)
+		{
+			Form_pg_attribute attr = tupdesc->attrs[attnum - 1];
+
+			if (!attr->attisdropped)
+				targetAttrs = lappend_int(targetAttrs, attnum);
+		}
+	}
+	else if (operation == CMD_UPDATE)
+	{
+		int col;
+
+		col = -1;
+		while ((col = bms_next_member(rte->updatedCols, col)) >= 0)
+		{
+			/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
+			AttrNumber attno = col + FirstLowInvalidHeapAttributeNumber;
+
+			if (attno <= InvalidAttrNumber) /* shouldn't happen */
+				elog(ERROR, "system-column update is not supported");
+			targetAttrs = lappend_int(targetAttrs, attno);
+		}
+	}
+
+	/*
+	 * Extract the relevant RETURNING list if any.
+	 */
+	if (plan->returningLists)
+		returningList = (List *) list_nth(plan->returningLists, subplan_index);
+
+	/*
+	 * ON CONFLICT DO UPDATE and DO NOTHING case with inference specification
+	 * should have already been rejected in the optimizer, as presently there
+	 * is no way to recognize an arbiter index on a foreign table.  Only DO
+	 * NOTHING is supported without an inference specification.
+	 */
+	if (plan->onConflictAction == ONCONFLICT_NOTHING)
+		doNothing = true;
+	else if (plan->onConflictAction != ONCONFLICT_NONE)
+		elog(ERROR, "unexpected ON CONFLICT specification: %d", (int) plan->onConflictAction);
+
+	/*
+	 * Construct the SQL command string.
+	 */
+	switch (operation)
+	{
+		case CMD_INSERT:
+			deparseInsertSql(&sql,
+							 root,
+							 resultRelation,
+							 rel,
+							 targetAttrs,
+							 doNothing,
+							 returningList,
+							 &retrieved_attrs);
+			break;
+		case CMD_UPDATE:
+			deparseUpdateSql(&sql,
+							 root,
+							 resultRelation,
+							 rel,
+							 targetAttrs,
+							 returningList,
+							 &retrieved_attrs);
+			break;
+		case CMD_DELETE:
+			deparseDeleteSql(&sql, root, resultRelation, rel, returningList, &retrieved_attrs);
+			break;
+		default:
+			elog(ERROR, "unexpected operation: %d", (int) operation);
+			break;
+	}
+
+	heap_close(rel, NoLock);
+
+	/*
+	 * Build the fdw_private list that will be available to the executor.
+	 * Items in the list must match enum FdwModifyPrivateIndex, above.
+	 */
+	return list_make4(makeString(sql.data),
+					  targetAttrs,
+					  makeInteger((retrieved_attrs != NIL)),
+					  retrieved_attrs);
 }
 
 static void
