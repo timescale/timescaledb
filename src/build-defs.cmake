@@ -24,21 +24,22 @@ if(APACHE_ONLY)
   add_definitions(-DAPACHE_ONLY)
 endif()
 
-include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_BINARY_DIR}/src ${PG_INCLUDEDIR_SERVER})
+include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_BINARY_DIR}/src)
+include_directories(SYSTEM ${PG_INCLUDEDIR_SERVER})
 
 # Only Windows and FreeBSD need the base include/ dir instead of include/server/, and including
 # both causes problems on Ubuntu where they frequently get out of sync
 if (WIN32 OR (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD"))
-  include_directories(${PG_INCLUDEDIR})
+  include_directories(SYSTEM ${PG_INCLUDEDIR})
 endif ()
 
 if (WIN32)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PG_LIBDIR}/postgres.lib ws2_32.lib Version.lib")
   set(CMAKE_C_FLAGS "-D_CRT_SECURE_NO_WARNINGS")
-  include_directories(${PG_INCLUDEDIR_SERVER}/port/win32)
+  include_directories(SYSTEM ${PG_INCLUDEDIR_SERVER}/port/win32)
 
   if (MSVC)
-    include_directories(${PG_INCLUDEDIR_SERVER}/port/win32_msvc)
+    include_directories(SYSTEM ${PG_INCLUDEDIR_SERVER}/port/win32_msvc)
   endif (MSVC)
 endif (WIN32)
 
