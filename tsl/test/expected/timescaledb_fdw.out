@@ -6,73 +6,25 @@
 CREATE SERVER some_server FOREIGN DATA WRAPPER timescaledb_fdw;
 CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER some_server;
 SELECT * FROM test_ft;
-INFO:  executing function timescaledb_fdw_handler
-INFO:  executing function get_foreign_rel_size
-INFO:  executing function get_foreign_paths
-INFO:  executing function get_foreign_plan
-INFO:  executing function begin_foreign_scan
-INFO:  executing function iterate_foreign_scan
-INFO:  executing function iterate_foreign_scan
-INFO:  executing function end_foreign_scan
  c0 |  c1  
 ----+------
   1 | test
 (1 row)
 
 INSERT INTO test_ft VALUES (1, 'test');
-INFO:  executing function timescaledb_fdw_handler
-INFO:  executing function plan_foreign_modify
-INFO:  executing function is_foreign_rel_updatable
-INFO:  executing function begin_foreign_modify
-INFO:  executing function exec_foreign_insert
-INFO:  executing function end_foreign_modify
+NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": INSERT INTO public.test_ft(c0, c1) VALUES ($1, $2)
 UPDATE test_ft SET c1 = 'new_test';
-INFO:  executing function add_foreign_update_targets
-INFO:  executing function get_foreign_rel_size
-INFO:  executing function get_foreign_paths
-INFO:  executing function get_foreign_plan
-INFO:  executing function plan_foreign_modify
-INFO:  executing function is_foreign_rel_updatable
-INFO:  executing function begin_foreign_scan
-INFO:  executing function begin_foreign_modify
-INFO:  executing function iterate_foreign_scan
-INFO:  executing function exec_foreign_update
-INFO:  executing function iterate_foreign_scan
-INFO:  executing function end_foreign_modify
-INFO:  executing function end_foreign_scan
+NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": UPDATE public.test_ft SET c1 = $2 WHERE ctid = $1
 DELETE FROM test_ft WHERE c0 = 1;
-INFO:  executing function add_foreign_update_targets
-INFO:  executing function get_foreign_rel_size
-INFO:  executing function get_foreign_paths
-INFO:  executing function get_foreign_plan
-INFO:  executing function plan_foreign_modify
-INFO:  executing function is_foreign_rel_updatable
-INFO:  executing function begin_foreign_scan
-INFO:  executing function begin_foreign_modify
-INFO:  executing function iterate_foreign_scan
-INFO:  executing function exec_foreign_delete
-INFO:  executing function iterate_foreign_scan
-INFO:  executing function end_foreign_modify
-INFO:  executing function end_foreign_scan
+NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": DELETE FROM public.test_ft WHERE ctid = $1
 EXPLAIN SELECT * FROM test_ft;
-INFO:  executing function get_foreign_rel_size
-INFO:  executing function get_foreign_paths
-INFO:  executing function get_foreign_plan
-INFO:  executing function begin_foreign_scan
-INFO:  executing function explain_foreign_scan
-INFO:  executing function end_foreign_scan
                          QUERY PLAN                         
 ------------------------------------------------------------
  Foreign Scan on test_ft  (cost=0.00..1.00 rows=1 width=42)
 (1 row)
 
 EXPLAIN INSERT INTO test_ft VALUES (1, 'test');
-INFO:  executing function timescaledb_fdw_handler
-INFO:  executing function plan_foreign_modify
-INFO:  executing function is_foreign_rel_updatable
-INFO:  executing function begin_foreign_modify
-INFO:  executing function explain_foreign_modify
-INFO:  executing function end_foreign_modify
+NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": INSERT INTO public.test_ft(c0, c1) VALUES ($1, $2)
                       QUERY PLAN                      
 ------------------------------------------------------
  Insert on test_ft  (cost=0.00..0.01 rows=1 width=42)
@@ -80,5 +32,4 @@ INFO:  executing function end_foreign_modify
 (2 rows)
 
 ANALYZE VERBOSE test_ft;
-INFO:  executing function analyze_foreign_table
 WARNING:  skipping "test_ft" --- cannot analyze this foreign table
