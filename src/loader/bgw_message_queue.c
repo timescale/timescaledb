@@ -154,7 +154,7 @@ queue_reset_reader(MessageQueue *queue)
 		ereport(ERROR, (
 						ERRCODE_INTERNAL_ERROR,
 						errmsg("multiple TimescaleDB background worker launchers have been started when only one is allowed"),
-						errhint("this is a bug, please report it on our github page")));
+						errhint("This is a bug, please report it on our github page.")));
 }
 
 /* Add a message to the queue - we can do this if the queue is not full */
