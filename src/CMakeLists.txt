@@ -49,6 +49,7 @@ set(SOURCES
   trigger.c
   utils.c
   version.c
+  with_clause_parser.c
 )
 
 # Add test source code in Debug builds
