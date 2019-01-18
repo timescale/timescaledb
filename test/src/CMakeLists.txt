@@ -1,5 +1,6 @@
 set(SOURCES
   symbol_conflict.c
+  test_with_clause_parser.c
 )
 
 include(${PROJECT_SOURCE_DIR}/src/build-defs.cmake)
