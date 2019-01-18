@@ -16,7 +16,7 @@ under the `\tsl` subdirectory, which is licensed under
 the [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE).
 For clarity, all code files reference licensing in their header.  [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
 
-Apache-2 licensed binaries can be build by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
 Below is an introduction to TimescaleDB. For more information, please check out these other resources:
 - [Developer Documentation](https://docs.timescale.com/)
