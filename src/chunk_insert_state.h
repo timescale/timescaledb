@@ -24,7 +24,6 @@ typedef struct ChunkInsertState
 	TupleConversionMap *tup_conv_map;
 	TupleTableSlot *slot;
 	MemoryContext mctx;
-
 	EState *estate;
 } ChunkInsertState;
 

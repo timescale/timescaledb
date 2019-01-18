@@ -1781,42 +1781,21 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 }
 
 /*
- * Append remote name of specified foreign table to buf.
- * Use value of table_name FDW option (if any) instead of relation's name.
- * Similarly, schema_name FDW option overrides schema name.
+ * Append name of table being queried.
+ *
+ * Note, we enforce that table names are the same across nodes.
  */
 static void
 deparseRelation(StringInfo buf, Relation rel)
 {
-	ForeignTable *table;
-	const char *nspname = NULL;
-	const char *relname = NULL;
-	ListCell *lc;
+	const char *nspname;
+	const char *relname;
 
-	/* obtain additional catalog information. */
-	table = GetForeignTable(RelationGetRelid(rel));
+	Assert(rel->rd_rel->relkind == RELKIND_FOREIGN_TABLE ||
+		   rel->rd_rel->relkind == RELKIND_RELATION);
 
-	/*
-	 * Use value of FDW options if any, instead of the name of object itself.
-	 */
-	foreach (lc, table->options)
-	{
-		DefElem *def = (DefElem *) lfirst(lc);
-
-		if (strcmp(def->defname, "schema_name") == 0)
-			nspname = defGetString(def);
-		else if (strcmp(def->defname, "table_name") == 0)
-			relname = defGetString(def);
-	}
-
-	/*
-	 * Note: we could skip printing the schema name if it's pg_catalog, but
-	 * that doesn't seem worth the trouble.
-	 */
-	if (nspname == NULL)
-		nspname = get_namespace_name(RelationGetNamespace(rel));
-	if (relname == NULL)
-		relname = RelationGetRelationName(rel);
+	nspname = get_namespace_name(RelationGetNamespace(rel));
+	relname = RelationGetRelationName(rel);
 
 	appendStringInfo(buf, "%s.%s", quote_identifier(nspname), quote_identifier(relname));
 }

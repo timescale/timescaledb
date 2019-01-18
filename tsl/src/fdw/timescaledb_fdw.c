@@ -22,8 +22,13 @@
 #include <access/sysattr.h>
 #include <executor/executor.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
 
 #include <export.h>
+#include <hypertable_server.h>
+#include <hypertable_cache.h>
+#include <chunk_server.h>
+#include <chunk_insert_state.h>
 
 #include "utils.h"
 #include "timescaledb_fdw.h"
@@ -37,11 +42,27 @@ typedef struct TsScanState
 	int row_counter;
 } TsScanState;
 
-static void
-log_func_name(const char *name)
+/*
+ * This enum describes what's kept in the fdw_private list for a ModifyTable
+ * node referencing a postgres_fdw foreign table.  We store:
+ *
+ * 1) INSERT/UPDATE/DELETE statement text to be sent to the remote server
+ * 2) Integer list of target attribute numbers for INSERT/UPDATE
+ *	  (NIL for a DELETE)
+ * 3) Boolean flag showing if the remote query has a RETURNING clause
+ * 4) Integer list of attribute numbers retrieved by RETURNING, if any
+ */
+enum FdwModifyPrivateIndex
 {
-	elog(INFO, "executing function %s", name);
-}
+	/* SQL statement to execute remotely (as a String node) */
+	FdwModifyPrivateUpdateSql,
+	/* Integer list of target attribute numbers for INSERT/UPDATE */
+	FdwModifyPrivateTargetAttnums,
+	/* has-returning flag (as an integer Value node) */
+	FdwModifyPrivateHasReturning,
+	/* Integer list of attribute numbers retrieved by RETURNING */
+	FdwModifyPrivateRetrievedAttrs,
+};
 
 Datum
 timescaledb_fdw_validator(PG_FUNCTION_ARGS)
@@ -56,7 +77,6 @@ timescaledb_fdw_validator(PG_FUNCTION_ARGS)
 static void
 get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
-	log_func_name(__func__);
 	baserel->rows = 0;
 }
 
@@ -64,8 +84,6 @@ static void
 get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
 	Cost startup_cost, total_cost;
-
-	log_func_name(__func__);
 
 	startup_cost = 0;
 	total_cost = startup_cost + baserel->rows;
@@ -89,8 +107,6 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid, For
 {
 	Index scan_relid = baserel->relid;
 
-	log_func_name(__func__);
-
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 	return make_foreignscan(tlist, scan_clauses, scan_relid, NIL, NIL, NIL, NIL, outer_plan);
 }
@@ -100,7 +116,6 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 {
 	TsScanState *state;
 
-	log_func_name(__func__);
 	state = palloc0(sizeof(TsScanState));
 	state->row_counter = 0;
 	node->fdw_state = state;
@@ -114,7 +129,6 @@ iterate_foreign_scan(ForeignScanState *node)
 	TsScanState *state;
 	HeapTuple tuple;
 
-	log_func_name(__func__);
 	slot = node->ss.ss_ScanTupleSlot;
 	tuple_desc = node->ss.ss_currentRelation->rd_att;
 	state = (TsScanState *) node->fdw_state;
@@ -142,82 +156,87 @@ iterate_foreign_scan(ForeignScanState *node)
 static void
 rescan_foreign_scan(ForeignScanState *node)
 {
-	log_func_name(__func__);
 }
 
 static void
 end_foreign_scan(ForeignScanState *node)
 {
-	log_func_name(__func__);
 }
 
 static void
 add_foreign_update_targets(Query *parsetree, RangeTblEntry *target_rte, Relation target_relation)
 {
-	log_func_name(__func__);
 }
 
 static List *
-plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, int subplan_index)
+get_insert_attrs(Relation rel)
+{
+	TupleDesc tupdesc = RelationGetDescr(rel);
+	List *attrs = NIL;
+	int i;
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+
+		if (!attr->attisdropped)
+			attrs = lappend_int(attrs, AttrOffsetGetAttrNumber(i));
+	}
+
+	return attrs;
+}
+
+static List *
+get_update_attrs(RangeTblEntry *rte)
+{
+	List *attrs = NIL;
+	int col = -1;
+
+	while ((col = bms_next_member(rte->updatedCols, col)) >= 0)
+	{
+		/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
+		AttrNumber attno = col + FirstLowInvalidHeapAttributeNumber;
+
+		if (attno <= InvalidAttrNumber) /* shouldn't happen */
+			elog(ERROR, "system-column update is not supported");
+
+		attrs = lappend_int(attrs, attno);
+	}
+
+	return attrs;
+}
+
+/*
+ * Plan INSERT, UPDATE, and DELETE.
+ *
+ * The main task of this function is to generate (deparse) the SQL statement
+ * to send to remote tables. For the TimescaleDB insert path, we actually call
+ * this function only once on the hypertable's root table instead of once per
+ * chunk. This is because we want to send INSERT statements to each remote
+ * hypertable rather than each remote chunk.
+ *
+ * UPDATEs and DELETEs work slightly different since we have no "optimized"
+ * path for such operations. Instead, they happen once per chunk.
+ */
+static List *
+plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation, int subplan_index)
 {
 	CmdType operation = plan->operation;
-	RangeTblEntry *rte = planner_rt_fetch(resultRelation, root);
+	RangeTblEntry *rte = planner_rt_fetch(result_relation, root);
 	Relation rel;
 	StringInfoData sql;
-	List *targetAttrs = NIL;
-	List *returningList = NIL;
+	List *returning_list = NIL;
 	List *retrieved_attrs = NIL;
-	bool doNothing = false;
+	List *target_attrs = NIL;
+	bool do_nothing = false;
 
 	initStringInfo(&sql);
-
-	/*
-	 * Core code already has some lock on each rel being planned, so we can
-	 * use NoLock here.
-	 */
-	rel = heap_open(rte->relid, NoLock);
-
-	/*
-	 * In an INSERT, we transmit all columns that are defined in the foreign
-	 * table.  In an UPDATE, we transmit only columns that were explicitly
-	 * targets of the UPDATE, so as to avoid unnecessary data transmission.
-	 * (We can't do that for INSERT since we would miss sending default values
-	 * for columns not listed in the source statement.)
-	 */
-	if (operation == CMD_INSERT)
-	{
-		TupleDesc tupdesc = RelationGetDescr(rel);
-		int attnum;
-
-		for (attnum = 1; attnum <= tupdesc->natts; attnum++)
-		{
-			Form_pg_attribute attr = tupdesc->attrs[attnum - 1];
-
-			if (!attr->attisdropped)
-				targetAttrs = lappend_int(targetAttrs, attnum);
-		}
-	}
-	else if (operation == CMD_UPDATE)
-	{
-		int col;
-
-		col = -1;
-		while ((col = bms_next_member(rte->updatedCols, col)) >= 0)
-		{
-			/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
-			AttrNumber attno = col + FirstLowInvalidHeapAttributeNumber;
-
-			if (attno <= InvalidAttrNumber) /* shouldn't happen */
-				elog(ERROR, "system-column update is not supported");
-			targetAttrs = lappend_int(targetAttrs, attno);
-		}
-	}
 
 	/*
 	 * Extract the relevant RETURNING list if any.
 	 */
 	if (plan->returningLists)
-		returningList = (List *) list_nth(plan->returningLists, subplan_index);
+		returning_list = (List *) list_nth(plan->returningLists, subplan_index);
 
 	/*
 	 * ON CONFLICT DO UPDATE and DO NOTHING case with inference specification
@@ -226,36 +245,50 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, 
 	 * NOTHING is supported without an inference specification.
 	 */
 	if (plan->onConflictAction == ONCONFLICT_NOTHING)
-		doNothing = true;
+		do_nothing = true;
 	else if (plan->onConflictAction != ONCONFLICT_NONE)
 		elog(ERROR, "unexpected ON CONFLICT specification: %d", (int) plan->onConflictAction);
 
 	/*
-	 * Construct the SQL command string.
+	 * Core code already has some lock on each rel being planned, so we can
+	 * use NoLock here.
+	 */
+	rel = heap_open(rte->relid, NoLock);
+
+	/*
+	 * Construct the SQL command string
+	 *
+	 * In an INSERT, we transmit all columns that are defined in the foreign
+	 * table.  In an UPDATE, we transmit only columns that were explicitly
+	 * targets of the UPDATE, so as to avoid unnecessary data transmission.
+	 * (We can't do that for INSERT since we would miss sending default values
+	 * for columns not listed in the source statement.)
 	 */
 	switch (operation)
 	{
 		case CMD_INSERT:
+			target_attrs = get_insert_attrs(rel);
 			deparseInsertSql(&sql,
-							 root,
-							 resultRelation,
+							 rte,
+							 result_relation,
 							 rel,
-							 targetAttrs,
-							 doNothing,
-							 returningList,
+							 target_attrs,
+							 do_nothing,
+							 returning_list,
 							 &retrieved_attrs);
 			break;
 		case CMD_UPDATE:
+			target_attrs = get_update_attrs(rte);
 			deparseUpdateSql(&sql,
-							 root,
-							 resultRelation,
+							 rte,
+							 result_relation,
 							 rel,
-							 targetAttrs,
-							 returningList,
+							 target_attrs,
+							 returning_list,
 							 &retrieved_attrs);
 			break;
 		case CMD_DELETE:
-			deparseDeleteSql(&sql, root, resultRelation, rel, returningList, &retrieved_attrs);
+			deparseDeleteSql(&sql, rte, result_relation, rel, returning_list, &retrieved_attrs);
 			break;
 		default:
 			elog(ERROR, "unexpected operation: %d", (int) operation);
@@ -269,23 +302,60 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index resultRelation, 
 	 * Items in the list must match enum FdwModifyPrivateIndex, above.
 	 */
 	return list_make4(makeString(sql.data),
-					  targetAttrs,
+					  target_attrs,
 					  makeInteger((retrieved_attrs != NIL)),
 					  retrieved_attrs);
+}
+
+static const char *
+chunk_servers_to_string(List *servers)
+{
+	StringInfo serverstr = makeStringInfo();
+	ListCell *lc;
+
+	initStringInfo(serverstr);
+
+	appendStringInfoChar(serverstr, '[');
+
+	foreach (lc, servers)
+	{
+		ChunkServer *server = lfirst(lc);
+
+		appendStringInfo(serverstr, "%s", NameStr(server->fd.server_name));
+
+		if (NULL != lnext(lc))
+			appendStringInfoChar(serverstr, ',');
+	}
+
+	appendStringInfoChar(serverstr, ']');
+
+	return serverstr->data;
 }
 
 static void
 begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private,
 					 int subplan_index, int eflags)
 {
-	log_func_name(__func__);
+	const char *sql = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
+	Chunk *chunk = ts_chunk_get_by_relid(rinfo->ri_RelationDesc->rd_id, 0, false);
+
+	if (NULL == chunk)
+		elog(NOTICE,
+			 "BEGIN FOREIGN MODIFY on non-chunk table \"%s\": %s",
+			 get_rel_name(rinfo->ri_RelationDesc->rd_id),
+			 sql);
+	else
+		elog(NOTICE,
+			 "BEGIN FOREIGN MODIFY on chunk \"%s\" %s: %s",
+			 get_rel_name(rinfo->ri_RelationDesc->rd_id),
+			 chunk_servers_to_string(chunk->servers),
+			 sql);
 }
 
 static TupleTableSlot *
 exec_foreign_insert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
 {
-	log_func_name(__func__);
 	return slot;
 }
 
@@ -293,7 +363,6 @@ static TupleTableSlot *
 exec_foreign_update(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
 {
-	log_func_name(__func__);
 	return slot;
 }
 
@@ -301,40 +370,34 @@ static TupleTableSlot *
 exec_foreign_delete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
 {
-	log_func_name(__func__);
 	return slot;
 }
 
 static void
 end_foreign_modify(EState *estate, ResultRelInfo *rinfo)
 {
-	log_func_name(__func__);
 }
 
 static int
 is_foreign_rel_updatable(Relation rel)
 {
-	log_func_name(__func__);
 	return (1 << CMD_INSERT) | (1 << CMD_DELETE) | (1 << CMD_UPDATE);
 }
 
 static void
 explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
 {
-	log_func_name(__func__);
 }
 
 static void
 explain_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private,
 					   int subplan_index, struct ExplainState *es)
 {
-	log_func_name(__func__);
 }
 
 static bool
 analyze_foreign_table(Relation relation, AcquireSampleRowsFunc *func, BlockNumber *totalpages)
 {
-	log_func_name(__func__);
 	return false;
 }
 
@@ -366,6 +429,5 @@ static FdwRoutine timescaledb_fdw_routine = {
 Datum
 timescaledb_fdw_handler(PG_FUNCTION_ARGS)
 {
-	log_func_name(__func__);
 	PG_RETURN_POINTER(&timescaledb_fdw_routine);
 }

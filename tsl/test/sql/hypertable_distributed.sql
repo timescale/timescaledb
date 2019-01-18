@@ -15,7 +15,7 @@ SELECT * FROM add_server('server_3');
 
 -- Create a distributed hypertable. Add a trigger and primary key
 -- constraint to test how those work
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
+CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 
@@ -47,6 +47,9 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_indexes('disttable');
 SELECT * FROM test.show_triggers('disttable');
+
+-- Drop a column
+ALTER TABLE disttable DROP COLUMN color;
 
 -- Create some chunks through insertion
 INSERT INTO disttable VALUES
@@ -93,7 +96,7 @@ FROM test.show_subtables('disttable') st;
 SELECT * FROM _timescaledb_catalog.chunk_index;
 
 -- Check that creating columns work
-ALTER TABLE disttable ADD COLUMN color int;
+ALTER TABLE disttable ADD COLUMN "Color" int;
 
 SELECT * FROM test.show_columns('disttable');
 SELECT st."Child" as chunk_relid, test.show_columns((st)."Child")
@@ -101,7 +104,7 @@ FROM test.show_subtables('disttable') st;
 
 -- Adding a new unique constraint should not recurse to foreign
 -- chunks, but a check constraint should
-ALTER TABLE disttable ADD CONSTRAINT disttable_color_unique UNIQUE (time, color);
+ALTER TABLE disttable ADD CONSTRAINT disttable_color_unique UNIQUE (time, "Color");
 ALTER TABLE disttable ADD CONSTRAINT disttable_temp_non_negative CHECK (temp > 0.0);
 
 SELECT st."Child" as chunk_relid, test.show_constraints((st)."Child")
@@ -112,6 +115,40 @@ FROM (SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
       FROM show_chunks('disttable')) c,
       _timescaledb_catalog.chunk_constraint cc
 WHERE c.chunk_id = cc.chunk_id;
+
+
+-- Test INSERTS with returning
+INSERT INTO disttable VALUES ('2017-09-02 06:09', 4, 9.8)
+RETURNING time, temp;
+
+-- On conflict
+INSERT INTO disttable VALUES ('2017-09-08 08:13', 6, 10.5)
+ON CONFLICT DO NOTHING;
+
+\set ON_ERROR_STOP 0
+-- ON CONFLICT only works with DO NOTHING
+INSERT INTO disttable VALUES ('2017-09-09 08:13', 7, 27.5)
+ON CONFLICT (time) DO UPDATE SET temp = 3.2;
+\set ON_ERROR_STOP 1
+
+-- Test updates
+UPDATE disttable SET device = 4 WHERE device = 3;
+
+WITH devices AS (
+     SELECT DISTINCT device FROM disttable ORDER BY device
+)
+UPDATE disttable SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
+
+\set ON_ERROR_STOP 0
+-- Updates referencing non-existing column
+UPDATE disttable SET device = 4 WHERE no_such_column = 2;
+UPDATE disttable SET no_such_column = 4 WHERE device = 2;
+-- Update to system column
+UPDATE disttable SET tableoid = 4 WHERE device = 2;
+\set ON_ERROR_STOP 1
+
+-- Test deletes
+DELETE FROM disttable WHERE device = 3;
 
 -- Test underreplicated chunk warning
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
