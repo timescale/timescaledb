@@ -4,8 +4,15 @@
 --parallel queries require big-ish tables so collect them all here
 --so that we need to generate queries only once.
 CREATE TABLE test (i int, j double precision, ts timestamp);
+SELECT create_hypertable('test','i',chunk_time_interval:=500000);
+NOTICE:  adding not-null constraint to column "i"
+ create_hypertable 
+-------------------
+ (1,public,test,t)
+(1 row)
+
 --has to be big enough to force at least 2 workers below.
-INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(1,1000000) AS x;
+INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1) AS x;
 SET client_min_messages = 'error';
 --avoid warning polluting output
 ANALYZE;
@@ -14,36 +21,42 @@ SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
 EXPLAIN (costs off)
 SELECT first(i, j) FROM "test";
-                 QUERY PLAN                  
----------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
          ->  Partial Aggregate
-               ->  Parallel Seq Scan on test
-(5 rows)
+               ->  Append
+                     ->  Parallel Seq Scan on test
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(8 rows)
 
 SELECT first(i, j) FROM "test";
  first 
 -------
-     1
+     0
 (1 row)
 
 EXPLAIN (costs off)
 SELECT last(i, j) FROM "test";
-                 QUERY PLAN                  
----------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
          ->  Partial Aggregate
-               ->  Parallel Seq Scan on test
-(5 rows)
+               ->  Append
+                     ->  Parallel Seq Scan on test
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(8 rows)
 
 SELECT last(i, j) FROM "test";
-  last   
----------
- 1000000
+  last  
+--------
+ 999999
 (1 row)
 
 EXPLAIN (costs off)
@@ -52,18 +65,22 @@ FROM "test"
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
  Gather
    Workers Planned: 1
    Single Copy: true
    ->  Limit
          ->  GroupAggregate
-               Group Key: (time_bucket('@ 1 sec'::interval, ts))
+               Group Key: (time_bucket('@ 1 sec'::interval, test.ts))
                ->  Sort
-                     Sort Key: (time_bucket('@ 1 sec'::interval, ts))
-                     ->  Seq Scan on test
-(9 rows)
+                     Sort Key: (time_bucket('@ 1 sec'::interval, test.ts))
+                     ->  Result
+                           ->  Append
+                                 ->  Seq Scan on test
+                                 ->  Seq Scan on _hyper_1_1_chunk
+                                 ->  Seq Scan on _hyper_1_2_chunk
+(13 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
@@ -81,66 +98,78 @@ LIMIT 5;
 
 --test variants of histogram
 EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
-                 QUERY PLAN                  
----------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
          ->  Partial Aggregate
-               ->  Parallel Seq Scan on test
-(5 rows)
+               ->  Append
+                     ->  Parallel Seq Scan on test
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(8 rows)
 
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
       histogram      
 ---------------------
- {0,500000,499999,1}
+ {1,500000,499999,0}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
-                 QUERY PLAN                  
----------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
          ->  Partial Aggregate
-               ->  Parallel Seq Scan on test
-(5 rows)
+               ->  Append
+                     ->  Parallel Seq Scan on test
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(8 rows)
 
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
-                                  histogram                                  
------------------------------------------------------------------------------
- {0,100000,100000,100000,100000,100000,100000,100000,100000,100000,100000,0}
+                                 histogram                                  
+----------------------------------------------------------------------------
+ {1,100000,100000,100000,100000,100000,100000,100000,100000,100000,99999,0}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
-                 QUERY PLAN                  
----------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
          ->  Partial Aggregate
-               ->  Parallel Seq Scan on test
-(5 rows)
+               ->  Append
+                     ->  Parallel Seq Scan on test
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(8 rows)
 
 SELECT histogram(i, 0, 100000, 5) FROM "test";
                 histogram                 
 ------------------------------------------
- {0,19999,20000,20000,20000,20000,900001}
+ {0,20000,20000,20000,20000,20000,900000}
 (1 row)
 
 EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
-                 QUERY PLAN                  
----------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
          ->  Partial Aggregate
-               ->  Parallel Seq Scan on test
-(5 rows)
+               ->  Append
+                     ->  Parallel Seq Scan on test
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk
+(8 rows)
 
 SELECT histogram(i, 10, 100000, 5) FROM "test";
-                histogram                 
-------------------------------------------
- {9,19998,19998,19998,19998,19998,900001}
+                 histogram                 
+-------------------------------------------
+ {10,19998,19998,19998,19998,19998,900000}
 (1 row)
 
