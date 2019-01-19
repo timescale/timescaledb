@@ -6,8 +6,9 @@
 --so that we need to generate queries only once.
 
 CREATE TABLE test (i int, j double precision, ts timestamp);
+SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 --has to be big enough to force at least 2 workers below.
-INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(1,1000000) AS x;
+INSERT INTO test SELECT x, x+0.1, _timescaledb_internal.to_timestamp(x*1000)  FROM generate_series(0,1000000-1) AS x;
 
 SET client_min_messages = 'error';
 --avoid warning polluting output
