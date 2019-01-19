@@ -200,6 +200,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	Datum		arg1,
 				arg3,
 				arg4;
+	int			i;
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
@@ -244,7 +245,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	 * projection for gapfilled tuples so expressions like COALESCE work
 	 * correctly for gapfilled tuples.
 	 */
-	for (int i = 0; i < state->ncolumns; i++)
+	for (i = 0; i < state->ncolumns; i++)
 	{
 		if (state->columns[i]->ctype == NULL_COLUMN)
 		{
@@ -626,11 +627,12 @@ gapfill_state_initialize_columns(GapFillState *state)
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
 	TargetEntry *tle;
 	Expr	   *expr;
+	int			i;
 
 	state->ncolumns = tupledesc->natts;
 	state->columns = palloc(state->ncolumns * sizeof(GapFillColumnState *));
 
-	for (int i = 0; i < state->ncolumns; i++)
+	for (i = 0; i < state->ncolumns; i++)
 	{
 		tle = list_nth(cscan->custom_scan_tlist, i);
 		expr = list_nth(lthird(cscan->custom_private), i);
