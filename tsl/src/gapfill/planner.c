@@ -127,6 +127,8 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	TargetEntry *tle;
 	Expr	   *expr;
 	List	   *tl_exprs = NIL;
+	UpperRelationKind stage;
+	int			i;
 
 	cscan->scan.scanrelid = 0;
 	cscan->scan.plan.targetlist = tlist;
@@ -154,7 +156,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("gapfill functionality with window functions not supported")));
 
-	for (int i = 0; i < list_length(tlist); i++)
+	for (i = 0; i < list_length(tlist); i++)
 	{
 		tle = list_nth(tlist, i);
 		if (root->upper_targets[UPPERREL_WINDOW])
@@ -174,7 +176,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	{
 		castNode(TargetEntry, lfirst(lc))->expr = gapfill_clean_expr(castNode(TargetEntry, lfirst(lc))->expr);
 	}
-	for (UpperRelationKind stage = UPPERREL_SETOP; stage <= UPPERREL_FINAL; stage++)
+	for (stage = UPPERREL_SETOP; stage <= UPPERREL_FINAL; stage++)
 	{
 		if (root->upper_targets[stage])
 		{
