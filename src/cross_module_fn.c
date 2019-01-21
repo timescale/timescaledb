@@ -27,6 +27,8 @@ TS_FUNCTION_INFO_V1(ts_server_add);
 TS_FUNCTION_INFO_V1(ts_server_delete);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
 TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
+TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
+TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -92,6 +94,18 @@ Datum
 ts_timescaledb_fdw_validator(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->timescaledb_fdw_validator(fcinfo));
+}
+
+Datum
+ts_remote_txn_id_in(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_in(fcinfo));
+}
+
+Datum
+ts_remote_txn_id_out(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_out(fcinfo));
 }
 
 /*
@@ -309,6 +323,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
 	.timescaledb_fdw_validator = empty_fn,
 	.cache_syscache_invalidate = cache_syscache_invalidate_default,
+#if !PG96
+	.remote_txn_id_in = error_no_default_fn_pg_community,
+	.remote_txn_id_out = error_no_default_fn_pg_community,
+#endif
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

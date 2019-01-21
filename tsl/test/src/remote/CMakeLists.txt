@@ -4,6 +4,8 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/connection_cache.c
   ${CMAKE_CURRENT_SOURCE_DIR}/async.c
   ${CMAKE_CURRENT_SOURCE_DIR}/command_exec.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/test_utils.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/txn_id.c
 )
 
 target_sources(${TSL_TESTS_LIB_NAME} PRIVATE ${SOURCES})

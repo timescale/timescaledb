@@ -45,3 +45,18 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_server (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_server', '');
 
 GRANT SELECT ON _timescaledb_catalog.chunk_server TO PUBLIC;
+
+--placeholder to allow creation of functions below
+CREATE TYPE rxid;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.rxid_in(cstring) RETURNS rxid
+    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.rxid_out(rxid) RETURNS cstring
+    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE TYPE rxid (
+   internallength = 16,
+   input = _timescaledb_internal.rxid_in,
+   output = _timescaledb_internal.rxid_out
+);

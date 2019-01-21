@@ -35,6 +35,7 @@
 #if !PG96
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
+#include "remote/txn_id.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -114,6 +115,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
+#if !PG96
+	.remote_txn_id_in = remote_txn_id_in_pg,
+	.remote_txn_id_out = remote_txn_id_out_pg,
+#endif
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
