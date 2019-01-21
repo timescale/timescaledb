@@ -14,3 +14,12 @@ CREATE TYPE _timescaledb_internal.compressed_data (
     RECEIVE = _timescaledb_internal.compressed_data_recv,
     SEND = _timescaledb_internal.compressed_data_send
 );
+
+--
+-- Remote transaction ID
+--
+CREATE TYPE rxid (
+   internallength = 16,
+   input = _timescaledb_internal.rxid_in,
+   output = _timescaledb_internal.rxid_out
+);

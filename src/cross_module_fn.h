@@ -15,6 +15,7 @@
 #include <utils/array.h>
 
 #include "export.h"
+#include "compat.h"
 #include "bgw/job.h"
 #include "process_utility.h"
 #include "with_clause_parser.h"
@@ -114,6 +115,8 @@ typedef struct CrossModuleFunctions
 	PGFunction timescaledb_fdw_handler;
 	PGFunction timescaledb_fdw_validator;
 	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
+	PGFunction remote_txn_id_in;
+	PGFunction remote_txn_id_out;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
