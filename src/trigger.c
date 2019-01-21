@@ -133,7 +133,14 @@ ts_trigger_create_all_on_chunk(Chunk *chunk)
 {
 	int sec_ctx;
 	Oid saved_uid;
-	Oid owner = ts_rel_get_owner(chunk->hypertable_relid);
+	Oid owner;
+
+	/* We do not create triggers on foreign table chunks */
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+		return;
+
+	Assert(chunk->relkind == RELKIND_RELATION);
+	owner = ts_rel_get_owner(chunk->hypertable_relid);
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 

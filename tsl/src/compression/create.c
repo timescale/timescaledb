@@ -607,6 +607,7 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	/* only add inheritable constraints. no dimension constraints */
 	ts_chunk_constraints_add_inheritable_constraints(compress_chunk->constraints,
 													 compress_chunk->fd.id,
+													 compress_chunk->relkind,
 													 compress_chunk->hypertable_relid);
 
 	ts_chunk_constraints_insert_metadata(compress_chunk->constraints);

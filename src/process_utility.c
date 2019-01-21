@@ -1707,9 +1707,16 @@ static void
 process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	const char chunk_relkind = get_rel_relkind(chunk_relid);
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
+	Chunk *chunk;
+
+	/* Foreign chunks do not support indexes */
+	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+		return;
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
