@@ -49,6 +49,7 @@ extern int ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_
 extern int ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
 														  Hypercube *cube);
 extern int ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
+															const char chunk_relkind,
 															Oid hypertable_oid);
 extern void ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id,
 										Oid hypertable_oid, int32 hypertable_id);

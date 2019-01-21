@@ -186,7 +186,7 @@ $BODY$
     t.tgtype,
     t.tgfoid::regproc,
     -- remove 'CREATE TRIGGER' part from definition
-    substring(pg_get_triggerdef(t.oid) from 15)
+    substring(pg_get_triggerdef(t.oid, true) from 15)
     FROM pg_trigger t
     WHERE t.tgrelid = rel
     AND t.tgisinternal = show_internal
@@ -215,7 +215,7 @@ BEGIN
     t.tgtype,
     t.tgfoid::regproc,
     -- remove 'CREATE TRIGGER' part from definition
-    substring(pg_get_triggerdef(t.oid) from 15)
+    substring(pg_get_triggerdef(t.oid, true) from 15)
     FROM pg_class cl, pg_trigger t
     WHERE format('%I.%I', cl.relnamespace::regnamespace::name, cl.relname) LIKE format('%I.%s', schema_name, table_name)
     AND t.tgrelid = cl.oid

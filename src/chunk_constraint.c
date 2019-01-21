@@ -545,7 +545,7 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 }
 
 static bool
-chunk_constraint_need_on_chunk(Form_pg_constraint conform)
+chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conform)
 {
 	if (conform->contype == CONSTRAINT_CHECK)
 	{
@@ -559,6 +559,11 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 		 */
 		return false;
 	}
+
+	/* Foreign tables do not support non-check constraints, so skip them */
+	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+		return false;
+
 	return true;
 }
 
@@ -576,7 +581,7 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 
 int
 ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
-												 Oid hypertable_oid)
+												 const char chunk_relkind, Oid hypertable_oid)
 {
 	ScanKeyData skey;
 	Relation rel;
@@ -593,7 +598,7 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	{
 		Form_pg_constraint pg_constraint = (Form_pg_constraint) GETSTRUCT(htup);
 
-		if (chunk_constraint_need_on_chunk(pg_constraint))
+		if (chunk_constraint_need_on_chunk(chunk_relkind, pg_constraint))
 		{
 			chunk_constraints_add(ccs, chunk_id, 0, NULL, NameStr(pg_constraint->conname));
 			num_added++;
@@ -609,19 +614,31 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 void
 ts_chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid)
 {
-	const char *constrname;
-	ChunkConstraint *cc;
+	HeapTuple tuple;
+	Form_pg_constraint con;
 
-	constrname = get_constraint_name(constraint_oid);
-	cc = chunk_constraints_add(chunk->constraints, chunk->fd.id, 0, NULL, constrname);
+	tuple = SearchSysCache1(CONSTROID, ObjectIdGetDatum(constraint_oid));
 
-	chunk_constraint_insert(cc);
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for constraint %u", constraint_oid);
 
-	chunk_constraint_create(cc,
-							chunk->table_id,
-							chunk->fd.id,
-							chunk->hypertable_relid,
-							chunk->fd.hypertable_id);
+	con = (Form_pg_constraint) GETSTRUCT(tuple);
+
+	if (chunk_constraint_need_on_chunk(chunk->relkind, con))
+	{
+		ChunkConstraint *cc =
+			chunk_constraints_add(chunk->constraints, chunk->fd.id, 0, NULL, NameStr(con->conname));
+
+		chunk_constraint_insert(cc);
+
+		chunk_constraint_create(cc,
+								chunk->table_id,
+								chunk->fd.id,
+								chunk->hypertable_relid,
+								chunk->fd.hypertable_id);
+	}
+
+	ReleaseSysCache(tuple);
 }
 
 static bool

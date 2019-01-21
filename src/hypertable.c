@@ -457,6 +457,7 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 	Oid owner;
 
 	Assert(ht != NULL);
+
 #if !PG96
 	if (stmt->transitionRels != NIL)
 		ereport(ERROR,
@@ -482,13 +483,20 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+
 	foreach (lc, chunks)
 	{
 		Oid chunk_oid = lfirst_oid(lc);
 		char *relschema = get_namespace_name(get_rel_namespace(chunk_oid));
 		char *relname = get_rel_name(chunk_oid);
+		char relkind = get_rel_relkind(chunk_oid);
 
-		ts_trigger_create_on_chunk(root_trigger_addr.objectId, relschema, relname);
+		Assert(relkind == RELKIND_RELATION || relkind == RELKIND_FOREIGN_TABLE);
+
+		/* Only create triggers on standard relations and not on, e.g., foreign
+		 * table chunks */
+		if (relkind == RELKIND_RELATION)
+			ts_trigger_create_on_chunk(root_trigger_addr.objectId, relschema, relname);
 	}
 
 	if (saved_uid != owner)

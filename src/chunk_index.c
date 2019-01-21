@@ -477,6 +477,12 @@ ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
 {
 	ObjectAddress idxobj;
 	char *hypertable_indexname = get_rel_name(hypertable_indexrelid);
+	const char chunk_relkind = get_rel_relkind(chunkrelid);
+
+	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+		return InvalidOid;
+
+	Assert(chunk_relkind == RELKIND_RELATION);
 
 	if (hypertable_indexname == NULL)
 		return InvalidOid; /* oops, the root index is gone, lets stop */
@@ -522,6 +528,13 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 	Relation chunkrel;
 	List *indexlist;
 	ListCell *lc;
+	const char chunk_relkind = get_rel_relkind(chunkrelid);
+
+	/* Foreign table chunks don't support indexes */
+	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+		return;
+
+	Assert(chunk_relkind == RELKIND_RELATION);
 
 	htrel = relation_open(hypertable_relid, AccessShareLock);
 

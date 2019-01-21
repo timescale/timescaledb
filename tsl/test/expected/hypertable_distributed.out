@@ -25,15 +25,34 @@ SELECT * FROM add_server('server_3');
  server_3    | localhost | 5432 | db_hypertable_distributed | default_perm_user | default_perm_user | t
 (1 row)
 
--- Create a distributed hypertable
-CREATE TABLE disttable(time timestamptz, device int, temp float);
+-- Create a distributed hypertable. Add a trigger and primary key
+-- constraint to test how those work
+CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | disttable  | t
 (1 row)
 
+CREATE OR REPLACE FUNCTION test_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    cnt INTEGER;
+BEGIN
+    SELECT count(*) INTO cnt FROM hyper;
+    RAISE WARNING 'FIRING trigger when: % level: % op: % cnt: % trigger_name %',
+        tg_when, tg_level, tg_op, cnt, tg_name;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END
+$BODY$;
+CREATE TRIGGER _0_test_trigger_insert
+    BEFORE INSERT ON disttable
+    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
@@ -47,10 +66,32 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 ----------+-----------------+-------------
 (0 rows)
 
+-- The constraints, indexes, and triggers on the hypertable
+SELECT * FROM test.show_constraints('disttable');
+       Constraint       | Type | Columns  |     Index      |     Expr     | Deferrable | Deferred | Validated 
+------------------------+------+----------+----------------+--------------+------------+----------+-----------
+ disttable_device_check | c    | {device} | -              | (device > 0) | f          | f        | t
+ disttable_pkey         | p    | {time}   | disttable_pkey |              | f          | f        | t
+(2 rows)
+
+SELECT * FROM test.show_indexes('disttable');
+     Index      | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------+---------+------+--------+---------+-----------+------------
+ disttable_pkey | {time}  |      | t      | t       | f         | 
+(1 row)
+
+SELECT * FROM test.show_triggers('disttable');
+        Trigger         | Type |               Function               |                                                     Definition                                                      
+------------------------+------+--------------------------------------+---------------------------------------------------------------------------------------------------------------------
+ _0_test_trigger_insert |    7 | test_trigger                         |  _0_test_trigger_insert BEFORE INSERT ON disttable FOR EACH ROW EXECUTE PROCEDURE test_trigger()
+ ts_insert_blocker      |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON disttable FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(2 rows)
+
+-- Create some chunks through insertion
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1),
        ('2017-01-01 08:01', 1, 1.2),
-       ('2018-01-01 08:01', 2, 1.3),
+       ('2018-01-02 08:01', 2, 1.3),
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
 INFO:  executing function timescaledb_fdw_handler
@@ -66,14 +107,7 @@ INFO:  executing function timescaledb_fdw_handler
 INFO:  executing function is_foreign_rel_updatable
 INFO:  executing function exec_foreign_insert
 INFO:  executing function exec_foreign_insert
-SELECT * FROM _timescaledb_catalog.chunk_server;
- chunk_id | server_chunk_id | server_name 
-----------+-----------------+-------------
-        1 |               1 | server_1
-        2 |               2 | server_2
-        3 |               3 | server_3
-(3 rows)
-
+-- Show chunks created
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
  chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                     slices                     
@@ -83,7 +117,135 @@ FROM show_chunks('disttable');
         3 |             1 | _timescaledb_internal | _hyper_1_3_dist_chunk | f       | {"time": [1545868800000000, 1546473600000000]}
 (3 rows)
 
--- Show underreplicated chunk warning
+-- The constraints, indexes, and triggers on foreign chunks. Only
+-- check constraints should recurse to foreign chunks (although they
+-- aren't enforced on a foreign table)
+SELECT st."Child" as chunk_relid, test.show_constraints((st)."Child")
+FROM test.show_subtables('disttable') st;
+                 chunk_relid                 |                                                                                   show_constraints                                                                                   
+---------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_dist_chunk | (constraint_1,c,{time},-,"((""time"" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND (""time"" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))",f,f,t)
+ _timescaledb_internal._hyper_1_1_dist_chunk | (disttable_device_check,c,{device},-,"(device > 0)",f,f,t)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (constraint_2,c,{time},-,"((""time"" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND (""time"" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone))",f,f,t)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (disttable_device_check,c,{device},-,"(device > 0)",f,f,t)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (constraint_3,c,{time},-,"((""time"" >= 'Wed Dec 26 16:00:00 2018 PST'::timestamp with time zone) AND (""time"" < 'Wed Jan 02 16:00:00 2019 PST'::timestamp with time zone))",f,f,t)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (disttable_device_check,c,{device},-,"(device > 0)",f,f,t)
+(6 rows)
+
+SELECT st."Child" as chunk_relid, test.show_indexes((st)."Child")
+FROM test.show_subtables('disttable') st;
+ chunk_relid | show_indexes 
+-------------+--------------
+(0 rows)
+
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st;
+ chunk_relid | show_triggers 
+-------------+---------------
+(0 rows)
+
+-- Check that the chunks are assigned servers
+SELECT * FROM _timescaledb_catalog.chunk_server;
+ chunk_id | server_chunk_id | server_name 
+----------+-----------------+-------------
+        1 |               1 | server_1
+        2 |               2 | server_2
+        3 |               3 | server_3
+(3 rows)
+
+-- Adding a new trigger should not recurse to foreign chunks
+CREATE TRIGGER _1_test_trigger_insert
+    AFTER INSERT ON disttable
+    FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st;
+ chunk_relid | show_triggers 
+-------------+---------------
+(0 rows)
+
+-- Check that we can create indexes on distributed hypertables and
+-- that they don't recurse to foreign chunks
+CREATE INDEX ON disttable (time, device);
+SELECT * FROM test.show_indexes('disttable');
+           Index           |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------------+---------------+------+--------+---------+-----------+------------
+ disttable_pkey            | {time}        |      | t      | t       | f         | 
+ disttable_time_device_idx | {time,device} |      | f      | f       | f         | 
+(2 rows)
+
+SELECT st."Child" as chunk_relid, test.show_indexes((st)."Child")
+FROM test.show_subtables('disttable') st;
+ chunk_relid | show_indexes 
+-------------+--------------
+(0 rows)
+
+-- No index mappings should exist either
+SELECT * FROM _timescaledb_catalog.chunk_index;
+ chunk_id | index_name | hypertable_id | hypertable_index_name 
+----------+------------+---------------+-----------------------
+(0 rows)
+
+-- Check that creating columns work
+ALTER TABLE disttable ADD COLUMN color int;
+SELECT * FROM test.show_columns('disttable');
+ Column |           Type           | NotNull 
+--------+--------------------------+---------
+ time   | timestamp with time zone | t
+ device | integer                  | f
+ temp   | double precision         | f
+ color  | integer                  | f
+(4 rows)
+
+SELECT st."Child" as chunk_relid, test.show_columns((st)."Child")
+FROM test.show_subtables('disttable') st;
+                 chunk_relid                 |            show_columns             
+---------------------------------------------+-------------------------------------
+ _timescaledb_internal._hyper_1_1_dist_chunk | (time,"timestamp with time zone",t)
+ _timescaledb_internal._hyper_1_1_dist_chunk | (device,integer,f)
+ _timescaledb_internal._hyper_1_1_dist_chunk | (temp,"double precision",f)
+ _timescaledb_internal._hyper_1_1_dist_chunk | (color,integer,f)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (time,"timestamp with time zone",t)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (device,integer,f)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (temp,"double precision",f)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (color,integer,f)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (time,"timestamp with time zone",t)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (device,integer,f)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (temp,"double precision",f)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (color,integer,f)
+(12 rows)
+
+-- Adding a new unique constraint should not recurse to foreign
+-- chunks, but a check constraint should
+ALTER TABLE disttable ADD CONSTRAINT disttable_color_unique UNIQUE (time, color);
+ALTER TABLE disttable ADD CONSTRAINT disttable_temp_non_negative CHECK (temp > 0.0);
+SELECT st."Child" as chunk_relid, test.show_constraints((st)."Child")
+FROM test.show_subtables('disttable') st;
+                 chunk_relid                 |                                                                                   show_constraints                                                                                   
+---------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_dist_chunk | (constraint_1,c,{time},-,"((""time"" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND (""time"" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))",f,f,t)
+ _timescaledb_internal._hyper_1_1_dist_chunk | (disttable_device_check,c,{device},-,"(device > 0)",f,f,t)
+ _timescaledb_internal._hyper_1_1_dist_chunk | (disttable_temp_non_negative,c,{temp},-,"(temp > (0.0)::double precision)",f,f,t)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (constraint_2,c,{time},-,"((""time"" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND (""time"" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone))",f,f,t)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (disttable_device_check,c,{device},-,"(device > 0)",f,f,t)
+ _timescaledb_internal._hyper_1_2_dist_chunk | (disttable_temp_non_negative,c,{temp},-,"(temp > (0.0)::double precision)",f,f,t)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (constraint_3,c,{time},-,"((""time"" >= 'Wed Dec 26 16:00:00 2018 PST'::timestamp with time zone) AND (""time"" < 'Wed Jan 02 16:00:00 2019 PST'::timestamp with time zone))",f,f,t)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (disttable_device_check,c,{device},-,"(device > 0)",f,f,t)
+ _timescaledb_internal._hyper_1_3_dist_chunk | (disttable_temp_non_negative,c,{temp},-,"(temp > (0.0)::double precision)",f,f,t)
+(9 rows)
+
+SELECT cc.*
+FROM (SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+      FROM show_chunks('disttable')) c,
+      _timescaledb_catalog.chunk_constraint cc
+WHERE c.chunk_id = cc.chunk_id;
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        1 |                  1 | constraint_1    | 
+        2 |                  2 | constraint_2    | 
+        3 |                  3 | constraint_3    | 
+(3 rows)
+
+-- Test underreplicated chunk warning
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 NOTICE:  adding not-null constraint to column "time"
