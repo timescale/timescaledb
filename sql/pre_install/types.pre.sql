@@ -10,7 +10,7 @@
 -- type valued and integer valued time columns.
 CREATE TYPE _timescaledb_catalog.ts_interval AS (
     is_time_interval        BOOLEAN,
-    time_interval		    INTERVAL,
+    time_interval           INTERVAL,
     integer_interval        BIGINT
     );
 
@@ -20,3 +20,9 @@ CREATE TYPE _timescaledb_catalog.ts_interval AS (
 
 CREATE TYPE _timescaledb_internal.compressed_data;
 
+--
+-- Remote transaction ID
+--
+CREATE TYPE rxid;
+
+--placeholder to allow creation of functions below

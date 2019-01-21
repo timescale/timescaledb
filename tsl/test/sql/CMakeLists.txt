@@ -106,6 +106,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     remote_connection.sql
     remote_connection_cache.sql
     remote_txn.sql
+    remote_txn_id.sql
     )
 endif ()
 
