@@ -20,11 +20,12 @@ typedef struct SSLConnection
 	unsigned long errcode;
 } SSLConnection;
 
-static void
-ssl_set_error(SSLConnection *conn, int err)
+static int
+ssl_failed(SSLConnection *conn, int err)
 {
 	conn->errcode = ERR_get_error();
 	conn->conn.err = err;
+	return -1;
 }
 
 static SSL_CTX *
@@ -68,38 +69,26 @@ ssl_setup(SSLConnection *conn)
 	conn->ssl_ctx = ssl_ctx_create();
 
 	if (NULL == conn->ssl_ctx)
-	{
-		ssl_set_error(conn, -1);
-		return -1;
-	}
+		return ssl_failed(conn, -1);
 
 	ERR_clear_error();
 
 	conn->ssl = SSL_new(conn->ssl_ctx);
 
 	if (conn->ssl == NULL)
-	{
-		ssl_set_error(conn, -1);
-		return -1;
-	}
+		return ssl_failed(conn, -1);
 
 	ERR_clear_error();
 
 	ret = SSL_set_fd(conn->ssl, conn->conn.sock);
 
 	if (ret == 0)
-	{
-		ssl_set_error(conn, -1);
-		return -1;
-	}
+		return ssl_failed(conn, -1);
 
 	ret = SSL_connect(conn->ssl);
 
 	if (ret <= 0)
-	{
-		ssl_set_error(conn, ret);
-		ret = -1;
-	}
+		return ssl_failed(conn, ret);
 
 	return ret;
 }
@@ -126,7 +115,7 @@ ssl_write(Connection *conn, const char *buf, size_t writelen)
 	int			ret = SSL_write(sslconn->ssl, buf, writelen);
 
 	if (ret < 0)
-		ssl_set_error(sslconn, ret);
+		return ssl_failed(sslconn, ret);
 
 	return ret;
 }
@@ -139,7 +128,7 @@ ssl_read(Connection *conn, char *buf, size_t buflen)
 	int			ret = SSL_read(sslconn->ssl, buf, buflen);
 
 	if (ret < 0)
-		ssl_set_error(sslconn, ret);
+		return ssl_failed(sslconn, ret);
 
 	return ret;
 }
