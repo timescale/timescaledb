@@ -318,12 +318,18 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 		{
 			char relkind = get_rel_relkind(lfirst_oid(lc));
 
-			if (relkind != RELKIND_RELATION && relkind != RELKIND_MATVIEW)
+			/* Note, that unlike partitioned tables, we allow index creation
+			 * when chunks (partitions) are foreign tables, but in that case we
+			 * actually do not create the indexes on the foreign table
+			 * chunks. Instead, we distribute this index creation to the data
+			 * nodes. */
+			if (relkind != RELKIND_RELATION && relkind != RELKIND_MATVIEW &&
+				relkind != RELKIND_FOREIGN_TABLE)
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-						 errmsg("cannot create index on partitioned table \"%s\"",
+						 errmsg("cannot create index on hypertable \"%s\"",
 								stmt->relation->relname),
-						 errdetail("Table \"%s\" contains partitions that are foreign tables.",
+						 errdetail("Table \"%s\" contains chunks of the wrong type.",
 								   stmt->relation->relname)));
 		}
 		list_free(inheritors);
