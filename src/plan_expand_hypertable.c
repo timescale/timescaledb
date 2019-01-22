@@ -32,6 +32,7 @@
 #include "guc.h"
 #include "extension.h"
 #include "chunk.h"
+#include "extension_constants.h"
 
 typedef struct CollectQualCtx
 {
@@ -49,7 +50,7 @@ static void
 init_chunk_exclusion_func()
 {
 	if (chunk_exclusion_func == InvalidOid)
-		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME, ts_extension_schema_name(), lengthof(ts_chunks_arg_types), ts_chunks_arg_types);
+		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME, INTERNAL_SCHEMA_NAME, lengthof(ts_chunks_arg_types), ts_chunks_arg_types);
 	Assert(chunk_exclusion_func != InvalidOid);
 }
 

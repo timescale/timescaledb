@@ -38,10 +38,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
 -- Function for explicit chunk exclusion. Supply a record and an array 
 -- of chunk ids as input.
 -- Intended to be used in WHERE clause.
--- An example: SELECT * FROM hypertable WHERE chunks_in(hypertable, ARRAY[1,2]);
+-- An example: SELECT * FROM hypertable WHERE _timescaledb_internal.chunks_in(hypertable, ARRAY[1,2]);
 --
 -- Use it with care as this function directly affects what chunks are being scanned for data.
 -- Although this function is immutable (always returns true), we declare it here as volatile
 -- so that the PostgreSQL optimizer does not try to evaluate/reduce it in the planner phase
-CREATE OR REPLACE FUNCTION chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C VOLATILE STRICT;
