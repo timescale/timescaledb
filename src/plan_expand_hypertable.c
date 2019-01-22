@@ -175,22 +175,20 @@ collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 static List *
 find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode)
 {
-	List *result;
-
 	/*
 	 * Using the HRI only makes sense if we are not using all the chunks,
 	 * otherwise using the cached inheritance hierarchy is faster.
 	 */
 	if (!ts_hypertable_restrict_info_has_restrictions(hri))
-		return find_all_inheritors(ht->main_table_relid, lockmode, NULL);
-	;
+		return find_inheritance_children(ht->main_table_relid, lockmode);
 
-	/* always include parent again, just as find_all_inheritors does */
-	result = list_make1_oid(ht->main_table_relid);
-
-	/* add chunks */
-	result = list_concat(result, ts_hypertable_restrict_info_get_chunk_oids(hri, ht, lockmode));
-	return result;
+	/*
+	 * Unlike find_all_inheritors we do not include parent because if there
+	 * are restrictions the parent table cannot fulfill them and since we do
+	 * have a trigger blocking inserts on the parent table it cannot contain
+	 * any rows.
+	 */
+	return ts_hypertable_restrict_info_get_chunk_oids(hri, ht, lockmode);
 }
 
 static bool

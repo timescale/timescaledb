@@ -161,30 +161,28 @@ ORDER BY device_id LIMIT 1;
 ------------------------------------------------
  Limit
    ->  Sort
-         Sort Key: ordered_append.device_id
+         Sort Key: _hyper_1_1_chunk.device_id
          ->  Append
-               ->  Seq Scan on ordered_append
                ->  Seq Scan on _hyper_1_1_chunk
                ->  Seq Scan on _hyper_1_2_chunk
                ->  Seq Scan on _hyper_1_3_chunk
-(8 rows)
+(7 rows)
 
 -- time column must be primary sort order
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
 ORDER BY device_id, time LIMIT 1;
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
  Limit
    ->  Sort
-         Sort Key: ordered_append.device_id, ordered_append."time"
+         Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
          ->  Append
-               ->  Seq Scan on ordered_append
                ->  Seq Scan on _hyper_1_1_chunk
                ->  Seq Scan on _hyper_1_2_chunk
                ->  Seq Scan on _hyper_1_3_chunk
-(8 rows)
+(7 rows)
 
 -- queries without LIMIT shouldnt use ordered append
 :PREFIX SELECT
@@ -194,12 +192,11 @@ ORDER BY time ASC;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: ordered_append."time"
-   ->  Index Scan Backward using ordered_append_time_device_id_idx on ordered_append
+   Sort Key: _hyper_1_1_chunk."time"
    ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk
    ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk
    ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk
-(6 rows)
+(5 rows)
 
 -- queries without ORDER BY shouldnt use ordered append (still uses append though)
 :PREFIX SELECT
@@ -210,11 +207,10 @@ LIMIT 1;
 ------------------------------------------
  Limit
    ->  Append
-         ->  Seq Scan on ordered_append
          ->  Seq Scan on _hyper_1_1_chunk
          ->  Seq Scan on _hyper_1_2_chunk
          ->  Seq Scan on _hyper_1_3_chunk
-(6 rows)
+(5 rows)
 
 -- test interaction with constraint exclusion
 :PREFIX SELECT
@@ -287,16 +283,14 @@ ORDER BY time DESC LIMIT 1;
      ->  Limit
            ->  Result
                  ->  Merge Append
-                       Sort Key: ordered_append."time"
-                       ->  Index Only Scan Backward using ordered_append_time_device_id_idx on ordered_append
-                             Index Cond: ("time" IS NOT NULL)
+                       Sort Key: _hyper_1_1_chunk."time"
                        ->  Index Only Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk
                              Index Cond: ("time" IS NOT NULL)
-(14 rows)
+(12 rows)
 
 :PREFIX SELECT last(time, time) FROM ordered_append;
                                                        QUERY PLAN                                                       
@@ -306,16 +300,14 @@ ORDER BY time DESC LIMIT 1;
      ->  Limit
            ->  Result
                  ->  Merge Append
-                       Sort Key: ordered_append."time" DESC
-                       ->  Index Only Scan using ordered_append_time_device_id_idx on ordered_append
-                             Index Cond: ("time" IS NOT NULL)
+                       Sort Key: _hyper_1_1_chunk."time" DESC
                        ->  Index Only Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk
                              Index Cond: ("time" IS NOT NULL)
-(14 rows)
+(12 rows)
 
 -- test query with time_bucket
 :PREFIX SELECT
@@ -342,12 +334,11 @@ ORDER BY 1 LIMIT 1;
  Limit
    ->  Result
          ->  Merge Append
-               Sort Key: (time_bucket('@ 1 day'::interval, ordered_append."time"))
-               ->  Index Scan Backward using ordered_append_time_device_id_idx on ordered_append
+               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
                ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk
                ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk
                ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk
-(8 rows)
+(7 rows)
 
 -- test query with order by time_bucket (should not use ordered append)
 :PREFIX SELECT
@@ -359,12 +350,11 @@ ORDER BY time_bucket('1d',time) LIMIT 1;
  Limit
    ->  Result
          ->  Merge Append
-               Sort Key: (time_bucket('@ 1 day'::interval, ordered_append."time"))
-               ->  Index Scan Backward using ordered_append_time_device_id_idx on ordered_append
+               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time"))
                ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk
                ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk
                ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk
-(8 rows)
+(7 rows)
 
 -- test query with now() should result in ordered append with constraint aware append
 :PREFIX SELECT * FROM ordered_append WHERE time < now() + '1 month'

@@ -15,6 +15,10 @@ SELECT create_hypertable('order_test','time',chunk_time_interval:=1000);
 INSERT INTO order_test SELECT 0,10,0.5;
 INSERT INTO order_test SELECT 1,9,0.5;
 INSERT INTO order_test SELECT 2,8,0.5;
+-- we want to see here that index scans are possible for the chosen expressions
+-- so we disable seqscan so we dont need to worry about other factors which would
+-- make PostgreSQL prefer seqscan over index scan
+SET enable_seqscan TO off;
 -- test sort optimization with single member order by
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
  time_bucket | device_id | value 
@@ -30,10 +34,9 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 ------------------------------------------------------------------------------------------------
  Result
    ->  Merge Append
-         Sort Key: (time_bucket(10, order_test."time"))
-         ->  Index Scan Backward using order_test_time_idx on order_test
+         Sort Key: (time_bucket(10, _hyper_1_1_chunk."time"))
          ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
-(5 rows)
+(4 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
@@ -46,15 +49,14 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
 
 -- must not use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Sort
-   Sort Key: (time_bucket(10, order_test."time")), order_test.device_id
+   Sort Key: (time_bucket(10, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device_id
    ->  Result
          ->  Append
-               ->  Seq Scan on order_test
                ->  Seq Scan on _hyper_1_1_chunk
-(6 rows)
+(5 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
@@ -71,8 +73,7 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
 -------------------------------------------------------------------------------------------------
  Result
    ->  Merge Append
-         Sort Key: order_test.device_id, (time_bucket(10, order_test."time"))
-         ->  Index Scan using order_test_device_id_time_idx on order_test
+         Sort Key: _hyper_1_1_chunk.device_id, (time_bucket(10, _hyper_1_1_chunk."time"))
          ->  Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
-(5 rows)
+(4 rows)
 

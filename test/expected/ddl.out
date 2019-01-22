@@ -272,9 +272,8 @@ EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
              QUERY PLAN             
 ------------------------------------
  Append
-   ->  Seq Scan on "Hypertable_1"
    ->  Seq Scan on _hyper_1_1_chunk
-(3 rows)
+(2 rows)
 
 SELECT * FROM ONLY PUBLIC."Hypertable_1";
  time | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 

@@ -76,19 +76,17 @@ EXPLAIN (costs off) SELECT * FROM customtype_test;
              QUERY PLAN             
 ------------------------------------
  Append
-   ->  Seq Scan on customtype_test
    ->  Seq Scan on _hyper_1_1_chunk
-(3 rows)
+(2 rows)
 
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:23'::customtype, 11);
 EXPLAIN (costs off) SELECT * FROM customtype_test;
              QUERY PLAN             
 ------------------------------------
  Append
-   ->  Seq Scan on customtype_test
    ->  Seq Scan on _hyper_1_1_chunk
    ->  Seq Scan on _hyper_1_2_chunk
-(4 rows)
+(3 rows)
 
 SELECT * FROM customtype_test;
          time_custom          | val 

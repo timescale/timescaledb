@@ -127,7 +127,8 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	PlannedStmt *stmt;
 	ListCell *lc;
 
-	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations && parse->resultRelation == 0)
+	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations &&
+		ts_guc_enable_constraint_exclusion && parse->resultRelation == 0)
 	{
 		Cache *hc = ts_hypertable_cache_pin();
 
@@ -210,11 +211,30 @@ is_append_parent(RelOptInfo *rel, RangeTblEntry *rte)
 		   rte->relkind == RELKIND_RELATION;
 }
 
+static Oid
+get_parentoid(PlannerInfo *root, Index rti)
+{
+#if PG96 || PG10
+	ListCell *lc;
+	foreach (lc, root->append_rel_list)
+	{
+		AppendRelInfo *appinfo = lfirst(lc);
+		if (appinfo->child_relid == rti)
+			return appinfo->parent_reloid;
+	}
+#else
+	if (root->append_rel_array[rti])
+		return root->append_rel_array[rti]->parent_reloid;
+#endif
+	return 0;
+}
+
 static void
 timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	Hypertable *ht;
 	Cache *hcache;
+	Oid ht_reloid = rte->relid;
 
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
@@ -228,7 +248,15 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		return;
 
 	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
+
+	/*
+	 * if this is an append child we use the parent relid to
+	 * check if its a hypertable
+	 */
+	if (is_append_child(rel, rte))
+		ht_reloid = get_parentoid(root, rti);
+
+	ht = ts_hypertable_cache_get_entry(hcache, ht_reloid);
 
 	if (!should_optimize_query(ht))
 		goto out_release;
@@ -240,36 +268,10 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	}
 	else if (ht != NULL && is_append_child(rel, rte))
 	{
-		/* Otherwise, apply only to hypertables */
-
-		/*
-		 * When applying to hypertables, apply when you get the first append
-		 * relation child (indicated by RELOPT_OTHER_MEMBER_REL) which is the
-		 * main table. Then apply to all other children of that hypertable. We
-		 * can't wait to get the parent of the append relation b/c by that
-		 * time it's too late.
-		 */
-		ListCell *l;
-
-		foreach (l, root->append_rel_list)
-		{
-			AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
-			RelOptInfo *siblingrel;
-
-			/*
-			 * Note: check against the reloid not the index in the
-			 * simple_rel_array since the current rel is not the parent but
-			 * just the child of the append_rel representing the main table.
-			 */
-			if (appinfo->parent_reloid != rte->relid)
-				continue;
-			siblingrel = root->simple_rel_array[appinfo->child_relid];
-			ts_sort_transform_optimization(root, siblingrel);
-		}
+		ts_sort_transform_optimization(root, rel);
 	}
 
 	if (
-
 		/*
 		 * Right now this optimization applies only to hypertables (ht used
 		 * below). Can be relaxed later to apply to reg tables but needs testing
@@ -323,7 +325,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	if (prev_get_relation_info_hook != NULL)
 		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
 
-	if (!ts_extension_is_loaded())
+	if (!ts_extension_is_loaded() || !ts_guc_enable_constraint_exclusion)
 		return;
 
 	rte = rt_fetch(rel->relid, root->parse->rtable);
