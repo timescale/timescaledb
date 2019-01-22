@@ -116,10 +116,15 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 		parallel_safe = parallel_safe && child->parallel_safe;
 
 		/*
-		 * Since we start from a MergeAppendPath all children should be sorted
-		 * in an order compatible with the order of the MergeAppendPath
+		 * When an index is not available on all chunks pathkeys of the child
+		 * might not match pathkeys of the MergeAppendPath PostgreSQL fixes
+		 * this when creating the merge append plan by inserting a sort node
+		 * for the child. Unfortunately this is too late for us so we don't do
+		 * this optimization for those cases for now.
 		 */
-		Assert(pathkeys_contained_in(merge->path.pathkeys, child->pathkeys));
+		if (!pathkeys_contained_in(merge->path.pathkeys, child->pathkeys))
+			return (Path *) merge;
+
 		sorted = lappend(sorted, child);
 	}
 
