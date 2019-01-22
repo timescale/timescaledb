@@ -30,8 +30,7 @@ SELECT first(i, j) FROM "test";
                ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     ->  Parallel Seq Scan on test
-(8 rows)
+(7 rows)
 
 SELECT first(i, j) FROM "test";
  first 
@@ -50,8 +49,7 @@ SELECT last(i, j) FROM "test";
                ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     ->  Parallel Seq Scan on test
-(8 rows)
+(7 rows)
 
 SELECT last(i, j) FROM "test";
   last  
@@ -80,8 +78,7 @@ LIMIT 5;
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_1_1_chunk
                                        ->  Parallel Seq Scan on _hyper_1_2_chunk
-                                       ->  Parallel Seq Scan on test
-(14 rows)
+(13 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
@@ -108,8 +105,7 @@ EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
                ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     ->  Parallel Seq Scan on test
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
       histogram      
@@ -127,8 +123,7 @@ EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
                ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     ->  Parallel Seq Scan on test
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
                                  histogram                                  
@@ -146,8 +141,7 @@ EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
                ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     ->  Parallel Seq Scan on test
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 0, 100000, 5) FROM "test";
                 histogram                 
@@ -165,8 +159,7 @@ EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
                ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     ->  Parallel Seq Scan on test
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 10, 100000, 5) FROM "test";
                  histogram                 

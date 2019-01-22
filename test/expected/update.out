@@ -54,9 +54,8 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
  Hash Join
-   Hash Cond: ("one_Partition_1".series_1 = "one_Partition".series_1)
+   Hash Cond: (_hyper_1_1_chunk.series_1 = "one_Partition".series_1)
    ->  Append
-         ->  Seq Scan on "one_Partition" "one_Partition_1"
          ->  Seq Scan on _hyper_1_1_chunk
          ->  Seq Scan on _hyper_1_2_chunk
          ->  Seq Scan on _hyper_1_3_chunk
@@ -73,7 +72,7 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Only Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
-(20 rows)
+(19 rows)
 
 -- ConstraintAwareAppend NOT applied for UPDATE
 EXPLAIN (costs off)

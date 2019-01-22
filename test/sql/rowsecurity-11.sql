@@ -12,6 +12,8 @@
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 
+SET timescaledb.enable_constraint_exclusion TO off;
+
 -- Suppress NOTICE messages when users/groups don't exist
 SET client_min_messages TO 'warning';
 

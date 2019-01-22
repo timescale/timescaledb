@@ -194,8 +194,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
-         ->  Seq Scan on document document_1
-               Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_1_1_chunk
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_1_2_chunk
@@ -208,7 +206,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_1_6_chunk
                Filter: (dlevel <= $0)
-(20 rows)
+(18 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
                            QUERY PLAN                           
@@ -221,8 +219,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dt
                InitPlan 1 (returns $0)
                  ->  Index Scan using uaccount_pkey on uaccount
                        Index Cond: (pguser = "current_user"())
-               ->  Seq Scan on document document_1
-                     Filter: (dlevel <= $0)
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (dlevel <= $0)
                ->  Seq Scan on _hyper_1_2_chunk
@@ -237,7 +233,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dt
                      Filter: (dlevel <= $0)
    ->  Hash
          ->  Seq Scan on category
-(24 rows)
+(22 rows)
 
 -- only owner can change policies
 ALTER POLICY p1 ON document USING (true);    --fail
@@ -916,8 +912,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
-         ->  Seq Scan on hyper_document hyper_document_1
-               Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_7_chunk
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_8_chunk
@@ -930,7 +924,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_12_chunk
                Filter: (dlevel <= $0)
-(20 rows)
+(18 rows)
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -968,8 +962,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
-         ->  Seq Scan on hyper_document hyper_document_1
-               Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_7_chunk
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_8_chunk
@@ -982,7 +974,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_12_chunk
                Filter: (dlevel <= $0)
-(20 rows)
+(18 rows)
 
 -- Show that RLS policy does not apply for direct inserts to children
 -- This should fail with RLS POLICY violation.
@@ -1083,8 +1075,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
          InitPlan 1 (returns $0)
            ->  Index Scan using uaccount_pkey on uaccount
                  Index Cond: (pguser = "current_user"())
-         ->  Seq Scan on hyper_document hyper_document_1
-               Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_7_chunk
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_8_chunk
@@ -1097,7 +1087,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                Filter: (dlevel <= $0)
          ->  Seq Scan on _hyper_2_12_chunk
                Filter: (dlevel <= $0)
-(20 rows)
+(18 rows)
 
 -- only owner can change policies
 ALTER POLICY pp1 ON hyper_document USING (true);    --fail
@@ -1280,10 +1270,10 @@ HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP TABLE dependee CASCADE;
 NOTICE:  drop cascades to policy d1 on table dependent
 EXPLAIN (COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
-         QUERY PLAN          
------------------------------
- Append
-   ->  Seq Scan on dependent
+        QUERY PLAN        
+--------------------------
+ Result
+   One-Time Filter: false
 (2 rows)
 
 -----   RECURSION    ----
@@ -1407,8 +1397,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
                ->  Subquery Scan on s2
                      Filter: (s2.y ~~ '%2f%'::text)
                      ->  Append
-                           ->  Seq Scan on s2 s2_1
-                                 Filter: ((x % 2) = 0)
                            ->  Seq Scan on _hyper_7_24_chunk
                                  Filter: ((x % 2) = 0)
                            ->  Seq Scan on _hyper_7_25_chunk
@@ -1423,7 +1411,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
                                  Filter: ((x % 2) = 0)
                            ->  Seq Scan on _hyper_7_30_chunk
                                  Filter: ((x % 2) = 0)
-(25 rows)
+(23 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p1 ON s1 USING (a in (select x from v2)); -- using VIEW in RLS policy
@@ -1443,9 +1431,8 @@ EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
  Subquery Scan on s1
    Filter: f_leak(s1.b)
    ->  Hash Join
-         Hash Cond: (s1_1.a = s2.x)
+         Hash Cond: (_hyper_6_13_chunk.a = s2.x)
          ->  Append
-               ->  Seq Scan on s1 s1_1
                ->  Seq Scan on _hyper_6_13_chunk
                ->  Seq Scan on _hyper_6_14_chunk
                ->  Seq Scan on _hyper_6_15_chunk
@@ -1463,8 +1450,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
                      ->  Subquery Scan on s2
                            Filter: (s2.y ~~ '%af%'::text)
                            ->  Append
-                                 ->  Seq Scan on s2 s2_1
-                                       Filter: ((x % 2) = 0)
                                  ->  Seq Scan on _hyper_7_24_chunk
                                        Filter: ((x % 2) = 0)
                                  ->  Seq Scan on _hyper_7_25_chunk
@@ -1479,7 +1464,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
                                        Filter: ((x % 2) = 0)
                                  ->  Seq Scan on _hyper_7_30_chunk
                                        Filter: ((x % 2) = 0)
-(39 rows)
+(36 rows)
 
 SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
  xx | x  |                y                 
@@ -1495,8 +1480,6 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
  Subquery Scan on s2
    Filter: (s2.y ~~ '%28%'::text)
    ->  Append
-         ->  Seq Scan on s2 s2_1
-               Filter: ((x % 2) = 0)
          ->  Seq Scan on _hyper_7_24_chunk
                Filter: ((x % 2) = 0)
          ->  Seq Scan on _hyper_7_25_chunk
@@ -1515,9 +1498,8 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
      ->  Limit
            ->  Subquery Scan on s1
                  ->  Nested Loop Semi Join
-                       Join Filter: (s1_1.a = s2_2.x)
+                       Join Filter: (_hyper_6_13_chunk.a = s2_1.x)
                        ->  Append
-                             ->  Seq Scan on s1 s1_1
                              ->  Seq Scan on _hyper_6_13_chunk
                              ->  Seq Scan on _hyper_6_14_chunk
                              ->  Seq Scan on _hyper_6_15_chunk
@@ -1530,11 +1512,9 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
                              ->  Seq Scan on _hyper_6_22_chunk
                              ->  Seq Scan on _hyper_6_23_chunk
                        ->  Materialize
-                             ->  Subquery Scan on s2_2
-                                   Filter: (s2_2.y ~~ '%af%'::text)
+                             ->  Subquery Scan on s2_1
+                                   Filter: (s2_1.y ~~ '%af%'::text)
                                    ->  Append
-                                         ->  Seq Scan on s2 s2_3
-                                               Filter: ((x % 2) = 0)
                                          ->  Seq Scan on _hyper_7_24_chunk _hyper_7_24_chunk_1
                                                Filter: ((x % 2) = 0)
                                          ->  Seq Scan on _hyper_7_25_chunk _hyper_7_25_chunk_1
@@ -1549,7 +1529,7 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
                                                Filter: ((x % 2) = 0)
                                          ->  Seq Scan on _hyper_7_30_chunk _hyper_7_30_chunk_1
                                                Filter: ((x % 2) = 0)
-(57 rows)
+(52 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p2 ON s2 USING (x in (select a from s1 where b like '%d2%'));
@@ -2072,8 +2052,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
  Subquery Scan on bv1
    Filter: f_leak(bv1.b)
    ->  Append
-         ->  Seq Scan on b1
-               Filter: ((a > 0) AND ((a % 2) = 0))
          ->  Bitmap Heap Scan on _hyper_8_36_chunk
                Recheck Cond: (a > 0)
                Filter: ((a % 2) = 0)
@@ -2104,7 +2082,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
                Filter: ((a % 2) = 0)
                ->  Bitmap Index Scan on _hyper_8_37_chunk_b1_a_idx
                      Index Cond: (a > 0)
-(35 rows)
+(33 rows)
 
 SELECT * FROM bv1 WHERE f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
@@ -2603,15 +2581,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 PREPARE plancache_test AS SELECT * FROM z1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
@@ -2620,61 +2596,51 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 PREPARE plancache_test2 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
                     QUERY PLAN                     
 ---------------------------------------------------
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Subquery Scan on z1
            Filter: f_leak(z1.b)
            ->  Append
-                 ->  Seq Scan on z1 z1_1
-                       Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_9_46_chunk
                        Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_9_47_chunk
                        Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_9_48_chunk
                        Filter: ((a % 2) = 0)
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Append
-               ->  Seq Scan on z2
-(17 rows)
+(12 rows)
 
 PREPARE plancache_test3 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                      QUERY PLAN                       
--------------------------------------------------------
+                   QUERY PLAN                    
+-------------------------------------------------
  Nested Loop
    CTE q
-     ->  Append
-           ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Subquery Scan on z1
-               Filter: f_leak(z1.b)
-               ->  Append
-                     ->  Seq Scan on z1 z1_1
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_9_46_chunk
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_9_47_chunk
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_9_48_chunk
-                           Filter: ((a % 2) = 0)
-(17 rows)
+   ->  Subquery Scan on z1
+         Filter: f_leak(z1.b)
+         ->  Append
+               ->  Seq Scan on _hyper_9_46_chunk
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_9_47_chunk
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_9_48_chunk
+                     Filter: ((a % 2) = 0)
+(14 rows)
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2692,15 +2658,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
                 QUERY PLAN                 
@@ -2708,59 +2672,49 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
                     QUERY PLAN                     
 ---------------------------------------------------
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Subquery Scan on z1
            Filter: f_leak(z1.b)
            ->  Append
-                 ->  Seq Scan on z1 z1_1
-                       Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_9_46_chunk
                        Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_9_47_chunk
                        Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_9_48_chunk
                        Filter: ((a % 2) = 0)
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Append
-               ->  Seq Scan on z2
-(17 rows)
+(12 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                      QUERY PLAN                       
--------------------------------------------------------
+                   QUERY PLAN                    
+-------------------------------------------------
  Nested Loop
    CTE q
-     ->  Append
-           ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Subquery Scan on z1
-               Filter: f_leak(z1.b)
-               ->  Append
-                     ->  Seq Scan on z1 z1_1
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_9_46_chunk
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_9_47_chunk
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_9_48_chunk
-                           Filter: ((a % 2) = 0)
-(17 rows)
+   ->  Subquery Scan on z1
+         Filter: f_leak(z1.b)
+         ->  Append
+               ->  Seq Scan on _hyper_9_46_chunk
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_9_47_chunk
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_9_48_chunk
+                     Filter: ((a % 2) = 0)
+(14 rows)
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2778,15 +2732,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 1)
-(11 rows)
+(9 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
                 QUERY PLAN                 
@@ -2794,59 +2746,49 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 1)
-(11 rows)
+(9 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
                     QUERY PLAN                     
 ---------------------------------------------------
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Subquery Scan on z1
            Filter: f_leak(z1.b)
            ->  Append
-                 ->  Seq Scan on z1 z1_1
-                       Filter: ((a % 2) = 1)
                  ->  Seq Scan on _hyper_9_46_chunk
                        Filter: ((a % 2) = 1)
                  ->  Seq Scan on _hyper_9_47_chunk
                        Filter: ((a % 2) = 1)
                  ->  Seq Scan on _hyper_9_48_chunk
                        Filter: ((a % 2) = 1)
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Append
-               ->  Seq Scan on z2
-(17 rows)
+(12 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                      QUERY PLAN                       
--------------------------------------------------------
+                   QUERY PLAN                    
+-------------------------------------------------
  Nested Loop
    CTE q
-     ->  Append
-           ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Subquery Scan on z1
-               Filter: f_leak(z1.b)
-               ->  Append
-                     ->  Seq Scan on z1 z1_1
-                           Filter: ((a % 2) = 1)
-                     ->  Seq Scan on _hyper_9_46_chunk
-                           Filter: ((a % 2) = 1)
-                     ->  Seq Scan on _hyper_9_47_chunk
-                           Filter: ((a % 2) = 1)
-                     ->  Seq Scan on _hyper_9_48_chunk
-                           Filter: ((a % 2) = 1)
-(17 rows)
+   ->  Subquery Scan on z1
+         Filter: f_leak(z1.b)
+         ->  Append
+               ->  Seq Scan on _hyper_9_46_chunk
+                     Filter: ((a % 2) = 1)
+               ->  Seq Scan on _hyper_9_47_chunk
+                     Filter: ((a % 2) = 1)
+               ->  Seq Scan on _hyper_9_48_chunk
+                     Filter: ((a % 2) = 1)
+(14 rows)
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2864,15 +2806,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 1)
-(11 rows)
+(9 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test;
                 QUERY PLAN                 
@@ -2880,59 +2820,49 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 1)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 1)
-(11 rows)
+(9 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
                     QUERY PLAN                     
 ---------------------------------------------------
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Subquery Scan on z1
            Filter: f_leak(z1.b)
            ->  Append
-                 ->  Seq Scan on z1 z1_1
-                       Filter: ((a % 2) = 1)
                  ->  Seq Scan on _hyper_9_46_chunk
                        Filter: ((a % 2) = 1)
                  ->  Seq Scan on _hyper_9_47_chunk
                        Filter: ((a % 2) = 1)
                  ->  Seq Scan on _hyper_9_48_chunk
                        Filter: ((a % 2) = 1)
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Append
-               ->  Seq Scan on z2
-(17 rows)
+(12 rows)
 
 EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-                      QUERY PLAN                       
--------------------------------------------------------
+                   QUERY PLAN                    
+-------------------------------------------------
  Nested Loop
    CTE q
-     ->  Append
-           ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Subquery Scan on z1
-               Filter: f_leak(z1.b)
-               ->  Append
-                     ->  Seq Scan on z1 z1_1
-                           Filter: ((a % 2) = 1)
-                     ->  Seq Scan on _hyper_9_46_chunk
-                           Filter: ((a % 2) = 1)
-                     ->  Seq Scan on _hyper_9_47_chunk
-                           Filter: ((a % 2) = 1)
-                     ->  Seq Scan on _hyper_9_48_chunk
-                           Filter: ((a % 2) = 1)
-(17 rows)
+   ->  Subquery Scan on z1
+         Filter: f_leak(z1.b)
+         ->  Append
+               ->  Seq Scan on _hyper_9_46_chunk
+                     Filter: ((a % 2) = 1)
+               ->  Seq Scan on _hyper_9_47_chunk
+                     Filter: ((a % 2) = 1)
+               ->  Seq Scan on _hyper_9_48_chunk
+                     Filter: ((a % 2) = 1)
+(14 rows)
 
 --
 -- Views should follow policy for view owner.
@@ -3024,15 +2954,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 -- Query as role that is not owner of table but is owner of view.
 -- Should return records based on view owner policies.
@@ -3052,15 +2980,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 -- Query as role that is not the owner of the table or view without permissions.
 SET SESSION AUTHORIZATION regress_rls_carol;
@@ -3086,15 +3012,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
  Subquery Scan on z1
    Filter: f_leak(z1.b)
    ->  Append
-         ->  Seq Scan on z1 z1_1
-               Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_46_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_47_chunk
                Filter: ((a % 2) = 0)
          ->  Seq Scan on _hyper_9_48_chunk
                Filter: ((a % 2) = 0)
-(11 rows)
+(9 rows)
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 DROP VIEW rls_view;
@@ -3277,14 +3201,12 @@ EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
  Subquery Scan on y1
    Filter: f_leak(y1.b)
    ->  Append
-         ->  Seq Scan on y1 y1_1
-               Filter: ((a = 1) AND ((a > 2) OR ((a % 2) = 0)))
          ->  Bitmap Heap Scan on _hyper_12_54_chunk
                Recheck Cond: (a = 1)
                Filter: ((a > 2) OR ((a % 2) = 0))
                ->  Bitmap Index Scan on _hyper_12_54_chunk_y1_a_idx
                      Index Cond: (a = 1)
-(10 rows)
+(8 rows)
 
 DROP VIEW rls_sbv;
 --
@@ -3334,8 +3256,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
  Subquery Scan on y2
    Filter: f_leak(y2.b)
    ->  Append
-         ->  Seq Scan on y2 y2_1
-               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
          ->  Seq Scan on _hyper_13_55_chunk
                Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
          ->  Seq Scan on _hyper_13_56_chunk
@@ -3358,7 +3278,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
                Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
          ->  Seq Scan on _hyper_13_65_chunk
                Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
-(27 rows)
+(25 rows)
 
 --
 -- Qual push-down of leaky functions, when not referring to table
@@ -3449,10 +3369,8 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE 
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Hash Join
-   Hash Cond: (y2.b = test_qual_pushdown.abc)
+   Hash Cond: (_hyper_13_55_chunk.b = test_qual_pushdown.abc)
    ->  Append
-         ->  Seq Scan on y2
-               Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
          ->  Seq Scan on _hyper_13_55_chunk
                Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
          ->  Seq Scan on _hyper_13_56_chunk
@@ -3478,7 +3396,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE 
    ->  Hash
          ->  Seq Scan on test_qual_pushdown
                Filter: f_leak(abc)
-(30 rows)
+(28 rows)
 
 SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
 NOTICE:  f_leak => cfcd208495d565ef66e7dff9f98764da
@@ -3509,8 +3427,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE 
          ->  Subquery Scan on y2
                Filter: f_leak(y2.b)
                ->  Append
-                     ->  Seq Scan on y2 y2_1
-                           Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
                      ->  Seq Scan on _hyper_13_55_chunk
                            Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
                      ->  Seq Scan on _hyper_13_56_chunk
@@ -3533,7 +3449,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE 
                            Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
                      ->  Seq Scan on _hyper_13_65_chunk
                            Filter: (((a % 4) = 0) OR ((a % 3) = 0) OR ((a % 2) = 0))
-(31 rows)
+(29 rows)
 
 DROP TABLE test_qual_pushdown;
 --
@@ -3562,34 +3478,31 @@ SET ROLE regress_rls_bob;
 PREPARE role_inval AS SELECT * FROM t1;
 -- Check plan
 EXPLAIN (COSTS OFF) EXECUTE role_inval;
-          QUERY PLAN           
--------------------------------
- Append
-   ->  Seq Scan on t1
-         Filter: ((a % 2) = 0)
-(3 rows)
+        QUERY PLAN        
+--------------------------
+ Result
+   One-Time Filter: false
+(2 rows)
 
 -- Change to regress_rls_carol
 SET ROLE regress_rls_carol;
 -- Check plan- should be different
 EXPLAIN (COSTS OFF) EXECUTE role_inval;
-          QUERY PLAN           
--------------------------------
- Append
-   ->  Seq Scan on t1
-         Filter: ((a % 4) = 0)
-(3 rows)
+        QUERY PLAN        
+--------------------------
+ Result
+   One-Time Filter: false
+(2 rows)
 
 -- Change back to regress_rls_bob
 SET ROLE regress_rls_bob;
 -- Check plan- should be back to original
 EXPLAIN (COSTS OFF) EXECUTE role_inval;
-          QUERY PLAN           
--------------------------------
- Append
-   ->  Seq Scan on t1
-         Filter: ((a % 2) = 0)
-(3 rows)
+        QUERY PLAN        
+--------------------------
+ Result
+   One-Time Filter: false
+(2 rows)
 
 --
 -- CTE and RLS
@@ -3645,8 +3558,6 @@ EXPLAIN (COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FRO
      ->  Subquery Scan on t1
            Filter: f_leak(t1.b)
            ->  Append
-                 ->  Seq Scan on t1 t1_1
-                       Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_15_66_chunk
                        Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_15_67_chunk
@@ -3669,7 +3580,7 @@ EXPLAIN (COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FRO
                        Filter: ((a % 2) = 0)
                  ->  Seq Scan on _hyper_15_76_chunk
                        Filter: ((a % 2) = 0)
-(29 rows)
+(27 rows)
 
 WITH cte1 AS (UPDATE t1 SET a = a + 1 RETURNING *) SELECT * FROM cte1; --fail
 ERROR:  new row violates row-level security policy for table "t1"
@@ -3790,7 +3701,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM t2;
               QUERY PLAN              
 --------------------------------------
  Append
-   ->  Seq Scan on t2
    ->  Seq Scan on _hyper_16_77_chunk
    ->  Seq Scan on _hyper_16_78_chunk
    ->  Seq Scan on _hyper_16_79_chunk
@@ -3802,7 +3712,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM t2;
    ->  Seq Scan on _hyper_16_85_chunk
    ->  Seq Scan on _hyper_16_86_chunk
    ->  Seq Scan on _hyper_16_87_chunk
-(13 rows)
+(12 rows)
 
 CREATE TABLE t3 AS SELECT * FROM t1;
 SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
@@ -3956,7 +3866,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM t1;
               QUERY PLAN              
 --------------------------------------
  Append
-   ->  Seq Scan on t1
    ->  Seq Scan on _hyper_15_66_chunk
    ->  Seq Scan on _hyper_15_67_chunk
    ->  Seq Scan on _hyper_15_68_chunk
@@ -3968,7 +3877,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM t1;
    ->  Seq Scan on _hyper_15_74_chunk
    ->  Seq Scan on _hyper_15_75_chunk
    ->  Seq Scan on _hyper_15_76_chunk
-(13 rows)
+(12 rows)
 
 -- Check that default deny does not apply to table owner.
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -4003,7 +3912,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM t1;
               QUERY PLAN              
 --------------------------------------
  Append
-   ->  Seq Scan on t1
    ->  Seq Scan on _hyper_15_66_chunk
    ->  Seq Scan on _hyper_15_67_chunk
    ->  Seq Scan on _hyper_15_68_chunk
@@ -4015,7 +3923,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM t1;
    ->  Seq Scan on _hyper_15_74_chunk
    ->  Seq Scan on _hyper_15_75_chunk
    ->  Seq Scan on _hyper_15_76_chunk
-(13 rows)
+(12 rows)
 
 -- Check that default deny applies to non-owner/non-superuser when RLS on.
 SET SESSION AUTHORIZATION regress_rls_bob;
@@ -4266,83 +4174,28 @@ FETCH ABSOLUTE 1 FROM current_check_cursor;
 
 -- Still cannot UPDATE row 2 through cursor
 UPDATE current_check SET payload = payload || '_new' WHERE CURRENT OF current_check_cursor RETURNING *;
- currentid | payload | rlsuser 
------------+---------+---------
-(0 rows)
-
+ERROR:  cursor "current_check_cursor" is not a simply updatable scan of table "current_check"
 -- Can update row 4 through cursor, which is the next visible row
 FETCH RELATIVE 1 FROM current_check_cursor;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         4 | def     | regress_rls_bob
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 UPDATE current_check SET payload = payload || '_new' WHERE CURRENT OF current_check_cursor RETURNING *;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         4 | def_new | regress_rls_bob
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM current_check;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         2 | bcd     | regress_rls_bob
-         4 | def_new | regress_rls_bob
-(2 rows)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 -- Plan should be a subquery TID scan
 EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
-                             QUERY PLAN                              
----------------------------------------------------------------------
- Update on current_check current_check_2
-   Update on current_check current_check_2
-   Update on _hyper_21_101_chunk current_check
-   ->  Subquery Scan on current_check
-         ->  Subquery Scan on current_check_3
-               Filter: ((current_check_3.currentid % 2) = 0)
-               ->  LockRows
-                     ->  Tid Scan on current_check current_check_4
-                           TID Cond: CURRENT OF current_check_cursor
-                           Filter: (currentid = 4)
-   ->  Subquery Scan on current_check_1
-         ->  Subquery Scan on current_check_5
-               Filter: ((current_check_5.currentid % 2) = 0)
-               ->  LockRows
-                     ->  Tid Scan on _hyper_21_101_chunk
-                           TID Cond: CURRENT OF current_check_cursor
-                           Filter: (currentid = 4)
-(17 rows)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 -- Similarly can only delete row 4
 FETCH ABSOLUTE 1 FROM current_check_cursor;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         2 | bcd     | regress_rls_bob
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
- currentid | payload | rlsuser 
------------+---------+---------
-(0 rows)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 FETCH RELATIVE 1 FROM current_check_cursor;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         4 | def     | regress_rls_bob
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         4 | def_new | regress_rls_bob
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM current_check;
- currentid | payload |     rlsuser     
------------+---------+-----------------
-         2 | bcd     | regress_rls_bob
-(1 row)
-
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
 COMMIT;
 --
 -- check pg_stats view filtering

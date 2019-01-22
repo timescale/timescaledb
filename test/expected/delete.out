@@ -81,9 +81,8 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                                                                       QUERY PLAN                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------
  Hash Join
-   Hash Cond: ("two_Partitions_1".series_1 = "two_Partitions".series_1)
+   Hash Cond: (_hyper_1_1_chunk.series_1 = "two_Partitions".series_1)
    ->  Append
-         ->  Seq Scan on "two_Partitions" "two_Partitions_1"
          ->  Seq Scan on _hyper_1_1_chunk
          ->  Seq Scan on _hyper_1_2_chunk
          ->  Seq Scan on _hyper_1_3_chunk
@@ -103,7 +102,7 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Only Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
-(23 rows)
+(22 rows)
 
 -- ConstraintAwareAppend NOT applied for DELETE
 EXPLAIN (costs off)

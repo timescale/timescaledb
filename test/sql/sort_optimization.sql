@@ -15,6 +15,11 @@ INSERT INTO order_test SELECT 0,10,0.5;
 INSERT INTO order_test SELECT 1,9,0.5;
 INSERT INTO order_test SELECT 2,8,0.5;
 
+-- we want to see here that index scans are possible for the chosen expressions
+-- so we disable seqscan so we dont need to worry about other factors which would
+-- make PostgreSQL prefer seqscan over index scan
+SET enable_seqscan TO off;
+
 -- test sort optimization with single member order by
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 -- should use index scan

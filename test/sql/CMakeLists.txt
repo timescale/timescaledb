@@ -14,6 +14,7 @@ set(TEST_FILES
   create_chunks.sql
   create_hypertable.sql
   create_table.sql
+  cursor.sql
   ddl_alter_column.sql
   ddl_errors.sql
   ddl_single.sql
@@ -38,7 +39,6 @@ set(TEST_FILES
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
-  plan_expand_hypertable_optimized.sql
   plan_expand_hypertable_results_diff.sql
   plan_hashagg_results_x_diff.sql
   plan_ordered_append_results_diff.sql
@@ -133,6 +133,7 @@ set(TEST_TEMPLATES
   alternate_users.sql.in
   parallel.sql.in
   partitioning.sql.in
+  plan_expand_hypertable_optimized.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg_optimized.sql.in
   # lateral plans are different across versions, explains run without analyze on 9.6

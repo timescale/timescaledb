@@ -380,27 +380,10 @@ static CustomPathMethods constraint_aware_append_path_methods = {
 	.PlanCustomPath = constraint_aware_append_plan_create,
 };
 
-static inline List *
-remove_parent_subpath(PlannerInfo *root, List *subpaths, Oid parent_relid)
-{
-	Path *childpath;
-	Oid relid;
-
-	childpath = linitial(subpaths);
-	relid = root->simple_rte_array[childpath->parent->relid]->relid;
-
-	if (relid == parent_relid)
-		subpaths = list_delete_first(subpaths);
-
-	return subpaths;
-}
-
 Path *
 ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *subpath)
 {
 	ConstraintAwareAppendPath *path;
-	AppendRelInfo *appinfo;
-	Oid relid;
 
 	path = (ConstraintAwareAppendPath *) newNode(sizeof(ConstraintAwareAppendPath), T_CustomPath);
 	path->cpath.path.pathtype = T_CustomScan;
@@ -425,37 +408,16 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *
 	path->cpath.methods = &constraint_aware_append_path_methods;
 
 	/*
-	 * Remove the main table from the append_rel_list and Append's subpaths
-	 * since it cannot contain any tuples
+	 * Make sure our subpath is either an Append or MergeAppend node
 	 */
 	switch (nodeTag(subpath))
 	{
 		case T_AppendPath:
-		{
-			AppendPath *append = (AppendPath *) subpath;
-
-			append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
-			break;
-		}
 		case T_MergeAppendPath:
-		{
-			MergeAppendPath *append = (MergeAppendPath *) subpath;
-
-			append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
 			break;
-		}
 		default:
 			elog(ERROR, "invalid node type %u", nodeTag(subpath));
 			break;
-	}
-
-	if (list_length(root->append_rel_list) > 1)
-	{
-		appinfo = linitial(root->append_rel_list);
-		relid = root->simple_rte_array[appinfo->child_relid]->relid;
-
-		if (relid == ht->main_table_relid)
-			root->append_rel_list = list_delete_first(root->append_rel_list);
 	}
 
 	return &path->cpath.path;

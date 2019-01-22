@@ -33,16 +33,16 @@ CREATE TABLE closed.closed_ht(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('closed.closed_ht','time');
 INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
 
 -- filter by schema
-SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed';
+SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed' ORDER BY table_schema, table_name;
 
 -- filter by table name
-SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1';
+SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER BY table_schema, table_name;
 
 -- filter by owner
 SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
