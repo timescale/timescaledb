@@ -19,6 +19,8 @@ set(TEST_FILES
   ddl_single.sql
   ddl.sql
   delete.sql
+  deparse.sql
+  deparse_fail.sql
   drop_schema.sql
   drop_owned.sql
   drop_extension.sql
