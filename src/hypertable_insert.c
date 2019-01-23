@@ -13,6 +13,7 @@
 #include <executor/nodeModifyTable.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
+#include <utils/builtins.h>
 #include <foreign/foreign.h>
 #include <catalog/pg_type.h>
 
@@ -107,12 +108,62 @@ hypertable_insert_rescan(CustomScanState *node)
 	ExecReScan(linitial(node->custom_ps));
 }
 
+static void
+hypertable_insert_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+{
+	HypertableInsertState *state = (HypertableInsertState *) node;
+	List *fdw_private = (List *) linitial(state->mt->fdwPrivLists);
+	ModifyTableState *mtstate = linitial(node->custom_ps);
+	Index rti = state->mt->nominalRelation;
+	RangeTblEntry *rte = rt_fetch(rti, es->rtable);
+	const char *relname = get_rel_name(rte->relid);
+	const char *namespace = get_namespace_name(get_rel_namespace(rte->relid));
+
+	Assert(IsA(mtstate, ModifyTableState));
+
+	if (NULL != state->fdwroutine)
+	{
+		appendStringInfo(es->str, "Insert on distributed hypertable");
+
+		if (es->verbose)
+		{
+			List *server_names = NIL;
+			ListCell *lc;
+
+			appendStringInfo(es->str,
+							 " %s.%s\n",
+							 quote_identifier(namespace),
+							 quote_identifier(relname));
+
+			foreach (lc, state->serveroids)
+			{
+				ForeignServer *server = GetForeignServer(lfirst_oid(lc));
+
+				server_names = lappend(server_names, server->servername);
+			}
+
+			ExplainPropertyList("Servers", server_names, es);
+		}
+		else
+			appendStringInfo(es->str, " %s\n", quote_identifier(relname));
+
+		/* Let the foreign data wrapper add its part of the explain */
+		if (NULL != state->fdwroutine->ExplainForeignModify)
+			state->fdwroutine->ExplainForeignModify(mtstate,
+													mtstate->resultRelInfo,
+													fdw_private,
+													0,
+													es);
+	}
+}
+
 static CustomExecMethods hypertable_insert_state_methods = {
 	.CustomName = "HypertableInsertState",
 	.BeginCustomScan = hypertable_insert_begin,
 	.EndCustomScan = hypertable_insert_end,
 	.ExecCustomScan = hypertable_insert_exec,
 	.ReScanCustomScan = hypertable_insert_rescan,
+	.ExplainCustomScan = hypertable_insert_explain,
 };
 
 static Node *
@@ -120,11 +171,30 @@ hypertable_insert_state_create(CustomScan *cscan)
 {
 	HypertableInsertState *state;
 	ModifyTable *mt = castNode(ModifyTable, linitial(cscan->custom_plans));
+	Oid serverid;
 
 	state = (HypertableInsertState *) newNode(sizeof(HypertableInsertState), T_CustomScanState);
 	state->cscan_state.methods = &hypertable_insert_state_methods;
 	state->mt = mt;
 	state->mt->arbiterIndexes = linitial(cscan->custom_private);
+
+	/*
+	 * Get the list of servers to insert on.
+	 */
+	state->serveroids = lsecond(cscan->custom_private);
+
+	/*
+	 * Get the FDW routine for the first server. It should be the same for
+	 * all of them
+	 */
+	if (NIL != state->serveroids)
+	{
+		serverid = linitial_oid(state->serveroids);
+		state->fdwroutine = GetFdwRoutineByServerId(serverid);
+		Assert(state->fdwroutine != NULL);
+	}
+	else
+		state->fdwroutine = NULL;
 
 	return (Node *) state;
 }
@@ -177,20 +247,11 @@ make_var_targetlist(const List *tlist)
  * no remote modify, we still need to return a list of empty lists.
  */
 static List *
-plan_remote_modify(PlannerInfo *root, ModifyTable *mt, List *serveroids)
+plan_remote_modify(PlannerInfo *root, ModifyTable *mt, List *serveroids, FdwRoutine *fdwroutine)
 {
-	FdwRoutine *fdwroutine = NULL;
 	List *fdw_private_list = NIL;
 	ListCell *lc;
 	int i = 0;
-
-	if (serveroids != NIL)
-
-		/*
-		 * Get the FDW routine for the first server. It should be the same for
-		 * all of them
-		 */
-		fdwroutine = GetFdwRoutineByServerId(linitial_oid(serveroids));
 
 	foreach (lc, mt->resultRelations)
 	{
@@ -246,6 +307,7 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	HypertableInsertPath *hipath = (HypertableInsertPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
 	ModifyTable *mt = linitial(custom_plans);
+	FdwRoutine *fdwroutine = NULL;
 
 	Assert(IsA(mt, ModifyTable));
 
@@ -258,7 +320,15 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	cscan->scan.plan.total_cost = mt->plan.total_cost;
 	cscan->scan.plan.plan_rows = mt->plan.plan_rows;
 	cscan->scan.plan.plan_width = mt->plan.plan_width;
-	cscan->custom_private = hipath->serveroids;
+
+	if (NIL != hipath->serveroids)
+	{
+		/* Get the foreign data wrapper routines for the first server. Should be
+		 * the same for all servers. */
+		Oid serverid = linitial_oid(hipath->serveroids);
+
+		fdwroutine = GetFdwRoutineByServerId(serverid);
+	}
 
 	/*
 	 * A remote hypertable is not a foreign table since it cannot have indexes
@@ -270,7 +340,7 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * e.g., a deparsed INSERT statement that references the hypertable
 	 * instead of a chunk.
 	 */
-	mt->fdwPrivLists = plan_remote_modify(root, mt, hipath->serveroids);
+	mt->fdwPrivLists = plan_remote_modify(root, mt, hipath->serveroids, fdwroutine);
 
 	/* The tlist is always NIL since the ModifyTable subplan doesn't have its
 	 * targetlist set until set_plan_references (setrefs.c) is run */
@@ -315,9 +385,11 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * we save the original list of arbiter indexes here
 	 * because we modify that list during execution and
 	 * we still need the original list in case that plan
-	 * gets reused
+	 * gets reused.
+	 *
+	 * We also pass on the servers to insert on.
 	 */
-	cscan->custom_private = list_make1(mt->arbiterIndexes);
+	cscan->custom_private = list_make2(mt->arbiterIndexes, hipath->serveroids);
 
 	return &cscan->scan.plan;
 }

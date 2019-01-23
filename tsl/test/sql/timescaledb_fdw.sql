@@ -3,8 +3,26 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE SERVER some_server FOREIGN DATA WRAPPER timescaledb_fdw;
-CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER some_server;
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Cleanup from other potential tests that created this database
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+SET client_min_messages TO NOTICE;
+CREATE DATABASE server_1;
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
+
+\c server_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE TABLE test_ft (c0 int, c1 varchar(10));
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER server_1;
 
 SELECT * FROM test_ft;
 INSERT INTO test_ft VALUES (1, 'test');
