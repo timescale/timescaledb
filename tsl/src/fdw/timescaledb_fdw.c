@@ -10,10 +10,11 @@
  */
 #include <postgres.h>
 #include <fmgr.h>
-#include <utils/rel.h>
+#include <catalog/pg_type.h>
 #include <foreign/fdwapi.h>
 #include <foreign/foreign.h>
 #include <nodes/relation.h>
+#include <nodes/makefuncs.h>
 #include <parser/parsetree.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/restrictinfo.h>
@@ -21,14 +22,20 @@
 #include <access/htup_details.h>
 #include <access/sysattr.h>
 #include <executor/executor.h>
+#include <commands/explain.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <miscadmin.h>
 
 #include <export.h>
 #include <hypertable_server.h>
 #include <hypertable_cache.h>
 #include <chunk_server.h>
 #include <chunk_insert_state.h>
+#include <remote/dist_txn.h>
+#include <remote/async.h>
+#include <compat.h>
 
 #include "utils.h"
 #include "timescaledb_fdw.h"
@@ -44,7 +51,7 @@ typedef struct TsScanState
 
 /*
  * This enum describes what's kept in the fdw_private list for a ModifyTable
- * node referencing a postgres_fdw foreign table.  We store:
+ * node referencing a timescaledb_fdw foreign table.  We store:
  *
  * 1) INSERT/UPDATE/DELETE statement text to be sent to the remote server
  * 2) Integer list of target attribute numbers for INSERT/UPDATE
@@ -62,7 +69,36 @@ enum FdwModifyPrivateIndex
 	FdwModifyPrivateHasReturning,
 	/* Integer list of attribute numbers retrieved by RETURNING */
 	FdwModifyPrivateRetrievedAttrs,
+	/* Insert state for the current chunk */
+	FdwModifyPrivateChunkInsertState,
 };
+
+/*
+ * Execution state of a foreign insert/update/delete operation.
+ */
+typedef struct TsFdwModifyState
+{
+	Relation rel;			  /* relcache entry for the foreign table */
+	AttInMetadata *attinmeta; /* attribute datatype conversion metadata */
+
+	/* for remote query execution */
+	PGconn *conn; /* connection for the scan */
+	PreparedStmt *p_stmt;
+
+	/* extracted fdw_private data */
+	char *query;		   /* text of INSERT/UPDATE/DELETE command */
+	List *target_attrs;	/* list of target attribute numbers */
+	bool has_returning;	/* is there a RETURNING clause? */
+	List *retrieved_attrs; /* attr numbers retrieved by RETURNING */
+
+	/* info about parameters for prepared statement */
+	AttrNumber ctidAttno; /* attnum of input resjunk ctid column */
+	int p_nums;			  /* number of parameters to transmit */
+	FmgrInfo *p_flinfo;   /* output conversion functions for them */
+
+	/* working memory context */
+	MemoryContext temp_cxt; /* context for per-tuple temporary data */
+} TsFdwModifyState;
 
 Datum
 timescaledb_fdw_validator(PG_FUNCTION_ARGS)
@@ -109,6 +145,101 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid, For
 
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 	return make_foreignscan(tlist, scan_clauses, scan_relid, NIL, NIL, NIL, NIL, outer_plan);
+}
+
+/*
+ * create_foreign_modify
+ *		Construct an execution state of a foreign insert/update/delete
+ *		operation
+ */
+static TsFdwModifyState *
+create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, CmdType operation,
+					  Plan *subplan, char *query, List *target_attrs, bool has_returning,
+					  List *retrieved_attrs)
+{
+	TsFdwModifyState *fmstate;
+	Relation rel = rri->ri_RelationDesc;
+	TupleDesc tupdesc = RelationGetDescr(rel);
+	Oid userid;
+	ForeignTable *table;
+	UserMapping *user;
+	AttrNumber n_params;
+	Oid typefnoid;
+	bool isvarlena;
+	ListCell *lc;
+
+	/* Begin constructing TsFdwModifyState. */
+	fmstate = (TsFdwModifyState *) palloc0(sizeof(TsFdwModifyState));
+	fmstate->rel = rel;
+
+	/*
+	 * Identify which user to do the remote access as.  This should match what
+	 * ExecCheckRTEPerms() does.
+	 */
+	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+
+	/* Get info about foreign table. */
+	table = GetForeignTable(RelationGetRelid(rel));
+	user = GetUserMapping(userid, table->serverid);
+
+	/* Open connection; report that we'll create a prepared statement. */
+	fmstate->conn = remote_dist_txn_get_connection(user, REMOTE_TXN_USE_PREP_STMT);
+	fmstate->p_stmt = NULL;
+
+	/* Set up remote query information. */
+	fmstate->query = query;
+	fmstate->target_attrs = target_attrs;
+	fmstate->has_returning = has_returning;
+	fmstate->retrieved_attrs = retrieved_attrs;
+
+	/* Create context for per-tuple temp workspace. */
+	fmstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
+											  "timescaledb_fdw temporary data",
+											  ALLOCSET_SMALL_SIZES);
+
+	/* Prepare for input conversion of RETURNING results. */
+	if (fmstate->has_returning)
+		fmstate->attinmeta = TupleDescGetAttInMetadata(tupdesc);
+
+	/* Prepare for output conversion of parameters used in prepared stmt. */
+	n_params = list_length(fmstate->target_attrs) + 1;
+	fmstate->p_flinfo = (FmgrInfo *) palloc0(sizeof(FmgrInfo) * n_params);
+	fmstate->p_nums = 0;
+
+	if (operation == CMD_UPDATE || operation == CMD_DELETE)
+	{
+		Assert(subplan != NULL);
+
+		/* Find the ctid resjunk column in the subplan's result */
+		fmstate->ctidAttno = ExecFindJunkAttributeInTlist(subplan->targetlist, "ctid");
+		if (!AttributeNumberIsValid(fmstate->ctidAttno))
+			elog(ERROR, "could not find junk ctid column");
+
+		/* First transmittable parameter will be ctid */
+		getTypeOutputInfo(TIDOID, &typefnoid, &isvarlena);
+		fmgr_info(typefnoid, &fmstate->p_flinfo[fmstate->p_nums]);
+		fmstate->p_nums++;
+	}
+
+	if (operation == CMD_INSERT || operation == CMD_UPDATE)
+	{
+		/* Set up for remaining transmittable parameters */
+		foreach (lc, fmstate->target_attrs)
+		{
+			int attnum = lfirst_int(lc);
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, attnum - 1);
+
+			Assert(!attr->attisdropped);
+
+			getTypeOutputInfo(attr->atttypid, &typefnoid, &isvarlena);
+			fmgr_info(typefnoid, &fmstate->p_flinfo[fmstate->p_nums]);
+			fmstate->p_nums++;
+		}
+	}
+
+	Assert(fmstate->p_nums <= n_params);
+
+	return fmstate;
 }
 
 static void
@@ -163,9 +294,39 @@ end_foreign_scan(ForeignScanState *node)
 {
 }
 
+/*
+ * Add resjunk column(s) needed for update/delete on a foreign table
+ */
 static void
 add_foreign_update_targets(Query *parsetree, RangeTblEntry *target_rte, Relation target_relation)
 {
+	Var *var;
+	const char *attrname;
+	TargetEntry *tle;
+
+	/*
+	 * In timescaledb_fdw, what we need is the ctid, same as for a regular
+	 * table.
+	 */
+
+	/* Make a Var representing the desired value */
+	var = makeVar(parsetree->resultRelation,
+				  SelfItemPointerAttributeNumber,
+				  TIDOID,
+				  -1,
+				  InvalidOid,
+				  0);
+
+	/* Wrap it in a resjunk TLE with the right name ... */
+	attrname = "ctid";
+
+	tle = makeTargetEntry((Expr *) var,
+						  list_length(parsetree->targetList) + 1,
+						  pstrdup(attrname),
+						  true);
+
+	/* ... and add it to the query's targetlist */
+	parsetree->targetList = lappend(parsetree->targetList, tle);
 }
 
 static List *
@@ -307,56 +468,265 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 					  retrieved_attrs);
 }
 
-static const char *
-chunk_servers_to_string(List *servers)
+/*
+ * Convert a relation's attribute numbers to the corresponding numbers for
+ * another relation.
+ *
+ * Conversions are necessary when, e.g., a (new) chunk's attribute numbers do
+ * not match the root table's numbers after a column has been removed.
+ */
+static List *
+convert_attrs(TupleConversionMap *map, List *attrs)
 {
-	StringInfo serverstr = makeStringInfo();
+	List *new_attrs = NIL;
 	ListCell *lc;
 
-	initStringInfo(serverstr);
-
-	appendStringInfoChar(serverstr, '[');
-
-	foreach (lc, servers)
+	foreach (lc, attrs)
 	{
-		ChunkServer *server = lfirst(lc);
+		AttrNumber attnum = lfirst_int(lc);
+		int i;
 
-		appendStringInfo(serverstr, "%s", NameStr(server->fd.server_name));
+		for (i = 0; i < map->outdesc->natts; i++)
+		{
+			if (map->attrMap[i] == attnum)
+			{
+				new_attrs = lappend_int(new_attrs, AttrOffsetGetAttrNumber(i));
+				break;
+			}
+		}
 
-		if (NULL != lnext(lc))
-			appendStringInfoChar(serverstr, ',');
+		/* Assert that we found the attribute */
+		Assert(i != map->outdesc->natts);
 	}
 
-	appendStringInfoChar(serverstr, ']');
+	Assert(list_length(attrs) == list_length(new_attrs));
 
-	return serverstr->data;
+	return new_attrs;
 }
 
 static void
-begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private,
+begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_private,
 					 int subplan_index, int eflags)
 {
-	const char *sql = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
-	Chunk *chunk = ts_chunk_get_by_relid(rinfo->ri_RelationDesc->rd_id, 0, false);
+	TsFdwModifyState *fmstate;
+	char *query;
+	List *target_attrs;
+	bool has_returning;
+	List *retrieved_attrs;
+	ChunkInsertState *cis;
+	RangeTblEntry *rte;
 
-	if (NULL == chunk)
-		elog(NOTICE,
-			 "BEGIN FOREIGN MODIFY on non-chunk table \"%s\": %s",
-			 get_rel_name(rinfo->ri_RelationDesc->rd_id),
-			 sql);
-	else
-		elog(NOTICE,
-			 "BEGIN FOREIGN MODIFY on chunk \"%s\" %s: %s",
-			 get_rel_name(rinfo->ri_RelationDesc->rd_id),
-			 chunk_servers_to_string(chunk->servers),
-			 sql);
+	/*
+	 * Do nothing in EXPLAIN (no ANALYZE) case.  rri->ri_FdwState stays NULL.
+	 */
+	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
+		return;
+
+	/* Deconstruct fdw_private data. */
+	query = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
+	target_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateTargetAttnums);
+	has_returning = intVal(list_nth(fdw_private, FdwModifyPrivateHasReturning));
+	retrieved_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateRetrievedAttrs);
+
+	if (list_length(fdw_private) > FdwModifyPrivateChunkInsertState)
+	{
+		cis = (ChunkInsertState *) list_nth(fdw_private, FdwModifyPrivateChunkInsertState);
+
+		/*
+		 * A chunk may have different attribute numbers than the root relation
+		 * that we planned the attribute lists for
+		 */
+		if (NULL != cis->tup_conv_map)
+		{
+			/*
+			 * Convert the target attributes (the inserted or updated
+			 * attributes)
+			 */
+			target_attrs = convert_attrs(cis->tup_conv_map, target_attrs);
+
+			/*
+			 * Convert the retrieved attributes, if there is a RETURNING
+			 * statement
+			 */
+			if (NIL != retrieved_attrs)
+				retrieved_attrs = convert_attrs(cis->tup_conv_map, retrieved_attrs);
+		}
+	}
+
+	/* Find RTE. */
+	rte = rt_fetch(rri->ri_RangeTableIndex, mtstate->ps.state->es_range_table);
+
+	/* Construct an execution state. */
+	fmstate = create_foreign_modify(mtstate->ps.state,
+									rte,
+									rri,
+									mtstate->operation,
+									mtstate->mt_plans[subplan_index]->plan,
+									query,
+									target_attrs,
+									has_returning,
+									retrieved_attrs);
+
+	rri->ri_FdwState = fmstate;
+}
+
+/*
+ * convert_prep_stmt_params
+ *		Create array of text strings representing parameter values
+ *
+ * tupleid is ctid to send, or NULL if none
+ * slot is slot to get remaining parameters from, or NULL if none
+ *
+ * Data is constructed in temp_cxt; caller should reset that after use.
+ */
+static const char **
+convert_prep_stmt_params(TsFdwModifyState *fmstate, ItemPointer tupleid, TupleTableSlot *slot)
+{
+	const char **p_values;
+	int pindex = 0;
+	MemoryContext oldcontext;
+
+	oldcontext = MemoryContextSwitchTo(fmstate->temp_cxt);
+
+	p_values = (const char **) palloc(sizeof(char *) * fmstate->p_nums);
+
+	/* 1st parameter should be ctid, if it's in use */
+	if (tupleid != NULL)
+	{
+		/* don't need set_transmission_modes for TID output */
+		p_values[pindex] = OutputFunctionCall(&fmstate->p_flinfo[pindex], PointerGetDatum(tupleid));
+		pindex++;
+	}
+
+	/* get following parameters from slot */
+	if (slot != NULL && fmstate->target_attrs != NIL)
+	{
+		int nestlevel;
+		ListCell *lc;
+
+		nestlevel = set_transmission_modes();
+
+		foreach (lc, fmstate->target_attrs)
+		{
+			int attnum = lfirst_int(lc);
+			Datum value;
+			bool isnull;
+
+			value = slot_getattr(slot, attnum, &isnull);
+			if (isnull)
+				p_values[pindex] = NULL;
+			else
+				p_values[pindex] = OutputFunctionCall(&fmstate->p_flinfo[pindex], value);
+			pindex++;
+		}
+
+		reset_transmission_modes(nestlevel);
+	}
+
+	Assert(pindex == fmstate->p_nums);
+
+	MemoryContextSwitchTo(oldcontext);
+
+	return p_values;
+}
+
+/*
+ * store_returning_result
+ *		Store the result of a RETURNING clause
+ *
+ * On error, be sure to release the PGresult on the way out.  Callers do not
+ * have PG_TRY blocks to ensure this happens.
+ */
+static void
+store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult *res)
+{
+	PG_TRY();
+	{
+		HeapTuple newtup;
+
+		newtup = make_tuple_from_result_row(res,
+											0,
+											fmstate->rel,
+											fmstate->attinmeta,
+											fmstate->retrieved_attrs,
+											NULL,
+											fmstate->temp_cxt);
+		/* tuple will be deleted when it is cleared from the slot */
+		ExecStoreTuple(newtup, slot, InvalidBuffer, true);
+	}
+	PG_CATCH();
+	{
+		if (res)
+			PQclear(res);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+}
+
+/*
+ * prepare_foreign_modify
+ *		Establish a prepared statement for execution of INSERT/UPDATE/DELETE
+ */
+static void
+prepare_foreign_modify(TsFdwModifyState *fmstate)
+{
+	AsyncRequest *req;
+
+	req = async_request_send_prepare(fmstate->conn, fmstate->query, fmstate->p_nums);
+
+	Assert(NULL != req);
+
+	fmstate->p_stmt = async_request_wait_prepared_statement(req);
 }
 
 static TupleTableSlot *
-exec_foreign_insert(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
+exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
 {
-	return slot;
+	TsFdwModifyState *fmstate = (TsFdwModifyState *) rri->ri_FdwState;
+	AsyncRequest *req;
+	AsyncResponseResult *rsp;
+	const char **p_values;
+	PGresult *res;
+	int n_rows;
+
+	/* Set up the prepared statement on the remote server, if we didn't yet */
+	if (!fmstate->p_stmt)
+		prepare_foreign_modify(fmstate);
+
+	/* Convert parameters needed by prepared statement to text form */
+	p_values = convert_prep_stmt_params(fmstate, NULL, slot);
+
+	req = async_request_send_prepared_stmt(fmstate->p_stmt, p_values);
+
+	Assert(NULL != req);
+
+	rsp = async_request_wait_any_result(req);
+
+	Assert(NULL != rsp);
+
+	res = async_response_result_get_pg_result(rsp);
+
+	if (PQresultStatus(res) != (fmstate->has_returning ? PGRES_TUPLES_OK : PGRES_COMMAND_OK))
+		async_response_report_error((AsyncResponse *) rsp, ERROR);
+
+	/* Check number of rows affected, and fetch RETURNING tuple if any */
+	if (fmstate->has_returning)
+	{
+		n_rows = PQntuples(res);
+		if (n_rows > 0)
+			store_returning_result(fmstate, slot, res);
+	}
+	else
+		n_rows = atoi(PQcmdTuples(res));
+
+	/* And clean up */
+	async_response_result_close(rsp);
+
+	MemoryContextReset(fmstate->temp_cxt);
+
+	/* Return NULL if nothing was inserted on the remote end */
+	return (n_rows > 0) ? slot : NULL;
 }
 
 static TupleTableSlot *
@@ -373,9 +743,33 @@ exec_foreign_delete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 	return slot;
 }
 
+/*
+ * finish_foreign_modify
+ *		Release resources for a foreign insert/update/delete operation
+ */
 static void
-end_foreign_modify(EState *estate, ResultRelInfo *rinfo)
+finish_foreign_modify(TsFdwModifyState *fmstate)
 {
+	Assert(fmstate != NULL);
+
+	/* If we created a prepared statement, destroy it */
+	if (NULL != fmstate->p_stmt)
+		prepared_stmt_close(fmstate->p_stmt);
+
+	fmstate->conn = NULL;
+}
+
+static void
+end_foreign_modify(EState *estate, ResultRelInfo *rri)
+{
+	TsFdwModifyState *fmstate = (TsFdwModifyState *) rri->ri_FdwState;
+
+	/* If fmstate is NULL, we are in EXPLAIN; nothing to do */
+	if (fmstate == NULL)
+		return;
+
+	/* Destroy the execution state */
+	finish_foreign_modify(fmstate);
 }
 
 static int
@@ -390,9 +784,15 @@ explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
 }
 
 static void
-explain_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rinfo, List *fdw_private,
+explain_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_private,
 					   int subplan_index, struct ExplainState *es)
 {
+	if (es->verbose)
+	{
+		char *sql = strVal(list_nth(fdw_private, FdwModifyPrivateUpdateSql));
+
+		ExplainPropertyText("Remote SQL", sql, es);
+	}
 }
 
 static bool

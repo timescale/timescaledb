@@ -52,8 +52,8 @@ install(
 add_subdirectory(bgw_policy)
 add_subdirectory(gapfill)
 add_subdirectory(continuous_aggs)
-add_subdirectory(fdw)
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")
+  add_subdirectory(fdw)
   add_subdirectory(remote)
 endif ()

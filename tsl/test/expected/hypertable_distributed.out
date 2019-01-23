@@ -7,6 +7,12 @@
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS server_3;
+SET client_min_messages TO NOTICE;
 CREATE DATABASE server_1;
 CREATE DATABASE server_2;
 CREATE DATABASE server_3;
@@ -51,6 +57,7 @@ NOTICE:  adding not-null constraint to column "time"
 \c server_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time');
  hypertable_id | schema_name | table_name | created 
@@ -68,6 +75,7 @@ SELECT * FROM create_hypertable('underreplicated', 'time');
 \c server_2
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time');
  hypertable_id | schema_name | table_name | created 
@@ -85,6 +93,7 @@ SELECT * FROM create_hypertable('underreplicated', 'time');
 \c server_3
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time');
  hypertable_id | schema_name | table_name | created 
@@ -157,8 +166,51 @@ SELECT * FROM test.show_triggers('disttable');
  ts_insert_blocker      |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON disttable FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (2 rows)
 
--- Drop a column
+-- Drop a column. This will make the attribute numbers of the
+-- hypertable's root relation differ from newly created chunks. It is
+-- a way to test that we properly handle attributed conversion between
+-- the root table and chunks
 ALTER TABLE disttable DROP COLUMN color;
+-- Currently no distributed DDL support, so need to manually drop
+-- column on datanodes
+\c server_1
+ALTER TABLE disttable DROP COLUMN color;
+\c server_2
+ALTER TABLE disttable DROP COLUMN color;
+\c server_3
+ALTER TABLE disttable DROP COLUMN color;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- EXPLAIN some inserts to see what plans and explain output for
+-- remote inserts look like
+EXPLAIN
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.1);
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=24)
+ Insert on distributed hypertable disttable
+   ->  Insert on disttable  (cost=0.00..0.01 rows=1 width=24)
+         ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=24)
+               ->  Result  (cost=0.00..0.01 rows=1 width=24)
+(5 rows)
+
+EXPLAIN VERBOSE
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.1);
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=24)
+ Insert on distributed hypertable public.disttable
+   Servers: server_1, server_2, server_3
+   Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3)
+   ->  Insert on public.disttable  (cost=0.00..0.01 rows=1 width=24)
+         ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=24)
+               Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
+               ->  Result  (cost=0.00..0.01 rows=1 width=24)
+                     Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
+(9 rows)
+
 -- Create some chunks through insertion
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1),
@@ -166,9 +218,6 @@ INSERT INTO disttable VALUES
        ('2018-01-02 08:01', 2, 1.3),
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_1_dist_chunk" [server_1]: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3)
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_2_dist_chunk" [server_2]: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3)
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_3_dist_chunk" [server_3]: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3)
 -- Show chunks created
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
@@ -197,6 +246,14 @@ FROM show_chunks('disttable');
         1 |             1 | _timescaledb_internal | _hyper_1_1_dist_chunk | r       | {"time": [1482969600000000, 1483574400000000]}
 (1 row)
 
+SELECT * FROM disttable;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+ Sun Jan 01 08:01:00 2017 PST |      1 |  1.2
+ Sun Jan 01 06:05:00 2017 PST |      1 |  1.4
+(3 rows)
+
 \c server_2
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
@@ -205,12 +262,24 @@ FROM show_chunks('disttable');
         1 |             1 | _timescaledb_internal | _hyper_1_2_dist_chunk | r       | {"time": [1514419200000000, 1515024000000000]}
 (1 row)
 
+SELECT * FROM disttable;
+             time             | device | temp 
+------------------------------+--------+------
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3
+(1 row)
+
 \c server_3
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
  chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                     slices                     
 ----------+---------------+-----------------------+-----------------------+---------+------------------------------------------------
         1 |             1 | _timescaledb_internal | _hyper_1_3_dist_chunk | r       | {"time": [1545868800000000, 1546473600000000]}
+(1 row)
+
+SELECT * FROM disttable;
+             time             | device | temp 
+------------------------------+--------+------
+ Tue Jan 01 09:11:00 2019 PST |      3 |  2.1
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -285,6 +354,16 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 
 -- Check that creating columns work
 ALTER TABLE disttable ADD COLUMN "Color" int;
+-- Currently no distributed DDL support, so need to manually add
+-- column on datanodes
+\c server_1
+ALTER TABLE disttable ADD COLUMN "Color" int;
+\c server_2
+ALTER TABLE disttable ADD COLUMN "Color" int;
+\c server_3
+ALTER TABLE disttable ADD COLUMN "Color" int;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 SELECT * FROM test.show_columns('disttable');
  Column |           Type           | NotNull 
 --------+--------------------------+---------
@@ -343,41 +422,63 @@ WHERE c.chunk_id = cc.chunk_id;
         3 |                  3 | constraint_3    | 
 (3 rows)
 
--- Test INSERTS with returning
-INSERT INTO disttable VALUES ('2017-09-02 06:09', 4, 9.8)
-RETURNING time, temp;
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_4_dist_chunk" [server_2]: INSERT INTO public.disttable("time", device, temp, "Color") VALUES ($1, $2, $3, $4) RETURNING "time", device, temp, "Color"
-             time             | temp 
-------------------------------+------
- Sat Sep 02 06:09:00 2017 PDT |  9.8
+-- Test INSERTS with RETURNING. Since we previously dropped a column
+-- on the hypertable, this also tests that we handle conversion of the
+-- attribute numbers in the RETURNING clause, since they now differ
+-- between the hypertable root relation and the chunk currently
+-- RETURNING from.
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-02 06:09', 4, 1, 9.8)
+RETURNING time, "Color", temp;
+             time             | Color | temp 
+------------------------------+-------+------
+ Sat Sep 02 06:09:00 2017 PDT |     1 |  9.8
 (1 row)
 
 -- On conflict
-INSERT INTO disttable VALUES ('2017-09-08 08:13', 6, 10.5)
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_5_dist_chunk" [server_3]: INSERT INTO public.disttable("time", device, temp, "Color") VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING "time", device, temp, "Color"
+-- Show new row and that conflicting row is not inserted
+\c server_1
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1 |      
+ Sun Jan 01 08:01:00 2017 PST |      1 |  1.2 |      
+ Sun Jan 01 06:05:00 2017 PST |      1 |  1.4 |      
+(3 rows)
+
+\c server_2
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
+ Sat Sep 02 06:09:00 2017 PDT |      4 |  9.8 |     1
+(2 rows)
+
+\c server_3
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Tue Jan 01 09:11:00 2019 PST |      3 |  2.1 |      
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 \set ON_ERROR_STOP 0
 -- ON CONFLICT only works with DO NOTHING
-INSERT INTO disttable VALUES ('2017-09-09 08:13', 7, 27.5)
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-09 08:13', 7, 3, 27.5)
 ON CONFLICT (time) DO UPDATE SET temp = 3.2;
 ERROR:  unexpected ON CONFLICT specification: 2
 \set ON_ERROR_STOP 1
 -- Test updates
 UPDATE disttable SET device = 4 WHERE device = 3;
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_1_dist_chunk" [server_1]: UPDATE _timescaledb_internal._hyper_1_1_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_2_dist_chunk" [server_2]: UPDATE _timescaledb_internal._hyper_1_2_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_3_dist_chunk" [server_3]: UPDATE _timescaledb_internal._hyper_1_3_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_4_dist_chunk" [server_2]: UPDATE _timescaledb_internal._hyper_1_4_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_5_dist_chunk" [server_3]: UPDATE _timescaledb_internal._hyper_1_5_dist_chunk SET device = $2 WHERE ctid = $1
 WITH devices AS (
      SELECT DISTINCT device FROM disttable ORDER BY device
 )
 UPDATE disttable SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_1_dist_chunk" [server_1]: UPDATE _timescaledb_internal._hyper_1_1_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_2_dist_chunk" [server_2]: UPDATE _timescaledb_internal._hyper_1_2_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_3_dist_chunk" [server_3]: UPDATE _timescaledb_internal._hyper_1_3_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_4_dist_chunk" [server_2]: UPDATE _timescaledb_internal._hyper_1_4_dist_chunk SET device = $2 WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_5_dist_chunk" [server_3]: UPDATE _timescaledb_internal._hyper_1_5_dist_chunk SET device = $2 WHERE ctid = $1
 \set ON_ERROR_STOP 0
 -- Updates referencing non-existing column
 UPDATE disttable SET device = 4 WHERE no_such_column = 2;
@@ -390,15 +491,9 @@ ERROR:  cannot assign to system column "tableoid" at character 22
 \set ON_ERROR_STOP 1
 -- Test deletes
 DELETE FROM disttable WHERE device = 3;
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_1_dist_chunk" [server_1]: DELETE FROM _timescaledb_internal._hyper_1_1_dist_chunk WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_2_dist_chunk" [server_2]: DELETE FROM _timescaledb_internal._hyper_1_2_dist_chunk WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_3_dist_chunk" [server_3]: DELETE FROM _timescaledb_internal._hyper_1_3_dist_chunk WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_4_dist_chunk" [server_2]: DELETE FROM _timescaledb_internal._hyper_1_4_dist_chunk WHERE ctid = $1
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_1_5_dist_chunk" [server_3]: DELETE FROM _timescaledb_internal._hyper_1_5_dist_chunk WHERE ctid = $1
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1);
-WARNING:  under-replicated chunk 6, lacks 1 server(s)
-NOTICE:  BEGIN FOREIGN MODIFY on chunk "_hyper_2_6_dist_chunk" [server_1,server_2,server_3]: INSERT INTO public.underreplicated("time", device, temp) VALUES ($1, $2, $3)
+WARNING:  under-replicated chunk 5, lacks 1 server(s)
 SELECT * FROM _timescaledb_catalog.chunk_server;
  chunk_id | server_chunk_id | server_name 
 ----------+-----------------+-------------
@@ -406,17 +501,16 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
         2 |               1 | server_2
         3 |               1 | server_3
         4 |               2 | server_2
+        5 |               2 | server_1
+        5 |               3 | server_2
         5 |               2 | server_3
-        6 |               2 | server_1
-        6 |               3 | server_2
-        6 |               3 | server_3
-(8 rows)
+(7 rows)
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
  chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                     slices                     
 ----------+---------------+-----------------------+-----------------------+---------+------------------------------------------------
-        6 |             2 | _timescaledb_internal | _hyper_2_6_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000]}
+        5 |             2 | _timescaledb_internal | _hyper_2_5_dist_chunk | f       | {"time": [1482969600000000, 1483574400000000]}
 (1 row)
 
 -- Show chunk server mappings
@@ -427,9 +521,8 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
         2 |               1 | server_2
         3 |               1 | server_3
         4 |               2 | server_2
+        5 |               2 | server_1
+        5 |               3 | server_2
         5 |               2 | server_3
-        6 |               2 | server_1
-        6 |               3 | server_2
-        6 |               3 | server_3
-(8 rows)
+(7 rows)
 

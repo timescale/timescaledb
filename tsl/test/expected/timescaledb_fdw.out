@@ -2,8 +2,28 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE SERVER some_server FOREIGN DATA WRAPPER timescaledb_fdw;
-CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER some_server;
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Cleanup from other potential tests that created this database
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+SET client_min_messages TO NOTICE;
+CREATE DATABASE server_1;
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
+ server_name |   host    | port  | database |       username       |   server_username    | created 
+-------------+-----------+-------+----------+----------------------+----------------------+---------
+ server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
+(1 row)
+
+\c server_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE TABLE test_ft (c0 int, c1 varchar(10));
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER server_1;
 SELECT * FROM test_ft;
  c0 |  c1  
 ----+------
@@ -11,11 +31,8 @@ SELECT * FROM test_ft;
 (1 row)
 
 INSERT INTO test_ft VALUES (1, 'test');
-NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": INSERT INTO public.test_ft(c0, c1) VALUES ($1, $2)
 UPDATE test_ft SET c1 = 'new_test';
-NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": UPDATE public.test_ft SET c1 = $2 WHERE ctid = $1
 DELETE FROM test_ft WHERE c0 = 1;
-NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": DELETE FROM public.test_ft WHERE ctid = $1
 EXPLAIN SELECT * FROM test_ft;
                          QUERY PLAN                         
 ------------------------------------------------------------
@@ -23,7 +40,6 @@ EXPLAIN SELECT * FROM test_ft;
 (1 row)
 
 EXPLAIN INSERT INTO test_ft VALUES (1, 'test');
-NOTICE:  BEGIN FOREIGN MODIFY on non-chunk table "test_ft": INSERT INTO public.test_ft(c0, c1) VALUES ($1, $2)
                       QUERY PLAN                      
 ------------------------------------------------------
  Insert on test_ft  (cost=0.00..0.01 rows=1 width=42)
