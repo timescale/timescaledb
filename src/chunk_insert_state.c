@@ -627,11 +627,26 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		{
 			resrelinfo->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
 			resrelinfo->ri_usesFdwDirectModify = false;
-			resrelinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
-														  resrelinfo,
-														  fdwprivate,
-														  0,
-														  dispatch->eflags);
+
+			if (NULL != resrelinfo->ri_FdwRoutine->BeginForeignModify)
+			{
+				/*
+				 * Since the fdwprivate data is part of the plan it must only
+				 * consist of Node objects that can be copied. Therefore, we
+				 * cannot directly append the non-Node ChunkInsertState to the
+				 * private data. Instead, we make a copy of the private data
+				 * before passing it on to the FDW handler function. In the
+				 * FDW, the ChunkInsertState will be at the offset defined by
+				 * the FdwModifyPrivateChunkInsertState (see
+				 * tsl/src/fdw/timescaledb_fdw.c).
+				 */
+				fdwprivate = lappend(list_copy(fdwprivate), state);
+				resrelinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
+															  resrelinfo,
+															  fdwprivate,
+															  0,
+															  dispatch->eflags);
+			}
 		}
 	}
 
@@ -653,9 +668,13 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
 	MemoryContext deletion_context;
 	MemoryContextCallback *free_callback;
+	ResultRelInfo *rri = state->result_relation_info;
 
 	if (state == NULL)
 		return;
+
+	if (NULL != rri->ri_FdwRoutine && NULL != rri->ri_FdwRoutine->EndForeignModify)
+		rri->ri_FdwRoutine->EndForeignModify(state->estate, rri);
 
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);

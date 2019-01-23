@@ -813,6 +813,8 @@ extern int oid_cmp(const void *p1, const void *p2);
 #include "compat/tuptable.h"
 #include "compat/tableam.h"
 
+#define ExecStoreHeapTuple(tuple, slot, should_free)                                               \
+	ExecStoreTuple(tuple, slot, InvalidBuffer, should_free)
 #else
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
 #endif

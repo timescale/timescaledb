@@ -9,6 +9,12 @@ ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS server_3;
+SET client_min_messages TO NOTICE;
 CREATE DATABASE server_1;
 CREATE DATABASE server_2;
 CREATE DATABASE server_3;
@@ -31,6 +37,7 @@ SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor =>
 \c server_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time');
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
@@ -38,6 +45,7 @@ SELECT * FROM create_hypertable('underreplicated', 'time');
 \c server_2
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time');
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
@@ -45,6 +53,7 @@ SELECT * FROM create_hypertable('underreplicated', 'time');
 \c server_3
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time');
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
@@ -81,8 +90,31 @@ SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_indexes('disttable');
 SELECT * FROM test.show_triggers('disttable');
 
--- Drop a column
+-- Drop a column. This will make the attribute numbers of the
+-- hypertable's root relation differ from newly created chunks. It is
+-- a way to test that we properly handle attributed conversion between
+-- the root table and chunks
 ALTER TABLE disttable DROP COLUMN color;
+-- Currently no distributed DDL support, so need to manually drop
+-- column on datanodes
+\c server_1
+ALTER TABLE disttable DROP COLUMN color;
+\c server_2
+ALTER TABLE disttable DROP COLUMN color;
+\c server_3
+ALTER TABLE disttable DROP COLUMN color;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- EXPLAIN some inserts to see what plans and explain output for
+-- remote inserts look like
+EXPLAIN
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.1);
+
+EXPLAIN VERBOSE
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.1);
 
 -- Create some chunks through insertion
 INSERT INTO disttable VALUES
@@ -103,12 +135,15 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
 \c server_1
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
+SELECT * FROM disttable;
 \c server_2
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
+SELECT * FROM disttable;
 \c server_3
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
+SELECT * FROM disttable;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
@@ -147,6 +182,17 @@ SELECT * FROM _timescaledb_catalog.chunk_index;
 -- Check that creating columns work
 ALTER TABLE disttable ADD COLUMN "Color" int;
 
+-- Currently no distributed DDL support, so need to manually add
+-- column on datanodes
+\c server_1
+ALTER TABLE disttable ADD COLUMN "Color" int;
+\c server_2
+ALTER TABLE disttable ADD COLUMN "Color" int;
+\c server_3
+ALTER TABLE disttable ADD COLUMN "Color" int;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
 SELECT * FROM test.show_columns('disttable');
 SELECT st."Child" as chunk_relid, test.show_columns((st)."Child")
 FROM test.show_subtables('disttable') st;
@@ -166,17 +212,34 @@ FROM (SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 WHERE c.chunk_id = cc.chunk_id;
 
 
--- Test INSERTS with returning
-INSERT INTO disttable VALUES ('2017-09-02 06:09', 4, 9.8)
-RETURNING time, temp;
+-- Test INSERTS with RETURNING. Since we previously dropped a column
+-- on the hypertable, this also tests that we handle conversion of the
+-- attribute numbers in the RETURNING clause, since they now differ
+-- between the hypertable root relation and the chunk currently
+-- RETURNING from.
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-02 06:09', 4, 1, 9.8)
+RETURNING time, "Color", temp;
 
 -- On conflict
-INSERT INTO disttable VALUES ('2017-09-08 08:13', 6, 10.5)
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
+
+-- Show new row and that conflicting row is not inserted
+\c server_1
+SELECT * FROM disttable;
+\c server_2
+SELECT * FROM disttable;
+\c server_3
+SELECT * FROM disttable;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 \set ON_ERROR_STOP 0
 -- ON CONFLICT only works with DO NOTHING
-INSERT INTO disttable VALUES ('2017-09-09 08:13', 7, 27.5)
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-09 08:13', 7, 3, 27.5)
 ON CONFLICT (time) DO UPDATE SET temp = 3.2;
 \set ON_ERROR_STOP 1
 

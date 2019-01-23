@@ -23,6 +23,7 @@ typedef struct HypertableInsertState
 	CustomScanState cscan_state;
 	ModifyTable *mt;
 	List *serveroids;
+	FdwRoutine *fdwroutine;
 } HypertableInsertState;
 
 extern void ts_hypertable_insert_fixup_tlist(Plan *plan);
