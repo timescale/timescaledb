@@ -21,6 +21,7 @@
 #include <commands/event_trigger.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <storage/lmgr.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -1316,6 +1317,7 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 	ClusterStmt *stmt = (ClusterStmt *) parsetree;
 	Cache *hcache;
 	Hypertable *ht;
+	bool handled = false;
 
 	Assert(IsA(stmt, ClusterStmt));
 
@@ -1330,9 +1332,11 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 	{
 		bool is_top_level = (context == PROCESS_UTILITY_TOPLEVEL);
 		Oid index_relid;
+		Relation index_rel;
 		List *chunk_indexes;
 		ListCell *lc;
 		MemoryContext old, mcxt;
+		LockRelId cluster_index_lockid;
 
 		if (!pg_class_ownercheck(ht->main_table_relid, GetUserId()))
 			aclcheck_error(ACLCHECK_NOT_OWNER,
@@ -1368,6 +1372,28 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 			ts_cache_release(hcache);
 			return false;
 		}
+
+		/*
+		 * DROP INDEX locks the table then the index, to prevent deadlocks we
+		 * lock them in the same order. The main table lock will be released
+		 * when the current transaction commits, and never taken again. We
+		 * will use the index relation to grab a session lock on the index,
+		 * which we will hold throughout CLUSTER
+		 */
+		LockRelationOid(ht->main_table_relid, AccessShareLock);
+		index_rel = relation_open(index_relid, AccessShareLock);
+		cluster_index_lockid = index_rel->rd_lockInfo.lockRelId;
+
+		relation_close(index_rel, NoLock);
+
+		/*
+		 * mark the main table as clustered, even though it has no data, so
+		 * future calls to CLUSTER don't need to pass in the index
+		 */
+		ts_chunk_index_mark_clustered(ht->main_table_relid, index_relid);
+
+		/* we will keep holding this lock throughout CLUSTER */
+		LockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
 
 		/*
 		 * The list of chunks and their indexes need to be on a memory context
@@ -1418,10 +1444,13 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 
 		/* Clean up working storage */
 		MemoryContextDelete(mcxt);
+
+		UnlockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+		handled = true;
 	}
 
 	ts_cache_release(hcache);
-	return false;
+	return handled;
 }
 
 /*
