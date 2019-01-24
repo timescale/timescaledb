@@ -1727,7 +1727,8 @@ process_index_start(ProcessUtilityArgs *args)
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction);
+														   info.extended_options.multitransaction,
+														   ht->fd.replication_factor > 0);
 	info.obj.objectId = root_table_index.objectId;
 
 	/* CREATE INDEX on the chunks */
