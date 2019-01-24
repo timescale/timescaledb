@@ -4,7 +4,6 @@ set(TEST_FILES
   edition.sql
   gapfill.sql
   partialize_finalize.sql
-  chunk_api.sql
 )
 
 set(TEST_FILES_DEBUG
@@ -20,7 +19,6 @@ set(TEST_FILES_DEBUG
   continuous_aggs_usage.sql
   ddl_hook.sql
   tsl_tables.sql
-  timescaledb_fdw.sql
 )
 
 set(TEST_TEMPLATES
@@ -50,11 +48,6 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 #compression only for PG > 9
 if (${PG_VERSION_MAJOR} GREATER "9")
-
-  list(APPEND TEST_FILES
-    hypertable_distributed.sql
-  )
-
   list(APPEND TEST_FILES_DEBUG
     compress_table.sql
     compression.sql
@@ -65,7 +58,6 @@ if (${PG_VERSION_MAJOR} GREATER "9")
     compression_segment_meta.sql
     compression_bgw.sql
     compress_bgw_reorder_drop_chunks.sql
-    server.sql
     transparent_decompression_queries.sql
   )
 
@@ -102,12 +94,18 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
 endforeach(TEMPLATE_FILE)
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")
+  list(APPEND TEST_FILES
+    hypertable_distributed.sql
+    chunk_api.sql
+    timescaledb_fdw.sql
+  )
   list(APPEND TEST_FILES_DEBUG
     remote_connection.sql
     remote_connection_cache.sql
     remote_txn.sql
     remote_txn_id.sql
-    )
+    server.sql
+  )
 endif ()
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
