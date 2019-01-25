@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
 CREATE TABLE chunkapi (time timestamptz, device int, temp float);
 
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
@@ -36,11 +40,14 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [151502400
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
 
--- Create a chunk that does not collide
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'public', 'my_chunk_prefix');
+-- Create a chunk that does not collide and with custom schema and name
+CREATE SCHEMA "ChunkSchema";
+
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('chunkapi');
 
--- Show the new chunk in the public schema
-\dt
+-- Show the new chunks
+\dt public.*
+\dt "ChunkSchema".*

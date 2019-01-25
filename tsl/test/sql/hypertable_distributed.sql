@@ -5,20 +5,52 @@
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 -- Need explicit password for non-super users to connect
-ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
-GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
-SET ROLE :ROLE_DEFAULT_PERM_USER;
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
--- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'perm_user_pass');
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'perm_user_pass');
-SELECT * FROM add_server('server_3', database => 'server_3', password => 'perm_user_pass');
+CREATE DATABASE server_1;
+CREATE DATABASE server_2;
+CREATE DATABASE server_3;
 
--- Create a distributed hypertable. Add a trigger and primary key
+-- Add servers using the TimescaleDB server management API
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass');
+SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass');
+
+-- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
+
+-- An underreplicated table that will has a replication_factor > num_servers
+CREATE TABLE underreplicated(time timestamptz, device int, temp float);
+SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
+
+-- Create tables on remote servers
+\c server_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
+SELECT * FROM create_hypertable('disttable', 'time');
+CREATE TABLE underreplicated(time timestamptz, device int, temp float);
+SELECT * FROM create_hypertable('underreplicated', 'time');
+\c server_2
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
+SELECT * FROM create_hypertable('disttable', 'time');
+CREATE TABLE underreplicated(time timestamptz, device int, temp float);
+SELECT * FROM create_hypertable('underreplicated', 'time');
+\c server_3
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
+SELECT * FROM create_hypertable('disttable', 'time');
+CREATE TABLE underreplicated(time timestamptz, device int, temp float);
+SELECT * FROM create_hypertable('underreplicated', 'time');
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
@@ -63,6 +95,22 @@ INSERT INTO disttable VALUES
 -- Show chunks created
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
+
+-- Show that there are assigned server_chunk_id:s in chunk server mappings
+SELECT * FROM _timescaledb_catalog.chunk_server;
+
+-- Show that chunks are created on remote servers
+\c server_1
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('disttable');
+\c server_2
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('disttable');
+\c server_3
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('disttable');
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
@@ -152,11 +200,11 @@ UPDATE disttable SET tableoid = 4 WHERE device = 2;
 DELETE FROM disttable WHERE device = 3;
 
 -- Test underreplicated chunk warning
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
-
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1);
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
+
+-- Show chunk server mappings
+SELECT * FROM _timescaledb_catalog.chunk_server;

@@ -143,6 +143,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.delete_server = server_delete,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
+#if !PG96
+	.create_chunk_on_servers = chunk_api_create_on_servers,
+#endif
 	.get_servername_list = server_get_servername_list,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
