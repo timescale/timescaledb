@@ -144,7 +144,12 @@ add_custom_target(sqlfile ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE
 set(MOD_FILE_REGEX "([0-9]+\\.[0-9]+\\.*[0-9]+[-a-z0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]+[-a-z0-9]*).sql")
 
 # We'd like to process the updates in reverse (descending) order
-set(MOD_FILES_LIST "${MOD_FILES_VERSIONED};${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql")
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/updates/${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql")
+  set(MOD_FILES_LIST ${MOD_FILES_VERSIONED})
+else()
+  set(MOD_FILES_LIST "${MOD_FILES_VERSIONED};updates/${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql")
+endif()
+
 list(REVERSE MOD_FILES_LIST)
 
 # Variable that will hold the list of update scripts from every
@@ -155,7 +160,7 @@ set(UPDATE_SCRIPTS "")
 # previous version that moves us further away from the current
 # version, thus making the update path longer as we move back in
 # history
-set(CURR_MOD_FILES ${LASTEST_MOD_VERSIONED})
+set(CURR_MOD_FILES "${LASTEST_MOD_VERSIONED}")
 
 # Now loop through the modfiles and generate the update files
 foreach(transition_mod_file ${MOD_FILES_LIST})
