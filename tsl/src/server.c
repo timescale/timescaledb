@@ -13,16 +13,17 @@
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <utils/builtins.h>
+#include <libpq/crypt.h>
 #include <miscadmin.h>
 #include <funcapi.h>
 
 #include <hypertable_server.h>
+#include <compat.h>
+#include <catalog.h>
 
+#include "fdw/timescaledb_fdw.h"
 #include "server.h"
-#include "compat.h"
-#include "catalog.h"
 
-#define TS_FOREIGN_DATA_WRAPPER_NAME "timescaledb_fdw"
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
 
@@ -30,10 +31,12 @@
  * Create a user mapping.
  *
  * Returns the OID of the created user mapping.
+ *
+ * Non-superusers must provide a password.
  */
 static Oid
 create_user_mapping(const char *username, const char *server_username, const char *servername,
-					bool if_not_exists)
+					const char *password, bool if_not_exists)
 {
 	ObjectAddress objaddr;
 	RoleSpec rolespec = {
@@ -51,9 +54,26 @@ create_user_mapping(const char *username, const char *server_username, const cha
 		.if_not_exists = if_not_exists,
 #endif
 		.servername = (char *) servername,
-		.options = list_make1(
-			makeDefElemCompat("user", (Node *) makeString(pstrdup(server_username)), -1)),
+		.options = NIL,
 	};
+
+	Assert(NULL != username && NULL != server_username && NULL != servername);
+
+	stmt.options =
+		list_make1(makeDefElemCompat("user", (Node *) makeString(pstrdup(server_username)), -1));
+
+	/* Non-superusers must provide a password */
+	if (!superuser() && (NULL == password || password[0] == '\0'))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_PARAMETER),
+				 errmsg("no password specified for user \"%s\"", server_username),
+				 errhint("Specify a password to use when connecting to server \"%s\"",
+						 servername)));
+
+	if (NULL != password)
+		stmt.options =
+			lappend(stmt.options,
+					makeDefElemCompat("password", (Node *) makeString(pstrdup(password)), -1));
 
 	objaddr = CreateUserMapping(&stmt);
 
@@ -73,7 +93,7 @@ create_foreign_server(const char *servername, const char *host, int32 port, cons
 	CreateForeignServerStmt stmt = {
 		.type = T_CreateForeignServerStmt,
 		.servername = (char *) servername,
-		.fdwname = TS_FOREIGN_DATA_WRAPPER_NAME,
+		.fdwname = TIMESCALEDB_FDW_NAME,
 		.options =
 			list_make3(makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1),
 					   makeDefElemCompat("port", (Node *) makeInteger(port), -1),
@@ -170,7 +190,8 @@ server_add(PG_FUNCTION_ARGS)
 	Oid userid = PG_ARGISNULL(4) ? GetUserId() : PG_GETARG_OID(4);
 	const char *server_username =
 		PG_ARGISNULL(5) ? GetUserNameFromId(userid, false) : PG_GETARG_CSTRING(5);
-	bool if_not_exists = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
+	const char *password = PG_ARGISNULL(6) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(6));
+	bool if_not_exists = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
 	ForeignServer *server;
 	UserMapping *um;
 	const char *username;
@@ -221,7 +242,7 @@ server_add(PG_FUNCTION_ARGS)
 		if (!created)
 			elog(NOTICE, "adding user mapping for \"%s\" to server \"%s\"", username, servername);
 
-		create_user_mapping(username, server_username, servername, if_not_exists);
+		create_user_mapping(username, server_username, servername, password, if_not_exists);
 
 		/* Make user mapping visible */
 		CommandCounterIncrement();
@@ -288,7 +309,7 @@ server_get_servername_list(void)
 	ScanKeyData scankey[1];
 	SysScanDesc scandesc;
 	Relation rel;
-	ForeignDataWrapper *fdw = GetForeignDataWrapperByName(TS_FOREIGN_DATA_WRAPPER_NAME, false);
+	ForeignDataWrapper *fdw = GetForeignDataWrapperByName(TIMESCALEDB_FDW_NAME, false);
 	List *servers = NIL;
 
 	rel = heap_open(ForeignServerRelationId, AccessShareLock);

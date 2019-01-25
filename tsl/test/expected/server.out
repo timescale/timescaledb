@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 CREATE OR REPLACE FUNCTION show_servers()
 RETURNS TABLE(server_name NAME, host TEXT, port INT, dbname NAME)
@@ -16,7 +17,7 @@ OPTIONS (host 'localhost', port '5432', dbname 'server_1');
 -- Create a user mapping for the server
 CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_1 OPTIONS (user 'cluster_user_1');
 -- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_2');
+SELECT * FROM add_server('server_2', password => 'perm_user_pass');
  server_name |   host    | port | database  |     username      |  server_username  | created 
 -------------+-----------+------+-----------+-------------------+-------------------+---------
  server_2    | localhost | 5432 | db_server | default_perm_user | default_perm_user | t
@@ -24,30 +25,36 @@ SELECT * FROM add_server('server_2');
 
 \set ON_ERROR_STOP 0
 -- Add again
-SELECT * FROM add_server('server_2');
+SELECT * FROM add_server('server_2', password => 'perm_user_pass');
 ERROR:  server "server_2" already exists
+-- Add without password
+SELECT * FROM add_server('server_3');
+ERROR:  no password specified for user "default_perm_user"
 -- Add NULL server
 SELECT * FROM add_server(NULL);
 ERROR:  invalid server name
 \set ON_ERROR_STOP 1
 -- Should not generate error with if_not_exists option
-SELECT * FROM add_server('server_2', if_not_exists => true);
+SELECT * FROM add_server('server_2', password => 'perm_user_pass', if_not_exists => true);
  server_name |   host    | port | database  |     username      |  server_username  | created 
 -------------+-----------+------+-----------+-------------------+-------------------+---------
  server_2    | localhost | 5432 | db_server | default_perm_user | default_perm_user | f
 (1 row)
 
+RESET ROLE;
+-- Superuser requires no password
 SELECT * FROM add_server('server_3', host => '192.168.3.4', database => 'server_2', remote_user => 'cluster_user_2');
- server_name |    host     | port | database |     username      | server_username | created 
--------------+-------------+------+----------+-------------------+-----------------+---------
- server_3    | 192.168.3.4 | 5432 | server_2 | default_perm_user | cluster_user_2  | t
+ server_name |    host     | port | database |  username  | server_username | created 
+-------------+-------------+------+----------+------------+-----------------+---------
+ server_3    | 192.168.3.4 | 5432 | server_2 | super_user | cluster_user_2  | t
 (1 row)
 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Server exists, but no user mapping
 CREATE SERVER server_4 FOREIGN DATA WRAPPER timescaledb_fdw
 OPTIONS (host 'localhost', port '5432', dbname 'server_4');
 -- User mapping should be added with NOTICE
-SELECT * FROM add_server('server_4', if_not_exists => true);
+SELECT * FROM add_server('server_4', password => 'perm_user_pass', if_not_exists => true);
 NOTICE:  adding user mapping for "default_perm_user" to server "server_4"
  server_name |   host    | port | database  |     username      |  server_username  | created 
 -------------+-----------+------+-----------+-------------------+-------------------+---------
@@ -92,28 +99,34 @@ SELECT rolname, srvname, umoptions
 FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
 WHERE a.oid = um.umuser AND fs.oid = um.umserver
 ORDER BY srvname;
-      rolname      | srvname  |        umoptions         
--------------------+----------+--------------------------
+      rolname      | srvname  |                    umoptions                     
+-------------------+----------+--------------------------------------------------
  super_user        | server_1 | {user=cluster_user_1}
- default_perm_user | server_2 | {user=default_perm_user}
- default_perm_user | server_3 | {user=cluster_user_2}
- default_perm_user | server_4 | {user=default_perm_user}
+ default_perm_user | server_2 | {user=default_perm_user,password=perm_user_pass}
+ super_user        | server_3 | {user=cluster_user_2}
+ default_perm_user | server_4 | {user=default_perm_user,password=perm_user_pass}
 (4 rows)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Delete a server
 \set ON_ERROR_STOP 0
+-- Cannot delete if not owner
+SELECT * FROM delete_server('server_3');
+ERROR:  must be owner of foreign server server_3
 -- Must use cascade because of user mappings
+RESET ROLE;
 SELECT * FROM delete_server('server_3');
 ERROR:  cannot drop server server_3 because other objects depend on it
 \set ON_ERROR_STOP 1
+-- Should work as superuser with cascade
 SELECT * FROM delete_server('server_3', cascade => true);
-NOTICE:  drop cascades to user mapping for default_perm_user on server server_3
+NOTICE:  drop cascades to user mapping for super_user on server server_3
  delete_server 
 ---------------
  t
 (1 row)
 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT srvname, srvoptions
 FROM pg_foreign_server;
  srvname  |                 srvoptions                  
@@ -128,11 +141,11 @@ SELECT rolname, srvname, umoptions
 FROM pg_user_mapping um, pg_authid a, pg_foreign_server fs
 WHERE a.oid = um.umuser AND fs.oid = um.umserver
 ORDER BY srvname;
-      rolname      | srvname  |        umoptions         
--------------------+----------+--------------------------
+      rolname      | srvname  |                    umoptions                     
+-------------------+----------+--------------------------------------------------
  super_user        | server_1 | {user=cluster_user_1}
- default_perm_user | server_2 | {user=default_perm_user}
- default_perm_user | server_4 | {user=default_perm_user}
+ default_perm_user | server_2 | {user=default_perm_user,password=perm_user_pass}
+ default_perm_user | server_4 | {user=default_perm_user,password=perm_user_pass}
 (3 rows)
 
 \set ON_ERROR_STOP 0
