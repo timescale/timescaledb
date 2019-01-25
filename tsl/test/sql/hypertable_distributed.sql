@@ -4,13 +4,15 @@
 
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+-- Need explicit password for non-super users to connect
+ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_1');
-SELECT * FROM add_server('server_2');
-SELECT * FROM add_server('server_3');
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'perm_user_pass');
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'perm_user_pass');
+SELECT * FROM add_server('server_3', database => 'server_3', password => 'perm_user_pass');
 
 -- Create a distributed hypertable. Add a trigger and primary key
 -- constraint to test how those work
