@@ -59,6 +59,21 @@ SELECT * FROM _timescaledb_config.bgw_job;
 ----+------------------+----------+-------------------+-------------+-------------+--------------
 (0 rows)
 
+SELECT * FROM timescaledb_information.drop_chunks_policies;
+ hypertable | older_than | cascade | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+------------+------------+---------+--------+-------------------+-------------+-------------+--------------
+(0 rows)
+
+SELECT * FROM timescaledb_information.reorder_policies;
+ hypertable | hypertable_index_name | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+------------+-----------------------+--------+-------------------+-------------+-------------+--------------
+(0 rows)
+
+SELECT * FROM timescaledb_information.policy_stats;
+ hypertable | job_id | job_type | last_run_success | last_finish | last_start | next_start | total_runs | total_failures 
+------------+--------+----------+------------------+-------------+------------+------------+------------+----------------
+(0 rows)
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 ------------------------------
 -- test reorder policy runs --
@@ -282,6 +297,19 @@ SELECT indexrelid::regclass, indisclustered
  _timescaledb_internal._hyper_1_3_chunk_test_reorder_table_time_idx | t
 (3 rows)
 
+--check that views work correctly 
+SELECT * FROM timescaledb_information.reorder_policies;
+     hypertable     |    hypertable_index_name    | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+--------------------+-----------------------------+--------+-------------------+-------------+-------------+--------------
+ test_reorder_table | test_reorder_table_time_idx |   1000 | @ 4 days          | @ 0         |          -1 | @ 1 day
+(1 row)
+
+SELECT * FROM timescaledb_information.policy_stats;
+     hypertable     | job_id | job_type | last_run_success |           last_finish           |           last_start            |           next_start            | total_runs | total_failures 
+--------------------+--------+----------+------------------+---------------------------------+---------------------------------+---------------------------------+------------+----------------
+ test_reorder_table |   1000 | reorder  | t                | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Tue Jan 04 16:00:00.05 2000 PST |          3 |              0
+(1 row)
+
 -- test deleting the policy
 SELECT remove_reorder_policy('test_reorder_table');
  remove_reorder_policy 
@@ -388,7 +416,7 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 SELECT add_drop_chunks_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
 WARNING:  Timescale License expired
 SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
-            alter_job_schedule            
+             alter_job_schedule              
 ---------------------------------------------
  (1001,"@ 1 sec","@ 5 mins",-1,"@ 12 hours")
 (1 row)
@@ -551,4 +579,17 @@ SELECT show_chunks('test_drop_chunks_table');
  _timescaledb_internal._hyper_2_7_chunk
  _timescaledb_internal._hyper_2_9_chunk
 (3 rows)
+
+--test that views work
+SELECT * FROM timescaledb_information.drop_chunks_policies;
+       hypertable       | older_than | cascade | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+------------------------+------------+---------+--------+-------------------+-------------+-------------+--------------
+ test_drop_chunks_table | @ 4 mons   | t       |   1001 | @ 1 sec           | @ 5 mins    |          -1 | @ 12 hours
+(1 row)
+
+SELECT * FROM timescaledb_information.policy_stats;
+       hypertable       | job_id |  job_type   | last_run_success |         last_finish          |          last_start          |          next_start          | total_runs | total_failures 
+------------------------+--------+-------------+------------------+------------------------------+------------------------------+------------------------------+------------+----------------
+ test_drop_chunks_table |   1001 | drop_chunks | t                | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:02 1999 PST |          2 |              0
+(1 row)
 

@@ -487,10 +487,13 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb');
                     objid                     
 ----------------------------------------------
+ timescaledb_information.policy_stats
+ timescaledb_information.reorder_policies
+ timescaledb_information.drop_chunks_policies
  timescaledb_information.license
  timescaledb_information.hypertable
  _timescaledb_internal.bgw_policy_chunk_stats
  _timescaledb_internal.bgw_job_stat
  _timescaledb_catalog.tablespace_id_seq
-(5 rows)
+(8 rows)
 

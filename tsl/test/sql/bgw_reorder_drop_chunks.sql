@@ -54,6 +54,9 @@ INSERT INTO public.bgw_dsm_handle_store VALUES (0);
 SELECT ts_bgw_params_create();
 
 SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM timescaledb_information.drop_chunks_policies;
+SELECT * FROM timescaledb_information.reorder_policies;
+SELECT * FROM timescaledb_information.policy_stats;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -160,6 +163,10 @@ SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
 
+--check that views work correctly 
+SELECT * FROM timescaledb_information.reorder_policies;
+SELECT * FROM timescaledb_information.policy_stats;
+
 -- test deleting the policy
 SELECT remove_reorder_policy('test_reorder_table');
 
@@ -181,6 +188,8 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
 SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
+
+
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
@@ -271,3 +280,7 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     where job_id=:drop_chunks_job_id;
 
 SELECT show_chunks('test_drop_chunks_table');
+
+--test that views work
+SELECT * FROM timescaledb_information.drop_chunks_policies;
+SELECT * FROM timescaledb_information.policy_stats;
