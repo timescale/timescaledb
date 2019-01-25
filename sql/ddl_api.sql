@@ -137,6 +137,8 @@ AS '@MODULE_PATHNAME@', 'ts_tablespace_detach_all_from_hypertable' LANGUAGE C VO
 CREATE OR REPLACE FUNCTION show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
 AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;
 
+-- Add a server to a TimescaleDB cluster. This also add a
+-- corresponding user mapping, if one does not already exist.
 CREATE OR REPLACE FUNCTION add_server(
     server_name            NAME,
     host                   TEXT = 'localhost',
@@ -144,10 +146,12 @@ CREATE OR REPLACE FUNCTION add_server(
     port                   INTEGER = 5432,
     local_user             REGROLE = NULL,
     remote_user            NAME = NULL,
+    password               TEXT = NULL,
     if_not_exists          BOOLEAN = FALSE
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_server_add' LANGUAGE C VOLATILE;
 
+-- Delete a server from a TimescaleDB cluster
 CREATE OR REPLACE FUNCTION delete_server(
     server_name            NAME,
     if_exists              BOOLEAN = FALSE,

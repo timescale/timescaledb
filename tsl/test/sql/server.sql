@@ -4,6 +4,7 @@
 
 -- Need to be super user to create extension and add servers
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
 
 CREATE OR REPLACE FUNCTION show_servers()
@@ -22,27 +23,31 @@ OPTIONS (host 'localhost', port '5432', dbname 'server_1');
 CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_1 OPTIONS (user 'cluster_user_1');
 
 -- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_2');
+SELECT * FROM add_server('server_2', password => 'perm_user_pass');
 
 \set ON_ERROR_STOP 0
 -- Add again
-SELECT * FROM add_server('server_2');
-
+SELECT * FROM add_server('server_2', password => 'perm_user_pass');
+-- Add without password
+SELECT * FROM add_server('server_3');
 -- Add NULL server
 SELECT * FROM add_server(NULL);
 \set ON_ERROR_STOP 1
 
 -- Should not generate error with if_not_exists option
-SELECT * FROM add_server('server_2', if_not_exists => true);
+SELECT * FROM add_server('server_2', password => 'perm_user_pass', if_not_exists => true);
 
+RESET ROLE;
+-- Superuser requires no password
 SELECT * FROM add_server('server_3', host => '192.168.3.4', database => 'server_2', remote_user => 'cluster_user_2');
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Server exists, but no user mapping
 CREATE SERVER server_4 FOREIGN DATA WRAPPER timescaledb_fdw
 OPTIONS (host 'localhost', port '5432', dbname 'server_4');
 
 -- User mapping should be added with NOTICE
-SELECT * FROM add_server('server_4', if_not_exists => true);
+SELECT * FROM add_server('server_4', password => 'perm_user_pass', if_not_exists => true);
 
 SELECT * FROM show_servers();
 
@@ -66,11 +71,15 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Delete a server
 \set ON_ERROR_STOP 0
+-- Cannot delete if not owner
+SELECT * FROM delete_server('server_3');
 -- Must use cascade because of user mappings
+RESET ROLE;
 SELECT * FROM delete_server('server_3');
 \set ON_ERROR_STOP 1
-
+-- Should work as superuser with cascade
 SELECT * FROM delete_server('server_3', cascade => true);
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT srvname, srvoptions
 FROM pg_foreign_server;
