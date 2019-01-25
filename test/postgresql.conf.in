@@ -5,3 +5,4 @@ timescaledb.telemetry_level=off
 timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'
 timescaledb.last_tuned_version='0.0.1'
 timescaledb_telemetry.cloud='ci'
+hba_file='@TEST_OUTPUT_DIR@/pg_hba.conf'

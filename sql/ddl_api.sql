@@ -143,7 +143,7 @@ CREATE OR REPLACE FUNCTION add_server(
     server_name            NAME,
     host                   TEXT = 'localhost',
     database               NAME = current_database(),
-    port                   INTEGER = 5432,
+    port                   INTEGER = inet_server_port(),
     local_user             REGROLE = NULL,
     remote_user            NAME = NULL,
     password               TEXT = NULL,

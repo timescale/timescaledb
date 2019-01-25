@@ -85,7 +85,8 @@ plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo
 
 	if (CMD_SELECT != parse->commandType)
 		return;
-	partialfnoid = get_function_oid(TS_PARTIALFN, INTERNAL_SCHEMA_NAME, lengthof(argtyp), argtyp);
+	partialfnoid =
+		ts_get_function_oid(TS_PARTIALFN, INTERNAL_SCHEMA_NAME, lengthof(argtyp), argtyp);
 	Assert(partialfnoid != InvalidOid);
 
 	state.fnoid = partialfnoid;

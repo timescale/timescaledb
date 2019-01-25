@@ -33,6 +33,7 @@
 
 typedef struct JsonbParseState JsonbParseState;
 typedef struct Hypertable Hypertable;
+typedef struct Chunk Chunk;
 
 typedef struct CrossModuleFunctions
 {
@@ -85,6 +86,7 @@ typedef struct CrossModuleFunctions
 	Datum (*remote_txn_id_in)(PG_FUNCTION_ARGS);
 	Datum (*remote_txn_id_out)(PG_FUNCTION_ARGS);
 #endif
+	void (*create_chunk_on_servers)(Chunk *chunk, Hypertable *ht);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

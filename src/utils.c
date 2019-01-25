@@ -539,7 +539,7 @@ ts_function_types_equal(Oid left[], Oid right[], int nargs)
 }
 
 Oid
-get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
+ts_get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[])
 {
 	FuncCandidateList func_candidates;
 

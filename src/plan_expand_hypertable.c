@@ -66,10 +66,10 @@ static void
 init_chunk_exclusion_func()
 {
 	if (chunk_exclusion_func == InvalidOid)
-		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME,
-												INTERNAL_SCHEMA_NAME,
-												lengthof(ts_chunks_arg_types),
-												ts_chunks_arg_types);
+		chunk_exclusion_func = ts_get_function_oid(CHUNK_EXCL_FUNC_NAME,
+												   INTERNAL_SCHEMA_NAME,
+												   lengthof(ts_chunks_arg_types),
+												   ts_chunks_arg_types);
 	Assert(chunk_exclusion_func != InvalidOid);
 }
 

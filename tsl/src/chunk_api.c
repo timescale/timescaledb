@@ -7,16 +7,22 @@
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
+#include <catalog/pg_type.h>
 #include <fmgr.h>
 #include <funcapi.h>
+#include <miscadmin.h>
 
+#include <catalog.h>
 #include <compat.h>
 #include <chunk.h>
+#include <chunk_server.h>
 #include <errors.h>
 #include <hypercube.h>
 #include <hypertable.h>
 #include <hypertable_cache.h>
 
+#include "remote/async.h"
+#include "remote/dist_txn.h"
 #include "chunk_api.h"
 
 /*
@@ -269,8 +275,8 @@ chunk_create(PG_FUNCTION_ARGS)
 {
 	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Jsonb *slices = PG_ARGISNULL(1) ? NULL : PG_GETARG_JSONB_P(1);
-	Name schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
-	Name table_prefix = PG_ARGISNULL(3) ? NULL : PG_GETARG_NAME(3);
+	const char *schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
+	const char *table_name = PG_ARGISNULL(3) ? NULL : PG_GETARG_CSTRING(3);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid);
 	Hypercube *hc;
@@ -300,17 +306,7 @@ chunk_create(PG_FUNCTION_ARGS)
 				 errmsg("invalid hypercube for hypertable \"%s\"", get_rel_name(hypertable_relid)),
 				 errdetail("%s", parse_err)));
 
-	if (NULL == schema_name)
-		schema_name = &ht->fd.associated_schema_name;
-
-	if (NULL == table_prefix)
-		table_prefix = &ht->fd.associated_table_prefix;
-
-	chunk = ts_chunk_find_or_create_without_cuts(ht,
-												 hc,
-												 NameStr(*schema_name),
-												 NameStr(*table_prefix),
-												 &created);
+	chunk = ts_chunk_find_or_create_without_cuts(ht, hc, schema_name, table_name, &created);
 
 	Assert(NULL != chunk);
 
@@ -324,3 +320,131 @@ chunk_create(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
+
+#if !PG96 /* Remote chunk creation only supported on                                               \
+		   * PG10 and above */
+
+#define CREATE_CHUNK_FUNCTION_NAME "create_chunk"
+#define CHUNK_CREATE_STMT                                                                          \
+	"SELECT * FROM " INTERNAL_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4)"
+
+#define ESTIMATE_JSON_STR_SIZE(num_dims) (60 * (num_dims))
+
+static Oid create_chunk_argtypes[4] = { REGCLASSOID, JSONBOID, NAMEOID, NAMEOID };
+
+/*
+ * Fill in / get the TupleDesc for the result type of the create_chunk()
+ * function.
+ */
+static void
+get_create_chunk_result_type(TupleDesc *tupdesc)
+{
+	Oid funcoid = ts_get_function_oid(CREATE_CHUNK_FUNCTION_NAME,
+									  INTERNAL_SCHEMA_NAME,
+									  4,
+									  create_chunk_argtypes);
+
+	if (get_func_result_type(funcoid, NULL, tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+}
+
+static void
+get_result_datums(Datum *values, bool *nulls, unsigned int numvals, AttInMetadata *attinmeta,
+				  PGresult *res)
+{
+	unsigned int i;
+
+	memset(nulls, 0, sizeof(bool) * numvals);
+
+	for (i = 0; i < numvals; i++)
+	{
+		if (PQgetisnull(res, 0, i))
+			nulls[i] = true;
+		else
+			values[i] = InputFunctionCall(&attinmeta->attinfuncs[i],
+										  PQgetvalue(res, 0, i),
+										  attinmeta->attioparams[i],
+										  attinmeta->atttypmods[i]);
+	}
+}
+
+/*
+ * Create a replica of a chunk on all its assigned servers.
+ */
+void
+chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht)
+{
+	AsyncRequestSet *reqset = async_request_set_create();
+	JsonbParseState *ps = NULL;
+	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &ps);
+	Jsonb *hcjson = JsonbValueToJsonb(jv);
+	const char *params[4] = {
+		quote_qualified_identifier(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name)),
+		JsonbToCString(NULL, &hcjson->root, ESTIMATE_JSON_STR_SIZE(ht->space->num_dimensions)),
+		NameStr(chunk->fd.schema_name),
+		NameStr(chunk->fd.table_name),
+	};
+	AsyncResponseResult *res;
+	ListCell *lc;
+	TupleDesc tupdesc;
+	AttInMetadata *attinmeta;
+
+	get_create_chunk_result_type(&tupdesc);
+	attinmeta = TupleDescGetAttInMetadata(tupdesc);
+
+	foreach (lc, chunk->servers)
+	{
+		ChunkServer *cs = lfirst(lc);
+		UserMapping *um = GetUserMapping(GetUserId(), cs->foreign_server_oid);
+		PGconn *conn = remote_dist_txn_get_connection(um, REMOTE_TXN_NO_PREP_STMT);
+		AsyncRequest *req;
+
+		req = async_request_send_with_params(conn, CHUNK_CREATE_STMT, 4, params);
+
+		async_request_attach_user_data(req, cs);
+		async_request_set_add(reqset, req);
+	}
+
+	while ((res = async_request_set_wait_ok_result(reqset)) != NULL)
+	{
+		PGresult *pgres = async_response_result_get_pg_result(res);
+		ChunkServer *cs = async_response_result_get_user_data(res);
+		Datum values[tupdesc->natts];
+		bool nulls[tupdesc->natts];
+		const char *schema_name, *table_name;
+		bool created;
+
+		get_result_datums(values, nulls, tupdesc->natts, attinmeta, pgres);
+
+		created = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_create_chunk_created)]);
+
+		/*
+		 * Sanity check the result. Use error rather than an assert since this
+		 * is the result of a remote call to a server that could potentially
+		 * run a different version of the remote function than we'd expect.
+		 */
+		if (!created)
+			elog(ERROR, "chunk creation failed on server \"%s\"", NameStr(cs->fd.server_name));
+
+		if (nulls[AttrNumberGetAttrOffset(Anum_create_chunk_id)] ||
+			nulls[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)] ||
+			nulls[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)])
+			elog(ERROR, "unexpected chunk creation result on remote server");
+
+		schema_name =
+			DatumGetCString(values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)]);
+		table_name = DatumGetCString(values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)]);
+
+		if (namestrcmp(&chunk->fd.schema_name, schema_name) != 0 ||
+			namestrcmp(&chunk->fd.table_name, table_name) != 0)
+			elog(ERROR, "remote chunk has mismatching schema or table name");
+
+		cs->fd.server_chunk_id =
+			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_create_chunk_id)]);
+	}
+}
+
+#endif /* !PG96 */

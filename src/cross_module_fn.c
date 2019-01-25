@@ -275,6 +275,12 @@ empty_fn(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+static void
+create_chunk_on_servers_default(Chunk *chunk, Hypertable *ht)
+{
+	error_no_default_fn_community();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -318,6 +324,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.delete_server = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
+	.create_chunk_on_servers = create_chunk_on_servers_default,
 	.get_servername_list = get_servername_list_default_fn,
 	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
 	.timescaledb_fdw_handler = error_no_default_fn_pg_community,

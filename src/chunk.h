@@ -122,8 +122,9 @@ extern TSDLLEXPORT void ts_chunk_do_drop_chunks(Oid table_relid, Datum older_tha
 												Oid newer_than_type, bool cascade,
 												bool cascades_to_materializations, int32 log_level);
 extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc,
-															   const char *schema,
-															   const char *prefix, bool *created);
+															   const char *schema_name,
+															   const char *table_name,
+															   bool *created);
 extern List *ts_chunk_servers_copy(Chunk *chunk);
 
 #define chunk_get_by_name(schema_name, table_name, num_constraints, fail_if_not_found)             \

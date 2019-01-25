@@ -46,6 +46,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk(
        hypertable REGCLASS,
        slices JSONB,
        schema_name NAME = NULL,
-       table_prefix NAME = NULL)
+       table_name NAME = NULL)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB, created BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_chunk_create' LANGUAGE C VOLATILE;

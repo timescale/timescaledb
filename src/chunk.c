@@ -723,11 +723,13 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 		 * setting to work
 		 */
 		create_toast_table(&stmt.base, objaddr.objectId);
+
+		if (uid != saved_uid)
+			SetUserIdAndSecContext(saved_uid, sec_ctx);
 	}
 	else if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		ChunkServer *cs;
-		ListCell *lc;
 
 		if (list_length(chunk->servers) == 0)
 			ereport(ERROR,
@@ -746,23 +748,21 @@ chunk_create_table(Chunk *chunk, Hypertable *ht)
 		/* Create the foreign table catalog information */
 		CreateForeignTable(&stmt, objaddr.objectId);
 
-		/* Create the corresponding chunks on the remote servers */
-		foreach (lc, chunk->servers)
-		{
-			cs = lfirst(lc);
+		/*
+		 * Need to restore security context to execute remote commands as the
+		 * original user
+		 */
+		if (uid != saved_uid)
+			SetUserIdAndSecContext(saved_uid, sec_ctx);
 
-			/* TODO: create chunk on server and get local ID */
+		/* Create the corresponding chunk replicas on the remote servers */
+		ts_cm_functions->create_chunk_on_servers(chunk, ht);
 
-			/* Set a bogus server_chunk_id for now */
-			cs->fd.server_chunk_id = chunk->fd.id;
-			ts_chunk_server_insert(cs);
-		}
+		/* Record the remote server chunk ID mappings */
+		ts_chunk_server_insert_multi(chunk->servers);
 	}
 	else
 		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
-
-	if (uid != saved_uid)
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 	set_attoptions(rel, objaddr.objectId);
 
@@ -834,15 +834,27 @@ get_chunk_name_suffix(const char relkind)
 	return "chunk";
 }
 
+/*
+ * Create a chunk from the dimensional constraints in the given hypercube.
+ *
+ * The table name for the chunk can be given explicitly, or generated if
+ * table_name is NULL. If the table name is generated, it will use the given
+ * prefix or, if NULL, use the hypertable's associated table prefix. Similarly,
+ * if schema_name is NULL it will use the hypertable's associated schema for
+ * the chunk.
+ */
 static Chunk *
-ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema,
-							   const char *prefix)
+ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema_name,
+							   const char *table_name, const char *prefix)
 {
 	Hyperspace *hs = ht->space;
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	const char relkind = ht->fd.replication_factor > 0 ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION;
+
+	if (NULL == schema_name || schema_name[0] == '\0')
+		schema_name = NameStr(ht->fd.associated_schema_name);
 
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -854,13 +866,27 @@ ts_chunk_create_from_hypercube(Hypertable *ht, Hypercube *hc, const char *schema
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = hc;
 	chunk->hypertable_relid = ht->main_table_relid;
-	namestrcpy(&chunk->fd.schema_name, schema);
-	snprintf(chunk->fd.table_name.data,
-			 NAMEDATALEN,
-			 "%s_%d_%s",
-			 prefix,
-			 chunk->fd.id,
-			 get_chunk_name_suffix(relkind));
+	namestrcpy(&chunk->fd.schema_name, schema_name);
+
+	if (NULL == table_name || table_name[0] == '\0')
+	{
+		int len;
+
+		if (NULL == prefix)
+			prefix = NameStr(ht->fd.associated_table_prefix);
+
+		len = snprintf(chunk->fd.table_name.data,
+					   NAMEDATALEN,
+					   "%s_%d_%s",
+					   prefix,
+					   chunk->fd.id,
+					   get_chunk_name_suffix(relkind));
+
+		if (len >= NAMEDATALEN)
+			elog(ERROR, "chunk table name too long");
+	}
+	else
+		namestrcpy(&chunk->fd.table_name, table_name);
 
 	/* Insert chunk */
 	chunk_insert_lock(chunk, RowExclusiveLock);
@@ -919,12 +945,12 @@ chunk_create_after_lock(Hypertable *ht, Point *p, const char *schema, const char
 	/* Resolve collisions with other chunks by cutting the new hypercube */
 	chunk_collision_resolve(hs, cube, p);
 
-	return ts_chunk_create_from_hypercube(ht, cube, schema, prefix);
+	return ts_chunk_create_from_hypercube(ht, cube, schema, NULL, prefix);
 }
 
 TSDLLEXPORT Chunk *
-ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema,
-									 const char *prefix, bool *created)
+ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema_name,
+									 const char *table_name, bool *created)
 {
 	Chunk *chunk;
 
@@ -934,7 +960,7 @@ ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *
 
 	if (NULL == chunk)
 	{
-		chunk = ts_chunk_create_from_hypercube(ht, hc, schema, prefix);
+		chunk = ts_chunk_create_from_hypercube(ht, hc, schema_name, table_name, NULL);
 
 		if (NULL != created)
 			*created = true;
