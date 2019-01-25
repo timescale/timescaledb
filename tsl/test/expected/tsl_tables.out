@@ -668,70 +668,70 @@ select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
 (1 row)
 
 -- No change
-select * from alter_policy_schedule(:job_id);
+select * from alter_job_schedule(:job_id);
  job_id | schedule_interval | max_runtime | max_retries | retry_period 
 --------+-------------------+-------------+-------------+--------------
    1013 | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
 -- Changes expected
-select * from alter_policy_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
+select * from alter_job_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
  job_id | schedule_interval | max_runtime | max_retries |  retry_period   
 --------+-------------------+-------------+-------------+-----------------
    1013 | @ 3 years         | @ 5 mins    |           5 | @ 2 mins 3 secs
 (1 row)
 
-select * from alter_policy_schedule(:job_id, INTERVAL '123 years');
+select * from alter_job_schedule(:job_id, INTERVAL '123 years');
  job_id | schedule_interval | max_runtime | max_retries |  retry_period   
 --------+-------------------+-------------+-------------+-----------------
    1013 | @ 123 years       | @ 5 mins    |           5 | @ 2 mins 3 secs
 (1 row)
 
-select * from alter_policy_schedule(:job_id, retry_period => INTERVAL '33 hours');
+select * from alter_job_schedule(:job_id, retry_period => INTERVAL '33 hours');
  job_id | schedule_interval | max_runtime | max_retries | retry_period 
 --------+-------------------+-------------+-------------+--------------
    1013 | @ 123 years       | @ 5 mins    |           5 | @ 33 hours
 (1 row)
 
-select * from alter_policy_schedule(:job_id, max_runtime => INTERVAL '456 sec');
+select * from alter_job_schedule(:job_id, max_runtime => INTERVAL '456 sec');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
    1013 | @ 123 years       | @ 7 mins 36 secs |           5 | @ 33 hours
 (1 row)
 
-select * from alter_policy_schedule(:job_id, max_retries => 0);
+select * from alter_job_schedule(:job_id, max_retries => 0);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
    1013 | @ 123 years       | @ 7 mins 36 secs |           0 | @ 33 hours
 (1 row)
 
-select * from alter_policy_schedule(:job_id, max_retries => -1);
+select * from alter_job_schedule(:job_id, max_retries => -1);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
    1013 | @ 123 years       | @ 7 mins 36 secs |          -1 | @ 33 hours
 (1 row)
 
-select * from alter_policy_schedule(:job_id, max_retries => 20);
+select * from alter_job_schedule(:job_id, max_retries => 20);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
    1013 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
 (1 row)
 
 -- No change
-select * from alter_policy_schedule(:job_id, max_runtime => NULL);
+select * from alter_job_schedule(:job_id, max_runtime => NULL);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
    1013 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
 (1 row)
 
-select * from alter_policy_schedule(:job_id, max_retries => NULL);
+select * from alter_job_schedule(:job_id, max_retries => NULL);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period 
 --------+-------------------+------------------+-------------+--------------
    1013 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours
 (1 row)
 
 -- Check if_exists boolean works correctly
-select * from alter_policy_schedule(1234, if_exists => TRUE);
+select * from alter_job_schedule(1234, if_exists => TRUE);
 NOTICE:  cannot alter policy schedule, policy #1234 not found, skipping
  job_id | schedule_interval | max_runtime | max_retries | retry_period 
 --------+-------------------+-------------+-------------+--------------
@@ -739,7 +739,7 @@ NOTICE:  cannot alter policy schedule, policy #1234 not found, skipping
 (1 row)
 
 \set ON_ERROR_STOP 0
-select * from alter_policy_schedule(1234);
+select * from alter_job_schedule(1234);
 ERROR:  cannot alter policy schedule, policy #1234 not found
 \set ON_ERROR_STOP 1
 select remove_reorder_policy('test_table');
@@ -760,6 +760,6 @@ select remove_reorder_policy('test_table');
 ERROR:  cannot execute an enterprise function with an invalid enterprise license
 select remove_drop_chunks_policy('test_table');
 ERROR:  cannot execute an enterprise function with an invalid enterprise license
-select alter_policy_schedule(12345);
+select alter_job_schedule(12345);
 ERROR:  cannot execute an enterprise function with an invalid enterprise license
 \set ON_ERROR_STOP 1

@@ -257,25 +257,25 @@ select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reo
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
  select * from _timescaledb_config.bgw_job where id=:job_id;
 -- No change
-select * from alter_policy_schedule(:job_id);
+select * from alter_job_schedule(:job_id);
 -- Changes expected
-select * from alter_policy_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
-select * from alter_policy_schedule(:job_id, INTERVAL '123 years');
-select * from alter_policy_schedule(:job_id, retry_period => INTERVAL '33 hours');
-select * from alter_policy_schedule(:job_id, max_runtime => INTERVAL '456 sec');
-select * from alter_policy_schedule(:job_id, max_retries => 0);
-select * from alter_policy_schedule(:job_id, max_retries => -1);
-select * from alter_policy_schedule(:job_id, max_retries => 20);
+select * from alter_job_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
+select * from alter_job_schedule(:job_id, INTERVAL '123 years');
+select * from alter_job_schedule(:job_id, retry_period => INTERVAL '33 hours');
+select * from alter_job_schedule(:job_id, max_runtime => INTERVAL '456 sec');
+select * from alter_job_schedule(:job_id, max_retries => 0);
+select * from alter_job_schedule(:job_id, max_retries => -1);
+select * from alter_job_schedule(:job_id, max_retries => 20);
 
 -- No change
-select * from alter_policy_schedule(:job_id, max_runtime => NULL);
-select * from alter_policy_schedule(:job_id, max_retries => NULL);
+select * from alter_job_schedule(:job_id, max_runtime => NULL);
+select * from alter_job_schedule(:job_id, max_retries => NULL);
 
 -- Check if_exists boolean works correctly
-select * from alter_policy_schedule(1234, if_exists => TRUE);
+select * from alter_job_schedule(1234, if_exists => TRUE);
 
 \set ON_ERROR_STOP 0
-select * from alter_policy_schedule(1234);
+select * from alter_job_schedule(1234);
 \set ON_ERROR_STOP 1
 
 select remove_reorder_policy('test_table');
@@ -289,5 +289,5 @@ select add_reorder_policy('test_table', 'test_table_time_idx');
 select add_drop_chunks_policy('test_table', INTERVAL '4 months', true);
 select remove_reorder_policy('test_table');
 select remove_drop_chunks_policy('test_table');
-select alter_policy_schedule(12345);
+select alter_job_schedule(12345);
 \set ON_ERROR_STOP 1

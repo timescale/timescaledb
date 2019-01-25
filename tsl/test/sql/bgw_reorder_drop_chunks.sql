@@ -210,7 +210,7 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 
 SELECT add_drop_chunks_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
 
-SELECT alter_policy_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
+SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
 
 select * from _timescaledb_config.bgw_policy_drop_chunks where job_id=:drop_chunks_job_id;
 

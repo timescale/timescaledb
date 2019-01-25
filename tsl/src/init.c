@@ -62,7 +62,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_date_time_bucket = ts_date_bucket,
 	.gapfill_timestamp_time_bucket = ts_timestamp_bucket,
 	.gapfill_timestamptz_time_bucket = ts_timestamptz_bucket,
-	.alter_policy_schedule = bgw_policy_alter_policy_schedule,
+	.alter_job_schedule = bgw_policy_alter_job_schedule,
 	.reorder_chunk = tsl_reorder_chunk,
 };
 

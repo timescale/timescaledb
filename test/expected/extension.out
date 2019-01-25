@@ -17,7 +17,7 @@ ORDER BY proname;
  add_dimension
  add_drop_chunks_policy
  add_reorder_policy
- alter_policy_schedule
+ alter_job_schedule
  attach_tablespace
  chunk_relation_size
  chunk_relation_size_pretty
