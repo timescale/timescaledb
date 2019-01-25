@@ -62,7 +62,8 @@ extern AsyncRequest *async_request_send_with_params_elevel(PGconn *conn, const c
 	async_request_send_with_params_elevel(conn, sql_statement, 0, NULL, elevel)
 #define async_request_send(conn, sql_statement)                                                    \
 	async_request_send_with_error(conn, sql_statement, ERROR)
-extern AsyncRequest *async_request_send_prepare(PGconn *conn, char *sql_statement, int n_params);
+extern AsyncRequest *async_request_send_prepare(PGconn *conn, const char *sql_statement,
+												int n_params);
 extern AsyncRequest *async_request_send_prepared_stmt(PreparedStmt *stmt,
 													  const char *const *paramValues);
 extern void async_request_attach_user_data(AsyncRequest *req, void *user_data);
@@ -81,6 +82,7 @@ extern void async_response_result_close(AsyncResponseResult *res);
 extern PGresult *async_response_result_get_pg_result(AsyncResponseResult *res);
 extern void *async_response_result_get_user_data(AsyncResponseResult *res);
 extern AsyncRequest *async_response_result_get_request(AsyncResponseResult *res);
+extern PreparedStmt *async_response_result_generate_prepared_stmt(AsyncResponseResult *res);
 
 /* Async Request Set */
 extern AsyncRequestSet *async_request_set_create(void);
