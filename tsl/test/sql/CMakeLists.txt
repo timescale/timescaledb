@@ -95,8 +95,8 @@ endforeach(TEMPLATE_FILE)
 
 if (NOT ${PG_VERSION} VERSION_LESS "10")
   list(APPEND TEST_FILES
-    hypertable_distributed.sql
     chunk_api.sql
+    hypertable_distributed.sql
     timescaledb_fdw.sql
   )
   list(APPEND TEST_FILES_DEBUG

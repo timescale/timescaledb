@@ -17,3 +17,4 @@ log_line_prefix='%u [%p] %d '
 # numbers. Setting extra_float_digits=0 retains the old behavior which
 # is needed to make our tests work for multiple PostgreSQL versions.
 extra_float_digits=0
+hba_file='@TEST_OUTPUT_DIR@/pg_hba.conf'

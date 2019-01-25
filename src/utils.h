@@ -73,6 +73,10 @@ extern Oid ts_inheritance_parent_relid(Oid relid);
 extern Oid ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype,
 								   proc_filter filter, void *filter_arg);
 extern Oid ts_get_operator(const char *name, Oid namespace, Oid left, Oid right);
+extern bool ts_function_types_equal(Oid left[], Oid right[], int nargs);
+
+extern TSDLLEXPORT Oid ts_get_function_oid(const char *funcname, const char *schema_name, int nargs,
+										   Oid arg_types[]);
 
 extern TSDLLEXPORT Oid ts_get_cast_func(Oid source, Oid target);
 

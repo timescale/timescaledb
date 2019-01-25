@@ -10,5 +10,8 @@
 
 extern Datum chunk_show(PG_FUNCTION_ARGS);
 extern Datum chunk_create(PG_FUNCTION_ARGS);
+#if !PG96
+extern void chunk_api_create_on_servers(Chunk *chunk, Hypertable *ht);
+#endif
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */
