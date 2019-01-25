@@ -2,22 +2,22 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width SMALLINT, ts SMALLINT, "start" SMALLINT, "end" SMALLINT) RETURNS SMALLINT
+CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width SMALLINT, ts SMALLINT, start SMALLINT, finish SMALLINT) RETURNS SMALLINT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_int16_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
-CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INT, ts INT, "start" INT, "end" INT) RETURNS INT
+CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INT, ts INT, start INT, finish INT) RETURNS INT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_int32_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
-CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width BIGINT, ts BIGINT, "start" BIGINT, "end" BIGINT) RETURNS BIGINT
+CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width BIGINT, ts BIGINT, start BIGINT, finish BIGINT) RETURNS BIGINT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_int64_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
-CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts DATE, "start" DATE, "end" DATE) RETURNS DATE
+CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts DATE, start DATE, finish DATE) RETURNS DATE
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
-CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMP, "start" TIMESTAMP, "end" TIMESTAMP) RETURNS TIMESTAMP
+CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMP, start TIMESTAMP, finish TIMESTAMP) RETURNS TIMESTAMP
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
-CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMPTZ, "start" TIMESTAMPTZ, "end" TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMPTZ, start TIMESTAMPTZ, finish TIMESTAMPTZ) RETURNS TIMESTAMPTZ
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
 -- locf function
