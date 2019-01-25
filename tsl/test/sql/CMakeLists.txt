@@ -59,6 +59,8 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     remote_txn.sql
     remote_txn_id.sql
     server.sql
+    timescaledb_fdw.sql
+    dist_commands.sql
   )
 endif ()
 

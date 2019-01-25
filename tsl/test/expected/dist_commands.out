@@ -1,0 +1,120 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE server1;
+SELECT * FROM add_server('server1', 'localhost', 'server1', port=>current_setting('port')::integer);
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server1     | localhost | 15432 | server1  | super_user | super_user      | t
+(1 row)
+
+CREATE DATABASE server2;
+SELECT * FROM add_server('server2', 'localhost', 'server2', port=>current_setting('port')::integer);
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server2     | localhost | 15432 | server2  | super_user | super_user      | t
+(1 row)
+
+CREATE DATABASE server3;
+SELECT * FROM add_server('server3', 'localhost', 'server3', port=>current_setting('port')::integer);
+ server_name |   host    | port  | database |  username  | server_username | created 
+-------------+-----------+-------+----------+------------+-----------------+---------
+ server3     | localhost | 15432 | server3  | super_user | super_user      | t
+(1 row)
+
+\des+
+                                                               List of foreign servers
+  Name   |   Owner    | Foreign-data wrapper | Access privileges | Type | Version |                    FDW options                     | Description 
+---------+------------+----------------------+-------------------+------+---------+----------------------------------------------------+-------------
+ server1 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'server1') | 
+ server2 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'server2') | 
+ server3 | super_user | timescaledb_fdw      |                   |      |         | (host 'localhost', port '15432', dbname 'server3') | 
+(3 rows)
+
+CREATE FUNCTION _timescaledb_internal.invoke_distributed_commands()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_invoke_distributed_commands'
+LANGUAGE C STRICT;
+CREATE FUNCTION _timescaledb_internal.invoke_faulty_distributed_command()
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_invoke_faulty_distributed_command'
+LANGUAGE C STRICT;
+SELECT _timescaledb_internal.invoke_distributed_commands();
+INFO:  server1 result: PGRES_COMMAND_OK
+INFO:  server2 result: PGRES_COMMAND_OK
+INFO:  server3 result: PGRES_COMMAND_OK
+INFO:  server1 result: PGRES_COMMAND_OK
+INFO:  server3 result: PGRES_COMMAND_OK
+INFO:  server1 result: PGRES_COMMAND_OK
+INFO:  server3 result: PGRES_COMMAND_OK
+ invoke_distributed_commands 
+-----------------------------
+ 
+(1 row)
+
+\c server1
+\dt
+            List of relations
+ Schema |    Name    | Type  |   Owner    
+--------+------------+-------+------------
+ public | disttable1 | table | super_user
+ public | disttable2 | table | super_user
+(2 rows)
+
+SELECT * FROM disttable1;
+             time             | device | temp  
+------------------------------+--------+-------
+ Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
+(1 row)
+
+\c server2
+\dt
+            List of relations
+ Schema |    Name    | Type  |   Owner    
+--------+------------+-------+------------
+ public | disttable1 | table | super_user
+(1 row)
+
+SELECT * FROM disttable1;
+ time | device | temp 
+------+--------+------
+(0 rows)
+
+\c server3
+\dt
+            List of relations
+ Schema |    Name    | Type  |   Owner    
+--------+------------+-------+------------
+ public | disttable1 | table | super_user
+ public | disttable2 | table | super_user
+(2 rows)
+
+SELECT * FROM disttable1;
+             time             | device | temp  
+------------------------------+--------+-------
+ Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
+(1 row)
+
+\c single
+-- Verify failed insert command gets fully rolled back
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.invoke_faulty_distributed_command();
+ERROR:  schema "_timescaledb_internal" does not exist at character 8
+\set ON_ERROR_STOP 1
+\c server1
+SELECT * from disttable2;
+ time | device | temp 
+------+--------+------
+(0 rows)
+
+\c server3
+SELECT * from disttable2;
+ time | device | temp 
+------+--------+------
+(0 rows)
+
+\c single
+DROP DATABASE server1;
+DROP DATABASE server2;
+DROP DATABASE server3;
