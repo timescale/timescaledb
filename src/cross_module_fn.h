@@ -49,7 +49,7 @@ typedef struct CrossModuleFunctions
 	PGFunction	gapfill_date_time_bucket;
 	PGFunction	gapfill_timestamp_time_bucket;
 	PGFunction	gapfill_timestamptz_time_bucket;
-	PGFunction	alter_policy_schedule;
+	PGFunction	alter_job_schedule;
 	PGFunction	reorder_chunk;
 } CrossModuleFunctions;
 

@@ -174,7 +174,7 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 }
 
 Datum
-bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS)
+bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 {
 	BgwJob	   *job;
 	TupleDesc	tupdesc;

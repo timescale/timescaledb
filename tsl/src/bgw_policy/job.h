@@ -21,6 +21,6 @@ extern bool execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_
 extern bool execute_drop_chunks_policy(int32 job_id);
 
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);
-extern Datum bgw_policy_alter_policy_schedule(PG_FUNCTION_ARGS);
+extern Datum bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS);
 
 #endif							/* TIMESCALEDB_TSL_BGW_POLICY_JOB_H */
