@@ -4,6 +4,50 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.2.0 (2019-01-29)
+
+**This is our first release to include Timescale-Licensed features, in addition to new Apache-2 capabilities.**
+
+We are excited to be introducing new time-series analytical functions, advanced data lifecycle management capabilities, and improved performance.
+- **Time-series analytical functions**: Users can now use our `time_bucket_gapfill` function, to write complex gapfilling, last object carried forward, and interpolation queries.
+- **Advanced data lifecycle management**: We are introducing scheduled policies, which use our background worker framework to manage time-series data. In this release, we support scheduled `drop_chunks` and `reorder`.
+- **Improved performance**: We added support for ordered appends, which optimize a large range of queries - particularly those that are ordered by time and contain a LIMIT clause. Please note that ordered appends do not support ordering by `time_bucket` at this time.
+- **Postgres 11 Support**: We added beta support for PG11 in 1.1.0. We're happy to announce that our PG11 support is now out of beta, and fully supported.
+
+This release adds code under a new license, LICENSE_TIMESCALE. This code can be found in `tsl`.
+
+**Notable commits**
+
+* [a531733] switch cis state when we switch chunks
+* [5c6b619] Make a copy of the ri_onConflict object in PG11
+* [61e524e] Make slot for upserts be update for every chunk switch
+* [8a7c127] Fix for ExecSlotDescriptor during upserts
+* [fa61613] Change time_bucket_gapfill argument names
+* [01be394] Fix bgw_launcher restart when failing during launcher setup
+* [7b3929e] Add ordered append optimization
+* [a69f84c] Fix signal processing in background workers
+* [47b5b7d] Log which chunks are dropped by background workers
+* [4e1e15f] Add reorder command
+* [2e4bb5d] Recluster and drop chunks scheduling code
+* [ef43e52] Add alter_policy_schedule API function
+* [5ba740e] Add gapfill query support
+* [be7c74c] Add logic for automatic DB maintenance functions
+* [4ff6ac7] Initial Timescale-Licensed-Module and License-Key Implementation
+* [fc42539] Add new top-level licensing information
+* [31e9c5b] Fix time column handling in get_create_command
+* [1b8ceca] Avoid loading twice in parallel workers and load only from $libdir
+* [76d7875] Don't throw errors when extension is loaded but not installed yet
+* [eecd845] Add Timescale License (TSL)
+* [4b42b30] Free ChunkInsertStates when the es_per_tuple_exprcontext is freed
+
+**Thanks**
+
+* @fordred for reporting our docker-run.sh script was out of date
+* @JpWebster for reporting a deadlock between reads an drop_chunks
+* @chickenburgers for reporting an issue with our CMake
+* Dimtrj and Asbjørn D., on slack, for creating a reproducible testcase for an UPSERT bug
+
+
 ## 1.1.1 (2018-12-20)
 
 This release contains bugfixes.
