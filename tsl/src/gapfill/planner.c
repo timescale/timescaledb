@@ -169,7 +169,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 		else
 			tl_exprs = lappend(tl_exprs, tle->expr);
 	}
-	cscan->custom_private = list_make3(gfpath->func, root->parse->groupClause, tl_exprs);
+	cscan->custom_private = list_make4(gfpath->func, root->parse->groupClause, tl_exprs, root->parse->jointree);
 
 	/* remove locf and interpolate function calls from targetlists */
 	foreach(lc, ((Plan *) linitial(custom_plans))->targetlist)

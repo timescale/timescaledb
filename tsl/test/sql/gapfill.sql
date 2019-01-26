@@ -876,4 +876,3 @@ SELECT
 FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
 GROUP BY 1;
 
-\set ON_ERROR_STOP 1
