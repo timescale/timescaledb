@@ -108,10 +108,16 @@ chunk_dispatch_exec(CustomScanState *node)
 		}
 
 		/* slot for the "existing" tuple in ON CONFLICT UPDATE IS chunk schema */
-		if (cis->tup_conv_map != NULL && state->parent->mt_existing != NULL)
-		{
-			TupleDesc	chunk_desc = cis->tup_conv_map->outdesc;
 
+		if (state->parent->mt_existing != NULL)
+		{
+			TupleDesc	chunk_desc;
+
+			if (cis->tup_conv_map && cis->tup_conv_map->outdesc)
+				chunk_desc = cis->tup_conv_map->outdesc;
+			else
+				chunk_desc = RelationGetDescr(cis->rel);
+			Assert(chunk_desc != NULL);
 			ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
 		}
 
