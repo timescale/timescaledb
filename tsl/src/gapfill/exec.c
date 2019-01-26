@@ -4,8 +4,11 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include <c.h>
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/htup_details.h>
+#include <catalog/pg_cast.h>
 #include <catalog/pg_type.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
@@ -26,6 +29,12 @@
 #include "gapfill/interpolate.h"
 #include "gapfill/exec.h"
 #include "time_bucket.h"
+
+typedef enum GapFillBoundary
+{
+	GAPFILL_START,
+	GAPFILL_END,
+} GapFillBoundary;
 
 typedef union GapFillColumnStateUnion
 {
@@ -194,6 +203,45 @@ is_const_null(Expr *expr)
 	return IsA(expr, Const) && castNode(Const, expr)->constisnull;
 }
 
+/*
+ * lookup cast func oid in pg_cast
+ *
+ * throws an error if no cast can be found
+ */
+static Oid
+get_cast_func(Oid source, Oid target)
+{
+	Oid result = InvalidOid;
+	HeapTuple casttup;
+
+	casttup = SearchSysCache2(CASTSOURCETARGET, ObjectIdGetDatum(source), ObjectIdGetDatum(target));
+	if (HeapTupleIsValid(casttup))
+	{
+		Form_pg_cast castform = (Form_pg_cast) GETSTRUCT(casttup);
+
+		result = castform->castfunc;
+		ReleaseSysCache(casttup);
+	}
+
+	if (!OidIsValid(result))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not find cast from %s to %s",
+						format_type_be(source),
+						format_type_be(target))));
+
+	return result;
+}
+
+/*
+ * returns true if v1 and v2 reference the same object
+ */
+static bool
+var_equal(Var *v1, Var *v2)
+{
+	return v1->varno == v2->varno && v1->varattno == v2->varattno && v1->vartype == v2->vartype;
+}
+
 static bool
 is_simple_expr_walker(Node *node, void *context)
 {
@@ -253,6 +301,198 @@ is_simple_expr(Expr *node)
 }
 
 /*
+ * align a value with the bucket boundary
+ * even though we use int64 as our internal representation we cannot call
+ * ts_int64_bucket here because int variants of time_bucket align differently
+ * then non-int variants because the bucket start is on monday for the latter
+ */
+static int64
+align_with_time_bucket(GapFillState *state, Expr *expr)
+{
+	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
+	FuncExpr *time_bucket = copyObject(linitial(cscan->custom_private));
+	Datum value;
+	bool isnull;
+
+	if (!is_simple_expr(expr))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "invalid time_bucket_gapfill argument: start must be a simple expression")));
+
+	time_bucket->args = list_make2(linitial(time_bucket->args), expr);
+	value = gapfill_exec_expr(state, (Expr *) time_bucket, &isnull);
+
+	/* start expression must not evaluate to NULL */
+	if (isnull)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL"),
+				 errhint(
+					 "You can either pass start and finish as arguments or in the WHERE clause")));
+
+	return gapfill_datum_get_internal(value, state->gapfill_typid);
+}
+
+static int64
+get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *expr)
+{
+	Datum arg_value;
+	bool isnull;
+
+	/*
+	 * add an explicit cast here if types do not match
+	 */
+	if (exprType((Node *) expr) != state->gapfill_typid)
+	{
+		Oid cast_oid = get_cast_func(exprType((Node *) expr), state->gapfill_typid);
+
+		expr = (Expr *) makeFuncExpr(cast_oid,
+									 state->gapfill_typid,
+									 list_make1(expr),
+									 InvalidOid,
+									 InvalidOid,
+									 0);
+	}
+
+	arg_value = gapfill_exec_expr(state, expr, &isnull);
+
+	if (isnull)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: %s cannot be NULL",
+						boundary == GAPFILL_START ? "start" : "finish"),
+				 errhint(
+					 "You can either pass start and finish as arguments or in the WHERE clause")));
+
+	return gapfill_datum_get_internal(arg_value, state->gapfill_typid);
+}
+
+static int64
+infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
+{
+	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
+	FuncExpr *func = linitial(cscan->custom_private);
+	FromExpr *jt = lfourth(cscan->custom_private);
+	ListCell *lc;
+	Var *ts_var;
+	TypeCacheEntry *tce = lookup_type_cache(state->gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
+	int strategy;
+	Oid lefttype, righttype;
+
+	int64 boundary_value = 0;
+	bool boundary_found = false;
+
+	/*
+	 * if the second argument to time_bucket_gapfill is not a column reference
+	 * we cannot match WHERE clause to the time column
+	 */
+	if (!IsA(lsecond(func->args), Var))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: ts needs to refer to a single "
+						"column if no start or finish is supplied"),
+				 errhint(
+					 "You can either pass start and finish as arguments or in the WHERE clause")));
+
+	ts_var = castNode(Var, lsecond(func->args));
+
+	foreach (lc, (List *) jt->quals)
+	{
+		OpExpr *opexpr;
+		Var *var;
+		Expr *expr;
+		Oid op;
+		int64 value;
+
+		if (!IsA(lfirst(lc), OpExpr))
+			continue;
+
+		opexpr = lfirst(lc);
+
+		if (IsA(linitial(opexpr->args), Var))
+		{
+			var = linitial(opexpr->args);
+			expr = lsecond(opexpr->args);
+			op = opexpr->opno;
+		}
+		else if (IsA(lsecond(opexpr->args), Var))
+		{
+			var = lsecond(opexpr->args);
+			expr = linitial(opexpr->args);
+			op = get_commutator(opexpr->opno);
+		}
+		else
+			continue;
+
+		if (!op_in_opfamily(op, tce->btree_opf))
+			continue;
+
+		/*
+		 * only allow simple expressions because Params have not been set up
+		 * at this stage and Vars will not work either because we execute in
+		 * separate execution context
+		 */
+		if (!is_simple_expr(expr) || !var_equal(ts_var, var))
+			continue;
+
+		get_op_opfamily_properties(op, tce->btree_opf, false, &strategy, &lefttype, &righttype);
+
+		if (boundary == GAPFILL_START && strategy != BTGreaterStrategyNumber &&
+			strategy != BTGreaterEqualStrategyNumber)
+			continue;
+		if (boundary == GAPFILL_END && strategy != BTLessStrategyNumber &&
+			strategy != BTLessEqualStrategyNumber)
+			continue;
+
+		value = get_boundary_expr_value(state, boundary, expr);
+
+		/*
+		 * if the boundary expression operator does not match the operator
+		 * used by the gapfill node we adjust the value by 1 here
+		 *
+		 * the operators for the gapfill node are >= for start and < for end
+		 * column > value becomes start >= value + 1 column <= value becomes
+		 * end < value + 1
+		 */
+		if (strategy == BTGreaterStrategyNumber || strategy == BTLessEqualStrategyNumber)
+			value += 1;
+
+		if (!boundary_found)
+		{
+			boundary_found = true;
+			boundary_value = value;
+		}
+		else
+		{
+			if (boundary == GAPFILL_START)
+				boundary_value = Max(boundary_value, value);
+			else
+				boundary_value = Min(boundary_value, value);
+		}
+	}
+
+	if (boundary_found)
+		return boundary_value;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			 errmsg("invalid time_bucket_gapfill argument: could not infer %s boundary from WHERE "
+					"clause",
+					boundary == GAPFILL_START ? "start" : "finish"),
+			 errhint("You can either pass start and finish as arguments or in the WHERE clause")));
+}
+
+static Const *
+make_const_value_for_gapfill_internal(Oid typid, int64 value)
+{
+	TypeCacheEntry *tce = lookup_type_cache(typid, 0);
+	Datum d = gapfill_internal_get_datum(value, typid);
+
+	return makeConst(typid, -1, InvalidOid, tce->typlen, d, false, tce->typbyval);
+}
+
+/*
  * Initialize the scan state
  */
 static void
@@ -266,7 +506,6 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	 * extract arguments and to align gapfill_start
 	 */
 	FuncExpr *func = linitial(cscan->custom_private);
-	FuncExpr *call = copyObject(func);
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
 	Node *entry;
@@ -288,53 +527,38 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	arg_value = gapfill_exec_expr(state, linitial(func->args), &isnull);
 	if (isnull)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
-	}
+
 	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype,
 														exprType(linitial(func->args)),
 														arg_value);
 
-	/* check if gapfill start was left out */
+	/*
+	 * check if gapfill start was left out so we have to infer from WHERE
+	 * clause
+	 */
 	if (is_const_null(lthird(func->args)))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL")));
+	{
+		int64 start = infer_gapfill_boundary(state, GAPFILL_START);
+		Const *expr = make_const_value_for_gapfill_internal(state->gapfill_typid, start);
+
+		state->gapfill_start = align_with_time_bucket(state, (Expr *) expr);
+	}
 	else
 	{
-		if (!is_simple_expr(lthird(func->args)))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid time_bucket_gapfill argument: start must be a simple "
-							"expression")));
-
 		/*
 		 * pass gapfill start through time_bucket so it is aligned with bucket
 		 * start
 		 */
-		call->args = list_make2(linitial(func->args), lthird(func->args));
-		arg_value = gapfill_exec_expr(state, (Expr *) call, &isnull);
-
-		/*
-		 * the default value for start is NULL but this is checked above, when
-		 * a non-Const is passed here that evaluates to NULL we bail
-		 */
-		if (isnull)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL")));
-
-		state->gapfill_start = gapfill_datum_get_internal(arg_value, func->funcresulttype);
+		state->gapfill_start = align_with_time_bucket(state, lthird(func->args));
 	}
 	state->next_timestamp = state->gapfill_start;
 
 	/* gap fill end */
 	if (is_const_null(lfourth(func->args)))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL")));
+		state->gapfill_end = infer_gapfill_boundary(state, GAPFILL_END);
 	else
 	{
 		if (!is_simple_expr(lfourth(func->args)))
@@ -351,7 +575,9 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		if (isnull)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL")));
+					 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL"),
+					 errhint("You can either pass start and finish as arguments or in the WHERE "
+							 "clause")));
 
 		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
 	}

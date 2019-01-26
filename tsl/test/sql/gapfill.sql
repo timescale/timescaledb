@@ -138,6 +138,12 @@ SELECT
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
 
+-- test non-aligned bucket start
+SELECT
+  time_bucket_gapfill(10,time,5,40)
+FROM (VALUES (11),(22)) v(time)
+GROUP BY 1;
+
 -- simple gapfill query
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
@@ -428,6 +434,13 @@ SELECT
   interpolate(min(value)) AS value
 FROM (values (0,1),(50,6)) v(time,value)
 GROUP BY 1 ORDER BY 1;
+
+-- test interpolate with NULL values
+SELECT
+  time_bucket_gapfill(1,time,0,5) AS time,
+  interpolate(avg(temp)) AS temp
+FROM (VALUES (0,0),(2,NULL),(5,5)) v(time,temp)
+GROUP BY 1;
 
 -- test interpolate datatypes
 SELECT
@@ -736,6 +749,13 @@ FROM (VALUES (1),(2)) v(t)
 WHERE t > t AND t < 2
 GROUP BY 1;
 
+-- expression with cast
+SELECT
+  time_bucket_gapfill(1,t1::int8)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 >= 1 AND t1 <= 2
+GROUP BY 1;
+
 -- expression with multiple column references
 SELECT
   time_bucket_gapfill(1,t1+t2)
@@ -771,6 +791,44 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > 0 AND t1 < 2
 GROUP BY 1;
 
+-- test with unsupported operator
+SELECT
+  time_bucket_gapfill(1,time)
+FROM metrics_int
+WHERE time =0 AND time < 2
+GROUP BY 1;
+
+-- time_bucket_gapfill with constraints ORed
+SELECT
+ time_bucket_gapfill(1::int8,t::int8)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+ t >= -1 OR t < 3
+GROUP BY 1;
+
+-- test with 2 tables and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m, metrics_int m2
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+
+-- test inner join and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
+WHERE m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+
+-- test inner join with constraints in join condition
+-- only toplevel where clause constraints are supported atm
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
+GROUP BY 1;
+
+\set ON_ERROR_STOP 1
+
 -- int32 time_bucket_gapfill with no start/finish
 SELECT
   time_bucket_gapfill(1,t)
@@ -787,18 +845,34 @@ WHERE
   t >= -1 AND t <= 3
 GROUP BY 1;
 
+-- int32 time_bucket_gapfill with start column and value switched
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  -1 < t AND t < 3
+GROUP BY 1;
+
+-- int32 time_bucket_gapfill with finish column and value switched
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= 0 AND 3 >= t
+GROUP BY 1;
+
 -- int16 time_bucket_gapfill with no start/finish
 SELECT
-  time_bucket_gapfill(1::int2,t::int2)
-FROM (VALUES (1),(2)) v(t)
+  time_bucket_gapfill(1::int2,t)
+FROM (VALUES (1::int2),(2::int2)) v(t)
 WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
 
 -- int64 time_bucket_gapfill with no start/finish
 SELECT
-  time_bucket_gapfill(1::int8,t::int8)
-FROM (VALUES (1),(2)) v(t)
+  time_bucket_gapfill(1::int8,t)
+FROM (VALUES (1::int8),(2::int8)) v(t)
 WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
@@ -835,13 +909,28 @@ WHERE
   t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'
 GROUP BY 1;
 
--- time_bucket_gapfill with multiple constraints
--- first one with matching operator wins
+-- timestamptz time_bucket_gapfill with different datatype in finish constraint
 SELECT
- time_bucket_gapfill(1::int8,t::int8)
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamptz),('2000-01-01'::timestamptz)) v(t)
+WHERE
+  t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'::date
+GROUP BY 1;
+
+-- time_bucket_gapfill with now() as start
+SELECT
+ time_bucket_gapfill('1d'::interval,t)
+FROM (VALUES (now()),(now())) v(t)
+WHERE
+ t >= now() AND t < now() - '1d'::interval
+GROUP BY 1;
+
+-- time_bucket_gapfill with multiple constraints
+SELECT
+ time_bucket_gapfill(1,t)
 FROM (VALUES (1),(2)) v(t)
 WHERE
- t >= -1 AND t < 3 and t>1 AND t <=4
+ t >= -1 AND t < 3 and t>1 AND t <=4 AND length(version()) > 0
 GROUP BY 1;
 
 -- int32 time_bucket_gapfill with greater for start
@@ -873,33 +962,3 @@ FROM metrics_int m, metrics_int m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
 
--- time_bucket_gapfill with constraints ORed
-SELECT
- time_bucket_gapfill(1::int8,t::int8)
-FROM (VALUES (1),(2)) v(t)
-WHERE
- t >= -1 OR t < 3
-GROUP BY 1;
-
--- test with 2 tables and where clause doesnt match gapfill argument
-SELECT
-  time_bucket_gapfill(1,m2.time)
-FROM metrics_int m, metrics_int m2
-WHERE m.time >=0 AND m.time < 2
-GROUP BY 1;
-
--- test inner join and where clause doesnt match gapfill argument
-SELECT
-  time_bucket_gapfill(1,m2.time)
-FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
-WHERE m1.time >=0 AND m1.time < 2
-GROUP BY 1;
-
--- test inner join with constraints in join condition
--- only toplevel where clause constraints are supported atm
-SELECT
-  time_bucket_gapfill(1,m2.time)
-FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
-GROUP BY 1;
-
-\set ON_ERROR_STOP 1
