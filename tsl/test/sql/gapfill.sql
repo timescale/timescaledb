@@ -100,6 +100,7 @@ SELECT
 FROM (VALUES (1),(2)) v(time);
 
 -- test NULL args
+\set ON_ERROR_STOP 0
 SELECT
   time_bucket_gapfill(NULL,time,1,11)
 FROM (VALUES (1),(2)) v(time)
@@ -119,6 +120,7 @@ SELECT
   time_bucket_gapfill(1,time,1,NULL)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
+\set ON_ERROR_STOP 1
 
 -- test int int2/4/8
 SELECT
@@ -623,3 +625,255 @@ SELECT
   ),avg(v1)
 FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2;
 
+\set ON_ERROR_STOP 0
+-- bucket_width non simple expression
+SELECT
+  time_bucket_gapfill(t,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- no start/finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- NULL start/finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,NULL,NULL)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- no start and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,finish:=1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- NULL start expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- unsupported start expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,t,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- NULL start and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,NULL,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- NULL finish expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- unsupported finish expression and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- no finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- NULL finish and no usable time constraints
+SELECT
+  time_bucket_gapfill(1,t,1,NULL)
+FROM (VALUES (1),(2)) v(t)
+WHERE true AND true
+GROUP BY 1;
+
+-- expression with column reference on right side
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE t > t AND t < 2
+GROUP BY 1;
+
+-- expression with multiple column references
+SELECT
+  time_bucket_gapfill(1,t1+t2)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 1 AND t1 < 2
+GROUP BY 1;
+
+-- expression with NULL start in WHERE clause, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > CASE WHEN length(version()) > 0 THEN NULL::int ELSE NULL::int END AND t1 < 4
+GROUP BY 1;
+
+-- expression with NULL finish in WHERE clause, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 0 AND t1 < CASE WHEN length(version()) > 0 THEN NULL::int ELSE NULL::int END
+GROUP BY 1;
+
+-- non-Const NULL as start argument, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 0 AND t1 < 2
+GROUP BY 1;
+
+-- non-Const NULL as finish argument, we use CASE to wrap the NULL so it doesnt get folded
+SELECT
+  time_bucket_gapfill(1,t1,NULL,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
+FROM (VALUES (1,2),(2,2)) v(t1,t2)
+WHERE t1 > 0 AND t1 < 2
+GROUP BY 1;
+
+-- int32 time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= -1 AND t < 3
+GROUP BY 1;
+
+-- same query with less or equal as finish
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= -1 AND t <= 3
+GROUP BY 1;
+
+-- int16 time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill(1::int2,t::int2)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= -1 AND t < 3
+GROUP BY 1;
+
+-- int64 time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill(1::int8,t::int8)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t >= -1 AND t < 3
+GROUP BY 1;
+
+-- date time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill('1d'::interval,t)
+FROM (VALUES ('1999-12-30'::date),('2000-01-01'::date)) v(t)
+WHERE
+  t >= '1999-12-29' AND t < '2000-01-03'
+GROUP BY 1;
+
+-- timestamp time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamp),('2000-01-01'::timestamp)) v(t)
+WHERE
+  t >= '1999-12-29' AND t < '2000-01-03'
+GROUP BY 1;
+
+-- timestamptz time_bucket_gapfill with no start/finish
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamptz),('2000-01-01'::timestamptz)) v(t)
+WHERE
+  t >= '1999-12-29' AND t < '2000-01-03'
+GROUP BY 1;
+
+-- timestamptz time_bucket_gapfill with more complex expression
+SELECT
+  time_bucket_gapfill('12h'::interval,t)
+FROM (VALUES ('1999-12-30'::timestamptz),('2000-01-01'::timestamptz)) v(t)
+WHERE
+  t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'
+GROUP BY 1;
+
+-- time_bucket_gapfill with multiple constraints
+-- first one with matching operator wins
+SELECT
+ time_bucket_gapfill(1::int8,t::int8)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+ t >= -1 AND t < 3 and t>1 AND t <=4
+GROUP BY 1;
+
+-- int32 time_bucket_gapfill with greater for start
+SELECT
+  time_bucket_gapfill(1,t)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+  t > -2 AND t < 3
+GROUP BY 1;
+
+-- test actual table
+SELECT
+  time_bucket_gapfill(1,time)
+FROM metrics_int
+WHERE time >=0 AND time < 2
+GROUP BY 1;
+
+-- test with table alias
+SELECT
+  time_bucket_gapfill(1,time)
+FROM metrics_int m
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+
+-- test with 2 tables
+SELECT
+  time_bucket_gapfill(1,m.time)
+FROM metrics_int m, metrics_int m2
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+
+-- time_bucket_gapfill with constraints ORed
+SELECT
+ time_bucket_gapfill(1::int8,t::int8)
+FROM (VALUES (1),(2)) v(t)
+WHERE
+ t >= -1 OR t < 3
+GROUP BY 1;
+
+-- test with 2 tables and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m, metrics_int m2
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+
+-- test inner join and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
+WHERE m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+
+-- test inner join with constraints in join condition
+-- only toplevel where clause constraints are supported atm
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
+GROUP BY 1;
+
+\set ON_ERROR_STOP 1

@@ -9,7 +9,6 @@
 #include <export.h>
 #include <cross_module_fn.h>
 #include "planner.h"
-#include "time_bucket.h"
 #include "gapfill/gapfill.h"
 
 #include "license.h"
@@ -56,12 +55,12 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remove_reorder_policy = reorder_remove_policy,
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.gapfill_marker = gapfill_marker,
-	.gapfill_int16_time_bucket = ts_int16_bucket,
-	.gapfill_int32_time_bucket = ts_int32_bucket,
-	.gapfill_int64_time_bucket = ts_int64_bucket,
-	.gapfill_date_time_bucket = ts_date_bucket,
-	.gapfill_timestamp_time_bucket = ts_timestamp_bucket,
-	.gapfill_timestamptz_time_bucket = ts_timestamptz_bucket,
+	.gapfill_int16_time_bucket = gapfill_int16_time_bucket,
+	.gapfill_int32_time_bucket = gapfill_int32_time_bucket,
+	.gapfill_int64_time_bucket = gapfill_int64_time_bucket,
+	.gapfill_date_time_bucket = gapfill_date_time_bucket,
+	.gapfill_timestamp_time_bucket = gapfill_timestamp_time_bucket,
+	.gapfill_timestamptz_time_bucket = gapfill_timestamptz_time_bucket,
 	.alter_job_schedule = bgw_policy_alter_job_schedule,
 	.reorder_chunk = tsl_reorder_chunk,
 };

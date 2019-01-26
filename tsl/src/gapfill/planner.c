@@ -189,6 +189,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 
 	return &cscan->scan.plan;
 }
+
 static CustomPathMethods gapfill_path_methods =
 {
 	.CustomName = "GapFill",
