@@ -16,6 +16,7 @@
 #include <utils/memutils.h>
 #include <utils/lsyscache.h>
 #include <utils/timestamp.h>
+#include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include "compat.h"
@@ -23,6 +24,7 @@
 #include "gapfill/locf.h"
 #include "gapfill/interpolate.h"
 #include "gapfill/exec.h"
+#include "time_bucket.h"
 
 typedef union GapFillColumnStateUnion
 {
@@ -178,6 +180,70 @@ gapfill_state_create(CustomScan *cscan)
 	return (Node *) state;
 }
 
+static bool
+is_const_null(Expr *expr)
+{
+	return IsA(expr, Const) &&castNode(Const, expr)->constisnull;
+}
+
+static bool
+is_simple_expr_walker(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+
+/*
+ * since expression_tree_walker does early exit on true
+ * logic is reverted and return value of true means expression
+ * is not simple, this is reverted in parent
+ */
+	switch (nodeTag(node))
+	{
+			/*
+			 * whitelist expression types we deem safe to execute in a
+			 * separate expression context
+			 */
+		case T_Const:
+		case T_FuncExpr:
+		case T_NamedArgExpr:
+		case T_OpExpr:
+		case T_DistinctExpr:
+		case T_NullIfExpr:
+		case T_ScalarArrayOpExpr:
+		case T_BoolExpr:
+		case T_CoerceViaIO:
+		case T_CaseExpr:
+		case T_CaseWhen:
+			break;
+		default:
+			return true;
+	}
+	return expression_tree_walker(node, is_simple_expr_walker, context);
+}
+
+/*
+ * check if expression is simple expression and contains only simple
+ * subexpressions
+ */
+static bool
+is_simple_expr(Expr *node)
+{
+	/*
+	 * we make a list here because expression tree walker will not recurse for
+	 * primitive node types without expression subnodes so the walker function
+	 * would never get called for toplevel Var or Param but we want to check
+	 * for this as well.
+	 */
+	node = (Expr *) list_make1(node);
+
+	/*
+	 * since expression_tree_walker does early exit on true and we use that to
+	 * skip processing on first non-simple expression we invert return value
+	 * from expression_tree_walker here
+	 */
+	return !expression_tree_walker((Node *) node, is_simple_expr_walker, NULL);
+}
+
 /*
  * Initialize the scan state
  */
@@ -197,9 +263,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	List	   *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
 	Node	   *entry;
 	bool		isnull;
-	Datum		arg1,
-				arg3,
-				arg4;
+	Datum		arg_value;
 	int			i;
 
 	state->gapfill_typid = func->funcresulttype;
@@ -207,28 +271,78 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	state->subslot = NULL;
 	state->scanslot = MakeSingleTupleTableSlot(tupledesc);
 
-	/* time_bucket interval */
-	arg1 = gapfill_exec_expr(state, linitial(func->args), &isnull);
-	/* isnull should never be true because time_bucket_gapfill is STRICT */
-	Assert(!isnull);
-	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype, exprType(linitial(func->args)), arg1);
+	/* bucket_width */
+	if (!is_simple_expr(linitial(func->args)))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple expression")));
 
-	/*
-	 * pass gapfill start through time_bucket so it is aligned with bucket
-	 * start
-	 */
-	call->args = list_make2(linitial(func->args), lthird(func->args));
-	arg3 = gapfill_exec_expr(state, (Expr *) call, &isnull);
-	/* isnull should never be true because time_bucket_gapfill is STRICT */
-	Assert(!isnull);
-	state->gapfill_start = gapfill_datum_get_internal(arg3, func->funcresulttype);
+	arg_value = gapfill_exec_expr(state, linitial(func->args), &isnull);
+	if (isnull)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
+	}
+	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype, exprType(linitial(func->args)), arg_value);
+
+	/* check if gapfill start was left out */
+	if (is_const_null(lthird(func->args)))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL")));
+	else
+	{
+		if (!is_simple_expr(lthird(func->args)))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: start must be a simple expression")));
+
+		/*
+		 * pass gapfill start through time_bucket so it is aligned with bucket
+		 * start
+		 */
+		call->args = list_make2(linitial(func->args), lthird(func->args));
+		arg_value = gapfill_exec_expr(state, (Expr *) call, &isnull);
+
+		/*
+		 * the default value for start is NULL but this is checked above, when
+		 * a non-Const is passed here that evaluates to NULL we bail
+		 */
+		if (isnull)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL")));
+
+		state->gapfill_start = gapfill_datum_get_internal(arg_value, func->funcresulttype);
+	}
 	state->next_timestamp = state->gapfill_start;
 
 	/* gap fill end */
-	arg4 = gapfill_exec_expr(state, lfourth(func->args), &isnull);
-	/* isnull should never be true because time_bucket_gapfill is STRICT */
-	Assert(!isnull);
-	state->gapfill_end = gapfill_datum_get_internal(arg4, func->funcresulttype);
+	if (is_const_null(lfourth(func->args)))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL")));
+	else
+	{
+
+		if (!is_simple_expr(lfourth(func->args)))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple expression")));
+		arg_value = gapfill_exec_expr(state, lfourth(func->args), &isnull);
+
+		/*
+		 * the default value for finish is NULL but this is checked above,
+		 * when a non-Const is passed here that evaluates to NULL we bail
+		 */
+		if (isnull)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL")));
+
+		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
+	}
 
 	/* remove start and end argument from time_bucket call */
 	func->args = list_make2(linitial(func->args), lsecond(func->args));
@@ -558,7 +672,11 @@ gapfill_fetch_next_tuple(GapFillState *state)
 
 	state->subslot = subslot;
 	time_value = slot_getattr(subslot, AttrOffsetGetAttrNumber(state->time_index), &isnull);
-	Assert(!isnull);
+	if (isnull)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid time_bucket_gapfill argument: ts cannot be NULL")));
+
 	state->subslot_time = gapfill_datum_get_internal(time_value, state->gapfill_typid);
 
 	return subslot;
