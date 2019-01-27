@@ -409,21 +409,6 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	}
 }
 
-static void
-adjust_slots(ChunkInsertState *cis)
-{
-	/*
-	 * Note: we have to adjust the slot descriptor whether or not this chunk
-	 * has a tup_conv_map since we reuse the same slot across chunks. thus the
-	 * slot will be set to the last chunk's slot descriptor and NOT the
-	 * hypertable's slot descriptor.
-	 */
-	if (ResultRelInfo_OnConflictNotNull(cis->result_relation_info) && ResultRelInfo_OnConflictProjInfoCompat(cis->result_relation_info) != NULL)
-	{
-		ExecSetSlotDescriptor(get_projection_info_slot_compat(ResultRelInfo_OnConflictProjInfoCompat(cis->result_relation_info)), RelationGetDescr(cis->rel));
-	}
-}
-
 
 /*
  * Check if tuple conversion is needed between a chunk and its parent table.
@@ -537,7 +522,6 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 													 gettext_noop("could not convert row type"));
 		adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 	}
-	adjust_slots(state);
 
 	/* Need a tuple table slot to store converted tuples */
 	if (state->tup_conv_map)
@@ -548,6 +532,25 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	MemoryContextSwitchTo(old_mcxt);
 
 	return state;
+}
+
+void
+ts_chunk_insert_state_switch(ChunkInsertState *state)
+{
+	/*
+	 * Adjust the slots descriptor.
+	 *
+	 * Note: we have to adjust the slot descriptor whether or not this chunk
+	 * has a tup_conv_map since we reuse the same slot across chunks. thus the
+	 * slot will be set to the last chunk's slot descriptor and NOT the
+	 * hypertable's slot descriptor.
+	 */
+	if (ResultRelInfo_OnConflictNotNull(state->result_relation_info) && ResultRelInfo_OnConflictProjInfoCompat(state->result_relation_info) != NULL)
+	{
+		TupleTableSlot *slot = get_projection_info_slot_compat(ResultRelInfo_OnConflictProjInfoCompat(state->result_relation_info));
+
+		ExecSetSlotDescriptor(slot, RelationGetDescr(state->rel));
+	}
 }
 
 static void

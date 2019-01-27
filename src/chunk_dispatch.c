@@ -69,5 +69,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 	}
 
 	Assert(cis != NULL);
+	ts_chunk_insert_state_switch(cis);
 	return cis;
 }
