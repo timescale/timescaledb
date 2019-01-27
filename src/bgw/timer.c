@@ -40,10 +40,10 @@ on_postmaster_death(void)
 			 errmsg("postmaster exited while timescaledb scheduler was working")));
 }
 
-static long
+static int64
 get_timeout_millisec(TimestampTz by_time)
 {
-	long		timeout_sec = 0;
+	int64		timeout_sec = 0;
 	int			timeout_usec = 0;
 
 	if (TIMESTAMP_IS_NOBEGIN(by_time))
@@ -63,7 +63,7 @@ wait_using_wait_latch(TimestampTz until)
 {
 	int			wl_rc;
 
-	long		timeout = get_timeout_millisec(until);
+	int64		timeout = get_timeout_millisec(until);
 
 	if (timeout > MAX_TIMEOUT)
 		timeout = MAX_TIMEOUT;
