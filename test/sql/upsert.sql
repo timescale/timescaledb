@@ -105,6 +105,13 @@ INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_2) VALUES
 ON CONFLICT (time, device_id)
 DO UPDATE SET device_id_2 = 'device-id-2-new', color = 'orange10' RETURNING *;
 
+--test inserting to to a chunk already in the chunk dispatch cache again.
+INSERT INTO upsert_test_space as current (time, device_id, temp, color, device_id_2) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-2'),
+('2018-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-2'),
+('2017-01-20T09:00:01', 'dev3', 43.5, 'orange7', 'device-id-2'),
+('2018-01-21T09:00:01', 'dev5', 43.5, 'orange9', 'device-id-2')
+ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_2 = coalesce(excluded.device_id_2,current.device_id_2), color = coalesce(excluded.color,current.color) RETURNING *;
 
 WITH CTE AS (
     INSERT INTO upsert_test_multi_unique
@@ -147,9 +154,9 @@ select * from upsert_test_diffchunk order by time, device_id;
 
 --make sure current works
 INSERT INTO upsert_test_diffchunk as current (time, device_id, temp, color, device_id_2) VALUES
- ('2019-01-20T09:00:01', 'dev1', 43.5, 'orange2', 'device-id-2'),
- ('2017-01-20T09:00:01', 'dev1', 43.5, 'yellow2', 'device-id-2')
---('2019-01-20T09:00:01', 'dev2', 43.5, 'orange2', 'device-id-2')
+('2019-01-20T09:00:01', 'dev1', 43.5, 'orange2', 'device-id-2'),
+('2017-01-20T09:00:01', 'dev1', 43.5, 'yellow2', 'device-id-2'),
+('2019-01-20T09:00:01', 'dev2', 43.5, 'orange2', 'device-id-2')
 ON CONFLICT (time, device_id)
 DO UPDATE SET
 device_id_2 = coalesce(excluded.device_id_2,current.device_id_2),
