@@ -871,7 +871,7 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 			ereport(LOG, (errmsg("TimescaleDB version %s does not have a background worker, exiting", soname)));
 		else					/* essentially we morph into the versioned
 								 * worker here */
-			DirectFunctionCall1(versioned_scheduler_main, InvalidOid);
+			DirectFunctionCall1(versioned_scheduler_main, ObjectIdGetDatum(InvalidOid));
 	}
 	PG_RETURN_VOID();
 }
