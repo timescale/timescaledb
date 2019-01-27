@@ -404,7 +404,7 @@ license_print_expiration_warning_if_needed(void)
 	if (license_is_expired())
 		ereport(WARNING, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						  errmsg("Timescale License expired"),
-						  errhint("Your license expired on %s. Renew your license to continue using enterprise features.", DatumGetCString(DirectFunctionCall1(timestamptz_out, current_license.end_time)))));
+						  errhint("Your license expired on %s. Renew your license to continue using enterprise features.", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(current_license.end_time))))));
 	else
 	{
 		Interval	week = {.day = 7,};
@@ -412,6 +412,6 @@ license_print_expiration_warning_if_needed(void)
 
 		if (timestamp_cmp_internal(GetCurrentTransactionStartTimestamp(), warn_after) >= 0)
 			ereport(WARNING, (errcode(ERRCODE_WARNING),
-							  errmsg("your Timescale Enterprise License expires on %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, current_license.end_time)))));
+							  errmsg("your Timescale Enterprise License expires on %s", DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(current_license.end_time))))));
 	}
 }
