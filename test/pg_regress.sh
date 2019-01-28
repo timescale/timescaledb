@@ -87,6 +87,8 @@ function cleanup() {
   rm -rf ${TEST_TABLESPACE2_PATH}
   rm -f ${CURRENT_DIR}/.pg_init
   rm -f ${TEMP_SCHEDULE}
+  rm -rf ${TEST_TABLESPACE3_PATH}
+  rm -f ${TEST_OUTPUT_DIR}/.pg_init
 }
 
 trap cleanup EXIT
@@ -94,7 +96,8 @@ trap cleanup EXIT
 # This mktemp line will work on both OSX and GNU systems
 TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
 TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
-export TEST_TABLESPACE1_PATH TEST_TABLESPACE2_PATH
+TEST_TABLESPACE3_PATH=${TEST_TABLESPACE3_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
+export TEST_TABLESPACE1_PATH TEST_TABLESPACE2_PATH TEST_TABLESPACE3_PATH
 
 rm -f ${TEST_OUTPUT_DIR}/.pg_init
 mkdir -p ${EXE_DIR}/sql/dump
