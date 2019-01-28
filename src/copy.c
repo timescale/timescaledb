@@ -286,6 +286,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			if (bistate->current_buf != InvalidBuffer)
 				ReleaseBuffer(bistate->current_buf);
 			bistate->current_buf = InvalidBuffer;
+			ts_chunk_insert_state_switch(cis);
 		}
 
 		/* Triggers and stuff need to be invoked in query context. */
