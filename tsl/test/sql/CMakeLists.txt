@@ -100,6 +100,8 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     timescaledb_fdw.sql
   )
   list(APPEND TEST_FILES_DEBUG
+    deparse.sql
+    deparse_fail.sql
     dist_commands.sql
     remote_connection.sql
     remote_connection_cache.sql

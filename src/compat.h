@@ -400,6 +400,8 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 	} name##data;                                                                                  \
 	FunctionCallInfo name = &name##data.fcinfo
 
+#define SizeForFunctionCallInfo(nargs) sizeof(FunctionCallInfoData)
+
 /* convenience macro to allocate FunctionCallInfoData on the heap */
 #define HEAP_FCINFO(nargs) palloc(sizeof(FunctionCallInfoData))
 

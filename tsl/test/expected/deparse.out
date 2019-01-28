@@ -1,0 +1,11 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- We compare information(\d+) about manually created tables with the ones that were recreated using deparse_table command.
+-- There should be no diff.
+\set ECHO errors
+ ?column? 
+----------
+ DONE
+(1 row)
+

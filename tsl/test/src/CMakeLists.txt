@@ -5,6 +5,7 @@ set(SOURCES
   test_ddl_hook.c
   test_continuous_aggs.c
   server.c
+  deparse.c
 )
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 

@@ -31,6 +31,7 @@
 #include "scan_iterator.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
+#include "constraint.h"
 #include "dimension_vector.h"
 #include "dimension_slice.h"
 #include "hypercube.h"
@@ -579,36 +580,40 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 	return cube->num_slices;
 }
 
+typedef struct ConstraintContext
+{
+	int num_added;
+	char chunk_relkind;
+	ChunkConstraints *ccs;
+	int32 chunk_id;
+} ConstraintContext;
+
+static ConstraintProcessStatus
+chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
+{
+	ConstraintContext *cc = arg;
+	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+
+	if (chunk_constraint_need_on_chunk(cc->chunk_relkind, constraint))
+	{
+		chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
+		return CONSTR_PROCESSED;
+	}
+
+	return CONSTR_IGNORED;
+}
+
 int
 ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
 												 const char chunk_relkind, Oid hypertable_oid)
 {
-	ScanKeyData skey;
-	Relation rel;
-	SysScanDesc scan;
-	HeapTuple htup;
-	int num_added = 0;
+	ConstraintContext cc = {
+		.chunk_relkind = chunk_relkind,
+		.ccs = ccs,
+		.chunk_id = chunk_id,
+	};
 
-	ScanKeyInit(&skey, Anum_pg_constraint_conrelid, BTEqualStrategyNumber, F_OIDEQ, hypertable_oid);
-
-	rel = table_open(ConstraintRelationId, AccessShareLock);
-	scan = systable_beginscan(rel, ConstraintRelidTypidNameIndexId, true, NULL, 1, &skey);
-
-	while (HeapTupleIsValid(htup = systable_getnext(scan)))
-	{
-		Form_pg_constraint pg_constraint = (Form_pg_constraint) GETSTRUCT(htup);
-
-		if (chunk_constraint_need_on_chunk(chunk_relkind, pg_constraint))
-		{
-			chunk_constraints_add(ccs, chunk_id, 0, NULL, NameStr(pg_constraint->conname));
-			num_added++;
-		}
-	}
-
-	systable_endscan(scan);
-	table_close(rel, AccessShareLock);
-
-	return num_added;
+	return ts_constraint_process(hypertable_oid, chunk_constraint_add, &cc);
 }
 
 void
