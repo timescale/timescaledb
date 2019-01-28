@@ -105,6 +105,13 @@ INSERT INTO upsert_test_space (time, device_id, temp, color, device_id_2) VALUES
 ON CONFLICT (time, device_id)
 DO UPDATE SET device_id_2 = 'device-id-2-new', color = 'orange10' RETURNING *;
 
+--test inserting to to a chunk already in the chunk dispatch cache again.
+INSERT INTO upsert_test_space as current (time, device_id, temp, color, device_id_2) VALUES ('2017-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-2'),
+('2018-01-20T09:00:01', 'dev5', 43.5, 'orange8', 'device-id-2'),
+('2017-01-20T09:00:01', 'dev3', 43.5, 'orange7', 'device-id-2'),
+('2018-01-21T09:00:01', 'dev5', 43.5, 'orange9', 'device-id-2')
+ON CONFLICT (time, device_id)
+DO UPDATE SET device_id_2 = coalesce(excluded.device_id_2,current.device_id_2), color = coalesce(excluded.color,current.color) RETURNING *;
 
 WITH CTE AS (
     INSERT INTO upsert_test_multi_unique
@@ -128,3 +135,32 @@ WITH CTE AS (
     RETURNING *
 )
 SELECT * FROM CTE;
+
+--create table with one chunk that has a tup_conv_map and one that does not
+--to ensure this, create a chunk before altering the table this chunk will not have a tup_conv_map
+CREATE TABLE upsert_test_diffchunk(time timestamp, device_id char(20), to_drop int, temp float, color text);
+SELECT create_hypertable('upsert_test_diffchunk', 'time', chunk_time_interval=> interval '1 month');
+CREATE UNIQUE INDEX time_device_idx ON upsert_test_diffchunk (time, device_id);
+--this is the chunk with no tup_conv_map
+INSERT INTO upsert_test_diffchunk (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev1', 25.9, 'yellow') RETURNING *;
+INSERT INTO upsert_test_diffchunk (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev2', 25.9, 'yellow') RETURNING *;
+--alter the table
+ALTER TABLE upsert_test_diffchunk DROP to_drop;
+ALTER TABLE upsert_test_diffchunk ADD device_id_2 char(20);
+--new chunk that does have a tup conv map
+INSERT INTO upsert_test_diffchunk (time, device_id, temp, color) VALUES ('2019-01-20T09:00:01', 'dev1', 23.5, 'orange') ;
+INSERT INTO upsert_test_diffchunk (time, device_id, temp, color) VALUES ('2019-01-20T09:00:01', 'dev2', 23.5, 'orange') ;
+select * from upsert_test_diffchunk order by time, device_id;
+
+--make sure current works
+INSERT INTO upsert_test_diffchunk as current (time, device_id, temp, color, device_id_2) VALUES
+('2019-01-20T09:00:01', 'dev1', 43.5, 'orange2', 'device-id-2'),
+('2017-01-20T09:00:01', 'dev1', 43.5, 'yellow2', 'device-id-2'),
+('2019-01-20T09:00:01', 'dev2', 43.5, 'orange2', 'device-id-2')
+ON CONFLICT (time, device_id)
+DO UPDATE SET
+device_id_2 = coalesce(excluded.device_id_2,current.device_id_2),
+temp = coalesce(excluded.temp,current.temp) ,
+color = coalesce(excluded.color,current.color);
+select * from upsert_test_diffchunk order by time, device_id;
+

@@ -211,7 +211,15 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	ResultRelInfo_OnConflictProjInfoCompat(rri) = ResultRelInfo_OnConflictProjInfoCompat(rri_orig);
 	ResultRelInfo_OnConflictWhereCompat(rri) = ResultRelInfo_OnConflictWhereCompat(rri_orig);
 #else
-	rri->ri_onConflict = rri_orig->ri_onConflict;
+	if (rri_orig->ri_onConflict != NULL)
+	{
+		rri->ri_onConflict = makeNode(OnConflictSetState);
+		rri->ri_onConflict->oc_ProjInfo = rri_orig->ri_onConflict->oc_ProjInfo;
+		rri->ri_onConflict->oc_WhereClause = rri_orig->ri_onConflict->oc_WhereClause;
+		rri->ri_onConflict->oc_ProjTupdesc = rri_orig->ri_onConflict->oc_ProjTupdesc;
+	}
+	else
+		rri->ri_onConflict = NULL;
 #endif
 
 	create_chunk_rri_constraint_expr(rri, rel);
@@ -343,8 +351,6 @@ get_adjusted_projection_info_onconflictupdate(ProjectionInfo *orig, List *update
 
 	update_tles = adjust_hypertable_tlist(update_tles, hypertable_to_chunk_map);
 
-	/* set the projection result slot to the chunk schema */
-	ExecSetSlotDescriptor(get_projection_info_slot_compat(orig), chunk_desc);
 	return ExecBuildProjectionInfoCompat(update_tles, orig->pi_exprContext,
 										 get_projection_info_slot_compat(orig), NULL, chunk_desc);
 }
@@ -410,6 +416,7 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 		}
 	}
 }
+
 
 /*
  * Check if tuple conversion is needed between a chunk and its parent table.
@@ -533,6 +540,25 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	MemoryContextSwitchTo(old_mcxt);
 
 	return state;
+}
+
+void
+ts_chunk_insert_state_switch(ChunkInsertState *state)
+{
+	/*
+	 * Adjust the slots descriptor.
+	 *
+	 * Note: we have to adjust the slot descriptor whether or not this chunk
+	 * has a tup_conv_map since we reuse the same slot across chunks. thus the
+	 * slot will be set to the last chunk's slot descriptor and NOT the
+	 * hypertable's slot descriptor.
+	 */
+	if (ResultRelInfo_OnConflictNotNull(state->result_relation_info) && ResultRelInfo_OnConflictProjInfoCompat(state->result_relation_info) != NULL)
+	{
+		TupleTableSlot *slot = get_projection_info_slot_compat(ResultRelInfo_OnConflictProjInfoCompat(state->result_relation_info));
+
+		ExecSetSlotDescriptor(slot, RelationGetDescr(state->rel));
+	}
 }
 
 static void
