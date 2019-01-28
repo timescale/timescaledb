@@ -1,0 +1,24 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/deparse_func.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION _timescaledb_internal.get_tabledef(tbl REGCLASS) RETURNS TEXT
+AS :TSL_MODULE_PATHNAME, 'tsl_test_get_tabledef' LANGUAGE C VOLATILE STRICT;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+CREATE TEMP TABLE fail_table1(x INT);
+SELECT _timescaledb_internal.get_tabledef('fail_table1');
+ERROR:  temporary table is not supported
+CREATE INDEX my_fail_table1_idx ON fail_table1 USING BTREE(x);
+SELECT _timescaledb_internal.get_tabledef('my_fail_table1_idx');
+ERROR:  given relation is not an ordinary table
+SELECT _timescaledb_internal.get_tabledef('non_existing');
+ERROR:  relation "non_existing" does not exist at character 43
+CREATE TABLE row_sec(i INT);
+ALTER TABLE row_sec ENABLE ROW LEVEL SECURITY;
+SELECT _timescaledb_internal.get_tabledef('row_sec');
+ERROR:  row security is not supported

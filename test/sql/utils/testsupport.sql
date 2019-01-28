@@ -275,3 +275,10 @@ $BODY$;
 -- Used to set a deterministic memory setting during tests
 CREATE OR REPLACE FUNCTION test.set_memory_cache_size(memory_amount text)
 RETURNS BIGINT AS :MODULE_PATHNAME, 'ts_set_memory_cache_size' LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION test.empty_trigger_func()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+END
+$BODY$;

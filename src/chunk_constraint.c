@@ -579,36 +579,40 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 	return cube->num_slices;
 }
 
+typedef struct ConstraintContext
+{
+	int num_added;
+	char chunk_relkind;
+	ChunkConstraints *ccs;
+	int32 chunk_id;
+} ConstraintContext;
+
+static bool
+chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
+{
+	ConstraintContext *cc = arg;
+	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+
+	if (chunk_constraint_need_on_chunk(cc->chunk_relkind, constraint))
+	{
+		chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
+		cc->num_added++;
+	}
+	return true;
+}
+
 int
 ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
 												 const char chunk_relkind, Oid hypertable_oid)
 {
-	ScanKeyData skey;
-	Relation rel;
-	SysScanDesc scan;
-	HeapTuple htup;
-	int num_added = 0;
+	ConstraintContext *cc = palloc(sizeof(ConstraintContext));
 
-	ScanKeyInit(&skey, Anum_pg_constraint_conrelid, BTEqualStrategyNumber, F_OIDEQ, hypertable_oid);
-
-	rel = heap_open(ConstraintRelationId, AccessShareLock);
-	scan = systable_beginscan(rel, ConstraintRelidTypidNameIndexId, true, NULL, 1, &skey);
-
-	while (HeapTupleIsValid(htup = systable_getnext(scan)))
-	{
-		Form_pg_constraint pg_constraint = (Form_pg_constraint) GETSTRUCT(htup);
-
-		if (chunk_constraint_need_on_chunk(chunk_relkind, pg_constraint))
-		{
-			chunk_constraints_add(ccs, chunk_id, 0, NULL, NameStr(pg_constraint->conname));
-			num_added++;
-		}
-	}
-
-	systable_endscan(scan);
-	heap_close(rel, AccessShareLock);
-
-	return num_added;
+	cc->chunk_relkind = chunk_relkind;
+	cc->num_added = 0;
+	cc->ccs = ccs;
+	cc->chunk_id = chunk_id;
+	ts_process_constraints(hypertable_oid, chunk_constraint_add, cc);
+	return cc->num_added;
 }
 
 void

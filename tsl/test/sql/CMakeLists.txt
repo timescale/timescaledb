@@ -60,6 +60,8 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     remote_txn_id.sql
     server.sql
     dist_commands.sql
+    deparse.sql
+    deparse_fail.sql
   )
 endif ()
 
