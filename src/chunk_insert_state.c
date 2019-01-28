@@ -211,7 +211,15 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel, Index r
 	ResultRelInfo_OnConflictProjInfoCompat(rri) = ResultRelInfo_OnConflictProjInfoCompat(rri_orig);
 	ResultRelInfo_OnConflictWhereCompat(rri) = ResultRelInfo_OnConflictWhereCompat(rri_orig);
 #else
-	rri->ri_onConflict = rri_orig->ri_onConflict;
+	if (rri_orig->ri_onConflict != NULL)
+	{
+		rri->ri_onConflict = makeNode(OnConflictSetState);
+		rri->ri_onConflict->oc_ProjInfo = rri_orig->ri_onConflict->oc_ProjInfo;
+		rri->ri_onConflict->oc_WhereClause = rri_orig->ri_onConflict->oc_WhereClause;
+		rri->ri_onConflict->oc_ProjTupdesc = rri_orig->ri_onConflict->oc_ProjTupdesc;
+	}
+	else
+		rri->ri_onConflict = NULL;
 #endif
 
 	create_chunk_rri_constraint_expr(rri, rel);
