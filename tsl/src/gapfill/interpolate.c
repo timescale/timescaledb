@@ -125,14 +125,11 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 	value = heap_getattr(&tuple, 1, tupdesc, &sample->isnull);
 	if (!sample->isnull)
 	{
-		sample->time = value;
+		sample->time = gapfill_datum_get_internal(value, state->gapfill_typid);
 
 		value = heap_getattr(&tuple, 2, tupdesc, &sample->isnull);
 		if (!sample->isnull)
-		{
-			sample->time = datumCopy(sample->time, state->columns[state->time_index]->typbyval, state->columns[state->time_index]->typlen);
 			sample->value = datumCopy(value, column->base.typbyval, column->base.typlen);
-		}
 	}
 
 	DecrTupleDescRefCount(tupdesc);
@@ -167,9 +164,9 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 	y0 = column->prev.value;
 	y1 = column->next.value;
 
-	x = gapfill_datum_get_internal(time, state->gapfill_typid);
-	x0 = gapfill_datum_get_internal(column->prev.time, state->gapfill_typid);
-	x1 = gapfill_datum_get_internal(column->next.time, state->gapfill_typid);
+	x  = time;
+	x0 = column->prev.time;
+	x1 = column->next.time;
 
 	switch (column->base.typid)
 	{
