@@ -10,7 +10,7 @@
 
 typedef struct GapFillInterpolateSample
 {
-	Datum		time;
+	int64		time;
 	Datum		value;
 	bool		isnull;
 } GapFillInterpolateSample;
