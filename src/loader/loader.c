@@ -532,9 +532,10 @@ do_load()
 	 */
 	PG_TRY();
 	{
-		PGFunction	ts_post_load_init = load_external_function(soname, POST_LOAD_INIT_FN, true, NULL);
+		PGFunction	ts_post_load_init = load_external_function(soname, POST_LOAD_INIT_FN, false, NULL);
 
-		DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
+		if (ts_post_load_init != NULL)
+			DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
 	}
 	PG_CATCH();
 	{
