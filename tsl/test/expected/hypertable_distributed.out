@@ -492,7 +492,8 @@ ERROR:  cannot assign to system column "tableoid" at character 22
 -- Test deletes
 DELETE FROM disttable WHERE device = 3;
 -- Test underreplicated chunk warning
-INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1);
+INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
+                                   ('2017-01-02 07:01', 2, 3.5);
 WARNING:  under-replicated chunk 5, lacks 1 server(s)
 SELECT * FROM _timescaledb_catalog.chunk_server;
  chunk_id | server_chunk_id | server_name 
@@ -526,3 +527,52 @@ SELECT * FROM _timescaledb_catalog.chunk_server;
         5 |               2 | server_3
 (7 rows)
 
+-- Show that chunks are created on remote servers and that all
+-- servers/chunks have the same data due to replication
+\c server_1
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('underreplicated');
+ chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                     slices                     
+----------+---------------+-----------------------+-----------------------+---------+------------------------------------------------
+        2 |             2 | _timescaledb_internal | _hyper_2_5_dist_chunk | r       | {"time": [1482969600000000, 1483574400000000]}
+(1 row)
+
+SELECT * FROM underreplicated;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+ Mon Jan 02 07:01:00 2017 PST |      2 |  3.5
+(2 rows)
+
+\c server_2
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('underreplicated');
+ chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                     slices                     
+----------+---------------+-----------------------+-----------------------+---------+------------------------------------------------
+        3 |             2 | _timescaledb_internal | _hyper_2_5_dist_chunk | r       | {"time": [1482969600000000, 1483574400000000]}
+(1 row)
+
+SELECT * FROM underreplicated;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+ Mon Jan 02 07:01:00 2017 PST |      2 |  3.5
+(2 rows)
+
+\c server_3
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('underreplicated');
+ chunk_id | hypertable_id |      schema_name      |      table_name       | relkind |                     slices                     
+----------+---------------+-----------------------+-----------------------+---------+------------------------------------------------
+        2 |             2 | _timescaledb_internal | _hyper_2_5_dist_chunk | r       | {"time": [1482969600000000, 1483574400000000]}
+(1 row)
+
+SELECT * FROM underreplicated;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+ Mon Jan 02 07:01:00 2017 PST |      2 |  3.5
+(2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;

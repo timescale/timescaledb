@@ -35,6 +35,7 @@
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
+#include "chunk_server.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
 #include "compat/tupconvert.h"
@@ -534,6 +535,22 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	}
 }
 
+static List *
+get_chunk_serveroids(Chunk *chunk)
+{
+	List *serveroids = NIL;
+	ListCell *lc;
+
+	foreach (lc, chunk->servers)
+	{
+		ChunkServer *cs = lfirst(lc);
+
+		serveroids = lappend_oid(serveroids, cs->foreign_server_oid);
+	}
+
+	return serveroids;
+}
+
 /*
  * Create new insert chunk state.
  *
@@ -578,6 +595,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	state->rel = rel;
 	state->result_relation_info = resrelinfo;
 	state->estate = dispatch->estate;
+	state->servers = get_chunk_serveroids(chunk);
 
 	if (resrelinfo->ri_RelationDesc->rd_rel->relhasindex &&
 		resrelinfo->ri_IndexRelationDescs == NULL)

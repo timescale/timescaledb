@@ -52,6 +52,7 @@ typedef struct ChunkInsertState
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
 	EState *estate;
+	List *servers;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

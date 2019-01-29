@@ -263,7 +263,8 @@ UPDATE disttable SET tableoid = 4 WHERE device = 2;
 DELETE FROM disttable WHERE device = 3;
 
 -- Test underreplicated chunk warning
-INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1);
+INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
+                                   ('2017-01-02 07:01', 2, 3.5);
 
 SELECT * FROM _timescaledb_catalog.chunk_server;
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
@@ -271,3 +272,20 @@ FROM show_chunks('underreplicated');
 
 -- Show chunk server mappings
 SELECT * FROM _timescaledb_catalog.chunk_server;
+
+-- Show that chunks are created on remote servers and that all
+-- servers/chunks have the same data due to replication
+\c server_1
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('underreplicated');
+SELECT * FROM underreplicated;
+\c server_2
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('underreplicated');
+SELECT * FROM underreplicated;
+\c server_3
+SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM show_chunks('underreplicated');
+SELECT * FROM underreplicated;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
