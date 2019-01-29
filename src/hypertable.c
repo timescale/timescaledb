@@ -836,9 +836,9 @@ ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk)
  * Get the tablespace at an offset from the given tablespace.
  */
 Tablespace *
-ts_hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset)
+ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id, Oid tablespace_oid, int16 offset)
 {
-	Tablespaces *tspcs = ts_tablespace_scan(ht->fd.id);
+	Tablespaces *tspcs = ts_tablespace_scan(hypertable_id);
 	int i = 0;
 
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)

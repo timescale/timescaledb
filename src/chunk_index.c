@@ -32,6 +32,12 @@
 #include "chunk.h"
 #include "compat.h"
 
+static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
+							   const char *hypertable_index);
+static Oid ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_indexrel,
+												 Relation chunkrel, IndexInfo *indexinfo,
+												 bool isconstraint);
+
 static List *
 create_index_colnames(Relation indexrel)
 {
@@ -115,10 +121,11 @@ find_attname_by_attno(TupleDesc tupdesc, AttrNumber attno)
 /*
  * Adjust attribute numbers for expression index definitions.
  */
-static void
-chunk_adjust_expr_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chunkrel)
+List *
+ts_get_expr_index_attnames(IndexInfo *ii, Relation htrel)
 {
 	ListCell *lc;
+	List *name_list = NIL;
 
 	foreach (lc, ii->ii_Expressions)
 	{
@@ -137,14 +144,37 @@ chunk_adjust_expr_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relatio
 			Var *var = lfirst(lc_var);
 			Name attname = find_attname_by_attno(htrel->rd_att, var->varattno);
 
-			if (NULL == attname)
-				elog(ERROR, "index expression var %u not found in chunk", var->varattno);
+			lappend(name_list, attname);
+		}
+	}
+	return name_list;
+}
 
-			/* Adjust the Var's attno to match the chunk's attno */
-			var->varattno = find_attno_by_attname(chunkrel->rd_att, attname);
+static void
+adjust_expr_attnos_from_attnames(IndexInfo *ii, List *attnames, Relation chunkrel)
+{
+	ListCell *lc;
+	ListCell *lc_name = list_head(attnames);
+	foreach (lc, ii->ii_Expressions)
+	{
+		/* Get a list of references to all Vars in the expression */
+		List *vars = pull_var_clause(lfirst(lc), 0);
+		ListCell *lc_var;
+		foreach (lc_var, vars)
+		{
+			Var *var = lfirst(lc_var);
+			for_each_cell (lc_name, lc_name)
+			{
+				Name attname = lfirst(lc_name);
+				if (NULL == attname)
+					elog(ERROR, "index expression var %u not found in chunk", var->varattno);
 
-			if (var->varattno == InvalidAttrNumber)
-				elog(ERROR, "index attribute %s not found in chunk", NameStr(*attname));
+				/* Adjust the Var's attno to match the chunk's attno */
+				var->varattno = find_attno_by_attname(chunkrel->rd_att, attname);
+
+				if (var->varattno == InvalidAttrNumber)
+					elog(ERROR, "index attribute %s not found in chunk", NameStr(*attname));
+			}
 		}
 	}
 }
@@ -172,38 +202,29 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 	}
 }
 
-static inline bool
-chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
+void
+ts_adjust_attnos_from_attnames(IndexInfo *indexinfo, Relation template_indexrel, Relation chunkrel,
+							   List *attnames)
 {
 	/*
-	 * We should be able to safely assume that the only reason the number of
-	 * attributes differ is because we have removed columns in the base table,
-	 * leaving junk attributes that aren't inherited by the chunk.
+	 * Adjust a hypertable's index attribute numbers to match a chunk.
+	 *
+	 * A hypertable's IndexInfo for one of its indexes references the attributes
+	 * (columns) in the hypertable by number. These numbers might not be the same
+	 * for the corresponding attribute in one of its chunks. To be able to use an
+	 * IndexInfo from a hypertable's index to create a corresponding index on a
+	 * chunk, we need to adjust the attribute numbers to match the chunk.
+	 *
+	 * We need to handle two cases: (1) regular indexes that reference columns
+	 * directly, and (2) expression indexes that reference columns in expressions.
 	 */
-	return !(htdesc->natts == chunkdesc->natts && htdesc->tdhasoid == chunkdesc->tdhasoid);
-}
-
-/*
- * Adjust a hypertable's index attribute numbers to match a chunk.
- *
- * A hypertable's IndexInfo for one of its indexes references the attributes
- * (columns) in the hypertable by number. These numbers might not be the same
- * for the corresponding attribute in one of its chunks. To be able to use an
- * IndexInfo from a hypertable's index to create a corresponding index on a
- * chunk, we need to adjust the attribute numbers to match the chunk.
- *
- * We need to handle two cases: (1) regular indexes that reference columns
- * directly, and (2) expression indexes that reference columns in expressions.
- */
-static void
-chunk_adjust_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chunkrel)
-{
-	Assert(ii->ii_NumIndexAttrs == idxrel->rd_att->natts);
-
-	if (list_length(ii->ii_Expressions) == 0)
-		chunk_adjust_colref_attnos(ii, idxrel, chunkrel);
+	if (list_length(indexinfo->ii_Expressions) == 0)
+		chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
 	else
-		chunk_adjust_expr_attnos(ii, htrel, idxrel, chunkrel);
+	{
+		Assert(attnames != NIL);
+		adjust_expr_attnos_from_attnames(indexinfo, attnames, chunkrel);
+	}
 }
 
 #define CHUNK_INDEX_TABLESPACE_OFFSET 1
@@ -214,25 +235,32 @@ chunk_adjust_attnos(IndexInfo *ii, Relation htrel, Relation idxrel, Relation chu
  * This hopefully leads to more I/O parallelism.
  */
 static Oid
-chunk_index_select_tablespace(Relation htrel, Relation chunkrel)
+chunk_index_select_tablespace(int32 hypertable_id, Relation chunkrel)
 {
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, htrel->rd_id);
 	Tablespace *tspc;
 	Oid tablespace_oid = InvalidOid;
 
-	Assert(ht != NULL);
-
-	tspc = ts_hypertable_get_tablespace_at_offset_from(ht,
+	tspc = ts_hypertable_get_tablespace_at_offset_from(hypertable_id,
 													   chunkrel->rd_rel->reltablespace,
 													   CHUNK_INDEX_TABLESPACE_OFFSET);
 
 	if (NULL != tspc)
 		tablespace_oid = tspc->tablespace_oid;
 
-	ts_cache_release(hcache);
-
 	return tablespace_oid;
+}
+
+Oid
+ts_chunk_index_get_tablespace(int32 hypertable_id, Relation template_indexrel, Relation chunkrel)
+{
+	/*
+	 * Determine the index's tablespace. Use the main index's tablespace, or,
+	 * if not set, select one at an offset from the chunk's tablespace.
+	 */
+	if (OidIsValid(template_indexrel->rd_rel->reltablespace))
+		return template_indexrel->rd_rel->reltablespace;
+	else
+		return chunk_index_select_tablespace(hypertable_id, chunkrel);
 }
 
 /*
@@ -242,25 +270,59 @@ static Oid
 chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation chunkrel,
 							bool isconstraint)
 {
+	IndexInfo *indexinfo = BuildIndexInfo(template_indexrel);
+	int32 hypertable_id;
+
+	/*
+	 * Convert the IndexInfo's attnos to match the chunk instead of the
+	 * hypertable
+	 */
+	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
+	{
+		/*
+		 * Adjust a hypertable's index attribute numbers to match a chunk.
+		 *
+		 * A hypertable's IndexInfo for one of its indexes references the attributes
+		 * (columns) in the hypertable by number. These numbers might not be the same
+		 * for the corresponding attribute in one of its chunks. To be able to use an
+		 * IndexInfo from a hypertable's index to create a corresponding index on a
+		 * chunk, we need to adjust the attribute numbers to match the chunk.
+		 *
+		 * We need to handle two cases: (1) regular indexes that reference columns
+		 * directly, and (2) expression indexes that reference columns in expressions.
+		 */
+		if (list_length(indexinfo->ii_Expressions) == 0)
+			chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
+		else
+		{
+			List *attnames = ts_get_expr_index_attnames(indexinfo, htrel);
+			adjust_expr_attnos_from_attnames(indexinfo, attnames, chunkrel);
+		}
+	}
+
+	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
+
+	return ts_chunk_index_create_post_adjustment(hypertable_id,
+												 template_indexrel,
+												 chunkrel,
+												 indexinfo,
+												 isconstraint);
+}
+
+static Oid
+ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_indexrel,
+									  Relation chunkrel, IndexInfo *indexinfo, bool isconstraint)
+{
 	Oid chunk_indexrelid = InvalidOid;
 	const char *indexname;
-	IndexInfo *indexinfo = BuildIndexInfo(template_indexrel);
 	HeapTuple tuple;
 	bool isnull;
 	Datum reloptions;
 	Datum indclass;
 	oidvector *indclassoid;
 	List *colnames = create_index_colnames(template_indexrel);
-	Oid tablespace = InvalidOid;
+	Oid tablespace;
 	bits16 flags = 0;
-
-	/*
-	 * Convert the IndexInfo's attnos to match the chunk instead of the
-	 * hypertable
-	 */
-
-	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
-		chunk_adjust_attnos(indexinfo, htrel, template_indexrel, chunkrel);
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(template_indexrel)));
 
@@ -282,14 +344,7 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 										get_rel_name(RelationGetRelid(template_indexrel)),
 										get_rel_namespace(RelationGetRelid(chunkrel)));
 
-	/*
-	 * Determine the index's tablespace. Use the main index's tablespace, or,
-	 * if not set, select one at an offset from the chunk's tablespace.
-	 */
-	if (OidIsValid(template_indexrel->rd_rel->reltablespace))
-		tablespace = template_indexrel->rd_rel->reltablespace;
-	else
-		tablespace = chunk_index_select_tablespace(htrel, chunkrel);
+	tablespace = ts_chunk_index_get_tablespace(hypertable_id, template_indexrel, chunkrel);
 
 	/* assign flags for index creation and constraint creation */
 	if (isconstraint)
@@ -409,6 +464,23 @@ chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypert
 					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
 }
 
+void
+ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hypertable_idxrel,
+											   int32 chunk_id, Relation chunkrel,
+											   IndexInfo *indexinfo)
+{
+	Oid chunk_indexrelid = ts_chunk_index_create_post_adjustment(hypertable_id,
+																 hypertable_idxrel,
+																 chunkrel,
+																 indexinfo,
+																 false);
+
+	chunk_index_insert(chunk_id,
+					   get_rel_name(chunk_indexrelid),
+					   hypertable_id,
+					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
+}
+
 /*
  * Create a new chunk index as a child of a parent hypertable index.
  *
@@ -422,6 +494,9 @@ ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
 {
 	ObjectAddress idxobj;
 	char *hypertable_indexname = get_rel_name(hypertable_indexrelid);
+
+	if (hypertable_indexname == NULL)
+		return InvalidOid; /* oops, the root index is gone, lets stop */
 
 	if (NULL != stmt->idxname)
 		stmt->idxname = chunk_index_choose_name(get_rel_name(chunkrelid),

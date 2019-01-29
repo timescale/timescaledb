@@ -64,15 +64,15 @@ extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions
 extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
-extern TSDLLEXPORT int ts_hypertable_relid_to_id(Oid relid);
+extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
 extern Chunk *ts_hypertable_get_chunk(Hypertable *h, Point *point);
 extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
 extern Tablespace *ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
 extern char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
-extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid,
-															   int16 offset);
+extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id,
+															   Oid tablespace_oid, int16 offset);
 extern bool ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
 extern List *ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx);

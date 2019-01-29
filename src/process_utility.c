@@ -23,6 +23,7 @@
 #include <access/xact.h>
 #include <storage/lmgr.h>
 #include <utils/rel.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/builtins.h>
@@ -57,6 +58,7 @@
 #include "indexing.h"
 #include "trigger.h"
 #include "utils.h"
+#include "with_clause_parser.h"
 
 void _process_utility_init(void);
 void _process_utility_fini(void);
@@ -255,6 +257,7 @@ process_copy(Node *parsetree, const char *query_string, char *completion_tag)
 }
 
 typedef void (*process_chunk_t)(Hypertable *ht, Oid chunk_relid, void *arg);
+typedef void (*mt_process_chunk_t)(int32 hypertable_id, Oid chunk_relid, void *arg);
 
 /*
  * Applies a function to each chunk of a hypertable.
@@ -303,6 +306,47 @@ foreach_chunk_relid(Oid relid, process_chunk_t process_chunk, void *arg)
 	ts_cache_release(hcache);
 
 	return ret;
+}
+
+static int
+foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t process_chunk,
+							   void *arg)
+{
+	Cache *hcache;
+	Hypertable *ht;
+	int32 hypertable_id;
+	List *chunks;
+	ListCell *lc;
+	int num_chunks = -1;
+
+	StartTransactionCommand();
+	MemoryContextSwitchTo(mctx);
+	LockRelationOid(relid, AccessShareLock);
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, relid);
+	if (NULL == ht)
+	{
+		ts_cache_release(hcache);
+		CommitTransactionCommand();
+		return -1;
+	}
+
+	hypertable_id = ht->fd.id;
+	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+
+	ts_cache_release(hcache);
+	CommitTransactionCommand();
+
+	num_chunks = list_length(chunks);
+	foreach (lc, chunks)
+	{
+		process_chunk(hypertable_id, lfirst_oid(lc), arg);
+	}
+
+	list_free(chunks);
+
+	return num_chunks;
 }
 
 static int
@@ -1187,10 +1231,40 @@ verify_constraint_list(RangeVar *relation, List *constraint_list)
 	}
 }
 
+typedef struct HypertableIndexOptions
+{
+	/*
+	 * true if we should run one transaction per chunk, otherwise use one
+	 * transaction for all the chunks
+	 */
+	bool multitransaction;
+	IndexInfo *indexinfo;
+	List *attnames;
+	int n_ht_atts;
+	bool ht_hasoid;
+
+	/* Concurrency testing options. */
+#ifdef DEBUG
+	/*
+	 * If barrier_table is a valid Oid we try to acquire a lock on it at the
+	 * start of each chunks sub-transaction.
+	 */
+	Oid barrier_table;
+
+	/*
+	 * if max_chunks >= 0 we'll create indicies on at most max_chunks, and
+	 * leave the table marked as Invalid when the command ends.
+	 */
+	int32 max_chunks;
+#endif
+} HypertableIndexOptions;
+
 typedef struct CreateIndexInfo
 {
 	IndexStmt *stmt;
 	ObjectAddress obj;
+	HypertableIndexOptions extended_options;
+	MemoryContext mctx;
 } CreateIndexInfo;
 
 /*
@@ -1210,11 +1284,154 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 }
 
 static void
-process_index_start(Node *parsetree)
+process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void *arg)
+{
+	CreateIndexInfo *info = (CreateIndexInfo *) arg;
+	CatalogSecurityContext sec_ctx;
+	Chunk *chunk;
+	Relation hypertable_index_rel;
+	Relation chunk_rel;
+
+	Assert(info->extended_options.multitransaction);
+
+	/* Start a new transaction for each relation. */
+	StartTransactionCommand();
+
+#ifdef DEBUG
+	if (info->extended_options.max_chunks == 0)
+	{
+		CommitTransactionCommand();
+		return;
+	}
+
+	/*
+	 * if max_chunks is < 0 then we're indexing all the chunks, if it's >= 0
+	 * then we're only indexing some of the chunks, and leaving the root index
+	 * marked as invalid
+	 */
+	if (info->extended_options.max_chunks > 0)
+		info->extended_options.max_chunks -= 1;
+
+	if (OidIsValid(info->extended_options.barrier_table))
+	{
+		/*
+		 * For insolation tests, and debugging, it's useful to be able to
+		 * pause CREATE INDEX immediately before it starts working on chunks.
+		 * We acquire and immediately release a lock on a barrier table to do
+		 * this.
+		 */
+		Relation barrier = relation_open(info->extended_options.barrier_table, AccessExclusiveLock);
+
+		relation_close(barrier, AccessExclusiveLock);
+	}
+#endif
+
+	/*
+	 * Change user since chunks are typically located in an internal schema
+	 * and chunk indexes require metadata changes. In the single-transaction
+	 * case, we do this once for the entire table.
+	 */
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+	/*
+	 * Hold a lock on the hypertable index, and the chunk to prevent
+	 * from being altered. Since we use the same relids across transactions,
+	 * there is a potential issue if the id gets reassigned between one
+	 * sub-transaction and the next. CLUSTER has a similar issue.
+	 *
+	 * We grab a ShareLock on the chunk, because that's what CREATE INDEX
+	 * does. For the hypertable's index, we are ok using the weaker
+	 * AccessShareLock, since we only need to prevent the index iteself from
+	 * being ALTERed or DROPed during this part of index creation.
+	 */
+	chunk_rel = relation_open(chunk_relid, ShareLock);
+	hypertable_index_rel = relation_open(info->obj.objectId, AccessShareLock);
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
+
+	/*
+	 * use ts_chunk_index_create instead of ts_chunk_index_create_from_stmt to
+	 * handle cases where the index is altered. Validation happens when
+	 * creating the hypertable's index, which goes through the ususal
+	 * DefineIndex mechanism.
+	 */
+	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
+									info->extended_options.ht_hasoid,
+									RelationGetDescr(chunk_rel)))
+		ts_adjust_attnos_from_attnames(info->extended_options.indexinfo,
+									   hypertable_index_rel,
+									   chunk_rel,
+									   info->extended_options.attnames);
+
+	ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
+												   hypertable_index_rel,
+												   chunk->fd.id,
+												   chunk_rel,
+												   info->extended_options.indexinfo);
+
+	relation_close(hypertable_index_rel, NoLock);
+	relation_close(chunk_rel, NoLock);
+
+	ts_catalog_restore_user(&sec_ctx);
+
+	CommitTransactionCommand();
+}
+
+typedef enum HypertableIndexFlags
+{
+	HypertableIndexFlagMultiTransaction = 0,
+#ifdef DEBUG
+	HypertableIndexFlagBarrierTable,
+	HypertableIndexFlagMaxChunks,
+#endif
+} HypertableIndexFlags;
+
+static const WithClauseDefinition index_with_clauses[] = {
+	[HypertableIndexFlagMultiTransaction] = {.arg_name = "transaction_per_chunk", .type_id = BOOLOID,},
+#ifdef DEBUG
+	[HypertableIndexFlagBarrierTable] = {.arg_name = "barrier_table", .type_id = REGCLASSOID,},
+	[HypertableIndexFlagMaxChunks] = {.arg_name = "max_chunks", .type_id = INT4OID, .default_val = Int32GetDatum(-1)},
+#endif
+};
+
+static bool
+multitransaction_create_index_mark_valid(CreateIndexInfo info)
+{
+#ifdef DEBUG
+	return info.extended_options.max_chunks < 0;
+#else
+	return true;
+#endif
+}
+
+/*
+ * Create an index on a hypertable
+ *
+ * We override CREATE INDEX on hypertables in order to ensure that the index is
+ * created on all of the hypertable's chunks, and to ensure that locks on all
+ * of said chunks are acquired at the correct time.
+ */
+static bool
+process_index_start(Node *parsetree, const char *queryString)
 {
 	IndexStmt *stmt = (IndexStmt *) parsetree;
 	Cache *hcache;
 	Hypertable *ht;
+	List *postgres_options = NIL;
+	List *hypertable_options = NIL;
+	WithClauseResult *parsed_with_clauses;
+	CreateIndexInfo info = {
+		.stmt = stmt,
+#ifdef DEBUG
+		.extended_options = {0, .max_chunks = -1,},
+#endif
+	};
+	ObjectAddress root_table_index;
+	Oid main_table_id;
+	Relation main_table_relation;
+	TupleDesc main_table_desc;
+	Relation main_table_index_relation;
+	LockRelId main_table_index_lock_relid;
 
 	Assert(IsA(stmt, IndexStmt));
 
@@ -1225,81 +1442,149 @@ process_index_start(Node *parsetree)
 	 * we don't deal with them so we will just return immediately
 	 */
 	if (NULL == stmt->relation)
-		return;
-
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
-
-	if (NULL != ht)
-	{
-		/* Make sure this index is allowed */
-		if (stmt->concurrent)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support concurrent "
-							"index creation")));
-
-		ts_indexing_verify_index(ht->space, stmt);
-	}
-
-	ts_cache_release(hcache);
-}
-
-static bool
-process_index_end(Node *parsetree, CollectedCommand *cmd)
-{
-	IndexStmt *stmt = (IndexStmt *) parsetree;
-	CatalogSecurityContext sec_ctx;
-	Cache *hcache;
-	Hypertable *ht;
-	bool handled = false;
-
-	Assert(IsA(stmt, IndexStmt));
-
-	/* see note in process_index_start above */
-	if (NULL == stmt->relation)
 		return false;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 
-	if (NULL != ht)
+	if (NULL == ht)
 	{
-		CreateIndexInfo info = {
-			.stmt = stmt,
-		};
+		ts_cache_release(hcache);
+		return false;
+	}
 
-		switch (cmd->type)
-		{
-			case SCT_Simple:
-				info.obj = cmd->d.simple.address;
-				break;
-			default:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("hypertables do not support this operation: "
-								"parsetree %s, type %d",
-								nodeToString(parsetree),
-								cmd->type)));
-				break;
-		}
+	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
 
+	stmt->options = postgres_options;
+
+	parsed_with_clauses = ts_with_clauses_parse(hypertable_options,
+												index_with_clauses,
+												TS_ARRAY_LEN(index_with_clauses));
+
+	info.extended_options.multitransaction =
+		DatumGetBool(parsed_with_clauses[HypertableIndexFlagMultiTransaction].parsed);
+#ifdef DEBUG
+	info.extended_options.max_chunks =
+		DatumGetInt32(parsed_with_clauses[HypertableIndexFlagMaxChunks].parsed);
+	info.extended_options.barrier_table =
+		DatumGetObjectId(parsed_with_clauses[HypertableIndexFlagBarrierTable].parsed);
+#endif
+
+	/* Make sure this index is allowed */
+	if (stmt->concurrent)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("hypertables do not support concurrent "
+						"index creation")));
+
+	if (info.extended_options.multitransaction &&
+		(stmt->unique || stmt->primary || stmt->isconstraint))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg(
+					 "cannot use timescaledb.transaction_per_chunk with UNIQUE or PRIMARY KEY")));
+
+	ts_indexing_verify_index(ht->space, stmt);
+
+	if (info.extended_options.multitransaction)
+		PreventInTransactionBlock(true,
+								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
+
+	/* CREATE INDEX on the root table of the hypertable */
+	root_table_index = ts_indexing_root_table_create_index(stmt,
+														   queryString,
+														   info.extended_options.multitransaction);
+	info.obj.objectId = root_table_index.objectId;
+
+	/* CREATE INDEX on the chunks */
+
+	/* create chunk indexes using the same transaction for all the chunks */
+	if (!info.extended_options.multitransaction)
+	{
+		CatalogSecurityContext sec_ctx;
 		/*
 		 * Change user since chunk's are typically located in an internal
-		 * schema and chunk indexes require metadata changes
+		 * schema and chunk indexes require metadata changes. In the
+		 * multi-transaction case, we do this once per chunk.
 		 */
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
 		/* Recurse to each chunk and create a corresponding index */
 		foreach_chunk(ht, process_index_chunk, &info);
 
 		ts_catalog_restore_user(&sec_ctx);
-		handled = true;
+		ts_cache_release(hcache);
+		return true;
 	}
+
+	/* create chunk indexes using a seperate transaction for each chunk */
+
+	/* we're about to release the hcache so store the main_table_relid for later */
+	main_table_id = ht->main_table_relid;
+	main_table_relation = relation_open(ht->main_table_relid, AccessShareLock);
+	main_table_desc = RelationGetDescr(main_table_relation);
+
+	main_table_index_relation = relation_open(info.obj.objectId, AccessShareLock);
+	main_table_index_lock_relid = main_table_index_relation->rd_lockInfo.lockRelId;
+
+	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
+	info.extended_options.attnames =
+		ts_get_expr_index_attnames(info.extended_options.indexinfo, main_table_relation);
+	info.extended_options.n_ht_atts = main_table_desc->natts;
+	info.extended_options.ht_hasoid = main_table_desc->tdhasoid;
+
+	relation_close(main_table_index_relation, NoLock);
+
+	/*
+	 * Lock the index for the remainder of the command. Since we're using
+	 * multiple transactions for index creation, a regular
+	 * transaction-level lock won't prevent the index from being
+	 * concurrently ALTERed or DELETEed. Instead, we grab a session level
+	 * lock on the index, which we'll release when the command is
+	 * finished. (This is the same strategy postgres uses in CREATE INDEX
+	 * CONCURRENTLY)
+	 */
+	LockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
+
+	relation_close(main_table_relation, NoLock);
+
+	/*
+	 * mark the hypertable's index as invalid until all the chunk indexes
+	 * are created. This allows us to determine if the CREATE INDEX
+	 * completed successfully or  not
+	 */
+	ts_indexing_mark_as_invalid(info.obj.objectId);
+	CacheInvalidateRelcacheByRelid(main_table_id);
+	CacheInvalidateRelcacheByRelid(info.obj.objectId);
 
 	ts_cache_release(hcache);
 
-	return handled;
+	/* we need a long-lived context in which to store the list of chunks since the per-transaction
+	 * context will get freed at the end of each transaction. Fortunately we're within just such a
+	 * context now; the PortalContext. */
+	info.mctx = CurrentMemoryContext;
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+
+	foreach_chunk_multitransaction(main_table_id,
+								   info.mctx,
+								   process_index_chunk_multitransaction,
+								   &info);
+
+	StartTransactionCommand();
+	MemoryContextSwitchTo(info.mctx);
+
+	if (multitransaction_create_index_mark_valid(info))
+	{
+		/* we're done, the index is now valid */
+		ts_indexing_mark_as_valid(info.obj.objectId);
+
+		CacheInvalidateRelcacheByRelid(main_table_id);
+		CacheInvalidateRelcacheByRelid(info.obj.objectId);
+	}
+
+	UnlockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
+
+	return true;
 }
 
 /*
@@ -1433,6 +1718,11 @@ process_cluster_start(Node *parsetree, ProcessUtilityContext context)
 			ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
 
 			/* Do the job. */
+
+			/*
+			 * Since we keep OIDs between transactions, there is a potential
+			 * issue if an OID gets reassigned between two subtransactions
+			 */
 			cluster_rel(cim->chunkoid, cim->indexoid, true, stmt->verbose);
 			PopActiveSnapshot();
 			CommitTransactionCommand();
@@ -2093,7 +2383,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			process_rename(args->parsetree);
 			break;
 		case T_IndexStmt:
-			process_index_start(args->parsetree);
+			handled = process_index_start(args->parsetree, args->query_string);
 			break;
 		case T_CreateTrigStmt:
 			process_create_trigger_start(args->parsetree);
@@ -2149,9 +2439,6 @@ process_ddl_command_end(CollectedCommand *cmd)
 	{
 		case T_CreateStmt:
 			process_create_table_end(cmd->parsetree);
-			break;
-		case T_IndexStmt:
-			process_index_end(cmd->parsetree, cmd);
 			break;
 		case T_AlterTableStmt:
 			process_altertable_end(cmd->parsetree, cmd);

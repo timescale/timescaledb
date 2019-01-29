@@ -9,6 +9,9 @@ GRANT USAGE ON SCHEMA test TO PUBLIC;
 -- functions generate output which is the same across PostgreSQL
 -- versions. Their usage is preferred over psql's '\d <relation>',
 -- since that output typically changes across PostgreSQL versions.
+
+-- this function is duplicated in test/isolation/specs/multi_transaction_indexing.spec
+-- if it changes, that copy may need to change as well
 CREATE OR REPLACE FUNCTION test.show_columns(rel regclass)
 RETURNS TABLE("Column" name,
               "Type" text,
@@ -76,6 +79,8 @@ $BODY$
     ORDER BY c.relname;
 $BODY$;
 
+-- this function is duplicated in test/isolation/specs/multi_transaction_indexing.spec
+-- if it changes, that copy may need to change as well
 CREATE OR REPLACE FUNCTION test.show_indexesp(pattern text)
 RETURNS TABLE("Table" regclass,
               "Index" regclass,

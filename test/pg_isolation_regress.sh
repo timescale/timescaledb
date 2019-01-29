@@ -45,7 +45,7 @@ if [[ -z ${TESTS} ]]; then
             if ! contains "${IGNORES}" "${t}"; then
                 TESTS="${TESTS} ${t}"
             fi
-        done < ${TEST_SCHEDULE}
+        done < ${ISOLATION_TEST_SCHEDULE}
     else
         PG_ISOLATION_REGRESS_OPTS="${PG_ISOLATION_REGRESS_OPTS} --schedule=${ISOLATION_TEST_SCHEDULE}"
     fi
@@ -66,7 +66,7 @@ else
     done
 fi
 
-if [[ -z ${TESTS} ]] && [[ -z ${TEST_SCHEDULE} ]]; then
+if [[ -z ${TESTS} ]] && [[ -z ${ISOLATION_TEST_SCHEDULE} ]]; then
     exit 0;
 fi
 
