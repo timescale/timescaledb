@@ -16,6 +16,9 @@ We are excited to be introducing new time-series analytical functions, advanced 
 
 This release adds code under a new license, LICENSE_TIMESCALE. This code can be found in `tsl`.
 
+**For this release only**, you will need to restart the database before running
+`ALTER EXTENSION`
+
 **Notable commits**
 
 * [a531733] switch cis state when we switch chunks
@@ -46,6 +49,7 @@ This release adds code under a new license, LICENSE_TIMESCALE. This code can be 
 * @JpWebster for reporting a deadlock between reads an drop_chunks
 * @chickenburgers for reporting an issue with our CMake
 * Dimtrj and Asbjørn D., on slack, for creating a reproducible testcase for an UPSERT bug
+* @skebanga for reporting a loader bug
 
 
 ## 1.1.1 (2018-12-20)
