@@ -69,9 +69,19 @@ enum FdwModifyPrivateIndex
 	FdwModifyPrivateHasReturning,
 	/* Integer list of attribute numbers retrieved by RETURNING */
 	FdwModifyPrivateRetrievedAttrs,
+	/* The servers for the current chunk */
+	FdwModifyPrivateServers,
 	/* Insert state for the current chunk */
 	FdwModifyPrivateChunkInsertState,
 };
+
+typedef struct TsFdwServerState
+{
+	Oid serverid;
+	/* for remote query execution */
+	PGconn *conn;		  /* connection for the scan */
+	PreparedStmt *p_stmt; /* prepared statement handle, if created */
+} TsFdwServerState;
 
 /*
  * Execution state of a foreign insert/update/delete operation.
@@ -81,10 +91,6 @@ typedef struct TsFdwModifyState
 	Relation rel;			  /* relcache entry for the foreign table */
 	AttInMetadata *attinmeta; /* attribute datatype conversion metadata */
 
-	/* for remote query execution */
-	PGconn *conn; /* connection for the scan */
-	PreparedStmt *p_stmt;
-
 	/* extracted fdw_private data */
 	char *query;		   /* text of INSERT/UPDATE/DELETE command */
 	List *target_attrs;	/* list of target attribute numbers */
@@ -92,13 +98,20 @@ typedef struct TsFdwModifyState
 	List *retrieved_attrs; /* attr numbers retrieved by RETURNING */
 
 	/* info about parameters for prepared statement */
-	AttrNumber ctidAttno; /* attnum of input resjunk ctid column */
-	int p_nums;			  /* number of parameters to transmit */
-	FmgrInfo *p_flinfo;   /* output conversion functions for them */
+	AttrNumber ctid_attno; /* attnum of input resjunk ctid column */
+	int p_nums;			   /* number of parameters to transmit */
+	FmgrInfo *p_flinfo;	/* output conversion functions for them */
 
 	/* working memory context */
 	MemoryContext temp_cxt; /* context for per-tuple temporary data */
+
+	bool prepared;
+	int num_servers;
+	TsFdwServerState servers[FLEXIBLE_ARRAY_MEMBER];
 } TsFdwModifyState;
+
+#define TS_FDW_MODIFY_STATE_SIZE(num_servers)                                                      \
+	(sizeof(TsFdwModifyState) + (sizeof(TsFdwServerState) * num_servers))
 
 Datum
 timescaledb_fdw_validator(PG_FUNCTION_ARGS)
@@ -147,6 +160,16 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid, For
 	return make_foreignscan(tlist, scan_clauses, scan_relid, NIL, NIL, NIL, NIL, outer_plan);
 }
 
+static void
+initialize_fdw_server_state(TsFdwServerState *fdw_server, Oid userid, Oid serverid)
+{
+	UserMapping *user = GetUserMapping(userid, serverid);
+
+	fdw_server->serverid = serverid;
+	fdw_server->conn = remote_dist_txn_get_connection(user, REMOTE_TXN_USE_PREP_STMT);
+	fdw_server->p_stmt = NULL;
+}
+
 /*
  * create_foreign_modify
  *		Construct an execution state of a foreign insert/update/delete
@@ -155,21 +178,21 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid, For
 static TsFdwModifyState *
 create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, CmdType operation,
 					  Plan *subplan, char *query, List *target_attrs, bool has_returning,
-					  List *retrieved_attrs)
+					  List *retrieved_attrs, List *servers)
 {
 	TsFdwModifyState *fmstate;
 	Relation rel = rri->ri_RelationDesc;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	Oid userid;
-	ForeignTable *table;
-	UserMapping *user;
 	AttrNumber n_params;
 	Oid typefnoid;
 	bool isvarlena;
 	ListCell *lc;
+	int i = 0;
+	int num_servers = servers == NIL ? 1 : list_length(servers);
 
 	/* Begin constructing TsFdwModifyState. */
-	fmstate = (TsFdwModifyState *) palloc0(sizeof(TsFdwModifyState));
+	fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_servers));
 	fmstate->rel = rel;
 
 	/*
@@ -178,19 +201,42 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 	 */
 	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
-	/* Get info about foreign table. */
-	table = GetForeignTable(RelationGetRelid(rel));
-	user = GetUserMapping(userid, table->serverid);
+	if (NIL != servers)
+	{
+		/*
+		 * This is either (1) an INSERT on a hypertable chunk, or (2) an
+		 * UPDATE or DELETE on a chunk. In the former case (1), the servers
+		 * were passed on from the INSERT path via the chunk insert state, and
+		 * in the latter case (2), the servers were resolved at planning time
+		 * in the FDW planning callback.
+		 */
 
-	/* Open connection; report that we'll create a prepared statement. */
-	fmstate->conn = remote_dist_txn_get_connection(user, REMOTE_TXN_USE_PREP_STMT);
-	fmstate->p_stmt = NULL;
+		foreach (lc, servers)
+		{
+			Oid serverid = lfirst_oid(lc);
+
+			initialize_fdw_server_state(&fmstate->servers[i++], userid, serverid);
+		}
+	}
+	else
+	{
+		/*
+		 * If there is no chunk insert state and no servers from planning,
+		 * this is an INSERT, UPDATE, or DELETE on a standalone foreign table.
+		 * We must get the server from the foreign table's metadata.
+		 */
+		ForeignTable *table = GetForeignTable(rri->ri_RelationDesc->rd_id);
+
+		initialize_fdw_server_state(&fmstate->servers[0], userid, table->serverid);
+	}
 
 	/* Set up remote query information. */
 	fmstate->query = query;
 	fmstate->target_attrs = target_attrs;
 	fmstate->has_returning = has_returning;
 	fmstate->retrieved_attrs = retrieved_attrs;
+	fmstate->prepared = false; /* PREPARE will happen later */
+	fmstate->num_servers = num_servers;
 
 	/* Create context for per-tuple temp workspace. */
 	fmstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
@@ -211,8 +257,8 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 		Assert(subplan != NULL);
 
 		/* Find the ctid resjunk column in the subplan's result */
-		fmstate->ctidAttno = ExecFindJunkAttributeInTlist(subplan->targetlist, "ctid");
-		if (!AttributeNumberIsValid(fmstate->ctidAttno))
+		fmstate->ctid_attno = ExecFindJunkAttributeInTlist(subplan->targetlist, "ctid");
+		if (!AttributeNumberIsValid(fmstate->ctid_attno))
 			elog(ERROR, "could not find junk ctid column");
 
 		/* First transmittable parameter will be ctid */
@@ -367,11 +413,52 @@ get_update_attrs(RangeTblEntry *rte)
 	return attrs;
 }
 
+static List *
+get_chunk_servers(Oid relid)
+{
+	Chunk *chunk = ts_chunk_get_by_relid(relid, 0, false);
+	List *serveroids = NIL;
+	ListCell *lc;
+
+	if (NULL == chunk)
+		return NIL;
+
+	foreach (lc, chunk->servers)
+	{
+		ChunkServer *cs = lfirst(lc);
+
+		serveroids = lappend_oid(serveroids, cs->foreign_server_oid);
+	}
+
+	return serveroids;
+}
+
 /*
  * Plan INSERT, UPDATE, and DELETE.
  *
  * The main task of this function is to generate (deparse) the SQL statement
- * to send to remote tables. For the TimescaleDB insert path, we actually call
+ * for the corresponding tables on remote servers.
+ *
+ * If the planning involves a hypertable, the function is called differently
+ * depending on the command:
+ *
+ * 1. INSERT - called only once during hypertable planning and the given
+ * result relation is the hypertable root relation. This is due to
+ * TimescaleDBs unique INSERT path. We'd like to plan the INSERT as if it
+ * would happen on the root of the hypertable. This is useful because INSERTs
+ * should occur via the top-level hypertables on the remote servers
+ * (preferrably batched), and not once per individual remote chunk
+ * (inefficient and won't go through the standard INSERT path on the remote
+ * server).
+ *
+ * 2. UPDATE and DELETE - called once per chunk and the given result relation
+ * is the chunk relation.
+ *
+ * For non-hypertables, which are foreign tables using the timescaledb_fdw,
+ * this function is called the way it normally would be for the FDW API, i.e.,
+ * once during planning.
+ *
+ * For the TimescaleDB insert path, we actually call
  * this function only once on the hypertable's root table instead of once per
  * chunk. This is because we want to send INSERT statements to each remote
  * hypertable rather than each remote chunk.
@@ -389,6 +476,7 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 	List *returning_list = NIL;
 	List *retrieved_attrs = NIL;
 	List *target_attrs = NIL;
+	List *servers = NIL;
 	bool do_nothing = false;
 
 	initStringInfo(&sql);
@@ -447,9 +535,11 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 							 target_attrs,
 							 returning_list,
 							 &retrieved_attrs);
+			servers = get_chunk_servers(rel->rd_id);
 			break;
 		case CMD_DELETE:
 			deparseDeleteSql(&sql, rte, result_relation, rel, returning_list, &retrieved_attrs);
+			servers = get_chunk_servers(rel->rd_id);
 			break;
 		default:
 			elog(ERROR, "unexpected operation: %d", (int) operation);
@@ -462,10 +552,11 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 	 * Build the fdw_private list that will be available to the executor.
 	 * Items in the list must match enum FdwModifyPrivateIndex, above.
 	 */
-	return list_make4(makeString(sql.data),
+	return list_make5(makeString(sql.data),
 					  target_attrs,
 					  makeInteger((retrieved_attrs != NIL)),
-					  retrieved_attrs);
+					  retrieved_attrs,
+					  servers);
 }
 
 /*
@@ -513,7 +604,8 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 	List *target_attrs;
 	bool has_returning;
 	List *retrieved_attrs;
-	ChunkInsertState *cis;
+	List *servers = NIL;
+	ChunkInsertState *cis = NULL;
 	RangeTblEntry *rte;
 
 	/*
@@ -527,6 +619,9 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 	target_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateTargetAttnums);
 	has_returning = intVal(list_nth(fdw_private, FdwModifyPrivateHasReturning));
 	retrieved_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateRetrievedAttrs);
+
+	if (list_length(fdw_private) > FdwModifyPrivateServers)
+		servers = (List *) list_nth(fdw_private, FdwModifyPrivateServers);
 
 	if (list_length(fdw_private) > FdwModifyPrivateChunkInsertState)
 	{
@@ -551,6 +646,12 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 			if (NIL != retrieved_attrs)
 				retrieved_attrs = convert_attrs(cis->tup_conv_map, retrieved_attrs);
 		}
+
+		/*
+		 * If there's a chunk insert state, then it has the authoritative
+		 * server list.
+		 */
+		servers = cis->servers;
 	}
 
 	/* Find RTE. */
@@ -565,7 +666,8 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 									query,
 									target_attrs,
 									has_returning,
-									retrieved_attrs);
+									retrieved_attrs,
+									servers);
 
 	rri->ri_FdwState = fmstate;
 }
@@ -663,6 +765,24 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 	PG_END_TRY();
 }
 
+static PreparedStmt *
+prepare_foreign_modify_server(TsFdwModifyState *fmstate, TsFdwServerState *fdw_server)
+{
+	AsyncRequest *req;
+
+	Assert(NULL == fdw_server->p_stmt);
+
+	req = async_request_send_prepare(fdw_server->conn, fmstate->query, fmstate->p_nums);
+
+	Assert(NULL != req);
+
+	/*
+	 * Async request interface doesn't seem to allow waiting for multiple
+	 * prepared statements in an AsyncRequestSet. Should fix async API
+	 */
+	return async_request_wait_prepared_statement(req);
+}
+
 /*
  * prepare_foreign_modify
  *		Establish a prepared statement for execution of INSERT/UPDATE/DELETE
@@ -670,13 +790,16 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 static void
 prepare_foreign_modify(TsFdwModifyState *fmstate)
 {
-	AsyncRequest *req;
+	int i;
 
-	req = async_request_send_prepare(fmstate->conn, fmstate->query, fmstate->p_nums);
+	for (i = 0; i < fmstate->num_servers; i++)
+	{
+		TsFdwServerState *fdw_server = &fmstate->servers[i];
 
-	Assert(NULL != req);
+		fdw_server->p_stmt = prepare_foreign_modify_server(fmstate, fdw_server);
+	}
 
-	fmstate->p_stmt = async_request_wait_prepared_statement(req);
+	fmstate->prepared = true;
 }
 
 static TupleTableSlot *
@@ -684,44 +807,66 @@ exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
 {
 	TsFdwModifyState *fmstate = (TsFdwModifyState *) rri->ri_FdwState;
-	AsyncRequest *req;
+	AsyncRequestSet *reqset;
 	AsyncResponseResult *rsp;
 	const char **p_values;
-	PGresult *res;
-	int n_rows;
-
-	/* Set up the prepared statement on the remote server, if we didn't yet */
-	if (!fmstate->p_stmt)
-		prepare_foreign_modify(fmstate);
+	int n_rows = -1;
+	int i;
 
 	/* Convert parameters needed by prepared statement to text form */
 	p_values = convert_prep_stmt_params(fmstate, NULL, slot);
 
-	req = async_request_send_prepared_stmt(fmstate->p_stmt, p_values);
+	if (!fmstate->prepared)
+		prepare_foreign_modify(fmstate);
 
-	Assert(NULL != req);
+	reqset = async_request_set_create();
 
-	rsp = async_request_wait_any_result(req);
-
-	Assert(NULL != rsp);
-
-	res = async_response_result_get_pg_result(rsp);
-
-	if (PQresultStatus(res) != (fmstate->has_returning ? PGRES_TUPLES_OK : PGRES_COMMAND_OK))
-		async_response_report_error((AsyncResponse *) rsp, ERROR);
-
-	/* Check number of rows affected, and fetch RETURNING tuple if any */
-	if (fmstate->has_returning)
+	for (i = 0; i < fmstate->num_servers; i++)
 	{
-		n_rows = PQntuples(res);
-		if (n_rows > 0)
-			store_returning_result(fmstate, slot, res);
-	}
-	else
-		n_rows = atoi(PQcmdTuples(res));
+		TsFdwServerState *fdw_server = &fmstate->servers[i];
+		AsyncRequest *req = async_request_send_prepared_stmt(fdw_server->p_stmt, p_values);
 
-	/* And clean up */
-	async_response_result_close(rsp);
+		Assert(NULL != req);
+
+		async_request_set_add(reqset, req);
+	}
+
+	while ((rsp = async_request_set_wait_any_result(reqset)))
+	{
+		PGresult *res = async_response_result_get_pg_result(rsp);
+
+		if (PQresultStatus(res) != (fmstate->has_returning ? PGRES_TUPLES_OK : PGRES_COMMAND_OK))
+			async_response_report_error((AsyncResponse *) rsp, ERROR);
+
+		/*
+		 * If we insert into multiple replica chunks, we should only return
+		 * the results from the first one
+		 */
+		if (n_rows == -1)
+		{
+			/* Check number of rows affected, and fetch RETURNING tuple if any */
+			if (fmstate->has_returning)
+			{
+				n_rows = PQntuples(res);
+
+				if (n_rows > 0)
+					store_returning_result(fmstate, slot, res);
+			}
+			else
+				n_rows = atoi(PQcmdTuples(res));
+		}
+
+		/* And clean up */
+		async_response_result_close(rsp);
+	}
+
+	/*
+	 * Currently no way to do a deep cleanup of all request in the request
+	 * set. The worry here is that since this runs in a per-chunk insert state
+	 * memory context, the async API will accumulate a lot of cruft during
+	 * inserts
+	 */
+	pfree(reqset);
 
 	MemoryContextReset(fmstate->temp_cxt);
 
@@ -750,13 +895,23 @@ exec_foreign_delete(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
 static void
 finish_foreign_modify(TsFdwModifyState *fmstate)
 {
+	int i;
+
 	Assert(fmstate != NULL);
 
-	/* If we created a prepared statement, destroy it */
-	if (NULL != fmstate->p_stmt)
-		prepared_stmt_close(fmstate->p_stmt);
+	for (i = 0; i < fmstate->num_servers; i++)
+	{
+		TsFdwServerState *fdw_server = &fmstate->servers[i];
 
-	fmstate->conn = NULL;
+		/* If we created a prepared statement, destroy it */
+		if (NULL != fdw_server->p_stmt)
+		{
+			prepared_stmt_close(fdw_server->p_stmt);
+			fdw_server->p_stmt = NULL;
+		}
+
+		fdw_server->conn = NULL;
+	}
 }
 
 static void

@@ -25,6 +25,7 @@ typedef struct ChunkInsertState
 	TupleTableSlot *slot;
 	MemoryContext mctx;
 	EState *estate;
+	List *servers;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
