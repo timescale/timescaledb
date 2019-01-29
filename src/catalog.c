@@ -507,25 +507,6 @@ ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
 	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
 }
 
-#if PG96
-#define CatalogTupleInsert(relation, tuple)                                                        \
-	do                                                                                             \
-	{                                                                                              \
-		simple_heap_insert(relation, tuple);                                                       \
-		CatalogUpdateIndexes(relation, tuple);                                                     \
-	} while (0);
-
-#define CatalogTupleUpdate(relation, tid, tuple)                                                   \
-	do                                                                                             \
-	{                                                                                              \
-		simple_heap_update(relation, tid, tuple);                                                  \
-		CatalogUpdateIndexes(relation, tuple);                                                     \
-	} while (0);
-
-#define CatalogTupleDelete(relation, tid) simple_heap_delete(relation, tid);
-
-#endif /* PG96 */
-
 /*
  * Insert a new row into a catalog table.
  */

@@ -89,6 +89,26 @@
 	BackgroundWorkerInitializeConnection(dbname, username, BGWORKER_NO_FLAGS)
 #endif
 
+/* CatalogTuple functions not implemented until pg10 */
+#if PG96
+#define CatalogTupleInsert(relation, tuple)                                                        \
+	do                                                                                             \
+	{                                                                                              \
+		simple_heap_insert(relation, tuple);                                                       \
+		CatalogUpdateIndexes(relation, tuple);                                                     \
+	} while (0);
+
+#define CatalogTupleUpdate(relation, tid, tuple)                                                   \
+	do                                                                                             \
+	{                                                                                              \
+		simple_heap_update(relation, tid, tuple);                                                  \
+		CatalogUpdateIndexes(relation, tuple);                                                     \
+	} while (0);
+
+#define CatalogTupleDelete(relation, tid) simple_heap_delete(relation, tid);
+
+#endif
+
 /* CheckValidResultRel */
 #if PG96
 #define CheckValidResultRelCompat(relinfo, operation)                                              \
@@ -487,6 +507,27 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 #define ResultRelInfo_OnConflictProjInfoCompat(rri) ((rri)->ri_onConflict->oc_ProjInfo)
 #define ResultRelInfo_OnConflictWhereCompat(rri) ((rri)->ri_onConflict->oc_WhereClause)
 #define ResultRelInfo_OnConflictNotNull(rri) ((rri)->ri_onConflict != NULL)
+#endif
+
+/* RangeVarGetRelidExtended
+ *
+ * PG11 replaced several boolean arguments to RangeVarGetRelidExtended with a single bitmask flag.
+ * Since that is generally cleaner, we adopt that convention. (See:
+ * https://github.com/postgres/postgres/commit/d87510a524f36a630cfb34cc392e95e959a1b0dc) We do not
+ * define RVR_SKIP_LOCKED as cannot yet emulate it
+ */
+#if PG96 || PG10
+#define RVR_MISSING_OK (1 << 0)
+#define RVR_NOWAIT (1 << 1)
+#define RangeVarGetRelidExtendedCompat(relation, lockmode, flags, callback, callback_arg)          \
+	RangeVarGetRelidExtended(relation,                                                             \
+							 lockmode,                                                             \
+							 (flags & RVR_MISSING_OK) != 0,                                        \
+							 (flags & RVR_NOWAIT) != 0,                                            \
+							 callback,                                                             \
+							 callback_arg)
+#else
+#define RangeVarGetRelidExtendedCompat RangeVarGetRelidExtended
 #endif
 
 /*

@@ -1,0 +1,69 @@
+Parsed test spec with 7 sessions
+
+starting permutation: CI I1 Ic Bc P Sc
+step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
+step I1: INSERT INTO ts_index_test VALUES (31, 6.4, 1);
+step Ic: COMMIT;
+step Bc: ROLLBACK;
+step CI: <... completed>
+step P: SELECT index_size FROM timescaledb_information.hypertable;
+index_size     
+
+64 kB          
+step Sc: COMMIT;
+
+starting permutation: I1 CI Bc Ic P Sc
+step I1: INSERT INTO ts_index_test VALUES (31, 6.4, 1);
+step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
+step Bc: ROLLBACK;
+step Ic: COMMIT;
+step CI: <... completed>
+step P: SELECT index_size FROM timescaledb_information.hypertable;
+index_size     
+
+64 kB          
+step Sc: COMMIT;
+
+starting permutation: S1 CI Bc Sc P Ic
+step S1: SELECT * FROM ts_index_test;
+time           temp           location       
+
+1              23.4           1              
+11             21.3           2              
+21             19.5           3              
+step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
+step Bc: ROLLBACK;
+step CI: <... completed>
+step Sc: COMMIT;
+step P: SELECT index_size FROM timescaledb_information.hypertable;
+index_size     
+
+48 kB          
+step Ic: COMMIT;
+
+starting permutation: F CI DI Bc P Ic Sc
+step F: SET client_min_messages TO 'fatal';
+step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
+step DI: DROP INDEX test_index; <waiting ...>
+step Bc: ROLLBACK;
+step CI: <... completed>
+step DI: <... completed>
+step P: SELECT index_size FROM timescaledb_information.hypertable;
+index_size     
+
+0 bytes        
+step Ic: COMMIT;
+step Sc: COMMIT;
+
+starting permutation: CI RI Bc P Ic Sc
+step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
+step RI: ALTER TABLE test_index RENAME COLUMN location TO height; <waiting ...>
+step Bc: ROLLBACK;
+step CI: <... completed>
+step RI: <... completed>
+step P: SELECT index_size FROM timescaledb_information.hypertable;
+index_size     
+
+48 kB          
+step Ic: COMMIT;
+step Sc: COMMIT;

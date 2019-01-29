@@ -7,6 +7,7 @@ accidentally triggering the load of a previous DB version.**
 ## 1.3.0 (unreleased)
 
 **Minor Features**
+* PR #1005 Enable creating indexes with one transaction per chunk
 * [] Remove parent oid from find_children_oids result
 * [b6d4202] Infer time_bucket_gapfill arguments from WHERE clause
 * [33ef1de] Add treat_null_as_missing option to locf

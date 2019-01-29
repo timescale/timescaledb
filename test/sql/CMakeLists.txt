@@ -97,6 +97,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_db_scheduler.sql
     installation_metadata.sql
     loader.sql
+    multi_transaction_index.sql
     net.sql
     symbol_conflict.sql
     telemetry.sql)

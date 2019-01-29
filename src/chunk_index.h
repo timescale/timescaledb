@@ -7,8 +7,10 @@
 #define TIMESCALEDB_CHUNK_INDEX_H
 
 #include <postgres.h>
+#include <nodes/execnodes.h>
 #include <nodes/parsenodes.h>
 #include <fmgr.h>
+#include <utils/relcache.h>
 
 #include <export.h>
 
@@ -23,6 +25,16 @@ typedef struct ChunkIndexMapping
 	Oid hypertableoid;
 } ChunkIndexMapping;
 
+extern void ts_chunk_index_create(Relation hypertable_rel, int32 hypertable_id,
+								  Relation hypertable_idxrel, int32 chunk_id, Relation chunkrel);
+
+extern List *ts_get_expr_index_attnames(IndexInfo *ii, Relation htrel);
+void ts_adjust_attnos_from_attnames(IndexInfo *indexinfo, Relation template_indexrel,
+									Relation chunkrel, List *attnames);
+extern void ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id,
+														   Relation hypertable_idxrel,
+														   int32 chunk_id, Relation chunkrel,
+														   IndexInfo *indexinfo);
 extern void ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id,
 									  Oid chunkrelid);
 extern Oid ts_chunk_index_create_from_stmt(IndexStmt *stmt, int32 chunk_id, Oid chunkrelid,
@@ -68,5 +80,25 @@ extern TSDLLEXPORT List *ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_c
  */
 TSDLLEXPORT Datum ts_chunk_index_clone(PG_FUNCTION_ARGS);
 TSDLLEXPORT Datum ts_chunk_index_replace(PG_FUNCTION_ARGS);
+
+extern Oid ts_chunk_index_get_tablespace(int32 hypertable_id, Relation template_indexrel,
+										 Relation chunkrel);
+
+static inline bool
+chunk_index_columns_changed(int hypertable_natts, bool hypertable_has_oid, TupleDesc chunkdesc)
+{
+	/*
+	 * We should be able to safely assume that the only reason the number of
+	 * attributes differ is because we have removed columns in the base table,
+	 * leaving junk attributes that aren't inherited by the chunk.
+	 */
+	return !(hypertable_natts == chunkdesc->natts && hypertable_has_oid == chunkdesc->tdhasoid);
+}
+
+static inline bool
+chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
+{
+	return chunk_index_columns_changed(htdesc->natts, htdesc->tdhasoid, chunkdesc);
+}
 
 #endif /* TIMESCALEDB_CHUNK_INDEX_H */

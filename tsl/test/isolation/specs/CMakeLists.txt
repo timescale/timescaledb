@@ -1,3 +1,5 @@
+set(TEST_FILES)
+
 set(TEST_TEMPLATES
  reorder_deadlock.spec.in
  reorder_vs_insert_other_chunk.spec.in)
@@ -14,5 +16,12 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
   set(TEST_FILE ${TEMPLATE}.spec)
   configure_file(${TEMPLATE_FILE} ${TEST_FILE})
-  list(APPEND TEST_FILES "${CMAKE_CURRENT_BINARY_DIR}/${TEST_FILE}")
+  list(APPEND TEST_FILES "${TEST_FILE}")
 endforeach(TEMPLATE_FILE)
+
+file(REMOVE ${ISOLATION_TEST_SCHEDULE})
+
+foreach(TEST_FILE ${TEST_FILES})
+    string(REGEX REPLACE "(.+)\.spec" "\\1" TESTS_TO_RUN ${TEST_FILE})
+    file(APPEND ${ISOLATION_TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
+endforeach(TEST_FILE)
