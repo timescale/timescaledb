@@ -164,7 +164,7 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 	y0 = column->prev.value;
 	y1 = column->next.value;
 
-	x  = time;
+	x = time;
 	x0 = column->prev.time;
 	x1 = column->next.time;
 

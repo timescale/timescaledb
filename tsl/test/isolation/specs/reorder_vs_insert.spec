@@ -15,7 +15,7 @@ setup
      index REGCLASS=NULL,
      verbose BOOLEAN=FALSE,
      wait_on REGCLASS=NULL
- ) RETURNS VOID AS '$libdir/timescaledb-1.2.0-dev', 'ts_reorder_chunk' LANGUAGE C VOLATILE;
+ ) RETURNS VOID AS '$libdir/timescaledb-1.3.0-dev', 'ts_reorder_chunk' LANGUAGE C VOLATILE;
 }
 
 teardown {
