@@ -65,6 +65,60 @@ cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
 #endif
 }
 
+#if PG96
+
+static Datum
+empty_fn(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_VOID();
+}
+
+static void
+error_not_supported(void)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("function is not supported under the current PostgreSQL version %s",
+					PG_VERSION_STR),
+			 errhint("Upgrade PostgreSQL to version 10 or greater.")));
+	pg_unreachable();
+}
+
+static Datum
+error_not_supported_default_fn(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("function \"%s\" is not supported under the current PostgreSQL version %s",
+					get_func_name(fcinfo->flinfo->fn_oid),
+					PG_VERSION_STR),
+			 errhint("Upgrade PostgreSQL to version 10 or greater.")));
+	pg_unreachable();
+}
+
+static List *
+error_get_serverlist_not_supported(void)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+static void
+error_hypertable_make_distributed_not_supported(Hypertable *ht, ArrayType *servers)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+static void
+error_create_chunk_on_servers_not_supported(Chunk *chunk, Hypertable *ht)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+#endif /* PG96 */
+
 /*
  * Cross module function initialization.
  *
@@ -106,22 +160,30 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_drop_chunks_by_chunk_id = ts_continuous_agg_drop_chunks_by_chunk_id,
 	.continuous_agg_trigfn = continuous_agg_trigfn,
 	.continuous_agg_update_options = continuous_agg_update_options,
+#if PG96
+	.add_server = error_not_supported_default_fn,
+	.delete_server = error_not_supported_default_fn,
+	.show_chunk = error_not_supported_default_fn,
+	.create_chunk = error_not_supported_default_fn,
+	.create_chunk_on_servers = error_create_chunk_on_servers_not_supported,
+	.get_servername_list = error_get_serverlist_not_supported,
+	.hypertable_make_distributed = error_hypertable_make_distributed_not_supported,
+	.timescaledb_fdw_handler = error_not_supported_default_fn,
+	.timescaledb_fdw_validator = empty_fn,
+#else
 	.add_server = server_add,
 	.delete_server = server_delete,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
-#if !PG96
 	.create_chunk_on_servers = chunk_api_create_on_servers,
-#endif
 	.get_servername_list = server_get_servername_list,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
-	.cache_syscache_invalidate = cache_syscache_invalidate,
-#if !PG96
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
 #endif
+	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
