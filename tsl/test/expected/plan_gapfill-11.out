@@ -9,7 +9,7 @@ SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_i
  gapfill_plan_test
 (1 row)
 
-INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), random();
+INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), 1.0;
 -- simple example
 :EXPLAIN
 SELECT
@@ -189,4 +189,50 @@ ORDER BY 1;
                                        ->  Parallel Seq Scan on _hyper_1_4_chunk
                                        ->  Parallel Seq Scan on gapfill_plan_test
 (16 rows)
+
+-- make sure we can run gapfill in parallel workers
+-- ensure this plan runs in parallel
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 2
+LIMIT 1;
+                                                                                                               QUERY PLAN                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: (interpolate(avg(value), NULL::record, NULL::record))
+         ->  Custom Scan (GapFill)
+               ->  Finalize GroupAggregate
+                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     ->  Gather Merge
+                           Workers Planned: 2
+                           ->  Sort
+                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                                 ->  Partial HashAggregate
+                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_1_2_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                       ->  Result
+                                             ->  Parallel Append
+                                                   ->  Parallel Seq Scan on _hyper_1_2_chunk
+                                                   ->  Parallel Seq Scan on _hyper_1_3_chunk
+                                                   ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                                   ->  Parallel Seq Scan on _hyper_1_4_chunk
+                                                   ->  Parallel Seq Scan on gapfill_plan_test
+(19 rows)
+
+-- actually run a parallel gapfill
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 2
+LIMIT 1;
+     time_bucket_gapfill      | interpolate 
+------------------------------+-------------
+ Mon Jan 01 00:00:00 2018 PST |           1
+(1 row)
 
