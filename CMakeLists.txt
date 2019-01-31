@@ -259,6 +259,7 @@ if (PGINDENT)
     COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/src
     COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/test/src
     COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/tsl/src
+    COMMAND ${PGINDENT} -typedefs typedefs.list -excludes=${PROJECT_BINARY_DIR}/pgindent_excludes -code-base=${PROJECT_SOURCE_DIR}/tsl/test/src
     DEPENDS ${PROJECT_BINARY_DIR}/typedefs.list)
 else ()
   message(STATUS "Install pgindent to be able to format C code: https://github.com/postgres/postgres/tree/master/src/tools/pgindent")
