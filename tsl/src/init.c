@@ -8,6 +8,8 @@
 
 #include <export.h>
 #include <cross_module_fn.h>
+#include <license_guc.h>
+
 #include "planner.h"
 #include "gapfill/gapfill.h"
 
@@ -25,6 +27,8 @@ PG_MODULE_MAGIC;
 #ifdef APACHE_ONLY
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
+
+extern void PGDLLEXPORT _PG_init(void);
 
 static void module_shutdown(void);
 static bool enterprise_enabled_internal(void);
@@ -99,4 +103,21 @@ static bool
 check_tsl_loaded(void)
 {
 	return true;
+}
+
+
+PGDLLEXPORT void
+_PG_init(void)
+{
+	/*
+	 * In a normal backend, we disable loading the tsl until after the main
+	 * timescale library is loaded, after which we enable it from the loader.
+	 * In parallel workers the restore shared libraries function will load the
+	 * libraries itself, and we bypass the loader, so we need to ensure that
+	 * timescale is aware it can  use the tsl if needed. It is always safe to
+	 * do this here, because if we reach this point, we must have already
+	 * loaded the tsl, so we no longer need to worry about its load order
+	 * relative to the other libraries.
+	 */
+	ts_license_enable_module_loading();
 }

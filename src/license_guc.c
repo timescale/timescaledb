@@ -85,10 +85,13 @@ current_license_can_downgrade_to_apache(void)
  * disable loading submodules until the post_load_init.
  */
 
-void
+TSDLLEXPORT void
 ts_license_enable_module_loading(void)
 {
 	int			result;
+
+	if (can_load)
+		return;
 
 	can_load = true;
 	/* re-set the license key to actually load the submodule if needed */
