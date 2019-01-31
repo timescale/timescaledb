@@ -93,7 +93,7 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
-if (NOT ${PG_VERSION} VERSION_LESS "10")
+if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
     hypertable_distributed.sql

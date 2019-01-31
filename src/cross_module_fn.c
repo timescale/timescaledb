@@ -52,17 +52,6 @@ TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
 TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
 
-#if PG10_LT
-static void
-error_invalid_postgresql_version(void)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("not supported with current PostgreSQL version")));
-	pg_unreachable();
-}
-#endif
-
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
 {
@@ -147,29 +136,17 @@ ts_timescaledb_fdw_validator(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(ts_cm_functions->timescaledb_fdw_validator(fcinfo));
 }
 
-#if !PG96
 Datum
 ts_remote_txn_id_in(PG_FUNCTION_ARGS)
 {
-#if PG10_GE
 	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_in(fcinfo));
-#else
-	error_invalid_postgresql_version();
-	PG_RETURN_NULL();
-#endif
 }
 
 Datum
 ts_remote_txn_id_out(PG_FUNCTION_ARGS)
 {
-#if PG10_GE
 	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_out(fcinfo));
-#else
-	error_invalid_postgresql_version();
-	PG_RETURN_NULL();
-#endif
 }
-#endif
 
 /*
  * stub function to trigger aggregate util functions.

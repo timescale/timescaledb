@@ -179,6 +179,16 @@ if ((${PG_VERSION_MAJOR} LESS "9") OR
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 9.6.3+, 10.2+, 11 or 12")
 endif()
 
+# Global check for multinode support in PG version
+set(PG_VERSION_MINIMUM_FOR_MULTINODE 11)
+
+if (${PG_VERSION_MAJOR} LESS ${PG_VERSION_MINIMUM_FOR_MULTINODE})
+  set(PG_VERSION_SUPPORTS_MULTINODE 0)
+  message(STATUS "Multinode support not available for this PostgreSQL version")
+else ()
+  set(PG_VERSION_SUPPORTS_MULTINODE 1)
+endif()
+
 # Get PostgreSQL configuration from pg_config
 get_pg_config(PG_INCLUDEDIR --includedir)
 get_pg_config(PG_INCLUDEDIR_SERVER --includedir-server)
