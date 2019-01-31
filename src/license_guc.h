@@ -71,6 +71,6 @@ typedef enum LicenseType
 extern bool ts_license_update_check(char **newval, void **extra, GucSource source);
 extern void ts_license_on_assign(const char *newval, void *extra);
 
-extern void ts_license_enable_module_loading(void);
+extern void TSDLLEXPORT ts_license_enable_module_loading(void);
 
 #endif							/* LICENSE_GUC */
