@@ -561,10 +561,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 								 MultiXactCutoff, use_wal);
 
 	/*
-	 * We know how to use a sort to duplicate the ordering of a
-	 * btree index, and will use seqscan-and-sort for that.  Otherwise, always
-	 * use an indexscan for other indexes or plain seqscan if no index is
-	 * supplied.
+	 * We know how to use a sort to duplicate the ordering of a btree index,
+	 * and will use seqscan-and-sort for that.  Otherwise, always use an
+	 * indexscan for other indexes or plain seqscan if no index is supplied.
 	 */
 	if (OldIndex != NULL && OldIndex->rd_rel->relam == BTREE_AM_OID)
 		use_sort = true;
