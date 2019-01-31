@@ -7,7 +7,7 @@
 CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
 SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
 
-INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), random();
+INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), 1.0;
 
 -- simple example
 :EXPLAIN
@@ -80,3 +80,22 @@ FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
 
+-- make sure we can run gapfill in parallel workers
+-- ensure this plan runs in parallel
+:EXPLAIN
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 2
+LIMIT 1;
+
+-- actually run a parallel gapfill
+SELECT
+  time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)),
+  interpolate(avg(value))
+FROM gapfill_plan_test
+GROUP BY 1
+ORDER BY 2
+LIMIT 1;
