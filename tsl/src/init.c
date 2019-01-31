@@ -43,7 +43,7 @@
 #include "hypertable.h"
 #include "compat.h"
 
-#if PG10_GE
+#if PG_VERSION_SUPPORTS_MULTINODE
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
 #include "remote/txn_id.h"
@@ -71,10 +71,66 @@ cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
 	 * the future see `postgres_fdw` connection management for an example. For
 	 * now, invalidate the entire cache.
 	 */
-#if PG10_GE
+#if PG_VERSION_SUPPORTS_MULTINODE
 	remote_connection_cache_invalidate_callback();
 #endif
 }
+
+#if !PG_VERSION_SUPPORTS_MULTINODE
+
+static Datum
+empty_fn(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_VOID();
+}
+
+static void
+error_not_supported(void)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("function is not supported under the current PostgreSQL version %s",
+					PG_VERSION),
+			 errhint("Upgrade PostgreSQL to version %s or greater.",
+					 PG_VERSION_MINIMUM_FOR_MULTINODE)));
+	pg_unreachable();
+}
+
+static Datum
+error_not_supported_default_fn(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("function \"%s\" is not supported under the current PostgreSQL version %s",
+					get_func_name(fcinfo->flinfo->fn_oid),
+					PG_VERSION),
+			 errhint("Upgrade PostgreSQL to version %s or greater.",
+					 PG_VERSION_MINIMUM_FOR_MULTINODE)));
+	pg_unreachable();
+}
+
+static List *
+error_get_serverlist_not_supported(void)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+static void
+error_hypertable_make_distributed_not_supported(Hypertable *ht, ArrayType *servers)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+static void
+error_create_chunk_on_servers_not_supported(Chunk *chunk, Hypertable *ht)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
+#endif /* PG_VERSION_SUPPORTS_MULTINODE */
 
 /*
  * Cross module function initialization.
@@ -139,22 +195,32 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_compress_table = tsl_process_compress_table,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+#if !PG_VERSION_SUPPORTS_MULTINODE
+	.add_server = error_not_supported_default_fn,
+	.delete_server = error_not_supported_default_fn,
+	.show_chunk = error_not_supported_default_fn,
+	.create_chunk = error_not_supported_default_fn,
+	.create_chunk_on_servers = error_create_chunk_on_servers_not_supported,
+	.get_servername_list = error_get_serverlist_not_supported,
+	.hypertable_make_distributed = error_hypertable_make_distributed_not_supported,
+	.timescaledb_fdw_handler = error_not_supported_default_fn,
+	.timescaledb_fdw_validator = empty_fn,
+	.remote_txn_id_in = error_not_supported_default_fn,
+	.remote_txn_id_out = error_not_supported_default_fn,
+#else
 	.add_server = server_add,
 	.delete_server = server_delete,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
-#if !PG96
 	.create_chunk_on_servers = chunk_api_create_on_servers,
-#endif
 	.get_servername_list = server_get_servername_list,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
 	.timescaledb_fdw_validator = timescaledb_fdw_validator,
-	.cache_syscache_invalidate = cache_syscache_invalidate,
-#if !PG96
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
 #endif
+	.cache_syscache_invalidate = cache_syscache_invalidate,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -168,7 +234,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
-#if PG10_GE
+#if PG_VERSION_SUPPORTS_MULTINODE
 	_remote_connection_cache_init();
 	_remote_dist_txn_init();
 #endif
@@ -189,7 +255,7 @@ module_shutdown(void)
 	 * Order of items should be strict reverse order of ts_module_init. Please
 	 * document any exceptions.
 	 */
-#if PG10_GE
+#if PG_VERSION_SUPPORTS_MULTINODE
 	_remote_dist_txn_fini();
 	_remote_connection_cache_fini();
 #endif

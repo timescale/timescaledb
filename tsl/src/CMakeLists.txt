@@ -39,11 +39,13 @@ endif (USE_OPENSSL)
 target_compile_definitions(${TSL_LIBRARY_NAME} PUBLIC TS_TSL)
 target_compile_definitions(${TSL_LIBRARY_NAME} PUBLIC TS_SUBMODULE)
 
-if (WIN32)
-  target_link_libraries(${TSL_LIBRARY_NAME} ${PG_LIBDIR}/libpq.lib)
-else ()
-  target_link_libraries(${TSL_LIBRARY_NAME} pq)
-endif ()
+if (PG_VERSION_SUPPORTS_MULTINODE)
+  if (WIN32)
+    target_link_libraries(${TSL_LIBRARY_NAME} ${PG_LIBDIR}/libpq.lib)
+  else ()
+    target_link_libraries(${TSL_LIBRARY_NAME} pq)
+  endif ()
+endif(PG_VERSION_SUPPORTS_MULTINODE)
 
 install(
   TARGETS ${TSL_LIBRARY_NAME}
@@ -59,6 +61,6 @@ add_subdirectory(continuous_aggs)
 add_subdirectory(nodes)
 add_subdirectory(fdw)
 
-if (NOT ${PG_VERSION} VERSION_LESS "10")
+if (PG_VERSION_SUPPORTS_MULTINODE)
   add_subdirectory(remote)
 endif ()
