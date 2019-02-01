@@ -169,6 +169,22 @@ jobs:
       name: "ApacheOnly regression tests 9.6.6"
       env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
 
+    # Release mode regression tests
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Release regression tests 11"
+      env: PG_VERSION=11.0 PG_GIT_TAG=REL_11_0 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Release regression tests 10.2"
+      env: PG_VERSION=10.2 PG_GIT_TAG=REL_10_2 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+
+    - if: (type = cron) OR (branch = prerelease_test)
+      stage: test
+      name: "Release regression tests 9.6.6"
+      env: PG_VERSION=9.6.6 PG_GIT_TAG=REL9_6_6 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
       stage: test
