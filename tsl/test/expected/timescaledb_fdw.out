@@ -42,17 +42,39 @@ SELECT * FROM test_ft;
 INSERT INTO test_ft VALUES (1, 'test');
 UPDATE test_ft SET c1 = 'new_test';
 DELETE FROM test_ft WHERE c0 = 1;
-EXPLAIN SELECT * FROM test_ft;
-                            QUERY PLAN                             
--------------------------------------------------------------------
- Foreign Scan on test_ft  (cost=110.00..154.80 rows=1160 width=42)
-(1 row)
+EXPLAIN (VERBOSE, COSTS FALSE) SELECT * FROM test_ft;
+                   QUERY PLAN                    
+-------------------------------------------------
+ Foreign Scan on public.test_ft
+   Output: c0, c1
+   Remote SQL: SELECT c0, c1 FROM public.test_ft
+(3 rows)
 
-EXPLAIN INSERT INTO test_ft VALUES (1, 'test');
-                      QUERY PLAN                      
-------------------------------------------------------
- Insert on test_ft  (cost=0.00..0.01 rows=1 width=42)
-   ->  Result  (cost=0.00..0.01 rows=1 width=42)
+EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ HashAggregate
+   Output: avg(c0), c1
+   Group Key: test_ft.c1
+   ->  Foreign Scan on public.test_ft
+         Output: c0, c1
+         Remote SQL: SELECT c0, c1 FROM public.test_ft
+(6 rows)
+
+EXPLAIN (VERBOSE, COSTS FALSE) INSERT INTO test_ft VALUES (1, 'test');
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Insert on public.test_ft
+   Remote SQL: INSERT INTO public.test_ft(c0, c1) VALUES ($1, $2)
+   ->  Result
+         Output: 1, 'test'::character varying(10)
+(4 rows)
+
+EXPLAIN (COSTS FALSE) INSERT INTO test_ft VALUES (1, 'test');
+    QUERY PLAN     
+-------------------
+ Insert on test_ft
+   ->  Result
 (2 rows)
 
 ANALYZE VERBOSE test_ft;

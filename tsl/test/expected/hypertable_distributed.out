@@ -195,19 +195,19 @@ INSERT INTO disttable VALUES
                ->  Result  (cost=0.00..0.01 rows=1 width=24)
 (5 rows)
 
-EXPLAIN VERBOSE
+EXPLAIN (VERBOSE, COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
                                                            QUERY PLAN                                                            
 ---------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=24)
+ Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.disttable
    Servers: server_1, server_2, server_3
    Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3)
-   ->  Insert on public.disttable  (cost=0.00..0.01 rows=1 width=24)
-         ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=24)
+   ->  Insert on public.disttable
+         ->  Custom Scan (ChunkDispatch)
                Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
-               ->  Result  (cost=0.00..0.01 rows=1 width=24)
+               ->  Result
                      Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
 (9 rows)
 
@@ -284,6 +284,46 @@ SELECT * FROM disttable;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Show what some queries would look like on the frontend
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT * FROM disttable;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Append
+   ->  Foreign Scan on _timescaledb_internal._hyper_1_1_dist_chunk
+         Output: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device, _hyper_1_1_dist_chunk.temp
+         Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_1_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_1_2_dist_chunk
+         Output: _hyper_1_2_dist_chunk."time", _hyper_1_2_dist_chunk.device, _hyper_1_2_dist_chunk.temp
+         Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_2_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_1_3_dist_chunk
+         Output: _hyper_1_3_dist_chunk."time", _hyper_1_3_dist_chunk.device, _hyper_1_3_dist_chunk.temp
+         Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_3_dist_chunk
+(10 rows)
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT time_bucket('1 minute', time) AS time, avg(temp)
+FROM disttable WHERE device = 2 GROUP BY 1;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time")), avg(_hyper_1_1_dist_chunk.temp)
+   Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time"))
+   ->  Sort
+         Output: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.temp
+         Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time"))
+         ->  Append
+               ->  Foreign Scan on _timescaledb_internal._hyper_1_1_dist_chunk
+                     Output: time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time"), _hyper_1_1_dist_chunk.temp
+                     Remote SQL: SELECT "time", temp FROM _timescaledb_internal._hyper_1_1_dist_chunk WHERE ((device = 2))
+               ->  Foreign Scan on _timescaledb_internal._hyper_1_2_dist_chunk
+                     Output: time_bucket('@ 1 min'::interval, _hyper_1_2_dist_chunk."time"), _hyper_1_2_dist_chunk.temp
+                     Remote SQL: SELECT "time", temp FROM _timescaledb_internal._hyper_1_2_dist_chunk WHERE ((device = 2))
+               ->  Foreign Scan on _timescaledb_internal._hyper_1_3_dist_chunk
+                     Output: time_bucket('@ 1 min'::interval, _hyper_1_3_dist_chunk."time"), _hyper_1_3_dist_chunk.temp
+                     Remote SQL: SELECT "time", temp FROM _timescaledb_internal._hyper_1_3_dist_chunk WHERE ((device = 2))
+(16 rows)
+
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
 -- aren't enforced on a foreign table)
