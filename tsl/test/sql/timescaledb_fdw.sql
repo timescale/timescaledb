@@ -50,6 +50,15 @@ EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
 SELECT * FROM test_ft;
 SELECT avg(c0) FROM test_ft GROUP BY c1;
 
-UPDATE test_ft SET c1 = 'new_test';
+-- Update rows
+EXPLAIN (VERBOSE, COSTS FALSE)
+UPDATE test_ft SET c1 = 'new_test' WHERE c0 = 2
+RETURNING c1, c0;
+
+UPDATE test_ft SET c1 = 'new_test' WHERE c0 = 2
+RETURNING c1, c0;
+
+-- Show that the update was applied
+SELECT * FROM test_ft;
 DELETE FROM test_ft WHERE c0 = 1;
 ANALYZE VERBOSE test_ft;

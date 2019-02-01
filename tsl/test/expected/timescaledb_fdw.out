@@ -100,7 +100,37 @@ SELECT avg(c0) FROM test_ft GROUP BY c1;
  2.0000000000000000
 (2 rows)
 
-UPDATE test_ft SET c1 = 'new_test';
+-- Update rows
+EXPLAIN (VERBOSE, COSTS FALSE)
+UPDATE test_ft SET c1 = 'new_test' WHERE c0 = 2
+RETURNING c1, c0;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Update on public.test_ft
+   Output: c1, c0
+   Remote SQL: UPDATE public.test_ft SET c1 = $2 WHERE ctid = $1 RETURNING c0, c1
+   ->  Foreign Scan on public.test_ft
+         Output: c0, 'new_test'::character varying(10), ctid
+         Remote SQL: SELECT c0, ctid FROM public.test_ft WHERE ((c0 = 2)) FOR UPDATE
+(6 rows)
+
+UPDATE test_ft SET c1 = 'new_test' WHERE c0 = 2
+RETURNING c1, c0;
+    c1    | c0 
+----------+----
+ new_test |  2
+ new_test |  2
+(2 rows)
+
+-- Show that the update was applied
+SELECT * FROM test_ft;
+ c0 |    c1    
+----+----------
+  1 | value1
+  2 | new_test
+  2 | new_test
+(3 rows)
+
 DELETE FROM test_ft WHERE c0 = 1;
 ANALYZE VERBOSE test_ft;
 WARNING:  skipping "test_ft" --- cannot analyze this foreign table
