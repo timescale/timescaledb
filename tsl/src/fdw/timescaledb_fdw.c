@@ -1023,13 +1023,158 @@ get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 }
 
 static ForeignScan *
-get_foreign_plan(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid, ForeignPath *best_path,
-				 List *tlist, List *scan_clauses, Plan *outer_plan)
+get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
+				 ForeignPath *best_path, List *tlist, List *scan_clauses, Plan *outer_plan)
 {
-	Index scan_relid = baserel->relid;
+	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) foreignrel->fdw_private;
+	Index scan_relid;
+	List *fdw_private;
+	List *remote_exprs = NIL;
+	List *local_exprs = NIL;
+	List *params_list = NIL;
+	List *fdw_scan_tlist = NIL;
+	List *fdw_recheck_quals = NIL;
+	List *retrieved_attrs;
+	StringInfoData sql;
+	ListCell *lc;
 
-	scan_clauses = extract_actual_clauses(scan_clauses, false);
-	return make_foreignscan(tlist, scan_clauses, scan_relid, NIL, NIL, NIL, NIL, outer_plan);
+	if (IS_SIMPLE_REL(foreignrel))
+	{
+		/*
+		 * For base relations, set scan_relid as the relid of the relation.
+		 */
+		scan_relid = foreignrel->relid;
+
+		/*
+		 * In a base-relation scan, we must apply the given scan_clauses.
+		 *
+		 * Separate the scan_clauses into those that can be executed remotely
+		 * and those that can't.  baserestrictinfo clauses that were
+		 * previously determined to be safe or unsafe by classifyConditions
+		 * are found in fpinfo->remote_conds and fpinfo->local_conds. Anything
+		 * else in the scan_clauses list will be a join clause, which we have
+		 * to check for remote-safety.
+		 *
+		 * Note: the join clauses we see here should be the exact same ones
+		 * previously examined by postgresGetForeignPaths.  Possibly it'd be
+		 * worth passing forward the classification work done then, rather
+		 * than repeating it here.
+		 *
+		 * This code must match "extract_actual_clauses(scan_clauses, false)"
+		 * except for the additional decision about remote versus local
+		 * execution.
+		 */
+		foreach (lc, scan_clauses)
+		{
+			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+			/* Ignore any pseudoconstants, they're dealt with elsewhere */
+			if (rinfo->pseudoconstant)
+				continue;
+
+			if (list_member_ptr(fpinfo->remote_conds, rinfo))
+				remote_exprs = lappend(remote_exprs, rinfo->clause);
+			else if (list_member_ptr(fpinfo->local_conds, rinfo))
+				local_exprs = lappend(local_exprs, rinfo->clause);
+			else if (is_foreign_expr(root, foreignrel, rinfo->clause))
+				remote_exprs = lappend(remote_exprs, rinfo->clause);
+			else
+				local_exprs = lappend(local_exprs, rinfo->clause);
+		}
+
+		/*
+		 * For a base-relation scan, we have to support EPQ recheck, which
+		 * should recheck all the remote quals.
+		 */
+		fdw_recheck_quals = remote_exprs;
+	}
+	else if (IS_JOIN_REL(foreignrel))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("foreign joins are not supported")));
+	}
+	else
+	{
+		/*
+		 * Upper relation - set scan_relid to 0.
+		 */
+		scan_relid = 0;
+
+		/*
+		 * For a join rel, baserestrictinfo is NIL and we are not considering
+		 * parameterization right now, so there should be no scan_clauses for
+		 * a joinrel or an upper rel either.
+		 */
+		Assert(!scan_clauses);
+
+		/*
+		 * Instead we get the conditions to apply from the fdw_private
+		 * structure.
+		 */
+		remote_exprs = extract_actual_clauses(fpinfo->remote_conds, false);
+		local_exprs = extract_actual_clauses(fpinfo->local_conds, false);
+
+		/*
+		 * We leave fdw_recheck_quals empty in this case, since we never need
+		 * to apply EPQ recheck clauses.  In the case of a joinrel, EPQ
+		 * recheck is handled elsewhere --- see postgresGetForeignJoinPaths().
+		 * If we're planning an upperrel (ie, remote grouping or aggregation)
+		 * then there's no EPQ to do because SELECT FOR UPDATE wouldn't be
+		 * allowed, and indeed we *can't* put the remote clauses into
+		 * fdw_recheck_quals because the unaggregated Vars won't be available
+		 * locally.
+		 */
+
+		/* Build the list of columns to be fetched from the foreign server. */
+		fdw_scan_tlist = build_tlist_to_deparse(foreignrel);
+	}
+
+	/*
+	 * Build the query string to be sent for execution, and identify
+	 * expressions to be sent as parameters.
+	 */
+	initStringInfo(&sql);
+	deparseSelectStmtForRel(&sql,
+							root,
+							foreignrel,
+							fdw_scan_tlist,
+							remote_exprs,
+							best_path->path.pathkeys,
+							false,
+							&retrieved_attrs,
+							&params_list);
+
+	/* Remember remote_exprs for possible use by postgresPlanDirectModify */
+	fpinfo->final_remote_exprs = remote_exprs;
+
+	/*
+	 * Build the fdw_private list that will be available to the executor.
+	 * Items in the list must match order in enum FdwScanPrivateIndex.
+	 */
+	fdw_private =
+		list_make3(makeString(sql.data), retrieved_attrs, makeInteger(fpinfo->fetch_size));
+
+	Assert(!IS_JOIN_REL(foreignrel));
+
+	if (IS_UPPER_REL(foreignrel))
+		fdw_private = lappend(fdw_private, makeString(fpinfo->relation_name->data));
+
+	/*
+	 * Create the ForeignScan node for the given relation.
+	 *
+	 * Note that the remote parameter expressions are stored in the fdw_exprs
+	 * field of the finished plan node; we can't keep them in private state
+	 * because then they wouldn't be subject to later planner processing.
+	 */
+	return make_foreignscan(tlist,
+							local_exprs,
+							scan_relid,
+							params_list,
+							fdw_private,
+							fdw_scan_tlist,
+							fdw_recheck_quals,
+							outer_plan);
 }
 
 static void
