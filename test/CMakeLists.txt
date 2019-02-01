@@ -42,6 +42,7 @@ add_custom_target(regresscheck
 add_custom_target(isolationcheck
   COMMAND ${CMAKE_COMMAND} -E env
   ${PG_ISOLATION_REGRESS_ENV}
+  SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
   ${CMAKE_CURRENT_SOURCE_DIR}/pg_isolation_regress.sh
   ${PG_REGRESS_OPTS_BASE}
   ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
@@ -66,6 +67,7 @@ add_custom_target(regresschecklocal
 add_custom_target(isolationchecklocal
   COMMAND ${CMAKE_COMMAND} -E env
   ${PG_ISOLATION_REGRESS_ENV}
+  SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
   ${CMAKE_CURRENT_SOURCE_DIR}/pg_isolation_regress.sh
   ${PG_REGRESS_OPTS_BASE}
   ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
