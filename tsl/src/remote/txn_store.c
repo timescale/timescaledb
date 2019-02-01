@@ -88,8 +88,9 @@ remote_txn_store_remove(RemoteTxnStore *store, Oid user_mapping_oid)
 void
 remote_txn_store_destroy(RemoteTxnStore *store)
 {
-	RemoteTxn *txn;
 #if DEBUG
+	RemoteTxn *txn;
+
 	remote_txn_store_foreach(store, txn) { remote_txn_check_for_leaked_prepared_statements(txn); }
 #endif
 	hash_destroy(store->hashtable);

@@ -210,11 +210,11 @@ exec_cleanup_command(PGconn *conn, const char *query)
 	switch (async_response_get_type(response))
 	{
 		case RESPONSE_TIMEOUT:
-			elog(DEBUG, "abort processing: timeout executing %s", query);
+			elog(DEBUG3, "abort processing: timeout executing %s", query);
 			success = false;
 			break;
 		case RESPONSE_COMMUNICATION_ERROR:
-			elog(DEBUG, "abort processing: communication error executing %s", query);
+			elog(DEBUG3, "abort processing: communication error executing %s", query);
 			success = false;
 			break;
 		case RESPONSE_RESULT:
@@ -222,7 +222,7 @@ exec_cleanup_command(PGconn *conn, const char *query)
 			pg_result = async_response_result_get_pg_result(result);
 			if (PQresultStatus(pg_result) != PGRES_COMMAND_OK)
 			{
-				elog(DEBUG, "abort processing: error in result executing %s", query);
+				elog(DEBUG3, "abort processing: error in result executing %s", query);
 				success = false;
 			}
 			else
