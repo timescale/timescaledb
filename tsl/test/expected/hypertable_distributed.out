@@ -586,8 +586,57 @@ ERROR:  column "no_such_column" of relation "disttable" does not exist at charac
 UPDATE disttable SET tableoid = 4 WHERE device = 2;
 ERROR:  cannot assign to system column "tableoid" at character 22
 \set ON_ERROR_STOP 1
--- Test deletes
-DELETE FROM disttable WHERE device = 3;
+-- Test deletes (no rows deleted)
+DELETE FROM disttable WHERE device = 3
+RETURNING *;
+ time | device | temp | Color 
+------+--------+------+-------
+(0 rows)
+
+-- Test deletes (rows deleted)
+DELETE FROM disttable WHERE device = 4
+RETURNING *;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Tue Jan 01 09:11:00 2019 PST |      4 |  2.1 |      
+ Sat Sep 02 06:09:00 2017 PDT |      4 |  9.8 |     1
+(2 rows)
+
+-- Query to show that rows are deleted
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Sun Jan 01 06:01:00 2017 PST |      2 |  1.1 |      
+ Sun Jan 01 08:01:00 2017 PST |      2 |  1.2 |      
+ Sun Jan 01 06:05:00 2017 PST |      2 |  1.4 |      
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
+(4 rows)
+
+-- Ensure rows are deleted on the servers
+\c server_1
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Sun Jan 01 06:01:00 2017 PST |      2 |  1.1 |      
+ Sun Jan 01 08:01:00 2017 PST |      2 |  1.2 |      
+ Sun Jan 01 06:05:00 2017 PST |      2 |  1.4 |      
+(3 rows)
+
+\c server_2
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
+(1 row)
+
+\c server_3
+SELECT * FROM disttable;
+ time | device | temp | Color 
+------+--------+------+-------
+(0 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
@@ -711,6 +760,37 @@ SELECT * FROM underreplicated;
  Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
  Mon Jan 02 07:01:00 2017 PST |      2 |    2
 (2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+DELETE FROM underreplicated WHERE device = 2
+RETURNING *;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 02 07:01:00 2017 PST |      2 |    2
+(1 row)
+
+-- Ensure deletes across all servers
+\c server_1
+SELECT * FROM underreplicated;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+(1 row)
+
+\c server_2
+SELECT * FROM underreplicated;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+(1 row)
+
+\c server_3
+SELECT * FROM underreplicated;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;

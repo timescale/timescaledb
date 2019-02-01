@@ -289,8 +289,26 @@ UPDATE disttable SET no_such_column = 4 WHERE device = 2;
 UPDATE disttable SET tableoid = 4 WHERE device = 2;
 \set ON_ERROR_STOP 1
 
--- Test deletes
-DELETE FROM disttable WHERE device = 3;
+-- Test deletes (no rows deleted)
+DELETE FROM disttable WHERE device = 3
+RETURNING *;
+
+-- Test deletes (rows deleted)
+DELETE FROM disttable WHERE device = 4
+RETURNING *;
+
+-- Query to show that rows are deleted
+SELECT * FROM disttable;
+
+-- Ensure rows are deleted on the servers
+\c server_1
+SELECT * FROM disttable;
+\c server_2
+SELECT * FROM disttable;
+\c server_3
+SELECT * FROM disttable;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
@@ -326,6 +344,19 @@ RETURNING time, temp, device;
 SELECT * FROM underreplicated;
 
 -- Show that all replica chunks are updated
+\c server_1
+SELECT * FROM underreplicated;
+\c server_2
+SELECT * FROM underreplicated;
+\c server_3
+SELECT * FROM underreplicated;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+DELETE FROM underreplicated WHERE device = 2
+RETURNING *;
+
+-- Ensure deletes across all servers
 \c server_1
 SELECT * FROM underreplicated;
 \c server_2

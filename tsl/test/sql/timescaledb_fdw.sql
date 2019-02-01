@@ -60,5 +60,15 @@ RETURNING c1, c0;
 
 -- Show that the update was applied
 SELECT * FROM test_ft;
+
+-- Test deletes
 DELETE FROM test_ft WHERE c0 = 1;
+
+-- Show tuples deleted locally and on remote server
+SELECT * FROM test_ft;
+\c server_1
+SELECT * FROM test_ft;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
 ANALYZE VERBOSE test_ft;
