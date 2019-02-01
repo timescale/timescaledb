@@ -35,11 +35,21 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE FOREIGN TABLE test_ft (c0 int, c1 varchar(10)) SERVER server_1;
 
 SELECT * FROM test_ft;
-INSERT INTO test_ft VALUES (1, 'test');
-UPDATE test_ft SET c1 = 'new_test';
-DELETE FROM test_ft WHERE c0 = 1;
+EXPLAIN (COSTS FALSE) INSERT INTO test_ft VALUES (1, 'value1'), (2, 'value2'), (2, 'value1') RETURNING c1, c0;
+INSERT INTO test_ft VALUES (1, 'value1'), (2, 'value2'), (2, 'value1') RETURNING c1, c0;
+
+-- Show tuples inserted on remote server
+\c server_1
+SELECT * FROM test_ft;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Query from frontend
 EXPLAIN (VERBOSE, COSTS FALSE) SELECT * FROM test_ft;
 EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
-EXPLAIN (VERBOSE, COSTS FALSE) INSERT INTO test_ft VALUES (1, 'test');
-EXPLAIN (COSTS FALSE) INSERT INTO test_ft VALUES (1, 'test');
+SELECT * FROM test_ft;
+SELECT avg(c0) FROM test_ft GROUP BY c1;
+
+UPDATE test_ft SET c1 = 'new_test';
+DELETE FROM test_ft WHERE c0 = 1;
 ANALYZE VERBOSE test_ft;
