@@ -274,6 +274,7 @@ ON CONFLICT (time) DO UPDATE SET temp = 3.2;
 
 -- Test updates
 UPDATE disttable SET device = 4 WHERE device = 3;
+SELECT * FROM disttable;
 
 WITH devices AS (
      SELECT DISTINCT device FROM disttable ORDER BY device
@@ -315,6 +316,21 @@ SELECT * FROM underreplicated;
 \c server_3
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
+SELECT * FROM underreplicated;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+UPDATE underreplicated SET temp = 2.0 WHERE device = 2
+RETURNING time, temp, device;
+
+SELECT * FROM underreplicated;
+
+-- Show that all replica chunks are updated
+\c server_1
+SELECT * FROM underreplicated;
+\c server_2
+SELECT * FROM underreplicated;
+\c server_3
 SELECT * FROM underreplicated;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
