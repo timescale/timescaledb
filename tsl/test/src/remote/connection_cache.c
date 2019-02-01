@@ -97,7 +97,7 @@ invalidate_user()
 	PGconn *conn_modify = get_connection();
 	remote_connection_exec_ok_command(conn_modify,
 									  "ALTER USER MAPPING FOR CURRENT_USER SERVER loopback_1 "
-									  "OPTIONS (test_option 'false')");
+									  "OPTIONS (password 'testpass')");
 	AcceptInvalidationMessages();
 	remote_connection_close(conn_modify);
 }

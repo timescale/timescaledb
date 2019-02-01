@@ -16,6 +16,15 @@ SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass')
  server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
+-- Set FDW and libpq options to make sure they are validated correctly
+ALTER SERVER server_1 OPTIONS (ADD use_remote_estimate 'true');
+ALTER SERVER server_1 OPTIONS (ADD fdw_startup_cost '110.0');
+ALTER SERVER server_1 OPTIONS (ADD connect_timeout '3');
+-- Test a bad option
+\set ON_ERROR_STOP 0
+ALTER SERVER server_1 OPTIONS (ADD invalid_option '3');
+ERROR:  invalid option "invalid_option"
+\set ON_ERROR_STOP 1
 \c server_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
@@ -34,9 +43,9 @@ INSERT INTO test_ft VALUES (1, 'test');
 UPDATE test_ft SET c1 = 'new_test';
 DELETE FROM test_ft WHERE c0 = 1;
 EXPLAIN SELECT * FROM test_ft;
-                         QUERY PLAN                         
-------------------------------------------------------------
- Foreign Scan on test_ft  (cost=0.00..1.00 rows=1 width=42)
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Foreign Scan on test_ft  (cost=0.00..1160.00 rows=1160 width=42)
 (1 row)
 
 EXPLAIN INSERT INTO test_ft VALUES (1, 'test');

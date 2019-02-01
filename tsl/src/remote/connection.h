@@ -13,6 +13,13 @@
 
 #include "async.h"
 
+typedef enum ConnOptionType
+{
+	CONN_OPTION_TYPE_NONE,
+	CONN_OPTION_TYPE_USER,
+	CONN_OPTION_TYPE_SERVER,
+} ConnOptionType;
+
 /* Open a connection with a remote endpoint.
  *  Note that this is a raw connection that does not obey txn semantics and is allocated using
  * malloc. Most users should use `remote_dist_txn_get_connection` or
@@ -24,6 +31,7 @@ void remote_connection_close(PGconn *conn);
 extern void remote_connection_report_error(int elevel, PGresult *res, PGconn *conn, bool clear,
 										   const char *sql);
 
+extern ConnOptionType remote_connection_option_type(const char *keyword);
 extern bool remote_connection_valid_user_option(const char *keyword);
 extern bool remote_connection_valid_server_option(const char *keyword);
 extern unsigned int remote_connection_get_cursor_number(PGconn *conn);
