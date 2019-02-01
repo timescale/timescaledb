@@ -14,6 +14,16 @@ SET client_min_messages TO NOTICE;
 CREATE DATABASE server_1;
 SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
 
+-- Set FDW and libpq options to make sure they are validated correctly
+ALTER SERVER server_1 OPTIONS (ADD use_remote_estimate 'true');
+ALTER SERVER server_1 OPTIONS (ADD fdw_startup_cost '110.0');
+ALTER SERVER server_1 OPTIONS (ADD connect_timeout '3');
+
+-- Test a bad option
+\set ON_ERROR_STOP 0
+ALTER SERVER server_1 OPTIONS (ADD invalid_option '3');
+\set ON_ERROR_STOP 1
+
 \c server_1
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;

@@ -73,46 +73,39 @@ is_libpq_option(const char *keyword, char **display_option)
 	return false;
 }
 
-typedef enum OptionType
-{
-	OPTION_TYPE_NONE,
-	OPTION_TYPE_USER,
-	OPTION_TYPE_SERVER,
-} OptionType;
-
-static OptionType
+ConnOptionType
 remote_connection_option_type(const char *keyword)
 {
 	char *display_option;
 
 	if (!is_libpq_option(keyword, &display_option))
-		return OPTION_TYPE_NONE;
+		return CONN_OPTION_TYPE_NONE;
 
 	/* Hide debug options, as well as settings we override internally. */
 	if (strchr(display_option, 'D') || strcmp(keyword, "fallback_application_name") == 0 ||
 		strcmp(keyword, "client_encoding") == 0)
-		return OPTION_TYPE_NONE;
+		return CONN_OPTION_TYPE_NONE;
 
 	/*
 	 * "user" and any secret options are allowed only on user mappings.
 	 * Everything else is a server option.
 	 */
 	if (strchr(display_option, '*') || strcmp(keyword, "user") == 0)
-		return OPTION_TYPE_USER;
+		return CONN_OPTION_TYPE_USER;
 
-	return OPTION_TYPE_SERVER;
+	return CONN_OPTION_TYPE_SERVER;
 }
 
 bool
 remote_connection_valid_user_option(const char *keyword)
 {
-	return remote_connection_option_type(keyword) == OPTION_TYPE_USER;
+	return remote_connection_option_type(keyword) == CONN_OPTION_TYPE_USER;
 }
 
 bool
 remote_connection_valid_server_option(const char *keyword)
 {
-	return remote_connection_option_type(keyword) == OPTION_TYPE_SERVER;
+	return remote_connection_option_type(keyword) == CONN_OPTION_TYPE_SERVER;
 }
 
 static int
