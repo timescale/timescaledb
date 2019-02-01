@@ -19,13 +19,20 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/planmain.h>
+#include <optimizer/var.h>
+#include <optimizer/cost.h>
+#include <optimizer/clauses.h>
+#include <optimizer/tlist.h>
 #include <access/htup_details.h>
 #include <access/sysattr.h>
+#include <access/reloptions.h>
 #include <executor/executor.h>
 #include <commands/explain.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
+#include <utils/selfuncs.h>
+#include <commands/defrem.h>
 #include <miscadmin.h>
 
 #include <export.h>
@@ -40,9 +47,16 @@
 #include "utils.h"
 #include "timescaledb_fdw.h"
 #include "deparse.h"
+#include "option.h"
 
-TS_FUNCTION_INFO_V1(timescaledb_fdw_handler);
-TS_FUNCTION_INFO_V1(timescaledb_fdw_validator);
+/* Default CPU cost to start up a foreign query. */
+#define DEFAULT_FDW_STARTUP_COST 100.0
+
+/* Default CPU cost to process 1 row (above and beyond cpu_tuple_cost). */
+#define DEFAULT_FDW_TUPLE_COST 0.01
+
+/* If no remote estimates, assume a sort costs 20% extra */
+#define DEFAULT_FDW_SORT_MULTIPLIER 1.2
 
 typedef struct TsScanState
 {
@@ -113,20 +127,597 @@ typedef struct TsFdwModifyState
 #define TS_FDW_MODIFY_STATE_SIZE(num_servers)                                                      \
 	(sizeof(TsFdwModifyState) + (sizeof(TsFdwServerState) * num_servers))
 
-Datum
-timescaledb_fdw_validator(PG_FUNCTION_ARGS)
+/*
+ * Estimate costs of executing a SQL statement remotely.
+ * The given "sql" must be an EXPLAIN command.
+ */
+static void
+get_remote_estimate(const char *sql, PGconn *conn, double *rows, int *width, Cost *startup_cost,
+					Cost *total_cost)
 {
+	AsyncResponseResult *volatile rsp = NULL;
+
+	/* PGresult must be released before leaving this function. */
+	PG_TRY();
+	{
+		AsyncRequest *req;
+		PGresult *res;
+		char *line;
+		char *p;
+		int n;
+
+		/*
+		 * Execute EXPLAIN remotely.
+		 */
+		req = async_request_send(conn, sql);
+		rsp = async_request_wait_any_result(req);
+		res = async_response_result_get_pg_result(rsp);
+
+		if (PQresultStatus(res) != PGRES_TUPLES_OK)
+			async_response_report_error((AsyncResponse *) rsp, ERROR);
+
+		/*
+		 * Extract cost numbers for topmost plan node.  Note we search for a
+		 * left paren from the end of the line to avoid being confused by
+		 * other uses of parentheses.
+		 */
+		line = PQgetvalue(res, 0, 0);
+		p = strrchr(line, '(');
+		if (p == NULL)
+			elog(ERROR, "could not interpret EXPLAIN output: \"%s\"", line);
+		n = sscanf(p, "(cost=%lf..%lf rows=%lf width=%d)", startup_cost, total_cost, rows, width);
+		if (n != 4)
+			elog(ERROR, "could not interpret EXPLAIN output: \"%s\"", line);
+
+		async_response_result_close(rsp);
+	}
+	PG_CATCH();
+	{
+		if (NULL != rsp)
+			async_response_result_close(rsp);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+}
+
+/*
+ * estimate_path_cost_size
+ *		Get cost and size estimates for a foreign scan on given foreign
+ *		relation either a base relation or an upper relation containing
+ *		foreign relations.
+ *
+ * param_join_conds are the parameterization clauses with outer relations.
+ * pathkeys specify the expected sort order if any for given path being costed.
+ *
+ * The function returns the cost and size estimates in p_row, p_width,
+ * p_startup_cost and p_total_cost variables.
+ */
+static void
+estimate_path_cost_size(PlannerInfo *root, RelOptInfo *foreignrel, List *param_join_conds,
+						List *pathkeys, double *p_rows, int *p_width, Cost *p_startup_cost,
+						Cost *p_total_cost)
+{
+	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) foreignrel->fdw_private;
+	double rows = 0;
+	double retrieved_rows;
+	int width = 0;
+	Cost startup_cost = 0;
+	Cost total_cost = 0;
+	Cost cpu_per_tuple;
+
 	/*
-	 * no logging b/c it seems that validator func is called even when not
-	 * using foreign table
+	 * If the table or the server is configured to use remote estimates,
+	 * connect to the foreign server and execute EXPLAIN to estimate the
+	 * number of rows selected by the restriction+join clauses.  Otherwise,
+	 * estimate rows using whatever statistics we have locally, in a way
+	 * similar to ordinary tables.
 	 */
-	PG_RETURN_VOID();
+	if (fpinfo->use_remote_estimate)
+	{
+		List *remote_param_join_conds;
+		List *local_param_join_conds;
+		StringInfoData sql;
+		PGconn *conn;
+		Selectivity local_sel;
+		QualCost local_cost;
+		List *fdw_scan_tlist = NIL;
+		List *remote_conds;
+
+		/* Required only to be passed to deparseSelectStmtForRel */
+		List *retrieved_attrs;
+
+		/*
+		 * param_join_conds might contain both clauses that are safe to send
+		 * across, and clauses that aren't.
+		 */
+		classifyConditions(root,
+						   foreignrel,
+						   param_join_conds,
+						   &remote_param_join_conds,
+						   &local_param_join_conds);
+
+		if (IS_JOIN_REL(foreignrel))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("foreign joins are not supported")));
+
+		/* Build the list of columns to be fetched from the foreign server. */
+		if (IS_UPPER_REL(foreignrel))
+			fdw_scan_tlist = build_tlist_to_deparse(foreignrel);
+		else
+			fdw_scan_tlist = NIL;
+
+		/*
+		 * The complete list of remote conditions includes everything from
+		 * baserestrictinfo plus any extra join_conds relevant to this
+		 * particular path.
+		 */
+		remote_conds = list_concat(list_copy(remote_param_join_conds), fpinfo->remote_conds);
+
+		/*
+		 * Construct EXPLAIN query including the desired SELECT, FROM, and
+		 * WHERE clauses. Params and other-relation Vars are replaced by dummy
+		 * values, so don't request params_list.
+		 */
+		initStringInfo(&sql);
+		appendStringInfoString(&sql, "EXPLAIN ");
+		deparseSelectStmtForRel(&sql,
+								root,
+								foreignrel,
+								fdw_scan_tlist,
+								remote_conds,
+								pathkeys,
+								false,
+								&retrieved_attrs,
+								NULL);
+
+		/* Get the remote estimate */
+		conn = remote_dist_txn_get_connection(fpinfo->user, REMOTE_TXN_NO_PREP_STMT);
+		get_remote_estimate(sql.data, conn, &rows, &width, &startup_cost, &total_cost);
+
+		retrieved_rows = rows;
+
+		/* Factor in the selectivity of the locally-checked quals */
+		local_sel = clauselist_selectivity(root,
+										   local_param_join_conds,
+										   foreignrel->relid,
+										   JOIN_INNER,
+										   NULL);
+		local_sel *= fpinfo->local_conds_sel;
+
+		rows = clamp_row_est(rows * local_sel);
+
+		/* Add in the eval cost of the locally-checked quals */
+		startup_cost += fpinfo->local_conds_cost.startup;
+		total_cost += fpinfo->local_conds_cost.per_tuple * retrieved_rows;
+		cost_qual_eval(&local_cost, local_param_join_conds, root);
+		startup_cost += local_cost.startup;
+		total_cost += local_cost.per_tuple * retrieved_rows;
+	}
+	else
+	{
+		Cost run_cost = 0;
+
+		/*
+		 * We don't support join conditions in this mode (hence, no
+		 * parameterized paths can be made).
+		 */
+		Assert(param_join_conds == NIL);
+
+		/*
+		 * Use rows/width estimates made by set_baserel_size_estimates() for
+		 * base foreign relations.
+		 */
+		rows = foreignrel->rows;
+		width = foreignrel->reltarget->width;
+
+		/* Back into an estimate of the number of retrieved rows. */
+		retrieved_rows = clamp_row_est(rows / fpinfo->local_conds_sel);
+
+		/*
+		 * We will come here again and again with different set of pathkeys
+		 * that caller wants to cost. We don't need to calculate the cost of
+		 * bare scan each time. Instead, use the costs if we have cached them
+		 * already.
+		 */
+		if (fpinfo->rel_startup_cost > 0 && fpinfo->rel_total_cost > 0)
+		{
+			startup_cost = fpinfo->rel_startup_cost;
+			run_cost = fpinfo->rel_total_cost - fpinfo->rel_startup_cost;
+		}
+		else if (IS_JOIN_REL(foreignrel))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("foreign joins are not supported")));
+		}
+		else if (IS_UPPER_REL(foreignrel))
+		{
+			TsFdwRelationInfo *ofpinfo;
+			PathTarget *ptarget = foreignrel->reltarget;
+			AggClauseCosts aggcosts;
+			double input_rows;
+			int numGroupCols;
+			double numGroups = 1;
+
+			/* Make sure the core code set the pathtarget. */
+			Assert(ptarget != NULL);
+
+			/*
+			 * This cost model is mixture of costing done for sorted and
+			 * hashed aggregates in cost_agg().  We are not sure which
+			 * strategy will be considered at remote side, thus for
+			 * simplicity, we put all startup related costs in startup_cost
+			 * and all finalization and run cost are added in total_cost.
+			 *
+			 * Also, core does not care about costing HAVING expressions and
+			 * adding that to the costs.  So similarly, here too we are not
+			 * considering remote and local conditions for costing.
+			 */
+
+			ofpinfo = (TsFdwRelationInfo *) fpinfo->outerrel->fdw_private;
+
+			/* Get rows and width from input rel */
+			input_rows = ofpinfo->rows;
+			width = ofpinfo->width;
+
+			/* Collect statistics about aggregates for estimating costs. */
+			MemSet(&aggcosts, 0, sizeof(AggClauseCosts));
+			if (root->parse->hasAggs)
+			{
+				get_agg_clause_costs(root,
+									 (Node *) fpinfo->grouped_tlist,
+									 AGGSPLIT_SIMPLE,
+									 &aggcosts);
+
+				/*
+				 * The cost of aggregates in the HAVING qual will be the same
+				 * for each child as it is for the parent, so there's no need
+				 * to use a translated version of havingQual.
+				 */
+				get_agg_clause_costs(root,
+									 (Node *) root->parse->havingQual,
+									 AGGSPLIT_SIMPLE,
+									 &aggcosts);
+			}
+
+			/* Get number of grouping columns and possible number of groups */
+			numGroupCols = list_length(root->parse->groupClause);
+			numGroups = estimate_num_groups(root,
+											get_sortgrouplist_exprs(root->parse->groupClause,
+																	fpinfo->grouped_tlist),
+											input_rows,
+											NULL);
+
+			/*
+			 * Number of rows expected from foreign server will be same as
+			 * that of number of groups.
+			 */
+			rows = retrieved_rows = numGroups;
+
+			/*-----
+			 * Startup cost includes:
+			 *	  1. Startup cost for underneath input * relation
+			 *	  2. Cost of performing aggregation, per cost_agg()
+			 *	  3. Startup cost for PathTarget eval
+			 *-----
+			 */
+			startup_cost = ofpinfo->rel_startup_cost;
+			startup_cost += aggcosts.transCost.startup;
+			startup_cost += aggcosts.transCost.per_tuple * input_rows;
+			startup_cost += (cpu_operator_cost * numGroupCols) * input_rows;
+			startup_cost += ptarget->cost.startup;
+
+			/*-----
+			 * Run time cost includes:
+			 *	  1. Run time cost of underneath input relation
+			 *	  2. Run time cost of performing aggregation, per cost_agg()
+			 *	  3. PathTarget eval cost for each output row
+			 *-----
+			 */
+			run_cost = ofpinfo->rel_total_cost - ofpinfo->rel_startup_cost;
+			run_cost += aggcosts.finalCost * numGroups;
+			run_cost += cpu_tuple_cost * numGroups;
+			run_cost += ptarget->cost.per_tuple * numGroups;
+		}
+		else
+		{
+			/* Clamp retrieved rows estimates to at most foreignrel->tuples. */
+			retrieved_rows = Min(retrieved_rows, foreignrel->tuples);
+
+			/*
+			 * Cost as though this were a seqscan, which is pessimistic.  We
+			 * effectively imagine the local_conds are being evaluated
+			 * remotely, too.
+			 */
+			startup_cost = 0;
+			run_cost = 0;
+			run_cost += seq_page_cost * foreignrel->pages;
+
+			startup_cost += foreignrel->baserestrictcost.startup;
+			cpu_per_tuple = cpu_tuple_cost + foreignrel->baserestrictcost.per_tuple;
+			run_cost += cpu_per_tuple * foreignrel->tuples;
+		}
+
+		/*
+		 * Without remote estimates, we have no real way to estimate the cost
+		 * of generating sorted output.  It could be free if the query plan
+		 * the remote side would have chosen generates properly-sorted output
+		 * anyway, but in most cases it will cost something.  Estimate a value
+		 * high enough that we won't pick the sorted path when the ordering
+		 * isn't locally useful, but low enough that we'll err on the side of
+		 * pushing down the ORDER BY clause when it's useful to do so.
+		 */
+		if (pathkeys != NIL)
+		{
+			startup_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+			run_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+		}
+
+		total_cost = startup_cost + run_cost;
+	}
+
+	/*
+	 * Cache the costs for scans without any pathkeys or parameterization
+	 * before adding the costs for transferring data from the foreign server.
+	 * These costs are useful for costing the join between this relation and
+	 * another foreign relation or to calculate the costs of paths with
+	 * pathkeys for this relation, when the costs can not be obtained from the
+	 * foreign server. This function will be called at least once for every
+	 * foreign relation without pathkeys and parameterization.
+	 */
+	if (pathkeys == NIL && param_join_conds == NIL)
+	{
+		fpinfo->rel_startup_cost = startup_cost;
+		fpinfo->rel_total_cost = total_cost;
+	}
+
+	/*
+	 * Add some additional cost factors to account for connection overhead
+	 * (fdw_startup_cost), transferring data across the network
+	 * (fdw_tuple_cost per retrieved row), and local manipulation of the data
+	 * (cpu_tuple_cost per retrieved row).
+	 */
+	startup_cost += fpinfo->fdw_startup_cost;
+	total_cost += fpinfo->fdw_startup_cost;
+	total_cost += fpinfo->fdw_tuple_cost * retrieved_rows;
+	total_cost += cpu_tuple_cost * retrieved_rows;
+
+	/* Return results. */
+	*p_rows = rows;
+	*p_width = width;
+	*p_startup_cost = startup_cost;
+	*p_total_cost = total_cost;
+}
+
+/*
+ * Parse options from foreign server and apply them to fpinfo.
+ *
+ * New options might also require tweaking merge_fdw_options().
+ */
+static void
+apply_server_options(TsFdwRelationInfo *fpinfo)
+{
+	ListCell *lc;
+
+	foreach (lc, fpinfo->server->options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+
+		if (strcmp(def->defname, "use_remote_estimate") == 0)
+			fpinfo->use_remote_estimate = defGetBoolean(def);
+		else if (strcmp(def->defname, "fdw_startup_cost") == 0)
+			fpinfo->fdw_startup_cost = strtod(defGetString(def), NULL);
+		else if (strcmp(def->defname, "fdw_tuple_cost") == 0)
+			fpinfo->fdw_tuple_cost = strtod(defGetString(def), NULL);
+		else if (strcmp(def->defname, "extensions") == 0)
+			fpinfo->shippable_extensions = option_extract_extension_list(defGetString(def), false);
+		else if (strcmp(def->defname, "fetch_size") == 0)
+			fpinfo->fetch_size = strtol(defGetString(def), NULL, 10);
+	}
+}
+
+/*
+ * Parse options from foreign table and apply them to fpinfo.
+ *
+ * New options might also require tweaking merge_fdw_options().
+ */
+static void
+apply_table_options(TsFdwRelationInfo *fpinfo)
+{
+	ListCell *lc;
+
+	foreach (lc, fpinfo->table->options)
+	{
+		DefElem *def = (DefElem *) lfirst(lc);
+
+		if (strcmp(def->defname, "use_remote_estimate") == 0)
+			fpinfo->use_remote_estimate = defGetBoolean(def);
+		else if (strcmp(def->defname, "fetch_size") == 0)
+			fpinfo->fetch_size = strtol(defGetString(def), NULL, 10);
+	}
 }
 
 static void
 get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
-	baserel->rows = 0;
+	TsFdwRelationInfo *fpinfo;
+	ListCell *lc;
+	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
+	const char *namespace;
+	const char *relname;
+	const char *refname;
+
+	/*
+	 * We use TsFdwRelationInfo to pass various information to subsequent
+	 * functions.
+	 */
+	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(TsFdwRelationInfo));
+	baserel->fdw_private = (void *) fpinfo;
+
+	/* Base foreign tables need to be pushed down always. */
+	fpinfo->pushdown_safe = true;
+
+	/* Look up foreign-table catalog info. */
+	fpinfo->table = GetForeignTable(foreigntableid);
+	fpinfo->server = GetForeignServer(fpinfo->table->serverid);
+
+	/*
+	 * Extract user-settable option values.  Note that per-table setting of
+	 * use_remote_estimate overrides per-server setting.
+	 */
+	fpinfo->use_remote_estimate = false;
+	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
+	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
+	fpinfo->shippable_extensions = NIL;
+	fpinfo->fetch_size = 100;
+
+	apply_server_options(fpinfo);
+	apply_table_options(fpinfo);
+
+	/*
+	 * If the table or the server is configured to use remote estimates,
+	 * identify which user to do remote access as during planning.  This
+	 * should match what ExecCheckRTEPerms() does.  If we fail due to lack of
+	 * permissions, the query would have failed at runtime anyway.
+	 */
+	if (fpinfo->use_remote_estimate)
+	{
+		Oid userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+
+		fpinfo->user = GetUserMapping(userid, fpinfo->server->serverid);
+	}
+	else
+		fpinfo->user = NULL;
+
+	/*
+	 * Identify which baserestrictinfo clauses can be sent to the remote
+	 * server and which can't.
+	 */
+	classifyConditions(root,
+					   baserel,
+					   baserel->baserestrictinfo,
+					   &fpinfo->remote_conds,
+					   &fpinfo->local_conds);
+
+	/*
+	 * Identify which attributes will need to be retrieved from the remote
+	 * server.  These include all attrs needed for joins or final output, plus
+	 * all attrs used in the local_conds.  (Note: if we end up using a
+	 * parameterized scan, it's possible that some of the join clauses will be
+	 * sent to the remote and thus we wouldn't really need to retrieve the
+	 * columns used in them.  Doesn't seem worth detecting that case though.)
+	 */
+	fpinfo->attrs_used = NULL;
+	pull_varattnos((Node *) baserel->reltarget->exprs, baserel->relid, &fpinfo->attrs_used);
+	foreach (lc, fpinfo->local_conds)
+	{
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+		pull_varattnos((Node *) rinfo->clause, baserel->relid, &fpinfo->attrs_used);
+	}
+
+	/*
+	 * Compute the selectivity and cost of the local_conds, so we don't have
+	 * to do it over again for each path.  The best we can do for these
+	 * conditions is to estimate selectivity on the basis of local statistics.
+	 */
+	fpinfo->local_conds_sel =
+		clauselist_selectivity(root, fpinfo->local_conds, baserel->relid, JOIN_INNER, NULL);
+
+	cost_qual_eval(&fpinfo->local_conds_cost, fpinfo->local_conds, root);
+
+	/*
+	 * Set cached relation costs to some negative value, so that we can detect
+	 * when they are set to some sensible costs during one (usually the first)
+	 * of the calls to estimate_path_cost_size().
+	 */
+	fpinfo->rel_startup_cost = -1;
+	fpinfo->rel_total_cost = -1;
+
+	/*
+	 * If the table or the server is configured to use remote estimates,
+	 * connect to the foreign server and execute EXPLAIN to estimate the
+	 * number of rows selected by the restriction clauses, as well as the
+	 * average row width.  Otherwise, estimate using whatever statistics we
+	 * have locally, in a way similar to ordinary tables.
+	 */
+	if (fpinfo->use_remote_estimate)
+	{
+		/*
+		 * Get cost/size estimates with help of remote server.  Save the
+		 * values in fpinfo so we don't need to do it again to generate the
+		 * basic foreign path.
+		 */
+		estimate_path_cost_size(root,
+								baserel,
+								NIL,
+								NIL,
+								&fpinfo->rows,
+								&fpinfo->width,
+								&fpinfo->startup_cost,
+								&fpinfo->total_cost);
+
+		/* Report estimated baserel size to planner. */
+		baserel->rows = fpinfo->rows;
+		baserel->reltarget->width = fpinfo->width;
+	}
+	else
+	{
+		/*
+		 * If the foreign table has never been ANALYZEd, it will have relpages
+		 * and reltuples equal to zero, which most likely has nothing to do
+		 * with reality.  We can't do a whole lot about that if we're not
+		 * allowed to consult the remote server, but we can use a hack similar
+		 * to plancat.c's treatment of empty relations: use a minimum size
+		 * estimate of 10 pages, and divide by the column-datatype-based width
+		 * estimate to get the corresponding number of tuples.
+		 */
+		if (baserel->pages == 0 && baserel->tuples == 0)
+		{
+			baserel->pages = 10;
+			baserel->tuples =
+				(10 * BLCKSZ) / (baserel->reltarget->width + MAXALIGN(SizeofHeapTupleHeader));
+		}
+
+		/* Estimate baserel size as best we can with local statistics. */
+		set_baserel_size_estimates(root, baserel);
+
+		/* Fill in basically-bogus cost estimates for use later. */
+		estimate_path_cost_size(root,
+								baserel,
+								NIL,
+								NIL,
+								&fpinfo->rows,
+								&fpinfo->width,
+								&fpinfo->startup_cost,
+								&fpinfo->total_cost);
+	}
+
+	/*
+	 * Set the name of relation in fpinfo, while we are constructing it here.
+	 * It will be used to build the string describing the join relation in
+	 * EXPLAIN output. We can't know whether VERBOSE option is specified or
+	 * not, so always schema-qualify the foreign table name.
+	 */
+	fpinfo->relation_name = makeStringInfo();
+	namespace = get_namespace_name(get_rel_namespace(foreigntableid));
+	relname = get_rel_name(foreigntableid);
+	refname = rte->eref->aliasname;
+	appendStringInfo(fpinfo->relation_name,
+					 "%s.%s",
+					 quote_identifier(namespace),
+					 quote_identifier(relname));
+	if (*refname && strcmp(refname, relname) != 0)
+		appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
+
+	/* No outer and inner relations. */
+	fpinfo->make_outerrel_subquery = false;
+	fpinfo->make_innerrel_subquery = false;
+	fpinfo->lower_subquery_rels = NULL;
+	/* Set the relation index. */
+	fpinfo->relation_index = baserel->relid;
 }
 
 static void
@@ -981,8 +1572,23 @@ static FdwRoutine timescaledb_fdw_routine = {
 	.AnalyzeForeignTable = analyze_foreign_table,
 };
 
+TS_FUNCTION_INFO_V1(timescaledb_fdw_handler);
+
 Datum
 timescaledb_fdw_handler(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_POINTER(&timescaledb_fdw_routine);
+}
+
+PG_FUNCTION_INFO_V1(timescaledb_fdw_validator);
+
+Datum
+timescaledb_fdw_validator(PG_FUNCTION_ARGS)
+{
+	List *options_list = untransformRelOptions(PG_GETARG_DATUM(0));
+	Oid catalog = PG_GETARG_OID(1);
+
+	option_validate(options_list, catalog);
+
+	PG_RETURN_VOID();
 }
