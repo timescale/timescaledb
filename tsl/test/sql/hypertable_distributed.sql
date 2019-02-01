@@ -112,7 +112,7 @@ EXPLAIN
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
 
-EXPLAIN VERBOSE
+EXPLAIN (VERBOSE, COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
 
@@ -146,6 +146,14 @@ FROM show_chunks('disttable');
 SELECT * FROM disttable;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Show what some queries would look like on the frontend
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT * FROM disttable;
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT time_bucket('1 minute', time) AS time, avg(temp)
+FROM disttable WHERE device = 2 GROUP BY 1;
 
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they

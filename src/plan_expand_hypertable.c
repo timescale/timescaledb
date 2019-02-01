@@ -1079,7 +1079,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
-	if (enable_partitionwise_aggregate)
+	if (enable_partitionwise_aggregate || ht->fd.replication_factor > 0)
 		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
 #endif
 
