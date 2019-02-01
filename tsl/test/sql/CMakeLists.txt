@@ -1,16 +1,23 @@
 set(TEST_FILES
-    bgw_policy.sql
-    bgw_reorder_drop_chunks.sql
     edition.sql
     gapfill.sql
     reorder.sql
+)
+
+set(TEST_FILES_DEBUG
+    bgw_policy.sql
+    bgw_reorder_drop_chunks.sql
     tsl_tables.sql
 )
 
 set(TEST_TEMPLATES
   # parallel plans are different between postgres versions
   plan_gapfill.sql.in
-)
+  )
+
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
@@ -39,4 +46,3 @@ foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
   file(APPEND ${TEST_SCHEDULE} "test: ${TESTS_TO_RUN}\n")
 endforeach(TEST_FILE)
-

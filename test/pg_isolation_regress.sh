@@ -8,6 +8,7 @@
 
 CURRENT_DIR=$(dirname $0)
 EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
+SPECS_DIR=${SPECS_DIR:-${EXE_DIR}/isolation/specs}
 PG_ISOLATION_REGRESS=${PG_ISOLATION_REGRESS:-pg_isolation_regress}
 ISOLATION_TEST_SCHEDULE=${ISOLATION_TEST_SCHEDULE:-}
 TESTS=${TESTS:-}
@@ -24,8 +25,8 @@ echo "IGNORES ${IGNORES}"
 
 if [[ -z ${TESTS} ]]; then
     if [[ -z ${ISOLATION_TEST_SCHEDULE} ]]; then
-        for t in ${EXE_DIR}/isolation/specs/*.spec; do
-            t=${t##${EXE_DIR}/isolation/specs/}
+        for t in ${SPECS_DIR}/*.spec; do
+            t=${t##${SPECS_DIR}/}
             t=${t%.spec}
 
             if ! contains "${IGNORES}" "${t}"; then
@@ -55,8 +56,8 @@ else
     # passing in only those tests from the directory which are found in TESTS
     FILTER=${TESTS}
     TESTS=
-    for t in ${EXE_DIR}/isolation/specs/*.spec; do
-        t=${t##${EXE_DIR}/isolation/specs/}
+    for t in ${SPECS_DIR}/*.spec; do
+        t=${t##${SPECS_DIR}/}
         t=${t%.spec}
 
         if contains "${FILTER}" "${t}" && ! contains "${IGNORES}" "${t}"; then
