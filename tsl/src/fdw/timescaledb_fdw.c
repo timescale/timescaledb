@@ -34,6 +34,7 @@
 #include <utils/rel.h>
 #include <utils/selfuncs.h>
 #include <commands/defrem.h>
+#include <commands/explain.h>
 #include <miscadmin.h>
 
 #include <export.h>
@@ -63,6 +64,29 @@ typedef struct TsScanState
 {
 	int row_counter;
 } TsScanState;
+
+/*
+ * Indexes of FDW-private information stored in fdw_private lists.
+ *
+ * These items are indexed with the enum FdwScanPrivateIndex, so an item
+ * can be fetched with list_nth().  For example, to get the SELECT statement:
+ *		sql = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
+ */
+enum FdwScanPrivateIndex
+{
+	/* SQL statement to execute remotely (as a String node) */
+	FdwScanPrivateSelectSql,
+	/* Integer list of attribute numbers retrieved by the SELECT */
+	FdwScanPrivateRetrievedAttrs,
+	/* Integer representing the desired fetch_size */
+	FdwScanPrivateFetchSize,
+
+	/*
+	 * String describing join i.e. names of relations being joined and types
+	 * of join, added when the scan is join
+	 */
+	FdwScanPrivateRelations
+};
 
 /*
  * This enum describes what's kept in the fdw_private list for a ModifyTable
@@ -1953,6 +1977,30 @@ is_foreign_rel_updatable(Relation rel)
 static void
 explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
 {
+	List *fdw_private;
+	char *sql;
+	char *relations;
+
+	fdw_private = ((ForeignScan *) node->ss.ps.plan)->fdw_private;
+
+	/*
+	 * Add names of relation handled by the foreign scan when the scan is an
+	 * upper rel.
+	 */
+	if (list_length(fdw_private) > FdwScanPrivateRelations)
+	{
+		relations = strVal(list_nth(fdw_private, FdwScanPrivateRelations));
+		ExplainPropertyText("Relations", relations, es);
+	}
+
+	/*
+	 * Add remote query, when VERBOSE option is specified.
+	 */
+	if (es->verbose)
+	{
+		sql = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
+		ExplainPropertyText("Remote SQL", sql, es);
+	}
 }
 
 static void
