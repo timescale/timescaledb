@@ -183,16 +183,16 @@ ALTER TABLE disttable DROP COLUMN color;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- EXPLAIN some inserts to see what plans and explain output for
 -- remote inserts look like
-EXPLAIN
+EXPLAIN (COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=24)
+                 QUERY PLAN                 
+--------------------------------------------
+ Custom Scan (HypertableInsert)
  Insert on distributed hypertable disttable
-   ->  Insert on disttable  (cost=0.00..0.01 rows=1 width=24)
-         ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=24)
-               ->  Result  (cost=0.00..0.01 rows=1 width=24)
+   ->  Insert on disttable
+         ->  Custom Scan (ChunkDispatch)
+               ->  Result
 (5 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE)
@@ -302,27 +302,73 @@ SELECT * FROM disttable;
 (10 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE)
-SELECT time_bucket('1 minute', time) AS time, avg(temp)
-FROM disttable WHERE device = 2 GROUP BY 1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable GROUP BY 1, 2
+ORDER BY 1;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
-   Output: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time")), avg(_hyper_1_1_dist_chunk.temp)
-   Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time"))
+   Output: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device, avg(_hyper_1_1_dist_chunk.temp)
+   Group Key: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device
    ->  Sort
-         Output: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.temp
-         Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time"))
+         Output: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device, _hyper_1_1_dist_chunk.temp
+         Sort Key: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device
          ->  Append
                ->  Foreign Scan on _timescaledb_internal._hyper_1_1_dist_chunk
-                     Output: time_bucket('@ 1 min'::interval, _hyper_1_1_dist_chunk."time"), _hyper_1_1_dist_chunk.temp
-                     Remote SQL: SELECT "time", temp FROM _timescaledb_internal._hyper_1_1_dist_chunk WHERE ((device = 2))
+                     Output: time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time"), _hyper_1_1_dist_chunk.device, _hyper_1_1_dist_chunk.temp
+                     Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_1_dist_chunk
                ->  Foreign Scan on _timescaledb_internal._hyper_1_2_dist_chunk
-                     Output: time_bucket('@ 1 min'::interval, _hyper_1_2_dist_chunk."time"), _hyper_1_2_dist_chunk.temp
-                     Remote SQL: SELECT "time", temp FROM _timescaledb_internal._hyper_1_2_dist_chunk WHERE ((device = 2))
+                     Output: time_bucket('@ 3 hours'::interval, _hyper_1_2_dist_chunk."time"), _hyper_1_2_dist_chunk.device, _hyper_1_2_dist_chunk.temp
+                     Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_2_dist_chunk
                ->  Foreign Scan on _timescaledb_internal._hyper_1_3_dist_chunk
-                     Output: time_bucket('@ 1 min'::interval, _hyper_1_3_dist_chunk."time"), _hyper_1_3_dist_chunk.temp
-                     Remote SQL: SELECT "time", temp FROM _timescaledb_internal._hyper_1_3_dist_chunk WHERE ((device = 2))
+                     Output: time_bucket('@ 3 hours'::interval, _hyper_1_3_dist_chunk."time"), _hyper_1_3_dist_chunk.device, _hyper_1_3_dist_chunk.temp
+                     Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_3_dist_chunk
 (16 rows)
+
+-- Execute some queries on the frontend and return the results
+SELECT * FROM disttable;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+ Sun Jan 01 08:01:00 2017 PST |      1 |  1.2
+ Sun Jan 01 06:05:00 2017 PST |      1 |  1.4
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3
+ Tue Jan 01 09:11:00 2019 PST |      3 |  2.1
+(5 rows)
+
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable
+GROUP BY 1, 2
+ORDER BY 1;
+             time             | device | avg_temp 
+------------------------------+--------+----------
+ Sun Jan 01 04:00:00 2017 PST |      1 |     1.25
+ Sun Jan 01 07:00:00 2017 PST |      1 |      1.2
+ Tue Jan 02 07:00:00 2018 PST |      2 |      1.3
+ Tue Jan 01 07:00:00 2019 PST |      3 |      2.1
+(4 rows)
+
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable GROUP BY 1, 2
+HAVING avg(temp) > 1.2
+ORDER BY 1;
+             time             | device | avg_temp 
+------------------------------+--------+----------
+ Sun Jan 01 04:00:00 2017 PST |      1 |     1.25
+ Tue Jan 02 07:00:00 2018 PST |      2 |      1.3
+ Tue Jan 01 07:00:00 2019 PST |      3 |      2.1
+(3 rows)
+
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable
+WHERE temp > 2
+GROUP BY 1, 2
+HAVING avg(temp) > 1.2
+ORDER BY 1;
+             time             | device | avg_temp 
+------------------------------+--------+----------
+ Tue Jan 01 07:00:00 2019 PST |      3 |      2.1
+(1 row)
 
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they

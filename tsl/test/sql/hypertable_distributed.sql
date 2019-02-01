@@ -108,7 +108,7 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- EXPLAIN some inserts to see what plans and explain output for
 -- remote inserts look like
-EXPLAIN
+EXPLAIN (COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
 
@@ -152,8 +152,29 @@ EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT * FROM disttable;
 
 EXPLAIN (VERBOSE, COSTS FALSE)
-SELECT time_bucket('1 minute', time) AS time, avg(temp)
-FROM disttable WHERE device = 2 GROUP BY 1;
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable GROUP BY 1, 2
+ORDER BY 1;
+
+-- Execute some queries on the frontend and return the results
+SELECT * FROM disttable;
+
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable
+GROUP BY 1, 2
+ORDER BY 1;
+
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable GROUP BY 1, 2
+HAVING avg(temp) > 1.2
+ORDER BY 1;
+
+SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
+FROM disttable
+WHERE temp > 2
+GROUP BY 1, 2
+HAVING avg(temp) > 1.2
+ORDER BY 1;
 
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they

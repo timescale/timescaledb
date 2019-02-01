@@ -15,6 +15,7 @@
 #include <foreign/foreign.h>
 #include <nodes/relation.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <parser/parsetree.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/restrictinfo.h>
@@ -59,11 +60,6 @@
 
 /* If no remote estimates, assume a sort costs 20% extra */
 #define DEFAULT_FDW_SORT_MULTIPLIER 1.2
-
-typedef struct TsScanState
-{
-	int row_counter;
-} TsScanState;
 
 /*
  * Indexes of FDW-private information stored in fdw_private lists.
@@ -113,6 +109,47 @@ enum FdwModifyPrivateIndex
 	/* Insert state for the current chunk */
 	FdwModifyPrivateChunkInsertState,
 };
+
+/*
+ * Execution state of a foreign scan using timescaledb_fdw.
+ */
+typedef struct TsFdwScanState
+{
+	Relation rel;			  /* relcache entry for the foreign table. NULL
+							   * for a foreign join scan. */
+	TupleDesc tupdesc;		  /* tuple descriptor of scan */
+	AttInMetadata *attinmeta; /* attribute datatype conversion metadata */
+
+	/* extracted fdw_private data */
+	char *query;		   /* text of SELECT command */
+	List *retrieved_attrs; /* list of retrieved attribute numbers */
+
+	/* for remote query execution */
+	PGconn *conn;				/* connection for the scan */
+	unsigned int cursor_number; /* quasi-unique ID for my cursor */
+	bool cursor_exists;			/* have we created the cursor? */
+	int num_params;				/* number of parameters passed to query */
+	FmgrInfo *param_flinfo;		/* output conversion functions for them */
+	List *param_exprs;			/* executable expressions for param values */
+	const char **param_values;  /* textual values of query parameters */
+
+	/* for storing result tuples */
+	HeapTuple *tuples; /* array of currently-retrieved tuples */
+	int num_tuples;	/* # of tuples in array */
+	int next_tuple;	/* index of next one to return */
+
+	/* batch-level state, for optimizing rewinds and avoiding useless fetch */
+	int fetch_ct_2;   /* Min(# of fetches done, 2) */
+	bool eof_reached; /* true if last fetch reached EOF */
+
+	/* working memory contexts */
+	MemoryContext batch_cxt; /* context holding current batch of tuples */
+	MemoryContext temp_cxt;  /* context for per-tuple temporary data */
+
+	int fetch_size; /* number of tuples per fetch */
+
+	int row_counter;
+} TsFdwScanState;
 
 typedef struct TsFdwServerState
 {
@@ -1329,56 +1366,466 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 	return fmstate;
 }
 
+/*
+ * Prepare for processing of parameters used in remote query.
+ */
+static void
+prepare_query_params(PlanState *node, List *fdw_exprs, int num_params, FmgrInfo **param_flinfo,
+					 List **param_exprs, const char ***param_values)
+{
+	int i;
+	ListCell *lc;
+
+	Assert(num_params > 0);
+
+	/* Prepare for output conversion of parameters used in remote query. */
+	*param_flinfo = (FmgrInfo *) palloc0(sizeof(FmgrInfo) * num_params);
+
+	i = 0;
+	foreach (lc, fdw_exprs)
+	{
+		Node *param_expr = (Node *) lfirst(lc);
+		Oid typefnoid;
+		bool isvarlena;
+
+		getTypeOutputInfo(exprType(param_expr), &typefnoid, &isvarlena);
+		fmgr_info(typefnoid, &(*param_flinfo)[i]);
+		i++;
+	}
+
+	/*
+	 * Prepare remote-parameter expressions for evaluation.  (Note: in
+	 * practice, we expect that all these expressions will be just Params, so
+	 * we could possibly do something more efficient than using the full
+	 * expression-eval machinery for this.  But probably there would be little
+	 * benefit, and it'd require postgres_fdw to know more than is desirable
+	 * about Param evaluation.)
+	 */
+	*param_exprs = ExecInitExprList(fdw_exprs, node);
+
+	/* Allocate buffer for text form of query parameters. */
+	*param_values = (const char **) palloc0(num_params * sizeof(char *));
+}
+
 static void
 begin_foreign_scan(ForeignScanState *node, int eflags)
 {
-	TsScanState *state;
+	ForeignScan *fsplan = (ForeignScan *) node->ss.ps.plan;
+	EState *estate = node->ss.ps.state;
+	TsFdwScanState *fsstate;
+	RangeTblEntry *rte;
+	Oid userid;
+	ForeignTable *table;
+	UserMapping *user;
+	int rtindex;
+	int num_params;
 
-	state = palloc0(sizeof(TsScanState));
-	state->row_counter = 0;
-	node->fdw_state = state;
+	/*
+	 * Do nothing in EXPLAIN (no ANALYZE) case.  node->fdw_state stays NULL.
+	 */
+	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
+		return;
+
+	/*
+	 * We'll save private state in node->fdw_state.
+	 */
+	fsstate = (TsFdwScanState *) palloc0(sizeof(TsFdwScanState));
+	node->fdw_state = (void *) fsstate;
+
+	/*
+	 * Identify which user to do the remote access as.  This should match what
+	 * ExecCheckRTEPerms() does.  In case of a join or aggregate, use the
+	 * lowest-numbered member RTE as a representative; we would get the same
+	 * result from any.
+	 */
+	if (fsplan->scan.scanrelid > 0)
+		rtindex = fsplan->scan.scanrelid;
+	else
+		rtindex = bms_next_member(fsplan->fs_relids, -1);
+	rte = rt_fetch(rtindex, estate->es_range_table);
+	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+
+	/* Get info about foreign table. */
+	table = GetForeignTable(rte->relid);
+	user = GetUserMapping(userid, table->serverid);
+
+	/*
+	 * Get connection to the foreign server.  Connection manager will
+	 * establish new connection if necessary.
+	 */
+	fsstate->conn = remote_dist_txn_get_connection(user,
+												   list_length(fsplan->fdw_exprs) > 0 ?
+													   REMOTE_TXN_USE_PREP_STMT :
+													   REMOTE_TXN_NO_PREP_STMT);
+
+	/* Assign a unique ID for my cursor */
+	fsstate->cursor_number = remote_connection_get_cursor_number(fsstate->conn);
+	fsstate->cursor_exists = false;
+
+	/* Get private info created by planner functions. */
+	fsstate->query = strVal(list_nth(fsplan->fdw_private, FdwScanPrivateSelectSql));
+	fsstate->retrieved_attrs = (List *) list_nth(fsplan->fdw_private, FdwScanPrivateRetrievedAttrs);
+	fsstate->fetch_size = intVal(list_nth(fsplan->fdw_private, FdwScanPrivateFetchSize));
+
+	/* Create contexts for batches of tuples and per-tuple temp workspace. */
+	fsstate->batch_cxt = AllocSetContextCreate(estate->es_query_cxt,
+											   "timescaledb_fdw tuple data",
+											   ALLOCSET_DEFAULT_SIZES);
+	fsstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
+											  "timescaledb_fdw temporary data",
+											  ALLOCSET_SMALL_SIZES);
+
+	/*
+	 * Get info we'll need for converting data fetched from the foreign server
+	 * into local representation and error reporting during that process.
+	 */
+	if (fsplan->scan.scanrelid > 0)
+	{
+		fsstate->rel = node->ss.ss_currentRelation;
+		fsstate->tupdesc = RelationGetDescr(fsstate->rel);
+	}
+	else
+	{
+		fsstate->rel = NULL;
+		fsstate->tupdesc = node->ss.ss_ScanTupleSlot->tts_tupleDescriptor;
+	}
+
+	fsstate->attinmeta = TupleDescGetAttInMetadata(fsstate->tupdesc);
+
+	/*
+	 * Prepare for processing of parameters used in remote query, if any.
+	 */
+	num_params = list_length(fsplan->fdw_exprs);
+	fsstate->num_params = num_params;
+	if (num_params > 0)
+		prepare_query_params((PlanState *) node,
+							 fsplan->fdw_exprs,
+							 num_params,
+							 &fsstate->param_flinfo,
+							 &fsstate->param_exprs,
+							 &fsstate->param_values);
+}
+
+/*
+ * Construct array of query parameter values in text format.
+ */
+static void
+process_query_params(ExprContext *econtext, FmgrInfo *param_flinfo, List *param_exprs,
+					 const char **param_values)
+{
+	int nestlevel;
+	int i;
+	ListCell *lc;
+
+	nestlevel = set_transmission_modes();
+
+	i = 0;
+	foreach (lc, param_exprs)
+	{
+		ExprState *expr_state = (ExprState *) lfirst(lc);
+		Datum expr_value;
+		bool is_null;
+
+		/* Evaluate the parameter expression */
+		expr_value = ExecEvalExpr(expr_state, econtext, &is_null);
+
+		/*
+		 * Get string representation of each parameter value by invoking
+		 * type-specific output function, unless the value is null.
+		 */
+		if (is_null)
+			param_values[i] = NULL;
+		else
+			param_values[i] = OutputFunctionCall(&param_flinfo[i], expr_value);
+
+		i++;
+	}
+
+	reset_transmission_modes(nestlevel);
+}
+
+/*
+ * Create cursor for node's query with current parameter values.
+ */
+static void
+create_cursor(ForeignScanState *node)
+{
+	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
+	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+	int num_params = fsstate->num_params;
+	const char **values = fsstate->param_values;
+	PGconn *conn = fsstate->conn;
+	StringInfoData buf;
+	AsyncRequest *req;
+
+	/*
+	 * Construct array of query parameter values in text format.  We do the
+	 * conversions in the short-lived per-tuple context, so as not to cause a
+	 * memory leak over repeated scans.
+	 */
+	if (num_params > 0)
+	{
+		MemoryContext oldcontext;
+
+		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+
+		process_query_params(econtext, fsstate->param_flinfo, fsstate->param_exprs, values);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	/* Construct the DECLARE CURSOR command */
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "DECLARE c%u CURSOR FOR\n%s", fsstate->cursor_number, fsstate->query);
+
+	/*
+	 * Notice that we pass NULL for paramTypes, thus forcing the remote server
+	 * to infer types for all parameters.  Since we explicitly cast every
+	 * parameter (see deparse.c), the "inference" is trivial and will produce
+	 * the desired result.  This allows us to avoid assuming that the remote
+	 * server has the same OIDs we do for the parameters' types.
+	 */
+	req = async_request_send_with_params(conn, buf.data, num_params, values);
+
+	Assert(NULL != req);
+
+	async_request_wait_ok_command(req);
+
+	/* Mark the cursor as created, and show no tuples have been retrieved */
+	fsstate->cursor_exists = true;
+	fsstate->tuples = NULL;
+	fsstate->num_tuples = 0;
+	fsstate->next_tuple = 0;
+	fsstate->fetch_ct_2 = 0;
+	fsstate->eof_reached = false;
+
+	/* Clean up */
+	pfree(buf.data);
+}
+
+/*
+ * Fetch some more rows from the node's cursor.
+ */
+static void
+fetch_more_data(ForeignScanState *node)
+{
+	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
+	AsyncRequest *volatile req = NULL;
+	AsyncResponseResult *volatile rsp = NULL;
+	MemoryContext oldcontext;
+
+	/*
+	 * We'll store the tuples in the batch_cxt.  First, flush the previous
+	 * batch.
+	 */
+	fsstate->tuples = NULL;
+	MemoryContextReset(fsstate->batch_cxt);
+	oldcontext = MemoryContextSwitchTo(fsstate->batch_cxt);
+
+	/* PGresult must be released before leaving this function. */
+	PG_TRY();
+	{
+		PGconn *conn = fsstate->conn;
+		PGresult *res;
+		char sql[64];
+		int numrows;
+		int i;
+
+		snprintf(sql,
+				 sizeof(sql),
+				 "FETCH %d FROM c%u",
+				 fsstate->fetch_size,
+				 fsstate->cursor_number);
+
+		req = async_request_send(conn, sql);
+
+		Assert(NULL != req);
+
+		rsp = async_request_wait_any_result(req);
+
+		Assert(NULL != rsp);
+
+		res = async_response_result_get_pg_result(rsp);
+
+		/* On error, report the original query, not the FETCH. */
+		if (PQresultStatus(res) != PGRES_TUPLES_OK)
+			remote_connection_report_error(ERROR, res, fsstate->conn, false, fsstate->query);
+
+		/* Convert the data into HeapTuples */
+		numrows = PQntuples(res);
+		fsstate->tuples = (HeapTuple *) palloc0(numrows * sizeof(HeapTuple));
+		fsstate->num_tuples = numrows;
+		fsstate->next_tuple = 0;
+
+		for (i = 0; i < numrows; i++)
+		{
+			Assert(IsA(node->ss.ps.plan, ForeignScan));
+
+			fsstate->tuples[i] = make_tuple_from_result_row(res,
+															i,
+															fsstate->rel,
+															fsstate->attinmeta,
+															fsstate->retrieved_attrs,
+															node,
+															fsstate->temp_cxt);
+		}
+
+		/* Update fetch_ct_2 */
+		if (fsstate->fetch_ct_2 < 2)
+			fsstate->fetch_ct_2++;
+
+		/* Must be EOF if we didn't get as many tuples as we asked for. */
+		fsstate->eof_reached = (numrows < fsstate->fetch_size);
+
+		pfree(req);
+		async_response_result_close(rsp);
+		req = NULL;
+		rsp = NULL;
+	}
+	PG_CATCH();
+	{
+		if (NULL != req)
+			pfree(req);
+
+		if (NULL != rsp)
+			async_response_result_close(rsp);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	MemoryContextSwitchTo(oldcontext);
 }
 
 static TupleTableSlot *
 iterate_foreign_scan(ForeignScanState *node)
 {
-	TupleTableSlot *slot;
-	TupleDesc tuple_desc;
-	TsScanState *state;
-	HeapTuple tuple;
+	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
+	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 
-	slot = node->ss.ss_ScanTupleSlot;
-	tuple_desc = node->ss.ss_currentRelation->rd_att;
-	state = (TsScanState *) node->fdw_state;
-	if (state->row_counter == 0)
+	/*
+	 * If this is the first call after Begin or ReScan, we need to create the
+	 * cursor on the remote side.
+	 */
+	if (!fsstate->cursor_exists)
+		create_cursor(node);
+
+	/*
+	 * Get some more tuples, if we've run out.
+	 */
+	if (fsstate->next_tuple >= fsstate->num_tuples)
 	{
-		/* Dummy implementation to return one tuple */
-		MemoryContext oldcontext = MemoryContextSwitchTo(node->ss.ps.state->es_query_cxt);
-		Datum values[2];
-		bool nulls[2];
-
-		values[0] = Int8GetDatum(1);
-		values[1] = CStringGetTextDatum("test");
-		nulls[0] = false;
-		nulls[1] = false;
-		tuple = heap_form_tuple(tuple_desc, values, nulls);
-		MemoryContextSwitchTo(oldcontext);
-		ExecStoreTuple(tuple, slot, InvalidBuffer, true);
-		state->row_counter += 1;
+		/* No point in another fetch if we already detected EOF, though. */
+		if (!fsstate->eof_reached)
+			fetch_more_data(node);
+		/* If we didn't get any tuples, must be end of data. */
+		if (fsstate->next_tuple >= fsstate->num_tuples)
+			return ExecClearTuple(slot);
 	}
-	else
-		ExecClearTuple(slot);
+
+	/*
+	 * Return the next tuple.
+	 */
+	ExecStoreTuple(fsstate->tuples[fsstate->next_tuple++], slot, InvalidBuffer, false);
+
 	return slot;
 }
 
 static void
 rescan_foreign_scan(ForeignScanState *node)
 {
+	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
+	char sql[64];
+	AsyncRequest *req;
+
+	/* If we haven't created the cursor yet, nothing to do. */
+	if (!fsstate->cursor_exists)
+		return;
+
+	/*
+	 * If any internal parameters affecting this node have changed, we'd
+	 * better destroy and recreate the cursor.  Otherwise, rewinding it should
+	 * be good enough.  If we've only fetched zero or one batch, we needn't
+	 * even rewind the cursor, just rescan what we have.
+	 */
+	if (node->ss.ps.chgParam != NULL)
+	{
+		fsstate->cursor_exists = false;
+		snprintf(sql, sizeof(sql), "CLOSE c%u", fsstate->cursor_number);
+	}
+	else if (fsstate->fetch_ct_2 > 1)
+	{
+		snprintf(sql, sizeof(sql), "MOVE BACKWARD ALL IN c%u", fsstate->cursor_number);
+	}
+	else
+	{
+		/* Easy: just rescan what we already have in memory, if anything */
+		fsstate->next_tuple = 0;
+		return;
+	}
+
+	/*
+	 * We don't use a PG_TRY block here, so be careful not to throw error
+	 * without releasing the PGresult.
+	 */
+	req = async_request_send(fsstate->conn, sql);
+
+	Assert(NULL != req);
+
+	async_request_wait_ok_command(req);
+
+	pfree(req);
+
+	/* Now force a fresh FETCH. */
+	fsstate->tuples = NULL;
+	fsstate->num_tuples = 0;
+	fsstate->next_tuple = 0;
+	fsstate->fetch_ct_2 = 0;
+	fsstate->eof_reached = false;
+}
+
+/*
+ * Utility routine to close a cursor.
+ */
+static void
+close_cursor(PGconn *conn, unsigned int cursor_number)
+{
+	char sql[64];
+	AsyncRequest *req;
+
+	snprintf(sql, sizeof(sql), "CLOSE c%u", cursor_number);
+
+	/*
+	 * We don't use a PG_TRY block here, so be careful not to throw error
+	 * without releasing the PGresult.
+	 */
+
+	req = async_request_send(conn, sql);
+
+	Assert(NULL != req);
+
+	async_request_wait_ok_command(req);
+
+	pfree(req);
 }
 
 static void
 end_foreign_scan(ForeignScanState *node)
 {
+	TsFdwScanState *fsstate = (TsFdwScanState *) node->fdw_state;
+
+	/* if fsstate is NULL, we are in EXPLAIN; nothing to do */
+	if (fsstate == NULL)
+		return;
+
+	/* Close the cursor if open, to prevent accumulation of cursors */
+	if (fsstate->cursor_exists)
+		close_cursor(fsstate->conn, fsstate->cursor_number);
+
+	/* Release remote connection */
+	fsstate->conn = NULL;
+
+	/* MemoryContexts will be deleted automatically. */
 }
 
 /*
