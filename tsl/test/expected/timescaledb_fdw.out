@@ -131,6 +131,25 @@ SELECT * FROM test_ft;
   2 | new_test
 (3 rows)
 
+-- Test deletes
 DELETE FROM test_ft WHERE c0 = 1;
+-- Show tuples deleted locally and on remote server
+SELECT * FROM test_ft;
+ c0 |    c1    
+----+----------
+  2 | new_test
+  2 | new_test
+(2 rows)
+
+\c server_1
+SELECT * FROM test_ft;
+ c0 |    c1    
+----+----------
+  2 | new_test
+  2 | new_test
+(2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 ANALYZE VERBOSE test_ft;
 WARNING:  skipping "test_ft" --- cannot analyze this foreign table
