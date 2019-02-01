@@ -2363,10 +2363,86 @@ exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 }
 
 static TupleTableSlot *
-exec_foreign_update(EState *estate, ResultRelInfo *rinfo, TupleTableSlot *slot,
-					TupleTableSlot *planSlot)
+exec_foreign_update(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
+					TupleTableSlot *plan_slot)
 {
-	return slot;
+	TsFdwModifyState *fmstate = (TsFdwModifyState *) rri->ri_FdwState;
+	AsyncRequestSet *reqset;
+	AsyncResponseResult *rsp;
+	Datum datum;
+	bool is_null;
+	const char **p_values;
+	int n_rows = -1;
+	int i;
+
+	/* Set up the prepared statement on the remote server, if we didn't yet */
+	if (!fmstate->prepared)
+		prepare_foreign_modify(fmstate);
+
+	/* Get the ctid that was passed up as a resjunk column */
+	datum = ExecGetJunkAttribute(plan_slot, fmstate->ctid_attno, &is_null);
+
+	/* shouldn't ever get a null result... */
+	if (is_null)
+		elog(ERROR, "ctid is NULL");
+
+	/* Convert parameters needed by prepared statement to text form */
+	p_values = convert_prep_stmt_params(fmstate, (ItemPointer) DatumGetPointer(datum), slot);
+	reqset = async_request_set_create();
+
+	for (i = 0; i < fmstate->num_servers; i++)
+	{
+		TsFdwServerState *fdw_server = &fmstate->servers[i];
+		AsyncRequest *req = async_request_send_prepared_stmt(fdw_server->p_stmt, p_values);
+
+		Assert(NULL != req);
+
+		async_request_attach_user_data(req, fdw_server);
+		async_request_set_add(reqset, req);
+	}
+
+	while ((rsp = async_request_set_wait_any_result(reqset)))
+	{
+		PGresult *res = async_response_result_get_pg_result(rsp);
+		TsFdwServerState *fdw_server = async_response_result_get_user_data(rsp);
+
+		if (PQresultStatus(res) != (fmstate->has_returning ? PGRES_TUPLES_OK : PGRES_COMMAND_OK))
+			remote_connection_report_error(ERROR, res, fdw_server->conn, false, fmstate->query);
+
+		/*
+		 * If we update multiple replica chunks, we should only return the
+		 * results from the first one.
+		 */
+		if (n_rows == -1)
+		{
+			/* Check number of rows affected, and fetch RETURNING tuple if any */
+			if (fmstate->has_returning)
+			{
+				n_rows = PQntuples(res);
+
+				if (n_rows > 0)
+					store_returning_result(fmstate, slot, res);
+			}
+			else
+				n_rows = atoi(PQcmdTuples(res));
+		}
+
+		/* And clean up */
+		async_response_result_close(rsp);
+	}
+
+	/*
+	 * Currently no way to do a deep cleanup of all request in the request
+	 * set. The worry here is that since this runs in a per-chunk insert state
+	 * memory context, the async API will accumulate a lot of cruft during
+	 * inserts
+	 */
+	pfree(reqset);
+
+	MemoryContextReset(fmstate->temp_cxt);
+
+	/* Return NULL if nothing was updated on the remote end */
+	return (n_rows > 0) ? slot : NULL;
 }
 
 static TupleTableSlot *
