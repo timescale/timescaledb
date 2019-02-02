@@ -438,3 +438,11 @@ SELECT wait_worker_counts(1,1,0,0);
 -- clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE :TEST_DBNAME_2;
+-- test rename database
+CREATE DATABASE db_rename_test;
+\c db_rename_test :ROLE_SUPERUSER
+SET client_min_messages=error;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
+DROP DATABASE db_rename_test2;
