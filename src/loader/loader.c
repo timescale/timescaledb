@@ -351,7 +351,6 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 static void
 post_analyze_hook(ParseState *pstate, Query *query)
 {
-
 	if (query->commandType == CMD_UTILITY)
 	{
 		/*
@@ -377,6 +376,16 @@ post_analyze_hook(ParseState *pstate, Query *query)
 			case T_DropOwnedStmt:
 				if (drop_owned_statement_drops_extension((DropOwnedStmt *) query->utilityStmt))
 					ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
+				break;
+			case T_RenameStmt:
+				if (((RenameStmt *) query->utilityStmt)->renameType == OBJECT_DATABASE)
+				{
+					RenameStmt *stmt = (RenameStmt *) query->utilityStmt;
+					Oid			db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
+
+					if (OidIsValid(db_oid))
+						ts_bgw_message_send_and_wait(STOP, db_oid);
+				}
 				break;
 			default:
 
