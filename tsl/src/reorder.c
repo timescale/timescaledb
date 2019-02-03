@@ -1233,7 +1233,7 @@ swap_relation_files(Oid r1, Oid r2,
 	heap_close(relRelation, RowExclusiveLock);
 
 	/*
-	 * Close both relcache entries' smgr links.  We need this kluge because
+	 * Close both relcache entries' smgr links.  We need this kludge because
 	 * both links will be invalidated during upcoming CommandCounterIncrement.
 	 * Whichever of the rels is the second to be cleared will have a dangling
 	 * reference to the other's smgr entry.  Rather than trying to avoid this
