@@ -323,7 +323,7 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum va
 	PG_RETURN_POINTER(state);
 }
 
-/* bookend_combinefunc - internal function called be ts_last_combinefunc and ts_first_combinefunc;
+/* bookend_combinefunc - internal function called by ts_last_combinefunc and ts_first_combinefunc;
  * fmgr args are: (internal internal_state, internal2 internal_state)
  */
 static inline Datum
