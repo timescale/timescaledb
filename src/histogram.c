@@ -191,10 +191,11 @@ ts_hist_finalfunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "ts_hist_finalfunc called in non-aggregate context");
 	}
 
-	if (PG_ARGISNULL(0))
+	state = PG_ARGISNULL(0) ? NULL : PG_GETARG_BYTEA_P(0);
+
+	if (state == NULL)
 		PG_RETURN_NULL();
 
-	state = PG_GETARG_BYTEA_P(0);
 	hist = (Datum *) VARDATA(state);
 
 	dims[0] = HIST_LEN(state);

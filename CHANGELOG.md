@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.2.1 (unreleased)
+
+**Notable commits**
+
+**Thanks**
+
+* @jamessewell for reporting and helping debug a segfault in last()
+
 ## 1.2.0 (2019-01-29)
 
 **This is our first release to include Timescale-Licensed features, in addition to new Apache-2 capabilities.**
