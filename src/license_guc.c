@@ -70,10 +70,10 @@ current_license_can_downgrade_to_apache(void)
  * check and assign:
  *   1. In the first stage we check the license kind, load the submodule into
  *      memory if needed (but don't link any of the cross-module functions yet)
- *      and, if it's an enterprise license, valdate the license key.
+ *      and, if it's an enterprise license, validate the license key.
  *   2. In the second stage we link all of the cross-module functions.
  *
- * The first stage will fail if the provide license key is invalid, or it's
+ * The first stage will fail if the provided license key is invalid, or it's
  * trying to downgrade from an edition that uses the submodule
  * (Community and Enterprise) to one that does not (ApacheOnly). Currently only
  * upgrading is allowed within a session; downgrading requires starting a new
@@ -108,7 +108,7 @@ ts_license_enable_module_loading(void)
 
 /*
  * `ts_license_update_check`
- * Used to validate license keys in preperation for `ts_license_on_assign`
+ * Used to validate license keys in preparation for `ts_license_on_assign`
  */
 bool
 ts_license_update_check(char **newval, void **extra, GucSource source)

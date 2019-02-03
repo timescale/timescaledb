@@ -78,7 +78,7 @@ is_chunk_exclusion_func(Node *node)
  * they will not be used anyway.
  *
  * This method is modifying the query tree by removing `chunks_in` function node
- * from the WHERE caluse. This is done to prevent the function from making the
+ * from the WHERE clause. This is done to prevent the function from making the
  * planner believe that an index-only scan is not possible (since function is
  * only used to exclude chunks we actually don't need that function to run so it
  * can be removed).
