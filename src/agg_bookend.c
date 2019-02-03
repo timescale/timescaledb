@@ -516,12 +516,9 @@ ts_bookend_finalfunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "ts_bookend_finalfunc called in non-aggregate context");
 	}
 
+	state = PG_ARGISNULL(0) ? NULL : (InternalCmpAggStore *) PG_GETARG_POINTER(0);
 
-	if (PG_ARGISNULL(0))
-		PG_RETURN_NULL();
-
-	state = (InternalCmpAggStore *) PG_GETARG_POINTER(0);
-	if (state->value.is_null || state->cmp.is_null)
+	if (state == NULL || state->value.is_null || state->cmp.is_null)
 		PG_RETURN_NULL();
 
 	PG_RETURN_DATUM(state->value.datum);
