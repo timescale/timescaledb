@@ -5,7 +5,7 @@
  */
 
 /*
- * A license is a type follwed by the license contents, see Readme.module.md
+ * A license is a type followed by the license contents, see Readme.module.md
  * for more detail.
  */
 #include <postgres.h>

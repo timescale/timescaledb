@@ -145,7 +145,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	/*
 	 * we currently do not support window functions where the number of
 	 * entries in the target list at window stage is different from the
-	 * nunmber of entries in the target list at aggregation stage. This can
+	 * number of entries in the target list at aggregation stage. This can
 	 * happen if a subexpression of a column expression is identical for
 	 * multiple columns and postgres planner decides to split up those columns
 	 * above aggregation node.

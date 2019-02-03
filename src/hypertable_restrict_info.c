@@ -208,7 +208,7 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, DimensionV
 			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri, strategy, values);
 		default:
 			elog(ERROR, "unknown dimension type: %d", dri->dimension->type);
-			/* supress compiler warning on MSVC */
+			/* suppress compiler warning on MSVC */
 			return false;
 	}
 }
