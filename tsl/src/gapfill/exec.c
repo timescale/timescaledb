@@ -401,7 +401,17 @@ gapfill_exec(CustomScanState *node)
 				gapfill_state_set_next(state, slot);
 			}
 			else
-				state->state = FETCHED_LAST;
+			{
+				/*
+				 * if GROUP BY has non time_bucket_gapfill columns but the
+				 * query has not initialized the groups there is nothing we
+				 * can do here
+				 */
+				if (state->multigroup && !state->groups_initialized)
+					return NULL;
+				else
+					state->state = FETCHED_LAST;
+			}
 		}
 
 		/* return any subplan tuples before gapfill_start */
