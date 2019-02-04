@@ -166,6 +166,14 @@ SELECT
 FROM (VALUES (1),(2),(3)) v(time)
 GROUP BY 1 ORDER BY 1;
 
+-- test gap fill without rows in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time)
+FROM (VALUES (1),(2),(3)) v(time)
+WHERE false
+GROUP BY 1 ORDER BY 1;
+
 -- test coalesce
 SELECT
   time_bucket_gapfill(1,time,0,5),
@@ -230,6 +238,15 @@ SELECT
 FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
 GROUP BY 1,id ORDER BY 2,1;
 
+-- test grouping by non-time columns with no rows in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  id,
+  min(value) as m
+FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
+WHERE false
+GROUP BY 1,id ORDER BY 2,1;
+
 -- test duplicate columns in GROUP BY
 SELECT
   time_bucket_gapfill(1,time,0,5) as time,
@@ -252,6 +269,15 @@ SELECT
   color,
   min(value) as m
 FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color ORDER BY 2,1;
+
+-- test grouping by non-time columns with text columns with no rows in resultset
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  min(value) as m
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+WHERE false
 GROUP BY 1,color ORDER BY 2,1;
 
 -- test insert into SELECT
