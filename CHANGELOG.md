@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 **Thanks**
 
 * @jamessewell for reporting and helping debug a segfault in last()
+* @piscopoc for reporting a segfault in time_bucket_gapfill
 
 ## 1.2.0 (2019-01-29)
 
