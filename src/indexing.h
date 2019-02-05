@@ -19,4 +19,4 @@ extern void ts_indexing_verify_indexes(Hypertable *ht);
 extern void ts_indexing_create_default_indexes(Hypertable *ht);
 extern TSDLLEXPORT Oid ts_indexing_find_clustered_index(Oid table_relid);
 
-#endif							/* TIMESCALEDB_INDEXING_H */
+#endif /* TIMESCALEDB_INDEXING_H */

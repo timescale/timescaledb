@@ -27,7 +27,8 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 	cd->on_conflict = ONCONFLICT_NONE;
 	cd->arbiter_indexes = NIL;
 	cd->cmd_type = CMD_INSERT;
-	cd->cache = ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
+	cd->cache =
+		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
 
 	return cd;
 }
@@ -57,7 +58,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 
 	if (NULL == cis)
 	{
-		Chunk	   *new_chunk;
+		Chunk *new_chunk;
 
 		new_chunk = ts_hypertable_get_chunk(dispatch->hypertable, point);
 

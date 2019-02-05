@@ -110,7 +110,6 @@ _PG_fini(void)
 	_cache_fini();
 }
 
-
 TSDLLEXPORT Datum
 ts_post_load_init(PG_FUNCTION_ARGS)
 {

@@ -49,20 +49,16 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
  * them up to the ModifyTable node.
  */
 static Plan *
-chunk_dispatch_plan_create(PlannerInfo *root,
-						   RelOptInfo *relopt,
-						   struct CustomPath *best_path,
-						   List *tlist,
-						   List *clauses,
-						   List *custom_plans)
+chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, struct CustomPath *best_path,
+						   List *tlist, List *clauses, List *custom_plans)
 {
 	ChunkDispatchPath *cdpath = (ChunkDispatchPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
-	ListCell   *lc;
+	ListCell *lc;
 
-	foreach(lc, custom_plans)
+	foreach (lc, custom_plans)
 	{
-		Plan	   *subplan = lfirst(lc);
+		Plan *subplan = lfirst(lc);
 
 		cscan->scan.plan.startup_cost += subplan->startup_cost;
 		cscan->scan.plan.total_cost += subplan->total_cost;
@@ -73,8 +69,8 @@ chunk_dispatch_plan_create(PlannerInfo *root,
 	cscan->custom_private = list_make1_oid(cdpath->hypertable_relid);
 	cscan->methods = &chunk_dispatch_plan_methods;
 	cscan->custom_plans = custom_plans;
-	cscan->scan.scanrelid = 0;	/* Indicate this is not a real relation we are
-								 * scanning */
+	cscan->scan.scanrelid = 0; /* Indicate this is not a real relation we are
+								* scanning */
 	cscan->scan.plan.targetlist = tlist;
 
 	/*
@@ -91,7 +87,8 @@ static CustomPathMethods chunk_dispatch_path_methods = {
 };
 
 Path *
-ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti, Oid hypertable_relid)
+ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti,
+							  Oid hypertable_relid)
 {
 	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
 

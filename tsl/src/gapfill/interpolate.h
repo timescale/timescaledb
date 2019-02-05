@@ -10,24 +10,25 @@
 
 typedef struct GapFillInterpolateSample
 {
-	int64		time;
-	Datum		value;
-	bool		isnull;
+	int64 time;
+	Datum value;
+	bool isnull;
 } GapFillInterpolateSample;
 
 typedef struct GapFillInterpolateColumnState
 {
 	GapFillColumnState base;
-	Expr	   *lookup_before;
-	Expr	   *lookup_after;
+	Expr *lookup_before;
+	Expr *lookup_after;
 	GapFillInterpolateSample prev;
 	GapFillInterpolateSample next;
 } GapFillInterpolateColumnState;
 
-void		gapfill_interpolate_initialize(GapFillInterpolateColumnState *, GapFillState *, FuncExpr *);
-void		gapfill_interpolate_group_change(GapFillInterpolateColumnState *, int64, Datum, bool);
-void		gapfill_interpolate_tuple_fetched(GapFillInterpolateColumnState *, int64, Datum, bool);
-void		gapfill_interpolate_tuple_returned(GapFillInterpolateColumnState *, int64, Datum, bool);
-void		gapfill_interpolate_calculate(GapFillInterpolateColumnState *, GapFillState *, int64, Datum *, bool *);
+void gapfill_interpolate_initialize(GapFillInterpolateColumnState *, GapFillState *, FuncExpr *);
+void gapfill_interpolate_group_change(GapFillInterpolateColumnState *, int64, Datum, bool);
+void gapfill_interpolate_tuple_fetched(GapFillInterpolateColumnState *, int64, Datum, bool);
+void gapfill_interpolate_tuple_returned(GapFillInterpolateColumnState *, int64, Datum, bool);
+void gapfill_interpolate_calculate(GapFillInterpolateColumnState *, GapFillState *, int64, Datum *,
+								   bool *);
 
-#endif							/* TIMESCALEDB_GAPFILL_INTERPOLATE_H */
+#endif /* TIMESCALEDB_GAPFILL_INTERPOLATE_H */

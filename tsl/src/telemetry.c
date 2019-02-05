@@ -29,8 +29,10 @@ tsl_telemetry_add_license_info(JsonbParseState *parseState)
 		ts_jsonb_add_str(parseState, LICENSE_EDITION_KEY, LICENSE_EDITION_COMMUNITY);
 	else
 	{
-		char	   *start_time = DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(license_start_time())));
-		char	   *end_time = DatumGetCString(DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(license_end_time())));
+		char *start_time = DatumGetCString(
+			DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(license_start_time())));
+		char *end_time = DatumGetCString(
+			DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(license_end_time())));
 
 		ts_jsonb_add_str(parseState, LICENSE_EDITION_KEY, LICENSE_EDITION_ENTERPRISE);
 		ts_jsonb_add_str(parseState, LICENSE_KIND_KEY, license_kind_str());

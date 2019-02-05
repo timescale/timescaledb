@@ -15,14 +15,14 @@
 #include "conn_internal.h"
 #include "conn_mock.h"
 
-#define MOCK_MAX_BUF_SIZE	1024
+#define MOCK_MAX_BUF_SIZE 1024
 
 typedef struct MockConnection
 {
-	Connection	conn;
-	char		recv_buf[MOCK_MAX_BUF_SIZE];
-	int			recv_buf_offset;
-	int			recv_buf_len;
+	Connection conn;
+	char recv_buf[MOCK_MAX_BUF_SIZE];
+	int recv_buf_offset;
+	int recv_buf_len;
 } MockConnection;
 
 static int
@@ -46,8 +46,8 @@ mock_write(Connection *conn, const char *buf, size_t writelen)
 static ssize_t
 mock_read(Connection *conn, char *buf, size_t readlen)
 {
-	size_t		bytes_to_read = 0;
-	size_t		max = readlen;
+	size_t bytes_to_read = 0;
+	size_t max = readlen;
 	MockConnection *mock = (MockConnection *) conn;
 
 	if (mock->recv_buf_offset >= mock->recv_buf_len)

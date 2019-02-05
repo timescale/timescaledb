@@ -27,12 +27,12 @@ Datum
 ts_test_job_refresh(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
-	ListCell   *lc;
+	ListCell *lc;
 
 	if (SRF_IS_FIRSTCALL())
 	{
 		MemoryContext oldcontext;
-		TupleDesc	tupdesc;
+		TupleDesc tupdesc;
 
 		/* Use top-level memory context to preserve the global static list */
 		cur_scheduled_jobs = ts_update_scheduled_jobs_list(cur_scheduled_jobs, TopMemoryContext);
@@ -62,9 +62,9 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 	else
 	{
 		/* Return the current list_cell and advance ptr */
-		HeapTuple	tuple;
-		Datum	   *values = palloc(sizeof(*values) * funcctx->tuple_desc->natts);
-		bool	   *nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
+		HeapTuple tuple;
+		Datum *values = palloc(sizeof(*values) * funcctx->tuple_desc->natts);
+		bool *nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
 
 		ts_populate_scheduled_job_tuple(lfirst(lc), values);
 		memset(nulls, 0, sizeof(*nulls) * funcctx->tuple_desc->natts);

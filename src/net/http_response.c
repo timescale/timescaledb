@@ -9,18 +9,19 @@
 
 #include "http.h"
 
-#define CARRIAGE_RETURN	'\r'
-#define NEW_LINE		'\n'
-#define SEP_CHAR		':'
+#define CARRIAGE_RETURN '\r'
+#define NEW_LINE '\n'
+#define SEP_CHAR ':'
 #define HTTP_VERSION_BUFFER_SIZE 128
 
-extern HttpHeader *ts_http_header_create(const char *name, size_t name_len, const char *value, size_t value_len, HttpHeader *next);
+extern HttpHeader *ts_http_header_create(const char *name, size_t name_len, const char *value,
+										 size_t value_len, HttpHeader *next);
 
 typedef enum HttpParseState
 {
 	HTTP_STATE_STATUS,
-	HTTP_STATE_INTERM,			/* received a single \r */
-	HTTP_STATE_HEADER_NAME,		/* received \r\n */
+	HTTP_STATE_INTERM,		/* received a single \r */
+	HTTP_STATE_HEADER_NAME, /* received \r\n */
 	HTTP_STATE_HEADER_VALUE,
 	HTTP_STATE_ALMOST_DONE,
 	HTTP_STATE_BODY,
@@ -31,19 +32,19 @@ typedef enum HttpParseState
 typedef struct HttpResponseState
 {
 	MemoryContext context;
-	char		version[HTTP_VERSION_BUFFER_SIZE];
-	char		raw_buffer[MAX_RAW_BUFFER_SIZE];
+	char version[HTTP_VERSION_BUFFER_SIZE];
+	char raw_buffer[MAX_RAW_BUFFER_SIZE];
 	/* The next read should copy data into the buffer starting here */
-	off_t		offset;
-	off_t		parse_offset;
-	size_t		cur_header_name_len;
-	size_t		cur_header_value_len;
-	char	   *cur_header_name;
-	char	   *cur_header_value;
+	off_t offset;
+	off_t parse_offset;
+	size_t cur_header_name_len;
+	size_t cur_header_value_len;
+	char *cur_header_name;
+	char *cur_header_value;
 	HttpHeader *headers;
-	int			status_code;
-	size_t		content_length;
-	char	   *body_start;
+	int status_code;
+	size_t content_length;
+	char *body_start;
 	HttpParseState state;
 } HttpResponseState;
 
@@ -57,9 +58,8 @@ ts_http_response_state_init(HttpResponseState *state)
 HttpResponseState *
 ts_http_response_state_create()
 {
-	MemoryContext context = AllocSetContextCreate(CurrentMemoryContext,
-												  "Http Response",
-												  ALLOCSET_DEFAULT_SIZES);
+	MemoryContext context =
+		AllocSetContextCreate(CurrentMemoryContext, "Http Response", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(context);
 	HttpResponseState *ret = palloc(sizeof(HttpResponseState));
 
@@ -165,7 +165,7 @@ http_parse_version(HttpResponseState *state)
 static void
 http_parse_status(HttpResponseState *state, const char next)
 {
-	char	   *raw_buf = palloc(state->parse_offset + 1);
+	char *raw_buf = palloc(state->parse_offset + 1);
 
 	switch (next)
 	{
@@ -182,8 +182,7 @@ http_parse_status(HttpResponseState *state, const char next)
 			state->state = HTTP_STATE_ERROR;
 			memset(state->version, '\0', sizeof(state->version));
 
-			if (sscanf(raw_buf, "%127s%*[ ]%d%*[ ]%*s",
-					   state->version, &state->status_code) == 2)
+			if (sscanf(raw_buf, "%127s%*[ ]%d%*[ ]%*s", state->version, &state->status_code) == 2)
 			{
 				if (http_parse_version(state))
 					state->state = HTTP_STATE_INTERM;
@@ -203,38 +202,37 @@ http_parse_status(HttpResponseState *state, const char next)
 }
 
 static void
-http_response_state_add_header(HttpResponseState *state,
-							   const char *name,
-							   size_t name_len,
-							   const char *value,
-							   size_t value_len)
+http_response_state_add_header(HttpResponseState *state, const char *name, size_t name_len,
+							   const char *value, size_t value_len)
 {
 	MemoryContext old = MemoryContextSwitchTo(state->context);
-	HttpHeader *new_header = ts_http_header_create(name, name_len, value, value_len,
-												   state->headers);
+	HttpHeader *new_header =
+		ts_http_header_create(name, name_len, value, value_len, state->headers);
 
 	state->headers = new_header;
 	MemoryContextSwitchTo(old);
 }
 
-static
-void
+static void
 http_parse_interm(HttpResponseState *state, const char next)
 {
-	int			temp_length;
+	int temp_length;
 
 	switch (next)
 	{
 		case NEW_LINE:
 			state->state = HTTP_STATE_HEADER_NAME;
 			/* Store another header */
-			http_response_state_add_header(state, state->cur_header_name,
-										   state->cur_header_name_len, state->cur_header_value,
+			http_response_state_add_header(state,
+										   state->cur_header_name,
+										   state->cur_header_name_len,
+										   state->cur_header_value,
 										   state->cur_header_value_len);
 
 			/* Check if the line we just read is Content-Length */
 			if (state->cur_header_name != NULL &&
-				strncmp(HTTP_CONTENT_LENGTH, state->cur_header_name, state->cur_header_name_len) == 0)
+				strncmp(HTTP_CONTENT_LENGTH, state->cur_header_name, state->cur_header_name_len) ==
+					0)
 			{
 				if (sscanf(state->cur_header_value, "%d", &temp_length) == 1)
 				{
@@ -343,7 +341,7 @@ ts_http_response_state_parse(HttpResponseState *state, size_t bytes)
 	/* Each state function will do the state AND transition */
 	while (state->parse_offset < state->offset)
 	{
-		char		next = state->raw_buffer[state->parse_offset];
+		char next = state->raw_buffer[state->parse_offset];
 
 		switch (state->state)
 		{
@@ -370,7 +368,8 @@ ts_http_response_state_parse(HttpResponseState *state, size_t bytes)
 				break;
 			case HTTP_STATE_BODY:
 				/* Stay here until we have read content_length */
-				if ((state->body_start + state->content_length) <= (state->raw_buffer + state->offset))
+				if ((state->body_start + state->content_length) <=
+					(state->raw_buffer + state->offset))
 				{
 					/* Then we are done */
 					state->state = HTTP_STATE_DONE;

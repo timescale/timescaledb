@@ -38,176 +38,189 @@
 #define IS_VALID_ESTIMATE(est) ((est) >= 0)
 #define MAX_FUNCTION_ARGS 10
 
-static double custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr, double path_rows);
+static double custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr,
+												double path_rows);
 static double custom_group_estimate_date_trunc(PlannerInfo *root, FuncExpr *expr, double path_rows);
 
 static double custom_group_estimate_expr(PlannerInfo *root, Node *expr, double path_rows);
 
 typedef struct
 {
-	Oid			function_oid;
+	Oid function_oid;
 
-	bool		extension_function;
-	char	   *function_name;
-	int			nargs;
-	double		(*custom_group_estimate_func) (PlannerInfo *root, FuncExpr *expr, double path_rows);
-	Oid			arg_types[MAX_FUNCTION_ARGS];
+	bool extension_function;
+	char *function_name;
+	int nargs;
+	double (*custom_group_estimate_func)(PlannerInfo *root, FuncExpr *expr, double path_rows);
+	Oid arg_types[MAX_FUNCTION_ARGS];
 } CustomEstimateForFunctionInfo;
 
 typedef struct
 {
-	Oid			function_oid;
+	Oid function_oid;
 	CustomEstimateForFunctionInfo *entry;
 } CustomEstimateForFunctionInfoHashEntry;
 
 /* Definitions of functions with a custom group estimate.
    These will also be entered into the custom_estimate_func_hash hash table. */
-static CustomEstimateForFunctionInfo custom_estimate_func_info[] =
-{
+static CustomEstimateForFunctionInfo custom_estimate_func_info[] = {
+	{ .extension_function = true,
+	  .function_name = "time_bucket",
+	  .nargs = 2,
+	  .arg_types = { INTERVALOID, TIMESTAMPOID },
+	  .custom_group_estimate_func = custom_group_estimate_time_bucket },
+	{ .extension_function = true,
+	  .function_name = "time_bucket",
+	  .nargs = 3,
+	  .arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID },
+	  .custom_group_estimate_func = custom_group_estimate_time_bucket },
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 2,
-		.arg_types = {INTERVALOID, TIMESTAMPOID},
-		.custom_group_estimate_func = custom_group_estimate_time_bucket
-	},
-	{
-		.extension_function = true,
-		.function_name = "time_bucket",
-		.nargs = 3,
-		.arg_types = {INTERVALOID, TIMESTAMPOID, TIMESTAMPOID},
-		.custom_group_estimate_func = custom_group_estimate_time_bucket
-	},
-	{
-		.extension_function = true,
-		.function_name = "time_bucket",
-		.nargs = 2,
-		.arg_types = {INTERVALOID, TIMESTAMPTZOID},
+		.arg_types = { INTERVALOID, TIMESTAMPTZOID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 3,
-		.arg_types = {INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID},
+		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 2,
-		.arg_types = {INTERVALOID, DATEOID},
+		.arg_types = { INTERVALOID, DATEOID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 3,
-		.arg_types = {INTERVALOID, DATEOID, DATEOID},
+		.arg_types = { INTERVALOID, DATEOID, DATEOID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 2,
-		.arg_types = {INT2OID, INT2OID},
+		.arg_types = { INT2OID, INT2OID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 3,
-		.arg_types = {INT2OID, INT2OID, INT2OID},
+		.arg_types = { INT2OID, INT2OID, INT2OID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 2,
-		.arg_types = {INT4OID, INT4OID},
+		.arg_types = { INT4OID, INT4OID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 3,
-		.arg_types = {INT4OID, INT4OID, INT4OID},
+		.arg_types = { INT4OID, INT4OID, INT4OID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 2,
-		.arg_types = {INT8OID, INT8OID},
+		.arg_types = { INT8OID, INT8OID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.extension_function = true,
 		.function_name = "time_bucket",
 		.nargs = 3,
-		.arg_types = {INT8OID, INT8OID, INT8OID},
+		.arg_types = { INT8OID, INT8OID, INT8OID },
 		.custom_group_estimate_func = custom_group_estimate_time_bucket,
 	},
 	{
 		.function_name = "date_trunc",
 		.nargs = 2,
-		.arg_types = {TEXTOID, TIMESTAMPOID},
+		.arg_types = { TEXTOID, TIMESTAMPOID },
 		.custom_group_estimate_func = custom_group_estimate_date_trunc,
 	},
 	{
 		.nargs = 2,
 		.custom_group_estimate_func = custom_group_estimate_date_trunc,
-		.arg_types = {TEXTOID, TIMESTAMPTZOID},
+		.arg_types = { TEXTOID, TIMESTAMPTZOID },
 		.function_name = "date_trunc",
 	},
 };
-#define _MAX_HASHAGG_FUNCTIONS (sizeof(custom_estimate_func_info)/sizeof(custom_estimate_func_info[0]))
+#define _MAX_HASHAGG_FUNCTIONS                                                                     \
+	(sizeof(custom_estimate_func_info) / sizeof(custom_estimate_func_info[0]))
 
 static HTAB *custom_estimate_func_hash = NULL;
 
 static void
 initialize_custom_estimate_func_info()
 {
-	int			i = 0;
+	int i = 0;
 
-	HASHCTL		hashctl = {
-		.keysize = sizeof(Oid),
-		.entrysize = sizeof(CustomEstimateForFunctionInfoHashEntry)
-	};
+	HASHCTL hashctl = { .keysize = sizeof(Oid),
+						.entrysize = sizeof(CustomEstimateForFunctionInfoHashEntry) };
 
-	custom_estimate_func_hash = hash_create("custom_estimate_func_hash", _MAX_HASHAGG_FUNCTIONS, &hashctl, HASH_ELEM | HASH_BLOBS);
+	custom_estimate_func_hash = hash_create("custom_estimate_func_hash",
+											_MAX_HASHAGG_FUNCTIONS,
+											&hashctl,
+											HASH_ELEM | HASH_BLOBS);
 
 	for (i = 0; i < _MAX_HASHAGG_FUNCTIONS; i++)
 	{
 		CustomEstimateForFunctionInfo def = custom_estimate_func_info[i];
 		CustomEstimateForFunctionInfoHashEntry *hash_entry;
-		bool		function_found = false;
-		bool		hash_found;
+		bool function_found = false;
+		bool hash_found;
 		FuncCandidateList funclist;
 
 		if (def.extension_function)
-			funclist = FuncnameGetCandidates(list_make2(makeString(ts_extension_schema_name()), makeString(def.function_name)),
-											 def.nargs, NIL, false, false, false);
+			funclist = FuncnameGetCandidates(list_make2(makeString(ts_extension_schema_name()),
+														makeString(def.function_name)),
+											 def.nargs,
+											 NIL,
+											 false,
+											 false,
+											 false);
 		else
 			funclist = FuncnameGetCandidates(list_make1(makeString(def.function_name)),
-											 def.nargs, NIL, false, false, false);
+											 def.nargs,
+											 NIL,
+											 false,
+											 false,
+											 false);
 
 		/* check types */
 		while (!function_found && funclist != NULL)
 		{
-			if (funclist->nargs != def.nargs || !ts_function_types_equal(funclist->args, def.arg_types, def.nargs))
+			if (funclist->nargs != def.nargs ||
+				!ts_function_types_equal(funclist->args, def.arg_types, def.nargs))
 				funclist = funclist->next;
 			else
 				function_found = true;
 		}
 
 		if (!function_found)
-			elog(ERROR, "cache lookup failed for function \"%s\" with %d args",
-				 def.function_name, def.nargs);
+			elog(ERROR,
+				 "cache lookup failed for function \"%s\" with %d args",
+				 def.function_name,
+				 def.nargs);
 
 		custom_estimate_func_info[i].function_oid = funclist->oid;
 
-		hash_entry = hash_search(custom_estimate_func_hash, &(custom_estimate_func_info[i].function_oid), HASH_ENTER, &hash_found);
+		hash_entry = hash_search(custom_estimate_func_hash,
+								 &(custom_estimate_func_info[i].function_oid),
+								 HASH_ENTER,
+								 &hash_found);
 		Assert(!hash_found);
 		hash_entry->entry = &custom_estimate_func_info[i];
 	}
@@ -225,7 +238,6 @@ get_custom_estimate_func_info(Oid function_oid)
 	return (hash_entry != NULL ? hash_entry->entry : NULL);
 }
 
-
 static double estimate_max_spread_expr(PlannerInfo *root, Expr *expr);
 
 /* Estimate the max spread on a time var in terms of the internal time representation.
@@ -236,12 +248,10 @@ static double
 estimate_max_spread_var(PlannerInfo *root, Var *var)
 {
 	VariableStatData vardata;
-	Oid			ltop;
-	Datum		max_datum,
-				min_datum;
-	int64		max,
-				min;
-	bool		valid;
+	Oid ltop;
+	Datum max_datum, min_datum;
+	int64 max, min;
+	bool valid;
 
 	examine_variable(root, (Node *) var, 0, &vardata);
 	get_sort_group_operators(var->vartype, true, false, false, &ltop, NULL, NULL, NULL);
@@ -263,10 +273,10 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 static double
 estimate_max_spread_opexpr(PlannerInfo *root, OpExpr *opexpr)
 {
-	char	   *function_name = get_opname(opexpr->opno);
-	Expr	   *left;
-	Expr	   *right;
-	Expr	   *nonconst;
+	char *function_name = get_opname(opexpr->opno);
+	Expr *left;
+	Expr *right;
+	Expr *nonconst;
 
 	if (list_length(opexpr->args) != 2 || strlen(function_name) != 1)
 		return INVALID_ESTIMATE;
@@ -308,7 +318,7 @@ estimate_max_spread_expr(PlannerInfo *root, Expr *expr)
 static double
 custom_group_estimate_expr_interval(PlannerInfo *root, Expr *expr, double interval_period)
 {
-	double		max_period;
+	double max_period;
 
 	if (interval_period <= 0)
 		return INVALID_ESTIMATE;
@@ -327,10 +337,10 @@ custom_group_estimate_expr_interval(PlannerInfo *root, Expr *expr, double interv
 static double
 custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr, double path_rows)
 {
-	Node	   *first_arg = eval_const_expressions(root, linitial(expr->args));
-	Expr	   *second_arg = lsecond(expr->args);
-	Const	   *c;
-	double		period;
+	Node *first_arg = eval_const_expressions(root, linitial(expr->args));
+	Expr *second_arg = lsecond(expr->args);
+	Const *c;
+	double period;
 
 	if (!IsA(first_arg, Const))
 		return INVALID_ESTIMATE;
@@ -363,17 +373,20 @@ custom_group_estimate_time_bucket(PlannerInfo *root, FuncExpr *expr, double path
 static double
 custom_group_estimate_date_trunc(PlannerInfo *root, FuncExpr *expr, double path_rows)
 {
-	Node	   *first_arg = eval_const_expressions(root, linitial(expr->args));
-	Expr	   *second_arg = lsecond(expr->args);
-	Const	   *c;
-	text	   *interval;
+	Node *first_arg = eval_const_expressions(root, linitial(expr->args));
+	Expr *second_arg = lsecond(expr->args);
+	Const *c;
+	text *interval;
 
 	if (!IsA(first_arg, Const))
 		return INVALID_ESTIMATE;
 
 	c = (Const *) first_arg;
 	interval = DatumGetTextPP(c->constvalue);
-	return custom_group_estimate_expr_interval(root, second_arg, (double) ts_date_trunc_interval_period_approx(interval));
+	return custom_group_estimate_expr_interval(root,
+											   second_arg,
+											   (double) ts_date_trunc_interval_period_approx(
+												   interval));
 }
 
 /* if performing integer division number of groups is less than the spread divided by the divisor.
@@ -381,12 +394,12 @@ custom_group_estimate_date_trunc(PlannerInfo *root, FuncExpr *expr, double path_
 static double
 custom_group_estimate_integer_division(PlannerInfo *root, Oid opno, Node *left, Node *right)
 {
-	char	   *function_name = get_opname(opno);
+	char *function_name = get_opname(opno);
 
 	/* only handle division */
 	if (function_name[0] == '/' && function_name[1] == '\0' && IsA(right, Const))
 	{
-		Const	   *c = (Const *) right;
+		Const *c = (Const *) right;
 
 		if (c->consttype != INT2OID && c->consttype != INT4OID && c->consttype != INT8OID)
 			return INVALID_ESTIMATE;
@@ -397,9 +410,11 @@ custom_group_estimate_integer_division(PlannerInfo *root, Oid opno, Node *left, 
 }
 
 static double
-custom_group_estimate_funcexpr(PlannerInfo *root, FuncExpr *custom_group_estimate_func, double path_rows)
+custom_group_estimate_funcexpr(PlannerInfo *root, FuncExpr *custom_group_estimate_func,
+							   double path_rows)
 {
-	CustomEstimateForFunctionInfo *func_est = get_custom_estimate_func_info(custom_group_estimate_func->funcid);
+	CustomEstimateForFunctionInfo *func_est =
+		get_custom_estimate_func_info(custom_group_estimate_func->funcid);
 
 	if (NULL != func_est)
 		return func_est->custom_group_estimate_func(root, custom_group_estimate_func, path_rows);
@@ -409,9 +424,9 @@ custom_group_estimate_funcexpr(PlannerInfo *root, FuncExpr *custom_group_estimat
 static double
 custom_group_estimate_opexpr(PlannerInfo *root, OpExpr *opexpr, double path_rows)
 {
-	Node	   *first;
-	Node	   *second;
-	double		estimate;
+	Node *first;
+	Node *second;
+	double estimate;
 
 	if (list_length(opexpr->args) != 2)
 		return INVALID_ESTIMATE;
@@ -430,10 +445,8 @@ custom_group_estimate_opexpr(PlannerInfo *root, OpExpr *opexpr, double path_rows
 	return INVALID_ESTIMATE;
 }
 
-
-
-/* Get a custom estimate for the number of groups of an expression. Return INVALID_ESTIMATE if we don't have
- * any extra knowledge and should just use the default estimate */
+/* Get a custom estimate for the number of groups of an expression. Return INVALID_ESTIMATE if we
+ * don't have any extra knowledge and should just use the default estimate */
 static double
 custom_group_estimate_expr(PlannerInfo *root, Node *expr, double path_rows)
 {
@@ -448,31 +461,28 @@ custom_group_estimate_expr(PlannerInfo *root, Node *expr, double path_rows)
 	}
 }
 
-/* Get a custom estimate for the number of groups in a query. Return INVALID_ESTIMATE if we don't have
- * any extra knowledge and should just use the default estimate. This works by getting
- * a custom estimate for any groups where a custom estimate exists and multiplying that
- * by the standard estimate of the groups for which custom estimates don't exist */
+/* Get a custom estimate for the number of groups in a query. Return INVALID_ESTIMATE if we don't
+ * have any extra knowledge and should just use the default estimate. This works by getting a custom
+ * estimate for any groups where a custom estimate exists and multiplying that by the standard
+ * estimate of the groups for which custom estimates don't exist */
 static double
-custom_group_estimate(PlannerInfo *root,
-					  double path_rows)
+custom_group_estimate(PlannerInfo *root, double path_rows)
 {
-	Query	   *parse = root->parse;
-	double		d_num_groups = 1;
-	List	   *group_exprs;
-	ListCell   *lc;
-	bool		found = false;
-	List	   *new_group_expr = NIL;
+	Query *parse = root->parse;
+	double d_num_groups = 1;
+	List *group_exprs;
+	ListCell *lc;
+	bool found = false;
+	List *new_group_expr = NIL;
 
 	Assert(parse->groupClause && !parse->groupingSets);
 
-	group_exprs = get_sortgrouplist_exprs(parse->groupClause,
-										  parse->targetList);
+	group_exprs = get_sortgrouplist_exprs(parse->groupClause, parse->targetList);
 
-	foreach(lc, group_exprs)
+	foreach (lc, group_exprs)
 	{
-		Node	   *item = lfirst(lc);
-		double		estimate =
-		custom_group_estimate_expr(root, item, path_rows);
+		Node *item = lfirst(lc);
+		double estimate = custom_group_estimate_expr(root, item, path_rows);
 
 		if (IS_VALID_ESTIMATE(estimate))
 		{
@@ -499,22 +509,20 @@ custom_group_estimate(PlannerInfo *root,
 /* Add a parallel HashAggregate plan.
  * This code is similar to parts of create_grouping_paths */
 static void
-plan_add_parallel_hashagg(PlannerInfo *root,
-						  RelOptInfo *input_rel,
-						  RelOptInfo *output_rel, double d_num_groups)
+plan_add_parallel_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel,
+						  double d_num_groups)
 {
-	Query	   *parse = root->parse;
-	Path	   *cheapest_partial_path = linitial(input_rel->partial_pathlist);
+	Query *parse = root->parse;
+	Path *cheapest_partial_path = linitial(input_rel->partial_pathlist);
 	PathTarget *target = root->upper_targets[UPPERREL_GROUP_AGG];
 	PathTarget *partial_grouping_target = ts_make_partial_grouping_target(root, target);
 	AggClauseCosts agg_partial_costs;
 	AggClauseCosts agg_final_costs;
-	Size		hashagg_table_size;
-	double		total_groups;
-	Path	   *partial_path;
+	Size hashagg_table_size;
+	double total_groups;
+	Path *partial_path;
 
-	double		d_num_partial_groups = custom_group_estimate(root,
-															 cheapest_partial_path->rows);
+	double d_num_partial_groups = custom_group_estimate(root, cheapest_partial_path->rows);
 
 	/* don't have any special estimate */
 	if (!IS_VALID_ESTIMATE(d_num_partial_groups))
@@ -526,23 +534,22 @@ plan_add_parallel_hashagg(PlannerInfo *root,
 	if (parse->hasAggs)
 	{
 		/* partial phase */
-		get_agg_clause_costs(root, (Node *) partial_grouping_target->exprs,
+		get_agg_clause_costs(root,
+							 (Node *) partial_grouping_target->exprs,
 							 AGGSPLIT_INITIAL_SERIAL,
 							 &agg_partial_costs);
 
 		/* final phase */
-		get_agg_clause_costs(root, (Node *) target->exprs,
+		get_agg_clause_costs(root,
+							 (Node *) target->exprs,
 							 AGGSPLIT_FINAL_DESERIAL,
 							 &agg_final_costs);
-		get_agg_clause_costs(root, parse->havingQual,
-							 AGGSPLIT_FINAL_DESERIAL,
-							 &agg_final_costs);
+		get_agg_clause_costs(root, parse->havingQual, AGGSPLIT_FINAL_DESERIAL, &agg_final_costs);
 	}
 
-	hashagg_table_size =
-		ts_estimate_hashagg_tablesize(cheapest_partial_path,
-									  &agg_partial_costs,
-									  d_num_partial_groups);
+	hashagg_table_size = ts_estimate_hashagg_tablesize(cheapest_partial_path,
+													   &agg_partial_costs,
+													   d_num_partial_groups);
 
 	/*
 	 * Tentatively produce a partial HashAgg Path, depending on if it looks as
@@ -551,17 +558,17 @@ plan_add_parallel_hashagg(PlannerInfo *root,
 	if (hashagg_table_size >= work_mem * 1024L)
 		return;
 
-	add_partial_path(output_rel, (Path *)
-					 create_agg_path(root,
-									 output_rel,
-									 cheapest_partial_path,
-									 partial_grouping_target,
-									 AGG_HASHED,
-									 AGGSPLIT_INITIAL_SERIAL,
-									 parse->groupClause,
-									 NIL,
-									 &agg_partial_costs,
-									 d_num_partial_groups));
+	add_partial_path(output_rel,
+					 (Path *) create_agg_path(root,
+											  output_rel,
+											  cheapest_partial_path,
+											  partial_grouping_target,
+											  AGG_HASHED,
+											  AGGSPLIT_INITIAL_SERIAL,
+											  parse->groupClause,
+											  NIL,
+											  &agg_partial_costs,
+											  d_num_partial_groups));
 
 	if (!output_rel->partial_pathlist)
 		return;
@@ -576,64 +583,54 @@ plan_add_parallel_hashagg(PlannerInfo *root,
 											   partial_grouping_target,
 											   NULL,
 											   &total_groups);
-	add_path(output_rel, (Path *)
-			 create_agg_path(root,
-							 output_rel,
-							 partial_path,
-							 target,
-							 AGG_HASHED,
-							 AGGSPLIT_FINAL_DESERIAL,
-							 parse->groupClause,
-							 (List *) parse->havingQual,
-							 &agg_final_costs,
-							 d_num_groups));
+	add_path(output_rel,
+			 (Path *) create_agg_path(root,
+									  output_rel,
+									  partial_path,
+									  target,
+									  AGG_HASHED,
+									  AGGSPLIT_FINAL_DESERIAL,
+									  parse->groupClause,
+									  (List *) parse->havingQual,
+									  &agg_final_costs,
+									  d_num_groups));
 }
-
 
 /* This function add a HashAggregate path, if appropriate
  * it looks like a highly modified create_grouping_paths function
  * in the postgres planner. */
 void
-ts_plan_add_hashagg(PlannerInfo *root,
-					RelOptInfo *input_rel,
-					RelOptInfo *output_rel)
+ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
 {
-	Query	   *parse = root->parse;
-	Path	   *cheapest_path = input_rel->cheapest_total_path;
+	Query *parse = root->parse;
+	Path *cheapest_path = input_rel->cheapest_total_path;
 	AggClauseCosts agg_costs;
-	bool		can_hash;
-	double		d_num_groups;
-	Size		hashaggtablesize;
+	bool can_hash;
+	double d_num_groups;
+	Size hashaggtablesize;
 	PathTarget *target = root->upper_targets[UPPERREL_GROUP_AGG];
-	bool		try_parallel_aggregation;
-
+	bool try_parallel_aggregation;
 
 	if (parse->groupingSets || !parse->hasAggs || parse->groupClause == NIL)
 		return;
 
 	MemSet(&agg_costs, 0, sizeof(AggClauseCosts));
-	get_agg_clause_costs(root, (Node *) root->processed_tlist, AGGSPLIT_SIMPLE,
-						 &agg_costs);
-	get_agg_clause_costs(root, parse->havingQual, AGGSPLIT_SIMPLE,
-						 &agg_costs);
+	get_agg_clause_costs(root, (Node *) root->processed_tlist, AGGSPLIT_SIMPLE, &agg_costs);
+	get_agg_clause_costs(root, parse->havingQual, AGGSPLIT_SIMPLE, &agg_costs);
 
-	can_hash = (parse->groupClause != NIL &&
-				agg_costs.numOrderedAggs == 0 &&
+	can_hash = (parse->groupClause != NIL && agg_costs.numOrderedAggs == 0 &&
 				grouping_is_hashable(parse->groupClause));
 
 	if (!can_hash)
 		return;
 
-	d_num_groups = custom_group_estimate(root,
-										 cheapest_path->rows);
+	d_num_groups = custom_group_estimate(root, cheapest_path->rows);
 
 	/* don't have any special estimate */
 	if (!IS_VALID_ESTIMATE(d_num_groups))
 		return;
 
-	hashaggtablesize = ts_estimate_hashagg_tablesize(cheapest_path,
-													 &agg_costs,
-													 d_num_groups);
+	hashaggtablesize = ts_estimate_hashagg_tablesize(cheapest_path, &agg_costs, d_num_groups);
 
 	if (hashaggtablesize >= work_mem * 1024L)
 		return;
@@ -666,15 +663,15 @@ ts_plan_add_hashagg(PlannerInfo *root,
 	 * We just need an Agg over the cheapest-total input path, since input
 	 * order won't matter.
 	 */
-	add_path(output_rel, (Path *)
-			 create_agg_path(root, output_rel,
-							 cheapest_path,
-							 target,
-							 AGG_HASHED,
-							 AGGSPLIT_SIMPLE,
-							 parse->groupClause,
-							 (List *) parse->havingQual,
-							 &agg_costs,
-							 d_num_groups));
-
+	add_path(output_rel,
+			 (Path *) create_agg_path(root,
+									  output_rel,
+									  cheapest_path,
+									  target,
+									  AGG_HASHED,
+									  AGGSPLIT_SIMPLE,
+									  parse->groupClause,
+									  (List *) parse->havingQual,
+									  &agg_costs,
+									  d_num_groups));
 }

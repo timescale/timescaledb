@@ -35,13 +35,13 @@
 static bool
 excluded_by_constraint(RangeTblEntry *rte, AppendRelInfo *appinfo, List *restrictinfos)
 {
-	ListCell   *lc;
-	RelOptInfo	rel = {
+	ListCell *lc;
+	RelOptInfo rel = {
 		.relid = appinfo->child_relid,
 		.reloptkind = RELOPT_OTHER_MEMBER_REL,
 		.baserestrictinfo = NIL,
 	};
-	Query		parse = {
+	Query parse = {
 		.resultRelation = InvalidOid,
 	};
 	PlannerGlobal glob = {
@@ -52,7 +52,7 @@ excluded_by_constraint(RangeTblEntry *rte, AppendRelInfo *appinfo, List *restric
 		.parse = &parse,
 	};
 
-	foreach(lc, restrictinfos)
+	foreach (lc, restrictinfos)
 	{
 		/*
 		 * We need a copy to retain the original parent ID in Vars for next
@@ -65,7 +65,8 @@ excluded_by_constraint(RangeTblEntry *rte, AppendRelInfo *appinfo, List *restric
 		 * Update Vars to reference the child relation (chunk) instead of the
 		 * hypertable main table
 		 */
-		rinfo->clause = (Expr *) adjust_appendrel_attrs_compat(&root, (Node *) old->clause, appinfo);
+		rinfo->clause =
+			(Expr *) adjust_appendrel_attrs_compat(&root, (Node *) old->clause, appinfo);
 		rel.baserestrictinfo = lappend(rel.baserestrictinfo, rinfo);
 	}
 
@@ -80,7 +81,7 @@ get_plans_for_exclusion(Plan *plan)
 	/* into the subplans of this Result node. */
 	if (IsA(plan, Result))
 	{
-		Result	   *res = (Result *) plan;
+		Result *res = (Result *) plan;
 
 		if (res->plan.lefttree != NULL && res->plan.righttree == NULL)
 			return res->plan.lefttree;
@@ -91,15 +92,12 @@ get_plans_for_exclusion(Plan *plan)
 }
 
 static bool
-can_exclude_chunk(Scan *scan, AppendRelInfo *appinfo, EState *estate,
-				  List *restrictinfos)
+can_exclude_chunk(Scan *scan, AppendRelInfo *appinfo, EState *estate, List *restrictinfos)
 {
 	RangeTblEntry *rte = rt_fetch(scan->scanrelid, estate->es_range_table);
 
-	return rte->rtekind == RTE_RELATION &&
-		rte->relkind == RELKIND_RELATION &&
-		!rte->inh &&
-		excluded_by_constraint(rte, appinfo, restrictinfos);
+	return rte->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION && !rte->inh &&
+		   excluded_by_constraint(rte, appinfo, restrictinfos);
 }
 
 /*
@@ -116,9 +114,9 @@ can_exclude_chunk(Scan *scan, AppendRelInfo *appinfo, EState *estate,
 static List *
 constify_restrictinfos(List *restrictinfos)
 {
-	List	   *newinfos = NIL;
-	ListCell   *lc;
-	Query		parse = {
+	List *newinfos = NIL;
+	ListCell *lc;
+	Query parse = {
 		.resultRelation = InvalidOid,
 	};
 	PlannerGlobal glob = {
@@ -129,7 +127,7 @@ constify_restrictinfos(List *restrictinfos)
 		.parse = &parse,
 	};
 
-	foreach(lc, restrictinfos)
+	foreach (lc, restrictinfos)
 	{
 		/* We need a copy to not mess up the plan */
 		RestrictInfo *old = lfirst(lc);
@@ -152,34 +150,32 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
-	Plan	   *subplan = copyObject(state->subplan);
-	List	   *append_rel_info = lsecond(cscan->custom_private);
-	List	   *restrictinfos = constify_restrictinfos(lthird(cscan->custom_private));
-	List	  **appendplans,
-			   *old_appendplans;
-	ListCell   *lc_plan,
-			   *lc_info;
+	Plan *subplan = copyObject(state->subplan);
+	List *append_rel_info = lsecond(cscan->custom_private);
+	List *restrictinfos = constify_restrictinfos(lthird(cscan->custom_private));
+	List **appendplans, *old_appendplans;
+	ListCell *lc_plan, *lc_info;
 
 	switch (nodeTag(subplan))
 	{
 		case T_Append:
-			{
-				Append	   *append = (Append *) subplan;
+		{
+			Append *append = (Append *) subplan;
 
-				old_appendplans = append->appendplans;
-				append->appendplans = NIL;
-				appendplans = &append->appendplans;
-				break;
-			}
+			old_appendplans = append->appendplans;
+			append->appendplans = NIL;
+			appendplans = &append->appendplans;
+			break;
+		}
 		case T_MergeAppend:
-			{
-				MergeAppend *append = (MergeAppend *) subplan;
+		{
+			MergeAppend *append = (MergeAppend *) subplan;
 
-				old_appendplans = append->mergeplans;
-				append->mergeplans = NIL;
-				appendplans = &append->mergeplans;
-				break;
-			}
+			old_appendplans = append->mergeplans;
+			append->mergeplans = NIL;
+			appendplans = &append->mergeplans;
+			break;
+		}
 		case T_Result:
 
 			/*
@@ -193,10 +189,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			elog(ERROR, "invalid plan %d", nodeTag(subplan));
 	}
 
-	forboth(lc_plan, old_appendplans, lc_info, append_rel_info)
+	forboth (lc_plan, old_appendplans, lc_info, append_rel_info)
 	{
-		Plan	   *plan = get_plans_for_exclusion(lfirst(lc_plan));
-
+		Plan *plan = get_plans_for_exclusion(lfirst(lc_plan));
 
 		switch (nodeTag(plan))
 		{
@@ -214,15 +209,14 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			case T_WorkTableScan:
 			case T_ForeignScan:
 			case T_CustomScan:
-				{
-					/*
-					 * If this is a base rel (chunk), check if it can be
-					 * excluded from the scan. Otherwise, fall through.
-					 */
-					if (can_exclude_chunk((Scan *) plan, lfirst(lc_info), estate,
-										  restrictinfos))
-						break;
-				}
+			{
+				/*
+				 * If this is a base rel (chunk), check if it can be
+				 * excluded from the scan. Otherwise, fall through.
+				 */
+				if (can_exclude_chunk((Scan *) plan, lfirst(lc_info), estate, restrictinfos))
+					break;
+			}
 			default:
 				*appendplans = lappend(*appendplans, plan);
 		}
@@ -277,7 +271,6 @@ ca_append_exec(CustomScanState *node)
 
 		econtext->ecxt_scantuple = subslot;
 
-
 #if PG96
 		resultslot = ExecProject(node->ss.ps.ps_ProjInfo, &isDone);
 
@@ -314,13 +307,11 @@ ca_append_rescan(CustomScanState *node)
 }
 
 static void
-ca_append_explain(CustomScanState *node,
-				  List *ancestors,
-				  ExplainState *es)
+ca_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
-	Oid			relid = linitial_oid(linitial(cscan->custom_private));
+	Oid relid = linitial_oid(linitial(cscan->custom_private));
 
 	ExplainPropertyText("Hypertable", get_rel_name(relid), es);
 #if PG96 || PG10
@@ -335,7 +326,6 @@ ca_append_explain(CustomScanState *node,
 #endif
 }
 
-
 static CustomExecMethods constraint_aware_append_state_methods = {
 	.BeginCustomScan = ca_append_begin,
 	.ExecCustomScan = ca_append_exec,
@@ -348,7 +338,7 @@ static Node *
 constraint_aware_append_state_create(CustomScan *cscan)
 {
 	ConstraintAwareAppendState *state;
-	Append	   *append = linitial(cscan->custom_plans);
+	Append *append = linitial(cscan->custom_plans);
 
 	state = (ConstraintAwareAppendState *) newNode(sizeof(ConstraintAwareAppendState),
 												   T_CustomScanState);
@@ -364,19 +354,15 @@ static CustomScanMethods constraint_aware_append_plan_methods = {
 };
 
 static Plan *
-constraint_aware_append_plan_create(PlannerInfo *root,
-									RelOptInfo *rel,
-									struct CustomPath *path,
-									List *tlist,
-									List *clauses,
-									List *custom_plans)
+constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
+									List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
-	Plan	   *subplan = linitial(custom_plans);
+	Plan *subplan = linitial(custom_plans);
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
-	cscan->scan.scanrelid = 0;	/* Not a real relation we are scanning */
-	cscan->scan.plan.targetlist = tlist;	/* Target list we expect as output */
+	cscan->scan.scanrelid = 0;			 /* Not a real relation we are scanning */
+	cscan->scan.plan.targetlist = tlist; /* Target list we expect as output */
 	cscan->custom_plans = custom_plans;
 	cscan->custom_private = list_make3(list_make1_oid(rte->relid),
 									   list_copy(root->append_rel_list),
@@ -397,8 +383,8 @@ static CustomPathMethods constraint_aware_append_path_methods = {
 static inline List *
 remove_parent_subpath(PlannerInfo *root, List *subpaths, Oid parent_relid)
 {
-	Path	   *childpath;
-	Oid			relid;
+	Path *childpath;
+	Oid relid;
 
 	childpath = linitial(subpaths);
 	relid = root->simple_rte_array[childpath->parent->relid]->relid;
@@ -414,7 +400,7 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *
 {
 	ConstraintAwareAppendPath *path;
 	AppendRelInfo *appinfo;
-	Oid			relid;
+	Oid relid;
 
 	path = (ConstraintAwareAppendPath *) newNode(sizeof(ConstraintAwareAppendPath), T_CustomPath);
 	path->cpath.path.pathtype = T_CustomScan;
@@ -445,19 +431,19 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *
 	switch (nodeTag(subpath))
 	{
 		case T_AppendPath:
-			{
-				AppendPath *append = (AppendPath *) subpath;
+		{
+			AppendPath *append = (AppendPath *) subpath;
 
-				append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
-				break;
-			}
+			append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
+			break;
+		}
 		case T_MergeAppendPath:
-			{
-				MergeAppendPath *append = (MergeAppendPath *) subpath;
+		{
+			MergeAppendPath *append = (MergeAppendPath *) subpath;
 
-				append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
-				break;
-			}
+			append->subpaths = remove_parent_subpath(root, append->subpaths, ht->main_table_relid);
+			break;
+		}
 		default:
 			elog(ERROR, "invalid node type %u", nodeTag(subpath));
 			break;

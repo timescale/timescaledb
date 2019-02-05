@@ -33,28 +33,26 @@
 #include "planner_import.h"
 #include "compat.h"
 
-
 /* copied verbatim from prepunion.c */
 void
-ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
-							 Index newvarno,
+ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index newvarno,
 							 List **translated_vars)
 {
-	List	   *vars = NIL;
-	TupleDesc	old_tupdesc = RelationGetDescr(oldrelation);
-	TupleDesc	new_tupdesc = RelationGetDescr(newrelation);
-	int			oldnatts = old_tupdesc->natts;
-	int			newnatts = new_tupdesc->natts;
-	int			old_attno;
+	List *vars = NIL;
+	TupleDesc old_tupdesc = RelationGetDescr(oldrelation);
+	TupleDesc new_tupdesc = RelationGetDescr(newrelation);
+	int oldnatts = old_tupdesc->natts;
+	int newnatts = new_tupdesc->natts;
+	int old_attno;
 
 	for (old_attno = 0; old_attno < oldnatts; old_attno++)
 	{
 		Form_pg_attribute att;
-		char	   *attname;
-		Oid			atttypid;
-		int32		atttypmod;
-		Oid			attcollation;
-		int			new_attno;
+		char *attname;
+		Oid atttypid;
+		int32 atttypmod;
+		Oid attcollation;
+		int new_attno;
 
 		att = TupleDescAttr(old_tupdesc, old_attno);
 		if (att->attisdropped)
@@ -74,12 +72,13 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
 		 */
 		if (oldrelation == newrelation)
 		{
-			vars = lappend(vars, makeVar(newvarno,
-										 (AttrNumber) (old_attno + 1),
-										 atttypid,
-										 atttypmod,
-										 attcollation,
-										 0));
+			vars = lappend(vars,
+						   makeVar(newvarno,
+								   (AttrNumber)(old_attno + 1),
+								   atttypid,
+								   atttypmod,
+								   attcollation,
+								   0));
 			continue;
 		}
 
@@ -93,39 +92,43 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
 		 * Note: the test for (att = ...) != NULL cannot fail, it's just a
 		 * notational device to include the assignment into the if-clause.
 		 */
-		if (old_attno < newnatts &&
-			(att = TupleDescAttr(new_tupdesc, old_attno)) != NULL &&
-			!att->attisdropped &&
-			strcmp(attname, NameStr(att->attname)) == 0)
+		if (old_attno < newnatts && (att = TupleDescAttr(new_tupdesc, old_attno)) != NULL &&
+			!att->attisdropped && strcmp(attname, NameStr(att->attname)) == 0)
 			new_attno = old_attno;
 		else
 		{
 			for (new_attno = 0; new_attno < newnatts; new_attno++)
 			{
 				att = TupleDescAttr(new_tupdesc, new_attno);
-				if (!att->attisdropped &&
-					strcmp(attname, NameStr(att->attname)) == 0)
+				if (!att->attisdropped && strcmp(attname, NameStr(att->attname)) == 0)
 					break;
 			}
 			if (new_attno >= newnatts)
-				elog(ERROR, "could not find inherited attribute \"%s\" of relation \"%s\"",
-					 attname, RelationGetRelationName(newrelation));
+				elog(ERROR,
+					 "could not find inherited attribute \"%s\" of relation \"%s\"",
+					 attname,
+					 RelationGetRelationName(newrelation));
 		}
 
 		/* Found it, check type and collation match */
 		if (atttypid != att->atttypid || atttypmod != att->atttypmod)
-			elog(ERROR, "attribute \"%s\" of relation \"%s\" does not match parent's type",
-				 attname, RelationGetRelationName(newrelation));
+			elog(ERROR,
+				 "attribute \"%s\" of relation \"%s\" does not match parent's type",
+				 attname,
+				 RelationGetRelationName(newrelation));
 		if (attcollation != att->attcollation)
-			elog(ERROR, "attribute \"%s\" of relation \"%s\" does not match parent's collation",
-				 attname, RelationGetRelationName(newrelation));
+			elog(ERROR,
+				 "attribute \"%s\" of relation \"%s\" does not match parent's collation",
+				 attname,
+				 RelationGetRelationName(newrelation));
 
-		vars = lappend(vars, makeVar(newvarno,
-									 (AttrNumber) (new_attno + 1),
-									 atttypid,
-									 atttypmod,
-									 attcollation,
-									 0));
+		vars = lappend(vars,
+					   makeVar(newvarno,
+							   (AttrNumber)(new_attno + 1),
+							   atttypid,
+							   atttypmod,
+							   attcollation,
+							   0));
 	}
 
 	*translated_vars = vars;
@@ -133,15 +136,13 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
 
 /* copied exactly from planner.c */
 size_t
-ts_estimate_hashagg_tablesize(struct Path *path,
-							  const struct AggClauseCosts *agg_costs,
+ts_estimate_hashagg_tablesize(struct Path *path, const struct AggClauseCosts *agg_costs,
 							  double dNumGroups)
 {
-	size_t		hashentrysize;
+	size_t hashentrysize;
 
 	/* Estimate per-hash-entry space at tuple width... */
-	hashentrysize = MAXALIGN(path->pathtarget->width) +
-		MAXALIGN(SizeofMinimalTupleHeader);
+	hashentrysize = MAXALIGN(path->pathtarget->width) + MAXALIGN(SizeofMinimalTupleHeader);
 
 	/* plus space for pass-by-ref transition values... */
 	hashentrysize += agg_costs->transitionSpace;
@@ -165,14 +166,14 @@ ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_t
 	PathTarget *partial_target;
 	struct List *non_group_cols;
 	struct List *non_group_exprs;
-	int			i;
+	int i;
 	struct ListCell *lc;
 
 	partial_target = create_empty_pathtarget();
 	non_group_cols = NIL;
 
 	i = 0;
-	foreach(lc, grouping_target->exprs)
+	foreach (lc, grouping_target->exprs)
 	{
 		struct Expr *expr = (struct Expr *) lfirst(lc);
 		unsigned int sgref = get_pathtarget_sortgroupref(grouping_target, i);
@@ -212,9 +213,8 @@ ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_t
 	 * we are covering the needs of ORDER BY and window specifications.
 	 */
 	non_group_exprs = pull_var_clause((struct Node *) non_group_cols,
-									  PVC_INCLUDE_AGGREGATES |
-									  PVC_RECURSE_WINDOWFUNCS |
-									  PVC_INCLUDE_PLACEHOLDERS);
+									  PVC_INCLUDE_AGGREGATES | PVC_RECURSE_WINDOWFUNCS |
+										  PVC_INCLUDE_PLACEHOLDERS);
 
 	add_new_columns_to_pathtarget(partial_target, non_group_exprs);
 
@@ -223,7 +223,7 @@ ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_t
 	 * are at the top level of the target list, so we can just scan the list
 	 * rather than recursing through the expression trees.
 	 */
-	foreach(lc, partial_target->exprs)
+	foreach (lc, partial_target->exprs)
 	{
 		struct Aggref *aggref = (struct Aggref *) lfirst(lc);
 
@@ -256,18 +256,18 @@ ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_t
 #if PG96
 /* copied verbatim from selfuncs.c */
 bool
-ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-					  Datum *min, Datum *max)
+ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, Datum *min,
+					  Datum *max)
 {
-	uintptr_t	tmin = 0;
-	uintptr_t	tmax = 0;
-	char		have_data = false;
-	short		typLen;
-	char		typByVal;
+	uintptr_t tmin = 0;
+	uintptr_t tmax = 0;
+	char have_data = false;
+	short typLen;
+	char typByVal;
 	unsigned int opfuncoid;
-	uintptr_t  *values;
-	int			nvalues;
-	int			i;
+	uintptr_t *values;
+	int nvalues;
+	int i;
 
 	/*
 	 * XXX It's very tempting to try to use the actual column min and max, if
@@ -287,8 +287,8 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 		return false;
 	}
 
-#if (PG_VERSION_NUM >= 90603)	/* statistic_proc_security_check was added in
-								 * 9.6.3 */
+#if (PG_VERSION_NUM >= 90603) /* statistic_proc_security_check was added in                        \
+							   * 9.6.3 */
 
 	/*
 	 * If we can't apply the sortop to the stats data, just fail.  In
@@ -297,8 +297,7 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 	 * probably not worth trying, because whatever the caller wants to do with
 	 * the endpoints would likely fail the security check too.
 	 */
-	if (!statistic_proc_security_check(vardata,
-									   (opfuncoid = get_opcode(sortop))))
+	if (!statistic_proc_security_check(vardata, (opfuncoid = get_opcode(sortop))))
 		return false;
 #else
 	opfuncoid = get_opcode(sortop);
@@ -314,11 +313,15 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 	 * use.
 	 */
 	if (get_attstatsslot(vardata->statsTuple,
-						 vardata->atttype, vardata->atttypmod,
-						 STATISTIC_KIND_HISTOGRAM, sortop,
+						 vardata->atttype,
+						 vardata->atttypmod,
+						 STATISTIC_KIND_HISTOGRAM,
+						 sortop,
 						 NULL,
-						 &values, &nvalues,
-						 NULL, NULL))
+						 &values,
+						 &nvalues,
+						 NULL,
+						 NULL))
 	{
 		if (nvalues > 0)
 		{
@@ -329,11 +332,15 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 		free_attstatsslot(vardata->atttype, values, nvalues, NULL, 0);
 	}
 	else if (get_attstatsslot(vardata->statsTuple,
-							  vardata->atttype, vardata->atttypmod,
-							  STATISTIC_KIND_HISTOGRAM, InvalidOid,
+							  vardata->atttype,
+							  vardata->atttypmod,
+							  STATISTIC_KIND_HISTOGRAM,
+							  InvalidOid,
 							  NULL,
-							  &values, &nvalues,
-							  NULL, NULL))
+							  &values,
+							  &nvalues,
+							  NULL,
+							  NULL))
 	{
 		free_attstatsslot(vardata->atttype, values, nvalues, NULL, 0);
 		return false;
@@ -346,14 +353,18 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 	 * avoid unnecessary data copying.
 	 */
 	if (get_attstatsslot(vardata->statsTuple,
-						 vardata->atttype, vardata->atttypmod,
-						 STATISTIC_KIND_MCV, InvalidOid,
+						 vardata->atttype,
+						 vardata->atttypmod,
+						 STATISTIC_KIND_MCV,
+						 InvalidOid,
 						 NULL,
-						 &values, &nvalues,
-						 NULL, NULL))
+						 &values,
+						 &nvalues,
+						 NULL,
+						 NULL))
 	{
-		char		tmin_is_mcv = false;
-		char		tmax_is_mcv = false;
+		char tmin_is_mcv = false;
+		char tmax_is_mcv = false;
 		struct FmgrInfo opproc;
 
 		fmgr_info(opfuncoid, &opproc);
@@ -366,16 +377,12 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 				tmin_is_mcv = tmax_is_mcv = have_data = true;
 				continue;
 			}
-			if (DatumGetBool(FunctionCall2Coll(&opproc,
-											   DEFAULT_COLLATION_OID,
-											   values[i], tmin)))
+			if (DatumGetBool(FunctionCall2Coll(&opproc, DEFAULT_COLLATION_OID, values[i], tmin)))
 			{
 				tmin = values[i];
 				tmin_is_mcv = true;
 			}
-			if (DatumGetBool(FunctionCall2Coll(&opproc,
-											   DEFAULT_COLLATION_OID,
-											   tmax, values[i])))
+			if (DatumGetBool(FunctionCall2Coll(&opproc, DEFAULT_COLLATION_OID, tmax, values[i])))
 			{
 				tmax = values[i];
 				tmax_is_mcv = true;
@@ -395,17 +402,17 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 #else
 /* copied verbatim from selfuncs.c */
 bool
-ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-					  Datum *min, Datum *max)
+ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, Datum *min,
+					  Datum *max)
 {
-	Datum		tmin = 0;
-	Datum		tmax = 0;
-	bool		have_data = false;
-	int16		typLen;
-	bool		typByVal;
-	Oid			opfuncoid;
+	Datum tmin = 0;
+	Datum tmax = 0;
+	bool have_data = false;
+	int16 typLen;
+	bool typByVal;
+	Oid opfuncoid;
 	AttStatsSlot sslot;
-	int			i;
+	int i;
 
 	/*
 	 * XXX It's very tempting to try to use the actual column min and max, if
@@ -432,8 +439,7 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 	 * probably not worth trying, because whatever the caller wants to do with
 	 * the endpoints would likely fail the security check too.
 	 */
-	if (!statistic_proc_security_check(vardata,
-									   (opfuncoid = get_opcode(sortop))))
+	if (!statistic_proc_security_check(vardata, (opfuncoid = get_opcode(sortop))))
 		return false;
 
 	get_typlenbyval(vardata->atttype, &typLen, &typByVal);
@@ -445,8 +451,10 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 	 * the one we want, fail --- this suggests that there is data we can't
 	 * use.
 	 */
-	if (get_attstatsslot(&sslot, vardata->statsTuple,
-						 STATISTIC_KIND_HISTOGRAM, sortop,
+	if (get_attstatsslot(&sslot,
+						 vardata->statsTuple,
+						 STATISTIC_KIND_HISTOGRAM,
+						 sortop,
 						 ATTSTATSSLOT_VALUES))
 	{
 		if (sslot.nvalues > 0)
@@ -457,9 +465,7 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 		}
 		free_attstatsslot(&sslot);
 	}
-	else if (get_attstatsslot(&sslot, vardata->statsTuple,
-							  STATISTIC_KIND_HISTOGRAM, InvalidOid,
-							  0))
+	else if (get_attstatsslot(&sslot, vardata->statsTuple, STATISTIC_KIND_HISTOGRAM, InvalidOid, 0))
 	{
 		free_attstatsslot(&sslot);
 		return false;
@@ -471,13 +477,15 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 	 * the MCVs.  However, usually the MCVs will not be the extreme values, so
 	 * avoid unnecessary data copying.
 	 */
-	if (get_attstatsslot(&sslot, vardata->statsTuple,
-						 STATISTIC_KIND_MCV, InvalidOid,
+	if (get_attstatsslot(&sslot,
+						 vardata->statsTuple,
+						 STATISTIC_KIND_MCV,
+						 InvalidOid,
 						 ATTSTATSSLOT_VALUES))
 	{
-		bool		tmin_is_mcv = false;
-		bool		tmax_is_mcv = false;
-		FmgrInfo	opproc;
+		bool tmin_is_mcv = false;
+		bool tmax_is_mcv = false;
+		FmgrInfo opproc;
 
 		fmgr_info(opfuncoid, &opproc);
 
@@ -489,16 +497,14 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
 				tmin_is_mcv = tmax_is_mcv = have_data = true;
 				continue;
 			}
-			if (DatumGetBool(FunctionCall2Coll(&opproc,
-											   DEFAULT_COLLATION_OID,
-											   sslot.values[i], tmin)))
+			if (DatumGetBool(
+					FunctionCall2Coll(&opproc, DEFAULT_COLLATION_OID, sslot.values[i], tmin)))
 			{
 				tmin = sslot.values[i];
 				tmin_is_mcv = true;
 			}
-			if (DatumGetBool(FunctionCall2Coll(&opproc,
-											   DEFAULT_COLLATION_OID,
-											   tmax, sslot.values[i])))
+			if (DatumGetBool(
+					FunctionCall2Coll(&opproc, DEFAULT_COLLATION_OID, tmax, sslot.values[i])))
 			{
 				tmax = sslot.values[i];
 				tmax_is_mcv = true;

@@ -31,7 +31,7 @@
 
 #include <catalog/pg_constraint.h>
 #include "compat.h"
-#if PG96 || PG10				/* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_constraint_fn.h>
 #endif
 #include "compat-msvc-exit.h"
@@ -56,8 +56,8 @@
 #include "plan_agg_bookend.h"
 #include "plan_ordered_append.h"
 
-void		_planner_init(void);
-void		_planner_fini(void);
+void _planner_init(void);
+void _planner_fini(void);
 
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
@@ -94,11 +94,11 @@ turn_off_inheritance_walker(Node *node, Cache *hc)
 
 	if (IsA(node, Query))
 	{
-		Query	   *query = (Query *) node;
-		ListCell   *lc;
-		int			rti = 1;
+		Query *query = (Query *) node;
+		ListCell *lc;
+		int rti = 1;
 
-		foreach(lc, query->rtable)
+		foreach (lc, query->rtable)
 		{
 			RangeTblEntry *rte = lfirst(lc);
 
@@ -128,7 +128,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations && parse->resultRelation == 0)
 	{
-		Cache	   *hc = ts_hypertable_cache_pin();
+		Cache *hc = ts_hypertable_cache_pin();
 
 		/*
 		 * turn of inheritance on hypertables we will expand ourselves in
@@ -141,7 +141,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 	if (prev_planner_hook != NULL)
 		/* Call any earlier hooks */
-		return (prev_planner_hook) (parse, cursor_opts, bound_params);
+		return (prev_planner_hook)(parse, cursor_opts, bound_params);
 
 	/* Call the standard planner */
 	stmt = standard_planner(parse, cursor_opts, bound_params);
@@ -159,14 +159,11 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	return stmt;
 }
 
-
 static inline bool
 should_optimize_query(Hypertable *ht)
 {
-	return !ts_guc_disable_optimizations &&
-		(ts_guc_optimize_non_hypertables || ht != NULL);
+	return !ts_guc_disable_optimizations && (ts_guc_optimize_non_hypertables || ht != NULL);
 }
-
 
 extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 
@@ -174,17 +171,16 @@ static inline bool
 should_optimize_append(const Path *path)
 {
 	RelOptInfo *rel = path->parent;
-	ListCell   *lc;
+	ListCell *lc;
 
-	if (!ts_guc_constraint_aware_append ||
-		constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
+	if (!ts_guc_constraint_aware_append || constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
 		return false;
 
 	/*
 	 * If there are clauses that have mutable functions, this path is ripe for
 	 * execution-time optimization.
 	 */
-	foreach(lc, rel->baserestrictinfo)
+	foreach (lc, rel->baserestrictinfo)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
@@ -194,42 +190,35 @@ should_optimize_append(const Path *path)
 	return false;
 }
 
-
 static inline bool
 is_append_child(RelOptInfo *rel, RangeTblEntry *rte)
 {
-	return rel->reloptkind == RELOPT_OTHER_MEMBER_REL &&
-		rte->inh == false &&
-		rel->rtekind == RTE_RELATION &&
-		rte->relkind == RELKIND_RELATION;
+	return rel->reloptkind == RELOPT_OTHER_MEMBER_REL && rte->inh == false &&
+		   rel->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION;
 }
 
 static inline bool
 is_append_parent(RelOptInfo *rel, RangeTblEntry *rte)
 {
-	return rel->reloptkind == RELOPT_BASEREL &&
-		rte->inh == true &&
-		rel->rtekind == RTE_RELATION &&
-		rte->relkind == RELKIND_RELATION;
+	return rel->reloptkind == RELOPT_BASEREL && rte->inh == true && rel->rtekind == RTE_RELATION &&
+		   rte->relkind == RELKIND_RELATION;
 }
 
 static void
-timescaledb_set_rel_pathlist(PlannerInfo *root,
-							 RelOptInfo *rel,
-							 Index rti,
-							 RangeTblEntry *rte)
+timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	Hypertable *ht;
-	Cache	   *hcache;
+	Cache *hcache;
 
 	if (prev_set_rel_pathlist_hook != NULL)
-		(*prev_set_rel_pathlist_hook) (root, rel, rti, rte);
+		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 
 	if (!ts_extension_is_loaded() || IS_DUMMY_REL(rel) || !OidIsValid(rte->relid))
 		return;
 
 	/* quick abort if only optimizing hypertables */
-	if (!ts_guc_optimize_non_hypertables && !(is_append_parent(rel, rte) || is_append_child(rel, rte)))
+	if (!ts_guc_optimize_non_hypertables &&
+		!(is_append_parent(rel, rte) || is_append_child(rel, rte)))
 		return;
 
 	hcache = ts_hypertable_cache_pin();
@@ -254,9 +243,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 		 * can't wait to get the parent of the append relation b/c by that
 		 * time it's too late.
 		 */
-		ListCell   *l;
+		ListCell *l;
 
-		foreach(l, root->append_rel_list)
+		foreach (l, root->append_rel_list)
 		{
 			AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
 			RelOptInfo *siblingrel;
@@ -275,20 +264,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 
 	if (
 
-	/*
-	 * Right now this optimization applies only to hypertables (ht used
-	 * below). Can be relaxed later to apply to reg tables but needs testing
-	 */
-		ht != NULL &&
-		is_append_parent(rel, rte) &&
-	/* Do not optimize result relations (INSERT, UPDATE, DELETE) */
+		/*
+		 * Right now this optimization applies only to hypertables (ht used
+		 * below). Can be relaxed later to apply to reg tables but needs testing
+		 */
+		ht != NULL && is_append_parent(rel, rte) &&
+		/* Do not optimize result relations (INSERT, UPDATE, DELETE) */
 		0 == root->parse->resultRelation)
 	{
-		ListCell   *lc;
+		ListCell *lc;
 
-		foreach(lc, rel->pathlist)
+		foreach (lc, rel->pathlist)
 		{
-			Path	  **pathptr = (Path **) &lfirst(lc);
+			Path **pathptr = (Path **) &lfirst(lc);
 
 			switch (nodeTag(*pathptr))
 			{
@@ -297,8 +285,13 @@ timescaledb_set_rel_pathlist(PlannerInfo *root,
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
 				case T_MergeAppendPath:
-					if (rel->fdw_private != NULL && ((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered)
-						*pathptr = ts_ordered_append_path_create(root, rel, ht, castNode(MergeAppendPath, *pathptr));
+					if (rel->fdw_private != NULL &&
+						((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered)
+						*pathptr =
+							ts_ordered_append_path_create(root,
+														  rel,
+														  ht,
+														  castNode(MergeAppendPath, *pathptr));
 					if (should_optimize_append(*pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
 					break;
@@ -316,9 +309,7 @@ out_release:
  * the planner gets about a relation. We hijack it here
  * to also expand the append relation for hypertables. */
 static void
-timescaledb_get_relation_info_hook(PlannerInfo *root,
-								   Oid relation_objectid,
-								   bool inhparent,
+timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
 								   RelOptInfo *rel)
 {
 	RangeTblEntry *rte;
@@ -344,19 +335,14 @@ timescaledb_get_relation_info_hook(PlannerInfo *root,
 	 */
 	if (!rte->inh && is_rte_hypertable(rte))
 	{
-
-		Cache	   *hcache = ts_hypertable_cache_pin();
+		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
 
 		Assert(ht != NULL);
 
 		rel->fdw_private = palloc0(sizeof(TimescaleDBPrivate));
 
-		ts_plan_expand_hypertable_chunks(ht,
-										 root,
-										 relation_objectid,
-										 inhparent,
-										 rel);
+		ts_plan_expand_hypertable_chunks(ht, root, relation_objectid, inhparent, rel);
 #if !PG96 && !PG10
 		setup_append_rel_array(root);
 #endif
@@ -377,7 +363,7 @@ involves_ts_hypertable_relid(PlannerInfo *root, Index relid)
 static bool
 involves_hypertable_relid_set(PlannerInfo *root, Relids relid_set)
 {
-	int			relid = -1;
+	int relid = -1;
 
 	while ((relid = bms_next_member(relid_set, relid)) >= 0)
 	{
@@ -403,13 +389,11 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 
 			return involves_ts_hypertable_relid(root, rel->relid);
 		case RELOPT_JOINREL:
-			return involves_hypertable_relid_set(root,
-												 rel->relids);
+			return involves_hypertable_relid_set(root, rel->relids);
 		default:
 			return false;
 	}
 }
-
 
 /*
  * Replace INSERT (ModifyTablePath) paths on hypertables.
@@ -471,16 +455,15 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 static List *
 replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 {
-	Cache	   *htcache = ts_hypertable_cache_pin();
-	List	   *new_pathlist = NIL;
-	ListCell   *lc;
+	Cache *htcache = ts_hypertable_cache_pin();
+	List *new_pathlist = NIL;
+	ListCell *lc;
 
-	foreach(lc, pathlist)
+	foreach (lc, pathlist)
 	{
-		Path	   *path = lfirst(lc);
+		Path *path = lfirst(lc);
 
-		if (IsA(path, ModifyTablePath) &&
-			((ModifyTablePath *) path)->operation == CMD_INSERT)
+		if (IsA(path, ModifyTablePath) && ((ModifyTablePath *) path)->operation == CMD_INSERT)
 		{
 			ModifyTablePath *mt = (ModifyTablePath *) path;
 			RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
@@ -500,23 +483,18 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 
 static void
 #if PG96 || PG10
-timescale_create_upper_paths_hook(PlannerInfo *root,
-								  UpperRelationKind stage,
-								  RelOptInfo *input_rel,
+timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 								  RelOptInfo *output_rel)
 {
-	Query	   *parse = root->parse;
+	Query *parse = root->parse;
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel);
 #else
-timescale_create_upper_paths_hook(PlannerInfo *root,
-								  UpperRelationKind stage,
-								  RelOptInfo *input_rel,
-								  RelOptInfo *output_rel,
-								  void *extra)
+timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
+								  RelOptInfo *output_rel, void *extra)
 {
-	Query	   *parse = root->parse;
+	Query *parse = root->parse;
 
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
@@ -532,9 +510,7 @@ timescale_create_upper_paths_hook(PlannerInfo *root,
 	if (output_rel != NULL && output_rel->pathlist != NIL)
 		output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
 
-	if (ts_guc_disable_optimizations ||
-		input_rel == NULL ||
-		IS_DUMMY_REL(input_rel))
+	if (ts_guc_disable_optimizations || input_rel == NULL || IS_DUMMY_REL(input_rel))
 		return;
 
 	if (!ts_guc_optimize_non_hypertables && !involves_hypertable(root, input_rel))
@@ -547,7 +523,6 @@ timescale_create_upper_paths_hook(PlannerInfo *root,
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 	}
 }
-
 
 void
 _planner_init(void)

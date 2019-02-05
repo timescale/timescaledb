@@ -20,8 +20,8 @@
 #include "net/conn_mock.h"
 #endif
 
-#define HTTPS_PORT	443
-#define TEST_ENDPOINT	"postman-echo.com"
+#define HTTPS_PORT 443
+#define TEST_ENDPOINT "postman-echo.com"
 
 TS_FUNCTION_INFO_V1(ts_test_status);
 TS_FUNCTION_INFO_V1(ts_test_status_ssl);
@@ -37,7 +37,7 @@ static HttpRequest *
 build_request(int status)
 {
 	HttpRequest *req = ts_http_request_create(HTTP_GET);
-	char		uri[20];
+	char uri[20];
 
 	snprintf(uri, 20, "/status/%d", status);
 
@@ -54,8 +54,8 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	Connection *conn;
 	HttpRequest *req;
 	HttpResponseState *rsp = NULL;
-	HttpError	err;
-	Datum		json;
+	HttpError err;
+	Datum json;
 
 	conn = ts_connection_create(type);
 
@@ -88,7 +88,8 @@ test_factory(ConnectionType type, int status, char *host, int port)
 		elog(ERROR, "%s", ts_http_strerror(err));
 
 	if (!ts_http_response_state_valid_status(rsp))
-		elog(ERROR, "endpoint sent back unexpected HTTP status: %d",
+		elog(ERROR,
+			 "endpoint sent back unexpected HTTP status: %d",
 			 ts_http_response_state_status_code(rsp));
 
 	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
@@ -102,19 +103,20 @@ test_factory(ConnectionType type, int status, char *host, int port)
 Datum
 ts_test_status_ssl(PG_FUNCTION_ARGS)
 {
-	int			status = PG_GETARG_INT32(0);
+	int status = PG_GETARG_INT32(0);
 #ifdef TS_USE_OPENSSL
 
 	return test_factory(CONNECTION_SSL, status, TEST_ENDPOINT, HTTPS_PORT);
 #else
-	char		buf[128] = {'\0'};
+	char buf[128] = { '\0' };
 
 	if (status / 100 != 2)
 		elog(ERROR, "endpoint sent back unexpected HTTP status: %d", status);
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
-	PG_RETURN_JSONB_P(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf)));;
+	PG_RETURN_JSONB_P(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf)));
+	;
 #endif
 }
 
@@ -122,8 +124,8 @@ ts_test_status_ssl(PG_FUNCTION_ARGS)
 Datum
 ts_test_status(PG_FUNCTION_ARGS)
 {
-	int			port = 80;
-	int			status = PG_GETARG_INT32(0);
+	int port = 80;
+	int status = PG_GETARG_INT32(0);
 
 	PG_RETURN_JSONB_P(test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
 }
@@ -133,8 +135,8 @@ ts_test_status(PG_FUNCTION_ARGS)
 Datum
 ts_test_status_mock(PG_FUNCTION_ARGS)
 {
-	int			port = 80;
-	text	   *arg1 = PG_GETARG_TEXT_P(0);
+	int port = 80;
+	text *arg1 = PG_GETARG_TEXT_P(0);
 
 	test_string = text_to_cstring(arg1);
 
@@ -147,7 +149,7 @@ TS_FUNCTION_INFO_V1(ts_test_validate_server_version);
 Datum
 ts_test_validate_server_version(PG_FUNCTION_ARGS)
 {
-	text	   *response = PG_GETARG_TEXT_P(0);
+	text *response = PG_GETARG_TEXT_P(0);
 	VersionResult result;
 
 	if (ts_validate_server_version(text_to_cstring(response), &result))
@@ -161,8 +163,8 @@ ts_test_validate_server_version(PG_FUNCTION_ARGS)
 Datum
 ts_test_telemetry_main_conn(PG_FUNCTION_ARGS)
 {
-	text	   *host = PG_GETARG_TEXT_P(0);
-	text	   *path = PG_GETARG_TEXT_P(1);
+	text *host = PG_GETARG_TEXT_P(0);
+	text *path = PG_GETARG_TEXT_P(1);
 	const char *scheme;
 
 #ifdef TS_USE_OPENSSL
@@ -181,12 +183,12 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 	ConnectionType conntype;
 	HttpRequest *req;
 	HttpResponseState *rsp;
-	HttpError	err;
-	Datum		json_body;
+	HttpError err;
+	Datum json_body;
 	const char *host = PG_ARGISNULL(0) ? TELEMETRY_HOST : text_to_cstring(PG_GETARG_TEXT_P(0));
 	const char *servname = PG_ARGISNULL(1) ? "https" : text_to_cstring(PG_GETARG_TEXT_P(1));
-	int			port = PG_ARGISNULL(2) ? 0 : PG_GETARG_INT32(2);
-	int			ret;
+	int port = PG_ARGISNULL(2) ? 0 : PG_GETARG_INT32(2);
+	int ret;
 
 	if (PG_NARGS() > 3)
 		elog(ERROR, "invalid number of arguments");
@@ -235,11 +237,13 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 	if (!ts_http_response_state_valid_status(rsp))
 	{
 		ts_http_response_state_destroy(rsp);
-		elog(ERROR, "telemetry got unexpected HTTP response status: %d",
+		elog(ERROR,
+			 "telemetry got unexpected HTTP response status: %d",
 			 ts_http_response_state_status_code(rsp));
 	}
 
-	json_body = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
+	json_body =
+		DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
 
 	ts_http_response_state_destroy(rsp);
 

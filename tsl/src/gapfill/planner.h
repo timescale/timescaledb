@@ -9,12 +9,12 @@
 #include <postgres.h>
 #include <optimizer/planner.h>
 
-void		plan_add_gapfill(PlannerInfo *, RelOptInfo *);
+void plan_add_gapfill(PlannerInfo *, RelOptInfo *);
 
 typedef struct GapFillPath
 {
-	CustomPath	cpath;
-	FuncExpr   *func;			/* time_bucket_gapfill function call */
+	CustomPath cpath;
+	FuncExpr *func; /* time_bucket_gapfill function call */
 } GapFillPath;
 
-#endif							/* TIMESCALEDB_GAPFILL_PLANNER_H */
+#endif /* TIMESCALEDB_GAPFILL_PLANNER_H */

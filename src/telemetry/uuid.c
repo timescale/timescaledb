@@ -27,7 +27,7 @@ ts_uuid_create(void)
 	 * a byte array
 	 */
 	unsigned char *gen_uuid = palloc0(UUID_LEN);
-	bool		rand_success = false;
+	bool rand_success = false;
 
 #if !PG96
 	rand_success = pg_backend_random((char *) gen_uuid, UUID_LEN);
@@ -49,8 +49,8 @@ ts_uuid_create(void)
 		memcpy(&gen_uuid[8], &ts, sizeof(TimestampTz));
 	}
 
-	gen_uuid[6] = (gen_uuid[6] & 0x0f) | 0x40;	/* "version" field */
-	gen_uuid[8] = (gen_uuid[8] & 0x3f) | 0x80;	/* "variant" field */
+	gen_uuid[6] = (gen_uuid[6] & 0x0f) | 0x40; /* "version" field */
+	gen_uuid[8] = (gen_uuid[8] & 0x3f) | 0x80; /* "variant" field */
 
 	return (pg_uuid_t *) gen_uuid;
 }

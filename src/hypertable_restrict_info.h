@@ -8,7 +8,6 @@
 
 #include "hypertable.h"
 
-
 /* HypertableRestrictInfo represents restrictions on a hypertable. It uses
  * range exclusion logic to figure out which chunks can match the description */
 typedef struct HypertableRestrictInfo HypertableRestrictInfo;
@@ -16,14 +15,18 @@ typedef struct HypertableRestrictInfo HypertableRestrictInfo;
 extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht);
 
 /* Add restrictions based on a List of RestrictInfo */
-extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root, List *base_restrict_infos);
+extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
+											List *base_restrict_infos);
 
 /* Some restrictions were added */
 extern bool ts_hypertable_restrict_info_has_restrictions(HypertableRestrictInfo *hri);
 
 /* Get a list of chunk oids for chunks whose constraints match the restriction clauses */
-extern List *ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode);
+extern List *ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *hri, Hypertable *ht,
+														LOCKMODE lockmode);
 
-extern List *ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode, bool reverse);
+extern List *ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri,
+																Hypertable *ht, LOCKMODE lockmode,
+																bool reverse);
 
-#endif							/* TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H */
+#endif /* TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H */

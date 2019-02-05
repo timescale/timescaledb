@@ -12,7 +12,7 @@
 #include "conn_internal.h"
 #include "conn_plain.h"
 
-#define DEFAULT_TIMEOUT_MSEC	3000
+#define DEFAULT_TIMEOUT_MSEC 3000
 #define MAX_PORT 65535
 
 static void
@@ -29,13 +29,12 @@ set_error(int err)
 int
 ts_plain_connect(Connection *conn, const char *host, const char *servname, int port)
 {
-	char		strport[6];
-	struct addrinfo *ainfo,
-				hints = {
+	char strport[6];
+	struct addrinfo *ainfo, hints = {
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_STREAM,
 	};
-	int			ret;
+	int ret;
 
 	if (NULL == servname && (port <= 0 || port > MAX_PORT))
 	{
@@ -79,8 +78,12 @@ ts_plain_connect(Connection *conn, const char *host, const char *servname, int p
 	 * non-blocking socket by default. We avoid this by calling WSASocket
 	 * directly.
 	 */
-	conn->sock = WSASocket(ainfo->ai_family, ainfo->ai_socktype,
-						   ainfo->ai_protocol, NULL, 0, WSA_FLAG_OVERLAPPED);
+	conn->sock = WSASocket(ainfo->ai_family,
+						   ainfo->ai_socktype,
+						   ainfo->ai_protocol,
+						   NULL,
+						   0,
+						   WSA_FLAG_OVERLAPPED);
 
 	if (conn->sock == INVALID_SOCKET)
 		ret = SOCKET_ERROR;
@@ -124,10 +127,10 @@ out:
 static ssize_t
 plain_write(Connection *conn, const char *buf, size_t writelen)
 {
-	ssize_t		ret;
+	ssize_t ret;
 #ifdef WIN32
-	DWORD		b;
-	WSABUF		wbuf = {
+	DWORD b;
+	WSABUF wbuf = {
 		.len = writelen,
 		.buf = (char *) buf,
 	};
@@ -151,11 +154,10 @@ plain_write(Connection *conn, const char *buf, size_t writelen)
 static ssize_t
 plain_read(Connection *conn, char *buf, size_t buflen)
 {
-	ssize_t		ret;
+	ssize_t ret;
 #ifdef WIN32
-	DWORD		b,
-				flags = 0;
-	WSABUF		wbuf = {
+	DWORD b, flags = 0;
+	WSABUF wbuf = {
 		.len = buflen,
 		.buf = buf,
 	};
@@ -191,14 +193,14 @@ ts_plain_set_timeout(Connection *conn, unsigned long millis)
 {
 #ifdef WIN32
 	/* Timeout is in milliseconds on Windows */
-	DWORD		timeout = millis;
-	int			optlen = sizeof(DWORD);
+	DWORD timeout = millis;
+	int optlen = sizeof(DWORD);
 #else
 	struct timeval timeout = {
 		.tv_sec = millis / 1000L,
 		.tv_usec = (millis - ((millis / 1000L) * 1000L)) * 1000L,
 	};
-	int			optlen = sizeof(struct timeval);
+	int optlen = sizeof(struct timeval);
 #endif
 
 	/*
@@ -259,8 +261,8 @@ _conn_plain_init(void)
 	 * anyway.
 	 */
 #if defined(WIN32) && defined(WSA_STARTUP_ENABLED)
-	WSADATA		wsadata;
-	int			res;
+	WSADATA wsadata;
+	int res;
 
 	res = WSAStartup(MAKEWORD(2, 2), &wsadata);
 
@@ -277,7 +279,7 @@ void
 _conn_plain_fini(void)
 {
 #if defined(WIN32) && defined(WSA_STARTUP_ENABLED)
-	int			ret = WSACleanup();
+	int ret = WSACleanup();
 
 	if (ret != 0)
 		elog(WARNING, "WSACleanup failed");

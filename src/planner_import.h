@@ -22,17 +22,16 @@
 #include <utils/relcache.h>
 #include <utils/selfuncs.h>
 
-extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
-							 Index newvarno,
-							 List **translated_vars);
+extern void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index newvarno,
+										 List **translated_vars);
 extern size_t ts_estimate_hashagg_tablesize(struct Path *path,
-							  const struct AggClauseCosts *agg_costs,
-							  double dNumGroups);
+											const struct AggClauseCosts *agg_costs,
+											double dNumGroups);
 
 extern struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *root,
-								PathTarget *grouping_target);
+														  PathTarget *grouping_target);
 
 extern bool ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-					  Datum *min, Datum *max);
+								  Datum *min, Datum *max);
 
-#endif							/* TIMESCALEDB_PLANNER_IMPORT_H */
+#endif /* TIMESCALEDB_PLANNER_IMPORT_H */

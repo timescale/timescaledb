@@ -13,12 +13,13 @@
 
 typedef struct ChunkDispatchPath
 {
-	CustomPath	cpath;
+	CustomPath cpath;
 	ModifyTablePath *mtpath;
-	Index		hypertable_rti;
-	Oid			hypertable_relid;
+	Index hypertable_rti;
+	Oid hypertable_relid;
 } ChunkDispatchPath;
 
-extern Path *ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti, Oid hypertable_relid);
+extern Path *ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath,
+										   Index hypertable_rti, Oid hypertable_relid);
 
-#endif							/* TIMESCALEDB_CHUNK_DISPATCH_PLAN_H */
+#endif /* TIMESCALEDB_CHUNK_DISPATCH_PLAN_H */

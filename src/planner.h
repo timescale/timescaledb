@@ -8,7 +8,7 @@
 
 typedef struct TimescaleDBPrivate
 {
-	bool		appends_ordered;
+	bool appends_ordered;
 } TimescaleDBPrivate;
 
-#endif							/* TIMESCALEDB_PLANNER_H */
+#endif /* TIMESCALEDB_PLANNER_H */

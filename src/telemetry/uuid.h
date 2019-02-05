@@ -11,4 +11,4 @@
 
 extern pg_uuid_t *ts_uuid_create(void);
 
-#endif							/* TIMESCALEDB_TELEMETRY_UUID_H */
+#endif /* TIMESCALEDB_TELEMETRY_UUID_H */

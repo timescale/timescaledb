@@ -24,7 +24,6 @@ bgw_job_stat_next_start_was_set(FormData_bgw_job_stat *fd)
 	return fd->next_start != DT_NOBEGIN;
 }
 
-
 static ScanTupleResult
 bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 {
@@ -40,11 +39,11 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 }
 
 static bool
-bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
-					  tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
+bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func tuple_found,
+					  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
-	Catalog    *catalog = ts_catalog_get();
-	ScannerCtx	scanctx = {
+	Catalog *catalog = ts_catalog_get();
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, BGW_JOB_STAT),
 		.index = catalog_get_index(catalog, BGW_JOB_STAT, indexid),
 		.nkeys = nkeys,
@@ -60,15 +59,23 @@ bgw_job_stat_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
 }
 
 static inline bool
-bgw_job_stat_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found, tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
+bgw_job_stat_scan_job_id(int32 bgw_job_id, tuple_found_func tuple_found,
+						 tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
 	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0],
 				Anum_bgw_job_stat_pkey_idx_job_id,
-				BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(bgw_job_id));
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(bgw_job_id));
 	return bgw_job_stat_scan_one(BGW_JOB_STAT_PKEY_IDX,
-								 scankey, 1, tuple_found, tuple_filter, data, lockmode);
+								 scankey,
+								 1,
+								 tuple_found,
+								 tuple_filter,
+								 data,
+								 lockmode);
 }
 
 TSDLLEXPORT BgwJobStat *
@@ -76,7 +83,11 @@ ts_bgw_job_stat_find(int32 bgw_job_id)
 {
 	BgwJobStat *job_stat = NULL;
 
-	bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_found, NULL, &job_stat, AccessShareLock);
+	bgw_job_stat_scan_job_id(bgw_job_id,
+							 bgw_job_stat_tuple_found,
+							 NULL,
+							 &job_stat,
+							 AccessShareLock);
 
 	return job_stat;
 }
@@ -96,16 +107,16 @@ ts_bgw_job_stat_delete(int32 bgw_job_id)
 }
 
 /* Mark the start of a job. This should be done in a separate transaction by the scheduler
-*  before the bgw for a job is launched. This ensures that the job is counted as started
-* before /any/ job specific code is executed. A job that has been started but never ended
-* is assumed to have crashed. We use this conservative design since no process in the database
-* instance can write once a crash happened in any job. Therefore our only choice is to deduce
-* a crash from the lack of a write (the marked end write in this case).
-*/
+ *  before the bgw for a job is launched. This ensures that the job is counted as started
+ * before /any/ job specific code is executed. A job that has been started but never ended
+ * is assumed to have crashed. We use this conservative design since no process in the database
+ * instance can write once a crash happened in any job. Therefore our only choice is to deduce
+ * a crash from the lack of a write (the marked end write in this case).
+ */
 static ScanTupleResult
 bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 {
-	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
 
 	fd->last_start = ts_timer_get_current_timestamp();
@@ -138,52 +149,54 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	return SCAN_DONE;
 }
 
-
 typedef struct
 {
-	JobResult	result;
-	BgwJob	   *job;
+	JobResult result;
+	BgwJob *job;
 } JobResultCtx;
 
-
-static
-TimestampTz
+static TimestampTz
 calculate_next_start_on_success(TimestampTz last_finish, BgwJob *job)
 {
 	/* TODO: add randomness here? Do we need a range or just a percent? */
-	TimestampTz ts = DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
-															 TimestampTzGetDatum(last_finish),
-															 IntervalPGetDatum(&job->fd.schedule_interval)));
+	TimestampTz ts =
+		DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
+												TimestampTzGetDatum(last_finish),
+												IntervalPGetDatum(&job->fd.schedule_interval)));
 
 	return ts;
 }
 
 /* For failures we have standard exponential backoff based on consecutive failures
  * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF */
-static
-TimestampTz
+static TimestampTz
 calculate_next_start_on_failure(TimestampTz last_finish, int consecutive_failures, BgwJob *job)
 {
 	/* TODO: add randomness here? Do we need a range or just a percent? */
 	/* consecutive failures includes this failure */
-	float8		multiplier = 1 << (consecutive_failures - 1);
+	float8 multiplier = 1 << (consecutive_failures - 1);
 
 	/* ival = retry_period * 2^(consecutive_failures - 1)  */
-	Datum		ival = DirectFunctionCall2(interval_mul, IntervalPGetDatum(&job->fd.retry_period), Float8GetDatum(multiplier));
+	Datum ival = DirectFunctionCall2(interval_mul,
+									 IntervalPGetDatum(&job->fd.retry_period),
+									 Float8GetDatum(multiplier));
 
 	/* ival_max is the ceiling = MAX_INTERVALS_BACKOFF * schedule_interval */
-	Datum		ival_max = DirectFunctionCall2(interval_mul, IntervalPGetDatum(&job->fd.schedule_interval), Float8GetDatum(MAX_INTERVALS_BACKOFF));
+	Datum ival_max = DirectFunctionCall2(interval_mul,
+										 IntervalPGetDatum(&job->fd.schedule_interval),
+										 Float8GetDatum(MAX_INTERVALS_BACKOFF));
 
 	if (DatumGetInt32(DirectFunctionCall2(interval_cmp, ival, ival_max)) > 0)
 		ival = ival_max;
 
-	return DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval, TimestampTzGetDatum(last_finish), ival));
+	return DatumGetTimestampTz(
+		DirectFunctionCall2(timestamptz_pl_interval, TimestampTzGetDatum(last_finish), ival));
 }
 
 /* For crashes, the logic is the similar as for failures except we also have
-*  a minimum wait after a crash that we wait, so that if an operator needs to disable the job,
-*  there will be enough time before another crash.
-*/
+ *  a minimum wait after a crash that we wait, so that if an operator needs to disable the job,
+ *  there will be enough time before another crash.
+ */
 static TimestampTz
 calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
 {
@@ -200,14 +213,19 @@ static ScanTupleResult
 bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 {
 	JobResultCtx *result_ctx = data;
-	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
-	Interval   *duration;
+	Interval *duration;
 
 	fd->last_finish = ts_timer_get_current_timestamp();
 
-	duration = DatumGetIntervalP(DirectFunctionCall2(timestamp_mi, TimestampTzGetDatum(fd->last_finish), TimestampTzGetDatum(fd->last_start)));
-	fd->total_duration = *DatumGetIntervalP(DirectFunctionCall2(interval_pl, IntervalPGetDatum(&fd->total_duration), IntervalPGetDatum(duration)));
+	duration = DatumGetIntervalP(DirectFunctionCall2(timestamp_mi,
+													 TimestampTzGetDatum(fd->last_finish),
+													 TimestampTzGetDatum(fd->last_start)));
+	fd->total_duration =
+		*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+											   IntervalPGetDatum(&fd->total_duration),
+											   IntervalPGetDatum(duration)));
 
 	/* undo marking created by start marks */
 	fd->last_run_success = result_ctx->result == JOB_SUCCESS ? true : false;
@@ -232,7 +250,9 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		 * have happened before failure)
 		 */
 		if (!bgw_job_stat_next_start_was_set(fd))
-			fd->next_start = calculate_next_start_on_failure(fd->last_finish, fd->consecutive_failures, result_ctx->job);
+			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
+															 fd->consecutive_failures,
+															 result_ctx->job);
 	}
 
 	ts_catalog_update(ti->scanrel, tuple);
@@ -245,7 +265,7 @@ static ScanTupleResult
 bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 {
 	TimestampTz *next_start = data;
-	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
 
 	fd->next_start = *next_start;
@@ -257,21 +277,24 @@ bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 }
 
 static bool
-bgw_job_stat_insert_mark_start_relation(Relation rel,
-										int32 bgw_job_id)
+bgw_job_stat_insert_mark_start_relation(Relation rel, int32 bgw_job_id)
 {
-	TupleDesc	desc = RelationGetDescr(rel);
-	Datum		values[Natts_bgw_job_stat];
-	bool		nulls[Natts_bgw_job_stat] = {false};
+	TupleDesc desc = RelationGetDescr(rel);
+	Datum values[Natts_bgw_job_stat];
+	bool nulls[Natts_bgw_job_stat] = { false };
 	CatalogSecurityContext sec_ctx;
-	Interval	zero_ival = {.time = 0,};
+	Interval zero_ival = {
+		.time = 0,
+	};
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_job_id)] = Int32GetDatum(bgw_job_id);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] = TimestampGetDatum(ts_timer_get_current_timestamp());
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
+		TimestampGetDatum(ts_timer_get_current_timestamp());
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_finish)] = TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_runs)] = Int64GetDatum(1);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] = IntervalPGetDatum(&zero_ival);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_duration)] =
+		IntervalPGetDatum(&zero_ival);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
@@ -291,9 +314,9 @@ bgw_job_stat_insert_mark_start_relation(Relation rel,
 static bool
 bgw_job_stat_insert_mark_start(int32 bgw_job_id)
 {
-	Catalog    *catalog = ts_catalog_get();
-	Relation	rel;
-	bool		result;
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
+	bool result;
 
 	rel = heap_open(catalog_get_table_id(catalog, BGW_JOB_STAT), RowExclusiveLock);
 	result = bgw_job_stat_insert_mark_start_relation(rel, bgw_job_id);
@@ -302,27 +325,31 @@ bgw_job_stat_insert_mark_start(int32 bgw_job_id)
 	return result;
 }
 
-
 void
 ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
-	if (!bgw_job_stat_scan_job_id(bgw_job_id, bgw_job_stat_tuple_mark_start, NULL, NULL, RowExclusiveLock))
+	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+								  bgw_job_stat_tuple_mark_start,
+								  NULL,
+								  NULL,
+								  RowExclusiveLock))
 		bgw_job_stat_insert_mark_start(bgw_job_id);
-
 }
 
 void
 ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 {
-	JobResultCtx res =
-	{
+	JobResultCtx res = {
 		.job = job,
 		.result = result,
 	};
 
-	if (!bgw_job_stat_scan_job_id(job->fd.id, bgw_job_stat_tuple_mark_end, NULL, &res, RowExclusiveLock))
+	if (!bgw_job_stat_scan_job_id(job->fd.id,
+								  bgw_job_stat_tuple_mark_end,
+								  NULL,
+								  &res,
+								  RowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
-
 }
 
 bool
@@ -338,9 +365,12 @@ ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 	if (next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
-	if (!bgw_job_stat_scan_job_id(job->fd.id, bgw_job_stat_tuple_set_next_start, NULL, &next_start, RowExclusiveLock))
+	if (!bgw_job_stat_scan_job_id(job->fd.id,
+								  bgw_job_stat_tuple_set_next_start,
+								  NULL,
+								  &next_start,
+								  RowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
-
 }
 
 bool

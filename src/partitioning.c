@@ -31,26 +31,23 @@
 #include "catalog.h"
 #include "utils.h"
 
-#define IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype)				\
-	((proform)->prorettype == INT4OID &&								\
-	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&				\
-	 (proform)->pronargs == 1 &&										\
-	 ((proform)->proargtypes.values[0] == argtype ||					\
+#define IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype)                                        \
+	((proform)->prorettype == INT4OID && ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&      \
+	 (proform)->pronargs == 1 &&                                                                   \
+	 ((proform)->proargtypes.values[0] == argtype ||                                               \
 	  (proform)->proargtypes.values[0] == ANYELEMENTOID))
 
-#define IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype)			\
-	(IS_VALID_OPEN_DIM_TYPE((proform)->prorettype) &&				\
-	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&			\
-	 (proform)->pronargs == 1 &&									\
-	 ((proform)->proargtypes.values[0] == argtype ||				\
+#define IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype)                                          \
+	(IS_VALID_OPEN_DIM_TYPE((proform)->prorettype) &&                                              \
+	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) && (proform)->pronargs == 1 &&              \
+	 ((proform)->proargtypes.values[0] == argtype ||                                               \
 	  (proform)->proargtypes.values[0] == ANYELEMENTOID))
 
-#define IS_VALID_PARTITIONING_FUNC(proform, dimtype, argtype) \
-	((dimtype == DIMENSION_TYPE_OPEN) ?						  \
-	 IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype) :	  \
-	 IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype))
+#define IS_VALID_PARTITIONING_FUNC(proform, dimtype, argtype)                                      \
+	((dimtype == DIMENSION_TYPE_OPEN) ? IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype) :        \
+										IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype))
 
-typedef bool (*proc_filter) (Form_pg_proc form, void *arg);
+typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
 
 /*
  * Find a partitioning function with a given schema and name.
@@ -59,16 +56,13 @@ typedef bool (*proc_filter) (Form_pg_proc form, void *arg);
  * that the partitioning function should take.
  */
 static regproc
-lookup_proc_filtered(const char *schema,
-					 const char *funcname,
-					 Oid *rettype,
-					 proc_filter filter,
+lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, proc_filter filter,
 					 void *filter_arg)
 {
-	Oid			namespace_oid = LookupExplicitNamespace(schema, false);
-	regproc		func = InvalidOid;
-	CatCList   *catlist;
-	int			i;
+	Oid namespace_oid = LookupExplicitNamespace(schema, false);
+	regproc func = InvalidOid;
+	CatCList *catlist;
+	int i;
 
 	/*
 	 * We could use SearchSysCache3 to get by (name, args, namespace), but
@@ -79,7 +73,7 @@ lookup_proc_filtered(const char *schema,
 
 	for (i = 0; i < catlist->n_members; i++)
 	{
-		HeapTuple	proctup = &catlist->members[i]->tuple;
+		HeapTuple proctup = &catlist->members[i]->tuple;
 		Form_pg_proc procform = (Form_pg_proc) GETSTRUCT(proctup);
 
 		if (procform->pronamespace == namespace_oid &&
@@ -101,7 +95,7 @@ lookup_proc_filtered(const char *schema,
 static bool
 closed_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
 {
-	Oid		   *argtype = arg;
+	Oid *argtype = arg;
 
 	return IS_VALID_CLOSED_PARTITIONING_FUNC(form, *argtype);
 }
@@ -109,7 +103,7 @@ closed_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
 static bool
 open_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
 {
-	Oid		   *argtype = arg;
+	Oid *argtype = arg;
 
 	return IS_VALID_OPEN_PARTITIONING_FUNC(form, *argtype);
 }
@@ -117,8 +111,8 @@ open_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
 bool
 ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtype)
 {
-	HeapTuple	tuple;
-	bool		isvalid;
+	HeapTuple tuple;
+	bool isvalid;
 
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcoid));
 
@@ -135,7 +129,7 @@ ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtyp
 Oid
 ts_partitioning_func_get_closed_default(void)
 {
-	Oid			argtype = ANYELEMENTOID;
+	Oid argtype = ANYELEMENTOID;
 
 	return lookup_proc_filtered(DEFAULT_PARTITIONING_FUNC_SCHEMA,
 								DEFAULT_PARTITIONING_FUNC_NAME,
@@ -150,7 +144,7 @@ ts_partitioning_func_is_closed_default(const char *schema, const char *funcname)
 	Assert(schema != NULL && funcname != NULL);
 
 	return strcmp(DEFAULT_PARTITIONING_FUNC_SCHEMA, schema) == 0 &&
-		strcmp(DEFAULT_PARTITIONING_FUNC_NAME, funcname) == 0;
+		   strcmp(DEFAULT_PARTITIONING_FUNC_NAME, funcname) == 0;
 }
 
 /*
@@ -159,10 +153,9 @@ ts_partitioning_func_is_closed_default(const char *schema, const char *funcname)
 static void
 partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType dimtype)
 {
-	Oid			funcoid;
-	proc_filter filter = dimtype == DIMENSION_TYPE_CLOSED ?
-	closed_dim_partitioning_func_filter :
-	open_dim_partitioning_func_filter;
+	Oid funcoid;
+	proc_filter filter = dimtype == DIMENSION_TYPE_CLOSED ? closed_dim_partitioning_func_filter :
+															open_dim_partitioning_func_filter;
 
 	if (dimtype != DIMENSION_TYPE_CLOSED && dimtype != DIMENSION_TYPE_OPEN)
 		elog(ERROR, "invalid dimension type %u", dimtype);
@@ -180,7 +173,8 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 			ereport(ERROR,
 					(errmsg("invalid partitioning function"),
 					 errhint("A partitioning function for a open (time) dimension "
-							 "must be IMMUTABLE, take one argument, and return a supported time type")));
+							 "must be IMMUTABLE, take one argument, and return a supported time "
+							 "type")));
 	}
 
 	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
@@ -195,8 +189,8 @@ ts_partitioning_func_qualified_name(PartitioningFunc *pf)
 static Oid
 find_text_coercion_func(Oid type)
 {
-	Oid			funcid;
-	bool		is_varlena;
+	Oid funcid;
+	bool is_varlena;
 	CoercionPathType cpt;
 
 	/*
@@ -214,18 +208,13 @@ find_text_coercion_func(Oid type)
 #define TYPECACHE_HASH_FLAGS (TYPECACHE_HASH_PROC | TYPECACHE_HASH_PROC_FINFO)
 
 PartitioningInfo *
-ts_partitioning_info_create(const char *schema,
-							const char *partfunc,
-							const char *partcol,
-							DimensionType dimtype,
-							Oid relid)
+ts_partitioning_info_create(const char *schema, const char *partfunc, const char *partcol,
+							DimensionType dimtype, Oid relid)
 {
 	PartitioningInfo *pinfo;
-	Oid			columntype,
-				varcollid,
-				funccollid = InvalidOid;
-	Var		   *var;
-	FuncExpr   *expr;
+	Oid columntype, varcollid, funccollid = InvalidOid;
+	Var *var;
+	FuncExpr *expr;
 
 	if (schema == NULL || partfunc == NULL || partcol == NULL)
 		ereport(ERROR,
@@ -242,7 +231,6 @@ ts_partitioning_info_create(const char *schema,
 	if (pinfo->column_attnum == InvalidAttrNumber)
 		return NULL;
 
-
 	StrNCpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
 
 	/* Lookup the type cache entry to access the hash function for the type */
@@ -252,7 +240,8 @@ ts_partitioning_info_create(const char *schema,
 	{
 		TypeCacheEntry *tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
-		if (tce->hash_proc == InvalidOid && ts_partitioning_func_is_closed_default(schema, partfunc))
+		if (tce->hash_proc == InvalidOid &&
+			ts_partitioning_func_is_closed_default(schema, partfunc))
 			elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
 	}
 
@@ -265,12 +254,7 @@ ts_partitioning_info_create(const char *schema,
 	 */
 	varcollid = get_typcollation(columntype);
 
-	var = makeVar(1,
-				  pinfo->column_attnum,
-				  columntype,
-				  -1,
-				  varcollid,
-				  0);
+	var = makeVar(1, pinfo->column_attnum, columntype, -1, varcollid, 0);
 
 	expr = makeFuncExpr(pinfo->partfunc.func_fmgr.fn_oid,
 						pinfo->partfunc.rettype,
@@ -294,7 +278,7 @@ Datum
 ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
 	FunctionCallInfoData fcinfo;
-	Datum		result;
+	Datum result;
 
 	InitFunctionCallInfoData(fcinfo, &pinfo->partfunc.func_fmgr, 1, InvalidOid, NULL, NULL);
 
@@ -304,17 +288,20 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 	result = FunctionCallInvoke(&fcinfo);
 
 	if (fcinfo.isnull)
-		elog(ERROR, "partitioning function \"%s.%s\" returned NULL",
-			 pinfo->partfunc.schema, pinfo->partfunc.name);
+		elog(ERROR,
+			 "partitioning function \"%s.%s\" returned NULL",
+			 pinfo->partfunc.schema,
+			 pinfo->partfunc.name);
 
 	return result;
 }
 
 Datum
-ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc, bool *isnull)
+ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc,
+								 bool *isnull)
 {
-	Datum		value;
-	bool		null;
+	Datum value;
+	bool null;
 
 	value = heap_getattr(tuple, pinfo->column_attnum, desc, &null);
 
@@ -335,9 +322,9 @@ ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, Tuple
 static Oid
 resolve_function_argtype(FunctionCallInfo fcinfo)
 {
-	FuncExpr   *fe;
-	Node	   *node;
-	Oid			argtype;
+	FuncExpr *fe;
+	Node *node;
+	Oid argtype;
 
 	/* Get the function expression from the call info */
 	fe = (FuncExpr *) fcinfo->flinfo->fn_expr;
@@ -387,8 +374,8 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
  */
 typedef struct PartFuncCache
 {
-	Oid			argtype;
-	Oid			coerce_funcid;
+	Oid argtype;
+	Oid coerce_funcid;
 	TypeCacheEntry *tce;
 } PartFuncCache;
 
@@ -417,19 +404,19 @@ TS_FUNCTION_INFO_V1(ts_get_partition_for_key);
 Datum
 ts_get_partition_for_key(PG_FUNCTION_ARGS)
 {
-	Datum		arg = PG_GETARG_DATUM(0);
+	Datum arg = PG_GETARG_DATUM(0);
 	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;
 	struct varlena *data;
-	uint32		hash_u;
-	int32		res;
+	uint32 hash_u;
+	int32 res;
 
 	if (PG_NARGS() != 1)
 		elog(ERROR, "unexpected number of arguments to partitioning function");
 
 	if (NULL == pfc)
 	{
-		Oid			funcid = InvalidOid;
-		Oid			argtype = resolve_function_argtype(fcinfo);
+		Oid funcid = InvalidOid;
+		Oid argtype = resolve_function_argtype(fcinfo);
 
 		if (argtype != TEXTOID)
 		{
@@ -451,10 +438,9 @@ ts_get_partition_for_key(PG_FUNCTION_ARGS)
 	}
 
 	data = DatumGetTextPP(arg);
-	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data),
-									 VARSIZE_ANY_EXHDR(data)));
+	hash_u = DatumGetUInt32(hash_any((unsigned char *) VARDATA_ANY(data), VARSIZE_ANY_EXHDR(data)));
 
-	res = (int32) (hash_u & 0x7fffffff);	/* Only positive numbers */
+	res = (int32)(hash_u & 0x7fffffff); /* Only positive numbers */
 
 	PG_FREE_IF_COPY(data, 0);
 	PG_RETURN_INT32(res);
@@ -476,17 +462,17 @@ TS_FUNCTION_INFO_V1(ts_get_partition_hash);
 Datum
 ts_get_partition_hash(PG_FUNCTION_ARGS)
 {
-	Datum		arg = PG_GETARG_DATUM(0);
+	Datum arg = PG_GETARG_DATUM(0);
 	PartFuncCache *pfc = fcinfo->flinfo->fn_extra;
-	Datum		hash;
-	int32		res;
+	Datum hash;
+	int32 res;
 
 	if (PG_NARGS() != 1)
 		elog(ERROR, "unexpected number of arguments to partitioning function");
 
 	if (NULL == pfc)
 	{
-		Oid			argtype = resolve_function_argtype(fcinfo);
+		Oid argtype = resolve_function_argtype(fcinfo);
 		TypeCacheEntry *tce = lookup_type_cache(argtype, TYPECACHE_HASH_FLAGS);
 
 		pfc = part_func_cache_create(argtype, tce, InvalidOid, fcinfo->flinfo->fn_mcxt);
@@ -499,7 +485,7 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	hash = FunctionCall1(&pfc->tce->hash_proc_finfo, arg);
 
 	/* Only positive numbers */
-	res = (int32) (DatumGetUInt32(hash) & 0x7fffffff);
+	res = (int32)(DatumGetUInt32(hash) & 0x7fffffff);
 
 	PG_RETURN_INT32(res);
 }

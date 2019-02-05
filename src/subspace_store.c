@@ -24,17 +24,17 @@
 typedef struct SubspaceStoreInternalNode
 {
 	DimensionVec *vector;
-	size_t		descendants;
-	bool		last_internal_node;
+	size_t descendants;
+	bool last_internal_node;
 } SubspaceStoreInternalNode;
 
 typedef struct SubspaceStore
 {
 	MemoryContext mcxt;
-	int16		num_dimensions;
-/* limit growth of store by  limiting number of slices in first dimension,	0 for no limit */
-	int16		max_items;
-	SubspaceStoreInternalNode *origin;	/* origin of the tree */
+	int16 num_dimensions;
+	/* limit growth of store by  limiting number of slices in first dimension,	0 for no limit */
+	int16 max_items;
+	SubspaceStoreInternalNode *origin; /* origin of the tree */
 } SubspaceStore;
 
 static inline SubspaceStoreInternalNode *
@@ -91,13 +91,13 @@ ts_subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items)
 }
 
 void
-ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc,
-					  void *object, void (*object_free) (void *))
+ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
+					  void (*object_free)(void *))
 {
 	SubspaceStoreInternalNode *node = store->origin;
 	DimensionSlice *last = NULL;
 	MemoryContext old = MemoryContextSwitchTo(store->mcxt);
-	int			i;
+	int i;
 
 	Assert(hc->num_slices == store->num_dimensions);
 
@@ -145,7 +145,7 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 			 * become significant we may wish to change this to something more
 			 * sophisticated like LRU.
 			 */
-			size_t		items_removed = subspace_store_internal_node_descendants(node, i);
+			size_t items_removed = subspace_store_internal_node_descendants(node, i);
 
 			/*
 			 * descendants at the root is inclusive of the descendants at the
@@ -189,16 +189,15 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc,
 	}
 
 	Assert(last != NULL && last->storage == NULL);
-	last->storage = object;		/* at the end we store the object */
+	last->storage = object; /* at the end we store the object */
 	last->storage_free = object_free;
 	MemoryContextSwitchTo(old);
 }
 
-
 void *
 ts_subspace_store_get(SubspaceStore *store, Point *target)
 {
-	int			i;
+	int i;
 	DimensionVec *vec = store->origin->vector;
 	DimensionSlice *match = NULL;
 

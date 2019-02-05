@@ -11,7 +11,7 @@
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
 
-#include "compat-msvc-enter.h"	/* To label externs in extension.h and
+#include "compat-msvc-enter.h" /* To label externs in extension.h and
 								 * miscadmin.h correctly */
 #include <commands/extension.h>
 #include <miscadmin.h>
@@ -30,8 +30,7 @@
 #include "extension_utils.c"
 #include "compat.h"
 
-
-static Oid	extension_proxy_oid = InvalidOid;
+static Oid extension_proxy_oid = InvalidOid;
 
 /*
  * ExtensionState tracks the state of extension metadata in the backend.
@@ -53,7 +52,7 @@ static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
 static bool
 extension_loader_present()
 {
-	void	  **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
+	void **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
 
 	return (*presentptr != NULL && *((bool *) *presentptr));
 }
@@ -61,7 +60,7 @@ extension_loader_present()
 void
 ts_extension_check_version(const char *so_version)
 {
-	char	   *sql_version;
+	char *sql_version;
 
 	if (!IsNormalProcessingMode() || !IsTransactionState() || !extension_exists())
 		return;
@@ -71,9 +70,12 @@ ts_extension_check_version(const char *so_version)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("extension \"%s\" version mismatch: shared library version %s; SQL version %s", EXTENSION_NAME, so_version, sql_version)));
+				 errmsg("extension \"%s\" version mismatch: shared library version %s; SQL version "
+						"%s",
+						EXTENSION_NAME,
+						so_version,
+						sql_version)));
 	}
-
 
 	if (!process_shared_preload_libraries_in_progress && !extension_loader_present())
 	{
@@ -88,16 +90,18 @@ ts_extension_check_server_version()
 	 * This is a load-time check for the correct server version since the
 	 * extension may be distributed as a binary
 	 */
-	char	   *server_version_num_guc = GetConfigOptionByName("server_version_num", NULL, false);
-	long		server_version_num = strtol(server_version_num_guc, NULL, 10);
+	char *server_version_num_guc = GetConfigOptionByName("server_version_num", NULL, false);
+	long server_version_num = strtol(server_version_num_guc, NULL, 10);
 
 	if (!is_supported_pg_version(server_version_num))
 	{
-		char	   *server_version_guc = GetConfigOptionByName("server_version", NULL, false);
+		char *server_version_guc = GetConfigOptionByName("server_version", NULL, false);
 
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("extension \"%s\" does not support postgres version %s", EXTENSION_NAME, server_version_guc)));
+				 errmsg("extension \"%s\" does not support postgres version %s",
+						EXTENSION_NAME,
+						server_version_guc)));
 	}
 }
 
@@ -116,7 +120,8 @@ extension_set_state(enum ExtensionState newstate)
 			break;
 		case EXTENSION_STATE_CREATED:
 			ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
-			extension_proxy_oid = get_relname_relid(EXTENSION_PROXY_TABLE, get_namespace_oid(CACHE_SCHEMA_NAME, false));
+			extension_proxy_oid = get_relname_relid(EXTENSION_PROXY_TABLE,
+													get_namespace_oid(CACHE_SCHEMA_NAME, false));
 			ts_catalog_reset();
 			break;
 		case EXTENSION_STATE_NOT_INSTALLED:
@@ -138,30 +143,31 @@ extension_update_state()
 Oid
 ts_extension_schema_oid(void)
 {
-	Datum		result;
-	Relation	rel;
+	Datum result;
+	Relation rel;
 	SysScanDesc scandesc;
-	HeapTuple	tuple;
+	HeapTuple tuple;
 	ScanKeyData entry[1];
-	bool		is_null = true;
-	Oid			schema = InvalidOid;
+	bool is_null = true;
+	Oid schema = InvalidOid;
 
 	rel = heap_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,
-				BTEqualStrategyNumber, F_NAMEEQ,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(EXTENSION_NAME)));
 
-	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true,
-								  NULL, 1, entry);
+	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true, NULL, 1, entry);
 
 	tuple = systable_getnext(scandesc);
 
 	/* We assume that there can be at most one matching tuple */
 	if (HeapTupleIsValid(tuple))
 	{
-		result = heap_getattr(tuple, Anum_pg_extension_extnamespace, RelationGetDescr(rel), &is_null);
+		result =
+			heap_getattr(tuple, Anum_pg_extension_extnamespace, RelationGetDescr(rel), &is_null);
 
 		if (!is_null)
 			schema = DatumGetObjectId(result);
