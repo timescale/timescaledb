@@ -125,6 +125,7 @@ static PlannedStmt *
 timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *stmt;
+	ListCell *lc;
 
 	if (ts_extension_is_loaded() && !ts_guc_disable_optimizations && parse->resultRelation == 0)
 	{
@@ -154,8 +155,13 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	 * standard_planner. Therefore, we fixup the final target list for
 	 * HypertableInsert here.
 	 */
-	stmt->planTree = ts_hypertable_insert_fixup_tlist(stmt->planTree);
+	ts_hypertable_insert_fixup_tlist(stmt->planTree);
+	foreach (lc, stmt->subplans)
+	{
+		Plan *subplan = (Plan *) lfirst(lc);
 
+		ts_hypertable_insert_fixup_tlist(subplan);
+	}
 	return stmt;
 }
 
