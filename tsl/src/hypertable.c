@@ -6,14 +6,15 @@
 
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_proc.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
+#include <utils/array.h>
 #include <miscadmin.h>
 #include <access/xact.h>
 #include <cache.h>
 #include <nodes/pg_list.h>
-#include <utils/array.h>
 #include <foreign/foreign.h>
 
 #include <hypertable_server.h>
@@ -27,6 +28,11 @@
 #include "hypertable_cache.h"
 #include "fdw/timescaledb_fdw.h"
 #include "server.h"
+#include "deparse.h"
+#include "remote/dist_commands.h"
+#include "compat.h"
+#include <utils.h>
+#include <extension.h>
 
 Datum
 hypertable_valid_ts_interval(PG_FUNCTION_ARGS)
@@ -54,6 +60,25 @@ server_append(List *servers, int32 hypertable_id, const char *servername)
 	return lappend(servers, hs);
 }
 
+static void
+hypertable_create_backend_tables(int32 hypertable_id, List *servers)
+{
+#if PG_VERSION_SUPPORTS_MULTINODE
+	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
+	ListCell *cell;
+
+	foreach (cell, deparse_get_tabledef_commands(ht->main_table_relid))
+		ts_dist_cmd_run_on_servers(lfirst(cell), servers);
+
+	ts_dist_cmd_run_on_servers(deparse_get_distributed_hypertable_create_command(ht), servers);
+#else
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("distributed hypertables not supported"),
+			 errdetail("The PostgreSQL version does not support distributed hypertables.")));
+#endif
+}
+
 /*
  * Assign servers to a hypertable.
  *
@@ -63,11 +88,13 @@ server_append(List *servers, int32 hypertable_id, const char *servername)
  * Returns a list of HypertableServer objects that correspond to the given
  * server names.
  */
-static List *
+List *
 hypertable_assign_servers(int32 hypertable_id, List *servers)
 {
 	ListCell *lc;
 	List *assigned_servers = NIL;
+
+	hypertable_create_backend_tables(hypertable_id, servers);
 
 	foreach (lc, servers)
 	{

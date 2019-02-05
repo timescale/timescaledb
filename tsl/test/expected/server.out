@@ -13,14 +13,14 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- EXISTS' on 'CREATE SERVER' and 'CREATE USER MAPPING' is not
 -- supported on PG 9.6
 CREATE SERVER server_1 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '5432', dbname 'server_1');
+OPTIONS (host 'localhost', port '15432', dbname 'server_1');
 -- Create a user mapping for the server
 CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_1 OPTIONS (user 'cluster_user_1');
 -- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_2', password => 'perm_user_pass');
- server_name |   host    | port  | database  |     username      |  server_username  | created 
--------------+-----------+-------+-----------+-------------------+-------------------+---------
- server_2    | localhost | 15432 | db_server | default_perm_user | default_perm_user | t
+SELECT * FROM add_server('server_2', password => 'perm_user_pass', database => 'server_2');
+ server_name |   host    | port  | database |     username      |  server_username  | created 
+-------------+-----------+-------+----------+-------------------+-------------------+---------
+ server_2    | localhost | 15432 | server_2 | default_perm_user | default_perm_user | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -52,7 +52,7 @@ SELECT * FROM add_server('server_3', host => '192.168.3.4', database => 'server_
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Server exists, but no user mapping
 CREATE SERVER server_4 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '5432', dbname 'server_4');
+OPTIONS (host 'localhost', port '15432', dbname 'server_4');
 -- User mapping should be added with NOTICE
 SELECT * FROM add_server('server_4', password => 'perm_user_pass', if_not_exists => true);
 NOTICE:  adding user mapping for "default_perm_user" to server "server_4"
@@ -62,12 +62,12 @@ NOTICE:  adding user mapping for "default_perm_user" to server "server_4"
 (1 row)
 
 SELECT * FROM show_servers();
- server_name |    host     | port  |  dbname   
--------------+-------------+-------+-----------
- server_1    | localhost   |  5432 | server_1
- server_2    | localhost   | 15432 | db_server
+ server_name |    host     | port  |  dbname  
+-------------+-------------+-------+----------
+ server_1    | localhost   | 15432 | server_1
+ server_2    | localhost   | 15432 | server_2
  server_3    | 192.168.3.4 | 15432 | server_2
- server_4    | localhost   |  5432 | server_4
+ server_4    | localhost   | 15432 | server_4
 (4 rows)
 
 -- Should show up in view
@@ -75,10 +75,10 @@ SELECT server_name, options FROM timescaledb_information.server
 ORDER BY server_name;
  server_name |                    options                    
 -------------+-----------------------------------------------
- server_1    | {host=localhost,port=5432,dbname=server_1}
- server_2    | {host=localhost,port=15432,dbname=db_server}
+ server_1    | {host=localhost,port=15432,dbname=server_1}
+ server_2    | {host=localhost,port=15432,dbname=server_2}
  server_3    | {host=192.168.3.4,port=15432,dbname=server_2}
- server_4    | {host=localhost,port=5432,dbname=server_4}
+ server_4    | {host=localhost,port=15432,dbname=server_4}
 (4 rows)
 
 -- List foreign servers and user mappings
@@ -87,10 +87,10 @@ FROM pg_foreign_server
 ORDER BY srvname;
  srvname  |                  srvoptions                   
 ----------+-----------------------------------------------
- server_1 | {host=localhost,port=5432,dbname=server_1}
- server_2 | {host=localhost,port=15432,dbname=db_server}
+ server_1 | {host=localhost,port=15432,dbname=server_1}
+ server_2 | {host=localhost,port=15432,dbname=server_2}
  server_3 | {host=192.168.3.4,port=15432,dbname=server_2}
- server_4 | {host=localhost,port=5432,dbname=server_4}
+ server_4 | {host=localhost,port=15432,dbname=server_4}
 (4 rows)
 
 -- Need super user permissions to list user mappings
@@ -129,11 +129,11 @@ NOTICE:  drop cascades to user mapping for super_user on server server_3
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT srvname, srvoptions
 FROM pg_foreign_server;
- srvname  |                  srvoptions                  
-----------+----------------------------------------------
- server_1 | {host=localhost,port=5432,dbname=server_1}
- server_2 | {host=localhost,port=15432,dbname=db_server}
- server_4 | {host=localhost,port=5432,dbname=server_4}
+ srvname  |                 srvoptions                  
+----------+---------------------------------------------
+ server_1 | {host=localhost,port=15432,dbname=server_1}
+ server_2 | {host=localhost,port=15432,dbname=server_2}
+ server_4 | {host=localhost,port=15432,dbname=server_4}
 (3 rows)
 
 RESET ROLE;
@@ -161,13 +161,35 @@ SELECT * FROM delete_server('server_3', if_exists => true);
 (1 row)
 
 SELECT * FROM show_servers();
- server_name |   host    | port  |  dbname   
--------------+-----------+-------+-----------
- server_1    | localhost |  5432 | server_1
- server_2    | localhost | 15432 | db_server
- server_4    | localhost |  5432 | server_4
+ server_name |   host    | port  |  dbname  
+-------------+-----------+-------+----------
+ server_1    | localhost | 15432 | server_1
+ server_2    | localhost | 15432 | server_2
+ server_4    | localhost | 15432 | server_4
 (3 rows)
 
+-- Set up servers to receive distributed tables (database may be left over from other tests)
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_2;
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_4;
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS server_4;
+SET client_min_messages TO INFO;
+CREATE DATABASE server_1;
+CREATE DATABASE server_2;
+CREATE DATABASE server_4;
+\c server_1;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+CREATE ROLE cluster_user_1 WITH LOGIN;
+\c server_2;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_4;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 -- Test that servers are added to a hypertable
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
@@ -187,6 +209,14 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
 (3 rows)
 
 DROP TABLE disttable;
+-- Need to distribute table drop
+\c server_1;
+DROP TABLE disttable;
+\c server_2;
+DROP TABLE disttable;
+\c server_4;
+DROP TABLE disttable;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 \set ON_ERROR_STOP 0
@@ -220,7 +250,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
 
 -- Deleting a server should remove the hypertable_server mappings for that server
 SELECT * FROM delete_server('server_2', cascade => true);
-NOTICE:  drop cascades to user mapping for default_perm_user on server server_2
+NOTICE:  drop cascades to 2 other objects
  delete_server 
 ---------------
  t
@@ -234,7 +264,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
 
 -- Should also clean up hypertable_server when using standard DDL commands
 DROP SERVER server_4 CASCADE;
-NOTICE:  drop cascades to user mapping for default_perm_user on server server_4
+NOTICE:  drop cascades to 2 other objects
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
@@ -265,3 +295,6 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  no servers can be assigned to "disttable"
 \set ON_ERROR_STOP 1
+DROP DATABASE server_1;
+DROP DATABASE server_2;
+DROP DATABASE server_4;

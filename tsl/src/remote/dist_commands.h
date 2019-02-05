@@ -19,6 +19,9 @@ extern PGresult *ts_dist_cmd_get_server_result(DistCmdResult *response, const ch
 
 extern void ts_dist_cmd_close_response(DistCmdResult *response);
 
+#define ts_dist_cmd_run_on_servers(command, servers)                                               \
+	ts_dist_cmd_close_response(ts_dist_cmd_invoke_on_servers(command, servers));
+
 extern PreparedDistCmd *ts_dist_cmd_prepare_command(const char *sql, size_t n_params,
 													List *server_names);
 extern PreparedDistCmd *ts_dist_cmd_prepare_command_on_all_servers(const char *sql,
