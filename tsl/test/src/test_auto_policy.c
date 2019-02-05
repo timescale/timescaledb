@@ -14,13 +14,13 @@
 #include "chunk.h"
 #include "reorder.h"
 
-#define NUM_REORDER_RET_VALS	2
+#define NUM_REORDER_RET_VALS 2
 
 TS_FUNCTION_INFO_V1(ts_test_auto_reorder);
 TS_FUNCTION_INFO_V1(ts_test_auto_drop_chunks);
 
-static Oid	chunk_oid;
-static Oid	index_oid;
+static Oid chunk_oid;
+static Oid index_oid;
 
 static void
 dummy_reorder_func(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id)
@@ -33,12 +33,12 @@ dummy_reorder_func(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id)
 Datum
 ts_test_auto_reorder(PG_FUNCTION_ARGS)
 {
-	TupleDesc	tupdesc;
-	HeapTuple	tuple;
-	int32		job_id = PG_GETARG_INT32(0);
-	Datum		values[NUM_REORDER_RET_VALS];
-	bool		nulls[NUM_REORDER_RET_VALS] = {false};
-	BgwJob		job = {.fd = {.id = job_id}};
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	int32 job_id = PG_GETARG_INT32(0);
+	Datum values[NUM_REORDER_RET_VALS];
+	bool nulls[NUM_REORDER_RET_VALS] = { false };
+	BgwJob job = { .fd = { .id = job_id } };
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 	{

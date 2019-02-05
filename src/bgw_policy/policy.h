@@ -12,6 +12,6 @@
 
 ScanTupleResult ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, void *const data);
 
-void		ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id);
+void ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id);
 
-#endif							/* TIMESCALEDB_BGW_POLICY_POLICY_H */
+#endif /* TIMESCALEDB_BGW_POLICY_POLICY_H */

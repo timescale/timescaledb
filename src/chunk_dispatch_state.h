@@ -17,9 +17,9 @@ typedef struct Cache Cache;
 typedef struct ChunkDispatchState
 {
 	CustomScanState cscan_state;
-	Plan	   *subplan;
-	Cache	   *hypertable_cache;
-	Oid			hypertable_relid;
+	Plan *subplan;
+	Cache *hypertable_cache;
+	Oid hypertable_relid;
 
 	/*
 	 * Keep pointers to the original parsed Query and the ModifyTableState
@@ -38,8 +38,6 @@ typedef struct ChunkDispatchState
 #define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
 
 extern ChunkDispatchState *ts_chunk_dispatch_state_create(Oid, Plan *);
-void
-			ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
+void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
 
-
-#endif							/* TIMESCALEDB_CHUNK_DISPATCH_STATE_H */
+#endif /* TIMESCALEDB_CHUNK_DISPATCH_STATE_H */

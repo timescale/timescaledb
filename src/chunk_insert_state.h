@@ -18,23 +18,23 @@
 
 typedef struct ChunkInsertState
 {
-	Relation	rel;
+	Relation rel;
 	ResultRelInfo *result_relation_info;
-	List	   *arbiter_indexes;
+	List *arbiter_indexes;
 	TupleConversionMap *tup_conv_map;
 	TupleTableSlot *slot;
 	MemoryContext mctx;
 
-	EState	   *estate;
+	EState *estate;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
 
-extern HeapTuple ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple, TupleTableSlot **existing_slot);
+extern HeapTuple ts_chunk_insert_state_convert_tuple(ChunkInsertState *state, HeapTuple tuple,
+													 TupleTableSlot **existing_slot);
 extern ChunkInsertState *ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_switch(ChunkInsertState *state);
 
-
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 
-#endif							/* TIMESCALEDB_CHUNK_INSERT_STATE_H */
+#endif /* TIMESCALEDB_CHUNK_INSERT_STATE_H */

@@ -191,8 +191,8 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 
 typedef struct InternalFunctionDef
 {
-	char	   *name;
-	int			args;
+	char *name;
+	int args;
 } InternalFunctionDef;
 
 const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
@@ -230,9 +230,9 @@ catalog_is_valid(Catalog *catalog)
 static Oid
 catalog_owner(void)
 {
-	HeapTuple	tuple;
-	Oid			owner_oid;
-	Oid			nsp_oid = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
+	HeapTuple tuple;
+	Oid owner_oid;
+	Oid nsp_oid = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
 
 	tuple = SearchSysCache1(NAMESPACEOID, ObjectIdGetDatum(nsp_oid));
 
@@ -288,23 +288,27 @@ ts_catalog_database_info_get()
  * The rest of the arguments are used to populate the first arg.
  */
 void
-ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const TableInfoDef *table_ary, const TableIndexDef *index_ary, const char **serial_id_ary)
+ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
+						   const TableInfoDef *table_ary, const TableIndexDef *index_ary,
+						   const char **serial_id_ary)
 {
-	int			i;
+	int i;
 
 	for (i = 0; i < max_tables; i++)
 	{
-		Oid			schema_oid;
-		Oid			id;
+		Oid schema_oid;
+		Oid id;
 		const char *sequence_name;
-		Size		number_indexes,
-					j;
+		Size number_indexes, j;
 
 		schema_oid = get_namespace_oid(table_ary[i].schema_name, false);
 		id = get_relname_relid(table_ary[i].table_name, schema_oid);
 
 		if (id == InvalidOid)
-			elog(ERROR, "OID lookup failed for table \"%s.%s\"", table_ary[i].schema_name, table_ary[i].table_name);
+			elog(ERROR,
+				 "OID lookup failed for table \"%s.%s\"",
+				 table_ary[i].schema_name,
+				 table_ary[i].table_name);
 
 		tables_info[i].id = id;
 
@@ -313,12 +317,10 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const 
 
 		for (j = 0; j < number_indexes; j++)
 		{
-			id = get_relname_relid(index_ary[i].names[j],
-								   schema_oid);
+			id = get_relname_relid(index_ary[i].names[j], schema_oid);
 
 			if (id == InvalidOid)
-				elog(ERROR, "OID lookup failed for table index \"%s\"",
-					 index_ary[i].names[j]);
+				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);
 
 			tables_info[i].index_ids[j] = id;
 		}
@@ -329,7 +331,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const 
 
 		if (NULL != sequence_name)
 		{
-			RangeVar   *sequence;
+			RangeVar *sequence;
 
 			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name));
 			tables_info[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
@@ -342,7 +344,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables, const 
 Catalog *
 ts_catalog_get(void)
 {
-	int			i;
+	int i;
 
 	if (!OidIsValid(MyDatabaseId))
 		elog(ERROR, "invalid database ID");
@@ -354,13 +356,17 @@ ts_catalog_get(void)
 		return &catalog;
 
 	memset(&catalog, 0, sizeof(Catalog));
-	ts_catalog_table_info_init(catalog.tables, _MAX_CATALOG_TABLES, catalog_table_names, catalog_table_index_definitions, catalog_table_serial_id_names);
+	ts_catalog_table_info_init(catalog.tables,
+							   _MAX_CATALOG_TABLES,
+							   catalog_table_names,
+							   catalog_table_index_definitions,
+							   catalog_table_serial_id_names);
 
 	catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
-		catalog.caches[i].inval_proxy_id = get_relname_relid(cache_proxy_table_names[i],
-															 catalog.cache_schema_id);
+		catalog.caches[i].inval_proxy_id =
+			get_relname_relid(cache_proxy_table_names[i], catalog.cache_schema_id);
 
 	catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
 
@@ -368,12 +374,19 @@ ts_catalog_get(void)
 	{
 		InternalFunctionDef def = internal_function_definitions[i];
 		FuncCandidateList funclist =
-		FuncnameGetCandidates(list_make2(makeString(INTERNAL_SCHEMA_NAME),
-										 makeString(def.name)),
-							  def.args, NULL, false, false, false);
+			FuncnameGetCandidates(list_make2(makeString(INTERNAL_SCHEMA_NAME),
+											 makeString(def.name)),
+								  def.args,
+								  NULL,
+								  false,
+								  false,
+								  false);
 
 		if (funclist == NULL || funclist->next)
-			elog(ERROR, "OID lookup failed for the function \"%s\" with %d args", def.name, def.args);
+			elog(ERROR,
+				 "OID lookup failed for the function \"%s\" with %d args",
+				 def.name,
+				 def.args);
 
 		catalog.functions[i].function_id = funclist->oid;
 	}
@@ -400,8 +413,8 @@ catalog_get_table(Catalog *catalog, Oid relid)
 		const char *relname = get_rel_name(relid);
 
 		for (i = 0; i < _MAX_CATALOG_TABLES; i++)
-			if (strcmp(catalog_table_names[i].schema_name, schema_name) == 0
-				&& strcmp(catalog_table_name(i), relname) == 0)
+			if (strcmp(catalog_table_names[i].schema_name, schema_name) == 0 &&
+				strcmp(catalog_table_name(i), relname) == 0)
 				return (CatalogTable) i;
 
 		return INVALID_CATALOG_TABLE;
@@ -420,10 +433,13 @@ catalog_get_table(Catalog *catalog, Oid relid)
 int64
 ts_catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
 {
-	Oid			relid = catalog->tables[table].serial_relid;
+	Oid relid = catalog->tables[table].serial_relid;
 
 	if (!OidIsValid(relid))
-		elog(ERROR, "no serial ID column for table \"%s.%s\"", catalog_table_names[table].schema_name, catalog_table_name(table));
+		elog(ERROR,
+			 "no serial ID column for table \"%s.%s\"",
+			 catalog_table_names[table].schema_name,
+			 catalog_table_name(table));
 
 	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }
@@ -433,7 +449,7 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 {
 	if (!catalog_is_valid(catalog))
 	{
-		Oid			schema;
+		Oid schema;
 
 		/*
 		 * The catalog can be invalid during upgrade scripts. Try a non-cached
@@ -465,7 +481,8 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
  * with ts_catalog_restore_user().
  */
 bool
-ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info, CatalogSecurityContext *sec_ctx)
+ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
+									  CatalogSecurityContext *sec_ctx)
 {
 	GetUserIdAndSecContext(&sec_ctx->saved_uid, &sec_ctx->saved_security_context);
 
@@ -491,22 +508,23 @@ ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
 }
 
 #if PG96
-#define CatalogTupleInsert(relation, tuple)		\
-	do {										\
-		simple_heap_insert(relation, tuple);	\
-		CatalogUpdateIndexes(relation, tuple);	\
+#define CatalogTupleInsert(relation, tuple)                                                        \
+	do                                                                                             \
+	{                                                                                              \
+		simple_heap_insert(relation, tuple);                                                       \
+		CatalogUpdateIndexes(relation, tuple);                                                     \
 	} while (0);
 
-#define CatalogTupleUpdate(relation, tid, tuple)	\
-	do {											\
-		simple_heap_update(relation, tid, tuple);	\
-		CatalogUpdateIndexes(relation, tuple);		\
+#define CatalogTupleUpdate(relation, tid, tuple)                                                   \
+	do                                                                                             \
+	{                                                                                              \
+		simple_heap_update(relation, tid, tuple);                                                  \
+		CatalogUpdateIndexes(relation, tuple);                                                     \
 	} while (0);
 
-#define CatalogTupleDelete(relation, tid)		\
-	simple_heap_delete(relation, tid);
+#define CatalogTupleDelete(relation, tid) simple_heap_delete(relation, tid);
 
-#endif							/* PG96 */
+#endif /* PG96 */
 
 /*
  * Insert a new row into a catalog table.
@@ -526,7 +544,7 @@ catalog_insert(Relation rel, HeapTuple tuple)
 void
 ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls)
 {
-	HeapTuple	tuple = heap_form_tuple(tupdesc, values, nulls);
+	HeapTuple tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	catalog_insert(rel, tuple);
 	heap_freetuple(tuple);
@@ -592,9 +610,9 @@ ts_catalog_delete_only(Relation rel, HeapTuple tuple)
 void
 ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 {
-	Catalog    *catalog = ts_catalog_get();
+	Catalog *catalog = ts_catalog_get();
 	CatalogTable table = catalog_get_table(catalog, catalog_relid);
-	Oid			relid;
+	Oid relid;
 
 	switch (table)
 	{
@@ -624,11 +642,12 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 
 /* Scanner helper functions specifically for the catalog tables */
 bool
-ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode, char *table_name, void *data)
+ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys,
+					tuple_found_func tuple_found, LOCKMODE lockmode, char *table_name, void *data)
 {
-	Catalog    *catalog = ts_catalog_get();
+	Catalog *catalog = ts_catalog_get();
 
-	ScannerCtx	scanctx = {
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, table),
 		.index = catalog_get_index(catalog, table, indexid),
 		.nkeys = num_keys,
@@ -643,11 +662,12 @@ ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int n
 }
 
 void
-ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode, void *data)
+ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys,
+					tuple_found_func tuple_found, LOCKMODE lockmode, void *data)
 {
-	Catalog    *catalog = ts_catalog_get();
+	Catalog *catalog = ts_catalog_get();
 
-	ScannerCtx	scanctx = {
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, table),
 		.index = catalog_get_index(catalog, table, indexid),
 		.nkeys = num_keys,

@@ -26,4 +26,4 @@ extern TSDLLEXPORT int pg_b64_dec_len(int srclen);
 
 #endif
 
-#endif							/* BASE64_COMPAT_H */
+#endif /* BASE64_COMPAT_H */

@@ -29,11 +29,11 @@ extern void PGDLLEXPORT _PG_fini(void);
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
-bool		ts_extension_invalidate(Oid relid);
-bool		ts_extension_is_loaded(void);
-void		ts_extension_check_version(const char *actual_version);
-bool		ts_license_update_check(char **newval, void **extra, GucSource source);
-void		ts_license_on_assign(const char *newval, void *extra);
+bool ts_extension_invalidate(Oid relid);
+bool ts_extension_is_loaded(void);
+void ts_extension_check_version(const char *actual_version);
+bool ts_license_update_check(char **newval, void **extra, GucSource source);
+void ts_license_on_assign(const char *newval, void *extra);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
@@ -49,10 +49,10 @@ post_analyze_hook(ParseState *pstate, Query *query)
 	if (ts_extension_is_loaded())
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
 
-	/*
-	 * a symbol needed by IsParallelWorker is not exported on windows so we do
-	 * not perform this check
-	 */
+		/*
+		 * a symbol needed by IsParallelWorker is not exported on windows so we do
+		 * not perform this check
+		 */
 #ifndef WIN32
 	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
@@ -92,14 +92,14 @@ _PG_fini(void)
 }
 
 /* mock for extension.c */
-void		ts_catalog_reset(void);
+void ts_catalog_reset(void);
 void
 ts_catalog_reset()
 {
 }
 
 /* mock for guc.c */
-void		ts_hypertable_cache_invalidate_callback(void);
+void ts_hypertable_cache_invalidate_callback(void);
 void
 ts_hypertable_cache_invalidate_callback(void)
 {

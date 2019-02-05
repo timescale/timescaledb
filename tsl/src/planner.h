@@ -8,6 +8,6 @@
 
 #include <optimizer/planner.h>
 
-void		tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
+void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
 
-#endif							/* TIMESCALEDB_TSL_PLANNER_H */
+#endif /* TIMESCALEDB_TSL_PLANNER_H */

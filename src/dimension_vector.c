@@ -29,7 +29,7 @@ cmp_slices_reverse(const void *left, const void *right)
 static int
 cmp_coordinate_and_slice(const void *left, const void *right)
 {
-	int64		coord = *((int64 *) left);
+	int64 coord = *((int64 *) left);
 	const DimensionSlice *slice = *((DimensionSlice **) right);
 
 	return ts_dimension_slice_cmp_coordinate(slice, coord);
@@ -103,7 +103,7 @@ ts_dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
 {
 	DimensionVec *vec = *vecptr;
 
-	int32		existing_slice_index = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
+	int32 existing_slice_index = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
 
 	if (existing_slice_index == -1)
 	{
@@ -127,7 +127,9 @@ ts_dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 	DimensionVec *vec = *vecptr;
 
 	ts_dimension_slice_free(vec->slices[index]);
-	memmove(vec->slices + index, vec->slices + (index + 1), sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
+	memmove(vec->slices + index,
+			vec->slices + (index + 1),
+			sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
 	vec->num_slices--;
 }
 
@@ -135,7 +137,7 @@ ts_dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 static inline bool
 dimension_vec_is_sorted(DimensionVec *vec)
 {
-	int			i;
+	int i;
 
 	if (vec->num_slices < 2)
 		return true;
@@ -158,8 +160,11 @@ ts_dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 
 	Assert(dimension_vec_is_sorted(vec));
 
-	res = bsearch(&coordinate, vec->slices, vec->num_slices,
-				  sizeof(DimensionSlice *), cmp_coordinate_and_slice);
+	res = bsearch(&coordinate,
+				  vec->slices,
+				  vec->num_slices,
+				  sizeof(DimensionSlice *),
+				  cmp_coordinate_and_slice);
 
 	if (res == NULL)
 		return NULL;
@@ -170,7 +175,7 @@ ts_dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 int
 ts_dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
 {
-	int			i;
+	int i;
 
 	for (i = 0; i < vec->num_slices; i++)
 		if (dimension_slice_id == vec->slices[i]->fd.id)
@@ -191,7 +196,7 @@ ts_dimension_vec_get(DimensionVec *vec, int32 index)
 void
 ts_dimension_vec_free(DimensionVec *vec)
 {
-	int			i;
+	int i;
 
 	for (i = 0; i < vec->num_slices; i++)
 		ts_dimension_slice_free(vec->slices[i]);

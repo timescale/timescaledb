@@ -8,18 +8,18 @@
 
 #include <postgres.h>
 
-#define HTTP_HOST	"Host"
-#define HTTP_CONTENT_LENGTH	"Content-Length"
-#define HTTP_CONTENT_TYPE	"Content-Type"
-#define MAX_RAW_BUFFER_SIZE	4096
-#define MAX_REQUEST_DATA_SIZE	2048
+#define HTTP_HOST "Host"
+#define HTTP_CONTENT_LENGTH "Content-Length"
+#define HTTP_CONTENT_TYPE "Content-Type"
+#define MAX_RAW_BUFFER_SIZE 4096
+#define MAX_REQUEST_DATA_SIZE 2048
 
 typedef struct HttpHeader
 {
-	char	   *name;
-	int			name_len;
-	char	   *value;
-	int			value_len;
+	char *name;
+	int name_len;
+	char *value;
+	int value_len;
 	struct HttpHeader *next;
 } HttpHeader;
 
@@ -41,14 +41,14 @@ typedef enum HttpVersion
 typedef enum HttpError
 {
 	HTTP_ERROR_NONE = 0,
-	HTTP_ERROR_WRITE,			/* Connection write error, check errno */
-	HTTP_ERROR_READ,			/* Connection read error, check errno */
+	HTTP_ERROR_WRITE, /* Connection write error, check errno */
+	HTTP_ERROR_READ,  /* Connection read error, check errno */
 	HTTP_ERROR_CONN_CLOSED,
 	HTTP_ERROR_REQUEST_BUILD,
 	HTTP_ERROR_RESPONSE_PARSE,
 	HTTP_ERROR_RESPONSE_INCOMPLETE,
 	HTTP_ERROR_INVALID_BUFFER_STATE,
-	HTTP_ERROR_UNKNOWN,			/* Should always be last */
+	HTTP_ERROR_UNKNOWN, /* Should always be last */
 } HttpError;
 
 /*  NOTE: HttpRequest* structs are all responsible */
@@ -89,13 +89,14 @@ extern char *ts_http_response_state_next_buffer(HttpResponseState *state, ssize_
 extern ssize_t ts_http_response_state_buffer_remaining(HttpResponseState *state);
 extern const char *ts_http_response_state_body_start(HttpResponseState *state);
 extern size_t ts_http_response_state_content_length(HttpResponseState *state);
-extern int	ts_http_response_state_status_code(HttpResponseState *state);
+extern int ts_http_response_state_status_code(HttpResponseState *state);
 extern HttpHeader *ts_http_response_state_headers(HttpResponseState *state);
 
 /*  Returns false if encountered an error during parsing */
 extern bool ts_http_response_state_parse(HttpResponseState *state, size_t bytes);
 
 extern const char *ts_http_strerror(HttpError http_errno);
-extern HttpError ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *state);
+extern HttpError ts_http_send_and_recv(Connection *conn, HttpRequest *req,
+									   HttpResponseState *state);
 
-#endif							/* TIMESCALEDB_HTTP_H */
+#endif /* TIMESCALEDB_HTTP_H */

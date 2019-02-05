@@ -30,7 +30,7 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include "compat.h"
-#if PG96 || PG10				/* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_inherits_fn.h>
 #include <catalog/pg_constraint_fn.h>
 #endif
@@ -60,8 +60,8 @@
 Oid
 ts_rel_get_owner(Oid relid)
 {
-	HeapTuple	tuple;
-	Oid			ownerid;
+	HeapTuple tuple;
+	Oid ownerid;
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 
@@ -93,13 +93,12 @@ ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid)
 Oid
 ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 {
-	Oid			ownerid = ts_rel_get_owner(hypertable_oid);
+	Oid ownerid = ts_rel_get_owner(hypertable_oid);
 
 	if (!has_privs_of_role(userid, ownerid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for hypertable \"%s\"",
-						get_rel_name(hypertable_oid))));
+				 errmsg("permission denied for hypertable \"%s\"", get_rel_name(hypertable_oid))));
 
 	return ownerid;
 }
@@ -107,24 +106,30 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 static Hypertable *
 hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
 {
-	Oid			namespace_oid;
+	Oid namespace_oid;
 	Hypertable *h = STRUCT_FROM_TUPLE(tuple, mctx, Hypertable, FormData_hypertable);
 
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
 	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);
-	h->chunk_cache = ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
+	h->chunk_cache =
+		ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
 
 	if (!heap_attisnull_compat(tuple, Anum_hypertable_chunk_sizing_func_schema, desc) &&
 		!heap_attisnull_compat(tuple, Anum_hypertable_chunk_sizing_func_name, desc))
 	{
 		FuncCandidateList func =
-		FuncnameGetCandidates(list_make2(makeString(NameStr(h->fd.chunk_sizing_func_schema)),
-										 makeString(NameStr(h->fd.chunk_sizing_func_name))),
-							  3, NIL, false, false, false);
+			FuncnameGetCandidates(list_make2(makeString(NameStr(h->fd.chunk_sizing_func_schema)),
+											 makeString(NameStr(h->fd.chunk_sizing_func_name))),
+								  3,
+								  NIL,
+								  false,
+								  false,
+								  false);
 
 		if (NULL == func || NULL != func->next)
-			elog(ERROR, "could not find the adaptive chunking function \"%s.%s\"",
+			elog(ERROR,
+				 "could not find the adaptive chunking function \"%s.%s\"",
 				 NameStr(h->fd.chunk_sizing_func_schema),
 				 NameStr(h->fd.chunk_sizing_func_name));
 
@@ -139,13 +144,12 @@ ts_hypertable_from_tupleinfo(TupleInfo *ti)
 	return hypertable_from_tuple(ti->tuple, ti->mctx, ti->desc);
 }
 
-
 static ScanTupleResult
 hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 {
 	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
-	Oid		   *relid = data;
-	Oid			schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
+	Oid *relid = data;
+	Oid schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
 
 	if (OidIsValid(schema_oid))
 		*relid = get_relname_relid(NameStr(form->table_name), schema_oid);
@@ -156,10 +160,10 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 Oid
 ts_hypertable_id_to_relid(int32 hypertable_id)
 {
-	Catalog    *catalog = ts_catalog_get();
-	Oid			relid = InvalidOid;
+	Catalog *catalog = ts_catalog_get();
+	Oid relid = InvalidOid;
 	ScanKeyData scankey[1];
-	ScannerCtx	scanctx = {
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, HYPERTABLE),
 		.index = catalog_get_index(catalog, HYPERTABLE, HYPERTABLE_ID_INDEX),
 		.nkeys = 1,
@@ -171,8 +175,10 @@ ts_hypertable_id_to_relid(int32 hypertable_id)
 	};
 
 	/* Perform an index scan on the hypertable pkey. */
-	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
-				BTEqualStrategyNumber, F_INT4EQ,
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
 				Int32GetDatum(hypertable_id));
 
 	ts_scanner_scan(&scanctx);
@@ -183,9 +189,9 @@ ts_hypertable_id_to_relid(int32 hypertable_id)
 int32
 ts_hypertable_relid_to_id(Oid relid)
 {
-	Cache	   *hcache = ts_hypertable_cache_pin();
+	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
-	int			result = (ht == NULL) ? -1 : ht->fd.id;
+	int result = (ht == NULL) ? -1 : ht->fd.id;
 
 	ts_cache_release(hcache);
 
@@ -195,7 +201,7 @@ ts_hypertable_relid_to_id(Oid relid)
 typedef struct ChunkStoreEntry
 {
 	MemoryContext mcxt;
-	Chunk	   *chunk;
+	Chunk *chunk;
 } ChunkStoreEntry;
 
 static void
@@ -205,17 +211,11 @@ chunk_store_entry_free(void *cse)
 }
 
 static int
-hypertable_scan_limit_internal(ScanKeyData *scankey,
-							   int num_scankeys,
-							   int indexid,
-							   tuple_found_func on_tuple_found,
-							   void *scandata,
-							   int limit,
-							   LOCKMODE lock,
-							   bool tuplock,
-							   MemoryContext mctx)
+hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int indexid,
+							   tuple_found_func on_tuple_found, void *scandata, int limit,
+							   LOCKMODE lock, bool tuplock, MemoryContext mctx)
 {
-	Catalog    *catalog = ts_catalog_get();
+	Catalog *catalog = ts_catalog_get();
 	ScannerCtx	scanctx = {
 		.table = catalog_get_table_id(catalog, HYPERTABLE),
 		.index = catalog_get_index(catalog, HYPERTABLE, indexid),
@@ -240,13 +240,21 @@ hypertable_scan_limit_internal(ScanKeyData *scankey,
 int
 ts_number_of_hypertables()
 {
-	return hypertable_scan_limit_internal(NULL, 0, HYPERTABLE_ID_INDEX, NULL, NULL, -1, AccessShareLock, false, CurrentMemoryContext);
+	return hypertable_scan_limit_internal(NULL,
+										  0,
+										  HYPERTABLE_ID_INDEX,
+										  NULL,
+										  NULL,
+										  -1,
+										  AccessShareLock,
+										  false,
+										  CurrentMemoryContext);
 }
 
 static ScanTupleResult
 hypertable_tuple_append(TupleInfo *ti, void *data)
 {
-	List	  **hypertables = data;
+	List **hypertables = data;
 
 	*hypertables = lappend(*hypertables, ts_hypertable_from_tupleinfo(ti));
 
@@ -256,7 +264,7 @@ hypertable_tuple_append(TupleInfo *ti, void *data)
 List *
 ts_hypertable_get_all(void)
 {
-	List	   *result = NIL;
+	List *result = NIL;
 
 	hypertable_scan_limit_internal(NULL,
 								   0,
@@ -275,25 +283,30 @@ static ScanTupleResult
 hypertable_tuple_update(TupleInfo *ti, void *data)
 {
 	Hypertable *ht = data;
-	Datum		values[Natts_hypertable];
-	bool		nulls[Natts_hypertable];
-	HeapTuple	copy;
+	Datum values[Natts_hypertable];
+	bool nulls[Natts_hypertable];
+	HeapTuple copy;
 	CatalogSecurityContext sec_ctx;
 
 	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
 
-	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] = NameGetDatum(&ht->fd.schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] =
+		NameGetDatum(&ht->fd.schema_name);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(&ht->fd.table_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] = NameGetDatum(&ht->fd.associated_schema_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] = NameGetDatum(&ht->fd.associated_table_prefix);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] = Int16GetDatum(ht->fd.num_dimensions);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] = Int64GetDatum(ht->fd.chunk_target_size);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] =
+		NameGetDatum(&ht->fd.associated_schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
+		NameGetDatum(&ht->fd.associated_table_prefix);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] =
+		Int16GetDatum(ht->fd.num_dimensions);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] =
+		Int64GetDatum(ht->fd.chunk_target_size);
 
 	memset(nulls, 0, sizeof(nulls));
 
 	if (OidIsValid(ht->chunk_sizing_func))
 	{
-		Dimension  *dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+		Dimension *dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 		ChunkSizingInfo info = {
 			.table_relid = ht->main_table_relid,
 			.colname = dim == NULL ? NULL : NameStr(dim->fd.column_name),
@@ -332,8 +345,10 @@ ts_hypertable_update(Hypertable *ht)
 {
 	ScanKeyData scankey[1];
 
-	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
-				BTEqualStrategyNumber, F_INT4EQ,
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
 				Int32GetDatum(ht->fd.id));
 
 	return hypertable_scan_limit_internal(scankey,
@@ -348,30 +363,30 @@ ts_hypertable_update(Hypertable *ht)
 }
 
 int
-ts_hypertable_scan_with_memory_context(const char *schema,
-									   const char *table,
-									   tuple_found_func tuple_found,
-									   void *data,
-									   LOCKMODE lockmode,
-									   bool tuplock,
-									   MemoryContext mctx)
+ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
+									   tuple_found_func tuple_found, void *data, LOCKMODE lockmode,
+									   bool tuplock, MemoryContext mctx)
 {
 	ScanKeyData scankey[2];
-	NameData	schema_name,
-				table_name;
+	NameData schema_name, table_name;
 
 	namestrcpy(&schema_name, schema);
 	namestrcpy(&table_name, table);
 
 	/* Perform an index scan on schema and table. */
-	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber, F_NAMEEQ,
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				NameGetDatum(&schema_name));
-	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
-				BTEqualStrategyNumber, F_NAMEEQ,
+	ScanKeyInit(&scankey[1],
+				Anum_hypertable_name_idx_table,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				NameGetDatum(&table_name));
 
-	return hypertable_scan_limit_internal(scankey, 2,
+	return hypertable_scan_limit_internal(scankey,
+										  2,
 										  HYPERTABLE_NAME_INDEX,
 										  tuple_found,
 										  data,
@@ -385,8 +400,8 @@ static ScanTupleResult
 hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
-	bool		isnull;
-	int			hypertable_id = heap_getattr(ti->tuple, Anum_hypertable_id, ti->desc, &isnull);
+	bool isnull;
+	int hypertable_id = heap_getattr(ti->tuple, Anum_hypertable_id, ti->desc, &isnull);
 
 	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
@@ -407,12 +422,16 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 {
 	ScanKeyData scankey[2];
 
-	ScanKeyInit(&scankey[0], Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber, F_NAMEEQ,
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
 
-	ScanKeyInit(&scankey[1], Anum_hypertable_name_idx_table,
-				BTEqualStrategyNumber, F_NAMEEQ,
+	ScanKeyInit(&scankey[1],
+				Anum_hypertable_name_idx_table,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(table_name)));
 
 	return hypertable_scan_limit_internal(scankey,
@@ -429,7 +448,7 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 static ScanTupleResult
 reset_associated_tuple_found(TupleInfo *ti, void *data)
 {
-	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(tuple);
 	CatalogSecurityContext sec_ctx;
 
@@ -451,8 +470,10 @@ ts_hypertable_reset_associated_schema_name(const char *associated_schema)
 {
 	ScanKeyData scankey[1];
 
-	ScanKeyInit(&scankey[0], Anum_hypertable_associated_schema_name,
-				BTEqualStrategyNumber, F_NAMEEQ,
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_associated_schema_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(associated_schema)));
 
 	return hypertable_scan_limit_internal(scankey,
@@ -479,7 +500,7 @@ HTSU_Result
 ts_hypertable_lock_tuple(Oid table_relid)
 {
 	HTSU_Result result;
-	int			num_found;
+	int num_found;
 
 	num_found = hypertable_scan(get_namespace_name(get_rel_namespace(table_relid)),
 								get_rel_name(table_relid),
@@ -491,8 +512,7 @@ ts_hypertable_lock_tuple(Oid table_relid)
 	if (num_found != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable",
-						get_rel_name(table_relid))));
+				 errmsg("table \"%s\" is not a hypertable", get_rel_name(table_relid))));
 
 	return result;
 }
@@ -566,31 +586,29 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
 
 static void
-hypertable_insert_relation(Relation rel,
-						   Name schema_name,
-						   Name table_name,
-						   Name associated_schema_name,
-						   Name associated_table_prefix,
-						   Name chunk_sizing_func_schema,
-						   Name chunk_sizing_func_name,
-						   int64 chunk_target_size,
-						   int16 num_dimensions)
+hypertable_insert_relation(Relation rel, Name schema_name, Name table_name,
+						   Name associated_schema_name, Name associated_table_prefix,
+						   Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
+						   int64 chunk_target_size, int16 num_dimensions)
 {
-	TupleDesc	desc = RelationGetDescr(rel);
-	Datum		values[Natts_hypertable];
-	bool		nulls[Natts_hypertable] = {false};
-	NameData	default_associated_table_prefix;
+	TupleDesc desc = RelationGetDescr(rel);
+	Datum values[Natts_hypertable];
+	bool nulls[Natts_hypertable] = { false };
+	NameData default_associated_table_prefix;
 	CatalogSecurityContext sec_ctx;
 
 	values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)] = NameGetDatum(schema_name);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)] = NameGetDatum(table_name);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] = NameGetDatum(associated_schema_name);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)] =
+		NameGetDatum(associated_schema_name);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)] = Int16GetDatum(num_dimensions);
 
 	if (NULL != chunk_sizing_func_schema && NULL != chunk_sizing_func_name)
 	{
-		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] = NameGetDatum(chunk_sizing_func_schema);
-		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] = NameGetDatum(chunk_sizing_func_name);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)] =
+			NameGetDatum(chunk_sizing_func_schema);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)] =
+			NameGetDatum(chunk_sizing_func_name);
 	}
 	else
 	{
@@ -601,13 +619,16 @@ hypertable_insert_relation(Relation rel,
 	if (chunk_target_size < 0)
 		chunk_target_size = 0;
 
-	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] = Int64GetDatum(chunk_target_size);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] =
+		Int64GetDatum(chunk_target_size);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] = Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE));
+	values[AttrNumberGetAttrOffset(Anum_hypertable_id)] =
+		Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE));
 
 	if (NULL != associated_table_prefix)
-		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] = NameGetDatum(associated_table_prefix);
+		values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)] =
+			NameGetDatum(associated_table_prefix);
 	else
 	{
 		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
@@ -624,17 +645,12 @@ hypertable_insert_relation(Relation rel,
 }
 
 static void
-hypertable_insert(Name schema_name,
-				  Name table_name,
-				  Name associated_schema_name,
-				  Name associated_table_prefix,
-				  Name chunk_sizing_func_schema,
-				  Name chunk_sizing_func_name,
-				  int64 chunk_target_size,
-				  int16 num_dimensions)
+hypertable_insert(Name schema_name, Name table_name, Name associated_schema_name,
+				  Name associated_table_prefix, Name chunk_sizing_func_schema,
+				  Name chunk_sizing_func_name, int64 chunk_target_size, int16 num_dimensions)
 {
-	Catalog    *catalog = ts_catalog_get();
-	Relation	rel;
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
 
 	rel = heap_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel,
@@ -656,7 +672,6 @@ hypertable_tuple_found(TupleInfo *ti, void *data)
 
 	*entry = ts_hypertable_from_tupleinfo(ti);
 	return SCAN_DONE;
-
 }
 
 Hypertable *
@@ -664,12 +679,7 @@ ts_hypertable_get_by_name(char *schema, char *name)
 {
 	Hypertable *ht = NULL;
 
-	hypertable_scan(schema,
-					name,
-					hypertable_tuple_found,
-					&ht,
-					AccessShareLock,
-					false);
+	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock, false);
 
 	return ht;
 }
@@ -680,8 +690,10 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 	ScanKeyData scankey[1];
 	Hypertable *ht = NULL;
 
-	ScanKeyInit(&scankey[0], Anum_hypertable_pkey_idx_id,
-				BTEqualStrategyNumber, F_INT4EQ,
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
 				Int32GetDatum(hypertable_id));
 
 	hypertable_scan_limit_internal(scankey,
@@ -700,8 +712,7 @@ static ChunkStoreEntry *
 hypertable_chunk_store_add(Hypertable *h, Chunk *chunk)
 {
 	ChunkStoreEntry *cse;
-	MemoryContext old_mcxt,
-				chunk_mcxt;
+	MemoryContext old_mcxt, chunk_mcxt;
 
 	chunk_mcxt = AllocSetContextCreate(ts_subspace_store_mcxt(h->chunk_cache),
 									   "chunk cache entry memory context",
@@ -725,7 +736,7 @@ ts_hypertable_get_chunk(Hypertable *h, Point *point)
 
 	if (NULL == cse)
 	{
-		Chunk	   *chunk;
+		Chunk *chunk;
 
 		/*
 		 * ts_chunk_find() must execute on a per-tuple memory context since it
@@ -735,7 +746,8 @@ ts_hypertable_get_chunk(Hypertable *h, Point *point)
 		chunk = ts_chunk_find(h->space, point);
 
 		if (NULL == chunk)
-			chunk = ts_chunk_create(h, point,
+			chunk = ts_chunk_create(h,
+									point,
 									NameStr(h->fd.associated_schema_name),
 									NameStr(h->fd.associated_table_prefix));
 
@@ -773,11 +785,11 @@ ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 Tablespace *
 ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 {
-	Dimension  *dim;
+	Dimension *dim;
 	DimensionVec *vec;
 	DimensionSlice *slice;
 	Tablespaces *tspcs = ts_tablespace_scan(ht->fd.id);
-	int			i = 0;
+	int i = 0;
 
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)
 		return NULL;
@@ -827,7 +839,7 @@ Tablespace *
 ts_hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, int16 offset)
 {
 	Tablespaces *tspcs = ts_tablespace_scan(ht->fd.id);
-	int			i = 0;
+	int i = 0;
 
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)
 		return NULL;
@@ -844,9 +856,9 @@ ts_hypertable_get_tablespace_at_offset_from(Hypertable *ht, Oid tablespace_oid, 
 static inline Oid
 hypertable_relid_lookup(Oid relid)
 {
-	Cache	   *hcache = ts_hypertable_cache_pin();
+	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid);
-	Oid			result = (ht == NULL) ? InvalidOid : ht->main_table_relid;
+	Oid result = (ht == NULL) ? InvalidOid : ht->main_table_relid;
 
 	ts_cache_release(hcache);
 
@@ -856,7 +868,7 @@ hypertable_relid_lookup(Oid relid)
 /*
  * Returns a hypertable's relation ID (OID) iff the given RangeVar corresponds to
  * a hypertable, otherwise InvalidOid.
-*/
+ */
 Oid
 ts_hypertable_relid(RangeVar *rv)
 {
@@ -882,7 +894,7 @@ ts_is_hypertable(Oid relid)
 static Oid
 hypertable_check_associated_schema_permissions(const char *schema_name, Oid user_oid)
 {
-	Oid			schema_oid;
+	Oid schema_oid;
 
 	/*
 	 * If the schema name is NULL, it implies the internal catalog schema and
@@ -916,8 +928,7 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 	else if (pg_namespace_aclcheck(schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permissions denied: cannot create chunks in schema \"%s\"",
-						schema_name)));
+				 errmsg("permissions denied: cannot create chunks in schema \"%s\"", schema_name)));
 
 	return schema_oid;
 }
@@ -926,7 +937,7 @@ static bool
 relation_has_tuples(Relation rel)
 {
 	HeapScanDesc scandesc = heap_beginscan(rel, GetActiveSnapshot(), 0, NULL);
-	bool		hastuples = HeapTupleIsValid(heap_getnext(scandesc, ForwardScanDirection));
+	bool hastuples = HeapTupleIsValid(heap_getnext(scandesc, ForwardScanDirection));
 
 	heap_endscan(scandesc);
 	return hastuples;
@@ -935,8 +946,8 @@ relation_has_tuples(Relation rel)
 static bool
 table_has_tuples(Oid table_relid, LOCKMODE lockmode)
 {
-	Relation	rel = heap_open(table_relid, lockmode);
-	bool		hastuples = relation_has_tuples(rel);
+	Relation rel = heap_open(table_relid, lockmode);
+	bool hastuples = relation_has_tuples(rel);
 
 	heap_close(rel, lockmode);
 	return hastuples;
@@ -954,22 +965,17 @@ table_has_replica_identity(Relation rel)
 	return rel->rd_rel->relreplident != REPLICA_IDENTITY_DEFAULT;
 }
 
-static bool inline
-table_has_rules(Relation rel)
-{
-	return rel->rd_rules != NULL;
-}
-
+static bool inline table_has_rules(Relation rel) { return rel->rd_rules != NULL; }
 
 bool
 ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
 {
-	ListCell   *lc;
-	List	   *chunks = find_inheritance_children(table_relid, lockmode);
+	ListCell *lc;
+	List *chunks = find_inheritance_children(table_relid, lockmode);
 
-	foreach(lc, chunks)
+	foreach (lc, chunks)
 	{
-		Oid			chunk_relid = lfirst_oid(lc);
+		Oid chunk_relid = lfirst_oid(lc);
 
 		/* Chunks already locked by find_inheritance_children() */
 		if (table_has_tuples(chunk_relid, NoLock))
@@ -992,9 +998,11 @@ hypertable_create_schema(const char *schema_name)
 	CreateSchemaCommand(&stmt,
 						"(generated CREATE SCHEMA command)"
 #if !PG96
-						,-1, -1
+						,
+						-1,
+						-1
 #endif
-		);
+	);
 }
 
 /*
@@ -1007,18 +1015,20 @@ hypertable_create_schema(const char *schema_name)
 static void
 hypertable_validate_constraints(Oid relid)
 {
-	Relation	catalog;
+	Relation catalog;
 	SysScanDesc scan;
 	ScanKeyData scankey;
-	HeapTuple	tuple;
+	HeapTuple tuple;
 
 	catalog = heap_open(ConstraintRelationId, AccessShareLock);
 
-	ScanKeyInit(&scankey, Anum_pg_constraint_conrelid, BTEqualStrategyNumber,
-				F_OIDEQ, ObjectIdGetDatum(relid));
+	ScanKeyInit(&scankey,
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
 
-	scan = systable_beginscan(catalog, ConstraintRelidTypidNameIndexId, true,
-							  NULL, 1, &scankey);
+	scan = systable_beginscan(catalog, ConstraintRelidTypidNameIndexId, true, NULL, 1, &scankey);
 
 	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
 	{
@@ -1029,7 +1039,8 @@ hypertable_validate_constraints(Oid relid)
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
 							get_rel_name(relid)),
-					 errhint("Remove all NO INHERIT constraints from table \"%s\" before making it a hypertable.",
+					 errhint("Remove all NO INHERIT constraints from table \"%s\" before making it "
+							 "a hypertable.",
 							 get_rel_name(relid))));
 	}
 
@@ -1082,7 +1093,8 @@ ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot INSERT into hypertable \"%s\" during restore", relname),
-				 errhint("Set 'timescaledb.restoring' to 'off' after the restore process has finished.")));
+				 errhint("Set 'timescaledb.restoring' to 'off' after the restore process has "
+						 "finished.")));
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1102,28 +1114,34 @@ ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
 static Oid
 old_insert_blocker_trigger_get(Oid relid)
 {
-	Relation	tgrel;
+	Relation tgrel;
 	ScanKeyData skey[1];
 	SysScanDesc tgscan;
-	HeapTuple	tuple;
-	Oid			tgoid = InvalidOid;
+	HeapTuple tuple;
+	Oid tgoid = InvalidOid;
 
 	tgrel = heap_open(TriggerRelationId, AccessShareLock);
 
 	ScanKeyInit(&skey[0],
 				Anum_pg_trigger_tgrelid,
-				BTEqualStrategyNumber, F_OIDEQ,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
 				ObjectIdGetDatum(relid));
 
-	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true,
-								NULL, 1, skey);
+	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true, NULL, 1, skey);
 
 	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
 	{
 		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
 
-		if (TRIGGER_TYPE_MATCHES(trig->tgtype, TRIGGER_TYPE_ROW, TRIGGER_TYPE_BEFORE, TRIGGER_TYPE_INSERT) &&
-			strncmp(OLD_INSERT_BLOCKER_NAME, NameStr(trig->tgname), strlen(OLD_INSERT_BLOCKER_NAME)) == 0 && trig->tgisinternal)
+		if (TRIGGER_TYPE_MATCHES(trig->tgtype,
+								 TRIGGER_TYPE_ROW,
+								 TRIGGER_TYPE_BEFORE,
+								 TRIGGER_TYPE_INSERT) &&
+			strncmp(OLD_INSERT_BLOCKER_NAME,
+					NameStr(trig->tgname),
+					strlen(OLD_INSERT_BLOCKER_NAME)) == 0 &&
+			trig->tgisinternal)
 		{
 			tgoid = HeapTupleGetOid(tuple);
 			break;
@@ -1146,16 +1164,17 @@ static Oid
 insert_blocker_trigger_add(Oid relid)
 {
 	ObjectAddress objaddr;
-	char	   *relname = get_rel_name(relid);
-	Oid			schemaid = get_rel_namespace(relid);
-	char	   *schema = get_namespace_name(schemaid);
+	char *relname = get_rel_name(relid);
+	Oid schemaid = get_rel_namespace(relid);
+	char *schema = get_namespace_name(schemaid);
 	CreateTrigStmt stmt = {
 		.type = T_CreateTrigStmt,
 		.row = true,
 		.timing = TRIGGER_TYPE_BEFORE,
 		.trigname = INSERT_BLOCKER_NAME,
 		.relation = makeRangeVar(schema, relname, -1),
-		.funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
+		.funcname =
+			list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
 		.args = NIL,
 		.events = TRIGGER_TYPE_INSERT,
 	};
@@ -1186,14 +1205,15 @@ TS_FUNCTION_INFO_V1(ts_hypertable_insert_blocker_trigger_add);
 Datum
 ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 {
-	Oid			relid = PG_GETARG_OID(0);
-	Oid			old_trigger;
+	Oid relid = PG_GETARG_OID(0);
+	Oid old_trigger;
 
 	if (table_has_tuples(relid, AccessShareLock))
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("hypertable \"%s\" has data in the root table", get_rel_name(relid)),
-				 errdetail("Migrate the data from the root table to chunks before running the UPDATE again."),
+				 errdetail("Migrate the data from the root table to chunks before running the "
+						   "UPDATE again."),
 				 errhint("Data can be migrated as follows:\n"
 						 "> BEGIN;\n"
 						 "> SET timescaledb.restoring = 'off';\n"
@@ -1201,16 +1221,14 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 						 "> SET timescaledb.restoring = 'on';\n"
 						 "> TRUNCATE ONLY \"%1$s\";\n"
 						 "> SET timescaledb.restoring = 'off';\n"
-						 "> COMMIT;", get_rel_name(relid))));
+						 "> COMMIT;",
+						 get_rel_name(relid))));
 
 	/* Now drop the old trigger */
 	old_trigger = old_insert_blocker_trigger_get(relid);
 	if (OidIsValid(old_trigger))
 	{
-		ObjectAddress objaddr = {
-			.classId = TriggerRelationId,
-			.objectId = old_trigger
-		};
+		ObjectAddress objaddr = { .classId = TriggerRelationId, .objectId = old_trigger };
 
 		performDeletion(&objaddr, DROP_RESTRICT, 0);
 	}
@@ -1222,10 +1240,10 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 static Datum
 create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht, bool created)
 {
-	TupleDesc	tupdesc;
-	Datum		values[Natts_create_hypertable];
-	bool		nulls[Natts_create_hypertable] = {false};
-	HeapTuple	tuple;
+	TupleDesc tupdesc;
+	Datum values[Natts_create_hypertable];
+	bool nulls[Natts_create_hypertable] = { false };
+	HeapTuple tuple;
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		ereport(ERROR,
@@ -1235,15 +1253,15 @@ create_hypertable_datum(FunctionCallInfo fcinfo, Hypertable *ht, bool created)
 
 	tupdesc = BlessTupleDesc(tupdesc);
 	values[AttrNumberGetAttrOffset(Anum_create_hypertable_id)] = Int32GetDatum(ht->fd.id);
-	values[AttrNumberGetAttrOffset(Anum_create_hypertable_schema_name)] = NameGetDatum(&ht->fd.schema_name);
-	values[AttrNumberGetAttrOffset(Anum_create_hypertable_table_name)] = NameGetDatum(&ht->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_create_hypertable_schema_name)] =
+		NameGetDatum(&ht->fd.schema_name);
+	values[AttrNumberGetAttrOffset(Anum_create_hypertable_table_name)] =
+		NameGetDatum(&ht->fd.table_name);
 	values[AttrNumberGetAttrOffset(Anum_create_hypertable_created)] = BoolGetDatum(created);
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
 }
-
-
 
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
 
@@ -1269,12 +1287,12 @@ TS_FUNCTION_INFO_V1(ts_hypertable_create);
 Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
 {
-	Oid			table_relid = PG_GETARG_OID(0);
-	Name		associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
-	Name		associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
-	bool		create_default_indexes = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
-	bool		if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
-	bool		migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
+	Oid table_relid = PG_GETARG_OID(0);
+	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
+	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
+	bool create_default_indexes = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
+	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
+	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
 	DimensionInfo time_dim_info = {
 		.table_relid = table_relid,
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1),
@@ -1296,17 +1314,15 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1),
 		.check_for_index = !create_default_indexes,
 	};
-	Cache	   *hcache;
+	Cache *hcache;
 	Hypertable *ht;
-	Oid			associated_schema_oid;
-	Oid			user_oid = GetUserId();
-	Oid			tspc_oid = get_rel_tablespace(table_relid);
-	bool		table_has_data;
-	NameData	schema_name,
-				table_name,
-				default_associated_schema_name;
-	Relation	rel;
-	Datum		retval;
+	Oid associated_schema_oid;
+	Oid user_oid = GetUserId();
+	Oid tspc_oid = get_rel_tablespace(table_relid);
+	bool table_has_data;
+	NameData schema_name, table_name, default_associated_schema_name;
+	Relation rel;
+	Datum retval;
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1372,8 +1388,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
-				 errmsg("table \"%s\" is already a hypertable",
-						get_rel_name(table_relid))));
+				 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
 	}
 
 	/*
@@ -1395,9 +1410,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		case RELKIND_RELATION:
 			break;
 		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("invalid relation type")));
+			ereport(ERROR, (errcode(ERRCODE_WRONG_OBJECT_TYPE), errmsg("invalid relation type")));
 	}
 
 	/* Check that the table doesn't have any unsupported constraints */
@@ -1409,19 +1422,22 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is not empty", get_rel_name(table_relid)),
-				 errhint("You can migrate data by specifying 'migrate_data => true' when calling this function.")));
+				 errhint("You can migrate data by specifying 'migrate_data => true' when calling "
+						 "this function.")));
 
 	if (is_inheritance_table(table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
-				 errdetail("It is not possible to turn tables that use inheritance into hypertables.")));
+				 errdetail(
+					 "It is not possible to turn tables that use inheritance into hypertables.")));
 
 	if (!table_is_logged(table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
-				 errdetail("It is not possible to turn temporary or unlogged tables into hypertables.")));
+				 errdetail(
+					 "It is not possible to turn temporary or unlogged tables into hypertables.")));
 
 	if (table_has_replica_identity(rel))
 		ereport(ERROR,
@@ -1433,7 +1449,8 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support rules"),
-				 errdetail("Table \"%s\" has attached rules, which do not work on hypertables.", get_rel_name(table_relid)),
+				 errdetail("Table \"%s\" has attached rules, which do not work on hypertables.",
+						   get_rel_name(table_relid)),
 				 errhint("Remove the rules before calling create_hypertable")));
 
 	/*
@@ -1471,11 +1488,11 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		{
 			ereport(NOTICE,
 					(errcode(ERRCODE_WARNING),
-					 errmsg("adaptive chunking is a BETA feature and is not recommended for production deployments")));
+					 errmsg("adaptive chunking is a BETA feature and is not recommended for "
+							"production deployments")));
 
 			time_dim_info.adaptive_chunking = true;
 		}
-
 	}
 
 	/* Validate that the dimensions are OK */
@@ -1522,7 +1539,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	/* Attach tablespace, if any */
 	if (OidIsValid(tspc_oid))
 	{
-		NameData	tspc_name;
+		NameData tspc_name;
 
 		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
 		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
@@ -1563,9 +1580,9 @@ hypertable_rename_schema_name(TupleInfo *ti, void *data)
 	const char **schema_names = (const char **) data;
 	const char *old_schema_name = schema_names[0];
 	const char *new_schema_name = schema_names[1];
-	bool		updated = false;
+	bool updated = false;
 
-	HeapTuple	tuple = heap_copytuple(ti->tuple);
+	HeapTuple tuple = heap_copytuple(ti->tuple);
 	FormData_hypertable *ht = (FormData_hypertable *) GETSTRUCT(tuple);
 
 	/*
@@ -1602,10 +1619,10 @@ hypertable_rename_schema_name(TupleInfo *ti, void *data)
 void
 ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 {
-	const char *schema_names[2] = {old_name, new_name};
-	Catalog    *catalog = ts_catalog_get();
+	const char *schema_names[2] = { old_name, new_name };
+	Catalog *catalog = ts_catalog_get();
 
-	ScannerCtx	scanctx = {
+	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, HYPERTABLE),
 		.index = InvalidOid,
 		.tuple_found = hypertable_rename_schema_name,
@@ -1619,19 +1636,18 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 
 typedef struct AccumHypertable
 {
-	List	   *ht_oids;
-	Name		schema_name;
-	Name		table_name;
+	List *ht_oids;
+	Name schema_name;
+	Name table_name;
 } AccumHypertable;
-
 
 static ScanTupleResult
 hypertable_tuple_match_name(TupleInfo *ti, void *data)
 {
-	Oid			relid;
+	Oid relid;
 	FormData_hypertable *form = (FormData_hypertable *) GETSTRUCT(ti->tuple);
 	AccumHypertable *accum = data;
-	Oid			schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
+	Oid schema_oid = get_namespace_oid(NameStr(form->schema_name), true);
 
 	if (!OidIsValid(schema_oid))
 		return SCAN_CONTINUE;
@@ -1641,9 +1657,13 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 		return SCAN_CONTINUE;
 
 	if ((accum->schema_name == NULL ||
-		 DatumGetBool(DirectFunctionCall2(nameeq, NameGetDatum(accum->schema_name), NameGetDatum(&form->schema_name)))) &&
+		 DatumGetBool(DirectFunctionCall2(nameeq,
+										  NameGetDatum(accum->schema_name),
+										  NameGetDatum(&form->schema_name)))) &&
 		(accum->table_name == NULL ||
-		 DatumGetBool(DirectFunctionCall2(nameeq, NameGetDatum(accum->table_name), NameGetDatum(&form->table_name)))))
+		 DatumGetBool(DirectFunctionCall2(nameeq,
+										  NameGetDatum(accum->table_name),
+										  NameGetDatum(&form->table_name)))))
 		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
 
 	return SCAN_CONTINUE;
@@ -1656,7 +1676,7 @@ hypertable_tuple_match_name(TupleInfo *ti, void *data)
 List *
 ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx)
 {
-	Catalog    *catalog = ts_catalog_get();
+	Catalog *catalog = ts_catalog_get();
 	AccumHypertable data = {
 		.ht_oids = NIL,
 		.schema_name = schema_name,

@@ -12,21 +12,21 @@
 #include "config.h"
 #include "net/conn.h"
 
-#define MAX_RESULT_SIZE	2048
+#define MAX_RESULT_SIZE 2048
 
 TS_FUNCTION_INFO_V1(ts_test_conn);
 
 Datum
 ts_test_conn(PG_FUNCTION_ARGS)
 {
-	char		response[MAX_RESULT_SIZE];
+	char response[MAX_RESULT_SIZE];
 	Connection *conn;
-	int			ret;
-	int			port = 80;
+	int ret;
+	int port = 80;
 #ifdef TS_USE_OPENSSL
-	int			ssl_port = 443;
+	int ssl_port = 443;
 #endif
-	char	   *host = "postman-echo.com";
+	char *host = "postman-echo.com";
 
 	/* Test connection_init/destroy */
 	conn = ts_connection_create(CONNECTION_PLAIN);

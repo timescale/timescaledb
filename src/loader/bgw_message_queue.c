@@ -30,20 +30,18 @@
 #define BGW_ACK_WAIT_INTERVAL 100L
 #define BGW_ACK_QUEUE_SIZE (MAXALIGN(shm_mq_minimum_size + sizeof(int)))
 
-
-
 /* We're using a relatively simple implementation of a circular queue similar to:
  * http://opendatastructures.org/ods-python/2_3_ArrayQueue_Array_Based_.html */
 typedef struct MessageQueue
 {
-	pid_t		reader_pid;		/* Should only be set once at cluster launcher
-								 * startup */
-	slock_t		mutex;			/* Controls access to the reader pid */
-	LWLock	   *lock;			/* Pointer to the lock to control
-								 * adding/removing elements from queue */
-	uint8		read_upto;
-	uint8		num_elements;
-	BgwMessage	buffer[BGW_MQ_MAX_MESSAGES];
+	pid_t reader_pid; /* Should only be set once at cluster launcher
+					   * startup */
+	slock_t mutex;	/* Controls access to the reader pid */
+	LWLock *lock;	 /* Pointer to the lock to control
+					   * adding/removing elements from queue */
+	uint8 read_upto;
+	uint8 num_elements;
+	BgwMessage buffer[BGW_MQ_MAX_MESSAGES];
 } MessageQueue;
 
 typedef enum QueueResponseType
@@ -63,8 +61,7 @@ static MessageQueue *mq = NULL;
 static void
 queue_init()
 {
-	bool		found;
-
+	bool found;
 
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
 	mq = ShmemInitStruct(BGW_MQ_NAME, sizeof(MessageQueue), &found);
@@ -76,7 +73,6 @@ queue_init()
 		mq->lock = &(GetNamedLWLockTranche(BGW_MQ_TRANCHE_NAME))->lock;
 	}
 	LWLockRelease(AddinShmemInitLock);
-
 }
 
 /* This gets called when shared memory is initialized in a backend
@@ -108,7 +104,7 @@ ts_bgw_message_queue_alloc(void)
 static pid_t
 queue_get_reader(MessageQueue *queue)
 {
-	pid_t		reader;
+	pid_t reader;
 	volatile MessageQueue *vq = queue;
 
 	SpinLockAcquire(&vq->mutex);
@@ -121,7 +117,7 @@ static void
 queue_set_reader(MessageQueue *queue)
 {
 	volatile MessageQueue *vq = queue;
-	pid_t		reader_pid;
+	pid_t reader_pid;
 
 	SpinLockAcquire(&vq->mutex);
 	if (vq->reader_pid == InvalidPid)
@@ -140,7 +136,7 @@ static void
 queue_reset_reader(MessageQueue *queue)
 {
 	volatile MessageQueue *vq = queue;
-	bool		reset = false;
+	bool reset = false;
 
 	SpinLockAcquire(&vq->mutex);
 	if (vq->reader_pid == MyProcPid)
@@ -151,10 +147,11 @@ queue_reset_reader(MessageQueue *queue)
 	SpinLockRelease(&vq->mutex);
 
 	if (!reset)
-		ereport(ERROR, (
-						ERRCODE_INTERNAL_ERROR,
-						errmsg("multiple TimescaleDB background worker launchers have been started when only one is allowed"),
-						errhint("This is a bug, please report it on our github page.")));
+		ereport(ERROR,
+				(ERRCODE_INTERNAL_ERROR,
+				 errmsg("multiple TimescaleDB background worker launchers have been started when "
+						"only one is allowed"),
+				 errhint("This is a bug, please report it on our github page.")));
 }
 
 /* Add a message to the queue - we can do this if the queue is not full */
@@ -166,7 +163,9 @@ queue_add(MessageQueue *queue, BgwMessage *message)
 	LWLockAcquire(queue->lock, LW_EXCLUSIVE);
 	if (queue->num_elements < BGW_MQ_MAX_MESSAGES)
 	{
-		memcpy(&queue->buffer[(queue->read_upto + queue->num_elements) % BGW_MQ_MAX_MESSAGES], message, sizeof(BgwMessage));
+		memcpy(&queue->buffer[(queue->read_upto + queue->num_elements) % BGW_MQ_MAX_MESSAGES],
+			   message,
+			   sizeof(BgwMessage));
 		queue->num_elements++;
 		message_result = MESSAGE_SENT;
 	}
@@ -186,7 +185,9 @@ queue_remove(MessageQueue *queue)
 
 	LWLockAcquire(queue->lock, LW_EXCLUSIVE);
 	if (queue_get_reader(queue) != MyProcPid)
-		ereport(ERROR, (errmsg("cannot read if not reader for TimescaleDB background worker message queue")));
+		ereport(ERROR,
+				(errmsg(
+					"cannot read if not reader for TimescaleDB background worker message queue")));
 
 	if (queue->num_elements > 0)
 	{
@@ -208,13 +209,10 @@ bgw_message_create(BgwMessageType message_type, Oid db_oid)
 
 	seg = dsm_create(BGW_ACK_QUEUE_SIZE, 0);
 
-	*message = (BgwMessage)
-	{
-		.message_type = message_type,
-			.sender_pid = MyProcPid,
-			.db_oid = db_oid,
-			.ack_dsm_handle = dsm_segment_handle(seg)
-	};
+	*message = (BgwMessage){ .message_type = message_type,
+							 .sender_pid = MyProcPid,
+							 .db_oid = db_oid,
+							 .ack_dsm_handle = dsm_segment_handle(seg) };
 
 	return message;
 }
@@ -226,9 +224,8 @@ bgw_message_create(BgwMessageType message_type, Oid db_oid)
 static shm_mq_result
 ts_shm_mq_wait_for_attach(MessageQueue *queue, shm_mq_handle *ack_queue_handle)
 {
-	int			n;
-	PGPROC	   *reader_proc;
-
+	int n;
+	PGPROC *reader_proc;
 
 	for (n = 1; n <= BGW_MQ_NUM_WAITS; n++)
 	{
@@ -252,14 +249,15 @@ ts_shm_mq_wait_for_attach(MessageQueue *queue, shm_mq_handle *ack_queue_handle)
 }
 
 static bool
-enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message, shm_mq_handle *ack_queue_handle)
+enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message,
+							 shm_mq_handle *ack_queue_handle)
 {
-	Size		bytes_received = 0;
+	Size bytes_received = 0;
 	QueueResponseType send_result;
-	bool	   *data = NULL;
+	bool *data = NULL;
 	shm_mq_result mq_res;
-	bool		ack_received = false;
-	int			n;
+	bool ack_received = false;
+	int n;
 
 	/*
 	 * We don't want the process restarting workers to really distinguish the
@@ -286,7 +284,10 @@ enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message, shm_mq_ha
 #if PG96
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL);
 #else
-		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL, WAIT_EVENT_MQ_INTERNAL);
+		WaitLatch(MyLatch,
+				  WL_LATCH_SET | WL_TIMEOUT,
+				  BGW_ACK_WAIT_INTERVAL,
+				  WAIT_EVENT_MQ_INTERNAL);
 #endif
 		ResetLatch(MyLatch);
 		CHECK_FOR_INTERRUPTS();
@@ -307,23 +308,24 @@ enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message, shm_mq_ha
 extern bool
 ts_bgw_message_send_and_wait(BgwMessageType message_type, Oid db_oid)
 {
-	shm_mq	   *ack_queue;
+	shm_mq *ack_queue;
 	dsm_segment *seg;
 	shm_mq_handle *ack_queue_handle;
 	BgwMessage *message;
-	bool		ack_received = false;
+	bool ack_received = false;
 
 	message = bgw_message_create(message_type, db_oid);
 
 	seg = dsm_find_mapping(message->ack_dsm_handle);
 	if (seg == NULL)
-		ereport(ERROR, (errmsg("TimescaleDB background worker dynamic shared memory segment not mapped")));
+		ereport(ERROR,
+				(errmsg("TimescaleDB background worker dynamic shared memory segment not mapped")));
 	ack_queue = shm_mq_create(dsm_segment_address(seg), BGW_ACK_QUEUE_SIZE);
 	shm_mq_set_receiver(ack_queue, MyProc);
 	ack_queue_handle = shm_mq_attach(ack_queue, seg, NULL);
 	if (ack_queue_handle != NULL)
 		ack_received = enqueue_message_wait_for_ack(mq, message, ack_queue_handle);
-	dsm_detach(seg);			/* Queue detach happens in dsm detach callback */
+	dsm_detach(seg); /* Queue detach happens in dsm detach callback */
 	pfree(message);
 	return ack_received;
 }
@@ -351,20 +353,18 @@ typedef enum MessageAckSent
 	SEND_FAILURE
 } MessageAckSent;
 
-static const char *message_ack_sent_err[] = {
-	[ACK_SENT] = "Sent ack successfully",
-	[DSM_SEGMENT_UNAVAILABLE] = "DSM Segment unavailable",
-	[QUEUE_NOT_ATTACHED] = "Ack queue unable to attach",
-	[SEND_FAILURE] = "Unable to send ack on queue"
-};
+static const char *message_ack_sent_err[] = { [ACK_SENT] = "Sent ack successfully",
+											  [DSM_SEGMENT_UNAVAILABLE] = "DSM Segment unavailable",
+											  [QUEUE_NOT_ATTACHED] = "Ack queue unable to attach",
+											  [SEND_FAILURE] = "Unable to send ack on queue" };
 
 static MessageAckSent
 send_ack(dsm_segment *seg, bool success)
 {
-	shm_mq	   *ack_queue;
+	shm_mq *ack_queue;
 	shm_mq_handle *ack_queue_handle;
 	shm_mq_result ack_res;
-	int			n;
+	int n;
 
 	ack_queue = dsm_segment_address(seg);
 	if (ack_queue == NULL)
@@ -385,7 +385,10 @@ send_ack(dsm_segment *seg, bool success)
 #if PG96
 		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL);
 #else
-		WaitLatch(MyLatch, WL_LATCH_SET | WL_TIMEOUT, BGW_ACK_WAIT_INTERVAL, WAIT_EVENT_MQ_INTERNAL);
+		WaitLatch(MyLatch,
+				  WL_LATCH_SET | WL_TIMEOUT,
+				  BGW_ACK_WAIT_INTERVAL,
+				  WAIT_EVENT_MQ_INTERNAL);
 #endif
 		ResetLatch(MyLatch);
 		CHECK_FOR_INTERRUPTS();
@@ -423,8 +426,11 @@ ts_bgw_message_send_ack(BgwMessage *message, bool success)
 
 		ack_res = send_ack(seg, success);
 		if (ack_res != ACK_SENT)
-			ereport(DEBUG1, (errmsg("TimescaleDB background worker launcher unable to send ack to backend pid %d", message->sender_pid),
-							 errhint("Reason: %s", message_ack_sent_err[ack_res])));
+			ereport(DEBUG1,
+					(errmsg("TimescaleDB background worker launcher unable to send ack to backend "
+							"pid %d",
+							message->sender_pid),
+					 errhint("Reason: %s", message_ack_sent_err[ack_res])));
 		dsm_detach(seg);
 	}
 #if PG96

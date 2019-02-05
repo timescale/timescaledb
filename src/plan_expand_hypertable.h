@@ -18,15 +18,19 @@
  * up being expensive because RelationGetNumberOfBlocks has to open the file for each relation.
  * This gets even worse under high concurrency.
  *
- * This logic solves this by expanding only the chunks needed to fulfil the query instead of all chunks.
- * In effect, it moves chunk exclusion up in the planning process. But, we actually don't use constraint
- * exclusion here, but rather a variant of range exclusion implemented by HypertableRestrictInfo.
+ * This logic solves this by expanding only the chunks needed to fulfil the query instead of all
+ * chunks. In effect, it moves chunk exclusion up in the planning process. But, we actually don't
+ * use constraint exclusion here, but rather a variant of range exclusion implemented by
+ * HypertableRestrictInfo.
  * */
 
 /* Can we use hypertable expansion here */
-extern bool ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte);
+extern bool ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti,
+													   RangeTblEntry *rte);
 
 /* Do the expansion */
-extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid relation_objectid, bool inhparent, RelOptInfo *rel);
+extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root,
+											 Oid relation_objectid, bool inhparent,
+											 RelOptInfo *rel);
 
-#endif							/* TIMESCALEDB_PLAN_EXPAND_HYPERTABLE_H */
+#endif /* TIMESCALEDB_PLAN_EXPAND_HYPERTABLE_H */

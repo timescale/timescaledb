@@ -26,37 +26,37 @@ typedef struct EventTriggerDropObject
 typedef struct EventTriggerDropTableConstraint
 {
 	EventTriggerDropObject obj;
-	char	   *constraint_name;
-	char	   *schema;
-	char	   *table;
+	char *constraint_name;
+	char *schema;
+	char *table;
 } EventTriggerDropTableConstraint;
 
 typedef struct EventTriggerDropIndex
 {
 	EventTriggerDropObject obj;
-	char	   *index_name;
-	char	   *schema;
+	char *index_name;
+	char *schema;
 } EventTriggerDropIndex;
 
 typedef struct EventTriggerDropTable
 {
 	EventTriggerDropObject obj;
-	char	   *table_name;
-	char	   *schema;
+	char *table_name;
+	char *schema;
 } EventTriggerDropTable;
 
 typedef struct EventTriggerDropSchema
 {
 	EventTriggerDropObject obj;
-	char	   *schema;
+	char *schema;
 } EventTriggerDropSchema;
 
 typedef struct EventTriggerDropTrigger
 {
 	EventTriggerDropObject obj;
-	char	   *trigger_name;
-	char	   *schema;
-	char	   *table;
+	char *trigger_name;
+	char *schema;
+	char *table;
 } EventTriggerDropTrigger;
 
 extern List *ts_event_trigger_dropped_objects(void);
@@ -64,4 +64,4 @@ extern List *ts_event_trigger_ddl_commands(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
 
-#endif							/* TIMESCALEDB_EVENT_TRIGGER_H */
+#endif /* TIMESCALEDB_EVENT_TRIGGER_H */

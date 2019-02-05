@@ -22,14 +22,15 @@ typedef enum JobType
 typedef struct BgwJob
 {
 	FormData_bgw_job fd;
-	JobType		bgw_type;
+	JobType bgw_type;
 
 } BgwJob;
 
-typedef bool job_main_func (void);
-typedef bool (*unknown_job_type_hook_type) (BgwJob *job);
+typedef bool job_main_func(void);
+typedef bool (*unknown_job_type_hook_type)(BgwJob *job);
 
-extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *function, const char *name, const char *extra);
+extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *function, const char *name,
+												   const char *extra);
 
 extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job);
 
@@ -41,7 +42,10 @@ extern bool ts_bgw_job_has_timeout(BgwJob *job);
 extern TimestampTz ts_bgw_job_timeout_at(BgwJob *job, TimestampTz start_time);
 
 extern TSDLLEXPORT bool ts_bgw_job_delete_by_id(int32 job_id);
-extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval, Interval *max_runtime, int32 max_retries, Interval *retry_period);
+extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name job_type,
+													Interval *schedule_interval,
+													Interval *max_runtime, int32 max_retries,
+													Interval *retry_period);
 extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_job);
 
 extern bool ts_bgw_job_execute(BgwJob *job);
@@ -49,6 +53,7 @@ extern bool ts_bgw_job_execute(BgwJob *job);
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
 extern void ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook);
 extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
-extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs, Interval *next_interval);
+extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
+											  Interval *next_interval);
 
-#endif							/* BGW_JOB_H */
+#endif /* BGW_JOB_H */

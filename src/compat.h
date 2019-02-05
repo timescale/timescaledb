@@ -15,13 +15,12 @@
 
 #include "export.h"
 
-
 #define is_supported_pg_version_96(version) ((version >= 90603) && (version < 100000))
 #define is_supported_pg_version_10(version) ((version >= 100002) && (version < 110000))
 #define is_supported_pg_version_11(version) ((version >= 110000) && (version < 120000))
-#define is_supported_pg_version(version) (is_supported_pg_version_96(version) \
-	|| is_supported_pg_version_10(version) \
-	|| is_supported_pg_version_11(version))
+#define is_supported_pg_version(version)                                                           \
+	(is_supported_pg_version_96(version) || is_supported_pg_version_10(version) ||                 \
+	 is_supported_pg_version_11(version))
 
 #define PG96 is_supported_pg_version_96(PG_VERSION_NUM)
 #define PG10 is_supported_pg_version_10(PG_VERSION_NUM)
@@ -30,7 +29,6 @@
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
 #endif
-
 
 /*
  * The following are compatibility functions for different versions of
@@ -66,7 +64,7 @@
 #if PG96 || PG10
 #define adjust_appendrel_attrs_compat adjust_appendrel_attrs
 #else
-#define adjust_appendrel_attrs_compat(root, node, appinfo) \
+#define adjust_appendrel_attrs_compat(root, node, appinfo)                                         \
 	adjust_appendrel_attrs(root, node, 1, &appinfo)
 #endif
 
@@ -78,26 +76,25 @@
  * interface kept for backwards compatibility.
  */
 #if PG96 || PG10
-#define BackgroundWorkerInitializeConnectionByOidCompat(dboid, useroid) \
+#define BackgroundWorkerInitializeConnectionByOidCompat(dboid, useroid)                            \
 	BackgroundWorkerInitializeConnectionByOid(dboid, useroid)
-#define BackgroundWorkerInitializeConnectionCompat(dbname, username) \
+#define BackgroundWorkerInitializeConnectionCompat(dbname, username)                               \
 	BackgroundWorkerInitializeConnection(dbname, username)
 #else
 #define BGWORKER_NO_FLAGS 0
 
-#define BackgroundWorkerInitializeConnectionByOidCompat(dboid, useroid) \
+#define BackgroundWorkerInitializeConnectionByOidCompat(dboid, useroid)                            \
 	BackgroundWorkerInitializeConnectionByOid(dboid, useroid, BGWORKER_NO_FLAGS)
-#define BackgroundWorkerInitializeConnectionCompat(dbname, username) \
+#define BackgroundWorkerInitializeConnectionCompat(dbname, username)                               \
 	BackgroundWorkerInitializeConnection(dbname, username, BGWORKER_NO_FLAGS)
 #endif
 
 /* CheckValidResultRel */
 #if PG96
-#define CheckValidResultRelCompat(relinfo, operation) \
+#define CheckValidResultRelCompat(relinfo, operation)                                              \
 	CheckValidResultRel((relinfo)->ri_RelationDesc, operation)
 #else
-#define CheckValidResultRelCompat(relinfo, operation)	\
-	CheckValidResultRel(relinfo, operation)
+#define CheckValidResultRelCompat(relinfo, operation) CheckValidResultRel(relinfo, operation)
 #endif
 
 /* ConstraintRelidTypidNameIndexId
@@ -122,8 +119,24 @@
 #if PG96 || PG10
 #define CreateTriggerCompat CreateTrigger
 #else
-#define CreateTriggerCompat(stmt, queryString, relOid, refRelOid, constraintOid, indexOid, isInternal) \
-	CreateTrigger(stmt, queryString, relOid, refRelOid, constraintOid, indexOid, InvalidOid, InvalidOid, NULL, isInternal, false)
+#define CreateTriggerCompat(stmt,                                                                  \
+							queryString,                                                           \
+							relOid,                                                                \
+							refRelOid,                                                             \
+							constraintOid,                                                         \
+							indexOid,                                                              \
+							isInternal)                                                            \
+	CreateTrigger(stmt,                                                                            \
+				  queryString,                                                                     \
+				  relOid,                                                                          \
+				  refRelOid,                                                                       \
+				  constraintOid,                                                                   \
+				  indexOid,                                                                        \
+				  InvalidOid,                                                                      \
+				  InvalidOid,                                                                      \
+				  NULL,                                                                            \
+				  isInternal,                                                                      \
+				  false)
 #endif
 
 /*
@@ -138,37 +151,65 @@
 #if PG96
 #define DefineIndexCompat DefineIndex
 #elif PG10
-#define DefineIndexCompat(relationId, stmt, indexRelationId, is_alter_table, check_rights, skip_build, quiet) \
-	DefineIndex(relationId, stmt, indexRelationId, is_alter_table, check_rights, false, skip_build, quiet)
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				false,                                                                             \
+				skip_build,                                                                        \
+				quiet)
 #else
-#define DefineIndexCompat(relationId, stmt, indexRelationId, is_alter_table, check_rights, skip_build, quiet) \
-	DefineIndex(relationId, stmt, indexRelationId, InvalidOid, InvalidOid, is_alter_table, check_rights, false, skip_build, quiet)
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				InvalidOid,                                                                        \
+				InvalidOid,                                                                        \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				false,                                                                             \
+				skip_build,                                                                        \
+				quiet)
 #endif
 
 /* ExecARInsertTriggers */
 #if PG96
-#define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes) \
+#define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes)                \
 	ExecARInsertTriggers(estate, result_rel_info, tuple, recheck_indexes)
 #else
-#define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes) \
+#define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes)                \
 	ExecARInsertTriggers(estate, result_rel_info, tuple, recheck_indexes, NULL)
 #endif
 
 /* ExecASInsertTriggers */
 #if PG96
-#define ExecASInsertTriggersCompat(estate, result_rel_info) \
+#define ExecASInsertTriggersCompat(estate, result_rel_info)                                        \
 	ExecASInsertTriggers(estate, result_rel_info)
 #else
-#define ExecASInsertTriggersCompat(estate, result_rel_info) \
+#define ExecASInsertTriggersCompat(estate, result_rel_info)                                        \
 	ExecASInsertTriggers(estate, result_rel_info, NULL)
 #endif
 
 /* ExecBuildProjectionInfo */
 #if PG96
-#define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc) \
-	ExecBuildProjectionInfo((List *)ExecInitExpr((Expr *) tl, NULL), exprContext, slot, inputdesc)
+#define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc)                    \
+	ExecBuildProjectionInfo((List *) ExecInitExpr((Expr *) tl, NULL), exprContext, slot, inputdesc)
 #else
-#define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc) \
+#define ExecBuildProjectionInfoCompat(tl, exprContext, slot, parent, inputdesc)                    \
 	ExecBuildProjectionInfo(tl, exprContext, slot, parent, inputdesc)
 #endif
 
@@ -221,11 +262,10 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc)
 static inline char *
 get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 {
-	char	   *name = get_attname(relid, attnum);
+	char *name = get_attname(relid, attnum);
 
 	if (!missing_ok && name == NULL)
-		elog(ERROR, "cache lookup failed for attribute %d of relation %u",
-			 attnum, relid);
+		elog(ERROR, "cache lookup failed for attribute %d of relation %u", attnum, relid);
 	return name;
 }
 #else
@@ -234,11 +274,9 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 
 /* get_projection_info_slot */
 #if PG96
-#define get_projection_info_slot_compat(pinfo) \
-	((pinfo)->pi_slot)
+#define get_projection_info_slot_compat(pinfo) ((pinfo)->pi_slot)
 #else
-#define get_projection_info_slot_compat(pinfo) \
-	((pinfo)->pi_state.resultslot)
+#define get_projection_info_slot_compat(pinfo) ((pinfo)->pi_state.resultslot)
 #endif
 
 /*
@@ -254,8 +292,7 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  * simply omit in earlier versions.
  */
 #if PG96 || PG10
-#define heap_attisnull_compat(tup, attnum, tupledesc) \
-	heap_attisnull(tup, attnum)
+#define heap_attisnull_compat(tup, attnum, tupledesc) heap_attisnull(tup, attnum)
 #else
 #define heap_attisnull_compat heap_attisnull
 #endif
@@ -275,65 +312,152 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
  */
 #if PG96 || PG10
 /* Index flags */
-#define	INDEX_CREATE_IS_PRIMARY				(1 << 0)
-#define	INDEX_CREATE_ADD_CONSTRAINT			(1 << 1)
-#define	INDEX_CREATE_SKIP_BUILD				(1 << 2)
-#define	INDEX_CREATE_CONCURRENT				(1 << 3)
-#define	INDEX_CREATE_IF_NOT_EXISTS			(1 << 4)
-#define	INDEX_CREATE_PARTITIONED			(1 << 5)
-#define INDEX_CREATE_INVALID				(1 << 6)
+#define INDEX_CREATE_IS_PRIMARY (1 << 0)
+#define INDEX_CREATE_ADD_CONSTRAINT (1 << 1)
+#define INDEX_CREATE_SKIP_BUILD (1 << 2)
+#define INDEX_CREATE_CONCURRENT (1 << 3)
+#define INDEX_CREATE_IF_NOT_EXISTS (1 << 4)
+#define INDEX_CREATE_PARTITIONED (1 << 5)
+#define INDEX_CREATE_INVALID (1 << 6)
 /* Constraint flags */
-#define	INDEX_CONSTR_CREATE_MARK_AS_PRIMARY	(1 << 0)
-#define	INDEX_CONSTR_CREATE_DEFERRABLE		(1 << 1)
-#define	INDEX_CONSTR_CREATE_INIT_DEFERRED	(1 << 2)
-#define	INDEX_CONSTR_CREATE_UPDATE_INDEX	(1 << 3)
-#define	INDEX_CONSTR_CREATE_REMOVE_OLD_DEPS	(1 << 4)
+#define INDEX_CONSTR_CREATE_MARK_AS_PRIMARY (1 << 0)
+#define INDEX_CONSTR_CREATE_DEFERRABLE (1 << 1)
+#define INDEX_CONSTR_CREATE_INIT_DEFERRED (1 << 2)
+#define INDEX_CONSTR_CREATE_UPDATE_INDEX (1 << 3)
+#define INDEX_CONSTR_CREATE_REMOVE_OLD_DEPS (1 << 4)
 
-#define index_create_compat(heapRelation, indexRelationName, indexRelationId, relFileNode, indexInfo, indexColNames, accessMethodObjectId, tableSpaceId, collationObjectId, classObjectId, coloptions, reloptions, \
-		flags, constr_flags, allow_system_table_mods, is_internal) \
-	index_create(heapRelation, indexRelationName, indexRelationId, relFileNode, indexInfo, indexColNames, accessMethodObjectId, tableSpaceId, collationObjectId, classObjectId, coloptions, reloptions, \
-		((flags & INDEX_CREATE_IS_PRIMARY) != 0), ((flags & INDEX_CREATE_ADD_CONSTRAINT) != 0), ((constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) != 0), ((constr_flags & INDEX_CONSTR_CREATE_INIT_DEFERRED) != 0), \
-		 allow_system_table_mods, ((flags & INDEX_CREATE_SKIP_BUILD) != 0), ((flags & INDEX_CREATE_CONCURRENT) != 0), is_internal, ((flags & INDEX_CREATE_IF_NOT_EXISTS) != 0))
+#define index_create_compat(heapRelation,                                                          \
+							indexRelationName,                                                     \
+							indexRelationId,                                                       \
+							relFileNode,                                                           \
+							indexInfo,                                                             \
+							indexColNames,                                                         \
+							accessMethodObjectId,                                                  \
+							tableSpaceId,                                                          \
+							collationObjectId,                                                     \
+							classObjectId,                                                         \
+							coloptions,                                                            \
+							reloptions,                                                            \
+							flags,                                                                 \
+							constr_flags,                                                          \
+							allow_system_table_mods,                                               \
+							is_internal)                                                           \
+	index_create(heapRelation,                                                                     \
+				 indexRelationName,                                                                \
+				 indexRelationId,                                                                  \
+				 relFileNode,                                                                      \
+				 indexInfo,                                                                        \
+				 indexColNames,                                                                    \
+				 accessMethodObjectId,                                                             \
+				 tableSpaceId,                                                                     \
+				 collationObjectId,                                                                \
+				 classObjectId,                                                                    \
+				 coloptions,                                                                       \
+				 reloptions,                                                                       \
+				 ((flags & INDEX_CREATE_IS_PRIMARY) != 0),                                         \
+				 ((flags & INDEX_CREATE_ADD_CONSTRAINT) != 0),                                     \
+				 ((constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) != 0),                           \
+				 ((constr_flags & INDEX_CONSTR_CREATE_INIT_DEFERRED) != 0),                        \
+				 allow_system_table_mods,                                                          \
+				 ((flags & INDEX_CREATE_SKIP_BUILD) != 0),                                         \
+				 ((flags & INDEX_CREATE_CONCURRENT) != 0),                                         \
+				 is_internal,                                                                      \
+				 ((flags & INDEX_CREATE_IF_NOT_EXISTS) != 0))
 #else
-#define	index_create_compat(heapRelation, indexRelationName, indexRelationId, relFileNode, indexInfo, indexColNames, accessMethodObjectId, tableSpaceId, collationObjectId, classObjectId, coloptions, reloptions, \
-		flags, constr_flags, allow_system_table_mods, is_internal) \
-	index_create(heapRelation, indexRelationName, indexRelationId, InvalidOid, InvalidOid, relFileNode, indexInfo, indexColNames, accessMethodObjectId, tableSpaceId, collationObjectId, classObjectId, coloptions, reloptions, \
-		flags, constr_flags, allow_system_table_mods, is_internal, NULL)
+#define index_create_compat(heapRelation,                                                          \
+							indexRelationName,                                                     \
+							indexRelationId,                                                       \
+							relFileNode,                                                           \
+							indexInfo,                                                             \
+							indexColNames,                                                         \
+							accessMethodObjectId,                                                  \
+							tableSpaceId,                                                          \
+							collationObjectId,                                                     \
+							classObjectId,                                                         \
+							coloptions,                                                            \
+							reloptions,                                                            \
+							flags,                                                                 \
+							constr_flags,                                                          \
+							allow_system_table_mods,                                               \
+							is_internal)                                                           \
+	index_create(heapRelation,                                                                     \
+				 indexRelationName,                                                                \
+				 indexRelationId,                                                                  \
+				 InvalidOid,                                                                       \
+				 InvalidOid,                                                                       \
+				 relFileNode,                                                                      \
+				 indexInfo,                                                                        \
+				 indexColNames,                                                                    \
+				 accessMethodObjectId,                                                             \
+				 tableSpaceId,                                                                     \
+				 collationObjectId,                                                                \
+				 classObjectId,                                                                    \
+				 coloptions,                                                                       \
+				 reloptions,                                                                       \
+				 flags,                                                                            \
+				 constr_flags,                                                                     \
+				 allow_system_table_mods,                                                          \
+				 is_internal,                                                                      \
+				 NULL)
 #endif
 
 /* InitResultRelInfo */
 #if PG96
-#define InitResultRelInfoCompat(result_rel_info, result_rel_desc, result_rel_index, instrument_options) \
+#define InitResultRelInfoCompat(result_rel_info,                                                   \
+								result_rel_desc,                                                   \
+								result_rel_index,                                                  \
+								instrument_options)                                                \
 	InitResultRelInfo(result_rel_info, result_rel_desc, result_rel_index, instrument_options)
 #else
-#define InitResultRelInfoCompat(result_rel_info, result_rel_desc, result_rel_index, instrument_options) \
+#define InitResultRelInfoCompat(result_rel_info,                                                   \
+								result_rel_desc,                                                   \
+								result_rel_index,                                                  \
+								instrument_options)                                                \
 	InitResultRelInfo(result_rel_info, result_rel_desc, result_rel_index, NULL, instrument_options)
 #endif
 
 /* make_op */
 #if PG96
-#define make_op_compat(pstate, opname, ltree, rtree, location)	\
+#define make_op_compat(pstate, opname, ltree, rtree, location)                                     \
 	make_op(pstate, opname, ltree, rtree, location)
 #else
-#define make_op_compat(pstate, opname, ltree, rtree, location)	\
+#define make_op_compat(pstate, opname, ltree, rtree, location)                                     \
 	make_op(pstate, opname, ltree, rtree, (pstate)->p_last_srf, location)
 #endif
 
 /* map_variable_attnos */
 #if PG96
-#define map_variable_attnos_compat(expr, varno, sublevels_up, map, map_size, rowtype, found_whole_row) \
+#define map_variable_attnos_compat(expr,                                                           \
+								   varno,                                                          \
+								   sublevels_up,                                                   \
+								   map,                                                            \
+								   map_size,                                                       \
+								   rowtype,                                                        \
+								   found_whole_row)                                                \
 	map_variable_attnos(expr, varno, sublevels_up, map, map_size, found_whole_row)
 #else
-#define map_variable_attnos_compat(returning_clauses, varno, sublevels_up, map, map_size, rowtype, found_whole_row) \
-	map_variable_attnos(returning_clauses, varno, sublevels_up, map, map_size, rowtype, found_whole_row);
+#define map_variable_attnos_compat(returning_clauses,                                              \
+								   varno,                                                          \
+								   sublevels_up,                                                   \
+								   map,                                                            \
+								   map_size,                                                       \
+								   rowtype,                                                        \
+								   found_whole_row)                                                \
+	map_variable_attnos(returning_clauses,                                                         \
+						varno,                                                                     \
+						sublevels_up,                                                              \
+						map,                                                                       \
+						map_size,                                                                  \
+						rowtype,                                                                   \
+						found_whole_row);
 #endif
 
 /* ParseFuncOrColumn */
 #if PG96
-#define ParseFuncOrColumnCompat(pstate, funcname, fargs, fn, location) \
+#define ParseFuncOrColumnCompat(pstate, funcname, fargs, fn, location)                             \
 	ParseFuncOrColumn(pstate, funcname, fargs, fn, location)
 #else
-#define ParseFuncOrColumnCompat(pstate, funcname, fargs, fn, location) \
+#define ParseFuncOrColumnCompat(pstate, funcname, fargs, fn, location)                             \
 	ParseFuncOrColumn(pstate, funcname, fargs, (pstate)->p_last_srf, fn, location)
 #endif
 
@@ -389,16 +513,13 @@ get_attname_compat(Oid relid, AttrNumber attnum, bool missing_ok)
 
 /* WaitLatch */
 #if PG96
-#define WaitLatchCompat(latch, wakeEvents, timeout) \
-	WaitLatch(latch, wakeEvents, timeout)
+#define WaitLatchCompat(latch, wakeEvents, timeout) WaitLatch(latch, wakeEvents, timeout)
 
-extern int	oid_cmp(const void *p1, const void *p2);
+extern int oid_cmp(const void *p1, const void *p2);
 
 #else
-#define WaitLatchCompat(latch, wakeEvents, timeout) \
+#define WaitLatchCompat(latch, wakeEvents, timeout)                                                \
 	WaitLatch(latch, wakeEvents, timeout, PG_WAIT_EXTENSION)
 #endif
 
-
-
-#endif							/* TIMESCALEDB_COMPAT_H */
+#endif /* TIMESCALEDB_COMPAT_H */

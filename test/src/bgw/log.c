@@ -26,10 +26,10 @@ ts_bgw_log_set_application_name(char *name)
 static bool
 bgw_log_insert_relation(Relation rel, char *msg)
 {
-	TupleDesc	desc = RelationGetDescr(rel);
+	TupleDesc desc = RelationGetDescr(rel);
 	static int32 msg_no = 0;
-	Datum		values[4];
-	bool		nulls[4] = {false, false, false};
+	Datum values[4];
+	bool nulls[4] = { false, false, false };
 
 	values[0] = Int32GetDatum(msg_no++);
 	values[1] = Int64GetDatum((int64) ts_params_get()->current_time);
@@ -48,21 +48,20 @@ bgw_log_insert_relation(Relation rel, char *msg)
 static void
 bgw_log_insert(char *msg)
 {
-	Relation	rel;
-	Oid			log_oid = get_relname_relid("bgw_log", get_namespace_oid("public", false));
+	Relation rel;
+	Oid log_oid = get_relname_relid("bgw_log", get_namespace_oid("public", false));
 
 	rel = heap_open(log_oid, RowExclusiveLock);
 	bgw_log_insert_relation(rel, msg);
 	heap_close(rel, RowExclusiveLock);
 }
 
-static
-emit_log_hook_type prev_emit_log_hook = NULL;
+static emit_log_hook_type prev_emit_log_hook = NULL;
 
 static void
 emit_log_hook_callback(ErrorData *edata)
 {
-	bool		started_txn = false;
+	bool started_txn = false;
 
 	/*
 	 * Block signals so we don't lose messages generated during signal

@@ -25,11 +25,11 @@
 static bool
 index_has_attribute(List *indexelems, const char *attrname)
 {
-	ListCell   *lc;
+	ListCell *lc;
 
-	foreach(lc, indexelems)
+	foreach (lc, indexelems)
 	{
-		Node	   *node = lfirst(lc);
+		Node *node = lfirst(lc);
 		const char *colname = NULL;
 
 		/*
@@ -45,17 +45,16 @@ index_has_attribute(List *indexelems, const char *attrname)
 				colname = strVal(node);
 				break;
 			case T_List:
-				{
-					List	   *pair = (List *) lfirst(lc);
+			{
+				List *pair = (List *) lfirst(lc);
 
-					if (list_length(pair) == 2 &&
-						IsA(linitial(pair), IndexElem) &&
-						IsA(lsecond(pair), List))
-					{
-						colname = ((IndexElem *) linitial(pair))->name;
-						break;
-					}
+				if (list_length(pair) == 2 && IsA(linitial(pair), IndexElem) &&
+					IsA(lsecond(pair), List))
+				{
+					colname = ((IndexElem *) linitial(pair))->name;
+					break;
 				}
+			}
 			default:
 				elog(ERROR, "unsupported index list element");
 		}
@@ -78,16 +77,17 @@ index_has_attribute(List *indexelems, const char *attrname)
 void
 ts_indexing_verify_columns(Hyperspace *hs, List *indexelems)
 {
-	int			i;
+	int i;
 
 	for (i = 0; i < hs->num_dimensions; i++)
 	{
-		Dimension  *dim = &hs->dimensions[i];
+		Dimension *dim = &hs->dimensions[i];
 
 		if (!index_has_attribute(indexelems, NameStr(dim->fd.column_name)))
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION),
-					 errmsg("cannot create a unique index without the column \"%s\" (used in partitioning)",
+					 errmsg("cannot create a unique index without the column \"%s\" (used in "
+							"partitioning)",
 							NameStr(dim->fd.column_name))));
 	}
 }
@@ -110,8 +110,8 @@ ts_indexing_verify_index(Hyperspace *hs, IndexStmt *stmt)
 static List *
 build_indexcolumn_list(Relation idxrel)
 {
-	List	   *columns = NIL;
-	int			i;
+	List *columns = NIL;
+	int i;
 
 	for (i = 0; i < idxrel->rd_att->natts; i++)
 	{
@@ -120,14 +120,13 @@ build_indexcolumn_list(Relation idxrel)
 		columns = lappend(columns, makeString(NameStr(idxattr->attname)));
 	}
 
-
 	return columns;
 }
 
 static void
 create_default_index(Hypertable *ht, List *indexelems)
 {
-	IndexStmt	stmt = {
+	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,
 		.idxname = NULL,
@@ -139,10 +138,10 @@ create_default_index(Hypertable *ht, List *indexelems)
 	DefineIndexCompat(ht->main_table_relid,
 					  &stmt,
 					  InvalidOid,
-					  false,	/* is alter table */
-					  false,	/* check rights */
-					  false,	/* skip_build */
-					  true);	/* quiet */
+					  false, /* is alter table */
+					  false, /* check rights */
+					  false, /* skip_build */
+					  true); /* quiet */
 }
 
 static Node *
@@ -164,13 +163,10 @@ get_open_dim_name(Dimension *dim)
 }
 
 static void
-create_default_indexes(Hypertable *ht,
-					   Dimension *time_dim,
-					   Dimension *space_dim,
-					   bool has_time_idx,
+create_default_indexes(Hypertable *ht, Dimension *time_dim, Dimension *space_dim, bool has_time_idx,
 					   bool has_time_space_idx)
 {
-	IndexElem	telem = {
+	IndexElem telem = {
 		.type = T_IndexElem,
 		.name = get_open_dim_name(time_dim),
 		.ordering = SORTBY_DESC,
@@ -188,7 +184,7 @@ create_default_indexes(Hypertable *ht,
 	/* Create ("space", "time") index */
 	if (space_dim != NULL && !has_time_space_idx)
 	{
-		IndexElem	selem = {
+		IndexElem selem = {
 			.type = T_IndexElem,
 			.name = NameStr(space_dim->fd.column_name),
 			.ordering = SORTBY_ASC,
@@ -208,17 +204,17 @@ create_default_indexes(Hypertable *ht,
 static void
 indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default, bool verify)
 {
-	Relation	tblrel = relation_open(ht->main_table_relid, AccessShareLock);
-	Dimension  *time_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
-	Dimension  *space_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
-	List	   *indexlist = RelationGetIndexList(tblrel);
-	bool		has_time_idx = false;
-	bool		has_time_space_idx = false;
-	ListCell   *lc;
+	Relation tblrel = relation_open(ht->main_table_relid, AccessShareLock);
+	Dimension *time_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	Dimension *space_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
+	List *indexlist = RelationGetIndexList(tblrel);
+	bool has_time_idx = false;
+	bool has_time_space_idx = false;
+	ListCell *lc;
 
-	foreach(lc, indexlist)
+	foreach (lc, indexlist)
 	{
-		Relation	idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
+		Relation idxrel = relation_open(lfirst_oid(lc), AccessShareLock);
 
 		if (verify && (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion))
 			ts_indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
@@ -226,8 +222,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 		/* Check for existence of "default" indexes */
 		if (create_default && NULL != time_dim)
 		{
-			Form_pg_attribute idxattr_time,
-						idxattr_space;
+			Form_pg_attribute idxattr_time, idxattr_space;
 
 			switch (idxrel->rd_att->natts)
 			{
@@ -242,7 +237,8 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 					idxattr_space = TupleDescAttr(idxrel->rd_att, 0);
 					idxattr_time = TupleDescAttr(idxrel->rd_att, 1);
 					if (space_dim != NULL &&
-						namestrcmp(&idxattr_space->attname, NameStr(space_dim->fd.column_name)) == 0 &&
+						namestrcmp(&idxattr_space->attname, NameStr(space_dim->fd.column_name)) ==
+							0 &&
 						namestrcmp(&idxattr_time->attname, NameStr(time_dim->fd.column_name)) == 0)
 						has_time_space_idx = true;
 					break;
@@ -265,7 +261,6 @@ ts_indexing_verify_indexes(Hypertable *ht)
 	indexing_create_and_verify_hypertable_indexes(ht, false, true);
 }
 
-
 void
 ts_indexing_create_default_indexes(Hypertable *ht)
 {
@@ -275,21 +270,20 @@ ts_indexing_create_default_indexes(Hypertable *ht)
 TSDLLEXPORT Oid
 ts_indexing_find_clustered_index(Oid table_relid)
 {
-	Relation	rel;
-	ListCell   *index;
-	Oid			index_relid = InvalidOid;
+	Relation rel;
+	ListCell *index;
+	Oid index_relid = InvalidOid;
 
 	rel = heap_open(table_relid, AccessShareLock);
 
 	/* We need to find the index that has indisclustered set. */
-	foreach(index, RelationGetIndexList(rel))
+	foreach (index, RelationGetIndexList(rel))
 	{
-		HeapTuple	idxtuple;
+		HeapTuple idxtuple;
 		Form_pg_index indexForm;
 
 		index_relid = lfirst_oid(index);
-		idxtuple = SearchSysCache1(INDEXRELID,
-								   ObjectIdGetDatum(index_relid));
+		idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_relid));
 		if (!HeapTupleIsValid(idxtuple))
 			elog(ERROR, "cache lookup failed for index %u", index_relid);
 		indexForm = (Form_pg_index) GETSTRUCT(idxtuple);

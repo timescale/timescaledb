@@ -12,13 +12,13 @@
 
 typedef struct VersionOSInfo
 {
-	char		sysname[VERSION_INFO_LEN];
-	char		version[VERSION_INFO_LEN];
-	char		release[VERSION_INFO_LEN];
-	char		pretty_version[VERSION_INFO_LEN];
-	bool		has_pretty_version;
+	char sysname[VERSION_INFO_LEN];
+	char version[VERSION_INFO_LEN];
+	char release[VERSION_INFO_LEN];
+	char pretty_version[VERSION_INFO_LEN];
+	bool has_pretty_version;
 } VersionOSInfo;
 
 extern bool ts_version_get_os_info(VersionOSInfo *info);
 
-#endif							/* TIMESCALEDB_VERSION_H */
+#endif /* TIMESCALEDB_VERSION_H */
