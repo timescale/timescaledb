@@ -87,11 +87,10 @@ typedef enum SchedulerState
 
 static volatile sig_atomic_t got_SIGHUP = false;
 
-static void
-launcher_sighup(SIGNAL_ARGS)
+static void launcher_sighup(SIGNAL_ARGS)
 {
 	/* based on av_sighup_handler */
-	int			save_errno = errno;
+	int save_errno = errno;
 
 	got_SIGHUP = true;
 	SetLatch(MyLatch);
@@ -118,34 +117,36 @@ TS_FUNCTION_INFO_V1(ts_bgw_cluster_launcher_main);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_entrypoint);
 typedef struct DbHashEntry
 {
-	Oid			db_oid;			/* key for the hash table, must be first */
-	BackgroundWorkerHandle *db_scheduler_handle;	/* needed to shut down
-													 * properly */
+	Oid db_oid;									 /* key for the hash table, must be first */
+	BackgroundWorkerHandle *db_scheduler_handle; /* needed to shut down
+												  * properly */
 	SchedulerState state;
 	VirtualTransactionId vxid;
-	int			state_transition_failures;
+	int state_transition_failures;
 } DbHashEntry;
 
-static void
-			scheduler_state_trans_enabled_to_allocated(DbHashEntry *entry);
+static void scheduler_state_trans_enabled_to_allocated(DbHashEntry *entry);
 
 static void
 bgw_on_postmaster_death(void)
 {
-	on_exit_reset();			/* don't call exit hooks cause we want to bail
-								 * out quickly */
+	on_exit_reset(); /* don't call exit hooks cause we want to bail
+					  * out quickly */
 	ereport(FATAL,
 			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("postmaster exited while TimescaleDB background worker launcher launcher was working")));
+			 errmsg("postmaster exited while TimescaleDB background worker launcher launcher was "
+					"working")));
 }
 
 static void
 report_bgw_limit_exceeded(DbHashEntry *entry)
 {
 	if (entry->state_transition_failures == 0)
-		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					  errmsg("TimescaleDB background worker limit of %d exceeded", ts_guc_max_background_workers),
-					  errhint("Consider increasing timescaledb.max_background_workers.")));
+		ereport(LOG,
+				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+				 errmsg("TimescaleDB background worker limit of %d exceeded",
+						ts_guc_max_background_workers),
+				 errhint("Consider increasing timescaledb.max_background_workers.")));
 	entry->state_transition_failures++;
 }
 
@@ -153,9 +154,11 @@ static void
 report_error_on_worker_register_failure(DbHashEntry *entry)
 {
 	if (entry->state_transition_failures == 0)
-		ereport(LOG, (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
-					  errmsg("no available background worker slots"),
-					  errhint("Consider increasing max_worker_processes in tandem with timescaledb.max_background_workers.")));
+		ereport(LOG,
+				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+				 errmsg("no available background worker slots"),
+				 errhint("Consider increasing max_worker_processes in tandem with "
+						 "timescaledb.max_background_workers.")));
 	entry->state_transition_failures++;
 }
 
@@ -172,7 +175,7 @@ static BgwHandleStatus
 get_background_worker_pid(BackgroundWorkerHandle *handle, pid_t *pidp)
 {
 	BgwHandleStatus status;
-	pid_t		pid;
+	pid_t pid;
 
 	if (handle == NULL)
 		status = BGWH_STOPPED;
@@ -296,12 +299,12 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 static HTAB *
 init_database_htab(void)
 {
-	HASHCTL		info = {
-		.keysize = sizeof(Oid),
-		.entrysize = sizeof(DbHashEntry)
-	};
+	HASHCTL info = { .keysize = sizeof(Oid), .entrysize = sizeof(DbHashEntry) };
 
-	return hash_create("launcher_db_htab", ts_guc_max_background_workers, &info, HASH_BLOBS | HASH_ELEM);
+	return hash_create("launcher_db_htab",
+					   ts_guc_max_background_workers,
+					   &info,
+					   HASH_BLOBS | HASH_ELEM);
 }
 
 /* Insert a scheduler entry into the hash table. Correctly set entry values. */
@@ -309,7 +312,7 @@ static DbHashEntry *
 db_hash_entry_create_if_not_exists(HTAB *db_htab, Oid db_oid)
 {
 	DbHashEntry *db_he;
-	bool		found;
+	bool found;
 
 	db_he = (DbHashEntry *) hash_search(db_htab, &db_oid, HASH_ENTER, &found);
 	if (!found)
@@ -345,9 +348,9 @@ db_hash_entry_create_if_not_exists(HTAB *db_htab, Oid db_oid)
 static void
 populate_database_htab(HTAB *db_htab)
 {
-	Relation	rel;
+	Relation rel;
 	HeapScanDesc scan;
-	HeapTuple	tup;
+	HeapTuple tup;
 
 	/*
 	 * by this time we should already be connected to the db, and only have
@@ -364,8 +367,8 @@ populate_database_htab(HTAB *db_htab)
 		Form_pg_database pgdb = (Form_pg_database) GETSTRUCT(tup);
 
 		if (!pgdb->datallowconn || pgdb->datistemplate)
-			continue;			/* don't bother with dbs that don't allow
-								 * connections or are templates */
+			continue; /* don't bother with dbs that don't allow
+					   * connections or are templates */
 
 		db_hash_entry_create_if_not_exists(db_htab, HeapTupleGetOid(tup));
 	}
@@ -415,12 +418,13 @@ scheduler_state_trans_started_to_allocated(DbHashEntry *entry)
 static void
 scheduler_state_trans_allocated_to_started(DbHashEntry *entry)
 {
-	pid_t		worker_pid;
-	bool		worker_registered;
+	pid_t worker_pid;
+	bool worker_registered;
 
 	Assert(entry->state == ALLOCATED);
 
-	worker_registered = register_entrypoint_for_db(entry->db_oid, entry->vxid, &entry->db_scheduler_handle);
+	worker_registered =
+		register_entrypoint_for_db(entry->db_oid, entry->vxid, &entry->db_scheduler_handle);
 	if (!worker_registered)
 	{
 		report_error_on_worker_register_failure(entry);
@@ -454,7 +458,6 @@ scheduler_state_trans_started_to_disabled(DbHashEntry *entry)
 	ts_bgw_total_workers_decrement();
 	scheduler_modify_state(entry, DISABLED);
 }
-
 
 static void
 scheduler_state_trans_automatic(DbHashEntry *entry)
@@ -493,7 +496,7 @@ scheduler_state_trans_automatic_all(HTAB *db_htab)
 static void
 launcher_pre_shmem_cleanup(int code, Datum arg)
 {
-	HTAB	   *db_htab = *(HTAB **) DatumGetPointer(arg);
+	HTAB *db_htab = *(HTAB **) DatumGetPointer(arg);
 	HASH_SEQ_STATUS hash_seq;
 	DbHashEntry *current_entry;
 
@@ -593,7 +596,7 @@ message_stop_action(HTAB *db_htab, BgwMessage *message)
  * accomplished by moving from STARTED to ALLOCATED after shutting down the
  * worker, never releasing the entry and transitioning all the way back to
  * ENABLED).
-*/
+ */
 static AckResult
 message_restart_action(HTAB *db_htab, BgwMessage *message, VirtualTransactionId vxid)
 {
@@ -629,9 +632,9 @@ static bool
 launcher_handle_message(HTAB *db_htab)
 {
 	BgwMessage *message = ts_bgw_message_receive();
-	PGPROC	   *sender;
+	PGPROC *sender;
 	VirtualTransactionId vxid;
-	AckResult	action_result = ACK_FAILURE;
+	AckResult action_result = ACK_FAILURE;
 
 	if (message == NULL)
 		return false;
@@ -639,7 +642,9 @@ launcher_handle_message(HTAB *db_htab)
 	sender = BackendPidGetProc(message->sender_pid);
 	if (sender == NULL)
 	{
-		ereport(LOG, (errmsg("TimescaleDB background worker launcher received message from non-existent backend")));
+		ereport(LOG,
+				(errmsg("TimescaleDB background worker launcher received message from non-existent "
+						"backend")));
 		return true;
 	}
 
@@ -678,8 +683,7 @@ launcher_handle_message(HTAB *db_htab)
  * they can set `timescaledb.max_background_workers = 0` and then we will
  * `proc_exit(0)` before doing anything else.
  */
-static void
-launcher_sigterm(SIGNAL_ARGS)
+static void launcher_sigterm(SIGNAL_ARGS)
 {
 	/*
 	 * do not use a level >= ERROR because we don't want to exit here but
@@ -687,16 +691,17 @@ launcher_sigterm(SIGNAL_ARGS)
 	 */
 	ereport(LOG,
 			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("terminating TimescaleDB background worker launcher due to administrator command")));
+			 errmsg("terminating TimescaleDB background worker launcher due to administrator "
+					"command")));
 	die(postgres_signal_arg);
 }
 
 extern Datum
 ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 {
-	HTAB	  **htab_storage;
+	HTAB **htab_storage;
 
-	HTAB	   *db_htab;
+	HTAB *db_htab;
 
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, launcher_sigterm);
@@ -714,9 +719,10 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		 * have to exit(0) because if we exit in error we get restarted by the
 		 * postmaster.
 		 */
-		ereport(LOG, (errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					  errmsg("TimescaleDB background worker is set to 0"),
-					  errhint("TimescaleDB background worker launcher shutting down.")));
+		ereport(LOG,
+				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+				 errmsg("TimescaleDB background worker is set to 0"),
+				 errhint("TimescaleDB background worker launcher shutting down.")));
 		proc_exit(0);
 	}
 	/* Connect to the db, no db name yet, so can only access shared catalogs */
@@ -744,8 +750,8 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 
 	while (true)
 	{
-		int			wl_rc;
-		bool		handled_msgs = false;
+		int wl_rc;
+		bool handled_msgs = false;
 
 		CHECK_FOR_INTERRUPTS();
 		populate_database_htab(db_htab);
@@ -754,7 +760,9 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		if (handled_msgs)
 			continue;
 
-		wl_rc = WaitLatchCompat(MyLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT, BGW_LAUNCHER_POLL_TIME_MS);
+		wl_rc = WaitLatchCompat(MyLatch,
+								WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT,
+								BGW_LAUNCHER_POLL_TIME_MS);
 		ResetLatch(MyLatch);
 		if (wl_rc & WL_POSTMASTER_DEATH)
 			bgw_on_postmaster_death();
@@ -769,8 +777,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 }
 
 /* Wrapper around `die()`, see note on `launcher_sigterm()` above for more info*/
-static void
-entrypoint_sigterm(SIGNAL_ARGS)
+static void entrypoint_sigterm(SIGNAL_ARGS)
 {
 	ereport(LOG,
 			(errcode(ERRCODE_ADMIN_SHUTDOWN),
@@ -790,17 +797,19 @@ entrypoint_sigterm(SIGNAL_ARGS)
 static void
 database_is_template_check(void)
 {
-
 	Form_pg_database pgdb;
-	HeapTuple	tuple;
+	HeapTuple tuple;
 
 	tuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(MyDatabaseId));
 	if (!HeapTupleIsValid(tuple))
-		ereport(ERROR, (errmsg("TimescaleDB background worker failed to find entry for database in syscache")));
+		ereport(ERROR,
+				(errmsg("TimescaleDB background worker failed to find entry for database in "
+						"syscache")));
 
 	pgdb = (Form_pg_database) GETSTRUCT(tuple);
 	if (pgdb->datistemplate)
-		ereport(ERROR, (errmsg("TimescaleDB background worker connected to template database, exiting")));
+		ereport(ERROR,
+				(errmsg("TimescaleDB background worker connected to template database, exiting")));
 
 	ReleaseSysCache(tuple);
 }
@@ -817,11 +826,10 @@ database_is_template_check(void)
 extern Datum
 ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 {
-	Oid			db_id = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	bool		ts_installed = false;
-	char		version[MAX_VERSION_LEN];
+	Oid db_id = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
+	bool ts_installed = false;
+	char version[MAX_VERSION_LEN];
 	VirtualTransactionId vxid;
-
 
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, entrypoint_sigterm);
@@ -862,15 +870,18 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	CommitTransactionCommand();
 	if (ts_installed)
 	{
-		char		soname[MAX_SO_NAME_LEN];
-		PGFunction	versioned_scheduler_main;
+		char soname[MAX_SO_NAME_LEN];
+		PGFunction versioned_scheduler_main;
 
 		snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
-		versioned_scheduler_main = load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
+		versioned_scheduler_main =
+			load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
 		if (versioned_scheduler_main == NULL)
-			ereport(LOG, (errmsg("TimescaleDB version %s does not have a background worker, exiting", soname)));
-		else					/* essentially we morph into the versioned
-								 * worker here */
+			ereport(LOG,
+					(errmsg("TimescaleDB version %s does not have a background worker, exiting",
+							soname)));
+		else /* essentially we morph into the versioned
+			  * worker here */
 			DirectFunctionCall1(versioned_scheduler_main, ObjectIdGetDatum(InvalidOid));
 	}
 	PG_RETURN_VOID();

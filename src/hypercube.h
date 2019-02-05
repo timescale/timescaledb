@@ -16,16 +16,15 @@
  */
 typedef struct Hypercube
 {
-	int16		capacity;		/* capacity of slices[] */
-	int16		num_slices;		/* actual number of slices (should equal
-								 * capacity after create) */
+	int16 capacity;   /* capacity of slices[] */
+	int16 num_slices; /* actual number of slices (should equal
+					   * capacity after create) */
 	/* Slices are stored in dimension order */
 	DimensionSlice *slices[FLEXIBLE_ARRAY_MEMBER];
 } Hypercube;
 
-#define HYPERCUBE_SIZE(num_dimensions)									\
+#define HYPERCUBE_SIZE(num_dimensions)                                                             \
 	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
-
 
 extern Hypercube *ts_hypercube_alloc(int16 num_dimensions);
 extern void ts_hypercube_free(Hypercube *hc);
@@ -37,4 +36,4 @@ extern DimensionSlice *ts_hypercube_get_slice_by_dimension_id(Hypercube *hc, int
 extern Hypercube *ts_hypercube_copy(Hypercube *hc);
 extern void ts_hypercube_slice_sort(Hypercube *hc);
 
-#endif							/* TIMESCALEDB_HYPERCUBE_H */
+#endif /* TIMESCALEDB_HYPERCUBE_H */

@@ -12,7 +12,9 @@
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 
-bool		ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *reverse);
-Path	   *ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, MergeAppendPath *merge);
+bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+									   bool *reverse);
+Path *ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+									MergeAppendPath *merge);
 
-#endif							/* TIMESCALEDB_PLAN_ORDERED_APPEND_H */
+#endif /* TIMESCALEDB_PLAN_ORDERED_APPEND_H */

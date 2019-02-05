@@ -65,38 +65,38 @@ typedef enum GapFillColumnType
 typedef struct GapFillColumnState
 {
 	GapFillColumnType ctype;
-	Oid			typid;
-	bool		typbyval;
-	int16		typlen;
+	Oid typid;
+	bool typbyval;
+	int16 typlen;
 } GapFillColumnState;
 
 typedef struct GapFillGroupColumnState
 {
 	GapFillColumnState base;
-	Datum		value;
-	bool		isnull;
+	Datum value;
+	bool isnull;
 } GapFillGroupColumnState;
 
 typedef struct GapFillState
 {
 	CustomScanState csstate;
-	Plan	   *subplan;
+	Plan *subplan;
 
-	Oid			gapfill_typid;
-	int64		gapfill_start;
-	int64		gapfill_end;
-	int64		gapfill_period;
+	Oid gapfill_typid;
+	int64 gapfill_start;
+	int64 gapfill_end;
+	int64 gapfill_period;
 
-	int64		next_timestamp;
-	int64		subslot_time;	/* time of tuple in subslot */
+	int64 next_timestamp;
+	int64 subslot_time; /* time of tuple in subslot */
 
-	int			time_index;		/* position of time column */
-	TupleTableSlot *subslot;	/* TupleTableSlot from subplan */
+	int time_index;			 /* position of time column */
+	TupleTableSlot *subslot; /* TupleTableSlot from subplan */
 
-	bool		multigroup;		/* multiple groupings */
-	bool		groups_initialized;
+	bool multigroup; /* multiple groupings */
+	bool groups_initialized;
 
-	int			ncolumns;
+	int ncolumns;
 	GapFillColumnState **columns;
 
 	ProjectionInfo *pi;
@@ -104,9 +104,9 @@ typedef struct GapFillState
 	GapFillFetchState state;
 } GapFillState;
 
-Node	   *gapfill_state_create(CustomScan *);
-Expr	   *gapfill_adjust_varnos(GapFillState *state, Expr *expr);
-Datum		gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull);
-int64		gapfill_datum_get_internal(Datum, Oid);
+Node *gapfill_state_create(CustomScan *);
+Expr *gapfill_adjust_varnos(GapFillState *state, Expr *expr);
+Datum gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull);
+int64 gapfill_datum_get_internal(Datum, Oid);
 
-#endif							/* TIMESCALEDB_GAPFILL_EXEC_H */
+#endif /* TIMESCALEDB_GAPFILL_EXEC_H */

@@ -25,13 +25,12 @@ ts_gapfill_marker(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(ts_cm_functions->gapfill_marker(fcinfo));
 }
 
-#define GAPFILL_TIMEBUCKET_WRAPPER(datatype) \
-TS_FUNCTION_INFO_V1(ts_gapfill_ ## datatype ## _bucket); \
-Datum \
-ts_gapfill_ ## datatype ## _bucket(PG_FUNCTION_ARGS) \
-{ \
-	return ts_cm_functions->gapfill_ ## datatype ## _time_bucket(fcinfo); \
-}
+#define GAPFILL_TIMEBUCKET_WRAPPER(datatype)                                                       \
+	TS_FUNCTION_INFO_V1(ts_gapfill_##datatype##_bucket);                                           \
+	Datum ts_gapfill_##datatype##_bucket(PG_FUNCTION_ARGS)                      \
+	{                                                                                              \
+		return ts_cm_functions->gapfill_##datatype##_time_bucket(fcinfo);                          \
+	}
 
 GAPFILL_TIMEBUCKET_WRAPPER(int16);
 GAPFILL_TIMEBUCKET_WRAPPER(int32);

@@ -25,8 +25,8 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	Hypertable *ht;
-	Cache	   *hypertable_cache;
-	PlanState  *ps;
+	Cache *hypertable_cache;
+	PlanState *ps;
 
 	hypertable_cache = ts_hypertable_cache_pin();
 
@@ -48,20 +48,20 @@ chunk_dispatch_exec(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	TupleTableSlot *slot;
-	PlanState  *substate = linitial(node->custom_ps);
+	PlanState *substate = linitial(node->custom_ps);
 
 	/* Get the next tuple from the subplan state node */
 	slot = ExecProcNode(substate);
 
 	if (!TupIsNull(slot))
 	{
-		Point	   *point;
+		Point *point;
 		ChunkInsertState *cis;
 		ChunkDispatch *dispatch = state->dispatch;
 		Hypertable *ht = dispatch->hypertable;
-		HeapTuple	tuple;
-		TupleDesc	tupdesc = slot->tts_tupleDescriptor;
-		EState	   *estate = node->ss.ps.state;
+		HeapTuple tuple;
+		TupleDesc tupdesc = slot->tts_tupleDescriptor;
+		EState *estate = node->ss.ps.state;
 		MemoryContext old;
 
 		/* Switch to the executor's per-tuple memory context */
@@ -80,7 +80,6 @@ chunk_dispatch_exec(CustomScanState *node)
 		 * Copy over the index to use in the returning list.
 		 */
 		dispatch->returning_index = state->parent->mt_whichplan;
-
 
 		/* Find or create the insert state matching the point */
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
@@ -111,7 +110,7 @@ chunk_dispatch_exec(CustomScanState *node)
 
 		if (state->parent->mt_existing != NULL)
 		{
-			TupleDesc	chunk_desc;
+			TupleDesc chunk_desc;
 
 			if (cis->tup_conv_map && cis->tup_conv_map->outdesc)
 				chunk_desc = cis->tup_conv_map->outdesc;
@@ -141,7 +140,7 @@ static void
 chunk_dispatch_end(CustomScanState *node)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
-	PlanState  *substate = linitial(node->custom_ps);
+	PlanState *substate = linitial(node->custom_ps);
 
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
@@ -151,7 +150,7 @@ chunk_dispatch_end(CustomScanState *node)
 static void
 chunk_dispatch_rescan(CustomScanState *node)
 {
-	PlanState  *substate = linitial(node->custom_ps);
+	PlanState *substate = linitial(node->custom_ps);
 
 	ExecReScan(substate);
 }
@@ -192,7 +191,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	 */
 	if (parent->mt_existing != NULL)
 	{
-		TupleDesc	existing;
+		TupleDesc existing;
 
 		existing = parent->mt_existing->tts_tupleDescriptor;
 		parent->mt_existing = ExecInitExtraTupleSlotCompat(parent->ps.state, NULL);
@@ -200,7 +199,7 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	}
 	if (parent->mt_conflproj != NULL)
 	{
-		TupleDesc	existing;
+		TupleDesc existing;
 
 		existing = parent->mt_conflproj->tts_tupleDescriptor;
 

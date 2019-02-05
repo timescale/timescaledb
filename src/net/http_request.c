@@ -9,23 +9,17 @@
 
 #include "http.h"
 
-#define SPACE		' '
-#define COLON		':'
-#define CARRIAGE	'\r'
-#define NEW_LINE	'\n'
+#define SPACE ' '
+#define COLON ':'
+#define CARRIAGE '\r'
+#define NEW_LINE '\n'
 
 /*  So that http_response.c can find this function */
-HttpHeader *ts_http_header_create(const char *name,
-					  size_t name_len,
-					  const char *value,
-					  size_t value_len,
-					  HttpHeader *next);
+HttpHeader *ts_http_header_create(const char *name, size_t name_len, const char *value,
+								  size_t value_len, HttpHeader *next);
 
 HttpHeader *
-ts_http_header_create(const char *name,
-					  size_t name_len,
-					  const char *value,
-					  size_t value_len,
+ts_http_header_create(const char *name, size_t name_len, const char *value, size_t value_len,
 					  HttpHeader *next)
 {
 	HttpHeader *new_header = palloc(sizeof(HttpHeader));
@@ -50,22 +44,19 @@ ts_http_header_create(const char *name,
 typedef struct HttpRequest
 {
 	HttpRequestMethod method;
-	char	   *uri;
-	size_t		uri_len;
+	char *uri;
+	size_t uri_len;
 	HttpVersion version;
 	HttpHeader *headers;
-	char	   *body;
-	size_t		body_len;
+	char *body;
+	size_t body_len;
 	MemoryContext context;
 } HttpRequest;
 
-static const char *http_method_strings[] = {
-	[HTTP_GET] = "GET",
-	[HTTP_POST] = "POST"
-};
+static const char *http_method_strings[] = { [HTTP_GET] = "GET", [HTTP_POST] = "POST" };
 
-#define METHOD_STRING(x)	http_method_strings[x]
-#define VERSION_STRING(x)	ts_http_version_string(x)
+#define METHOD_STRING(x) http_method_strings[x]
+#define VERSION_STRING(x) ts_http_version_string(x)
 
 void
 ts_http_request_init(HttpRequest *req, HttpRequestMethod method)
@@ -76,9 +67,8 @@ ts_http_request_init(HttpRequest *req, HttpRequestMethod method)
 HttpRequest *
 ts_http_request_create(HttpRequestMethod method)
 {
-	MemoryContext request_context = AllocSetContextCreate(CurrentMemoryContext,
-														  "Http Request",
-														  ALLOCSET_DEFAULT_SIZES);
+	MemoryContext request_context =
+		AllocSetContextCreate(CurrentMemoryContext, "Http Request", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(request_context);
 	HttpRequest *req = palloc0(sizeof(HttpRequest));
 
@@ -99,7 +89,7 @@ void
 ts_http_request_set_uri(HttpRequest *req, const char *uri)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
-	int			uri_len = strlen(uri);
+	int uri_len = strlen(uri);
 
 	req->uri = palloc(uri_len + 1);
 	memcpy(req->uri, uri, uri_len);
@@ -118,10 +108,9 @@ void
 ts_http_request_set_header(HttpRequest *req, const char *name, const char *value)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
-	int			name_len = strlen(name);
-	int			value_len = strlen(value);
-	HttpHeader *new_header =
-	ts_http_header_create(name, name_len, value, value_len, req->headers);
+	int name_len = strlen(name);
+	int value_len = strlen(value);
+	HttpHeader *new_header = ts_http_header_create(name, name_len, value, value_len, req->headers);
 
 	req->headers = new_header;
 	MemoryContextSwitchTo(old);
@@ -185,7 +174,7 @@ http_header_serialize(HttpHeader *header, StringInfo buf)
 static int
 http_header_get_content_length(HttpHeader *header)
 {
-	int			content_length = -1;
+	int content_length = -1;
 
 	if (!strncmp(header->name, HTTP_CONTENT_LENGTH, header->name_len))
 		sscanf(header->value, "%d", &content_length);
@@ -198,8 +187,8 @@ ts_http_request_build(HttpRequest *req, size_t *buf_size)
 	/* serialize into this buf, which is allocated on caller's memory context */
 	StringInfoData buf;
 	HttpHeader *cur_header;
-	int			content_length = 0;
-	bool		verified_content_length = false;
+	int content_length = 0;
+	bool verified_content_length = false;
 
 	initStringInfo(&buf);
 

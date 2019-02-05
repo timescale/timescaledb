@@ -14,7 +14,6 @@
 #include "bgw_message_queue.h"
 #include "../extension_constants.h"
 
-
 /* This is where versioned-extension facing functions live. They shouldn't live anywhere else. */
 
 const int32 ts_bgw_loader_api_version = 2;
@@ -31,7 +30,7 @@ TS_FUNCTION_INFO_V1(ts_bgw_db_workers_restart);
 void
 ts_bgw_interface_register_api_version()
 {
-	void	  **versionptr = find_rendezvous_variable(RENDEZVOUS_BGW_LOADER_API_VERSION);
+	void **versionptr = find_rendezvous_variable(RENDEZVOUS_BGW_LOADER_API_VERSION);
 
 	/* Cast away the const to store in the rendezvous variable */
 	*versionptr = (void *) &ts_bgw_loader_api_version;
@@ -53,7 +52,7 @@ ts_bgw_worker_release(PG_FUNCTION_ARGS)
 Datum
 ts_bgw_num_unreserved(PG_FUNCTION_ARGS)
 {
-	int			unreserved_workers;
+	int unreserved_workers;
 
 	unreserved_workers = ts_guc_max_background_workers - ts_bgw_total_workers_get();
 	PG_RETURN_INT32(unreserved_workers);
@@ -70,7 +69,6 @@ ts_bgw_db_workers_stop(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_bgw_message_send_and_wait(STOP, MyDatabaseId));
 }
-
 
 Datum
 ts_bgw_db_workers_restart(PG_FUNCTION_ARGS)

@@ -9,6 +9,5 @@
 #include <nodes/relation.h>
 #include <nodes/pg_list.h>
 
-extern void
-			ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
-#endif							/* TIMESCALEDB_PLAN_AGG_BOOKEND_H */
+extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
+#endif /* TIMESCALEDB_PLAN_AGG_BOOKEND_H */

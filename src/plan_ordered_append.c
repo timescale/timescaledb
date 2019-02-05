@@ -31,7 +31,7 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
 	RangeTblEntry *rte = root->simple_rte_array[rel->relid];
 	TypeCacheEntry *tce;
-	char	   *column;
+	char *column;
 
 	/* these are checked in caller so we only Assert */
 	Assert(!ts_guc_disable_optimizations && ts_guc_enable_ordered_append);
@@ -41,7 +41,8 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	 * with an ORDER BY and LIMIT clause, caller checked this, so only
 	 * asserting
 	 */
-	Assert(ht->space->num_dimensions == 1 || root->parse->sortClause != NIL || root->limit_tuples != -1.0);
+	Assert(ht->space->num_dimensions == 1 || root->parse->sortClause != NIL ||
+		   root->limit_tuples != -1.0);
 
 	/*
 	 * check that the first element of the ORDER BY clause actually matches
@@ -66,7 +67,8 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		return false;
 
 	/* check dimension column is our ORDER BY column */
-	column = strVal(list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(castNode(Var, tle->expr)->varattno)));
+	column = strVal(
+		list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(castNode(Var, tle->expr)->varattno)));
 	if (namestrcmp(&ht->space->dimensions[0].fd.column_name, column) != 0)
 		return false;
 
@@ -90,12 +92,13 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
  * we return the original MergeAppendPath
  */
 Path *
-ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, MergeAppendPath *merge)
+ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+							  MergeAppendPath *merge)
 {
-	ListCell   *lc;
-	List	   *sorted = NIL;
+	ListCell *lc;
+	List *sorted = NIL;
 	AppendPath *append;
-	bool		parallel_safe = rel->consider_parallel;
+	bool parallel_safe = rel->consider_parallel;
 
 	/*
 	 * double check pathkeys of the MergeAppendPath actually is compatible
@@ -106,9 +109,9 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 		return (Path *) merge;
 
 	/* create subpaths for our append node */
-	foreach(lc, merge->subpaths)
+	foreach (lc, merge->subpaths)
 	{
-		Path	   *child = lfirst(lc);
+		Path *child = lfirst(lc);
 
 		/*
 		 * AppendPath is parallel_safe if all children are parallel safe
@@ -137,7 +140,15 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 #elif PG10
 	append = create_append_path(rel, NIL, PATH_REQ_OUTER(&merge->path), 0, merge->partitioned_rels);
 #else
-	append = create_append_path(root, rel, NIL, NULL, PATH_REQ_OUTER(&merge->path), 0, false, merge->partitioned_rels, root->limit_tuples);
+	append = create_append_path(root,
+								rel,
+								NIL,
+								NULL,
+								PATH_REQ_OUTER(&merge->path),
+								0,
+								false,
+								merge->partitioned_rels,
+								root->limit_tuples);
 #endif
 
 	append->subpaths = sorted;

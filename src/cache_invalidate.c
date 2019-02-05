@@ -46,8 +46,8 @@
  * fails. This is why we also need to invalidate caches on transaction failure.
  */
 
-void		_cache_invalidate_init(void);
-void		_cache_invalidate_fini(void);
+void _cache_invalidate_init(void);
+void _cache_invalidate_fini(void);
 
 static void
 cache_invalidate_all(void)
@@ -62,7 +62,7 @@ cache_invalidate_all(void)
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
-	Catalog    *catalog;
+	Catalog *catalog;
 
 	if (ts_extension_invalidate(relid))
 	{

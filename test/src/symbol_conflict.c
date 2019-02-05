@@ -26,8 +26,7 @@ test_symbol_conflict(void)
 
 TS_FUNCTION_INFO_V1(FUNC(MODULE_NAME, hello));
 
-Datum
-FUNC(MODULE_NAME, hello) (PG_FUNCTION_ARGS)
+Datum FUNC(MODULE_NAME, hello)(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(test_symbol_conflict()));
 }

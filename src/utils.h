@@ -37,28 +37,26 @@ extern int64 ts_date_trunc_interval_period_approx(text *units);
  */
 extern int64 ts_get_interval_period_approx(Interval *interval);
 
-extern Oid	ts_inheritance_parent_relid(Oid relid);
+extern Oid ts_inheritance_parent_relid(Oid relid);
 
 extern bool ts_function_types_equal(Oid left[], Oid right[], int nargs);
 
-extern Oid	get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[]);
+extern Oid get_function_oid(char *name, char *schema_name, int nargs, Oid arg_types[]);
 
-extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size, size_t copy_size);
+extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
+										 size_t copy_size);
 
-#define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type) \
-      (to_type *) ts_create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));
+#define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type)                                         \
+	(to_type *) ts_create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));
 
 /* note PG10 has_superclass but PG96 does not so use this */
-#define is_inheritance_child(relid) \
-	(ts_inheritance_parent_relid(relid) != InvalidOid)
+#define is_inheritance_child(relid) (ts_inheritance_parent_relid(relid) != InvalidOid)
 
-#define is_inheritance_parent(relid) \
+#define is_inheritance_parent(relid)                                                               \
 	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
 
-#define is_inheritance_table(relid) \
-	(is_inheritance_child(relid) || is_inheritance_parent(relid))
+#define is_inheritance_table(relid) (is_inheritance_child(relid) || is_inheritance_parent(relid))
 
-#define DATUM_GET(values, attno) \
-	values[attno-1]
+#define DATUM_GET(values, attno) values[attno - 1]
 
-#endif							/* TIMESCALEDB_UTILS_H */
+#endif /* TIMESCALEDB_UTILS_H */

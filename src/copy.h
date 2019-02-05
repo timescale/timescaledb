@@ -14,7 +14,8 @@
 
 typedef struct Hypertable Hypertable;
 
-extern void timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht);
+extern void timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed,
+							   Hypertable *ht);
 extern void timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode);
 
-#endif							/* TIMESCALEDB_COPY_H */
+#endif /* TIMESCALEDB_COPY_H */

@@ -34,8 +34,9 @@ typedef union GapFillColumnStateUnion
 	GapFillLocfColumnState *locf;
 } GapFillColumnStateUnion;
 
-#define foreach_column(column,index,state) \
-  for((index)=0,(column)=(state)->columns[index];(index)<(state)->ncolumns;(index)++,(column)=(state)->columns[index])
+#define foreach_column(column, index, state)                                                       \
+	for ((index) = 0, (column) = (state)->columns[index]; (index) < (state)->ncolumns;             \
+		 (index)++, (column) = (state)->columns[index])
 
 static void gapfill_begin(CustomScanState *node, EState *estate, int eflags);
 static void gapfill_end(CustomScanState *node);
@@ -124,9 +125,8 @@ gapfill_internal_get_datum(int64 value, Oid type)
 static inline int64
 interval_to_usec(Interval *interval)
 {
-	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY)
-		+ (interval->day * USECS_PER_DAY)
-		+ interval->time;
+	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
+		   interval->time;
 }
 
 static inline int64
@@ -183,7 +183,7 @@ gapfill_state_create(CustomScan *cscan)
 static bool
 is_const_null(Expr *expr)
 {
-	return IsA(expr, Const) &&castNode(Const, expr)->constisnull;
+	return IsA(expr, Const) && castNode(Const, expr)->constisnull;
 }
 
 static bool
@@ -192,11 +192,11 @@ is_simple_expr_walker(Node *node, void *context)
 	if (node == NULL)
 		return false;
 
-/*
- * since expression_tree_walker does early exit on true
- * logic is reverted and return value of true means expression
- * is not simple, this is reverted in parent
- */
+	/*
+	 * since expression_tree_walker does early exit on true
+	 * logic is reverted and return value of true means expression
+	 * is not simple, this is reverted in parent
+	 */
 	switch (nodeTag(node))
 	{
 			/*
@@ -257,14 +257,14 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	 * this is the time_bucket_gapfill call from the plan which is used to
 	 * extract arguments and to align gapfill_start
 	 */
-	FuncExpr   *func = linitial(cscan->custom_private);
-	FuncExpr   *call = copyObject(func);
-	TupleDesc	tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
-	List	   *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
-	Node	   *entry;
-	bool		isnull;
-	Datum		arg_value;
-	int			i;
+	FuncExpr *func = linitial(cscan->custom_private);
+	FuncExpr *call = copyObject(func);
+	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
+	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
+	Node *entry;
+	bool isnull;
+	Datum arg_value;
+	int i;
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
@@ -275,7 +275,8 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	if (!is_simple_expr(linitial(func->args)))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple expression")));
+				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple "
+						"expression")));
 
 	arg_value = gapfill_exec_expr(state, linitial(func->args), &isnull);
 	if (isnull)
@@ -284,7 +285,9 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
 	}
-	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype, exprType(linitial(func->args)), arg_value);
+	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype,
+														exprType(linitial(func->args)),
+														arg_value);
 
 	/* check if gapfill start was left out */
 	if (is_const_null(lthird(func->args)))
@@ -296,7 +299,8 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		if (!is_simple_expr(lthird(func->args)))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid time_bucket_gapfill argument: start must be a simple expression")));
+					 errmsg("invalid time_bucket_gapfill argument: start must be a simple "
+							"expression")));
 
 		/*
 		 * pass gapfill start through time_bucket so it is aligned with bucket
@@ -325,11 +329,11 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 				 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL")));
 	else
 	{
-
 		if (!is_simple_expr(lfourth(func->args)))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple expression")));
+					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple "
+							"expression")));
 		arg_value = gapfill_exec_expr(state, lfourth(func->args), &isnull);
 
 		/*
@@ -368,7 +372,11 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 			lfirst(list_nth_cell(targetlist, i)) = entry;
 		}
 	}
-	state->pi = ExecBuildProjectionInfoCompat(targetlist, state->csstate.ss.ps.ps_ExprContext, MakeSingleTupleTableSlot(tupledesc), &state->csstate.ss.ps, NULL);
+	state->pi = ExecBuildProjectionInfoCompat(targetlist,
+											  state->csstate.ss.ps.ps_ExprContext,
+											  MakeSingleTupleTableSlot(tupledesc),
+											  &state->csstate.ss.ps,
+											  NULL);
 
 	state->csstate.custom_ps = list_make1(ExecInitNode(state->subplan, estate, eflags));
 }
@@ -386,7 +394,6 @@ gapfill_exec(CustomScanState *node)
 
 	while (true)
 	{
-
 		/* fetch next tuple from subplan */
 		if (FETCHED_NONE == state->state)
 		{
@@ -485,9 +492,9 @@ static void
 gapfill_state_reset_group(GapFillState *state, TupleTableSlot *slot)
 {
 	GapFillColumnStateUnion column;
-	int			i;
-	Datum		value;
-	bool		isnull;
+	int i;
+	Datum value;
+	bool isnull;
 
 	foreach_column(column.base, i, state)
 	{
@@ -495,7 +502,10 @@ gapfill_state_reset_group(GapFillState *state, TupleTableSlot *slot)
 		switch (column.base->ctype)
 		{
 			case INTERPOLATE_COLUMN:
-				gapfill_interpolate_group_change(column.interpolate, state->subslot_time, value, isnull);
+				gapfill_interpolate_group_change(column.interpolate,
+												 state->subslot_time,
+												 value,
+												 isnull);
 				break;
 			case LOCF_COLUMN:
 				gapfill_locf_group_change(column.locf);
@@ -503,7 +513,8 @@ gapfill_state_reset_group(GapFillState *state, TupleTableSlot *slot)
 			case GROUP_COLUMN:
 				column.group->isnull = isnull;
 				if (!isnull)
-					column.group->value = datumCopy(value, column.base->typbyval, column.base->typlen);
+					column.group->value =
+						datumCopy(value, column.base->typbyval, column.base->typlen);
 				break;
 			default:
 				break;
@@ -519,7 +530,7 @@ gapfill_state_gaptuple_create(GapFillState *state, int64 time)
 {
 	TupleTableSlot *slot = state->scanslot;
 	GapFillColumnStateUnion column;
-	int			i;
+	int i;
 
 	ExecClearTuple(slot);
 
@@ -558,10 +569,18 @@ gapfill_state_gaptuple_create(GapFillState *state, int64 time)
 		switch (column.base->ctype)
 		{
 			case LOCF_COLUMN:
-				gapfill_locf_calculate(column.locf, state, time, &slot->tts_values[i], &slot->tts_isnull[i]);
+				gapfill_locf_calculate(column.locf,
+									   state,
+									   time,
+									   &slot->tts_values[i],
+									   &slot->tts_isnull[i]);
 				break;
 			case INTERPOLATE_COLUMN:
-				gapfill_interpolate_calculate(column.interpolate, state, time, &slot->tts_values[i], &slot->tts_isnull[i]);
+				gapfill_interpolate_calculate(column.interpolate,
+											  state,
+											  time,
+											  &slot->tts_values[i],
+											  &slot->tts_isnull[i]);
 				break;
 			default:
 				break;
@@ -585,9 +604,9 @@ static bool
 gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot)
 {
 	GapFillColumnStateUnion column;
-	int			i;
-	Datum		value;
-	bool		isnull;
+	int i;
+	Datum value;
+	bool isnull;
 
 	/* groups not initialized yet */
 	if (!state->groups_initialized)
@@ -604,8 +623,10 @@ gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot)
 			value = slot_getattr(slot, AttrOffsetGetAttrNumber(i), &isnull);
 			if (isnull && column.group->isnull)
 				continue;
-			if (isnull != column.group->isnull ||
-				!datumIsEqual(value, column.group->value, column.base->typbyval, column.base->typlen))
+			if (isnull != column.group->isnull || !datumIsEqual(value,
+																column.group->value,
+																column.base->typbyval,
+																column.base->typlen))
 				return true;
 		}
 	}
@@ -620,9 +641,9 @@ static TupleTableSlot *
 gapfill_state_return_subplan_slot(GapFillState *state)
 {
 	GapFillColumnStateUnion column;
-	int			i;
-	Datum		value;
-	bool		isnull;
+	int i;
+	Datum value;
+	bool isnull;
 
 	foreach_column(column.base, i, state)
 	{
@@ -634,7 +655,10 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 				break;
 			case INTERPOLATE_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
-				gapfill_interpolate_tuple_returned(column.interpolate, state->subslot_time, value, isnull);
+				gapfill_interpolate_tuple_returned(column.interpolate,
+												   state->subslot_time,
+												   value,
+												   isnull);
 				break;
 			default:
 				break;
@@ -648,9 +672,9 @@ static void
 gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot)
 {
 	GapFillColumnStateUnion column;
-	int			i;
-	Datum		value;
-	bool		isnull;
+	int i;
+	Datum value;
+	bool isnull;
 
 	/*
 	 * if this tuple is for next group we dont update column state yet
@@ -665,7 +689,10 @@ gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot)
 		if (INTERPOLATE_COLUMN == column.base->ctype)
 		{
 			value = slot_getattr(subslot, AttrOffsetGetAttrNumber(i), &isnull);
-			gapfill_interpolate_tuple_fetched(column.interpolate, state->subslot_time, value, isnull);
+			gapfill_interpolate_tuple_fetched(column.interpolate,
+											  state->subslot_time,
+											  value,
+											  isnull);
 		}
 	}
 }
@@ -673,8 +700,8 @@ gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot)
 static TupleTableSlot *
 gapfill_fetch_next_tuple(GapFillState *state)
 {
-	Datum		time_value;
-	bool		isnull;
+	Datum time_value;
+	bool isnull;
 	TupleTableSlot *subslot = fetch_subplan_tuple((CustomScanState *) state);
 
 	if (!subslot)
@@ -751,11 +778,11 @@ fetch_subplan_tuple(CustomScanState *node)
 static void
 gapfill_state_initialize_columns(GapFillState *state)
 {
-	TupleDesc	tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
+	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
 	TargetEntry *tle;
-	Expr	   *expr;
-	int			i;
+	Expr *expr;
+	int i;
 
 	state->ncolumns = tupledesc->natts;
 	state->columns = palloc(state->ncolumns * sizeof(GapFillColumnState *));
@@ -771,16 +798,19 @@ gapfill_state_initialize_columns(GapFillState *state)
 			 * if there is time_bucket_gapfill function call this is our time
 			 * column
 			 */
-			if (IsA(expr, FuncExpr) &&
-				strncmp(get_func_name(castNode(FuncExpr, expr)->funcid), GAPFILL_FUNCTION, NAMEDATALEN) == 0)
+			if (IsA(expr, FuncExpr) && strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
+											   GAPFILL_FUNCTION,
+											   NAMEDATALEN) == 0)
 			{
-				state->columns[i] = gapfill_column_state_create(TIME_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+				state->columns[i] =
+					gapfill_column_state_create(TIME_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
 				state->time_index = i;
 				continue;
 			}
 
 			/* otherwise this is a normal group column */
-			state->columns[i] = gapfill_column_state_create(GROUP_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+			state->columns[i] =
+				gapfill_column_state_create(GROUP_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
 			state->multigroup = true;
 			state->groups_initialized = false;
 			continue;
@@ -788,22 +818,34 @@ gapfill_state_initialize_columns(GapFillState *state)
 		else if (IsA(expr, FuncExpr))
 		{
 			/* locf and interpolate need to be toplevel function calls */
-			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid), GAPFILL_LOCF_FUNCTION, NAMEDATALEN) == 0)
+			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
+						GAPFILL_LOCF_FUNCTION,
+						NAMEDATALEN) == 0)
 			{
-				state->columns[i] = gapfill_column_state_create(LOCF_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
-				gapfill_locf_initialize((GapFillLocfColumnState *) state->columns[i], state, (FuncExpr *) expr);
+				state->columns[i] =
+					gapfill_column_state_create(LOCF_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+				gapfill_locf_initialize((GapFillLocfColumnState *) state->columns[i],
+										state,
+										(FuncExpr *) expr);
 				continue;
 			}
-			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid), GAPFILL_INTERPOLATE_FUNCTION, NAMEDATALEN) == 0)
+			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
+						GAPFILL_INTERPOLATE_FUNCTION,
+						NAMEDATALEN) == 0)
 			{
-				state->columns[i] = gapfill_column_state_create(INTERPOLATE_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
-				gapfill_interpolate_initialize((GapFillInterpolateColumnState *) state->columns[i], state, (FuncExpr *) expr);
+				state->columns[i] =
+					gapfill_column_state_create(INTERPOLATE_COLUMN,
+												TupleDescAttr(tupledesc, i)->atttypid);
+				gapfill_interpolate_initialize((GapFillInterpolateColumnState *) state->columns[i],
+											   state,
+											   (FuncExpr *) expr);
 				continue;
 			}
 		}
 
 		/* column with no special action from gap fill node */
-		state->columns[i] = gapfill_column_state_create(NULL_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+		state->columns[i] =
+			gapfill_column_state_create(NULL_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
 	}
 }
 
@@ -815,7 +857,7 @@ gapfill_column_state_create(GapFillColumnType ctype, Oid typeid)
 {
 	TypeCacheEntry *tce = lookup_type_cache(typeid, 0);
 	GapFillColumnState *column;
-	size_t		size;
+	size_t size;
 
 	switch (ctype)
 	{
@@ -851,11 +893,11 @@ gapfill_column_state_create(GapFillColumnType ctype, Oid typeid)
 static bool
 gapfill_is_group_column(GapFillState *state, TargetEntry *tle)
 {
-	ListCell   *lc;
+	ListCell *lc;
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
-	List	   *groups = lsecond(cscan->custom_private);
+	List *groups = lsecond(cscan->custom_private);
 
-	foreach(lc, groups)
+	foreach (lc, groups)
 	{
 		if (tle->ressortgroupref == ((SortGroupClause *) lfirst(lc))->tleSortGroupRef)
 			return true;
@@ -874,7 +916,8 @@ gapfill_aggref_mutator(Node *node, void *context)
 		return NULL;
 
 	if (IsA(node, Aggref))
-		return (Node *) makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, (Datum) 0, true, false);
+		return (Node *)
+			makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, (Datum) 0, true, false);
 
 	return expression_tree_mutator((Node *) node, gapfill_aggref_mutator, context);
 }
@@ -885,7 +928,7 @@ gapfill_aggref_mutator(Node *node, void *context)
 Datum
 gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull)
 {
-	ExprState  *exprstate = ExecInitExpr(expr, &state->csstate.ss.ps);
+	ExprState *exprstate = ExecInitExpr(expr, &state->csstate.ss.ps);
 	ExprContext *exprcontext = GetPerTupleExprContext(state->csstate.ss.ps.state);
 
 	exprcontext->ecxt_scantuple = state->scanslot;
@@ -905,16 +948,15 @@ gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull)
 Expr *
 gapfill_adjust_varnos(GapFillState *state, Expr *expr)
 {
-	ListCell   *lc_var,
-			   *lc_tle;
-	List	   *vars = pull_var_clause((Node *) expr, 0);
-	List	   *tlist = castNode(CustomScan, state->csstate.ss.ps.plan)->custom_scan_tlist;
+	ListCell *lc_var, *lc_tle;
+	List *vars = pull_var_clause((Node *) expr, 0);
+	List *tlist = castNode(CustomScan, state->csstate.ss.ps.plan)->custom_scan_tlist;
 
-	foreach(lc_var, vars)
+	foreach (lc_var, vars)
 	{
-		Var		   *var = lfirst(lc_var);
+		Var *var = lfirst(lc_var);
 
-		foreach(lc_tle, tlist)
+		foreach (lc_tle, tlist)
 		{
 			TargetEntry *tle = lfirst(lc_tle);
 
@@ -922,7 +964,7 @@ gapfill_adjust_varnos(GapFillState *state, Expr *expr)
 			 * subqueries in aggregate queries can only reference columns so
 			 * we only need to look for targetlist toplevel column references
 			 */
-			if (IsA(tle->expr, Var) &&castNode(Var, tle->expr)->varattno == var->varattno)
+			if (IsA(tle->expr, Var) && castNode(Var, tle->expr)->varattno == var->varattno)
 			{
 				var->varattno = tle->resno;
 			}

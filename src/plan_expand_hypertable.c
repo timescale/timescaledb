@@ -15,7 +15,7 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include "compat.h"
-#if PG96 || PG10				/* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
+#if PG96 || PG10 /* PG11 consolidates pg_foo_fn.h -> pg_foo.h */
 #include <catalog/pg_constraint_fn.h>
 #include <catalog/pg_inherits_fn.h>
 #endif
@@ -38,19 +38,22 @@ typedef struct CollectQualCtx
 {
 	PlannerInfo *root;
 	RelOptInfo *rel;
-	List	   *restrictions;
-	FuncExpr   *chunk_exclusion_func;
+	List *restrictions;
+	FuncExpr *chunk_exclusion_func;
 } CollectQualCtx;
 
-static Oid	chunk_exclusion_func = InvalidOid;
+static Oid chunk_exclusion_func = InvalidOid;
 #define CHUNK_EXCL_FUNC_NAME "chunks_in"
-static Oid	ts_chunks_arg_types[] = {RECORDOID, INT4ARRAYOID};
+static Oid ts_chunks_arg_types[] = { RECORDOID, INT4ARRAYOID };
 
 static void
 init_chunk_exclusion_func()
 {
 	if (chunk_exclusion_func == InvalidOid)
-		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME, INTERNAL_SCHEMA_NAME, lengthof(ts_chunks_arg_types), ts_chunks_arg_types);
+		chunk_exclusion_func = get_function_oid(CHUNK_EXCL_FUNC_NAME,
+												INTERNAL_SCHEMA_NAME,
+												lengthof(ts_chunks_arg_types),
+												ts_chunks_arg_types);
 	Assert(chunk_exclusion_func != InvalidOid);
 }
 
@@ -59,7 +62,7 @@ is_chunk_exclusion_func(Node *node)
 {
 	if (IsA(node, FuncExpr))
 	{
-		FuncExpr   *explicit_exclusion = (FuncExpr *) node;
+		FuncExpr *explicit_exclusion = (FuncExpr *) node;
 
 		if (explicit_exclusion->funcid == chunk_exclusion_func)
 			return true;
@@ -91,24 +94,25 @@ collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 
 	if (IsA(node, FromExpr))
 	{
-		FromExpr   *f = (FromExpr *) node;
-		ListCell   *lc;
-		ListCell   *prev = NULL;
-		ListCell   *next = NULL;
-		bool		func_removed = false;
+		FromExpr *f = (FromExpr *) node;
+		ListCell *lc;
+		ListCell *prev = NULL;
+		ListCell *next = NULL;
+		bool func_removed = false;
 
 		for (lc = list_head((List *) f->quals); lc != NULL;)
 		{
-			Node	   *qual = (Node *) lfirst(lc);
+			Node *qual = (Node *) lfirst(lc);
 			RestrictInfo *restrictinfo;
-			Relids		relids;
-			bool		belongs_to_cur_rel = false;
+			Relids relids;
+			bool belongs_to_cur_rel = false;
 
 			next = lnext(lc);
 
 			relids = pull_varnos(qual);
 
-			belongs_to_cur_rel = bms_num_members(relids) == 1 && bms_is_member(ctx->rel->relid, relids);
+			belongs_to_cur_rel =
+				bms_num_members(relids) == 1 && bms_is_member(ctx->rel->relid, relids);
 
 			if (!belongs_to_cur_rel)
 			{
@@ -116,10 +120,9 @@ collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 				continue;
 			}
 
-
 			if (is_chunk_exclusion_func(qual))
 			{
-				FuncExpr   *func_expr = (FuncExpr *) qual;
+				FuncExpr *func_expr = (FuncExpr *) qual;
 
 				/* validation */
 				if (ctx->chunk_exclusion_func != NULL)
@@ -131,7 +134,8 @@ collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 				if (!IsA(linitial(func_expr->args), Var))
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg("first parameter for chunks_in function needs to be a record")));
+							 errmsg(
+								 "first parameter for chunks_in function needs to be a record")));
 
 				ctx->chunk_exclusion_func = func_expr;
 			}
@@ -139,13 +143,8 @@ collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 			if (ctx->chunk_exclusion_func == NULL)
 			{
 #if PG96
-				restrictinfo = make_restrictinfo((Expr *) qual,
-												 true,
-												 false,
-												 false,
-												 relids,
-												 NULL,
-												 NULL);
+				restrictinfo =
+					make_restrictinfo((Expr *) qual, true, false, false, relids, NULL, NULL);
 #else
 				restrictinfo = make_restrictinfo((Expr *) qual,
 												 true,
@@ -176,23 +175,21 @@ collect_quals_mutator(Node *node, CollectQualCtx *ctx)
 static List *
 find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode)
 {
-	List	   *result;
+	List *result;
 
 	/*
 	 * Using the HRI only makes sense if we are not using all the chunks,
 	 * otherwise using the cached inheritance hierarchy is faster.
 	 */
 	if (!ts_hypertable_restrict_info_has_restrictions(hri))
-		return find_all_inheritors(ht->main_table_relid, lockmode, NULL);;
+		return find_all_inheritors(ht->main_table_relid, lockmode, NULL);
+	;
 
 	/* always include parent again, just as find_all_inheritors does */
 	result = list_make1_oid(ht->main_table_relid);
 
 	/* add chunks */
-	result = list_concat(result,
-						 ts_hypertable_restrict_info_get_chunk_oids(hri,
-																	ht,
-																	lockmode));
+	result = list_concat(result, ts_hypertable_restrict_info_get_chunk_oids(hri, ht, lockmode));
 	return result;
 }
 
@@ -207,21 +204,23 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool *re
 	 * only do this optimization for hypertables with 1 dimension and queries
 	 * with an ORDER BY and LIMIT clause
 	 */
-	if (ht->space->num_dimensions != 1 || root->parse->sortClause == NIL || root->limit_tuples == -1.0)
+	if (ht->space->num_dimensions != 1 || root->parse->sortClause == NIL ||
+		root->limit_tuples == -1.0)
 		return false;
 
 	return ts_ordered_append_should_optimize(root, rel, ht, reverse);
 }
 
 bool
-ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti, RangeTblEntry *rte)
+ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index rti,
+										   RangeTblEntry *rte)
 {
 	if (ht == NULL ||
-	/* inheritance enabled */
+		/* inheritance enabled */
 		rte->inh == false ||
-	/* row locks not necessary */
+		/* row locks not necessary */
 		parse->rowMarks != NIL ||
-	/* not update and/or delete */
+		/* not update and/or delete */
 		0 != parse->resultRelation)
 		return false;
 
@@ -232,12 +231,12 @@ ts_plan_expand_hypertable_valid_hypertable(Hypertable *ht, Query *parse, Index r
 static List *
 get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 {
-	List	   *chunk_oids = NIL;
-	Const	   *chunks_arg;
+	List *chunk_oids = NIL;
+	Const *chunks_arg;
 	ArrayIterator chunk_id_iterator;
-	Datum		elem = (Datum) NULL;
-	bool		isnull;
-	Expr	   *expr;
+	Datum elem = (Datum) NULL;
+	bool isnull;
+	Expr *expr;
 
 	Assert(ctx->chunk_exclusion_func->args->length == 2);
 	expr = lsecond(ctx->chunk_exclusion_func->args);
@@ -257,8 +256,8 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 	{
 		if (!isnull)
 		{
-			int32		chunk_id = DatumGetInt32(elem);
-			Chunk	   *chunk = ts_chunk_get_by_id(chunk_id, 0, false);
+			int32 chunk_id = DatumGetInt32(elem);
+			Chunk *chunk = ts_chunk_get_by_id(chunk_id, 0, false);
 
 			if (chunk == NULL)
 				ereport(ERROR, (errmsg("chunk id %d not found", chunk_id)));
@@ -266,7 +265,9 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 			if (chunk->fd.hypertable_id != ht->fd.id)
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("chunk id %d does not belong to hypertable \"%s\"", chunk_id, NameStr(ht->fd.table_name))));
+						 errmsg("chunk id %d does not belong to hypertable \"%s\"",
+								chunk_id,
+								NameStr(ht->fd.table_name))));
 
 			chunk_oids = lappend_int(chunk_oids, chunk->table_id);
 		}
@@ -284,7 +285,7 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 static List *
 get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
 {
-	bool		reverse;
+	bool reverse;
 
 	if (ctx->chunk_exclusion_func == NULL)
 	{
@@ -301,7 +302,10 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		{
 			if (rel->fdw_private != NULL)
 				((TimescaleDBPrivate *) rel->fdw_private)->appends_ordered = true;
-			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri, ht, AccessShareLock, reverse);
+			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri,
+																	  ht,
+																	  AccessShareLock,
+																	  reverse);
 		}
 		else
 			return find_children_oids(hri, ht, AccessShareLock);
@@ -313,19 +317,16 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relationship */
 void
-ts_plan_expand_hypertable_chunks(Hypertable *ht,
-								 PlannerInfo *root,
-								 Oid parent_oid,
-								 bool inhparent,
+ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_oid, bool inhparent,
 								 RelOptInfo *rel)
 {
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
-	List	   *inh_oids;
-	ListCell   *l;
-	Relation	oldrelation = heap_open(parent_oid, NoLock);
-	Query	   *parse = root->parse;
-	Index		rti = rel->relid;
-	List	   *appinfos = NIL;
+	List *inh_oids;
+	ListCell *l;
+	Relation oldrelation = heap_open(parent_oid, NoLock);
+	Query *parse = root->parse;
+	Index rti = rel->relid;
+	List *appinfos = NIL;
 	PlanRowMark *oldrc;
 	CollectQualCtx ctx = {
 		.root = root,
@@ -355,15 +356,17 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 	 * children to them
 	 */
 	root->simple_rel_array_size += list_length(inh_oids);
-	root->simple_rel_array = repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
-	root->simple_rte_array = repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
+	root->simple_rel_array =
+		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
+	root->simple_rte_array =
+		repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
 
-	foreach(l, inh_oids)
+	foreach (l, inh_oids)
 	{
-		Oid			child_oid = lfirst_oid(l);
-		Relation	newrelation;
+		Oid child_oid = lfirst_oid(l);
+		Relation newrelation;
 		RangeTblEntry *childrte;
-		Index		child_rtindex;
+		Index child_rtindex;
 		AppendRelInfo *appinfo;
 
 		/* Open rel if needed; we already have required locks */
@@ -409,11 +412,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 		appinfo->child_relid = child_rtindex;
 		appinfo->parent_reltype = oldrelation->rd_rel->reltype;
 		appinfo->child_reltype = newrelation->rd_rel->reltype;
-		ts_make_inh_translation_list(oldrelation, newrelation, child_rtindex,
+		ts_make_inh_translation_list(oldrelation,
+									 newrelation,
+									 child_rtindex,
 									 &appinfo->translated_vars);
 		appinfo->parent_reloid = parent_oid;
 		appinfos = lappend(appinfos, appinfo);
-
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
@@ -424,10 +428,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht,
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
 #if !PG96 && !PG10
-/*
- * PG11 introduces a separate array to make looking up children faster, see:
- * https://github.com/postgres/postgres/commit/7d872c91a3f9d49b56117557cdbb0c3d4c620687.
- */
+	/*
+	 * PG11 introduces a separate array to make looking up children faster, see:
+	 * https://github.com/postgres/postgres/commit/7d872c91a3f9d49b56117557cdbb0c3d4c620687.
+	 */
 	setup_append_rel_array(root);
 #endif
 }

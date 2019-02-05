@@ -66,8 +66,10 @@ error_no_default_fn_community(void)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
-			 errhint("Upgrade to a Timescale-licensed binary to access this free community feature")));
+			 errmsg("functionality not supported under the current license \"%s\", license",
+					ts_guc_license_key),
+			 errhint(
+				 "Upgrade to a Timescale-licensed binary to access this free community feature")));
 }
 
 static void
@@ -75,8 +77,10 @@ error_no_default_fn_enterprise(void)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("functionality not supported under the current license \"%s\", license", ts_guc_license_key),
-			 errhint("Request a trial license to try this feature for free or contact us for more information at https://www.timescale.com/pricing")));
+			 errmsg("functionality not supported under the current license \"%s\", license",
+					ts_guc_license_key),
+			 errhint("Request a trial license to try this feature for free or contact us for more "
+					 "information at https://www.timescale.com/pricing")));
 }
 
 static bool
@@ -127,7 +131,8 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
 					get_func_name(fcinfo->flinfo->fn_oid),
 					ts_guc_license_key),
-			 errhint("Upgrade to a Timescale-licensed binary to access this free community feature")));
+			 errhint(
+				 "Upgrade to a Timescale-licensed binary to access this free community feature")));
 	pg_unreachable();
 }
 
@@ -139,7 +144,8 @@ error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
 			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
 					get_func_name(fcinfo->flinfo->fn_oid),
 					ts_guc_license_key),
-			 errhint("Request a trial license to try this feature for free or contact us for more information at https://www.timescale.com/pricing")));
+			 errhint("Request a trial license to try this feature for free or contact us for more "
+					 "information at https://www.timescale.com/pricing")));
 	pg_unreachable();
 }
 
