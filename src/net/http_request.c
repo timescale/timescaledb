@@ -26,12 +26,14 @@ ts_http_header_create(const char *name, size_t name_len, const char *value, size
 
 	memset(new_header, 0, sizeof(*new_header));
 	new_header->name = palloc(name_len + 1);
-	memcpy(new_header->name, name, name_len);
+	if (name_len > 0)
+		memcpy(new_header->name, name, name_len);
 	new_header->name[name_len] = '\0';
 	new_header->name_len = name_len;
 
 	new_header->value = palloc(value_len + 1);
-	memcpy(new_header->value, value, value_len);
+	if (value_len > 0)
+		memcpy(new_header->value, value, value_len);
 	new_header->value[value_len] = '\0';
 	new_header->value_len = value_len;
 
@@ -57,6 +59,18 @@ static const char *http_method_strings[] = { [HTTP_GET] = "GET", [HTTP_POST] = "
 
 #define METHOD_STRING(x) http_method_strings[x]
 #define VERSION_STRING(x) ts_http_version_string(x)
+
+/* appendBinaryStringInfo is UB if data is NULL. This function wraps it in a check that datalen > 0
+ */
+static void
+appendOptionalBinaryStringInfo(StringInfo str, const char *data, int datalen)
+{
+	if (datalen <= 0)
+		return;
+
+	Assert(data != NULL);
+	appendBinaryStringInfo(str, data, datalen);
+}
 
 void
 ts_http_request_init(HttpRequest *req, HttpRequestMethod method)
@@ -147,7 +161,7 @@ http_request_serialize_version(HttpRequest *req, StringInfo buf)
 static void
 http_request_serialize_uri(HttpRequest *req, StringInfo buf)
 {
-	appendBinaryStringInfo(buf, req->uri, req->uri_len);
+	appendOptionalBinaryStringInfo(buf, req->uri, req->uri_len);
 }
 
 static void
@@ -159,16 +173,16 @@ http_request_serialize_char(char to_serialize, StringInfo buf)
 static void
 http_request_serialize_body(HttpRequest *req, StringInfo buf)
 {
-	appendBinaryStringInfo(buf, req->body, req->body_len);
+	appendOptionalBinaryStringInfo(buf, req->body, req->body_len);
 }
 
 static void
 http_header_serialize(HttpHeader *header, StringInfo buf)
 {
-	appendBinaryStringInfo(buf, header->name, header->name_len);
+	appendOptionalBinaryStringInfo(buf, header->name, header->name_len);
 	http_request_serialize_char(COLON, buf);
 	http_request_serialize_char(SPACE, buf);
-	appendBinaryStringInfo(buf, header->value, header->value_len);
+	appendOptionalBinaryStringInfo(buf, header->value, header->value_len);
 }
 
 static int
