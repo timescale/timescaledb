@@ -7,13 +7,13 @@
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
 #include <utils/array.h>
-#include "nodes/makefuncs.h"
-#include "utils/lsyscache.h"
+#include <nodes/makefuncs.h>
+#include <utils/lsyscache.h>
 #include <netinet/in.h>
+#include <libpq/pqformat.h>
 
 #include "compat.h"
-
-#define HIST_LEN(state) ((VARSIZE(state) - VARHDRSZ) / sizeof(Datum))
+#include "utils.h"
 
 /* aggregate histogram:
  *	 histogram(state, val, min, max, nbuckets) returns the histogram array with nbuckets
@@ -35,13 +35,20 @@ TS_FUNCTION_INFO_V1(ts_hist_serializefunc);
 TS_FUNCTION_INFO_V1(ts_hist_deserializefunc);
 TS_FUNCTION_INFO_V1(ts_hist_finalfunc);
 
+#define HISTOGRAM_SIZE(state, nbuckets) (sizeof(*state) + nbuckets * sizeof(*state->buckets))
+
+typedef struct Histogram
+{
+	int32 nbuckets;
+	Datum buckets[FLEXIBLE_ARRAY_MEMBER];
+} Histogram;
+
 /* histogram(state, val, min, max, nbuckets) */
 Datum
 ts_hist_sfunc(PG_FUNCTION_ARGS)
 {
 	MemoryContext aggcontext;
-	bytea *state = (PG_ARGISNULL(0) ? NULL : PG_GETARG_BYTEA_P(0));
-	Datum *hist;
+	Histogram *state = (Histogram *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 	Datum val_datum = PG_GETARG_DATUM(1);
 	Datum min_datum = PG_GETARG_DATUM(2);
 	Datum max_datum = PG_GETARG_DATUM(3);
@@ -67,29 +74,31 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	if (state == NULL)
 	{
 		/* Allocate memory to a new histogram state array */
-		Size arrsize = sizeof(Datum) * (nbuckets + 2);
-
-		state = MemoryContextAllocZero(aggcontext, VARHDRSZ + arrsize);
-		SET_VARSIZE(state, VARHDRSZ + arrsize);
+		nbuckets += 2;
+		state = MemoryContextAllocZero(aggcontext, HISTOGRAM_SIZE(state, nbuckets));
+		state->nbuckets = nbuckets;
 	}
 
 	/* Increment the proper histogram bucket */
-	hist = (Datum *) VARDATA(state);
-	hist[bucket] = Int32GetDatum(DatumGetInt32(hist[bucket]) + 1);
+	Assert(bucket < state->nbuckets);
+	if (DatumGetInt32(state->buckets[bucket]) >= PG_INT32_MAX - 1)
+		elog(ERROR, "overflow in histogram");
 
-	PG_RETURN_BYTEA_P(state);
+	state->buckets[bucket] = Int32GetDatum(DatumGetInt32(state->buckets[bucket]) + 1);
+
+	PG_RETURN_POINTER(state);
 }
 
-/* Make a copy of the bytea state */
-static inline bytea *
-copy_state(MemoryContext aggcontext, bytea *state)
+/* Make a copy of the histogram state */
+static inline Histogram *
+copy_state(MemoryContext aggcontext, Histogram *state)
 {
-	bytea *copy;
-	Size arrsize = VARSIZE(state) - VARHDRSZ;
+	Histogram *copy;
+	Size bucket_bytes = state->nbuckets * sizeof(*copy->buckets);
 
-	copy = MemoryContextAllocZero(aggcontext, VARHDRSZ + arrsize);
-	SET_VARSIZE(copy, VARHDRSZ + arrsize);
-	memcpy(copy, state, VARHDRSZ + arrsize);
+	copy = MemoryContextAlloc(aggcontext, sizeof(*copy) + bucket_bytes);
+	copy->nbuckets = state->nbuckets;
+	memcpy(copy->buckets, state->buckets, bucket_bytes);
 
 	return copy;
 }
@@ -100,9 +109,9 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 {
 	MemoryContext aggcontext;
 
-	bytea *state1 = (PG_ARGISNULL(0) ? NULL : PG_GETARG_BYTEA_P(0));
-	bytea *state2 = (PG_ARGISNULL(1) ? NULL : PG_GETARG_BYTEA_P(1));
-	bytea *result;
+	Histogram *state1 = (Histogram *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	Histogram *state2 = (Histogram *) (PG_ARGISNULL(1) ? NULL : PG_GETARG_POINTER(1));
+	Histogram *result;
 
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{
@@ -123,66 +132,84 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 	else
 	{
 		Size i;
-		Datum *hist, *hist_other;
 
+		Assert(state1->nbuckets == state2->nbuckets);
 		result = copy_state(aggcontext, state1);
-		hist = (Datum *) VARDATA(result);
-		hist_other = (Datum *) VARDATA(state2);
 
 		/* Combine values from state1 and state2 when both states are non-null */
-		for (i = 0; i < HIST_LEN(state1); i++)
-			hist[i] = Int32GetDatum(DatumGetInt32(hist[i]) + DatumGetInt32(hist_other[i]));
+		for (i = 0; i < state1->nbuckets; i++)
+		{
+			/* Perform addition using int64 to check for overflow */
+			int64 val = (int64) DatumGetInt32(result->buckets[i]);
+			int64 other = (int64) DatumGetInt32(state2->buckets[i]);
+			if (val + other >= PG_INT32_MAX)
+				elog(ERROR, "overflow in histogram combine");
+
+			result->buckets[i] = Int32GetDatum((int32)(val + other));
+		}
 	}
 
-	PG_RETURN_BYTEA_P(result);
+	PG_RETURN_POINTER(result);
 }
 
 /* ts_hist_serializefunc(internal) => bytea */
 Datum
 ts_hist_serializefunc(PG_FUNCTION_ARGS)
 {
-	bytea *state;
-	Datum *hist;
+	Histogram *state;
 	Size i;
+	StringInfoData buf;
 
 	Assert(!PG_ARGISNULL(0));
-	state = PG_GETARG_BYTEA_P(0);
-	hist = (Datum *) VARDATA(state);
+	state = (Histogram *) PG_GETARG_POINTER(0);
 
-	for (i = 0; i < HIST_LEN(state); i++)
-	{
-		hist[i] = Int32GetDatum(htonl(DatumGetInt32(hist[i])));
-	}
+	pq_begintypsend(&buf);
+	pq_sendint(&buf, state->nbuckets, 4);
 
-	PG_RETURN_BYTEA_P(state);
+	for (i = 0; i < state->nbuckets; i++)
+		pq_sendint(&buf, DatumGetInt32(state->buckets[i]), 4);
+
+	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
-/* ts_hist_deserializefunc(bytea, internal) => internal */
+/* ts_hist_deserializefunc(bytea *, internal) => internal */
 Datum
 ts_hist_deserializefunc(PG_FUNCTION_ARGS)
 {
-	bytea *state;
-	Datum *hist;
-	Size i;
+	MemoryContext aggcontext;
+	bytea *serialized;
+	int32 nbuckets;
+	int32 i;
+	StringInfoData buf;
+	Histogram *state;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+		elog(ERROR, "ts_hist_deserializefunc called in non-aggregate context");
 
 	Assert(!PG_ARGISNULL(0));
-	state = PG_GETARG_BYTEA_P(0);
-	hist = (Datum *) VARDATA(state);
+	serialized = PG_GETARG_BYTEA_P(0);
 
-	for (i = 0; i < HIST_LEN(state); i++)
-	{
-		hist[i] = Int32GetDatum(ntohl(DatumGetInt32(hist[i])));
-	}
+	buf.data = VARDATA(serialized);
+	buf.len = VARSIZE(serialized);
+	buf.maxlen = VARSIZE(serialized);
+	buf.cursor = 0; /* used by pq_getmsgint*/
 
-	PG_RETURN_BYTEA_P(state);
+	nbuckets = pq_getmsgint(&buf, 4);
+
+	state = MemoryContextAllocZero(aggcontext, HISTOGRAM_SIZE(state, nbuckets));
+	state->nbuckets = nbuckets;
+
+	for (i = 0; i < state->nbuckets; i++)
+		state->buckets[i] = Int32GetDatum(pq_getmsgint(&buf, 4));
+
+	PG_RETURN_POINTER(state);
 }
 
 /* hist_finalfunc(internal, val REAL, MIN REAL, MAX REAL, nbuckets INTEGER) => INTEGER[] */
 Datum
 ts_hist_finalfunc(PG_FUNCTION_ARGS)
 {
-	bytea *state;
-	Datum *hist;
+	Histogram *state;
 	int dims[1];
 	int lbs[1];
 
@@ -192,15 +219,14 @@ ts_hist_finalfunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "ts_hist_finalfunc called in non-aggregate context");
 	}
 
-	state = PG_ARGISNULL(0) ? NULL : PG_GETARG_BYTEA_P(0);
+	state = (Histogram *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (state == NULL)
 		PG_RETURN_NULL();
 
-	hist = (Datum *) VARDATA(state);
-
-	dims[0] = HIST_LEN(state);
+	dims[0] = state->nbuckets;
 	lbs[0] = 1;
 
-	PG_RETURN_ARRAYTYPE_P(construct_md_array(hist, NULL, 1, dims, lbs, INT4OID, 4, true, 'i'));
+	PG_RETURN_ARRAYTYPE_P(
+		construct_md_array(state->buckets, NULL, 1, dims, lbs, INT4OID, 4, true, 'i'));
 }

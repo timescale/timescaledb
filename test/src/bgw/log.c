@@ -9,6 +9,7 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <postmaster/bgworker.h>
+#include <storage/proc.h>
 
 #include "log.h"
 #include "scanner.h"
@@ -62,6 +63,12 @@ static void
 emit_log_hook_callback(ErrorData *edata)
 {
 	bool started_txn = false;
+
+	/*
+	 * once proc_exit has started we may no longer be able to start transactions
+	 */
+	if (MyProc == NULL)
+		return;
 
 	/*
 	 * Block signals so we don't lose messages generated during signal
