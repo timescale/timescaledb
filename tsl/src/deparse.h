@@ -20,6 +20,7 @@ typedef struct TableInfo
 
 typedef struct TableDef
 {
+	const char *schema_cmd;
 	const char *create_cmd;
 	List *constraint_cmds;
 	List *index_cmds;
@@ -27,10 +28,14 @@ typedef struct TableDef
 	List *rule_cmds;
 } TableDef;
 
+typedef struct Hypertable Hypertable;
+
 TableInfo *deparse_create_table_info(Oid relid);
 TableDef *deparse_get_tabledef(TableInfo *table_info);
 List *deparse_get_tabledef_commands(Oid relid);
 List *deparse_get_tabledef_commands_from_tabledef(TableDef *table_def);
 const char *deparse_get_tabledef_commands_concat(Oid relid);
+
+const char *deparse_get_distributed_hypertable_create_command(Hypertable *ht);
 
 #endif
