@@ -136,6 +136,23 @@ WITH CTE AS (
 )
 SELECT * FROM CTE;
 
+--test error conditions when an index is dropped on a chunk
+DROP INDEX _timescaledb_internal._hyper_3_3_chunk_multi_time_color_idx;
+
+--everything is ok if not used as an arbiter index
+INSERT INTO upsert_test_multi_unique
+VALUES ('2017-01-20T09:00:01', 25.9, 'purple')
+ON CONFLICT DO NOTHING
+RETURNING *;
+
+--errors out if used as an arbiter index
+\set ON_ERROR_STOP 0
+INSERT INTO upsert_test_multi_unique
+VALUES ('2017-01-20T09:00:01', 25.9, 'purple')
+ON CONFLICT (time, color) DO NOTHING
+RETURNING *;
+\set ON_ERROR_STOP 1
+
 --create table with one chunk that has a tup_conv_map and one that does not
 --to ensure this, create a chunk before altering the table this chunk will not have a tup_conv_map
 CREATE TABLE upsert_test_diffchunk(time timestamp, device_id char(20), to_drop int, temp float, color text);
