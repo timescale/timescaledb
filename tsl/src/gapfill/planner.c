@@ -33,26 +33,30 @@ gapfill_clean_expr(Expr *expr)
 {
 	if (IsA(expr, FuncExpr))
 	{
-		if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid), GAPFILL_LOCF_FUNCTION, NAMEDATALEN) == 0)
+		if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
+					GAPFILL_LOCF_FUNCTION,
+					NAMEDATALEN) == 0)
 			return linitial(castNode(FuncExpr, expr)->args);
-		else if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid), GAPFILL_INTERPOLATE_FUNCTION, NAMEDATALEN) == 0)
+		else if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
+						 GAPFILL_INTERPOLATE_FUNCTION,
+						 NAMEDATALEN) == 0)
 			return linitial(castNode(FuncExpr, expr)->args);
 	}
 
 	if (IsA(expr, WindowFunc))
 	{
 		if (list_length(castNode(WindowFunc, expr)->args) == 1)
-			linitial(castNode(WindowFunc, expr)->args) = gapfill_clean_expr(linitial(castNode(WindowFunc, expr)->args));
+			linitial(castNode(WindowFunc, expr)->args) =
+				gapfill_clean_expr(linitial(castNode(WindowFunc, expr)->args));
 	}
 
 	return expr;
 }
 
-
 typedef struct gapfill_walker_context
 {
-	FuncExpr   *call;
-	int			num_calls;
+	FuncExpr *call;
+	int num_calls;
 } gapfill_walker_context;
 
 /*
@@ -64,7 +68,8 @@ gapfill_function_call_walker(FuncExpr *node, gapfill_walker_context *context)
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, FuncExpr) &&strncmp(get_func_name(node->funcid), GAPFILL_FUNCTION, NAMEDATALEN) == 0)
+	if (IsA(node, FuncExpr) &&
+		strncmp(get_func_name(node->funcid), GAPFILL_FUNCTION, NAMEDATALEN) == 0)
 	{
 		context->call = (FuncExpr *) node;
 		context->num_calls++;
@@ -87,16 +92,17 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 
 	if (list_length(subpath->pathkeys) > 0)
 	{
-		PathKey    *pk = llast(subpath->pathkeys);
+		PathKey *pk = llast(subpath->pathkeys);
 		EquivalenceMember *em = linitial(pk->pk_eclass->ec_members);
 
 		/* time_bucket_gapfill is last element */
-		if (BTLessStrategyNumber == pk->pk_strategy && IsA(em->em_expr, FuncExpr) &&((FuncExpr *) em->em_expr)->funcid == func->funcid)
+		if (BTLessStrategyNumber == pk->pk_strategy && IsA(em->em_expr, FuncExpr) &&
+			((FuncExpr *) em->em_expr)->funcid == func->funcid)
 		{
-			ListCell   *lc;
+			ListCell *lc;
 
 			/* check all groups are part of subpath pathkeys */
-			foreach(lc, root->group_pathkeys)
+			foreach (lc, root->group_pathkeys)
 			{
 				if (!list_member(subpath->pathkeys, lfirst(lc)))
 					return false;
@@ -119,16 +125,17 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
  * Agg node. During execution, the gapfill node will produce the new tuples.
  */
 static Plan *
-gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path, List *tlist, List *clauses, List *custom_plans)
+gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path, List *tlist,
+					List *clauses, List *custom_plans)
 {
 	GapFillPath *gfpath = (GapFillPath *) path;
 	CustomScan *cscan = makeNode(CustomScan);
-	ListCell   *lc;
+	ListCell *lc;
 	TargetEntry *tle;
-	Expr	   *expr;
-	List	   *tl_exprs = NIL;
+	Expr *expr;
+	List *tl_exprs = NIL;
 	UpperRelationKind stage;
-	int			i;
+	int i;
 
 	cscan->scan.scanrelid = 0;
 	cscan->scan.plan.targetlist = tlist;
@@ -151,7 +158,8 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	 * above aggregation node.
 	 */
 	if (root->upper_targets[UPPERREL_WINDOW] &&
-		list_length(root->upper_targets[UPPERREL_WINDOW]->exprs) != list_length(root->upper_targets[UPPERREL_GROUP_AGG]->exprs))
+		list_length(root->upper_targets[UPPERREL_WINDOW]->exprs) !=
+			list_length(root->upper_targets[UPPERREL_GROUP_AGG]->exprs))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("gapfill functionality with window functions not supported")));
@@ -172,15 +180,16 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	cscan->custom_private = list_make3(gfpath->func, root->parse->groupClause, tl_exprs);
 
 	/* remove locf and interpolate function calls from targetlists */
-	foreach(lc, ((Plan *) linitial(custom_plans))->targetlist)
+	foreach (lc, ((Plan *) linitial(custom_plans))->targetlist)
 	{
-		castNode(TargetEntry, lfirst(lc))->expr = gapfill_clean_expr(castNode(TargetEntry, lfirst(lc))->expr);
+		castNode(TargetEntry, lfirst(lc))->expr =
+			gapfill_clean_expr(castNode(TargetEntry, lfirst(lc))->expr);
 	}
 	for (stage = UPPERREL_SETOP; stage <= UPPERREL_FINAL; stage++)
 	{
 		if (root->upper_targets[stage])
 		{
-			foreach(lc, root->upper_targets[stage]->exprs)
+			foreach (lc, root->upper_targets[stage]->exprs)
 			{
 				lfirst(lc) = gapfill_clean_expr(lfirst(lc));
 			}
@@ -190,8 +199,7 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	return &cscan->scan.plan;
 }
 
-static CustomPathMethods gapfill_path_methods =
-{
+static CustomPathMethods gapfill_path_methods = {
 	.CustomName = "GapFill",
 	.PlanCustomPath = gapfill_plan_create,
 };
@@ -226,22 +234,27 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 
 	if (!gapfill_correct_order(root, subpath, func))
 	{
-		List	   *new_order = NIL;
-		ListCell   *lc;
-		PathKey    *pk_func = NULL;
+		List *new_order = NIL;
+		ListCell *lc;
+		PathKey *pk_func = NULL;
 
 		/* subpath does not have correct order */
-		foreach(lc, root->group_pathkeys)
+		foreach (lc, root->group_pathkeys)
 		{
-			PathKey    *pk = lfirst(lc);
+			PathKey *pk = lfirst(lc);
 			EquivalenceMember *em = linitial(pk->pk_eclass->ec_members);
 
-			if (!pk_func && IsA(em->em_expr, FuncExpr) &&((FuncExpr *) em->em_expr)->funcid == func->funcid)
+			if (!pk_func && IsA(em->em_expr, FuncExpr) &&
+				((FuncExpr *) em->em_expr)->funcid == func->funcid)
 			{
 				if (BTLessStrategyNumber == pk->pk_strategy)
 					pk_func = pk;
 				else
-					pk_func = make_canonical_pathkey(root, pk->pk_eclass, pk->pk_opfamily, BTLessStrategyNumber, pk->pk_nulls_first);
+					pk_func = make_canonical_pathkey(root,
+													 pk->pk_eclass,
+													 pk->pk_opfamily,
+													 BTLessStrategyNumber,
+													 pk->pk_nulls_first);
 			}
 			else
 				new_order = lappend(new_order, pk);
@@ -252,7 +265,8 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 					 errmsg("no top level time_bucket_gapfill in group by clause")));
 
 		new_order = lappend(new_order, pk_func);
-		subpath = (Path *) create_sort_path(root, subpath->parent, subpath, new_order, root->limit_tuples);
+		subpath = (Path *)
+			create_sort_path(root, subpath->parent, subpath, new_order, root->limit_tuples);
 	}
 
 	path->cpath.path.startup_cost = subpath->startup_cost;
@@ -268,13 +282,11 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
  * Prepend GapFill node to every group_rel path
  */
 void
-plan_add_gapfill(PlannerInfo *root,
-				 RelOptInfo *group_rel
-)
+plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 {
-	ListCell   *lc;
-	Query	   *parse = root->parse;
-	gapfill_walker_context context = {.call = NULL,.num_calls = 0};
+	ListCell *lc;
+	Query *parse = root->parse;
+	gapfill_walker_context context = { .call = NULL, .num_calls = 0 };
 
 	if (CMD_SELECT != parse->commandType || parse->groupClause == NIL)
 		return;
@@ -297,7 +309,8 @@ plan_add_gapfill(PlannerInfo *root,
 	 */
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("gapfill functionality cannot be used on postgres compiled with non integer timestamps")));
+			 errmsg("gapfill functionality cannot be used on postgres compiled with non integer "
+					"timestamps")));
 #endif
 
 	if (context.num_calls > 1)
@@ -307,7 +320,7 @@ plan_add_gapfill(PlannerInfo *root,
 
 	if (context.num_calls == 1)
 	{
-		foreach(lc, group_rel->pathlist)
+		foreach (lc, group_rel->pathlist)
 		{
 			lfirst(lc) = gapfill_path_create(root, lfirst(lc), context.call);
 		}

@@ -37,7 +37,7 @@ static void
 hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	HypertableInsertState *state = (HypertableInsertState *) node;
-	PlanState  *ps;
+	PlanState *ps;
 
 	ps = ExecInitNode(&state->mt->plan, estate, eflags);
 
@@ -46,7 +46,7 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 	if (IsA(ps, ModifyTableState))
 	{
 		ModifyTableState *mtstate = (ModifyTableState *) ps;
-		int			i;
+		int i;
 
 		/*
 		 * Find all ChunkDispatchState subnodes and set their parent
@@ -140,12 +140,8 @@ ts_hypertable_insert_fixup_tlist(Plan *plan)
 }
 
 static Plan *
-hypertable_insert_plan_create(PlannerInfo *root,
-							  RelOptInfo *rel,
-							  struct CustomPath *best_path,
-							  List *tlist,
-							  List *clauses,
-							  List *custom_plans)
+hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *best_path,
+							  List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 	ModifyTable *mt = linitial(custom_plans);
@@ -187,20 +183,19 @@ static CustomPathMethods hypertable_insert_path_methods = {
 Path *
 ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
-	Path	   *path = &mtpath->path;
-	Cache	   *hcache = ts_hypertable_cache_pin();
-	ListCell   *lc_path,
-			   *lc_rel;
-	List	   *subpaths = NIL;
+	Path *path = &mtpath->path;
+	Cache *hcache = ts_hypertable_cache_pin();
+	ListCell *lc_path, *lc_rel;
+	List *subpaths = NIL;
 	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
 
 	Assert(list_length(mtpath->subpaths) == list_length(mtpath->resultRelations));
 
-	forboth(lc_path, mtpath->subpaths, lc_rel, mtpath->resultRelations)
+	forboth (lc_path, mtpath->subpaths, lc_rel, mtpath->resultRelations)
 	{
-		Path	   *subpath = lfirst(lc_path);
-		Index		rti = lfirst_int(lc_rel);
+		Path *subpath = lfirst(lc_path);
+		Index rti = lfirst_int(lc_rel);
 		RangeTblEntry *rte = planner_rt_fetch(rti, root);
 
 		ht = ts_hypertable_cache_get_entry(hcache, rte->relid);
@@ -211,7 +206,8 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 				root->parse->onConflict->constraint != InvalidOid)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("hypertables do not support ON CONFLICT statements that reference constraints"),
+						 errmsg("hypertables do not support ON CONFLICT statements that reference "
+								"constraints"),
 						 errhint("Use column names to infer indexes instead.")));
 
 			/*

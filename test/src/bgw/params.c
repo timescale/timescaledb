@@ -27,13 +27,13 @@
 typedef struct FormData_bgw_dsm_handle
 {
 	/* handle is actually a uint32 */
-	int64		handle;
+	int64 handle;
 } FormData_bgw_dsm_handle;
 
 typedef struct TestParamsWrapper
 {
-	TestParams	params;
-	slock_t		mutex;
+	TestParams params;
+	slock_t mutex;
 } TestParamsWrapper;
 
 static Oid
@@ -45,9 +45,9 @@ get_dsm_handle_table_oid()
 static void
 params_register_dsm_handle(dsm_handle handle)
 {
-	Relation	rel;
+	Relation rel;
 	HeapScanDesc scan;
-	HeapTuple	tuple;
+	HeapTuple tuple;
 	FormData_bgw_dsm_handle *fd;
 
 	rel = heap_open(get_dsm_handle_table_oid(), RowExclusiveLock);
@@ -64,11 +64,11 @@ params_register_dsm_handle(dsm_handle handle)
 static dsm_handle
 params_load_dsm_handle()
 {
-	Relation	rel;
+	Relation rel;
 	HeapScanDesc scan;
-	HeapTuple	tuple;
+	HeapTuple tuple;
 	FormData_bgw_dsm_handle *fd;
-	dsm_handle	handle;
+	dsm_handle handle;
 
 	rel = heap_open(get_dsm_handle_table_oid(), RowExclusiveLock);
 	scan = heap_beginscan(rel, SnapshotSelf, 0, NULL);
@@ -99,14 +99,14 @@ static TestParamsWrapper *
 params_open_wrapper()
 {
 	dsm_segment *seg;
-	dsm_handle	handle = params_get_dsm_handle();
+	dsm_handle handle = params_get_dsm_handle();
 	TestParamsWrapper *wrapper;
 
 	seg = dsm_find_mapping(handle);
 	if (seg == NULL)
 	{
 #if PG96
-		bool		started = IsTransactionState();
+		bool started = IsTransactionState();
 
 		if (!started)
 			StartTransactionCommand();
@@ -199,7 +199,9 @@ ts_reset_and_wait_timer_latch()
 	Assert(wrapper != NULL);
 
 	ResetLatch(&wrapper->params.timer_latch);
-	WaitLatchCompat(&wrapper->params.timer_latch, WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH, 10000);
+	WaitLatchCompat(&wrapper->params.timer_latch,
+					WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
+					10000);
 
 	params_close_wrapper(wrapper);
 }
@@ -269,14 +271,15 @@ TS_FUNCTION_INFO_V1(ts_bgw_params_destroy);
 Datum
 ts_bgw_params_destroy(PG_FUNCTION_ARGS)
 {
-/* no way to unpin in 9.6 and can fail in EXEC_BACKEND cases so forget it, should only affect tests anyway */
+	/* no way to unpin in 9.6 and can fail in EXEC_BACKEND cases so forget it, should only affect
+	 * tests anyway */
 
-/*
- * Removing for now because the EXEC_BACKEND compile-time flag is not correctly passed down.
- * TODO: Fix once we fix this compile-script issue (Or make work on EXEC_BACKEND boxes)
- * #if PG10 && !defined(EXEC_BACKEND)
- *	dsm_unpin_segment(params_get_dsm_handle());
- * #endif
- */
+	/*
+	 * Removing for now because the EXEC_BACKEND compile-time flag is not correctly passed down.
+	 * TODO: Fix once we fix this compile-script issue (Or make work on EXEC_BACKEND boxes)
+	 * #if PG10 && !defined(EXEC_BACKEND)
+	 *	dsm_unpin_segment(params_get_dsm_handle());
+	 * #endif
+	 */
 	PG_RETURN_VOID();
 }

@@ -14,4 +14,4 @@ extern bool ts_loader_extension_exists(void);
 
 extern void ts_loader_extension_check(void);
 
-#endif							/* TIMESCALEDB_LOADER_H */
+#endif /* TIMESCALEDB_LOADER_H */

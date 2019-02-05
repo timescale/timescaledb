@@ -16,4 +16,4 @@ extern Datum ts_date_bucket(PG_FUNCTION_ARGS);
 extern Datum ts_timestamp_bucket(PG_FUNCTION_ARGS);
 extern Datum ts_timestamptz_bucket(PG_FUNCTION_ARGS);
 
-#endif							/* TIMESCALEDB_TIME_BUCKET_H */
+#endif /* TIMESCALEDB_TIME_BUCKET_H */

@@ -14,12 +14,11 @@
  * it actually is and will use the less efficient GroupAggregate instead of a HashAggregate
  * to prevent running out of memory.
  *
- * The planner will assume a large number of rows because the statistics planner for grouping assumes that the number of
- * distinct items produced by a function is the same as the number of distinct items going in. This is not true for functions
- * like time_bucket and date_trunc. This optimization fixes the statistics and adds the HashAggregate plan if appropriate.
+ * The planner will assume a large number of rows because the statistics planner for grouping
+ * assumes that the number of distinct items produced by a function is the same as the number of
+ * distinct items going in. This is not true for functions like time_bucket and date_trunc. This
+ * optimization fixes the statistics and adds the HashAggregate plan if appropriate.
  * */
 
-extern void ts_plan_add_hashagg(PlannerInfo *root,
-					RelOptInfo *input_rel,
-					RelOptInfo *output_rel);
-#endif							/* TIMESCALEDB_PLAN_ADD_HASHAGG_H */
+extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
+#endif /* TIMESCALEDB_PLAN_ADD_HASHAGG_H */

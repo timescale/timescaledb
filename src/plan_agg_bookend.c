@@ -61,9 +61,9 @@
 
 typedef struct FirstLastAggInfo
 {
-	MinMaxAggInfo *m_agg_info;	/* reusing MinMaxAggInfo to avoid code
-								 * duplication */
-	Expr	   *sort;			/* Expression to use for ORDER BY */
+	MinMaxAggInfo *m_agg_info; /* reusing MinMaxAggInfo to avoid code
+								* duplication */
+	Expr *sort;				   /* Expression to use for ORDER BY */
 } FirstLastAggInfo;
 
 typedef struct MutatorContext
@@ -72,8 +72,8 @@ typedef struct MutatorContext
 } MutatorContext;
 
 static bool find_first_last_aggs_walker(Node *node, List **context);
-static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *flinfo,
-					  Oid eqop, Oid sortop, bool nulls_first);
+static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *flinfo, Oid eqop, Oid sortop,
+								  bool nulls_first);
 static void first_last_qp_callback(PlannerInfo *root, void *extra);
 static Node *mutate_aggref_node(Node *node, MutatorContext *context);
 static void replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path);
@@ -91,21 +91,19 @@ mutate_aggref_node(Node *node, MutatorContext *context)
 		return NULL;
 	if (IsA(node, Aggref))
 	{
-		Aggref	   *aggref = (Aggref *) node;
+		Aggref *aggref = (Aggref *) node;
 
 		/* See if the Aggref should be replaced by a Param */
-		if (context->mm_path != NULL &&
-			list_length(aggref->args) == 2)
+		if (context->mm_path != NULL && list_length(aggref->args) == 2)
 		{
 			TargetEntry *curTarget = (TargetEntry *) linitial(aggref->args);
-			ListCell   *cell;
+			ListCell *cell;
 
-			foreach(cell, context->mm_path->mmaggregates)
+			foreach (cell, context->mm_path->mmaggregates)
 			{
 				MinMaxAggInfo *mminfo = (MinMaxAggInfo *) lfirst(cell);
 
-				if (mminfo->aggfnoid == aggref->aggfnoid &&
-					equal(mminfo->target, curTarget->expr))
+				if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, curTarget->expr))
 					return (Node *) copyObject(mminfo->param);
 			}
 		}
@@ -129,20 +127,24 @@ replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path)
 
 	context.mm_path = minmaxagg_path;
 
-	((Path *) minmaxagg_path)->pathtarget->exprs = (List *) mutate_aggref_node((Node *) ((Path *) minmaxagg_path)->pathtarget->exprs, (void *) &context);
+	((Path *) minmaxagg_path)->pathtarget->exprs =
+		(List *) mutate_aggref_node((Node *) ((Path *) minmaxagg_path)->pathtarget->exprs,
+									(void *) &context);
 }
 
 /* Stores function id (FIRST/LAST) with proper comparison strategy */
 typedef struct FuncStrategy
 {
-	Oid			func_oid;
+	Oid func_oid;
 	StrategyNumber strategy;
 } FuncStrategy;
 
-static Oid	first_last_arg_types[] = {ANYELEMENTOID, ANYOID};
+static Oid first_last_arg_types[] = { ANYELEMENTOID, ANYOID };
 
-static struct FuncStrategy first_func_strategy = {.func_oid = InvalidOid,.strategy = BTLessStrategyNumber};
-static struct FuncStrategy last_func_strategy = {.func_oid = InvalidOid,.strategy = BTGreaterStrategyNumber};
+static struct FuncStrategy first_func_strategy = { .func_oid = InvalidOid,
+												   .strategy = BTLessStrategyNumber };
+static struct FuncStrategy last_func_strategy = { .func_oid = InvalidOid,
+												  .strategy = BTGreaterStrategyNumber };
 
 static FuncStrategy *
 initialize_func_strategy(FuncStrategy *func_strategy, char *name, int nargs, Oid arg_types[])
@@ -172,7 +174,7 @@ is_first_last_node(Node *node, List **context)
 		return false;
 	if (IsA(node, Aggref))
 	{
-		Aggref	   *aggref = (Aggref *) node;
+		Aggref *aggref = (Aggref *) node;
 
 		FuncStrategy *func_strategy = get_func_strategy(aggref->aggfnoid);
 
@@ -185,14 +187,14 @@ is_first_last_node(Node *node, List **context)
 static bool
 contains_first_last_node(List *sortClause, List *targetList)
 {
-	List	   *exprs = get_sortgrouplist_exprs(sortClause, targetList);
-	ListCell   *cell;
-	List	   *context = NIL;
+	List *exprs = get_sortgrouplist_exprs(sortClause, targetList);
+	ListCell *cell;
+	List *context = NIL;
 
-	foreach(cell, exprs)
+	foreach (cell, exprs)
 	{
-		Node	   *expr = lfirst(cell);
-		bool		found = is_first_last_node(expr, &context);
+		Node *expr = lfirst(cell);
+		bool found = is_first_last_node(expr, &context);
 
 		if (found)
 			return true;
@@ -223,14 +225,14 @@ contains_first_last_node(List *sortClause, List *targetList)
 void
 ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 {
-	Query	   *parse = root->parse;
-	FromExpr   *jtnode;
+	Query *parse = root->parse;
+	FromExpr *jtnode;
 	RangeTblRef *rtr;
 	RangeTblEntry *rte;
-	List	   *first_last_aggs;
+	List *first_last_aggs;
 	RelOptInfo *grouped_rel;
-	ListCell   *lc;
-	List	   *mm_agg_list;
+	ListCell *lc;
+	List *mm_agg_list;
 	MinMaxAggPath *minmaxagg_path;
 
 	/* minmax_aggs list should be empty at this point */
@@ -240,7 +242,7 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	if (!parse->hasAggs)
 		return;
 
-	Assert(!parse->setOperations);	/* shouldn't get here if a setop */
+	Assert(!parse->setOperations);  /* shouldn't get here if a setop */
 	Assert(parse->rowMarks == NIL); /* nor if FOR UPDATE */
 
 	/*
@@ -254,8 +256,8 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 * implementations of grouping require looking at all the rows anyway, and
 	 * so there's not much point in optimizing FIRST/LAST.
 	 */
-	if (parse->groupClause || list_length(parse->groupingSets) > 1 ||
-		parse->hasWindowFuncs || contains_first_last_node(parse->sortClause, tlist))
+	if (parse->groupClause || list_length(parse->groupingSets) > 1 || parse->hasWindowFuncs ||
+		contains_first_last_node(parse->sortClause, tlist))
 		return;
 
 	/*
@@ -287,9 +289,9 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	rtr = (RangeTblRef *) jtnode;
 	rte = planner_rt_fetch(rtr->rtindex, root);
 	if (rte->rtekind == RTE_RELATION)
-		 /* ordinary relation, ok */ ;
+		/* ordinary relation, ok */;
 	else if (rte->rtekind == RTE_SUBQUERY && rte->inh)
-		 /* flattened UNION ALL subquery, ok */ ;
+		/* flattened UNION ALL subquery, ok */;
 	else
 		return;
 
@@ -309,20 +311,21 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 * prove to be non-indexable, give up; there is no point in optimizing
 	 * just some of them.
 	 */
-	foreach(lc, first_last_aggs)
+	foreach (lc, first_last_aggs)
 	{
 		FirstLastAggInfo *fl_info = (FirstLastAggInfo *) lfirst(lc);
 		MinMaxAggInfo *mminfo = fl_info->m_agg_info;
-		Oid			eqop;
-		bool		reverse;
+		Oid eqop;
+		bool reverse;
 
 		/*
 		 * We'll need the equality operator that goes with the aggregate's
 		 * ordering operator.
 		 */
 		eqop = get_equality_op_for_ordering_op(mminfo->aggsortop, &reverse);
-		if (!OidIsValid(eqop))	/* shouldn't happen */
-			elog(ERROR, "could not find equality operator for ordering operator %u",
+		if (!OidIsValid(eqop)) /* shouldn't happen */
+			elog(ERROR,
+				 "could not find equality operator for ordering operator %u",
 				 mminfo->aggsortop);
 
 		/*
@@ -356,19 +359,17 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 * to decide whether to make the Param, unfortunately.)
 	 */
 	mm_agg_list = NIL;
-	foreach(lc, first_last_aggs)
+	foreach (lc, first_last_aggs)
 	{
 		FirstLastAggInfo *fl_info = (FirstLastAggInfo *) lfirst(lc);
 		MinMaxAggInfo *mminfo = fl_info->m_agg_info;
 
-		mminfo->param =
-			SS_make_initplan_output_param(root,
-										  exprType((Node *) mminfo->target),
-										  -1,
-										  exprCollation((Node *) mminfo->target));
+		mminfo->param = SS_make_initplan_output_param(root,
+													  exprType((Node *) mminfo->target),
+													  -1,
+													  exprCollation((Node *) mminfo->target));
 		mm_agg_list = lcons(mminfo, mm_agg_list);
 	}
-
 
 	/*
 	 * Create a MinMaxAggPath node with the appropriate estimated costs and
@@ -383,7 +384,8 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 * doesn't matter that we haven't filled FDW-related fields in the rel.
 	 */
 	grouped_rel = fetch_upper_rel(root, UPPERREL_GROUP_AGG, NULL);
-	minmaxagg_path = create_minmaxagg_path(root, grouped_rel,
+	minmaxagg_path = create_minmaxagg_path(root,
+										   grouped_rel,
 										   create_pathtarget(root, tlist),
 										   mm_agg_list,
 										   (List *) parse->havingQual);
@@ -420,20 +422,20 @@ find_first_last_aggs_walker(Node *node, List **context)
 		return false;
 	if (IsA(node, Aggref))
 	{
-		Aggref	   *aggref = (Aggref *) node;
-		Oid			aggsortop;
+		Aggref *aggref = (Aggref *) node;
+		Oid aggsortop;
 		TargetEntry *value;
 		TargetEntry *sort;
 		MinMaxAggInfo *mminfo;
-		ListCell   *l;
+		ListCell *l;
 		FirstLastAggInfo *fl_info;
-		Oid			sort_oid;
+		Oid sort_oid;
 		TypeCacheEntry *sort_tce;
 		FuncStrategy *func_strategy;
 
 		Assert(aggref->agglevelsup == 0);
 		if (list_length(aggref->args) != 2)
-			return true;		/* it couldn't be first/last */
+			return true; /* it couldn't be first/last */
 
 		/*
 		 * ORDER BY is usually irrelevant for FIRST/LAST, but it can change
@@ -465,12 +467,16 @@ find_first_last_aggs_walker(Node *node, List **context)
 
 		func_strategy = get_func_strategy(aggref->aggfnoid);
 		if (func_strategy == NULL)
-			return true;		/* not first/last aggregate */
+			return true; /* not first/last aggregate */
 
 		sort_tce = lookup_type_cache(sort_oid, TYPECACHE_BTREE_OPFAMILY);
-		aggsortop = get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy->strategy);
+		aggsortop =
+			get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy->strategy);
 		if (aggsortop == InvalidOid)
-			elog(ERROR, "Can't resolve sort operator oid for function oid: %d and type: %d", aggref->aggfnoid, sort_oid);
+			elog(ERROR,
+				 "Can't resolve sort operator oid for function oid: %d and type: %d",
+				 aggref->aggfnoid,
+				 sort_oid);
 
 		/* Used in projection */
 		value = (TargetEntry *) linitial(aggref->args);
@@ -478,19 +484,18 @@ find_first_last_aggs_walker(Node *node, List **context)
 		sort = (TargetEntry *) lsecond(aggref->args);
 
 		if (contain_mutable_functions((Node *) sort->expr))
-			return true;		/* not potentially indexable */
+			return true; /* not potentially indexable */
 
 		if (type_is_rowtype(exprType((Node *) sort->expr)))
-			return true;		/* IS NOT NULL would have weird semantics */
+			return true; /* IS NOT NULL would have weird semantics */
 
 		/*
 		 * Check whether it's already in the list, and add it if not.
 		 */
-		foreach(l, *context)
+		foreach (l, *context)
 		{
 			mminfo = (MinMaxAggInfo *) lfirst(l);
-			if (mminfo->aggfnoid == aggref->aggfnoid &&
-				equal(mminfo->target, value->expr))
+			if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, value->expr))
 				return false;
 		}
 
@@ -516,8 +521,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		return false;
 	}
 	Assert(!IsA(node, SubLink));
-	return expression_tree_walker(node, find_first_last_aggs_walker,
-								  (void *) context);
+	return expression_tree_walker(node, find_first_last_aggs_walker, (void *) context);
 }
 
 /*
@@ -537,20 +541,20 @@ find_first_last_aggs_walker(Node *node, List **context)
  *
  */
 static bool
-build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
-					  Oid eqop, Oid sortop, bool nulls_first)
+build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oid sortop,
+					  bool nulls_first)
 {
 	PlannerInfo *subroot;
-	Query	   *parse;
+	Query *parse;
 	TargetEntry *value_target;
 	TargetEntry *sort_target;
-	List	   *tlist;
-	NullTest   *ntest;
+	List *tlist;
+	NullTest *ntest;
 	SortGroupClause *sortcl;
 	RelOptInfo *final_rel;
-	Path	   *sorted_path;
-	Cost		path_cost;
-	double		path_fraction;
+	Path *sorted_path;
+	Cost path_cost;
+	double path_fraction;
 	MinMaxAggInfo *mminfo;
 
 	/*
@@ -599,7 +603,8 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 	 * Value and sort target entries but sort target is eliminated later on
 	 * from target list
 	 */
-	value_target = makeTargetEntry(copyObject(mminfo->target), (AttrNumber) 1, pstrdup("value"), false);
+	value_target =
+		makeTargetEntry(copyObject(mminfo->target), (AttrNumber) 1, pstrdup("value"), false);
 	sort_target = makeTargetEntry(copyObject(fl_info->sort), (AttrNumber) 2, pstrdup("sort"), true);
 	tlist = list_make2(value_target, sort_target);
 	subroot->processed_tlist = parse->targetList = tlist;
@@ -621,8 +626,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 
 	/* User might have had that in WHERE already */
 	if (!list_member((List *) parse->jointree->quals, ntest))
-		parse->jointree->quals = (Node *)
-			lcons(ntest, (List *) parse->jointree->quals);
+		parse->jointree->quals = (Node *) lcons(ntest, (List *) parse->jointree->quals);
 
 	/* Build suitable ORDER BY clause */
 	sortcl = makeNode(SortGroupClause);
@@ -630,15 +634,13 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 	sortcl->eqop = eqop;
 	sortcl->sortop = sortop;
 	sortcl->nulls_first = nulls_first;
-	sortcl->hashable = false;	/* no need to make this accurate */
+	sortcl->hashable = false; /* no need to make this accurate */
 	parse->sortClause = list_make1(sortcl);
 
 	/* set up expressions for LIMIT 1 */
 	parse->limitOffset = NULL;
-	parse->limitCount = (Node *) makeConst(INT8OID, -1, InvalidOid,
-										   sizeof(int64),
-										   Int64GetDatum(1), false,
-										   FLOAT8PASSBYVAL);
+	parse->limitCount = (Node *)
+		makeConst(INT8OID, -1, InvalidOid, sizeof(int64), Int64GetDatum(1), false, FLOAT8PASSBYVAL);
 
 	/*
 	 * Generate the best paths for this query, telling query_planner that we
@@ -667,11 +669,10 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 	else
 		path_fraction = 1.0;
 
-	sorted_path =
-		get_cheapest_fractional_path_for_pathkeys(final_rel->pathlist,
-												  subroot->query_pathkeys,
-												  NULL,
-												  path_fraction);
+	sorted_path = get_cheapest_fractional_path_for_pathkeys(final_rel->pathlist,
+															subroot->query_pathkeys,
+															NULL,
+															path_fraction);
 	if (!sorted_path)
 		return false;
 
@@ -680,7 +681,9 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 	 * assume that this won't change any conclusions about which was the
 	 * cheapest path.)
 	 */
-	sorted_path = apply_projection_to_path(subroot, final_rel, sorted_path,
+	sorted_path = apply_projection_to_path(subroot,
+										   final_rel,
+										   sorted_path,
 										   create_pathtarget(subroot, tlist));
 
 	/*
@@ -690,7 +693,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info,
 	 * compare_fractional_path_costs().
 	 */
 	path_cost = sorted_path->startup_cost +
-		path_fraction * (sorted_path->total_cost - sorted_path->startup_cost);
+				path_fraction * (sorted_path->total_cost - sorted_path->startup_cost);
 
 	/* Save state for further processing */
 	mminfo->subroot = subroot;
@@ -711,9 +714,7 @@ first_last_qp_callback(PlannerInfo *root, void *extra)
 	root->distinct_pathkeys = NIL;
 
 	root->sort_pathkeys =
-		make_pathkeys_for_sortclauses(root,
-									  root->parse->sortClause,
-									  root->parse->targetList);
+		make_pathkeys_for_sortclauses(root, root->parse->sortClause, root->parse->targetList);
 
 	root->query_pathkeys = root->sort_pathkeys;
 }

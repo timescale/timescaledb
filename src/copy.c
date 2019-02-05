@@ -48,29 +48,28 @@
 
 typedef struct CopyChunkState CopyChunkState;
 
-typedef bool (*CopyFromFunc) (CopyChunkState *ccstate, ExprContext *econtext,
-							  Datum *values, bool *nulls, Oid *tuple_oid);
+typedef bool (*CopyFromFunc)(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
+							 bool *nulls, Oid *tuple_oid);
 
 typedef struct CopyChunkState
 {
-	Relation	rel;
-	EState	   *estate;
+	Relation rel;
+	EState *estate;
 	ChunkDispatch *dispatch;
 	CopyFromFunc next_copy_from;
 	union
 	{
-		CopyState	cstate;
+		CopyState cstate;
 		HeapScanDesc scandesc;
-		void	   *data;
-	}			fromctx;
+		void *data;
+	} fromctx;
 } CopyChunkState;
-
 
 static CopyChunkState *
 copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, void *fromctx)
 {
 	CopyChunkState *ccstate;
-	EState	   *estate = CreateExecutorState();
+	EState *estate = CreateExecutorState();
 
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
@@ -90,8 +89,8 @@ copy_chunk_state_destroy(CopyChunkState *ccstate)
 }
 
 static bool
-next_copy_from(CopyChunkState *ccstate, ExprContext *econtext,
-			   Datum *values, bool *nulls, Oid *tuple_oid)
+next_copy_from(CopyChunkState *ccstate, ExprContext *econtext, Datum *values, bool *nulls,
+			   Oid *tuple_oid)
 {
 	return NextCopyFrom(ccstate->fromctx.cstate, econtext, values, nulls, tuple_oid);
 }
@@ -102,31 +101,30 @@ next_copy_from(CopyChunkState *ccstate, ExprContext *econtext,
 static uint64
 timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 {
-	HeapTuple	tuple;
-	TupleDesc	tupDesc;
-	Datum	   *values;
-	bool	   *nulls;
+	HeapTuple tuple;
+	TupleDesc tupDesc;
+	Datum *values;
+	bool *nulls;
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
-	EState	   *estate = ccstate->estate;	/* for ExecConstraints() */
+	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
 	MemoryContext oldcontext = CurrentMemoryContext;
 	ChunkInsertState *prev_cis = NULL;
 
 	ErrorContextCallback errcallback;
-	CommandId	mycid = GetCurrentCommandId(true);
-	int			hi_options = 0; /* start with default heap_insert options */
+	CommandId mycid = GetCurrentCommandId(true);
+	int hi_options = 0; /* start with default heap_insert options */
 	BulkInsertState bistate;
-	uint64		processed = 0;
+	uint64 processed = 0;
 
 	if (ccstate->rel->rd_rel->relkind != RELKIND_RELATION)
 	{
 		if (ccstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("cannot copy to view \"%s\"",
-							RelationGetRelationName(ccstate->rel))));
+					 errmsg("cannot copy to view \"%s\"", RelationGetRelationName(ccstate->rel))));
 		else if (ccstate->rel->rd_rel->relkind == RELKIND_MATVIEW)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -203,8 +201,8 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	resultRelInfo = makeNode(ResultRelInfo);
 	InitResultRelInfoCompat(resultRelInfo,
 							ccstate->rel,
-							0,	/* dummy rangetable index - original was 1
-								 * which isn't dummy-nuf */
+							0, /* dummy rangetable index - original was 1
+								* which isn't dummy-nuf */
 							0);
 
 	ExecOpenIndices(resultRelInfo, false);
@@ -245,9 +243,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	for (;;)
 	{
 		TupleTableSlot *slot;
-		bool		skip_tuple;
-		Oid			loaded_oid = InvalidOid;
-		Point	   *point;
+		bool skip_tuple;
+		Oid loaded_oid = InvalidOid;
+		Point *point;
 		ChunkDispatch *dispatch = ccstate->dispatch;
 		ChunkInsertState *cis;
 
@@ -318,14 +316,13 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		skip_tuple = false;
 
 		/* BEFORE ROW INSERT Triggers */
-		if (resultRelInfo->ri_TrigDesc &&
-			resultRelInfo->ri_TrigDesc->trig_insert_before_row)
+		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
 		{
 			slot = ExecBRInsertTriggers(estate, resultRelInfo, slot);
 
-			if (slot == NULL)	/* "do nothing" */
+			if (slot == NULL) /* "do nothing" */
 				skip_tuple = true;
-			else				/* trigger might have changed tuple */
+			else /* trigger might have changed tuple */
 				tuple = ExecMaterializeSlot(slot);
 		}
 
@@ -336,16 +333,14 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 				ExecConstraints(resultRelInfo, slot, estate);
 
 			{
-				List	   *recheckIndexes = NIL;
+				List *recheckIndexes = NIL;
 
 				/* OK, store the tuple and create index entries for it */
-				heap_insert(resultRelInfo->ri_RelationDesc, tuple, mycid,
-							hi_options, bistate);
+				heap_insert(resultRelInfo->ri_RelationDesc, tuple, mycid, hi_options, bistate);
 
 				if (resultRelInfo->ri_NumIndices > 0)
-					recheckIndexes = ExecInsertIndexTuples(slot, &(tuple->t_self),
-														   estate, false, NULL,
-														   NIL);
+					recheckIndexes =
+						ExecInsertIndexTuples(slot, &(tuple->t_self), estate, false, NULL, NIL);
 
 				/* AFTER ROW INSERT Triggers */
 				ExecARInsertTriggersCompat(estate, resultRelInfo, tuple, recheckIndexes);
@@ -397,9 +392,9 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		 * this never happens because the ResultRelInfo always already exists
 		 * for the regular table.
 		 */
-		ListCell   *l;
+		ListCell *l;
 
-		foreach(l, estate->es_trig_target_relations)
+		foreach (l, estate->es_trig_target_relations)
 		{
 			ResultRelInfo *resultRelInfo = (ResultRelInfo *) lfirst(l);
 
@@ -437,13 +432,13 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 static List *
 timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 {
-	List	   *attnums = NIL;
+	List *attnums = NIL;
 
 	if (attnamelist == NIL)
 	{
 		/* Generate default column list */
-		int			attr_count = tupDesc->natts;
-		int			i;
+		int attr_count = tupDesc->natts;
+		int i;
 
 		for (i = 0; i < attr_count; i++)
 		{
@@ -457,13 +452,13 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 	else
 	{
 		/* Validate the user-supplied list and extract attnums */
-		ListCell   *l;
+		ListCell *l;
 
-		foreach(l, attnamelist)
+		foreach (l, attnamelist)
 		{
-			char	   *name = strVal(lfirst(l));
-			int			attnum;
-			int			i;
+			char *name = strVal(lfirst(l));
+			int attnum;
+			int i;
 
 			/* Lookup column name */
 			attnum = InvalidAttrNumber;
@@ -485,19 +480,18 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 							 errmsg("column \"%s\" of relation \"%s\" does not exist",
-									name, RelationGetRelationName(rel))));
+									name,
+									RelationGetRelationName(rel))));
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
-							 errmsg("column \"%s\" does not exist",
-									name)));
+							 errmsg("column \"%s\" does not exist", name)));
 			}
 			/* Check for duplicates */
 			if (list_member_int(attnums, attnum))
 				ereport(ERROR,
 						(errcode(ERRCODE_DUPLICATE_COLUMN),
-						 errmsg("column \"%s\" specified more than once",
-								name)));
+						 errmsg("column \"%s\" specified more than once", name)));
 			attnums = lappend_int(attnums, attnum);
 		}
 	}
@@ -508,10 +502,10 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 static void
 copy_security_check(Relation rel, List *attnums)
 {
-	List	   *range_table = NIL;
-	ListCell   *cur;
+	List *range_table = NIL;
+	ListCell *cur;
 	RangeTblEntry *rte;
-	char	   *xactReadOnly;
+	char *xactReadOnly;
 
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
@@ -520,10 +514,9 @@ copy_security_check(Relation rel, List *attnums)
 	rte->requiredPerms = ACL_INSERT;
 	range_table = list_make1(rte);
 
-	foreach(cur, attnums)
+	foreach (cur, attnums)
 	{
-		int			attno = lfirst_int(cur) -
-		FirstLowInvalidHeapAttributeNumber;
+		int attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
 
 		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
 	}
@@ -564,11 +557,11 @@ void
 timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht)
 {
 	CopyChunkState *ccstate;
-	CopyState	cstate;
-	bool		pipe = (stmt->filename == NULL);
-	Relation	rel;
-	List	   *range_table = NIL;
-	List	   *attnums = NIL;
+	CopyState cstate;
+	bool pipe = (stmt->filename == NULL);
+	Relation rel;
+	List *range_table = NIL;
+	List *attnums = NIL;
 
 	/* Disallow COPY to/from file or program except to superusers. */
 	if (!pipe && !superuser())
@@ -603,15 +596,19 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	copy_security_check(rel, attnums);
 
 #if PG96
-	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program,
-						   stmt->attlist, stmt->options);
+	cstate = BeginCopyFrom(rel, stmt->filename, stmt->is_program, stmt->attlist, stmt->options);
 #else
 	{
 		ParseState *pstate = make_parsestate(NULL);
 
 		pstate->p_sourcetext = queryString;
-		cstate = BeginCopyFrom(pstate, rel, stmt->filename, stmt->is_program,
-							   NULL, stmt->attlist, stmt->options);
+		cstate = BeginCopyFrom(pstate,
+							   rel,
+							   stmt->filename,
+							   stmt->is_program,
+							   NULL,
+							   stmt->attlist,
+							   stmt->options);
 		free_parsestate(pstate);
 	}
 #endif
@@ -624,11 +621,11 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 }
 
 static bool
-next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext,
-							   Datum *values, bool *nulls, Oid *tuple_oid)
+next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext, Datum *values,
+							   bool *nulls, Oid *tuple_oid)
 {
 	HeapScanDesc scandesc = ccstate->fromctx.scandesc;
-	HeapTuple	tuple = heap_getnext(scandesc, ForwardScanDirection);
+	HeapTuple tuple = heap_getnext(scandesc, ForwardScanDirection);
 
 	if (!HeapTupleIsValid(tuple))
 		return false;
@@ -648,19 +645,19 @@ next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext,
 void
 timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 {
-	Relation	rel;
+	Relation rel;
 	CopyChunkState *ccstate;
 	HeapScanDesc scandesc;
-	Snapshot	snapshot;
-	List	   *attnums = NIL;
-	List	   *range_table = NIL;
-	RangeVar	rv = {
+	Snapshot snapshot;
+	List *attnums = NIL;
+	List *range_table = NIL;
+	RangeVar rv = {
 		.schemaname = NameStr(ht->fd.schema_name),
 		.relname = NameStr(ht->fd.table_name),
 #if PG96
 		.inhOpt = INH_NO,
 #else
-		.inh = false,			/* Don't recurse */
+		.inh = false, /* Don't recurse */
 #endif
 	};
 
@@ -669,7 +666,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 		.relations = list_make1(&rv),
 		.behavior = DROP_RESTRICT,
 	};
-	int			i;
+	int i;
 
 	rel = heap_open(ht->main_table_relid, lockmode);
 
@@ -679,7 +676,6 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 
 		attnums = lappend_int(attnums, attr->attnum);
 	}
-
 
 	copy_security_check(rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());

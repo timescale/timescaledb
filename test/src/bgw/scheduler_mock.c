@@ -30,7 +30,6 @@
 #include "timer_mock.h"
 #include "params.h"
 
-
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_wait_for_scheduler_finish);
@@ -59,10 +58,10 @@ static char *
 serialize_test_parameters(int32 ttl)
 {
 	JsonbValue *result;
-	JsonbValue	ttl_value;
+	JsonbValue ttl_value;
 	JsonbParseState *parseState = NULL;
-	Jsonb	   *jb;
-	StringInfo	jtext = makeStringInfo();
+	Jsonb *jb;
+	StringInfo jtext = makeStringInfo();
 
 	ttl_value.type = jbvNumeric;
 	ttl_value.val.numeric = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(ttl)));
@@ -83,9 +82,9 @@ serialize_test_parameters(int32 ttl)
 static void
 deserialize_test_parameters(char *params, int32 *ttl)
 {
-	Jsonb	   *jb = (Jsonb *) DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(params)));
+	Jsonb *jb = (Jsonb *) DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(params)));
 	JsonbValue *ttl_v = getIthJsonbValueFromContainer(&jb->root, 0);
-	Numeric		ttl_numeric;
+	Numeric ttl_numeric;
 
 	Assert(ttl_v->type == jbvNumeric);
 
@@ -96,8 +95,8 @@ deserialize_test_parameters(char *params, int32 *ttl)
 extern Datum
 ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 {
-	Oid			db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	int32		ttl;
+	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
+	int32 ttl;
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
@@ -137,15 +136,17 @@ start_test_scheduler(char *params)
 	 * TODO this is where we would increment the number of bgw used, if we
 	 * decide to do so
 	 */
-	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", "ts_bgw_db_scheduler_test_main", params);
+	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main",
+							   "ts_bgw_db_scheduler_test_main",
+							   params);
 }
 
 extern Datum
 ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {
-	char	   *params = serialize_test_parameters(PG_GETARG_INT32(0));
+	char *params = serialize_test_parameters(PG_GETARG_INT32(0));
 	BackgroundWorkerHandle *worker_handle;
-	pid_t		pid;
+	pid_t pid;
 
 	worker_handle = start_test_scheduler(params);
 
@@ -160,14 +161,13 @@ static BackgroundWorkerHandle *current_handle = NULL;
 extern Datum
 ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 {
-	char	   *params = serialize_test_parameters(PG_GETARG_INT32(0));
-	pid_t		pid;
+	char *params = serialize_test_parameters(PG_GETARG_INT32(0));
+	pid_t pid;
 	MemoryContext old_ctx;
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
 	current_handle = start_test_scheduler(params);
 	MemoryContextSwitchTo(old_ctx);
-
 
 	Assert(BGWH_STARTED == WaitForBackgroundWorkerStartup(current_handle, &pid));
 
@@ -207,8 +207,7 @@ test_job_2_error()
 
 static pqsigfunc prev_signal_func = NULL;
 
-static void
-log_terminate_signal(SIGNAL_ARGS)
+static void log_terminate_signal(SIGNAL_ARGS)
 {
 	elog(WARNING, "Job got term signal");
 
@@ -251,7 +250,7 @@ test_job_4(void)
 static TestJobType
 get_test_job_type_from_name(Name job_type_name)
 {
-	int			i;
+	int i;
 
 	for (i = 0; i < _MAX_TEST_JOB_TYPE; i++)
 	{
@@ -280,12 +279,19 @@ test_job_dispatcher(BgwJob *job)
 		case TEST_JOB_TYPE_JOB_3_LONG:
 			return test_job_3_long();
 		case TEST_JOB_TYPE_JOB_4:
-			{
-				/* Set next_start to 200ms */
-				Interval   *new_interval = DatumGetIntervalP(DirectFunctionCall7(make_interval, Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Int32GetDatum(0), Float8GetDatum(0.2)));
+		{
+			/* Set next_start to 200ms */
+			Interval *new_interval = DatumGetIntervalP(DirectFunctionCall7(make_interval,
+																		   Int32GetDatum(0),
+																		   Int32GetDatum(0),
+																		   Int32GetDatum(0),
+																		   Int32GetDatum(0),
+																		   Int32GetDatum(0),
+																		   Int32GetDatum(0),
+																		   Float8GetDatum(0.2)));
 
-				return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, new_interval);
-			}
+			return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, new_interval);
+		}
 		case _MAX_TEST_JOB_TYPE:
 			elog(ERROR, "unrecognized test job type: %s", NameStr(job->fd.job_type));
 	}
@@ -304,7 +310,12 @@ ts_bgw_job_execute_test(PG_FUNCTION_ARGS)
 Datum
 ts_test_bgw_job_insert_relation(PG_FUNCTION_ARGS)
 {
-	ts_bgw_job_insert_relation(PG_GETARG_NAME(0), PG_GETARG_NAME(1), PG_GETARG_INTERVAL_P(2), PG_GETARG_INTERVAL_P(3), PG_GETARG_INT32(4), PG_GETARG_INTERVAL_P(5));
+	ts_bgw_job_insert_relation(PG_GETARG_NAME(0),
+							   PG_GETARG_NAME(1),
+							   PG_GETARG_INTERVAL_P(2),
+							   PG_GETARG_INTERVAL_P(3),
+							   PG_GETARG_INT32(4),
+							   PG_GETARG_INTERVAL_P(5));
 
 	PG_RETURN_NULL();
 }

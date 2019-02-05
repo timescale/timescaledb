@@ -9,4 +9,4 @@
 extern void ts_bgw_log_set_application_name(char *name);
 extern void ts_register_emit_log_hook(void);
 
-#endif							/* TEST_BGW_LOG_H */
+#endif /* TEST_BGW_LOG_H */

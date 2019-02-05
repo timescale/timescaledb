@@ -25,37 +25,34 @@
 
 typedef struct PartitioningFunc
 {
-	char		schema[NAMEDATALEN];
-	char		name[NAMEDATALEN];
-	Oid			rettype;
+	char schema[NAMEDATALEN];
+	char name[NAMEDATALEN];
+	Oid rettype;
 
 	/*
 	 * Function manager info to call the partitioning function on the
 	 * partitioning column's text representation.
 	 */
-	FmgrInfo	func_fmgr;
+	FmgrInfo func_fmgr;
 } PartitioningFunc;
-
 
 typedef struct PartitioningInfo
 {
-	char		column[NAMEDATALEN];
-	AttrNumber	column_attnum;
+	char column[NAMEDATALEN];
+	AttrNumber column_attnum;
 	DimensionType dimtype;
 	PartitioningFunc partfunc;
 } PartitioningInfo;
 
-
-extern Oid	ts_partitioning_func_get_closed_default(void);
+extern Oid ts_partitioning_func_get_closed_default(void);
 extern bool ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtype);
 
-extern PartitioningInfo *ts_partitioning_info_create(const char *schema,
-							const char *partfunc,
-							const char *partcol,
-							DimensionType dimtype,
-							Oid relid);
+extern PartitioningInfo *ts_partitioning_info_create(const char *schema, const char *partfunc,
+													 const char *partcol, DimensionType dimtype,
+													 Oid relid);
 extern List *ts_partitioning_func_qualified_name(PartitioningFunc *pf);
 extern Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value);
-extern Datum ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc, bool *isnull);
+extern Datum ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple,
+											  TupleDesc desc, bool *isnull);
 
-#endif							/* TIMESCALEDB_PARTITIONING_H */
+#endif /* TIMESCALEDB_PARTITIONING_H */

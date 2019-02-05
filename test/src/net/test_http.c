@@ -12,7 +12,7 @@
 #include "export.h"
 #include "net/http.h"
 
-#define MAX_REQUEST_SIZE	4096
+#define MAX_REQUEST_SIZE 4096
 
 /*  Tests for auxiliary HttpResponseState functions in http_parsing.h */
 
@@ -45,24 +45,24 @@ static const char *TEST_RESPONSES[] = {
 	"{\"status\":201}",
 };
 
-static const char *const BAD_RESPONSES[] = {
-	"HTTP/1.1 200 OK\r\n"
-	"Content-Type: application/json; charset=utf-8\r\n"
-	"Date: Thu, 12 Jul 2018 18:33:04 GMT\r\n"
-	"ETag: W/\"e-upYEWCL+q6R/++2nWHz5b76hBgo\"\r\n"
-	"Connection: Close\r\n"
-	"{\"status\":200}",
-	"Content-Length: 14\r\n"
-	"{\"status\":200}",
-	"Content-Length: 14\r\n"
-	"HTTP/1.1 404 Not Found\r\n"
-	"Connection: Close\r\n\r\n"
-	"{\"status\":404}",
-	NULL
-};
+static const char *const BAD_RESPONSES[] = { "HTTP/1.1 200 OK\r\n"
+											 "Content-Type: application/json; charset=utf-8\r\n"
+											 "Date: Thu, 12 Jul 2018 18:33:04 GMT\r\n"
+											 "ETag: W/\"e-upYEWCL+q6R/++2nWHz5b76hBgo\"\r\n"
+											 "Connection: Close\r\n"
+											 "{\"status\":200}",
+											 "Content-Length: 14\r\n"
+											 "{\"status\":200}",
+											 "Content-Length: 14\r\n"
+											 "HTTP/1.1 404 Not Found\r\n"
+											 "Connection: Close\r\n\r\n"
+											 "{\"status\":404}",
+											 NULL };
 
-static int	TEST_LENGTHS[] = {14, 14, 14, 14};
-static const char *MESSAGE_BODY[] = {"{\"status\":200}", "{\"status\":200}", "{\"status\":200}", "{\"status\":201}"};
+static int TEST_LENGTHS[] = { 14, 14, 14, 14 };
+static const char *MESSAGE_BODY[] = {
+	"{\"status\":200}", "{\"status\":200}", "{\"status\":200}", "{\"status\":201}"
+};
 
 TS_FUNCTION_INFO_V1(ts_test_http_parsing);
 TS_FUNCTION_INFO_V1(ts_test_http_parsing_full);
@@ -78,10 +78,8 @@ num_test_strings()
 Datum
 ts_test_http_parsing(PG_FUNCTION_ARGS)
 {
-	int			num_iterations = PG_GETARG_INT32(0);
-	int			bytes,
-				i,
-				j;
+	int num_iterations = PG_GETARG_INT32(0);
+	int bytes, i, j;
 
 	srand(time(0));
 
@@ -90,9 +88,9 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 		for (i = 0; i < num_test_strings(); i++)
 		{
 			HttpResponseState *state = ts_http_response_state_create();
-			bool		success;
-			ssize_t		bufsize = 0;
-			char	   *buf;
+			bool success;
+			ssize_t bufsize = 0;
+			char *buf;
 
 			bytes = rand() % (strlen(TEST_RESPONSES[i]) + 1);
 
@@ -124,16 +122,15 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 Datum
 ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 {
-	int			bytes,
-				i;
+	int bytes, i;
 
 	srand(time(0));
 
 	for (i = 0; i < num_test_strings(); i++)
 	{
 		HttpResponseState *state = ts_http_response_state_create();
-		ssize_t		bufsize = 0;
-		char	   *buf;
+		ssize_t bufsize = 0;
+		char *buf;
 
 		buf = ts_http_response_state_next_buffer(state, &bufsize);
 
@@ -150,7 +147,9 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 		Assert(ts_http_response_state_is_done(state));
 		Assert(ts_http_response_state_content_length(state) == TEST_LENGTHS[i]);
 		/* Make sure we read the right message body */
-		Assert(!strncmp(MESSAGE_BODY[i], ts_http_response_state_body_start(state), ts_http_response_state_content_length(state)));
+		Assert(!strncmp(MESSAGE_BODY[i],
+						ts_http_response_state_body_start(state),
+						ts_http_response_state_content_length(state)));
 
 		ts_http_response_state_destroy(state);
 	}
@@ -159,8 +158,8 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 	for (i = 0; i < 3; i++)
 	{
 		HttpResponseState *state = ts_http_response_state_create();
-		ssize_t		bufsize = 0;
-		char	   *buf;
+		ssize_t bufsize = 0;
+		char *buf;
 
 		buf = ts_http_response_state_next_buffer(state, &bufsize);
 
@@ -182,10 +181,10 @@ Datum
 ts_test_http_request_build(PG_FUNCTION_ARGS)
 {
 	const char *serialized;
-	size_t		request_len;
+	size_t request_len;
 	const char *expected_response = "GET /v1/alerts HTTP/1.1\r\n"
-	"Host: herp.com\r\nContent-Length: 0\r\n\r\n";
-	char	   *host = "herp.com";
+									"Host: herp.com\r\nContent-Length: 0\r\n\r\n";
+	char *host = "herp.com";
 	HttpRequest *req = ts_http_request_create(HTTP_GET);
 
 	ts_http_request_set_uri(req, "/v1/alerts");
@@ -198,7 +197,8 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 	Assert(!strncmp(expected_response, serialized, request_len));
 	ts_http_request_destroy(req);
 
-	expected_response = "GET /tmp/path/to/uri HTTP/1.0\r\n"
+	expected_response =
+		"GET /tmp/path/to/uri HTTP/1.0\r\n"
 		"Content-Length: 0\r\nHost: herp.com\r\nContent-Type: application/json\r\n\r\n";
 
 	req = ts_http_request_create(HTTP_GET);
@@ -214,7 +214,7 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 	ts_http_request_destroy(req);
 
 	expected_response = "POST /tmp/status/1234 HTTP/1.1\r\n"
-		"Content-Length: 0\r\nHost: herp.com\r\n\r\n";
+						"Content-Length: 0\r\nHost: herp.com\r\n\r\n";
 
 	req = ts_http_request_create(HTTP_POST);
 	ts_http_request_set_uri(req, "/tmp/status/1234");

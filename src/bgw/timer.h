@@ -14,8 +14,8 @@
 
 typedef struct Timer
 {
-	TimestampTz (*get_current_timestamp) ();
-	bool		(*wait) (TimestampTz until);
+	TimestampTz (*get_current_timestamp)();
+	bool (*wait)(TimestampTz until);
 
 } Timer;
 
@@ -26,4 +26,4 @@ extern TSDLLEXPORT TimestampTz ts_timer_get_current_timestamp(void);
 extern void ts_timer_set(const Timer *timer);
 #endif
 
-#endif							/* BGW_TIMER_H */
+#endif /* BGW_TIMER_H */

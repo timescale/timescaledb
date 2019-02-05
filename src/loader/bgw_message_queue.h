@@ -9,7 +9,6 @@
 #include <postgres.h>
 #include <storage/dsm.h>
 
-
 typedef enum BgwMessageType
 {
 	STOP = 0,
@@ -21,10 +20,9 @@ typedef struct BgwMessage
 {
 	BgwMessageType message_type;
 
-	pid_t		sender_pid;
-	Oid			db_oid;
-	dsm_handle	ack_dsm_handle;
-
+	pid_t sender_pid;
+	Oid db_oid;
+	dsm_handle ack_dsm_handle;
 
 } BgwMessage;
 
@@ -42,5 +40,4 @@ extern void ts_bgw_message_queue_alloc(void);
 extern void ts_bgw_message_queue_shmem_startup(void);
 extern void ts_bgw_message_queue_shmem_cleanup(void);
 
-
-#endif							/* TIMESCALEDB_BGW_MESSAGE_QUEUE_H */
+#endif /* TIMESCALEDB_BGW_MESSAGE_QUEUE_H */

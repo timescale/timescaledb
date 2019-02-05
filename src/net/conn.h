@@ -22,25 +22,26 @@ typedef struct Connection
 {
 	ConnectionType type;
 #ifdef WIN32
-	SOCKET		sock;
+	SOCKET sock;
 #else
-	int			sock;
+	int sock;
 #endif
-	ConnOps    *ops;
-	int			err;
+	ConnOps *ops;
+	int err;
 } Connection;
 
 extern Connection *ts_connection_create(ConnectionType type);
-extern int	ts_connection_connect(Connection *conn, const char *host, const char *servname, int port);
+extern int ts_connection_connect(Connection *conn, const char *host, const char *servname,
+								 int port);
 extern ssize_t ts_connection_read(Connection *conn, char *buf, size_t buflen);
 extern ssize_t ts_connection_write(Connection *conn, const char *buf, size_t writelen);
 extern void ts_connection_close(Connection *conn);
 extern void ts_connection_destroy(Connection *conn);
-extern int	ts_connection_set_timeout_millis(Connection *conn, unsigned long millis);
+extern int ts_connection_set_timeout_millis(Connection *conn, unsigned long millis);
 extern const char *ts_connection_get_and_clear_error(Connection *conn);
 
 /*  Called in init.c */
 extern void ts_connection_init(void);
 extern void ts_connection_fini(void);
 
-#endif							/* TIMESCALEDB_NET_CONN_H */
+#endif /* TIMESCALEDB_NET_CONN_H */

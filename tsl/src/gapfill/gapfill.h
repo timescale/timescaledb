@@ -22,4 +22,4 @@ extern Datum gapfill_timestamp_time_bucket(PG_FUNCTION_ARGS);
 extern Datum gapfill_timestamptz_time_bucket(PG_FUNCTION_ARGS);
 extern Datum gapfill_date_time_bucket(PG_FUNCTION_ARGS);
 
-#endif							/* TIMESCALEDB_TSL_GAPFILL_H */
+#endif /* TIMESCALEDB_TSL_GAPFILL_H */

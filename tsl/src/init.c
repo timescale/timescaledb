@@ -105,7 +105,6 @@ check_tsl_loaded(void)
 	return true;
 }
 
-
 PGDLLEXPORT void
 _PG_init(void)
 {

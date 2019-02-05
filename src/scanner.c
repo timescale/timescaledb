@@ -32,10 +32,9 @@ typedef union ScanDesc
  */
 typedef struct InternalScannerCtx
 {
-	Relation	tablerel,
-				indexrel;
-	TupleInfo	tinfo;
-	ScanDesc	scan;
+	Relation tablerel, indexrel;
+	TupleInfo tinfo;
+	ScanDesc scan;
 	ScannerCtx *sctx;
 } InternalScannerCtx;
 
@@ -44,11 +43,11 @@ typedef struct InternalScannerCtx
  */
 typedef struct Scanner
 {
-	Relation	(*openheap) (InternalScannerCtx *ctx);
-	ScanDesc	(*beginscan) (InternalScannerCtx *ctx);
-	bool		(*getnext) (InternalScannerCtx *ctx);
-	void		(*endscan) (InternalScannerCtx *ctx);
-	void		(*closeheap) (InternalScannerCtx *ctx);
+	Relation (*openheap)(InternalScannerCtx *ctx);
+	ScanDesc (*beginscan)(InternalScannerCtx *ctx);
+	bool (*getnext)(InternalScannerCtx *ctx);
+	void (*endscan)(InternalScannerCtx *ctx);
+	void (*closeheap)(InternalScannerCtx *ctx);
 } Scanner;
 
 /* Functions implementing heap scans */
@@ -64,8 +63,7 @@ heap_scanner_beginscan(InternalScannerCtx *ctx)
 {
 	ScannerCtx *sctx = ctx->sctx;
 
-	ctx->scan.heap_scan = heap_beginscan(ctx->tablerel, SnapshotSelf,
-										 sctx->nkeys, sctx->scankey);
+	ctx->scan.heap_scan = heap_beginscan(ctx->tablerel, SnapshotSelf, sctx->nkeys, sctx->scankey);
 	return ctx->scan;
 }
 
@@ -102,12 +100,10 @@ index_scanner_beginscan(InternalScannerCtx *ctx)
 {
 	ScannerCtx *sctx = ctx->sctx;
 
-	ctx->scan.index_scan = index_beginscan(ctx->tablerel, ctx->indexrel,
-										   SnapshotSelf, sctx->nkeys,
-										   sctx->norderbys);
+	ctx->scan.index_scan =
+		index_beginscan(ctx->tablerel, ctx->indexrel, SnapshotSelf, sctx->nkeys, sctx->norderbys);
 	ctx->scan.index_scan->xs_want_itup = ctx->sctx->want_itup;
-	index_rescan(ctx->scan.index_scan, sctx->scankey,
-				 sctx->nkeys, NULL, sctx->norderbys);
+	index_rescan(ctx->scan.index_scan, sctx->scankey, sctx->nkeys, NULL, sctx->norderbys);
 	return ctx->scan;
 }
 
@@ -163,9 +159,9 @@ static Scanner scanners[] = {
 int
 ts_scanner_scan(ScannerCtx *ctx)
 {
-	TupleDesc	tuple_desc;
-	bool		is_valid;
-	Scanner    *scanner;
+	TupleDesc tuple_desc;
+	bool is_valid;
+	Scanner *scanner;
 
 	InternalScannerCtx ictx = {
 		.sctx = ctx,
@@ -199,14 +195,17 @@ ts_scanner_scan(ScannerCtx *ctx)
 
 			if (ctx->tuplock.enabled)
 			{
-				Buffer		buffer;
+				Buffer buffer;
 				HeapUpdateFailureData hufd;
 
-				ictx.tinfo.lockresult = heap_lock_tuple(ictx.tablerel, ictx.tinfo.tuple,
+				ictx.tinfo.lockresult = heap_lock_tuple(ictx.tablerel,
+														ictx.tinfo.tuple,
 														GetCurrentCommandId(false),
 														ctx->tuplock.lockmode,
 														ctx->tuplock.waitpolicy,
-														false, &buffer, &hufd);
+														false,
+														&buffer,
+														&hufd);
 
 				/*
 				 * A tuple lock pins the underlying buffer, so we need to
@@ -216,8 +215,7 @@ ts_scanner_scan(ScannerCtx *ctx)
 			}
 
 			/* Abort the scan if the handler wants us to */
-			if (ctx->tuple_found != NULL &&
-				ctx->tuple_found(&ictx.tinfo, ctx->data) == SCAN_DONE)
+			if (ctx->tuple_found != NULL && ctx->tuple_found(&ictx.tinfo, ctx->data) == SCAN_DONE)
 				break;
 		}
 
@@ -241,7 +239,7 @@ ts_scanner_scan(ScannerCtx *ctx)
 bool
 ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
 {
-	int			num_found = ts_scanner_scan(ctx);
+	int num_found = ts_scanner_scan(ctx);
 
 	ctx->limit = 2;
 

@@ -23,9 +23,7 @@
 #include "params.h"
 #include "bgw/launcher_interface.h"
 
-
 static BackgroundWorkerHandle *bgw_handle = NULL;
-
 
 static bool mock_wait(TimestampTz until);
 static TimestampTz mock_current_time(void);
@@ -42,11 +40,15 @@ ts_timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle)
 	bgw_handle = handle;
 }
 
-/* WARNING: mock_wait must _only_ be called from the bgw_scheduler, calling it from a worker will clobber the timer state */
+/* WARNING: mock_wait must _only_ be called from the bgw_scheduler, calling it from a worker will
+ * clobber the timer state */
 static bool
 mock_wait(TimestampTz until)
 {
-	elog(WARNING, "[TESTING] Wait until " INT64_FORMAT ", started at " INT64_FORMAT, until, ts_params_get()->current_time);
+	elog(WARNING,
+		 "[TESTING] Wait until " INT64_FORMAT ", started at " INT64_FORMAT,
+		 until,
+		 ts_params_get()->current_time);
 
 	switch (ts_params_get()->mock_wait_type)
 	{
@@ -61,12 +63,12 @@ mock_wait(TimestampTz until)
 			ts_params_set_time(until, false);
 			return true;
 		case WAIT_FOR_OTHER_TO_ADVANCE:
-			{
-				/* Wait for another process to set "next time" */
-				ts_reset_and_wait_timer_latch();
+		{
+			/* Wait for another process to set "next time" */
+			ts_reset_and_wait_timer_latch();
 
-				return true;
-			}
+			return true;
+		}
 		default:
 			return false;
 	}

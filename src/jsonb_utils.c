@@ -20,7 +20,7 @@ static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValu
 TSDLLEXPORT void
 ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
 {
-	JsonbValue	json_value;
+	JsonbValue json_value;
 
 	json_value.type = jbvBool;
 	json_value.val.boolean = boolean;
@@ -31,7 +31,7 @@ ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
 TSDLLEXPORT void
 ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 {
-	JsonbValue	json_value;
+	JsonbValue json_value;
 
 	/* If there is a null entry, don't add it to the JSON */
 	if (value == NULL)
@@ -47,7 +47,7 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 void
 ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value)
 {
-	JsonbValue	json_key;
+	JsonbValue json_key;
 
 	Assert(key != NULL);
 	if (value == NULL)
@@ -80,7 +80,7 @@ ts_jsonb_get_text_field(Jsonb *json, text *field_name)
 	 * we cannot use `DirectFunctionCall`
 	 */
 	FunctionCallInfoData fcinfo;
-	Datum		result;
+	Datum result;
 
 	InitFunctionCallInfoData(fcinfo, NULL, 2, InvalidOid, NULL, NULL);
 
@@ -100,7 +100,7 @@ ts_jsonb_get_text_field(Jsonb *json, text *field_name)
 TSDLLEXPORT char *
 ts_jsonb_get_str_field(Jsonb *license, text *field_name)
 {
-	text	   *text_str = ts_jsonb_get_text_field(license, field_name);
+	text *text_str = ts_jsonb_get_text_field(license, field_name);
 
 	if (text_str == NULL)
 		return NULL;
@@ -111,8 +111,8 @@ ts_jsonb_get_str_field(Jsonb *license, text *field_name)
 TSDLLEXPORT TimestampTz
 ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
 {
-	Datum		time_datum;
-	text	   *time_str = ts_jsonb_get_text_field(license, field_name);
+	Datum time_datum;
+	text *time_str = ts_jsonb_get_text_field(license, field_name);
 
 	if (time_str == NULL)
 	{
@@ -120,11 +120,10 @@ ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
 		return DT_NOBEGIN;
 	}
 
-
 	time_datum = DirectFunctionCall3(timestamptz_in,
-									  /* str= */ CStringGetDatum(text_to_cstring(time_str)),
-									  /* unused */ Int32GetDatum(-1),
-									  /* typmod= */ Int32GetDatum(-1));
+									 /* str= */ CStringGetDatum(text_to_cstring(time_str)),
+									 /* unused */ Int32GetDatum(-1),
+									 /* typmod= */ Int32GetDatum(-1));
 
 	*field_found = true;
 	return DatumGetTimestampTz(time_datum);

@@ -33,10 +33,10 @@
 void
 ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name)
 {
-	Datum		datum_def = DirectFunctionCall1(pg_get_triggerdef, ObjectIdGetDatum(trigger_oid));
+	Datum datum_def = DirectFunctionCall1(pg_get_triggerdef, ObjectIdGetDatum(trigger_oid));
 	const char *def = TextDatumGetCString(datum_def);
-	List	   *deparsed_list;
-	Node	   *deparsed_node;
+	List *deparsed_list;
+	Node *deparsed_node;
 	CreateTrigStmt *stmt;
 
 	deparsed_list = pg_parse_query(def);
@@ -48,9 +48,9 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 #else
 	do
 	{
-		RawStmt    *rawstmt = (RawStmt *) deparsed_node;
+		RawStmt *rawstmt = (RawStmt *) deparsed_node;
 		ParseState *pstate = make_parsestate(NULL);
-		Query	   *query;
+		Query *query;
 
 		Assert(IsA(deparsed_node, RawStmt));
 		pstate->p_sourcetext = def;
@@ -64,30 +64,29 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 	stmt->relation->relname = chunk_table_name;
 	stmt->relation->schemaname = chunk_schema_name;
 
-	CreateTriggerCompat(stmt, def, InvalidOid, InvalidOid,
-						InvalidOid, InvalidOid, false);
+	CreateTriggerCompat(stmt, def, InvalidOid, InvalidOid, InvalidOid, InvalidOid, false);
 
-	CommandCounterIncrement();	/* needed to prevent pg_class being updated
-								 * twice */
+	CommandCounterIncrement(); /* needed to prevent pg_class being updated
+								* twice */
 }
 
-typedef bool (*trigger_handler) (Trigger *trigger, void *arg);
+typedef bool (*trigger_handler)(Trigger *trigger, void *arg);
 
 static inline void
 for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 {
-	Relation	rel;
+	Relation rel;
 
 	rel = relation_open(relid, AccessShareLock);
 
 	if (rel->trigdesc != NULL)
 	{
 		TriggerDesc *trigdesc = rel->trigdesc;
-		int			i;
+		int i;
 
 		for (i = 0; i < trigdesc->numtriggers; i++)
 		{
-			Trigger    *trigger = &trigdesc->triggers[i];
+			Trigger *trigger = &trigdesc->triggers[i];
 
 			if (!on_trigger(trigger, arg))
 				break;
@@ -100,7 +99,7 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 static bool
 create_trigger_handler(Trigger *trigger, void *arg)
 {
-	Chunk	   *chunk = arg;
+	Chunk *chunk = arg;
 
 #if !PG96
 	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
@@ -132,9 +131,9 @@ create_trigger_handler(Trigger *trigger, void *arg)
 void
 ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 {
-	int			sec_ctx;
-	Oid			saved_uid;
-	HeapTuple	tuple;
+	int sec_ctx;
+	Oid saved_uid;
+	HeapTuple tuple;
 	Form_pg_class form;
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(ht->main_table_relid));
@@ -161,7 +160,7 @@ ts_trigger_create_all_on_chunk(Hypertable *ht, Chunk *chunk)
 static bool
 check_for_transition_table(Trigger *trigger, void *arg)
 {
-	bool	   *found = arg;
+	bool *found = arg;
 
 	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
@@ -177,7 +176,7 @@ check_for_transition_table(Trigger *trigger, void *arg)
 bool
 ts_relation_has_transition_table_trigger(Oid relid)
 {
-	bool		found = false;
+	bool found = false;
 
 #if !PG96
 	for_each_trigger(relid, check_for_transition_table, &found);

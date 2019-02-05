@@ -52,17 +52,18 @@
  *
  * Some notes on design:
  *
- * We do not check for the installation of the extension upon loading the extension and instead rely on a hook for two reasons:
- * 1) We probably can't
- *	- The shared_preload_libraries is called in PostmasterMain which is way before InitPostgres is called.
- *			(Note: This happens even before the fork of the backend) -- so we don't even know which database this is for.
- *	-- This means we cannot query for the existence of the extension yet because the caches are initialized in InitPostgres.
- * 2) We actually don't want to load the extension in two cases:
- *	  a) We are upgrading the extension.
- *	  b) We set the guc timescaledb.disable_load.
+ * We do not check for the installation of the extension upon loading the extension and instead rely
+ *on a hook for two reasons: 1) We probably can't
+ *	- The shared_preload_libraries is called in PostmasterMain which is way before InitPostgres is
+ *called. (Note: This happens even before the fork of the backend) -- so we don't even know which
+ *database this is for.
+ *	-- This means we cannot query for the existence of the extension yet because the caches are
+ *initialized in InitPostgres. 2) We actually don't want to load the extension in two cases: a) We
+ *are upgrading the extension. b) We set the guc timescaledb.disable_load.
  *
- * 3) We include a section for the bgw launcher and some workers below the rest, separated with its own notes,
- *   some function definitions are included as they are referenced by other loader functions.
+ * 3) We include a section for the bgw launcher and some workers below the rest, separated with its
+ *own notes, some function definitions are included as they are referenced by other loader
+ *functions.
  *
  */
 
@@ -88,17 +89,17 @@ PG_MODULE_MAGIC;
 #define CalledInParallelWorker() false
 #else
 #define CalledInParallelWorker() IsParallelWorker()
-#endif							/* WIN32 */
+#endif /* WIN32 */
 #else
-#define CalledInParallelWorker() (MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
-#endif							/* PG96 */
+#define CalledInParallelWorker()                                                                   \
+	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
+#endif /* PG96 */
 extern void TSDLLEXPORT _PG_init(void);
 extern void TSDLLEXPORT _PG_fini(void);
 
 /* was the versioned-extension loaded*/
 static bool loaded = false;
 static bool loader_present = true;
-
 
 static char soversion[MAX_VERSION_LEN];
 
@@ -113,11 +114,7 @@ static shmem_startup_hook_type prev_shmem_startup_hook;
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
 
 static void inline extension_check(void);
-static void call_extension_post_parse_analyze_hook(ParseState *pstate,
-									   Query *query);
-
-
-
+static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query);
 
 extern char *
 ts_loader_extension_version(void)
@@ -149,14 +146,14 @@ drop_statement_drops_extension(DropStmt *stmt)
 	{
 		if (list_length(stmt->objects) == 1)
 		{
-			char	   *ext_name;
+			char *ext_name;
 #if PG96
-			List	   *names = linitial(stmt->objects);
+			List *names = linitial(stmt->objects);
 
 			Assert(list_length(names) == 1);
 			ext_name = strVal(linitial(names));
 #else
-			void	   *name = linitial(stmt->objects);
+			void *name = linitial(stmt->objects);
 
 			ext_name = strVal(name);
 #endif
@@ -170,23 +167,23 @@ drop_statement_drops_extension(DropStmt *stmt)
 static Oid
 extension_owner(void)
 {
-	Datum		result;
-	Relation	rel;
+	Datum result;
+	Relation rel;
 	SysScanDesc scandesc;
-	HeapTuple	tuple;
+	HeapTuple tuple;
 	ScanKeyData entry[1];
-	bool		is_null = true;
-	Oid			extension_owner = InvalidOid;
+	bool is_null = true;
+	Oid extension_owner = InvalidOid;
 
 	rel = heap_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,
-				BTEqualStrategyNumber, F_NAMEEQ,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(EXTENSION_NAME)));
 
-	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true,
-								  NULL, 1, entry);
+	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true, NULL, 1, entry);
 
 	tuple = systable_getnext(scandesc);
 
@@ -211,9 +208,9 @@ extension_owner(void)
 static bool
 drop_owned_statement_drops_extension(DropOwnedStmt *stmt)
 {
-	Oid			extension_owner_oid;
-	List	   *role_ids;
-	ListCell   *lc;
+	Oid extension_owner_oid;
+	List *role_ids;
+	ListCell *lc;
 
 	if (!extension_exists())
 		return false;
@@ -224,9 +221,9 @@ drop_owned_statement_drops_extension(DropOwnedStmt *stmt)
 	role_ids = roleSpecsToIds(stmt->roles);
 
 	/* Check privileges */
-	foreach(lc, role_ids)
+	foreach (lc, role_ids)
 	{
-		Oid			role_id = lfirst_oid(lc);
+		Oid role_id = lfirst_oid(lc);
 
 		if (role_id == extension_owner_oid)
 			return true;
@@ -263,7 +260,9 @@ should_load_on_alter_extension(Node *utility_stmt)
 	if (loaded)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("extension \"%s\" cannot be updated after the old version has already been loaded", stmt->extname),
+				 errmsg("extension \"%s\" cannot be updated after the old version has already been "
+						"loaded",
+						stmt->extname),
 				 errhint("Start a new session and execute ALTER EXTENSION as the first command. "
 						 "Make sure to pass the \"-X\" flag to psql.")));
 	/* do not load the current (old) version's .so */
@@ -274,7 +273,7 @@ static bool
 should_load_on_create_extension(Node *utility_stmt)
 {
 	CreateExtensionStmt *stmt = (CreateExtensionStmt *) utility_stmt;
-	bool		is_extension = strcmp(stmt->extname, EXTENSION_NAME) == 0;
+	bool is_extension = strcmp(stmt->extname, EXTENSION_NAME) == 0;
 
 	if (!is_extension)
 		return false;
@@ -338,11 +337,13 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 	 * database might not have TimescaleDB installed the database we are
 	 * dropping might.
 	 */
-	Oid			dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
+	Oid dropped_db_oid = get_database_oid(drop_db_statement->dbname, drop_db_statement->missing_ok);
 
 	if (dropped_db_oid != InvalidOid)
 	{
-		ereport(LOG, (errmsg("TimescaleDB background worker scheduler for database %u will be stopped", dropped_db_oid)));
+		ereport(LOG,
+				(errmsg("TimescaleDB background worker scheduler for database %u will be stopped",
+						dropped_db_oid)));
 		ts_bgw_message_send_and_wait(STOP, dropped_db_oid);
 	}
 	return;
@@ -365,10 +366,10 @@ post_analyze_hook(ParseState *pstate, Query *query)
 			case T_DropStmt:
 				if (drop_statement_drops_extension((DropStmt *) query->utilityStmt))
 
-					/*
-					 * if we drop the extension we should restart (in case of
-					 * a rollback) the scheduler
-					 */
+				/*
+				 * if we drop the extension we should restart (in case of
+				 * a rollback) the scheduler
+				 */
 				{
 					ts_bgw_message_send_and_wait(RESTART, MyDatabaseId);
 				}
@@ -381,7 +382,7 @@ post_analyze_hook(ParseState *pstate, Query *query)
 				if (((RenameStmt *) query->utilityStmt)->renameType == OBJECT_DATABASE)
 				{
 					RenameStmt *stmt = (RenameStmt *) query->utilityStmt;
-					Oid			db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
+					Oid db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
 
 					if (OidIsValid(db_oid))
 						ts_bgw_message_send_and_wait(STOP, db_oid);
@@ -424,7 +425,7 @@ timescale_shmem_startup_hook(void)
 static void
 extension_mark_loader_present()
 {
-	void	  **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
+	void **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
 
 	*presentptr = &loader_present;
 }
@@ -447,7 +448,8 @@ _PG_init(void)
 	ts_bgw_interface_register_api_version();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
-	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME, "Disable the loading of the actual extension",
+	DefineCustomBoolVariable(GUC_DISABLE_LOAD_NAME,
+							 "Disable the loading of the actual extension",
 							 NULL,
 							 &guc_disable_load,
 							 false,
@@ -483,11 +485,10 @@ _PG_fini(void)
 	/* No way to unregister relcache callback */
 }
 
-static void inline
-do_load()
+static void inline do_load()
 {
-	char	   *version = extension_version();
-	char		soname[MAX_SO_NAME_LEN];
+	char *version = extension_version();
+	char soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
 
 	StrNCpy(soversion, version, MAX_VERSION_LEN);
@@ -525,7 +526,6 @@ do_load()
 	if (strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0)
 		SetConfigOption("timescaledb.loader_present", "on", PGC_USERSET, PGC_S_SESSION);
 
-
 	/*
 	 * we need to capture the loaded extension's post analyze hook, giving it
 	 * a NULL as previous
@@ -541,7 +541,8 @@ do_load()
 	 */
 	PG_TRY();
 	{
-		PGFunction	ts_post_load_init = load_external_function(soname, POST_LOAD_INIT_FN, false, NULL);
+		PGFunction ts_post_load_init =
+			load_external_function(soname, POST_LOAD_INIT_FN, false, NULL);
 
 		if (ts_post_load_init != NULL)
 			DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
@@ -558,8 +559,7 @@ do_load()
 	post_parse_analyze_hook = old_hook;
 }
 
-static void inline
-extension_check()
+static void inline extension_check()
 {
 	if (!loaded)
 	{
@@ -592,8 +592,7 @@ ts_loader_extension_check(void)
 }
 
 static void
-call_extension_post_parse_analyze_hook(ParseState *pstate,
-									   Query *query)
+call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query)
 {
 	if (loaded && extension_post_parse_analyze_hook != NULL)
 	{
