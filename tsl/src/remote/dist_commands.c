@@ -57,9 +57,6 @@ ts_dist_cmd_collect_responses(List *requests)
 	{
 		DistCmdResponse *response = &results->responses[i];
 
-		if (PQresultStatus(async_response_result_get_pg_result(ar)) != PGRES_COMMAND_OK)
-			elog(ERROR, "unexpected tuple recieved while expecting a command");
-
 		response->result = ar;
 		response->server = pstrdup(async_response_result_get_user_data(ar));
 		++i;

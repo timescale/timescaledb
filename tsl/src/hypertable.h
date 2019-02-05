@@ -12,4 +12,6 @@
 
 extern void hypertable_make_distributed(Hypertable *ht, ArrayType *servers);
 
+List *hypertable_assign_servers(int32 hypertable_id, List *servers);
+
 #endif /* _TIMESCALEDB_TSL_HYPERTABLE_H */

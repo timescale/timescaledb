@@ -63,7 +63,7 @@ extern int64 ts_date_trunc_interval_period_approx(text *units);
  * Return the interval period in microseconds.
  * This is approximate -- to be used for planning;
  */
-extern int64 ts_get_interval_period_approx(Interval *interval);
+extern TSDLLEXPORT int64 ts_get_interval_period_approx(Interval *interval);
 
 extern Oid ts_inheritance_parent_relid(Oid relid);
 

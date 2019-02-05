@@ -19,6 +19,18 @@ CREATE DATABASE server_1;
 CREATE DATABASE server_2;
 CREATE DATABASE server_3;
 
+\c server_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_2
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_3
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
 -- Add servers using the TimescaleDB server management API
 SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
 SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass');
@@ -33,32 +45,6 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
--- Create tables on remote servers
-\c server_1
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time');
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time');
-\c server_2
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time');
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time');
-\c server_3
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time');
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time');
-\c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 CREATE OR REPLACE FUNCTION test_trigger()
@@ -370,3 +356,83 @@ SELECT * FROM underreplicated;
 SELECT * FROM underreplicated;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Test hypertable creation fails on distributed error
+\c server_3
+CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+\set ON_ERROR_STOP 0
+CREATE TABLE remotetable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
+SELECT * FROM create_hypertable('remotetable', 'time', replication_factor => 1);
+\set ON_ERROR_STOP 1
+
+SELECT * FROM timescaledb_information.hypertable;
+
+-- Test distributed hypertable creation with many parameters
+\c server_1
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+\c server_2
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+\c server_3
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __region text, reading float);
+SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
+associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
+create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
+servers => '{ "server_2", "server_3" }'); 
+
+-- Test assign_server
+SET ROLE :ROLE_SUPERUSER;
+CREATE OR REPLACE FUNCTION assign_server(
+	hypertable REGCLASS,
+	server     NAME
+)
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_test_assign_server' LANGUAGE C;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+SELECT * FROM assign_server('"Table\\Schema"."Param_Table"', 'server_1');
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+
+-- Verify hypertables on all servers
+SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT * FROM _timescaledb_catalog.dimension;
+SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
+
+\c server_1
+SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT * FROM _timescaledb_catalog.dimension;
+SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
+FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
+
+\c server_2
+SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT * FROM _timescaledb_catalog.dimension;
+SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
+FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
+
+\c server_3
+SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT * FROM _timescaledb_catalog.dimension;
+SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
+FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;

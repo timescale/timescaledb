@@ -16,6 +16,17 @@ SET client_min_messages TO NOTICE;
 CREATE DATABASE server_1;
 CREATE DATABASE server_2;
 CREATE DATABASE server_3;
+\c server_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_2
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_3
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Add servers using the TimescaleDB server management API
 SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
  server_name |   host    | port  | database |       username       |   server_username    | created 
@@ -53,62 +64,6 @@ NOTICE:  adding not-null constraint to column "time"
              2 | public      | underreplicated | t
 (1 row)
 
--- Create tables on remote servers
-\c server_1
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time');
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             1 | public      | disttable  | t
-(1 row)
-
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time');
- hypertable_id | schema_name |   table_name    | created 
----------------+-------------+-----------------+---------
-             2 | public      | underreplicated | t
-(1 row)
-
-\c server_2
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time');
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             1 | public      | disttable  | t
-(1 row)
-
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time');
- hypertable_id | schema_name |   table_name    | created 
----------------+-------------+-----------------+---------
-             2 | public      | underreplicated | t
-(1 row)
-
-\c server_3
-SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
-SELECT * FROM create_hypertable('disttable', 'time');
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             1 | public      | disttable  | t
-(1 row)
-
-CREATE TABLE underreplicated(time timestamptz, device int, temp float);
-SELECT * FROM create_hypertable('underreplicated', 'time');
- hypertable_id | schema_name |   table_name    | created 
----------------+-------------+-----------------+---------
-             2 | public      | underreplicated | t
-(1 row)
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
@@ -797,3 +752,195 @@ SELECT * FROM underreplicated;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test hypertable creation fails on distributed error
+\c server_3
+CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+\set ON_ERROR_STOP 0
+CREATE TABLE remotetable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
+SELECT * FROM create_hypertable('remotetable', 'time', replication_factor => 1);
+ERROR:  remote connection error: relation "remotetable" already exists
+\set ON_ERROR_STOP 1
+SELECT * FROM timescaledb_information.hypertable;
+ table_schema |   table_name    |     table_owner      | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size 
+--------------+-----------------+----------------------+----------------+------------+------------+------------+------------+------------
+ public       | disttable       | default_cluster_user |              1 |          4 | 0 bytes    | 0 bytes    |            | 0 bytes
+ public       | underreplicated | default_cluster_user |              1 |          1 | 0 bytes    | 0 bytes    |            | 0 bytes
+(2 rows)
+
+-- Test distributed hypertable creation with many parameters
+\c server_1
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+\c server_2
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+\c server_3
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA "T3sTSch";
+CREATE SCHEMA "Table\\Schema";
+GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_DEFAULT_CLUSTER_USER;
+GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __region text, reading float);
+SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
+associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
+create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
+servers => '{ "server_2", "server_3" }'); 
+NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
+ hypertable_id |  schema_name  | table_name  | created 
+---------------+---------------+-------------+---------
+             4 | Table\\Schema | Param_Table | t
+(1 row)
+
+-- Test assign_server
+SET ROLE :ROLE_SUPERUSER;
+CREATE OR REPLACE FUNCTION assign_server(
+	hypertable REGCLASS,
+	server     NAME
+)
+RETURNS void
+AS :TSL_MODULE_PATHNAME, 'tsl_test_assign_server' LANGUAGE C;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             1 |                      | server_1
+             1 |                      | server_2
+             1 |                      | server_3
+             2 |                      | server_1
+             2 |                      | server_2
+             2 |                      | server_3
+             4 |                      | server_2
+             4 |                      | server_3
+(8 rows)
+
+SELECT * FROM assign_server('"Table\\Schema"."Param_Table"', 'server_1');
+ assign_server 
+---------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             1 |                      | server_1
+             1 |                      | server_2
+             1 |                      | server_3
+             2 |                      | server_1
+             2 |                      | server_2
+             2 |                      | server_3
+             4 |                      | server_2
+             4 |                      | server_3
+             4 |                      | server_1
+(9 rows)
+
+-- Verify hypertables on all servers
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
+----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                  1
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                  4
+  4 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                  2
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  4 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000
+  5 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                
+(4 rows)
+
+SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
+      Trigger      | Type |               Function               |                                                               Definition                                                                
+-------------------+------+--------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------
+ ts_insert_blocker |    7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(1 row)
+
+\c server_1
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
+----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  3 |             3 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000
+  4 |             3 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                
+(4 rows)
+
+SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
+FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
+      tgname       | tgtype |                tgfoid                |                                                                substring                                                                
+-------------------+--------+--------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------
+ ts_insert_blocker |      7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(1 row)
+
+\c server_2
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
+----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  3 |             3 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000
+  4 |             3 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                
+(4 rows)
+
+SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
+FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
+      tgname       | tgtype |                tgfoid                |                                                                substring                                                                
+-------------------+--------+--------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------
+ ts_insert_blocker |      7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(1 row)
+
+\c server_3
+SELECT * FROM _timescaledb_catalog.hypertable;
+ id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | replication_factor 
+----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------------------
+  1 | public        | disttable       | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  2 | public        | underreplicated | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+  3 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                   
+(3 rows)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  3 |             3 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000
+  4 |             3 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                
+(4 rows)
+
+SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
+FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
+      tgname       | tgtype |                tgfoid                |                                                                substring                                                                
+-------------------+--------+--------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------
+ ts_insert_blocker |      7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
+(1 row)
+

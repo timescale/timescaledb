@@ -17,13 +17,13 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- EXISTS' on 'CREATE SERVER' and 'CREATE USER MAPPING' is not
 -- supported on PG 9.6
 CREATE SERVER server_1 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '5432', dbname 'server_1');
+OPTIONS (host 'localhost', port '15432', dbname 'server_1');
 
 -- Create a user mapping for the server
 CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_1 OPTIONS (user 'cluster_user_1');
 
 -- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_2', password => 'perm_user_pass');
+SELECT * FROM add_server('server_2', password => 'perm_user_pass', database => 'server_2');
 
 \set ON_ERROR_STOP 0
 -- Add again
@@ -44,7 +44,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Server exists, but no user mapping
 CREATE SERVER server_4 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port '5432', dbname 'server_4');
+OPTIONS (host 'localhost', port '15432', dbname 'server_4');
 
 -- User mapping should be added with NOTICE
 SELECT * FROM add_server('server_4', password => 'perm_user_pass', if_not_exists => true);
@@ -100,6 +100,29 @@ SELECT * FROM delete_server('server_3', if_exists => true);
 
 SELECT * FROM show_servers();
 
+-- Set up servers to receive distributed tables (database may be left over from other tests)
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_2;
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_4;
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS server_4;
+SET client_min_messages TO INFO;
+CREATE DATABASE server_1;
+CREATE DATABASE server_2;
+CREATE DATABASE server_4;
+\c server_1;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+CREATE ROLE cluster_user_1 WITH LOGIN;
+\c server_2;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_4;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+
 -- Test that servers are added to a hypertable
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
@@ -109,6 +132,14 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 
 DROP TABLE disttable;
+-- Need to distribute table drop
+\c server_1;
+DROP TABLE disttable;
+\c server_2;
+DROP TABLE disttable;
+\c server_4;
+DROP TABLE disttable;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 
 CREATE TABLE disttable(time timestamptz, device int, temp float);
 
@@ -152,3 +183,7 @@ SELECT * FROM show_servers();
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 1);
 \set ON_ERROR_STOP 1
+
+DROP DATABASE server_1;
+DROP DATABASE server_2;
+DROP DATABASE server_4;

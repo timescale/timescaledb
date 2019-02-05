@@ -25,6 +25,8 @@
 #include "trigger.h"
 #include "utils.h"
 #include "deparse.h"
+#include <extension.h>
+#include <utils/lsyscache.h>
 
 /**
  * Deparse a table into a set of SQL commands that can be used to recreate it.
@@ -210,6 +212,10 @@ get_index_oids(Relation rel, List *exclude_indexes)
 	return indexes;
 }
 
+/*
+ *  Specifically exclude the hypertable insert blocker from this list.  A table which was recreated
+ * with that trigger present would not be able to made into a hypertable.
+ */
 static List *
 get_trigger_oids(Relation rel)
 {
@@ -223,7 +229,7 @@ get_trigger_oids(Relation rel)
 		{
 			const Trigger trigger = rel->trigdesc->triggers[i];
 
-			if (!trigger.tgisinternal)
+			if (!trigger.tgisinternal && strcmp(trigger.tgname, INSERT_BLOCKER_NAME) != 0)
 				triggers = lappend_oid(triggers, trigger.tgoid);
 		}
 	}
@@ -292,9 +298,15 @@ TableDef *
 deparse_get_tabledef(TableInfo *table_info)
 {
 	StringInfo create_table = makeStringInfo();
+	StringInfo set_schema = makeStringInfo();
 	TableDef *table_def = palloc(sizeof(TableDef));
 	Oid tablespace;
 	Relation rel = relation_open(table_info->relid, AccessShareLock);
+
+	appendStringInfo(set_schema,
+					 "SET SCHEMA '%s';",
+					 quote_identifier(get_namespace_name(rel->rd_rel->relnamespace)));
+	table_def->schema_cmd = set_schema->data;
 
 	appendStringInfoString(create_table, "CREATE");
 	if (rel->rd_rel->relpersistence == RELPERSISTENCE_UNLOGGED)
@@ -340,6 +352,7 @@ deparse_get_tabledef_commands_from_tabledef(TableDef *table_def)
 {
 	List *cmds = NIL;
 
+	cmds = lappend(cmds, (char *) table_def->schema_cmd);
 	cmds = lappend(cmds, (char *) table_def->create_cmd);
 	cmds = list_concat(cmds, table_def->constraint_cmds);
 	cmds = list_concat(cmds, table_def->index_cmds);
@@ -358,4 +371,89 @@ deparse_get_tabledef_commands_concat(Oid relid)
 		appendStringInfoString(tabledef, lfirst(cell));
 
 	return tabledef->data;
+}
+
+const char *
+deparse_get_distributed_hypertable_create_command(Hypertable *ht)
+{
+	Hyperspace *space = ht->space;
+	Dimension *time_dim = &space->dimensions[0];
+	StringInfo hypertable_cmd = makeStringInfo();
+
+	appendStringInfo(hypertable_cmd,
+					 "SELECT * FROM %s.create_hypertable(%s",
+					 quote_identifier(ts_extension_schema_name()),
+					 quote_literal_cstr(
+						 quote_qualified_identifier(get_namespace_name(
+														get_rel_namespace(ht->main_table_relid)),
+													get_rel_name(ht->main_table_relid))));
+
+	appendStringInfo(hypertable_cmd,
+					 ", time_column_name => %s",
+					 quote_literal_cstr(NameStr(time_dim->fd.column_name)));
+
+	if (time_dim->fd.partitioning_func.data[0] != '\0')
+		appendStringInfo(hypertable_cmd,
+						 ", time_partitioning_func => %s",
+						 quote_literal_cstr(
+							 quote_qualified_identifier(NameStr(
+															time_dim->fd.partitioning_func_schema),
+														NameStr(time_dim->fd.partitioning_func))));
+
+	if (space->num_dimensions > 1)
+	{
+		Dimension *space_dim = &space->dimensions[1];
+
+		if (space->num_dimensions > 2)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg(
+						 "distribute hypertable doesn't yet support multiple space dimensions")));
+
+		appendStringInfo(hypertable_cmd,
+						 ", partitioning_column => %s",
+						 quote_literal_cstr(NameStr(space_dim->fd.column_name)));
+
+		if (space_dim->type == DIMENSION_TYPE_CLOSED)
+			appendStringInfo(hypertable_cmd, ", number_partitions => %d", space_dim->fd.num_slices);
+		else
+			appendStringInfo(hypertable_cmd,
+							 ", partitioning_func => %s",
+							 quote_literal_cstr(
+								 quote_qualified_identifier(NameStr(space_dim->fd
+																		.partitioning_func_schema),
+															NameStr(
+																space_dim->fd.partitioning_func))));
+	}
+
+	appendStringInfo(hypertable_cmd,
+					 ", associated_schema_name => %s",
+					 quote_literal_cstr(NameStr(ht->fd.associated_schema_name)));
+	appendStringInfo(hypertable_cmd,
+					 ", associated_table_prefix => %s",
+					 quote_literal_cstr(NameStr(ht->fd.associated_table_prefix)));
+
+	appendStringInfo(hypertable_cmd, ", chunk_time_interval => %ld", time_dim->fd.interval_length);
+
+	if (OidIsValid(ht->chunk_sizing_func))
+	{
+		appendStringInfo(hypertable_cmd,
+						 ", chunk_sizing_func => %s",
+						 quote_literal_cstr(
+							 quote_qualified_identifier(NameStr(ht->fd.chunk_sizing_func_schema),
+														NameStr(ht->fd.chunk_sizing_func_name))));
+		appendStringInfo(hypertable_cmd, ", chunk_target_size => '%ld'", ht->fd.chunk_target_size);
+	}
+
+	/*
+	 * Backend is assumed to not have any preexisting conflicting table or hypertable.  Any default
+	 * indicies will have already been created by the frontend.
+	 */
+	appendStringInfoString(hypertable_cmd, ", if_not_exists => FALSE");
+	appendStringInfoString(hypertable_cmd, ", migrate_data => FALSE");
+	appendStringInfoString(hypertable_cmd, ", create_default_indexes => FALSE");
+	appendStringInfoString(hypertable_cmd, ", replication_factor => 0");
+
+	appendStringInfoString(hypertable_cmd, ");");
+	return hypertable_cmd->data;
 }

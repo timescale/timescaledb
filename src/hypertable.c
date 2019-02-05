@@ -1473,8 +1473,8 @@ TS_FUNCTION_INFO_V1(ts_hypertable_create);
  * if_not_exists           BOOLEAN = FALSE
  * partitioning_func       REGPROC = NULL
  * migrate_data            BOOLEAN = FALSE
- * chunk_sizing_func       OID = NULL
  * chunk_target_size       TEXT = NULL
+ * chunk_sizing_func       OID = NULL
  * time_partitioning_func  REGPROC = NULL
  * replication_factor      INTEGER = NULL
  * servers                 NAME[] = NULL
