@@ -118,7 +118,7 @@ static CustomScanMethods hypertable_insert_plan_methods = {
  * that the top-level target list reflects the projection done in a RETURNING
  * statement.
  */
-Plan *
+void
 ts_hypertable_insert_fixup_tlist(Plan *plan)
 {
 	if (IsA(plan, CustomScan))
@@ -136,7 +136,7 @@ ts_hypertable_insert_fixup_tlist(Plan *plan)
 		}
 	}
 
-	return plan;
+	return;
 }
 
 static Plan *

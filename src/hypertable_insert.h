@@ -23,7 +23,7 @@ typedef struct HypertableInsertState
 	ModifyTable *mt;
 } HypertableInsertState;
 
-extern Plan *ts_hypertable_insert_fixup_tlist(Plan *plan);
+extern void ts_hypertable_insert_fixup_tlist(Plan *plan);
 extern Path *ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath);
 
 #endif /* TIMESCALEDB_HYPERTABLE_INSERT_H */
