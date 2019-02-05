@@ -181,3 +181,31 @@ temp = coalesce(excluded.temp,current.temp) ,
 color = coalesce(excluded.color,current.color);
 select * from upsert_test_diffchunk order by time, device_id;
 
+
+--arbiter index tests
+CREATE TABLE upsert_test_arbiter(time timestamp, to_drop int);
+SELECT create_hypertable('upsert_test_arbiter', 'time', chunk_time_interval=> interval '1 month');
+--this is the chunk with no tup_conv_map
+INSERT INTO upsert_test_arbiter (time, to_drop) VALUES ('2017-01-20T09:00:01', 1) RETURNING *;
+INSERT INTO upsert_test_arbiter (time, to_drop) VALUES ('2017-01-21T09:00:01', 2) RETURNING *;
+INSERT INTO upsert_test_arbiter (time, to_drop) VALUES ('2017-03-20T09:00:01', 3) RETURNING *;
+--alter the table
+ALTER TABLE upsert_test_arbiter DROP to_drop;
+ALTER TABLE upsert_test_arbiter ADD device_id char(20) DEFAULT 'dev1';
+CREATE UNIQUE INDEX arbiter_time_device_idx ON upsert_test_arbiter (time, device_id);
+
+INSERT INTO upsert_test_arbiter as current (time, device_id) VALUES
+    ('2018-01-21T09:00:01', 'dev1'),
+    ('2017-01-20T09:00:01', 'dev1'),
+    ('2017-01-21T09:00:01', 'dev2'),
+    ('2018-01-21T09:00:01', 'dev2')
+ ON CONFLICT (time, device_id) DO UPDATE SET device_id = coalesce(excluded.device_id,current.device_id)
+RETURNING *;
+
+with cte as (
+INSERT INTO upsert_test_arbiter (time, device_id) VALUES
+    ('2017-01-21T09:00:01', 'dev2'),
+    ('2018-01-21T09:00:01', 'dev2')
+ ON CONFLICT (time, device_id) DO UPDATE SET device_id = 'dev3'
+RETURNING *)
+select * from cte;
