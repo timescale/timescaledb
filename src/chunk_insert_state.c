@@ -471,7 +471,13 @@ chunk_insert_state_set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *d
 		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(chunk_rel), 0, true);
 		ChunkIndexMapping cim;
 
-		ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim);
+		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)
+		{
+			elog(ERROR,
+				 "could not find arbiter index for hypertable index \"%s\" on chunk \"%s\"",
+				 get_rel_name(hypertable_index),
+				 get_rel_name(RelationGetRelid(chunk_rel)));
+		}
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
 	}
