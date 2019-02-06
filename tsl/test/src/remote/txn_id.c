@@ -25,12 +25,12 @@ test_basic_in_out()
 	TestAssertTrue(id->user_mapping == 20);
 	TestAssertTrue(id->xid == 10);
 
+	TestAssertTrue(strcmp(remote_txn_id_prepare_transaction_sql(id),
+						  "PREPARE TRANSACTION \'ts-1-10-20\'") == 0);
 	TestAssertTrue(
-		strcmp(remote_txn_id_prepare_transaction_sql(id), "PREPARE TRANSACTION \'1-10-20\'") == 0);
-	TestAssertTrue(strcmp(remote_txn_id_commit_prepared_sql(id), "COMMIT PREPARED \'1-10-20\'") ==
-				   0);
+		strcmp(remote_txn_id_commit_prepared_sql(id), "COMMIT PREPARED \'ts-1-10-20\'") == 0);
 	TestAssertTrue(
-		strcmp(remote_txn_id_rollback_prepared_sql(id), "ROLLBACK PREPARED \'1-10-20\'") == 0);
+		strcmp(remote_txn_id_rollback_prepared_sql(id), "ROLLBACK PREPARED \'ts-1-10-20\'") == 0);
 }
 
 Datum

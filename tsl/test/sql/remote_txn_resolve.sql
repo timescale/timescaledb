@@ -48,3 +48,17 @@ SELECT create_records_with_concurrent_heal();
 SELECT * FROM table_modified_by_txns;
 SELECT count(*) FROM pg_prepared_xacts;
 SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+
+--test that it is safe to have non-ts prepared-txns with heal
+BEGIN;
+    INSERT INTO public.table_modified_by_txns VALUES ('non-ts-txn');
+PREPARE TRANSACTION 'non-ts-txn';
+
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+
+COMMIT PREPARED 'non-ts-txn';
+SELECT * FROM table_modified_by_txns;
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;

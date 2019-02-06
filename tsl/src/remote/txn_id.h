@@ -45,6 +45,8 @@ typedef struct RemoteTxnId
 
 extern RemoteTxnId *remote_txn_id_create(TransactionId xid, Oid user_mapping);
 extern RemoteTxnId *remote_txn_id_in(const char *gid_string);
+
+extern bool remote_txn_id_matches_prepared_txn(const char *id_string);
 extern Datum remote_txn_id_in_pg(PG_FUNCTION_ARGS);
 extern const char *remote_txn_id_out(const RemoteTxnId *remote_txn_id);
 extern Datum remote_txn_id_out_pg(PG_FUNCTION_ARGS);

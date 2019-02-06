@@ -125,3 +125,50 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn;
      1
 (1 row)
 
+--test that it is safe to have non-ts prepared-txns with heal
+BEGIN;
+    INSERT INTO public.table_modified_by_txns VALUES ('non-ts-txn');
+PREPARE TRANSACTION 'non-ts-txn';
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+NOTICE:  skipping 1 non-TimescaleDB prepared transaction
+ remote_txn_heal_server 
+------------------------
+                      0
+(1 row)
+
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+NOTICE:  skipping 1 non-TimescaleDB prepared transaction
+ remote_txn_heal_server 
+------------------------
+                      0
+(1 row)
+
+SELECT _timescaledb_internal.remote_txn_heal_server((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+NOTICE:  skipping 1 non-TimescaleDB prepared transaction
+ remote_txn_heal_server 
+------------------------
+                      0
+(1 row)
+
+COMMIT PREPARED 'non-ts-txn';
+SELECT * FROM table_modified_by_txns;
+           describes            
+--------------------------------
+ committed
+ prepared not comitted
+ committed with concurrent heal
+ non-ts-txn
+(4 rows)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+ count 
+-------
+     0
+(1 row)
+
