@@ -16,13 +16,15 @@
 #include "txn_id.h"
 
 #define GID_SEP "-"
+
+#define GID_PREFIX "ts"
 /* This is the maximum size of the literal accepted by PREPARE TRANSACTION, etc. */
 #define GID_MAX_SIZE 200
 
 #define REMOTE_TXN_ID_VERSION ((uint8) 1)
 
-/* current_pattern: version-xid-user_mapping_oid */
-#define FMT_PATTERN "%hhu" GID_SEP "%u" GID_SEP "%u"
+/* current_pattern: ts-version-xid-user_mapping_oid */
+#define FMT_PATTERN GID_PREFIX GID_SEP "%hhu" GID_SEP "%u" GID_SEP "%u"
 
 static char *
 remote_txn_id_get_sql(const char *command, RemoteTxnId *id)
@@ -52,6 +54,14 @@ const char *
 remote_txn_id_rollback_prepared_sql(RemoteTxnId *id)
 {
 	return remote_txn_id_get_sql("ROLLBACK PREPARED", id);
+}
+
+bool
+remote_txn_id_matches_prepared_txn(const char *id_string)
+{
+	if (strncmp(GID_PREFIX, id_string, strlen(GID_PREFIX)) == 0)
+		return true;
+	return false;
 }
 
 RemoteTxnId *

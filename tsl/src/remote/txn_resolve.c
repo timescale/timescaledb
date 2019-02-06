@@ -57,6 +57,7 @@ remote_txn_heal_server(PG_FUNCTION_ARGS)
 	PGresult *res;
 	int row;
 	List *unknown_txn_gid = NIL;
+	int non_ts_txns = 0;
 
 	/*
 	 * This function cannot be called inside a transaction block since effects
@@ -69,9 +70,18 @@ remote_txn_heal_server(PG_FUNCTION_ARGS)
 	Assert(1 == PQnfields(res));
 	for (row = 0; row < PQntuples(res); row++)
 	{
-		RemoteTxnId *tpc_gid = remote_txn_id_in(PQgetvalue(res, row, 0));
+		const char *id_string = PQgetvalue(res, row, 0);
+		RemoteTxnId *tpc_gid;
+		RemoteTxnResolution resolution;
 
-		RemoteTxnResolution resolution = remote_txn_resolution(foreign_server_oid, tpc_gid);
+		if (!remote_txn_id_matches_prepared_txn(id_string))
+		{
+			non_ts_txns++;
+			continue;
+		}
+
+		tpc_gid = remote_txn_id_in(id_string);
+		resolution = remote_txn_resolution(foreign_server_oid, tpc_gid);
 
 		switch (resolution)
 		{
@@ -89,6 +99,9 @@ remote_txn_heal_server(PG_FUNCTION_ARGS)
 				break;
 		}
 	}
+
+	if (non_ts_txns > 0)
+		elog(NOTICE, "skipping %d non-TimescaleDB prepared transaction", non_ts_txns);
 
 	remote_connection_result_close(res);
 

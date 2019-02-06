@@ -12,39 +12,41 @@ SELECT _timescaledb_internal.test_remote_txn_id();
  
 (1 row)
 
-SELECT '1-10-20'::rxid;
-  rxid   
----------
- 1-10-20
+SELECT 'ts-1-10-20'::rxid;
+    rxid    
+------------
+ ts-1-10-20
 (1 row)
 
 create table tbl_w_rxid(
     txn_id rxid
 );
 CREATE UNIQUE INDEX idx_name ON tbl_w_rxid ((txn_id::text));
-INSERT INTO tbl_w_rxid VALUES ('1-10-20'), ('1-11-20'), ('1-10-21');
+INSERT INTO tbl_w_rxid VALUES ('ts-1-10-20'), ('ts-1-11-20'), ('ts-1-10-21');
 SELECT txn_id, _timescaledb_internal.rxid_in(_timescaledb_internal.rxid_out(txn_id))::text = txn_id::text FROM tbl_w_rxid;
- txn_id  | ?column? 
----------+----------
- 1-10-20 | t
- 1-11-20 | t
- 1-10-21 | t
+   txn_id   | ?column? 
+------------+----------
+ ts-1-10-20 | t
+ ts-1-11-20 | t
+ ts-1-10-21 | t
 (3 rows)
 
 \set ON_ERROR_STOP 0
-INSERT INTO tbl_w_rxid VALUES ('1-10-20');
+INSERT INTO tbl_w_rxid VALUES ('ts-1-10-20');
 ERROR:  duplicate key value violates unique constraint "idx_name"
 SELECT ''::rxid;
 ERROR:  invalid input syntax for remote transaction ID: '' at character 8
-SELECT '--'::rxid;
-ERROR:  invalid input syntax for remote transaction ID: '--' at character 8
-SELECT '1-10-20a'::rxid;
-ERROR:  invalid input syntax for remote transaction ID: '1-10-20a' at character 8
-SELECT '2-10-20'::rxid;
+SELECT '---'::rxid;
+ERROR:  invalid input syntax for remote transaction ID: '---' at character 8
+SELECT 'ts---'::rxid;
+ERROR:  invalid input syntax for remote transaction ID: 'ts---' at character 8
+SELECT 'ts-1-10-20a'::rxid;
+ERROR:  invalid input syntax for remote transaction ID: 'ts-1-10-20a' at character 8
+SELECT 'ts-2-10-20'::rxid;
 ERROR:  invalid version for remote transaction ID: 2 at character 8
-SELECT '1-10-20.0'::rxid;
-ERROR:  invalid input syntax for remote transaction ID: '1-10-20.0' at character 8
-SELECT '1-10.0-20'::rxid;
-ERROR:  invalid input syntax for remote transaction ID: '1-10.0-20' at character 8
-SELECT 'a1-10-20'::rxid;
-ERROR:  invalid input syntax for remote transaction ID: 'a1-10-20' at character 8
+SELECT 'ts-1-10-20.0'::rxid;
+ERROR:  invalid input syntax for remote transaction ID: 'ts-1-10-20.0' at character 8
+SELECT 'ts-1-10.0-20'::rxid;
+ERROR:  invalid input syntax for remote transaction ID: 'ts-1-10.0-20' at character 8
+SELECT 'ts-a1-10-20'::rxid;
+ERROR:  invalid input syntax for remote transaction ID: 'ts-a1-10-20' at character 8
