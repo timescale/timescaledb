@@ -111,7 +111,6 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 	ExprContext *econtext;
 	TupleTableSlot *myslot;
 	MemoryContext oldcontext = CurrentMemoryContext;
-	ChunkInsertState *prev_cis = NULL;
 
 	ErrorContextCallback errcallback;
 	CommandId mycid = GetCurrentCommandId(true);
@@ -248,6 +247,7 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		Point *point;
 		ChunkDispatch *dispatch = ccstate->dispatch;
 		ChunkInsertState *cis;
+		bool cis_changed;
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -274,17 +274,16 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
 
 		/* Find or create the insert state matching the point */
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed);
 
 		Assert(cis != NULL);
 
-		if (cis != prev_cis)
+		if (cis_changed)
 		{
 			/* Different chunk so must release BulkInsertState */
 			if (bistate->current_buf != InvalidBuffer)
 				ReleaseBuffer(bistate->current_buf);
 			bistate->current_buf = InvalidBuffer;
-			ts_chunk_insert_state_switch(cis);
 		}
 
 		/* Triggers and stuff need to be invoked in query context. */
@@ -305,7 +304,6 @@ timescaledb_CopyFrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht)
 		saved_resultRelInfo = resultRelInfo;
 		resultRelInfo = cis->result_relation_info;
 		estate->es_result_relation_info = resultRelInfo;
-		prev_cis = cis;
 
 		/*
 		 * Constraints might reference the tableoid column, so initialize

@@ -29,6 +29,8 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 	cd->cmd_type = CMD_INSERT;
 	cd->cache =
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
+	cd->prev_cis = NULL;
+	cd->prev_cis_oid = InvalidOid;
 
 	return cd;
 }
@@ -50,11 +52,14 @@ destroy_chunk_insert_state(void *cis)
  * partitioned hyperspace.
  */
 extern ChunkInsertState *
-ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
+ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
+										 bool *cis_changed_out)
 {
 	ChunkInsertState *cis;
 
+	Assert(cis_changed_out != NULL);
 	cis = ts_subspace_store_get(dispatch->cache, point);
+	*cis_changed_out = true;
 
 	if (NULL == cis)
 	{
@@ -68,8 +73,17 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 		cis = ts_chunk_insert_state_create(new_chunk, dispatch);
 		ts_subspace_store_add(dispatch->cache, new_chunk->cube, cis, destroy_chunk_insert_state);
 	}
+	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
+	{
+		/* got the same item from cache as before */
+		*cis_changed_out = false;
+	}
+
+	if (*cis_changed_out)
+		ts_chunk_insert_state_switch(cis);
 
 	Assert(cis != NULL);
-	ts_chunk_insert_state_switch(cis);
+	dispatch->prev_cis = cis;
+	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
 }
