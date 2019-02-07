@@ -119,6 +119,16 @@ chunk_dispatch_exec(CustomScanState *node)
 			Assert(chunk_desc != NULL);
 			ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
 		}
+#if defined(USE_ASSERT_CHECKING) && !PG96 && !PG10
+		if (state->parent->mt_conflproj != NULL)
+		{
+			TupleTableSlot *slot = get_projection_info_slot_compat(
+				ResultRelInfo_OnConflictProjInfoCompat(cis->result_relation_info));
+
+			Assert(state->parent->mt_conflproj == slot);
+			Assert(state->parent->mt_existing->tts_tupleDescriptor == RelationGetDescr(cis->rel));
+		}
+#endif
 
 		/*
 		 * Set the result relation in the executor state to the target chunk.
