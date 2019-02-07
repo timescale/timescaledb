@@ -63,6 +63,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		TupleDesc tupdesc = slot->tts_tupleDescriptor;
 		EState *estate = node->ss.ps.state;
 		MemoryContext old;
+		bool cis_changed;
 
 		/* Switch to the executor's per-tuple memory context */
 		old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
@@ -82,42 +83,44 @@ chunk_dispatch_exec(CustomScanState *node)
 		dispatch->returning_index = state->parent->mt_whichplan;
 
 		/* Find or create the insert state matching the point */
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
-
-		/*
-		 * Update the arbiter indexes for ON CONFLICT statements so that they
-		 * match the chunk. Note that this requires updating the existing List
-		 * head (not replacing it), or otherwise the ModifyTableState node
-		 * won't pick it up.
-		 */
-		if (cis->arbiter_indexes != NIL)
+		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point, &cis_changed);
+		if (cis_changed)
 		{
 			/*
-			 * In PG11 several fields were removed from the ModifyTableState
-			 * node and ExecInsert function nodes, as they were redundant.
-			 * (See:
-			 * https://github.com/postgres/postgres/commit/ee0a1fc84eb29c916687dc5bd26909401d3aa8cd).
+			 * Update the arbiter indexes for ON CONFLICT statements so that they
+			 * match the chunk. Note that this requires updating the existing List
+			 * head (not replacing it), or otherwise the ModifyTableState node
+			 * won't pick it up.
 			 */
+			if (cis->arbiter_indexes != NIL)
+			{
+				/*
+				 * In PG11 several fields were removed from the ModifyTableState
+				 * node and ExecInsert function nodes, as they were redundant.
+				 * (See:
+				 * https://github.com/postgres/postgres/commit/ee0a1fc84eb29c916687dc5bd26909401d3aa8cd).
+				 */
 #if PG96 || PG10
-			state->parent->mt_arbiterindexes = cis->arbiter_indexes;
+				state->parent->mt_arbiterindexes = cis->arbiter_indexes;
 #else
-			Assert(IsA(state->parent->ps.plan, ModifyTable));
-			((ModifyTable *) state->parent->ps.plan)->arbiterIndexes = cis->arbiter_indexes;
+				Assert(IsA(state->parent->ps.plan, ModifyTable));
+				((ModifyTable *) state->parent->ps.plan)->arbiterIndexes = cis->arbiter_indexes;
 #endif
-		}
+			}
 
-		/* slot for the "existing" tuple in ON CONFLICT UPDATE IS chunk schema */
+			/* slot for the "existing" tuple in ON CONFLICT UPDATE IS chunk schema */
 
-		if (state->parent->mt_existing != NULL)
-		{
-			TupleDesc chunk_desc;
+			if (state->parent->mt_existing != NULL)
+			{
+				TupleDesc chunk_desc;
 
-			if (cis->tup_conv_map && cis->tup_conv_map->outdesc)
-				chunk_desc = cis->tup_conv_map->outdesc;
-			else
-				chunk_desc = RelationGetDescr(cis->rel);
-			Assert(chunk_desc != NULL);
-			ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
+				if (cis->tup_conv_map && cis->tup_conv_map->outdesc)
+					chunk_desc = cis->tup_conv_map->outdesc;
+				else
+					chunk_desc = RelationGetDescr(cis->rel);
+				Assert(chunk_desc != NULL);
+				ExecSetSlotDescriptor(state->parent->mt_existing, chunk_desc);
+			}
 		}
 #if defined(USE_ASSERT_CHECKING) && !PG96 && !PG10
 		if (state->parent->mt_conflproj != NULL)
@@ -133,7 +136,9 @@ chunk_dispatch_exec(CustomScanState *node)
 		/*
 		 * Set the result relation in the executor state to the target chunk.
 		 * This makes sure that the tuple gets inserted into the correct
-		 * chunk.
+		 * chunk. Note that since the ModifyTable executor saves and restores
+		 * the es_result_relation_info this has to be updated every time, not
+		 * just when the chunk changes.
 		 */
 		estate->es_result_relation_info = cis->result_relation_info;
 

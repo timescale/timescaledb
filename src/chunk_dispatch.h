@@ -14,6 +14,7 @@
 #include "cache.h"
 #include "subspace_store.h"
 #include "chunk_dispatch_state.h"
+#include "chunk_insert_state.h"
 
 /*
  * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is
@@ -38,15 +39,15 @@ typedef struct ChunkDispatch
 	List *on_conflict_set;
 	List *on_conflict_where;
 	CmdType cmd_type;
-
+	ChunkInsertState *prev_cis;
+	Oid prev_cis_oid;
 } ChunkDispatch;
 
 typedef struct Point Point;
-typedef struct ChunkInsertState ChunkInsertState;
 
 extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
 void ts_chunk_dispatch_destroy(ChunkDispatch *dispatch);
-extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch,
-																  Point *p);
+extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
+																  bool *cis_changed_out);
 
 #endif /* TIMESCALEDB_CHUNK_DISPATCH_H */
