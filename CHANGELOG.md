@@ -6,12 +6,17 @@ accidentally triggering the load of a previous DB version.**
 
 ## 1.2.1 (2019-02-11)
 
+This release contains bugfixes.
+
 **Notable commits**
+* [2f6b58a] Fix tlist on hypertable inserts inside CTEs
+* [7973b4a] Stop background worker on rename database
+* [32cc645] Fix loading the tsl license in parallel workers
 
 **Thanks**
 
-* @jamessewell for reporting and helping debug a segfault in last()
-* @piscopoc for reporting a segfault in time_bucket_gapfill
+* @jamessewell for reporting and helping debug a segfault in last() [034a0b0]
+* @piscopoc for reporting a segfault in time_bucket_gapfill [e6c68f8]
 
 ## 1.2.0 (2019-01-29)
 
@@ -72,10 +77,10 @@ This release contains bugfixes.
 
 **Notable commits**
 
-[f99b540] Avoid loading twice in parallel workers and load only from $libdir
-[e310f7d] Don't throw errors when extension is loaded but not installed yet
-[8498416] Free ChunkInsertStates when the es_per_tuple_exprcontext is freed
-[937eefe] Set C standard to C11
+* [f99b540] Avoid loading twice in parallel workers and load only from $libdir
+* [e310f7d] Don't throw errors when extension is loaded but not installed yet
+* [8498416] Free ChunkInsertStates when the es_per_tuple_exprcontext is freed
+* [937eefe] Set C standard to C11
 
 **Thanks**
 
