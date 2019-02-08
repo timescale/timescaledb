@@ -148,6 +148,14 @@ CREATE INDEX IF NOT EXISTS chunk_index_hypertable_id_hypertable_index_name_idx
 ON _timescaledb_catalog.chunk_index(hypertable_id, hypertable_index_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
+-- additional index info which is only needed for some indexes. If all values
+-- are the default, the index need not be found in this table.
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.optional_index_info (
+    hypertable_index_name NAME PRIMARY KEY,
+    is_scheduled BOOLEAN DEFAULT false
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
+
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
 -- inside other .sql scripts. This avoids insertion conflicts during pg_restore.
@@ -202,6 +210,13 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
     cascade_to_materializations BOOLEAN
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
+
+CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_scheduled_index (
+    job_id          		INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id   		INTEGER     UNIQUE NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+	hypertable_index_name	NAME		NOT NULL
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_scheduled_index', '');
 
 ----- End BGW policy table definitions
 

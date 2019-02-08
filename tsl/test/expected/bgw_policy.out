@@ -20,13 +20,17 @@ CREATE OR REPLACE FUNCTION test_drop_chunks(job_id INTEGER)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_auto_drop_chunks'
 LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE FUNCTION test_scheduled_index(job_id INTEGER)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_scheduled_index'
+LANGUAGE C VOLATILE STRICT;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE FUNCTION check_chunk_oid(chunk_id REGCLASS, chunk_oid REGCLASS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
 	count INTEGER;
 BEGIN
-	select count(*) from pg_class as pgc, _timescaledb_catalog.chunk as c where pgc.relname=c.table_name and c.id=chunk_id and pgc.oid=chunk_oid INTO count;
+	SELECT count(*) FROM pg_class AS pgc, _timescaledb_catalog.chunk AS c where pgc.relname=c.table_name and c.id=chunk_id and pgc.oid=chunk_oid INTO count;
 	return (count = 1);
 END
 $BODY$;
@@ -35,12 +39,12 @@ $BODY$
 DECLARE
 	count INTEGER;
 BEGIN
-	select count(*) from pg_index where indexrelid=index_oid and indrelid=hypertable_oid INTO count;
+	SELECT count(*) FROM pg_index where indexrelid=index_oid and indrelid=hypertable_oid INTO count;
 	return (count = 1);
 END
 $BODY$;
 CREATE TABLE test_table(time timestamptz, chunk_id int);
-SELECT create_hypertable('test_table', 'time');
+SELECT create_hypertable('test_table', 'time', create_default_indexes => false);
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
@@ -53,231 +57,466 @@ INSERT INTO test_table VALUES (now(), 2);
 INSERT INTO test_table VALUES (now() - INTERVAL '5 months', 3);
 INSERT INTO test_table VALUES (now() - INTERVAL '3 months', 4);
 INSERT INTO test_table VALUES (now() - INTERVAL '8 months', 5);
-SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table';
+SELECT COUNT(*) FROM _timescaledb_catalog.chunk AS c, _timescaledb_catalog.hypertable AS ht where c.hypertable_id = ht.id and ht.table_name='test_table';
  count 
 -------
      5
 (1 row)
 
--- Make sure reorder correctly selects chunks to reorder
--- by starting with oldest chunks
-select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
+CREATE INDEX ON test_table(time) WITH (timescaledb.scheduled);
 WARNING:  Timescale License expired
-select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+ Table | Index | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+-------+-------+---------+------+--------+---------+-----------+------------
+(0 rows)
+
+SELECT * FROM _timescaledb_config.bgw_policy_scheduled_index;
  job_id | hypertable_id | hypertable_index_name 
 --------+---------------+-----------------------
    1000 |             1 | test_table_time_idx
 (1 row)
 
-select * from _timescaledb_config.bgw_job where job_type IN ('reorder');
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
-------+------------------------+----------+-------------------+-------------+-------------+--------------
- 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+SELECT job_id AS scheduled_index_job_id FROM _timescaledb_config.bgw_policy_scheduled_index LIMIT 1 \gset
+\set ON_ERROR_STOP 0
+SELECT add_scheduled_index_policy('test_table', 'test_table_time_idx') AS scheduled_index_job_id \gset
+ERROR:  scheduled_index policy already exists for hypertable "test_table"
+\set ON_ERROR_STOP 1
+-- Make sure scheduled_index correctly SELECTs chunks to scheduled_index
+-- by starting with oldest chunks
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('scheduled_index');
+  id  |       application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period 
+------+-------------------------------+-----------------+-------------------+-------------+-------------+--------------
+ 1000 | ScheduledIndex Background Job | scheduled_index | @ 84 hours        | @ 0         |          -1 | @ 1 day
 (1 row)
 
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
 (0 rows)
 
--- Make a manual calls to reorder: make sure the correct chunk is called
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+ Table | Index | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+-------+-------+---------+------+--------+---------+-----------+------------
+(0 rows)
+
+-- Make a manual calls to scheduled_index: make sure the correct chunk is called
 -- Chunk 5 should be first
-select * from test_reorder(:reorder_job_id) \gset  reorder_
-INFO:  reordering "_timescaledb_internal._hyper_1_5_chunk" using sequential scan and sort
-INFO:  "_hyper_1_5_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
    1000 |        5 |                 1
 (1 row)
 
--- Confirm that reorder was called on the correct chunk Oid
-select check_chunk_oid(5, :reorder_chunk_oid);
- check_chunk_oid 
------------------
- t
+-- Confirm that scheduled_index was called on the correct chunk Oid
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
 (1 row)
 
-select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
- check_index_oid 
------------------
- t
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
 (1 row)
 
 -- Chunk 3 is next
-select * from test_reorder(:reorder_job_id) \gset  reorder_
-INFO:  reordering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
-INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
    1000 |        5 |                 1
    1000 |        3 |                 1
 (2 rows)
 
-select check_chunk_oid(3, :reorder_chunk_oid);
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(2 rows)
+
+-- Chunk 4 is next
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1000 |        5 |                 1
+   1000 |        3 |                 1
+   1000 |        4 |                 1
+(3 rows)
+
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal._hyper_1_4_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(3 rows)
+
+-- The following calls should not scheduled_index any chunk, because they're all too new
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+NOTICE:  no chunks need a scheduled index for hypertable public.test_table
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1000 |        5 |                 1
+   1000 |        3 |                 1
+   1000 |        4 |                 1
+(3 rows)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal._hyper_1_4_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(3 rows)
+
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+NOTICE:  no chunks need a scheduled index for hypertable public.test_table
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1000 |        5 |                 1
+   1000 |        3 |                 1
+   1000 |        4 |                 1
+(3 rows)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal._hyper_1_4_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(3 rows)
+
+INSERT INTO test_table VALUES (now() - INTERVAL '7 days', 6);
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal._hyper_1_4_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(3 rows)
+
+-- This call should scheduled_index chunk 1
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1000 |        5 |                 1
+   1000 |        3 |                 1
+   1000 |        4 |                 1
+   1000 |        1 |                 1
+(4 rows)
+
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal._hyper_1_4_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(4 rows)
+
+-- Should not scheduled_index anything, because all chunks are too new
+SELECT * FROM test_scheduled_index(:scheduled_index_job_id) \gset  scheduled_index_
+NOTICE:  no chunks need a scheduled index for hypertable public.test_table
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1000 |        5 |                 1
+   1000 |        3 |                 1
+   1000 |        4 |                 1
+   1000 |        1 |                 1
+(4 rows)
+
+SELECT * FROM timescaledb_information.scheduled_index_policies;
+ hypertable | hypertable_index_name | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+------------+-----------------------+--------+-------------------+-------------+-------------+--------------
+ test_table | test_table_time_idx   |   1000 | @ 84 hours        | @ 0         |          -1 | @ 1 day
+(1 row)
+
+-- indexes should still exist after removing the policy
+SELECT remove_scheduled_index_policy('test_table');
+ remove_scheduled_index_policy 
+-------------------------------
+ 
+(1 row)
+
+SELECT * FROM test.show_indexes('test_table');
+        Index        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------+---------+------+--------+---------+-----------+------------
+ test_table_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                           Index                            | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+------------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_3_chunk | _timescaledb_internal._hyper_1_3_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_4_chunk | _timescaledb_internal._hyper_1_4_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_5_chunk | _timescaledb_internal._hyper_1_5_chunk_test_table_time_idx | {time}  |      | f      | f       | f         | 
+(4 rows)
+
+-- but optional info should not exist
+SELECT * FROM _timescaledb_catalog.optional_index_info;
+ hypertable_index_name | is_scheduled 
+-----------------------+--------------
+(0 rows)
+
+-- Make sure reorder correctly SELECTs chunks to reorder
+-- by starting with oldest chunks
+SELECT add_reorder_policy('test_table', 'test_table_time_idx') AS reorder_job_id \gset
+SELECT * FROM _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
+ job_id | hypertable_id | hypertable_index_name 
+--------+---------------+-----------------------
+   1001 |             1 | test_table_time_idx
+(1 row)
+
+SELECT * FROM _timescaledb_config.bgw_job where job_type IN ('reorder');
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period 
+------+------------------------+----------+-------------------+-------------+-------------+--------------
+ 1001 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 1 day
+(1 row)
+
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+(0 rows)
+
+-- Make a manual calls to reorder: make sure the correct chunk is called
+-- Chunk 5 should be first
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
+INFO:  reordering "_timescaledb_internal._hyper_1_5_chunk" using sequential scan and sort
+INFO:  "_hyper_1_5_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1001 |        5 |                 1
+(1 row)
+
+-- Confirm that reorder was called on the correct chunk Oid
+SELECT check_chunk_oid(5, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
-select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
+SELECT check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
+ check_index_oid 
+-----------------
+ t
+(1 row)
+
+-- Chunk 3 is next
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
+INFO:  reordering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  "_hyper_1_3_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
+ job_id | chunk_id | num_times_job_run 
+--------+----------+-------------------
+   1001 |        5 |                 1
+   1001 |        3 |                 1
+(2 rows)
+
+SELECT check_chunk_oid(3, :reorder_chunk_oid);
+ check_chunk_oid 
+-----------------
+ t
+(1 row)
+
+SELECT check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
  check_index_oid 
 -----------------
  t
 (1 row)
 
 -- Chunk 4 is next
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_4_chunk" using sequential scan and sort
 INFO:  "_hyper_1_4_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1000 |        5 |                 1
-   1000 |        3 |                 1
-   1000 |        4 |                 1
+   1001 |        5 |                 1
+   1001 |        3 |                 1
+   1001 |        4 |                 1
 (3 rows)
 
-select check_chunk_oid(4, :reorder_chunk_oid);
+SELECT check_chunk_oid(4, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
-select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
+SELECT check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
  check_index_oid 
 -----------------
  t
 (1 row)
 
 -- The following calls should not reorder any chunk, because they're all too new
-select * from test_reorder(:reorder_job_id) \gset  reorder_
-NOTICE:  no chunks need reordering for hypertable public.test_table
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
+INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1000 |        5 |                 1
-   1000 |        3 |                 1
-   1000 |        4 |                 1
-(3 rows)
+   1001 |        5 |                 1
+   1001 |        3 |                 1
+   1001 |        4 |                 1
+   1001 |        1 |                 1
+(4 rows)
 
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1000 |        5 |                 1
-   1000 |        3 |                 1
-   1000 |        4 |                 1
-(3 rows)
+   1001 |        5 |                 1
+   1001 |        3 |                 1
+   1001 |        4 |                 1
+   1001 |        1 |                 1
+(4 rows)
 
 INSERT INTO test_table VALUES (now() - INTERVAL '7 days', 6);
 -- This call should reorder chunk 1
-select * from test_reorder(:reorder_job_id) \gset  reorder_
-INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  "_hyper_1_1_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
+NOTICE:  no chunks need reordering for hypertable public.test_table
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1000 |        5 |                 1
-   1000 |        3 |                 1
-   1000 |        4 |                 1
-   1000 |        1 |                 1
+   1001 |        5 |                 1
+   1001 |        3 |                 1
+   1001 |        4 |                 1
+   1001 |        1 |                 1
 (4 rows)
 
-select check_chunk_oid(1, :reorder_chunk_oid);
+SELECT check_chunk_oid(1, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
-select check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
+SELECT check_index_oid(:reorder_index_oid, 'test_table'::REGCLASS);
  check_index_oid 
 -----------------
  t
 (1 row)
 
 -- Should not reorder anything, because all chunks are too new
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1000 |        5 |                 1
-   1000 |        3 |                 1
-   1000 |        4 |                 1
-   1000 |        1 |                 1
+   1001 |        5 |                 1
+   1001 |        3 |                 1
+   1001 |        4 |                 1
+   1001 |        1 |                 1
 (4 rows)
 
-select remove_reorder_policy('test_table');
+SELECT remove_reorder_policy('test_table');
  remove_reorder_policy 
 -----------------------
  
 (1 row)
 
 -- Now do drop_chunks test
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
-SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table';
+SELECT add_drop_chunks_policy('test_table', INTERVAL '4 months', true) AS drop_chunks_job_id \gset
+SELECT count(*) FROM _timescaledb_catalog.chunk AS c, _timescaledb_catalog.hypertable AS ht where c.hypertable_id = ht.id and ht.table_name='test_table';
  count 
 -------
      6
 (1 row)
 
 -- Now simulate drop_chunks running automatically by calling it explicitly
-select test_drop_chunks(:drop_chunks_job_id);
+SELECT test_drop_chunks(:drop_chunks_job_id);
  test_drop_chunks 
 ------------------
  
 (1 row)
 
 -- Should have 4 chunks left
-SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset before_
-select :before_count=4;
+SELECT count(*) FROM _timescaledb_catalog.chunk AS c, _timescaledb_catalog.hypertable AS ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset before_
+SELECT :before_count=4;
  ?column? 
 ----------
  t
 (1 row)
 
 -- Make sure this second call does nothing
-select test_drop_chunks(:drop_chunks_job_id);
+SELECT test_drop_chunks(:drop_chunks_job_id);
  test_drop_chunks 
 ------------------
  
 (1 row)
 
-SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset after_
+SELECT count(*) FROM _timescaledb_catalog.chunk AS c, _timescaledb_catalog.hypertable AS ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset after_
 -- Should be true
-select :before_count=:after_count;
+SELECT :before_count=:after_count;
  ?column? 
 ----------
  t
 (1 row)
 
 INSERT INTO test_table VALUES (now() - INTERVAL '2 weeks', 1);
-SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset before_
+SELECT count(*) FROM _timescaledb_catalog.chunk AS c, _timescaledb_catalog.hypertable AS ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset before_
 -- This call should also do nothing
-select test_drop_chunks(:drop_chunks_job_id);
+SELECT test_drop_chunks(:drop_chunks_job_id);
  test_drop_chunks 
 ------------------
  
 (1 row)
 
-SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset after_
+SELECT count(*) FROM _timescaledb_catalog.chunk AS c, _timescaledb_catalog.hypertable AS ht where c.hypertable_id = ht.id and ht.table_name='test_table' \gset after_
 -- Should be true
-select :before_count=:after_count;
+SELECT :before_count=:after_count;
  ?column? 
 ----------
  t
 (1 row)
 
-select remove_drop_chunks_policy('test_table');
+SELECT remove_drop_chunks_policy('test_table');
  remove_drop_chunks_policy 
 ---------------------------
  
 (1 row)
 
--- Now test reorder chunk selection when there is space partitioning
+-- Now test reorder chunk SELECTion when there is space partitioning
 TRUNCATE test_table;
 SELECT add_dimension('public.test_table', 'chunk_id', 2);
           add_dimension           
@@ -292,103 +531,103 @@ INSERT INTO test_table VALUES (now() - INTERVAL '3 months', 4);
 INSERT INTO test_table VALUES (now() - INTERVAL '3 months', -4);
 INSERT INTO test_table VALUES (now() - INTERVAL '8 months', 5);
 INSERT INTO test_table VALUES (now() - INTERVAL '8 months', -5);
-select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
+SELECT add_reorder_policy('test_table', 'test_table_time_idx') AS reorder_job_id \gset
 -- Should be nothing in the chunk_stats table
-select count(*) from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id;
+SELECT count(*) FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id;
  count 
 -------
      0
 (1 row)
 
 -- Make a manual calls to reorder: make sure the correct (oldest) chunk is called
-select chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id ORDER BY ds.range_start LIMIT 1 \gset oldest_
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT chunk_id FROM _timescaledb_catalog.dimension_slice AS ds, _timescaledb_catalog.chunk_constraint AS cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id ORDER BY ds.range_start LIMIT 1 \gset oldest_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_13_chunk" using sequential scan and sort
 INFO:  "_hyper_1_13_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1002 |       13 |                 1
+   1003 |       13 |                 1
 (1 row)
 
 -- Confirm that reorder was called on the correct chunk Oid
-select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+SELECT check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
 -- Now run reorder again and pick the next oldest chunk
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT cc.chunk_id FROM _timescaledb_catalog.dimension_slice AS ds, _timescaledb_catalog.chunk_constraint AS cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (SELECT chunk_id FROM _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_14_chunk" using sequential scan and sort
 INFO:  "_hyper_1_14_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1002 |       14 |                 1
+   1003 |       14 |                 1
 (1 row)
 
 -- Confirm that reorder was called on the correct chunk Oid
-select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+SELECT check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
 -- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT cc.chunk_id FROM _timescaledb_catalog.dimension_slice AS ds, _timescaledb_catalog.chunk_constraint AS cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (SELECT chunk_id FROM _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_10_chunk" using sequential scan and sort
 INFO:  "_hyper_1_10_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1002 |       10 |                 1
+   1003 |       10 |                 1
 (1 row)
 
-select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+SELECT check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
 -- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT cc.chunk_id FROM _timescaledb_catalog.dimension_slice AS ds, _timescaledb_catalog.chunk_constraint AS cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (SELECT chunk_id FROM _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_11_chunk" using sequential scan and sort
 INFO:  "_hyper_1_11_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1002 |       11 |                 1
+   1003 |       11 |                 1
 (1 row)
 
-select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+SELECT check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
 -- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT cc.chunk_id FROM _timescaledb_catalog.dimension_slice AS ds, _timescaledb_catalog.chunk_constraint AS cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (SELECT chunk_id FROM _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_12_chunk" using sequential scan and sort
 INFO:  "_hyper_1_12_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1002 |       12 |                 1
+   1003 |       12 |                 1
 (1 row)
 
-select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+SELECT check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
 -- Ran out of chunks, so should be a noop
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
 -- Corner case: when there are no recent-enough chunks to reorder,
 -- DO NOT reorder any new chunks created by space partitioning.
@@ -397,28 +636,28 @@ INSERT INTO test_table VALUES (now() - INTERVAL '5 months', -5);
 INSERT INTO test_table VALUES (now() - INTERVAL '3 weeks', -5);
 INSERT INTO test_table VALUES (now(), -25);
 -- Should be noop
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
 -- But if we create a new time dimension, reorder it
 INSERT INTO test_table VALUES (now() - INTERVAL '1 year', 1);
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT cc.chunk_id FROM _timescaledb_catalog.dimension_slice AS ds, _timescaledb_catalog.chunk_constraint AS cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (SELECT chunk_id FROM _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 INFO:  reordering "_timescaledb_internal._hyper_1_16_chunk" using sequential scan and sort
 INFO:  "_hyper_1_16_chunk": found 0 removable, 1 nonremovable row versions in 1 pages
-select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
+SELECT job_id, chunk_id, num_times_job_run FROM _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-   1002 |       16 |                 1
+   1003 |       16 |                 1
 (1 row)
 
-select check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
+SELECT check_chunk_oid(:oldest_chunk_id, :reorder_chunk_oid);
  check_chunk_oid 
 -----------------
  t
 (1 row)
 
 -- Should be noop again
-select * from test_reorder(:reorder_job_id) \gset  reorder_
+SELECT * FROM test_reorder(:reorder_job_id) \gset  reorder_
 NOTICE:  no chunks need reordering for hypertable public.test_table
 CREATE TABLE test_table_int(time int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
@@ -430,6 +669,6 @@ NOTICE:  adding not-null constraint to column "time"
 
 \set ON_ERROR_STOP 0
 -- we cannot add a drop_chunks policy on a table whose open dimension is not time
-select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
+SELECT add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
 ERROR:  can only use "add_drop_chunks_policy" with an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
 \set ON_ERROR_STOP 1

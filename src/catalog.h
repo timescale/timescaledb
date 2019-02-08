@@ -51,6 +51,8 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+	BGW_POLICY_SCHEDULED_INDEX,
+	OPTIONAL_INDEX_INFO,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -486,6 +488,43 @@ typedef struct FormData_tablespace_hypertable_id_tablespace_name_idx
 
 /************************************
  *
+ * Optional index info table definitions
+ *
+ ************************************/
+
+#define OPTIONAL_INDEX_INFO_TABLE_NAME "optional_index_info"
+
+enum Anum_optional_index_info
+{
+	Anum_optional_index_info_hypertable_index_name = 1,
+	Anum_optional_index_info_is_scheduled,
+	_Anum_optional_index_info_max,
+};
+
+#define Natts_optional_index_info (_Anum_optional_index_info_max - 1)
+
+typedef struct FormData_optional_index_info
+{
+	NameData hypertable_index_name;
+	bool is_scheduled;
+} FormData_optional_index_info;
+
+typedef FormData_optional_index_info *Form_optional_index_info;
+
+enum
+{
+	OPTIONAL_INDEX_INFO_HYPERTABLE_NAME_IDX = 0,
+	_MAX_OPTIONAL_INDEX_INFO_INDEX,
+};
+
+enum Anum_optional_index_info_pkey_idx
+{
+	Anum_optional_index_info_pkey_idx_hypertable_index_name = 1,
+	_Anum_optional_index_info_pkey_idx_max,
+};
+
+/************************************
+ *
  * bgw_job table definitions
  *
  ************************************/
@@ -734,6 +773,57 @@ typedef enum Anum_bgw_policy_drop_chunks_pkey
 } Anum_bgw_policy_drop_chunks_pkey;
 
 #define Natts_bgw_policy_drop_chunks_pkey (_Anum_bgw_policy_drop_chunks_pkey_max - 1)
+
+/****** BGW_POLICY_SCHEDULED_INDEX TABLE definitions */
+#define BGW_POLICY_SCHEDULED_INDEX_TABLE_NAME "bgw_policy_scheduled_index"
+
+enum Anum_bgw_scheduled_index
+{
+	Anum_bgw_policy_scheduled_index_job_id = 1,
+	Anum_bgw_policy_scheduled_index_hypertable_id,
+	Anum_bgw_policy_scheduled_index_hypertable_index_name,
+	_Anum_bgw_policy_scheduled_index_max,
+};
+
+#define Natts_bgw_policy_scheduled_index (_Anum_bgw_policy_scheduled_index_max - 1)
+
+typedef struct FormData_bgw_policy_scheduled_index
+{
+	int32 job_id;
+	int32 hypertable_id;
+	NameData hypertable_index_name;
+} FormData_bgw_policy_scheduled_index;
+
+typedef FormData_bgw_policy_scheduled_index *Form_bgw_policy_scheduled_index;
+
+enum
+{
+	BGW_POLICY_SCHEDULED_INDEX_PKEY_IDX = 0,
+	BGW_POLICY_SCHEDULED_INDEX_HYPERTABLE_ID_IDX,
+	_MAX_BGW_POLICY_SCHEDULED_INDEX_INDEX,
+};
+
+enum Anum_bgw_policy_scheduled_index_pkey_idx
+{
+	Anum_bgw_policy_scheduled_index_pkey_idx_job_id = 1,
+	_Anum_bgw_policy_scheduled_index_pkey_idx_max,
+};
+
+typedef struct FormData_bgw_policy_scheduled_index_pkey_idx
+{
+	int32 job_id;
+} FormData_bgw_policy_scheduled_index_pkey_idx;
+
+enum Anum_bgw_policy_scheduled_index_hypertable_id_idx
+{
+	Anum_bgw_policy_scheduled_index_hypertable_id_idx_hypertable_id = 1,
+	_Anum_bgw_policy_scheduled_index_hypertable_id_idx_max,
+};
+
+typedef struct FormData_bgw_policy_scheduled_index_hypertable_id_idx
+{
+	int32 hypertable_id;
+} FormData_bgw_policy_scheduled_index_hypertable_id_idx;
 
 /****** BGW_POLICY_CHUNK_STATS TABLE definitions */
 #define BGW_POLICY_CHUNK_STATS_TABLE_NAME "bgw_policy_chunk_stats"

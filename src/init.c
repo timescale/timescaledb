@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <pg_config.h>
 #include <access/xact.h>
+#include <access/reloptions.h>
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include <utils/guc.h>
@@ -87,6 +88,12 @@ _PG_init(void)
 #ifdef TS_DEBUG
 	_conn_mock_init();
 #endif
+
+	add_bool_reloption(RELOPT_KIND_BTREE | RELOPT_KIND_HASH | RELOPT_KIND_GIN | RELOPT_KIND_GIST |
+						   RELOPT_KIND_BRIN,
+					   "multi_transaction",
+					   "",
+					   false);
 }
 
 void

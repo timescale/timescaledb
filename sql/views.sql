@@ -43,11 +43,19 @@ CREATE OR REPLACE VIEW timescaledb_information.reorder_policies as
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
 
+CREATE OR REPLACE VIEW timescaledb_information.scheduled_index_policies as
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.hypertable_index_name, p.job_id, j.schedule_interval,
+    j.max_runtime, j.max_retries, j.retry_period
+  FROM _timescaledb_config.bgw_policy_scheduled_index p
+    INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
+    INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
+
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
   SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_start, js.next_start,
     js.total_runs, js.total_failures
   FROM (SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_reorder
-        UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks) p
+        UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks
+        UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_scheduled_index) p
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id
     INNER JOIN _timescaledb_internal.bgw_job_stat js on p.job_id = js.job_id

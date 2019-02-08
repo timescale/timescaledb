@@ -18,6 +18,7 @@
 
 TS_FUNCTION_INFO_V1(ts_test_auto_reorder);
 TS_FUNCTION_INFO_V1(ts_test_auto_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_test_scheduled_index);
 
 static Oid chunk_oid;
 static Oid index_oid;
@@ -63,6 +64,17 @@ Datum
 ts_test_auto_drop_chunks(PG_FUNCTION_ARGS)
 {
 	execute_drop_chunks_policy(PG_GETARG_INT32(0));
+
+	PG_RETURN_NULL();
+}
+
+/* Call the real scheduled_index policy */
+Datum
+ts_test_scheduled_index(PG_FUNCTION_ARGS)
+{
+	int32 job_id = PG_GETARG_INT32(0);
+	BgwJob job = { .fd = { .id = job_id } };
+	execute_scheduled_index_policy(&job, false);
 
 	PG_RETURN_NULL();
 }

@@ -17,6 +17,7 @@ ORDER BY proname;
  add_dimension
  add_drop_chunks_policy
  add_reorder_policy
+ add_scheduled_index_policy
  alter_job_schedule
  attach_tablespace
  chunk_relation_size
@@ -38,6 +39,7 @@ ORDER BY proname;
  locf
  remove_drop_chunks_policy
  remove_reorder_policy
+ remove_scheduled_index_policy
  reorder_chunk
  set_adaptive_chunking
  set_chunk_time_interval
@@ -48,5 +50,5 @@ ORDER BY proname;
  time_bucket_gapfill
  timescaledb_post_restore
  timescaledb_pre_restore
-(34 rows)
+(36 rows)
 

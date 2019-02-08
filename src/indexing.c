@@ -455,3 +455,109 @@ ts_indexing_mark_as_invalid(Oid index_id)
 {
 	return ts_indexing_mark_as(index_id, IndexInvalid);
 }
+
+static ScanTupleResult optional_index_info_tuple_found(TupleInfo *ti, void *const data);
+
+TSDLLEXPORT OptionalIndexInfo *
+ts_indexing_optional_info_find_by_index_name(Name index_name)
+{
+	ScanKeyData scankey[1];
+	OptionalIndexInfo *ret = NULL;
+
+	ScanKeyInit(&scankey[0],
+				Anum_optional_index_info_pkey_idx_hypertable_index_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				NameGetDatum(index_name));
+
+	ts_catalog_scan_one(OPTIONAL_INDEX_INFO,
+						OPTIONAL_INDEX_INFO_HYPERTABLE_NAME_IDX,
+						scankey,
+						1,
+						optional_index_info_tuple_found,
+						AccessShareLock,
+						BGW_POLICY_SCHEDULED_INDEX_TABLE_NAME,
+						(void *) &ret);
+
+	return ret;
+}
+
+static ScanTupleResult
+optional_index_info_tuple_found(TupleInfo *ti, void *const data)
+{
+	OptionalIndexInfo **policy = data;
+
+	*policy =
+		STRUCT_FROM_TUPLE(ti->tuple, ti->mctx, OptionalIndexInfo, FormData_optional_index_info);
+
+	return SCAN_CONTINUE;
+}
+
+TSDLLEXPORT void
+ts_indexing_optional_info_insert(OptionalIndexInfo *policy)
+{
+	TupleDesc tupdesc;
+	CatalogSecurityContext sec_ctx;
+	Datum values[Natts_optional_index_info];
+	bool nulls[Natts_optional_index_info] = { false };
+	Catalog *catalog = ts_catalog_get();
+	Relation rel = heap_open(catalog_get_table_id(catalog, OPTIONAL_INDEX_INFO), RowExclusiveLock);
+
+	tupdesc = RelationGetDescr(rel);
+
+	values[AttrNumberGetAttrOffset(Anum_optional_index_info_hypertable_index_name)] =
+		NameGetDatum(&policy->fd.hypertable_index_name);
+	values[AttrNumberGetAttrOffset(Anum_optional_index_info_is_scheduled)] =
+		BoolGetDatum(policy->fd.is_scheduled);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, tupdesc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+
+	heap_close(rel, RowExclusiveLock);
+}
+
+static ScanTupleResult
+scan_delete_optional_index_tuple(TupleInfo *ti, void *data)
+{
+	CatalogSecurityContext sec_ctx;
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_restore_user(&sec_ctx);
+
+	return SCAN_CONTINUE;
+}
+
+TSDLLEXPORT bool
+ts_indexing_optional_info_delete_by_index_name(Name index_name)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_optional_index_info_pkey_idx_hypertable_index_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				NameGetDatum(index_name));
+
+	Catalog *catalog = ts_catalog_get();
+	ScannerCtx	scanctx = {
+		.table = catalog_get_table_id(catalog, OPTIONAL_INDEX_INFO),
+		.index = catalog_get_index(catalog, OPTIONAL_INDEX_INFO, OPTIONAL_INDEX_INFO_HYPERTABLE_NAME_IDX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = NULL,
+		.limit = 1,
+		.tuple_found = scan_delete_optional_index_tuple,
+		.lockmode = RowExclusiveLock,
+		.scandirection = ForwardScanDirection,
+		.result_mctx = CurrentMemoryContext,
+		.tuplock = {
+			.waitpolicy = LockWaitBlock,
+			.lockmode = LockTupleExclusive,
+			.enabled = false,
+		},
+	};
+
+	return ts_scanner_scan(&scanctx);
+}

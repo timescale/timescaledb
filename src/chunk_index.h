@@ -25,12 +25,13 @@ typedef struct ChunkIndexMapping
 	Oid hypertableoid;
 } ChunkIndexMapping;
 
-extern void ts_chunk_index_create(Relation hypertable_rel, int32 hypertable_id,
-								  Relation hypertable_idxrel, int32 chunk_id, Relation chunkrel);
-
 extern List *ts_get_expr_index_attnames(IndexInfo *ii, Relation htrel);
 void ts_adjust_attnos_from_attnames(IndexInfo *indexinfo, Relation template_indexrel,
 									Relation chunkrel, List *attnames);
+
+extern TSDLLEXPORT void ts_chunk_index_create(Relation hypertable_rel, int32 hypertable_id,
+											  Relation hypertable_idxrel, int32 chunk_id,
+											  Relation chunkrel, Oid constraint_oid);
 extern void ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id,
 														   Relation hypertable_idxrel,
 														   int32 chunk_id, Relation chunkrel,

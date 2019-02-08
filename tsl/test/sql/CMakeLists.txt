@@ -12,6 +12,7 @@ set(TEST_FILES
 set(TEST_FILES_DEBUG
     bgw_policy.sql
     bgw_reorder_drop_chunks.sql
+    bgw_scheduled_index.sql
     continuous_aggs.sql
     continuous_aggs_bgw.sql
     continuous_aggs_materialize.sql

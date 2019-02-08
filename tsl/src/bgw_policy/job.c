@@ -20,10 +20,12 @@
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/job.h"
 
+#include "bgw_policy/scheduled_index.h"
 #include "errors.h"
 #include "job.h"
 #include "hypertable.h"
 #include "chunk.h"
+#include "chunk_index.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -219,20 +221,125 @@ bgw_policy_job_requires_enterprise_license(BgwJob *job)
 {
 	license_print_expiration_warning_if_needed();
 
+	/* We deliberately have no default case, so that the compiler will warn if
+	 * we miss a job type
+	 */
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_REORDER:
-			return true;
 		case JOB_TYPE_DROP_CHUNKS:
+		case JOB_TYPE_SCHEDULED_INDEX:
 			return true;
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
+		case JOB_TYPE_VERSION_CHECK:
 			return false;
-		default:
-			elog(ERROR,
-				 "scheduler could not determine the license type for job type: \"%s\"",
-				 NameStr(job->fd.job_type));
+		case JOB_TYPE_UNKNOWN:
+		case _MAX_JOB_TYPE:
+			elog(ERROR, "invalid job type: \"%s\"", NameStr(job->fd.job_type));
 	}
-	pg_unreachable();
+	elog(ERROR,
+		 "scheduler could not determine the license type for job type: \"%s\"",
+		 NameStr(job->fd.job_type));
+}
+
+bool
+execute_scheduled_index_policy(BgwJob *job, bool fast_continue)
+{
+	int chunk_id;
+	bool started = false;
+	BgwPolicyScheduledIndex *args;
+	Hypertable *ht;
+	Chunk *chunk;
+	int32 job_id = job->fd.id;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+	}
+
+	/* Get the arguments from the scheduled_index_policy table */
+	args = ts_bgw_policy_scheduled_index_find_by_job(job_id);
+
+	if (args == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				 errmsg("could not run scheduled_index policy #%d because no args in policy table",
+						job_id)));
+
+	ht = ts_hypertable_get_by_id(args->fd.hypertable_id);
+
+	/* Find a chunk needing the index */
+	/* currently just use the same logic as reorder */
+	// chunk_id = get_chunk_id_needing_schedule_index(args->fd.job_id, ht);
+	chunk_id = get_chunk_id_to_reorder(args->fd.job_id, ht);
+
+	if (chunk_id == -1)
+	{
+		elog(NOTICE,
+			 "no chunks need a scheduled index for hypertable %s.%s",
+			 ht->fd.schema_name.data,
+			 ht->fd.table_name.data);
+		goto commit;
+	}
+
+	chunk = ts_chunk_get_by_id(chunk_id, 0, false);
+	elog(LOG,
+		 "creating a scheduled index on chunk %s.%s",
+		 chunk->fd.schema_name.data,
+		 chunk->fd.table_name.data);
+	{
+		Oid hypertable_index_oid =
+			get_relname_relid(NameStr(args->fd.hypertable_index_name),
+							  get_namespace_oid(NameStr(ht->fd.schema_name), false));
+		ChunkIndexMapping cim;
+		Relation hypertable_rel = relation_open(ht->main_table_relid, AccessShareLock);
+		Relation chunk_rel = relation_open(chunk->table_id, ShareLock);
+		Relation hypertable_index_rel = relation_open(hypertable_index_oid, AccessShareLock);
+
+		bool already_exists =
+			ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index_oid, &cim);
+		if (already_exists)
+			elog(LOG,
+				 "index already exists for %s.%s",
+				 chunk->fd.schema_name.data,
+				 chunk->fd.table_name.data);
+		else
+			ts_chunk_index_create(hypertable_rel,
+								  ht->fd.id,
+								  hypertable_index_rel,
+								  chunk->fd.id,
+								  chunk_rel,
+								  InvalidOid);
+
+		relation_close(hypertable_index_rel, NoLock);
+		relation_close(chunk_rel, NoLock);
+		relation_close(hypertable_rel, NoLock);
+	}
+	elog(LOG,
+		 "created a scheduled index on chunk %s.%s",
+		 chunk->fd.schema_name.data,
+		 chunk->fd.table_name.data);
+
+	/* Now update chunk_stats table */
+	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id,
+											 chunk_id,
+											 ts_timer_get_current_timestamp());
+
+	// if (fast_continue && get_chunk_id_needing_schedule_index(args->fd.job_id, ht) != -1)
+	if (fast_continue && get_chunk_id_to_reorder(args->fd.job_id, ht) != -1)
+	{
+		BgwJobStat *job_stat = ts_bgw_job_stat_find(job->fd.id);
+
+		ts_bgw_job_stat_set_next_start(job, job_stat->fd.last_start);
+		elog(LOG, "Fast catchup enabled on scheduled index");
+	}
+
+commit:
+	if (started)
+		CommitTransactionCommand();
+
+	return true;
 }
 
 bool
@@ -250,6 +357,8 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return execute_materialize_continuous_aggregate(job);
+		case JOB_TYPE_SCHEDULED_INDEX:
+			return execute_scheduled_index_policy(job, true);
 		default:
 			elog(ERROR,
 				 "scheduler tried to run an invalid job type: \"%s\"",

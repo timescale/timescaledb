@@ -26,6 +26,7 @@
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
 #include "process_utility.h"
+#include "bgw_policy/scheduled_index_api.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -63,8 +64,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_materialize = continuous_agg_materialize,
 	.add_drop_chunks_policy = drop_chunks_add_policy,
 	.add_reorder_policy = reorder_add_policy,
+	.add_scheduled_index_policy = scheduled_index_add_policy,
 	.remove_drop_chunks_policy = drop_chunks_remove_policy,
 	.remove_reorder_policy = reorder_remove_policy,
+	.remove_scheduled_index_policy = scheduled_index_remove_policy,
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.gapfill_marker = gapfill_marker,
 	.gapfill_int16_time_bucket = gapfill_int16_time_bucket,

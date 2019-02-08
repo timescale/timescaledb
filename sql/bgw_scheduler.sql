@@ -30,12 +30,22 @@ CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NA
 AS '@MODULE_PATHNAME@', 'ts_add_reorder_policy'
 LANGUAGE C VOLATILE STRICT;
 
+-- changes an index to scheduled without otherwise otherwise adding or removing existing instances of the index
+CREATE OR REPLACE FUNCTION add_scheduled_index_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_add_scheduled_index_policy'
+LANGUAGE C VOLATILE STRICT;
+
 CREATE OR REPLACE FUNCTION remove_drop_chunks_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_remove_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_remove_reorder_policy'
+LANGUAGE C VOLATILE STRICT;
+
+-- changes an index to non-scheduled without otherwise adding or removing existing instances of the index
+CREATE OR REPLACE FUNCTION remove_scheduled_index_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_remove_scheduled_index_policy'
 LANGUAGE C VOLATILE STRICT;
 
 -- Returns the updated job schedule values

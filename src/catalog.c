@@ -94,6 +94,14 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME,
 	},
+	[BGW_POLICY_SCHEDULED_INDEX] = {
+		.schema_name = CONFIG_SCHEMA_NAME,
+		.table_name = BGW_POLICY_SCHEDULED_INDEX_TABLE_NAME,
+	},
+	[OPTIONAL_INDEX_INFO] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = OPTIONAL_INDEX_INFO_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -183,6 +191,13 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_KEY] = "bgw_policy_drop_chunks_hypertable_id_key",
 		},
 	},
+	[BGW_POLICY_SCHEDULED_INDEX] = {
+		.length = _MAX_BGW_POLICY_SCHEDULED_INDEX_INDEX,
+		.names = (char *[]) {
+			[BGW_POLICY_SCHEDULED_INDEX_PKEY_IDX] = "bgw_policy_scheduled_index_pkey",
+			[BGW_POLICY_SCHEDULED_INDEX_HYPERTABLE_ID_IDX] = "bgw_policy_scheduled_index_hypertable_id_key",
+		},
+	},
 	[BGW_POLICY_CHUNK_STATS] = {
 		.length = _MAX_BGW_POLICY_CHUNK_STATS_INDEX,
 		.names = (char *[]) {
@@ -214,6 +229,13 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY] = "continuous_aggs_invalidation_threshold_pkey",
+		}
+	},
+	[OPTIONAL_INDEX_INFO] = {
+		.length = _MAX_OPTIONAL_INDEX_INFO_INDEX,
+		.names = (char *[]) {
+			[OPTIONAL_INDEX_INFO_HYPERTABLE_NAME_IDX] =
+				"optional_index_info_pkey"
 		},
 	},
 };
@@ -233,6 +255,8 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
 	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
+	[BGW_POLICY_SCHEDULED_INDEX] = NULL,
+	[OPTIONAL_INDEX_INFO] = NULL,
 };
 
 typedef struct InternalFunctionDef

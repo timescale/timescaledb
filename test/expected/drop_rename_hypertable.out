@@ -204,9 +204,10 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | dimension                                   | table | super_user
  _timescaledb_catalog | dimension_slice                             | table | super_user
  _timescaledb_catalog | hypertable                                  | table | super_user
+ _timescaledb_catalog | optional_index_info                         | table | super_user
  _timescaledb_catalog | tablespace                                  | table | super_user
  _timescaledb_catalog | telemetry_metadata                          | table | super_user
-(12 rows)
+(13 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

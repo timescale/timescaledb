@@ -27,6 +27,7 @@
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "catalog.h"
 #include "scanner.h"
 #include "chunk.h"
@@ -422,9 +423,9 @@ ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constr
  * relation. This function is typically called when a new chunk is created and
  * it should, for each hypertable index, have a corresponding index of its own.
  */
-static void
-chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypertable_idxrel,
-				   int32 chunk_id, Relation chunkrel, Oid constraint_oid)
+TSDLLEXPORT void
+ts_chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypertable_idxrel,
+					  int32 chunk_id, Relation chunkrel, Oid constraint_oid)
 {
 	Oid chunk_indexrelid;
 
@@ -545,14 +546,25 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 	foreach (lc, indexlist)
 	{
 		Oid hypertable_idxoid = lfirst_oid(lc);
-		Relation hypertable_idxrel = relation_open(hypertable_idxoid, AccessShareLock);
+		Relation hypertable_idxrel;
+		Name hypertable_idx_name = palloc(sizeof(*hypertable_idx_name));
+		OptionalIndexInfo *optional_iinfo;
 
-		chunk_index_create(htrel,
-						   hypertable_id,
-						   hypertable_idxrel,
-						   chunk_id,
-						   chunkrel,
-						   get_index_constraint(hypertable_idxoid));
+		namestrcpy(hypertable_idx_name, get_rel_name(hypertable_idxoid));
+
+		optional_iinfo = ts_indexing_optional_info_find_by_index_name(hypertable_idx_name);
+
+		if (optional_iinfo != NULL && optional_iinfo->fd.is_scheduled)
+			continue;
+
+		hypertable_idxrel = relation_open(hypertable_idxoid, AccessShareLock);
+
+		ts_chunk_index_create(htrel,
+							  hypertable_id,
+							  hypertable_idxrel,
+							  chunk_id,
+							  chunkrel,
+							  get_index_constraint(hypertable_idxoid));
 
 		relation_close(hypertable_idxrel, AccessShareLock);
 	}

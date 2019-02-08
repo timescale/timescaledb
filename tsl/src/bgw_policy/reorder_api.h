@@ -8,6 +8,7 @@
 #define TIMESCALEDB_TSL_BGW_POLICY_REORDER_API_H
 
 #include <postgres.h>
+#include <fmgr.h>
 
 /* User-facing API functions */
 extern Datum reorder_add_policy(PG_FUNCTION_ARGS);

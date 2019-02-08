@@ -49,6 +49,7 @@
 #include "chunk_index.h"
 #include "compat.h"
 #include "copy.h"
+#include "cross_module_fn.h"
 #include "errors.h"
 #include "event_trigger.h"
 #include "extension.h"
@@ -718,6 +719,7 @@ process_drop_hypertable_chunks(ProcessUtilityArgs *args, DropStmt *stmt)
  *  We need to ensure that DROP INDEX uses only one hypertable per query,
  *  otherwise query string might not be reusable for execution on a
  *  remote server.
+ * We remove the policy for a scheduled index before the index itself
  */
 static void
 process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
@@ -731,6 +733,8 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		RangeVar *relation = makeRangeVarFromNameList(object);
 		Oid relid;
 		Hypertable *ht;
+		NameData index_name = {};
+		OptionalIndexInfo *optional_iinfo;
 
 		if (NULL == relation)
 			continue;
@@ -748,6 +752,17 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		{
 			if (list_length(stmt->objects) != 1)
 				elog(ERROR, "cannot drop a hypertable index along with other objects");
+		}
+
+		namestrcpy(&index_name, relation->relname);
+
+		optional_iinfo = ts_indexing_optional_info_find_by_index_name(&index_name);
+
+		if (optional_iinfo != NULL && optional_iinfo->fd.is_scheduled)
+		{
+			DirectFunctionCall2(ts_cm_functions->remove_scheduled_index_policy,
+								ObjectIdGetDatum(relid),
+								BoolGetDatum(true));
 		}
 	}
 
@@ -1439,6 +1454,7 @@ typedef struct HypertableIndexOptions
 	List *attnames;
 	int n_ht_atts;
 	bool ht_hasoid;
+	bool scheduled;
 
 	/* Concurrency testing options. */
 #ifdef DEBUG
@@ -1547,10 +1563,8 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	chunk = ts_chunk_get_by_relid(chunk_relid, 0, true);
 
 	/*
-	 * use ts_chunk_index_create instead of ts_chunk_index_create_from_stmt to
-	 * handle cases where the index is altered. Validation happens when
-	 * creating the hypertable's index, which goes through the usual
-	 * DefineIndex mechanism.
+	 * Validation happens when creating the hypertable's index, which goes
+	 * through the usual DefineIndex mechanism.
 	 */
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
@@ -1577,6 +1591,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 typedef enum HypertableIndexFlags
 {
 	HypertableIndexFlagMultiTransaction = 0,
+	HypertableIndexFlagScheduled,
 #ifdef DEBUG
 	HypertableIndexFlagBarrierTable,
 	HypertableIndexFlagMaxChunks,
@@ -1585,6 +1600,7 @@ typedef enum HypertableIndexFlags
 
 static const WithClauseDefinition index_with_clauses[] = {
 	[HypertableIndexFlagMultiTransaction] = {.arg_name = "transaction_per_chunk", .type_id = BOOLOID,},
+	[HypertableIndexFlagScheduled] = {.arg_name = "scheduled", .type_id = BOOLOID,},
 #ifdef DEBUG
 	[HypertableIndexFlagBarrierTable] = {.arg_name = "barrier_table", .type_id = REGCLASSOID,},
 	[HypertableIndexFlagMaxChunks] = {.arg_name = "max_chunks", .type_id = INT4OID, .default_val = Int32GetDatum(-1)},
@@ -1662,12 +1678,16 @@ process_index_start(ProcessUtilityArgs *args)
 
 	info.extended_options.multitransaction =
 		DatumGetBool(parsed_with_clauses[HypertableIndexFlagMultiTransaction].parsed);
+	info.extended_options.scheduled =
+		DatumGetBool(parsed_with_clauses[HypertableIndexFlagScheduled].parsed);
 #ifdef DEBUG
 	info.extended_options.max_chunks =
 		DatumGetInt32(parsed_with_clauses[HypertableIndexFlagMaxChunks].parsed);
 	info.extended_options.barrier_table =
 		DatumGetObjectId(parsed_with_clauses[HypertableIndexFlagBarrierTable].parsed);
 #endif
+
+	Assert(!(info.extended_options.multitransaction && info.extended_options.scheduled));
 
 	/* Make sure this index is allowed */
 	if (stmt->concurrent)
@@ -1697,7 +1717,27 @@ process_index_start(ProcessUtilityArgs *args)
 
 	/* CREATE INDEX on the chunks */
 
-	/* create chunk indexes using the same transaction for all the chunks */
+	/*
+	 * if we're using scheduled index creation, don't create chunk indexes, just
+	 * create the job, and leave index creation for the bgw
+	 */
+	if (info.extended_options.scheduled)
+	{
+		Name index_name = palloc0(sizeof(*index_name));
+		char *index_name_str = get_rel_name(info.obj.objectId);
+
+		namestrcpy(index_name, index_name_str);
+
+		DirectFunctionCall3(ts_cm_functions->add_scheduled_index_policy,
+							ObjectIdGetDatum(ht->main_table_relid),
+							NameGetDatum(index_name),
+							BoolGetDatum(true));
+
+		ts_cache_release(hcache);
+		return true;
+	}
+
+	/* create chunk indexes using the same tranaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
 		CatalogSecurityContext sec_ctx;
