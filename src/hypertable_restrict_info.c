@@ -100,6 +100,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 		Oid restype;
 		Datum datum = ts_dimension_transform_value(dri->base.dimension,
 												   PointerGetDatum(lfirst(item)),
+												   dimvalues->type,
 												   &restype);
 		int64 value = ts_time_value_to_internal(datum, restype, false);
 
@@ -146,8 +147,10 @@ dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, List *v
 
 	foreach (item, values)
 	{
-		Datum value =
-			ts_dimension_transform_value(dri->base.dimension, PointerGetDatum(lfirst(item)), NULL);
+		Datum value = ts_dimension_transform_value(dri->base.dimension,
+												   PointerGetDatum(lfirst(item)),
+												   InvalidOid,
+												   NULL);
 
 		partitions = list_append_unique_int(partitions, DatumGetInt32(value));
 	}
