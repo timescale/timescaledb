@@ -216,8 +216,11 @@ INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1),
        ('2017-01-01 08:01', 1, 1.2),
        ('2018-01-02 08:01', 2, 1.3),
-       ('2019-01-01 09:11', 3, 2.1),
-       ('2017-01-01 06:05', 1, 1.4);
+       ('2019-01-01 09:11', 3, 2.1);
+-- Test prepared statement
+PREPARE dist_insert (timestamptz, int, float) AS
+INSERT INTO disttable VALUES ($1, $2, $3);
+EXECUTE dist_insert ('2017-01-01 06:05', 1, 1.4);
 -- Show chunks created
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
