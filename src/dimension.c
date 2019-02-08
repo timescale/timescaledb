@@ -656,7 +656,7 @@ ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval)
  * the restype parameter.
  */
 Datum
-ts_dimension_transform_value(Dimension *dim, Datum value, Oid *restype)
+ts_dimension_transform_value(Dimension *dim, Datum value, Oid const_datum_type, Oid *restype)
 {
 	if (NULL != dim->partitioning)
 		value = ts_partitioning_func_apply(dim->partitioning, value);
@@ -665,6 +665,8 @@ ts_dimension_transform_value(Dimension *dim, Datum value, Oid *restype)
 	{
 		if (NULL != dim->partitioning)
 			*restype = dim->partitioning->partfunc.rettype;
+		else if (const_datum_type != InvalidOid)
+			*restype = const_datum_type;
 		else
 			*restype = dim->fd.column_type;
 	}
