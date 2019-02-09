@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
+#include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/typcache.h>
 
@@ -198,7 +199,11 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 			 * should never happen since interpolate is not defined for other
 			 * datatypes
 			 */
-			Assert(false);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("unsupported datatype for interpolate: %s",
+							format_type_be(column->base.typid))));
+			pg_unreachable();
 			break;
 	}
 }

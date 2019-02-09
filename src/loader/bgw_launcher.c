@@ -134,8 +134,7 @@ bgw_on_postmaster_death(void)
 					  * out quickly */
 	ereport(FATAL,
 			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("postmaster exited while TimescaleDB background worker launcher launcher was "
-					"working")));
+			 errmsg("postmaster exited while TimescaleDB background worker launcher was working")));
 }
 
 static void
