@@ -12,6 +12,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
 #include <optimizer/var.h>
+#include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
 #include <utils/lsyscache.h>
@@ -87,8 +88,12 @@ gapfill_datum_get_internal(Datum value, Oid type)
 			 * should never happen since time_bucket_gapfill is not defined
 			 * for other datatypes
 			 */
-			Assert(false);
-			return 0;
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("unsupported datatype for time_bucket_gapfill: %s",
+							format_type_be(type))));
+			pg_unreachable();
+			break;
 	}
 }
 
@@ -158,7 +163,10 @@ gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg)
 			 * should never happen since time_bucket_gapfill is not defined
 			 * for other datatypes
 			 */
-			Assert(false);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("unsupported datatype for time_bucket_gapfill: %s",
+							format_type_be(timetype))));
 			pg_unreachable();
 			break;
 	}
