@@ -2,6 +2,7 @@ set(SOURCES
   test_auto_policy.c
   test_chunk_stats.c
   test_ddl_hook.c
+  test_continuous_aggs.c
 )
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 

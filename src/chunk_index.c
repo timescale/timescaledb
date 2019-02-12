@@ -85,24 +85,6 @@ chunk_index_choose_name(const char *tabname, const char *main_index_name, Oid na
 	return idxname;
 }
 
-static inline AttrNumber
-find_attno_by_attname(TupleDesc tupdesc, Name attname)
-{
-	int i;
-
-	if (NULL == attname)
-		return InvalidAttrNumber;
-
-	for (i = 0; i < tupdesc->natts; i++)
-	{
-		FormData_pg_attribute *attr = TupleDescAttr(tupdesc, i);
-
-		if (strncmp(NameStr(attr->attname), NameStr(*attname), NAMEDATALEN) == 0)
-			return attr->attnum;
-	}
-	return InvalidAttrNumber;
-}
-
 static inline Name
 find_attname_by_attno(TupleDesc tupdesc, AttrNumber attno)
 {
@@ -170,7 +152,7 @@ adjust_expr_attnos_from_attnames(IndexInfo *ii, List *attnames, Relation chunkre
 					elog(ERROR, "index expression var %u not found in chunk", var->varattno);
 
 				/* Adjust the Var's attno to match the chunk's attno */
-				var->varattno = find_attno_by_attname(chunkrel->rd_att, attname);
+				var->varattno = attno_find_by_attname(chunkrel->rd_att, attname);
 
 				if (var->varattno == InvalidAttrNumber)
 					elog(ERROR, "index attribute %s not found in chunk", NameStr(*attname));
@@ -190,7 +172,7 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
 	for (i = 0; i < idxrel->rd_att->natts; i++)
 	{
 		FormData_pg_attribute *idxattr = TupleDescAttr(idxrel->rd_att, i);
-		AttrNumber attno = find_attno_by_attname(chunkrel->rd_att, &idxattr->attname);
+		AttrNumber attno = attno_find_by_attname(chunkrel->rd_att, &idxattr->attname);
 
 		if (attno == InvalidAttrNumber)
 			elog(ERROR, "index attribute %s not found in chunk", NameStr(idxattr->attname));

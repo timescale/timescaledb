@@ -139,6 +139,13 @@ scanner_ctx_get_scanner(ScannerCtx *ctx)
 		return &scanners[ScannerTypeHeap];
 }
 
+/*
+ * Perform either a heap or index scan depending on the information in the
+ * ScannerCtx. ScannerCtx must be setup by caller with the proper information
+ * for the scan, including filters and callbacks for found tuples.
+ *
+ * Return the number of tuples that where found.
+ */
 void
 ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 {
@@ -257,7 +264,7 @@ ts_scanner_scan(ScannerCtx *ctx)
 	return ictx.tinfo.count;
 }
 
-bool
+TSDLLEXPORT bool
 ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type)
 {
 	int num_found = ts_scanner_scan(ctx);

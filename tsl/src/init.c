@@ -21,6 +21,7 @@
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/drop_chunks_api.h"
 #include "continuous_aggs/cagg_create.h"
+#include "continuous_aggs/insert.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -73,6 +74,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
+	.continuous_agg_trigfn = continuous_agg_trigfn,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -84,6 +86,8 @@ ts_module_init(PG_FUNCTION_ARGS)
 {
 	ts_cm_functions = &tsl_cm_functions;
 
+	_continuous_aggs_cache_inval_init();
+
 	PG_RETURN_BOOL(true);
 }
 
@@ -94,6 +98,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 static void
 module_shutdown(void)
 {
+	_continuous_aggs_cache_inval_fini();
 	ts_cm_functions = &ts_cm_functions_default;
 }
 
