@@ -22,6 +22,7 @@ TS_FUNCTION_INFO_V1(ts_reorder_chunk);
 TS_FUNCTION_INFO_V1(ts_partialize_agg);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
 TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
+TS_FUNCTION_INFO_V1(continuous_agg_invalidation_trigger);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -57,6 +58,12 @@ Datum
 ts_reorder_chunk(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->reorder_chunk(fcinfo));
+}
+
+Datum
+continuous_agg_invalidation_trigger(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->continuous_agg_trigfn(fcinfo));
 }
 
 /*
@@ -214,6 +221,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
+	.continuous_agg_trigfn = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

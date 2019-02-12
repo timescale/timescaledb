@@ -11,6 +11,8 @@
 #include <utils/rel.h>
 #include <nodes/nodes.h>
 #include <access/heapam.h>
+
+#include "export.h"
 #include "extension_constants.h"
 #include "scanner.h"
 #include "export.h"
@@ -46,6 +48,9 @@ typedef enum CatalogTable
 	BGW_POLICY_DROP_CHUNKS,
 	BGW_POLICY_CHUNK_STATS,
 	CONTINUOUS_AGG,
+	CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
+	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
+	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -794,6 +799,113 @@ enum Anum_continuous_agg
 
 #define Natts_continuous_agg (_Anum_continuous_agg_max - 1)
 
+/****** CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE definitions*/
+#define CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME "continuous_aggs_completed_threshold"
+typedef enum Anum_continuous_aggs_completed_threshold
+{
+	Anum_continuous_aggs_completed_threshold_materialization_id = 1,
+	Anum_continuous_aggs_completed_threshold_watermark,
+	_Anum_continuous_aggs_completed_threshold_max,
+} Anum_continuous_aggs_completed_threshold;
+
+#define Natts_continuous_aggs_completed_threshold                                                  \
+	(_Anum_continuous_aggs_completed_threshold_max - 1)
+
+typedef struct FormData_continuous_aggs_completed_threshold
+{
+	int32 materialization_id;
+	int64 watermark;
+} FormData_continuous_aggs_completed_threshold;
+
+typedef FormData_continuous_aggs_completed_threshold *Form_continuous_aggs_completed_threshold;
+
+enum
+{
+	CONTINUOUS_AGGS_COMPLETED_THRESHOLD_PKEY = 0,
+	_MAX_CONTINUOUS_AGGS_COMPLETED_THRESHOLD_INDEX,
+};
+typedef enum Anum_continuous_aggs_completed_threshold_pkey
+{
+	Anum_continuous_aggs_completed_threshold_pkey_materialization_id = 1,
+	_Anum_continuous_aggs_completed_threshold_pkey_max,
+} Anum_continuous_aggs_completed_threshold_pkey;
+
+#define Natts_continuous_aggs_completed_threshold_pkey                                             \
+	(_Anum_continuous_aggs_completed_threshold_pkey_max - 1)
+
+/****** CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions*/
+#define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \
+	"continuous_aggs_hypertable_invalidation_log"
+typedef enum Anum_continuous_aggs_hypertable_invalidation_log
+{
+	Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id = 1,
+	Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value,
+	Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value,
+	_Anum_continuous_aggs_hypertable_invalidation_log_max,
+} Anum_continuous_aggs_hypertable_invalidation_log;
+
+#define Natts_continuous_aggs_hypertable_invalidation_log                                          \
+	(_Anum_continuous_aggs_hypertable_invalidation_log_max - 1)
+
+typedef struct FormData_continuous_aggs_hypertable_invalidation_log
+{
+	int32 hypertable_id;
+	int64 lowest_modified_value;
+	int64 greatest_modified_value;
+} FormData_continuous_aggs_hypertable_invalidation_log;
+
+typedef FormData_continuous_aggs_hypertable_invalidation_log
+	*Form_continuous_aggs_hypertable_invalidation_log;
+
+enum
+{
+	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_INDEX,
+};
+typedef enum Anum_continuous_aggs_hypertable_invalidation_log_idx
+{
+	Anum_continuous_aggs_hypertable_invalidation_log_idx_hypertable_id = 1,
+	Anum_continuous_aggs_hypertable_invalidation_log_idx_lowest_modified_value,
+	_Anum_continuous_aggs_hypertable_invalidation_log_idx_max,
+} Anum_continuous_aggs_hypertable_invalidation_log_idx;
+
+#define Natts_continuous_aggs_hypertable_invalidation_log_idx                                      \
+	(_Anum_continuous_aggs_hypertable_invalidation_log_idx_max - 1)
+
+/****** CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE definitions*/
+#define CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME "continuous_aggs_invalidation_threshold"
+typedef enum Anum_continuous_aggs_invalidation_threshold
+{
+	Anum_continuous_aggs_invalidation_threshold_hypertable_id = 1,
+	Anum_continuous_aggs_invalidation_threshold_watermark,
+	_Anum_continuous_aggs_invalidation_threshold_max,
+} Anum_continuous_aggs_invalidation_threshold;
+
+#define Natts_continuous_aggs_invalidation_threshold                                               \
+	(_Anum_continuous_aggs_invalidation_threshold_max - 1)
+
+typedef struct FormData_continuous_aggs_invalidation_threshold
+{
+	int32 hypertable_id;
+	int64 watermark;
+} FormData_continuous_aggs_invalidation_threshold;
+
+typedef FormData_continuous_aggs_invalidation_threshold
+	*Form_continuous_aggs_invalidation_threshold;
+
+enum
+{
+	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY = 0,
+	_MAX_CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_INDEX,
+};
+typedef enum Anum_continuous_aggs_invalidation_threshold_pkey
+{
+	Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id = 1,
+	_Anum_continuous_aggs_invalidation_threshold_pkey_max,
+} Anum_continuous_aggs_invalidation_threshold_pkey;
+
+#define Natts_continuous_aggs_invalidation_threshold_pkey                                          \
+	(_Anum_continuous_aggs_invalidation_threshold_pkey_max - 1)
 /*
  * The maximum number of indexes a catalog table can have.
  * This needs to be bumped in case of new catalog tables that have more indexes.
@@ -879,19 +991,20 @@ extern TSDLLEXPORT bool ts_catalog_database_info_become_owner(CatalogDatabaseInf
 extern TSDLLEXPORT void ts_catalog_restore_user(CatalogSecurityContext *sec_ctx);
 extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values,
 												 bool *nulls);
-extern void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
-extern void ts_catalog_update(Relation rel, HeapTuple tuple);
+extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
+extern TSDLLEXPORT void ts_catalog_update(Relation rel, HeapTuple tuple);
 extern void ts_catalog_delete_tid(Relation rel, ItemPointer tid);
-extern void ts_catalog_delete(Relation rel, HeapTuple tuple);
+extern void TSDLLEXPORT ts_catalog_delete(Relation rel, HeapTuple tuple);
 extern void ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 
 /* Delete only: do not increment command counter or invalidate caches */
 extern void ts_catalog_delete_only(Relation rel, HeapTuple tuple);
 
-bool ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys,
-						 tuple_found_func tuple_found, LOCKMODE lockmode, char *policy_type,
-						 void *data);
-void ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys,
-						 tuple_found_func tuple_found, LOCKMODE lockmode, void *data);
+bool TSDLLEXPORT ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey,
+									 int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode,
+									 char *policy_type, void *data);
+void TSDLLEXPORT ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey,
+									 int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode,
+									 void *data);
 
 #endif /* TIMESCALEDB_CATALOG_H */
