@@ -1,0 +1,2 @@
+#suppress getaddrinfo due to internal error on macos
+interceptor_via_fun:getaddrinfo
