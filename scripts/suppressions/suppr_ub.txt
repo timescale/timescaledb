@@ -1,0 +1,13 @@
+alignment:pg_comp_crc32c_sse42
+alignment:array_cmp
+alignment:array_iter_setup
+alignment:array_out
+alignment:array_eq
+alignment:AllocSetCheck
+nonnull-attribute:TransactionIdSetPageStatus
+nonnull-attribute:SerializeTransactionState
+nonnull-attribute:initscan
+nonnull-attribute:SetTransactionSnapshot
+nonnull-attribute:/usr/src/postgresql/src/fe_utils/print.c
+#division by 0, looks like a real postgres ug
+float-divide-by-zero:_bt_vacuum_needs_cleanup
