@@ -5,3 +5,7 @@
 -- Trigger that blocks INSERTs on the hypertable's root table
 CREATE OR REPLACE FUNCTION _timescaledb_internal.insert_blocker() RETURNS trigger
 AS '@MODULE_PATHNAME@', 'ts_hypertable_insert_blocker' LANGUAGE C;
+
+-- Records mutations or INSERTs which would invalidate a continuous aggregate
+CREATE OR REPLACE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger() RETURNS TRIGGER
+AS '@MODULE_PATHNAME@', 'continuous_agg_invalidation_trigger' LANGUAGE C;

@@ -73,6 +73,7 @@ extern Oid get_function_oid(char *name, char *schema_name, int nargs, Oid arg_ty
 extern Oid get_operator(const char *name, Oid namespace, Oid left, Oid right);
 
 extern Oid get_cast_func(Oid source, Oid target);
+extern TSDLLEXPORT AttrNumber attno_find_by_attname(TupleDesc tupdesc, Name attname);
 
 extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
 										 size_t copy_size);
@@ -89,5 +90,13 @@ extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, si
 #define is_inheritance_table(relid) (is_inheritance_child(relid) || is_inheritance_parent(relid))
 
 #define DATUM_GET(values, attno) values[attno - 1]
+
+static inline int64
+int64_min(int64 a, int64 b)
+{
+	if (a <= b)
+		return a;
+	return b;
+}
 
 #endif /* TIMESCALEDB_UTILS_H */

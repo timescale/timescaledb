@@ -1,4 +1,6 @@
 set(TEST_FILES
+    continuous_aggs_materialize.sql
+    continuous_aggs_watermark.sql
     edition.sql
     gapfill.sql
     reorder.sql

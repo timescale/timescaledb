@@ -14,6 +14,8 @@
 #include <utils.h>
 #include <access/relscan.h>
 
+#include "export.h"
+
 /* Tuple information passed on to handlers when scanning for tuples. */
 typedef struct TupleInfo
 {
@@ -103,8 +105,9 @@ typedef struct ScannerCtx
 
 /* Performs an index scan or heap scan and returns the number of matching
  * tuples. */
-extern int ts_scanner_scan(ScannerCtx *ctx);
-extern bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, char *item_type);
+extern TSDLLEXPORT int ts_scanner_scan(ScannerCtx *ctx);
+extern TSDLLEXPORT bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found,
+											char *item_type);
 
 /*
  * Internal types and functions below.
