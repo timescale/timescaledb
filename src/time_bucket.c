@@ -4,12 +4,16 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_type.h>
 #include <utils/timestamp.h>
 #include <utils/datetime.h>
 #include <utils/date.h>
 #include <fmgr.h>
 
 #include "compat.h"
+
+#include "utils.h"
+#include "time_bucket.h"
 
 #if !PG96
 #include <utils/fmgrprotos.h>
@@ -262,4 +266,51 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 	TIME_BUCKET_TS(period, timestamp, result, origin);
 
 	PG_RETURN_DATUM(DirectFunctionCall1(timestamp_date, TimestampGetDatum(result)));
+}
+
+/* when working with time_buckets stored in our catalog, we may not know ahead of time which
+ * bucketing function to use, this function dynamically dispatches to the correct time_bucket_<foo>
+ * based on an inputted timestamp_type*/
+TSDLLEXPORT int64
+ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
+{
+	Datum timestamp_in_time_type = ts_internal_to_time_value(timestamp, timestamp_type);
+	Datum interval_in_interval_type;
+	Datum time_bucketed;
+	Datum (*bucket_function)(PG_FUNCTION_ARGS);
+
+	switch (timestamp_type)
+	{
+		case INT2OID:
+			interval_in_interval_type = ts_internal_to_interval_value(interval, timestamp_type);
+			bucket_function = ts_int16_bucket;
+			break;
+		case INT4OID:
+			interval_in_interval_type = ts_internal_to_interval_value(interval, timestamp_type);
+			bucket_function = ts_int32_bucket;
+			break;
+		case INT8OID:
+			interval_in_interval_type = ts_internal_to_interval_value(interval, timestamp_type);
+			bucket_function = ts_int64_bucket;
+			break;
+		case TIMESTAMPOID:
+			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
+			bucket_function = ts_timestamp_bucket;
+			break;
+		case TIMESTAMPTZOID:
+			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
+			bucket_function = ts_timestamptz_bucket;
+			break;
+		case DATEOID:
+			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
+			bucket_function = ts_date_bucket;
+			break;
+		default:
+			elog(ERROR, "invalid time_bucket Oid %d", timestamp_type);
+	}
+
+	time_bucketed =
+		DirectFunctionCall2(bucket_function, interval_in_interval_type, timestamp_in_time_type);
+
+	return ts_time_value_to_internal(time_bucketed, timestamp_type);
 }

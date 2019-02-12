@@ -143,7 +143,7 @@ ts_hypertable_cache_get_entry_rv(Cache *cache, RangeVar *rv)
 	return ts_hypertable_cache_get_entry(cache, RangeVarGetRelid(rv, NoLock, true));
 }
 
-Hypertable *
+TSDLLEXPORT Hypertable *
 ts_hypertable_cache_get_entry_by_id(Cache *cache, int32 hypertable_id)
 {
 	return ts_hypertable_cache_get_entry(cache, ts_hypertable_id_to_relid(hypertable_id));

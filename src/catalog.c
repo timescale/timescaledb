@@ -82,6 +82,18 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 			.schema_name = CATALOG_SCHEMA_NAME,
 			.table_name = CONTINUOUS_AGG_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME,
+	},
+	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME,
+	},
+	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -177,6 +189,24 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[BGW_POLICY_CHUNK_STATS_JOB_ID_CHUNK_ID_IDX] = "bgw_policy_chunk_stats_job_id_chunk_id_key",
 		},
 	},
+	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = {
+		.length = _MAX_CONTINUOUS_AGGS_COMPLETED_THRESHOLD_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_COMPLETED_THRESHOLD_PKEY] = "continuous_aggs_completed_threshold_pkey",
+		},
+	},
+	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = {
+		.length = _MAX_CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_IDX] = "continuous_aggs_hypertable_invalidation_log_idx",
+		},
+	},
+	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = {
+		.length = _MAX_CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY] = "continuous_aggs_invalidation_threshold_pkey",
+		},
+	},
 };
 
 static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
@@ -191,6 +221,9 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[BGW_JOB_STAT] = NULL,
 	[BGW_POLICY_REORDER] = NULL,
 	[BGW_POLICY_DROP_CHUNKS] = NULL,
+	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = NULL,
+	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
+	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
 };
 
 typedef struct InternalFunctionDef
@@ -535,7 +568,7 @@ ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *n
 	heap_freetuple(tuple);
 }
 
-void
+TSDLLEXPORT void
 ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
 {
 	CatalogTupleUpdate(rel, tid, tuple);
@@ -544,7 +577,7 @@ ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
 	CommandCounterIncrement();
 }
 
-void
+TSDLLEXPORT void
 ts_catalog_update(Relation rel, HeapTuple tuple)
 {
 	ts_catalog_update_tid(rel, &tuple->t_self, tuple);
@@ -558,7 +591,7 @@ ts_catalog_delete_tid(Relation rel, ItemPointer tid)
 	CommandCounterIncrement();
 }
 
-void
+TSDLLEXPORT void
 ts_catalog_delete(Relation rel, HeapTuple tuple)
 {
 	ts_catalog_delete_tid(rel, &tuple->t_self);
@@ -626,7 +659,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 }
 
 /* Scanner helper functions specifically for the catalog tables */
-bool
+TSDLLEXPORT bool
 ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys,
 					tuple_found_func tuple_found, LOCKMODE lockmode, char *table_name, void *data)
 {
@@ -646,7 +679,7 @@ ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey, int n
 	return ts_scanner_scan_one(&scanctx, false, table_name);
 }
 
-void
+TSDLLEXPORT void
 ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int num_keys,
 					tuple_found_func tuple_found, LOCKMODE lockmode, void *data)
 {

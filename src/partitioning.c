@@ -274,7 +274,7 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
  * We need to avoid FunctionCall1(), because we'd like to customize the error
  * message in case of NULL return values.
  */
-Datum
+TSDLLEXPORT Datum
 ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 {
 	FunctionCallInfoData fcinfo;
@@ -296,7 +296,7 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Datum value)
 	return result;
 }
 
-Datum
+TSDLLEXPORT Datum
 ts_partitioning_func_apply_tuple(PartitioningInfo *pinfo, HeapTuple tuple, TupleDesc desc,
 								 bool *isnull)
 {

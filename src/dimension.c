@@ -685,7 +685,7 @@ point_create(int16 num_dimensions)
 	return p;
 }
 
-Point *
+TSDLLEXPORT Point *
 ts_hyperspace_calculate_point(Hyperspace *hs, HeapTuple tuple, TupleDesc tupdesc)
 {
 	Point *p = point_create(hs->num_dimensions);

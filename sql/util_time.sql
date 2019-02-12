@@ -53,3 +53,5 @@ $BODY$
     SELECT (int_sec * 1000000)::bigint from extract(epoch from chunk_interval) as int_sec;
 $BODY$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_val ANYELEMENT)
+RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_time_to_internal' LANGUAGE C VOLATILE STRICT;
