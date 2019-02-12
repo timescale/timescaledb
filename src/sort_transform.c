@@ -33,7 +33,7 @@ transform_date_trunc(FuncExpr *func)
 	/*
 	 * date_trunc (const, var) => var
 	 *
-	 * proof: date_trunc(c, time1) > date_trunc(c,time2) iff time1 > time2
+	 * proof: date_trunc(c, time1) >= date_trunc(c,time2) iff time1 > time2
 	 */
 	Expr *second;
 
@@ -61,7 +61,7 @@ transform_time_bucket(FuncExpr *func)
 	/*
 	 * time_bucket(const, var, const) => var
 	 *
-	 * proof: time_bucket(const1, time1) > time_bucket(const1,time2) iff time1
+	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
 	 * > time2
 	 */
 	Expr *second;
@@ -89,7 +89,7 @@ transform_timestamp_cast(FuncExpr *func)
 	 *
 	 * timestamp(var) => var
 	 *
-	 * proof: timestamp(time1) > timestamp(time2) iff time1 > time2
+	 * proof: timestamp(time1) >= timestamp(time2) iff time1 > time2
 	 *
 	 */
 
@@ -116,7 +116,7 @@ transform_timestamptz_cast(FuncExpr *func)
 	 *
 	 * timestamptz(var) => var
 	 *
-	 * proof: timestamptz(time1) > timestamptz(time2) iff time1 > time2
+	 * proof: timestamptz(time1) >= timestamptz(time2) iff time1 > time2
 	 *
 	 */
 
@@ -231,7 +231,9 @@ transform_int_op_const(OpExpr *op)
  * Sort transforms have the following correctness condition:
  *	Any ordering provided by the returned expression is a valid
  *	ordering under the original expression. The reverse need not
- *	be true.
+ *	be true to apply the transformation to the last member of pathkeys
+ *	but it would need to be true to apply the transformation to
+ *	arbitrary members of pathkeys.
  *
  * Namely if orig_expr(X) > orig_expr(Y) then
  *			 new_expr(X) > new_expr(Y).
@@ -374,59 +376,66 @@ ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	 * to make this transparent to upper levels in the planner.
 	 *
 	 */
-	ListCell *lc_pathkey;
+	ListCell *lc;
 	List *transformed_query_pathkey = NIL;
-	bool was_transformed = false;
+	List *orig_query_pathkeys = root->query_pathkeys;
+	PathKey *last_pk;
+	PathKey *new_pk;
+	EquivalenceClass *transformed;
 
-	/* build transformed query pathkeys */
-	foreach (lc_pathkey, root->query_pathkeys)
+	/*
+	 * nothing to do for empty pathkeys
+	 */
+	if (orig_query_pathkeys == NIL)
+		return;
+
+	/*
+	 * These sort transformations are only safe for single member ORDER BY
+	 * clauses or as last member of the ORDER BY clause.
+	 * Using it for other ORDER BY clauses will result in wrong ordering.
+	 */
+	last_pk = llast(root->query_pathkeys);
+	transformed = sort_transform_ec(root, last_pk->pk_eclass);
+
+	if (transformed == NULL)
+		return;
+
+	new_pk = make_canonical_pathkey(root,
+									transformed,
+									last_pk->pk_opfamily,
+									last_pk->pk_strategy,
+									last_pk->pk_nulls_first);
+
+	/*
+	 * create complete transformed pathkeys
+	 */
+	foreach (lc, root->query_pathkeys)
 	{
-		PathKey *pk = lfirst(lc_pathkey);
-		EquivalenceClass *transformed = sort_transform_ec(root, pk->pk_eclass);
-
-		if (transformed != NULL)
-		{
-			PathKey *newpk = make_canonical_pathkey(root,
-													transformed,
-													pk->pk_opfamily,
-													pk->pk_strategy,
-													pk->pk_nulls_first);
-
-			was_transformed = true;
-			transformed_query_pathkey = lappend(transformed_query_pathkey, newpk);
-		}
+		if (lfirst(lc) != last_pk)
+			transformed_query_pathkey = lappend(transformed_query_pathkey, lfirst(lc));
 		else
-		{
-			transformed_query_pathkey = lappend(transformed_query_pathkey, pk);
-		}
+			transformed_query_pathkey = lappend(transformed_query_pathkey, new_pk);
 	}
 
-	if (was_transformed)
+	/* search for indexes on transformed pathkeys */
+	root->query_pathkeys = transformed_query_pathkey;
+	create_index_paths(root, rel);
+	root->query_pathkeys = orig_query_pathkeys;
+
+	/*
+	 * change returned paths to use original pathkeys. have to go through
+	 * all paths since create_index_paths might have modified existing
+	 * pathkey. Always safe to do transform since ordering of
+	 * transformed_query_pathkey implements ordering of
+	 * orig_query_pathkeys.
+	 */
+	foreach (lc, rel->pathlist)
 	{
-		ListCell *lc_plan;
+		Path *path = lfirst(lc);
 
-		/* search for indexes on transformed pathkeys */
-		List *orig_query_pathkeys = root->query_pathkeys;
-
-		root->query_pathkeys = transformed_query_pathkey;
-		create_index_paths(root, rel);
-		root->query_pathkeys = orig_query_pathkeys;
-
-		/*
-		 * change returned paths to use original pathkeys. have to go through
-		 * all paths since create_index_paths might have modified existing
-		 * pathkey. Always safe to do transform since ordering of
-		 * transformed_query_pathkey implements ordering of
-		 * orig_query_pathkeys.
-		 */
-		foreach (lc_plan, rel->pathlist)
+		if (compare_pathkeys(path->pathkeys, transformed_query_pathkey) == PATHKEYS_EQUAL)
 		{
-			Path *path = lfirst(lc_plan);
-
-			if (compare_pathkeys(path->pathkeys, transformed_query_pathkey) == PATHKEYS_EQUAL)
-			{
-				path->pathkeys = orig_query_pathkeys;
-			}
+			path->pathkeys = orig_query_pathkeys;
 		}
 	}
 }

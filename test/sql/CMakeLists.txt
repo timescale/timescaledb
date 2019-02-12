@@ -46,6 +46,7 @@ set(TEST_FILES
   relocate_extension.sql
   reloptions.sql
   size_utils.sql
+  sort_optimization.sql
   sql_query_results_optimized.sql
   sql_query_results_unoptimized.sql
   sql_query_results_x_diff.sql
