@@ -121,7 +121,12 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	rri->ri_onConflictSetProj = rri_orig->ri_onConflictSetProj;
 	rri->ri_onConflictSetWhere = rri_orig->ri_onConflictSetWhere;
 #endif
-	rri->ri_FdwState = NIL;
+
+	rri->ri_FdwState = NULL;
+	rri->ri_usesFdwDirectModify = dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify;
+
+	if (RelationGetForm(rel)->relkind == RELKIND_FOREIGN_TABLE)
+		rri->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
 
 	create_chunk_rri_constraint_expr(rri, rel);
 
@@ -536,19 +541,21 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 }
 
 static List *
-get_chunk_serveroids(Chunk *chunk)
+get_chunk_usermappings(Chunk *chunk, Oid userid)
 {
-	List *serveroids = NIL;
+	List *usermappings = NIL;
 	ListCell *lc;
 
 	foreach (lc, chunk->servers)
 	{
 		ChunkServer *cs = lfirst(lc);
+		UserMapping *um =
+			GetUserMapping(OidIsValid(userid) ? userid : GetUserId(), cs->foreign_server_oid);
 
-		serveroids = lappend_oid(serveroids, cs->foreign_server_oid);
+		usermappings = lappend(usermappings, um);
 	}
 
-	return serveroids;
+	return usermappings;
 }
 
 /*
@@ -595,7 +602,6 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	state->rel = rel;
 	state->result_relation_info = resrelinfo;
 	state->estate = dispatch->estate;
-	state->servers = get_chunk_serveroids(chunk);
 
 	if (resrelinfo->ri_RelationDesc->rd_rel->relhasindex &&
 		resrelinfo->ri_IndexRelationDescs == NULL)
@@ -611,10 +617,14 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
 
-	/* Set tuple conversion map, if tuple needs conversion. */
-	state->hyper_to_chunk_map = convert_tuples_by_name(RelationGetDescr(parent_rel),
-													   RelationGetDescr(rel),
-													   gettext_noop("could not convert row type"));
+	/* Set tuple conversion map, if tuple needs conversion. We don't want to
+	 * convert tuples going into foreign tables since these are actually sent to
+	 * data nodes for insert on that node's local hypertable. */
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
+		state->hyper_to_chunk_map =
+			convert_tuples_by_name(RelationGetDescr(parent_rel),
+								   RelationGetDescr(rel),
+								   gettext_noop("could not convert row type"));
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
@@ -629,43 +639,53 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
-	/*
-	 * If this is a chunk located one or more remote servers, we setup the
-	 * foreign data wrapper state. The private fdw data was created at the
-	 * planning stage and contains, among other things, a deparsed insert
-	 * statement for the hypertable.
-	 */
-	if (rel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
+		RangeTblEntry *rte =
+			rt_fetch(resrelinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
+
+		Assert(NULL != rte);
+		state->usermappings = get_chunk_usermappings(chunk, rte->checkAsUser);
+	}
+
+	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)
+	{
+		/* If the hypertable is setup for direct modify, we do not really use
+		 * the FDW. Instead exploit the FdwPrivate pointer to pass on the
+		 * chunk insert state to ServerDispatch so that it knows which servers
+		 * to insert into. */
+		resrelinfo->ri_FdwState = state;
+	}
+	else if (NULL != resrelinfo->ri_FdwRoutine && !resrelinfo->ri_usesFdwDirectModify &&
+			 NULL != resrelinfo->ri_FdwRoutine->BeginForeignModify)
+	{
+		/*
+		 * If this is a chunk located one or more remote servers, setup the
+		 * foreign data wrapper state for the chunk. The private fdw data was
+		 * created at the planning stage and contains, among other things, a
+		 * deparsed insert statement for the hypertable.
+		 */
 		ModifyTableState *mtstate = dispatch->dispatch_state->mtstate;
 		ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 		List *fdwprivate = linitial_node(List, mt->fdwPrivLists);
 
-		if (fdwprivate != NIL)
-		{
-			resrelinfo->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
-			resrelinfo->ri_usesFdwDirectModify = false;
-
-			if (NULL != resrelinfo->ri_FdwRoutine->BeginForeignModify)
-			{
-				/*
-				 * Since the fdwprivate data is part of the plan it must only
-				 * consist of Node objects that can be copied. Therefore, we
-				 * cannot directly append the non-Node ChunkInsertState to the
-				 * private data. Instead, we make a copy of the private data
-				 * before passing it on to the FDW handler function. In the
-				 * FDW, the ChunkInsertState will be at the offset defined by
-				 * the FdwModifyPrivateChunkInsertState (see
-				 * tsl/src/fdw/timescaledb_fdw.c).
-				 */
-				fdwprivate = lappend(list_copy(fdwprivate), state);
-				resrelinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
-															  resrelinfo,
-															  fdwprivate,
-															  0,
-															  dispatch->eflags);
-			}
-		}
+		Assert(NIL != fdwprivate);
+		/*
+		 * Since the fdwprivate data is part of the plan it must only
+		 * consist of Node objects that can be copied. Therefore, we
+		 * cannot directly append the non-Node ChunkInsertState to the
+		 * private data. Instead, we make a copy of the private data
+		 * before passing it on to the FDW handler function. In the
+		 * FDW, the ChunkInsertState will be at the offset defined by
+		 * the FdwModifyPrivateChunkInsertState (see
+		 * tsl/src/fdw/timescaledb_fdw.c).
+		 */
+		fdwprivate = lappend(list_copy(fdwprivate), state);
+		resrelinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
+													  resrelinfo,
+													  fdwprivate,
+													  0,
+													  dispatch->eflags);
 	}
 
 	MemoryContextSwitchTo(old_mcxt);
@@ -688,10 +708,8 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	MemoryContextCallback *free_callback;
 	ResultRelInfo *rri = state->result_relation_info;
 
-	if (state == NULL)
-		return;
-
-	if (NULL != rri->ri_FdwRoutine && NULL != rri->ri_FdwRoutine->EndForeignModify)
+	if (NULL != rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify &&
+		NULL != rri->ri_FdwRoutine->EndForeignModify)
 		rri->ri_FdwRoutine->EndForeignModify(state->estate, rri);
 
 	destroy_on_conflict_state(state);

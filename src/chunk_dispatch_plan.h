@@ -11,6 +11,8 @@
 #include <nodes/parsenodes.h>
 #include <nodes/extensible.h>
 
+#include "export.h"
+
 typedef struct ChunkDispatchPath
 {
 	CustomPath cpath;
@@ -19,7 +21,7 @@ typedef struct ChunkDispatchPath
 	Oid hypertable_relid;
 } ChunkDispatchPath;
 
-extern Path *ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath,
-										   Index hypertable_rti, Oid hypertable_relid);
+extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
+													   Index hypertable_rti, int subpath_index);
 
 #endif /* TIMESCALEDB_CHUNK_DISPATCH_PLAN_H */

@@ -442,6 +442,16 @@ create_chunk_on_servers_default(Chunk *chunk, Hypertable *ht)
 	error_no_default_fn_community();
 }
 
+static Path *
+server_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
+									Index hypertable_rti, int subpath_index)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+
+	return NULL;
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -519,6 +529,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_txn_id_in = error_no_default_fn_pg_community,
 	.remote_txn_id_out = error_no_default_fn_pg_community,
 	.remote_txn_heal_server = error_no_default_fn_pg_community,
+	.server_dispatch_path_create = server_dispatch_path_create_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
