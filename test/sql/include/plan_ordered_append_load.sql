@@ -2,6 +2,16 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- create a now() function for repeatable testing that always returns
+-- the same timestamp. It needs to be marked STABLE
+CREATE OR REPLACE FUNCTION now_s()
+RETURNS timestamptz LANGUAGE PLPGSQL STABLE AS
+$BODY$
+BEGIN
+    RETURN '2000-01-08T0:00:00+0'::timestamptz;
+END;
+$BODY$;
+
 -- create a table where we create chunks in order
 CREATE TABLE ordered_append(time timestamptz NOT NULL, device_id INT, value float);
 SELECT create_hypertable('ordered_append','time');

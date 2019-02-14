@@ -54,6 +54,8 @@ psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:47: NOTICE:  Stable function now_s() called!
              QUERY PLAN              
 -------------------------------------
  Custom Scan (ConstraintAwareAppend)
@@ -66,6 +68,8 @@ psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
  time | temp | colorid 
 ------+------+---------
 (0 rows)
@@ -74,6 +78,8 @@ psql:include/append.sql:48: NOTICE:  Stable function now_s() called!
 EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_s() + '1 month'
 ORDER BY time DESC limit 1;
+psql:include/append.sql:53: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:53: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:53: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:53: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:53: NOTICE:  Stable function now_s() called!
@@ -96,6 +102,8 @@ psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Custom Scan (ConstraintAwareAppend)
@@ -108,6 +116,8 @@ psql:include/append.sql:60: NOTICE:  Stable function now_s() called!
 
 -- the expected output should be the same as the non-optimized query
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months';
+psql:include/append.sql:63: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:63: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:63: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:63: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:63: NOTICE:  Stable function now_s() called!
@@ -127,6 +137,8 @@ psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
  Limit
@@ -141,6 +153,8 @@ psql:include/append.sql:69: NOTICE:  Stable function now_s() called!
 -- the expected output should be the same as the non-optimized query
 SELECT * FROM append_test WHERE time > now_s() - interval '2 months'
 ORDER BY time LIMIT 3;
+psql:include/append.sql:73: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:73: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:73: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:73: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:73: NOTICE:  Stable function now_s() called!
@@ -214,6 +228,8 @@ psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
              time             | temp | colorid 
 ------------------------------+------+---------
  Tue Aug 22 09:18:22 2017 PDT | 34.1 |       3
@@ -221,6 +237,8 @@ psql:include/append.sql:99: NOTICE:  Stable function now_s() called!
 
 EXPLAIN (costs off)
 EXECUTE query_opt;
+psql:include/append.sql:102: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:102: NOTICE:  Stable function now_s() called!
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
@@ -244,6 +262,8 @@ psql:include/append.sql:108: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:108: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:108: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:108: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:108: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:108: NOTICE:  Stable function now_s() called!
               t               | avg  
 ------------------------------+------
  Sun Jan 01 00:00:00 2017 PST | 28.5
@@ -255,6 +275,8 @@ SELECT date_trunc('year', time) t, avg(temp) FROM append_test
 WHERE time > now_s() - interval '4 months'
 GROUP BY t
 ORDER BY t DESC;
+psql:include/append.sql:115: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:115: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:115: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:115: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:115: NOTICE:  Stable function now_s() called!
@@ -333,6 +355,8 @@ psql:include/append.sql:154: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:154: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:154: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:154: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:154: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:154: NOTICE:  Stable function now_s() called!
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
  Merge Left Join
@@ -386,6 +410,8 @@ psql:include/append.sql:171: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:171: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:171: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:171: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:171: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:171: NOTICE:  Stable function now_s() called!
             btime             | value 
 ------------------------------+-------
  Fri Mar 03 16:00:00 2017 PST |  22.5
@@ -425,6 +451,10 @@ psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Nested Loop
@@ -437,19 +467,17 @@ psql:include/append.sql:192: NOTICE:  Stable function now_s() called!
                      Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
    ->  Custom Scan (ConstraintAwareAppend)
          Hypertable: join_test
-         Chunks left after exclusion: 3
+         Chunks left after exclusion: 1
          ->  Append
-               ->  Index Scan using _hyper_2_4_chunk_join_test_time_idx on _hyper_2_4_chunk j_1
+               ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_1
                      Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-               ->  Index Scan using _hyper_2_5_chunk_join_test_time_idx on _hyper_2_5_chunk j_2
-                     Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-               ->  Index Scan using _hyper_2_6_chunk_join_test_time_idx on _hyper_2_6_chunk j_3
-                     Index Cond: ("time" > (now_s() - '@ 3 hours'::interval))
-(18 rows)
+(14 rows)
 
 -- result should be the same as when optimizations are turned off
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
 WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
+psql:include/append.sql:196: NOTICE:  Stable function now_s() called!
+psql:include/append.sql:196: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:196: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:196: NOTICE:  Stable function now_s() called!
 psql:include/append.sql:196: NOTICE:  Stable function now_s() called!

@@ -5,6 +5,14 @@
 --parallel queries require big-ish tables so collect them all here
 --so that we need to generate queries only once.
 
+-- look at postgres version to decide whether we run with analyze or without
+SELECT
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
+    ELSE 'EXPLAIN (costs off)'
+  END AS "PREFIX"
+\gset
+
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 --has to be big enough to force at least 2 workers below.
@@ -15,19 +23,18 @@ SET client_min_messages = 'error';
 ANALYZE;
 RESET client_min_messages;
 
+SET work_mem TO '50MB';
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
 
-EXPLAIN (costs off)
-SELECT first(i, j) FROM "test";
+:PREFIX SELECT first(i, j) FROM "test";
 SELECT first(i, j) FROM "test";
 
-EXPLAIN (costs off)
-SELECT last(i, j) FROM "test";
+:PREFIX SELECT last(i, j) FROM "test";
 SELECT last(i, j) FROM "test";
 
-EXPLAIN (costs off)
-SELECT time_bucket('1 second', ts) sec, last(i, j)
+-- we dont run this with analyze because the sort memory usage is not stable
+EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
 GROUP BY sec
 ORDER BY sec
@@ -51,3 +58,21 @@ SELECT histogram(i, 0, 100000, 5) FROM "test";
 
 EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
 SELECT histogram(i, 10, 100000, 5) FROM "test";
+
+-- test constraint aware append
+:PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
+
+-- test constraint aware append with parallel aggregation
+:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
+SELECT count(*) FROM "test" WHERE length(version()) > 0;
+
+-- now() is not marked parallel safe in PostgreSQL < 12 so using now()
+-- in a query will prevent parallelism but CURRENT_TIMESTAMP and
+-- transaction_timestamp() are marked parallel safe
+:PREFIX SELECT i FROM "test" WHERE ts < CURRENT_TIMESTAMP;
+
+:PREFIX SELECT i FROM "test" WHERE ts < transaction_timestamp();
+
+-- this won't be parallel query because now() is parallel restricted in PG < 12
+:PREFIX SELECT i FROM "test" WHERE ts < now();
+

@@ -307,6 +307,25 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 					break;
 			}
 		}
+
+		foreach (lc, rel->partial_pathlist)
+		{
+			Path **pathptr = (Path **) &lfirst(lc);
+
+			switch (nodeTag(*pathptr))
+			{
+				case T_AppendPath:
+					if (should_optimize_append(*pathptr))
+						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
+					break;
+				case T_MergeAppendPath:
+					if (should_optimize_append(*pathptr))
+						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
+					break;
+				default:
+					break;
+			}
+		}
 	}
 
 out_release:

@@ -19,6 +19,7 @@
 #include "compat.h"
 #include "config.h"
 #include "license_guc.h"
+#include "constraint_aware_append.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -75,6 +76,7 @@ _PG_init(void)
 	_hypertable_cache_init();
 	_cache_invalidate_init();
 	_planner_init();
+	_constraint_aware_append_init();
 	_event_trigger_init();
 	_process_utility_init();
 	_guc_init();
