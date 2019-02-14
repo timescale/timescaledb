@@ -9,8 +9,28 @@
 #include <postgres.h>
 #include "server_chunk_assignment.h"
 
+typedef struct DeparsedInsertStmt
+{
+	const char *target; /* INSERT INTO (...) */
+	unsigned int num_target_attrs;
+	const char *target_attrs;
+	bool do_nothing;
+	const char *returning;
+	List *retrieved_attrs;
+} DeparsedInsertStmt;
+
+extern void deparse_insert_stmt(DeparsedInsertStmt *stmt, RangeTblEntry *rte, Index rtindex,
+								Relation rel, List *target_attrs, bool do_nothing,
+								List *returning_list);
+
+extern List *deparsed_insert_stmt_to_list(DeparsedInsertStmt *stmt);
+extern void deparsed_insert_stmt_from_list(DeparsedInsertStmt *stmt, List *list_stmt);
+
+extern const char *deparsed_insert_stmt_get_sql(DeparsedInsertStmt *stmt, int64 num_rows);
+extern const char *deparsed_insert_stmt_get_sql_explain(DeparsedInsertStmt *stmt, int64 num_rows);
+
 extern void deparseInsertSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,
-							 List *targetAttrs, bool doNothing, List *returningList,
+							 List *targetAttrs, int64 num_rows, bool doNothing, List *returningList,
 							 List **retrieved_attrs);
 
 extern void deparseUpdateSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,

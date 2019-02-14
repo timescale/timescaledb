@@ -11,6 +11,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
 #include <executor/nodeModifyTable.h>
+#include <optimizer/plancat.h>
 #include <utils/rel.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
@@ -22,6 +23,8 @@
 #include "chunk_dispatch_plan.h"
 #include "hypertable_cache.h"
 #include "hypertable_server.h"
+#include "cross_module_fn.h"
+#include "guc.h"
 
 /*
  * HypertableInsert (with corresponding executor node) is a plan node that
@@ -50,20 +53,27 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 		int i;
 
 		/*
-		 * Find all ChunkDispatchState subnodes and set their parent
-		 * ModifyTableState node
+		 * Find all ChunkDispatchState subnodes and give them access to the
+		 * ModifyTableState node. Note that ChunkDispatchState could either be
+		 * a direct subnode or, in case of remote insert, a child of a
+		 * ServerDispatchState subnode.
 		 */
 		for (i = 0; i < mtstate->mt_nplans; i++)
 		{
-			if (IsA(mtstate->mt_plans[i], CustomScanState))
+			if (ts_chunk_dispatch_is_state(mtstate->mt_plans[i]))
+				ts_chunk_dispatch_state_set_parent((ChunkDispatchState *) mtstate->mt_plans[i],
+												   mtstate);
+			else if (IsA(mtstate->mt_plans[i], CustomScanState))
 			{
 				CustomScanState *csstate = (CustomScanState *) mtstate->mt_plans[i];
+				ListCell *lc;
 
-				if (strcmp(csstate->methods->CustomName, CHUNK_DISPATCH_STATE_NAME) == 0)
+				foreach (lc, csstate->custom_ps)
 				{
-					ChunkDispatchState *cdstate = (ChunkDispatchState *) mtstate->mt_plans[i];
+					PlanState *ps = lfirst(lc);
 
-					ts_chunk_dispatch_state_set_parent(cdstate, mtstate);
+					if (ts_chunk_dispatch_is_state(ps))
+						ts_chunk_dispatch_state_set_parent((ChunkDispatchState *) ps, mtstate);
 				}
 			}
 		}
@@ -127,8 +137,9 @@ hypertable_insert_explain(CustomScanState *node, List *ancestors, ExplainState *
 		else
 			appendStringInfo(es->str, " %s\n", quote_identifier(relname));
 
-		/* Let the foreign data wrapper add its part of the explain */
-		if (NULL != state->fdwroutine->ExplainForeignModify)
+		/* Let the foreign data wrapper add its part of the explain, but only
+		 * if this was using the non-direct API. */
+		if (NIL != fdw_private && state->fdwroutine->ExplainForeignModify)
 			state->fdwroutine->ExplainForeignModify(mtstate,
 													mtstate->resultRelInfo,
 													fdw_private,
@@ -190,30 +201,55 @@ static CustomScanMethods hypertable_insert_plan_methods = {
 };
 
 /*
- * Plan the private FDW data for a remote hypertable (e.g., create the deparsed
- * INSERT statement). Note that the private data for a result relation is a
- * list, so we return a list of lists, one for each result relation.  In case of
- * no remote modify, we still need to return a list of empty lists.
+ * Plan the private FDW data for a remote hypertable. Note that the private
+ * data for a result relation is a list, so we return a list of lists, one for
+ * each result relation.  In case of no remote modify, we still need to return
+ * a list of empty lists.
  */
-static List *
-plan_remote_modify(PlannerInfo *root, ModifyTable *mt, List *serveroids, FdwRoutine *fdwroutine)
+static void
+plan_remote_modify(PlannerInfo *root, HypertableInsertPath *hipath, ModifyTable *mt,
+				   FdwRoutine *fdwroutine)
 {
 	List *fdw_private_list = NIL;
+	/* Keep any existing direct modify plans */
+	Bitmapset *direct_modify_plans = mt->fdwDirectModifyPlans;
 	ListCell *lc;
 	int i = 0;
 
+	/* Iterate all subplans / result relations to check which ones are inserts
+	 * into hypertables. In case we find a remote hypertable insert, we either
+	 * have to plan it using the FDW or, in case of server dispatching, we
+	 * just need to mark the plan as "direct" to let ModifyTable know it
+	 * should not invoke the regular FDW modify API. */
 	foreach (lc, mt->resultRelations)
 	{
 		Index rti = lfirst_int(lc);
+		RangeTblEntry *rte = planner_rt_fetch(rti, root);
 		List *fdwprivate = NIL;
+		bool is_server_dispatch = bms_is_member(i, hipath->server_dispatch_plans);
 
-		if (NULL != fdwroutine && NULL != fdwroutine->PlanForeignModify)
-			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i++);
+		/* If server batching is supported, we won't actually use the FDW
+		 * direct modify API (everything is done in ServerDispatch), but we
+		 * need to trick ModifyTable to believe we're doing direct modify so
+		 * that it doesn't invoke the non-direct FDW API for inserts. Instead,
+		 * it should handle only returning projections as if it was a direct
+		 * modify. We do this by adding the result relation's plan to
+		 * fdwDirectModifyPlans. See ExecModifyTable for more details. */
+		if (is_server_dispatch)
+			direct_modify_plans = bms_add_member(direct_modify_plans, i);
 
+		if (!is_server_dispatch && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
+			ts_is_hypertable(rte->relid))
+			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i);
+		else
+			fdwprivate = NIL;
+
+		i++;
 		fdw_private_list = lappend(fdw_private_list, fdwprivate);
 	}
 
-	return fdw_private_list;
+	mt->fdwDirectModifyPlans = direct_modify_plans;
+	mt->fdwPrivLists = fdw_private_list;
 }
 
 /*
@@ -283,7 +319,7 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * e.g., a deparsed INSERT statement that references the hypertable
 	 * instead of a chunk.
 	 */
-	mt->fdwPrivLists = plan_remote_modify(root, mt, hipath->serveroids, fdwroutine);
+	plan_remote_modify(root, hipath, mt, fdwroutine);
 
 	/*
 	 * Since this is the top-level plan (above ModifyTable) we need to use the
@@ -324,8 +360,10 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc, *lc_path, *lc_rel;
 	List *subpaths = NIL;
+	Bitmapset *server_dispatch_plans = NULL;
 	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
+	int i = 0;
 
 	Assert(list_length(mtpath->subpaths) == list_length(mtpath->resultRelations));
 
@@ -347,12 +385,19 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 								"constraints"),
 						 errhint("Use column names to infer indexes instead.")));
 
-			/*
-			 * We replace the plan with our custom chunk dispatch plan.
-			 */
-			subpath = ts_chunk_dispatch_path_create(mtpath, subpath, rti, rte->relid);
+			if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
+			{
+				/* Remember that this will become a server dispatch plan. We
+				 * need to know later whether or not to plan this using the
+				 * FDW API. */
+				server_dispatch_plans = bms_add_member(server_dispatch_plans, i);
+				subpath = ts_cm_functions->server_dispatch_path_create(root, mtpath, rti, i);
+			}
+			else
+				subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 		}
 
+		i++;
 		subpaths = lappend(subpaths, subpath);
 	}
 
@@ -368,6 +413,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	hipath->cpath.path.pathtype = T_CustomScan;
 	hipath->cpath.custom_paths = list_make1(mtpath);
 	hipath->cpath.methods = &hypertable_insert_path_methods;
+	hipath->server_dispatch_plans = server_dispatch_plans;
 	path = &hipath->cpath.path;
 	mtpath->subpaths = subpaths;
 

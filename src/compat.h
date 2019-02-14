@@ -13,6 +13,7 @@
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
 #include <nodes/nodes.h>
+#include <commands/explain.h>
 
 #include "export.h"
 #include "planner_import.h"

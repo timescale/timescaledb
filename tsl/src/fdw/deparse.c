@@ -1455,61 +1455,214 @@ deparseFromExprForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *foreignrel,
  * to *retrieved_attrs.
  */
 void
-deparseInsertSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel, List *targetAttrs,
-				 bool doNothing, List *returningList, List **retrieved_attrs)
+deparse_insert_stmt(DeparsedInsertStmt *stmt, RangeTblEntry *rte, Index rtindex, Relation rel,
+					List *target_attrs, bool do_nothing, List *returning_list)
 {
-	AttrNumber pindex;
 	bool first;
 	ListCell *lc;
+	StringInfoData buf;
 
-	appendStringInfoString(buf, "INSERT INTO ");
-	deparseRelation(buf, rel, true);
+	memset(stmt, 0, sizeof(DeparsedInsertStmt));
+	initStringInfo(&buf);
 
-	if (targetAttrs)
+	appendStringInfoString(&buf, "INSERT INTO ");
+	deparseRelation(&buf, rel, true);
+
+	stmt->target = buf.data;
+	stmt->num_target_attrs = list_length(target_attrs);
+
+	initStringInfo(&buf);
+
+	if (target_attrs != NIL)
 	{
-		appendStringInfoChar(buf, '(');
+		appendStringInfoChar(&buf, '(');
 
 		first = true;
-		foreach (lc, targetAttrs)
+		foreach (lc, target_attrs)
 		{
 			int attnum = lfirst_int(lc);
 
 			if (!first)
-				appendStringInfoString(buf, ", ");
+				appendStringInfoString(&buf, ", ");
 			first = false;
 
-			deparseColumnRef(buf, rtindex, attnum, rte, false);
+			deparseColumnRef(&buf, rtindex, attnum, rte, false);
 		}
 
-		appendStringInfoString(buf, ") VALUES (");
+		appendStringInfoString(&buf, ") VALUES ");
 
-		pindex = 1;
-		first = true;
-		foreach (lc, targetAttrs)
-		{
-			if (!first)
-				appendStringInfoString(buf, ", ");
-			first = false;
+		stmt->target_attrs = buf.data;
 
-			appendStringInfo(buf, "$%d", pindex);
-			pindex++;
-		}
-
-		appendStringInfoChar(buf, ')');
+		initStringInfo(&buf);
 	}
-	else
-		appendStringInfoString(buf, " DEFAULT VALUES");
 
-	if (doNothing)
-		appendStringInfoString(buf, " ON CONFLICT DO NOTHING");
+	stmt->do_nothing = do_nothing;
 
-	deparseReturningList(buf,
+	deparseReturningList(&buf,
 						 rte,
 						 rtindex,
 						 rel,
 						 rel->trigdesc && rel->trigdesc->trig_insert_after_row,
-						 returningList,
-						 retrieved_attrs);
+						 returning_list,
+						 &stmt->retrieved_attrs);
+
+	if (stmt->retrieved_attrs == NIL)
+		stmt->returning = NULL;
+	else
+		stmt->returning = buf.data;
+}
+
+static AttrNumber
+append_values_params(DeparsedInsertStmt *stmt, StringInfo buf, AttrNumber pindex)
+{
+	bool first = true;
+	int i;
+
+	appendStringInfoChar(buf, '(');
+
+	for (i = 0; i < stmt->num_target_attrs; i++)
+	{
+		if (!first)
+			appendStringInfoString(buf, ", ");
+		else
+			first = false;
+
+		appendStringInfo(buf, "$%d", pindex);
+		pindex++;
+	}
+
+	appendStringInfoChar(buf, ')');
+
+	return pindex;
+}
+
+static const char *
+deparsed_insert_stmt_get_sql_internal(DeparsedInsertStmt *stmt, StringInfo buf, int64 num_rows,
+									  bool abbrev)
+{
+	appendStringInfoString(buf, stmt->target);
+
+	if (stmt->num_target_attrs > 0)
+	{
+		appendStringInfoString(buf, stmt->target_attrs);
+
+		if (abbrev)
+		{
+			append_values_params(stmt, buf, 1);
+
+			if (num_rows > 1)
+			{
+				appendStringInfo(buf, ", ..., ");
+				append_values_params(stmt,
+									 buf,
+									 (stmt->num_target_attrs * num_rows) - stmt->num_target_attrs +
+										 1);
+			}
+		}
+		else
+		{
+			AttrNumber pindex = 1;
+			int64 i;
+
+			for (i = 0; i < num_rows; i++)
+			{
+				pindex = append_values_params(stmt, buf, pindex);
+
+				if (i < (num_rows - 1))
+					appendStringInfoString(buf, ", ");
+			}
+		}
+	}
+	else
+		appendStringInfoString(buf, " DEFAULT VALUES");
+
+	if (stmt->do_nothing)
+		appendStringInfoString(buf, " ON CONFLICT DO NOTHING");
+
+	if (NULL != stmt->returning)
+		appendStringInfoString(buf, stmt->returning);
+
+	return buf->data;
+}
+
+const char *
+deparsed_insert_stmt_get_sql(DeparsedInsertStmt *stmt, int64 num_rows)
+{
+	StringInfoData buf;
+
+	initStringInfo(&buf);
+
+	return deparsed_insert_stmt_get_sql_internal(stmt, &buf, num_rows, false);
+}
+
+const char *
+deparsed_insert_stmt_get_sql_explain(DeparsedInsertStmt *stmt, int64 num_rows)
+{
+	StringInfoData buf;
+
+	initStringInfo(&buf);
+
+	return deparsed_insert_stmt_get_sql_internal(stmt, &buf, num_rows, true);
+}
+
+enum DeparsedInsertStmtIndex
+{
+	DeparsedInsertStmtTarget,
+	DeparsedInsertStmtNumTargetAttrs,
+	DeparsedInsertStmtTargetAttrs,
+	DeparsedInsertStmtDoNothing,
+	DeparsedInsertStmtRetrievedAttrs,
+	DeparsedInsertStmtReturning,
+};
+
+List *
+deparsed_insert_stmt_to_list(DeparsedInsertStmt *stmt)
+{
+	List *stmt_list =
+		list_make5(makeString(pstrdup(stmt->target)),
+				   makeInteger(stmt->num_target_attrs),
+				   makeString(stmt->target_attrs != NULL ? pstrdup(stmt->target_attrs) : ""),
+				   makeInteger(stmt->do_nothing ? 1 : 0),
+				   stmt->retrieved_attrs);
+
+	if (NULL != stmt->returning)
+		stmt_list = lappend(stmt_list, makeString(pstrdup(stmt->returning)));
+
+	return stmt_list;
+}
+
+void
+deparsed_insert_stmt_from_list(DeparsedInsertStmt *stmt, List *list_stmt)
+{
+	stmt->target = strVal(list_nth(list_stmt, DeparsedInsertStmtTarget));
+	stmt->num_target_attrs = intVal(list_nth(list_stmt, DeparsedInsertStmtNumTargetAttrs));
+	stmt->target_attrs = (stmt->num_target_attrs > 0) ?
+							 strVal(list_nth(list_stmt, DeparsedInsertStmtTargetAttrs)) :
+							 NULL;
+	stmt->do_nothing = intVal(list_nth(list_stmt, DeparsedInsertStmtDoNothing));
+	stmt->retrieved_attrs = list_nth(list_stmt, DeparsedInsertStmtRetrievedAttrs);
+
+	if (list_length(list_stmt) > DeparsedInsertStmtReturning)
+	{
+		Assert(stmt->retrieved_attrs != NIL);
+		stmt->returning = strVal(list_nth(list_stmt, DeparsedInsertStmtReturning));
+	}
+	else
+		stmt->returning = NULL;
+}
+
+void
+deparseInsertSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel, List *targetAttrs,
+				 int64 num_rows, bool doNothing, List *returningList, List **retrieved_attrs)
+{
+	DeparsedInsertStmt stmt;
+
+	deparse_insert_stmt(&stmt, rte, rtindex, rel, targetAttrs, doNothing, returningList);
+
+	deparsed_insert_stmt_get_sql_internal(&stmt, buf, num_rows, false);
+
+	if (NULL != retrieved_attrs)
+		*retrieved_attrs = stmt.retrieved_attrs;
 }
 
 /*
@@ -1589,11 +1742,16 @@ deparseReturningList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation
 {
 	Bitmapset *attrs_used = NULL;
 
-	if (trig_after_row)
-	{
-		/* whole-row reference acquires all non-system columns */
-		attrs_used = bms_make_singleton(0 - FirstLowInvalidHeapAttributeNumber);
-	}
+	/* We currently do not handle triggers (trig_after_row == TRUE) given that
+	 * we know these triggers should exist also on remote servers and
+	 * can/should be executed there. The only reason to handle triggers on the
+	 * frontend is to (1) more efficiently handle BEFORE triggers (executing
+	 * them on the frontend before sending tuples), or (2) have triggers that
+	 * do not exist on remote servers.
+	 *
+	 * Note that, for a hypertable, trig_after_row is always true because of
+	 * the insert blocker trigger.
+	 */
 
 	if (returningList != NIL)
 	{

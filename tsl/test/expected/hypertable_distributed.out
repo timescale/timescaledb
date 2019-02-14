@@ -144,30 +144,35 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 EXPLAIN (COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
-                 QUERY PLAN                 
---------------------------------------------
+                  QUERY PLAN                   
+-----------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
-         ->  Custom Scan (ChunkDispatch)
-               ->  Result
-(5 rows)
+         ->  Custom Scan (ServerDispatch)
+               Batch size: 1000
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Result
+(7 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.disttable
    Servers: server_1, server_2, server_3
-   Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3)
    ->  Insert on public.disttable
-         ->  Custom Scan (ChunkDispatch)
+         ->  Custom Scan (ServerDispatch)
                Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
-               ->  Result
+               Batch size: 1000
+               Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3), ..., ($2998, $2999, $3000)
+               ->  Custom Scan (ChunkDispatch)
                      Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
-(9 rows)
+                     ->  Result
+                           Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
+(12 rows)
 
 -- Create some chunks through insertion
 INSERT INTO disttable VALUES
@@ -493,6 +498,17 @@ WHERE c.chunk_id = cc.chunk_id;
         3 |                  3 | constraint_3    | 
 (3 rows)
 
+-- Show contents after re-adding column
+SELECT * FROM disttable;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1 |      
+ Sun Jan 01 08:01:00 2017 PST |      1 |  1.2 |      
+ Sun Jan 01 06:05:00 2017 PST |      1 |  1.4 |      
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
+ Tue Jan 01 09:11:00 2019 PST |      3 |  2.1 |      
+(5 rows)
+
 -- Test INSERTS with RETURNING. Since we previously dropped a column
 -- on the hypertable, this also tests that we handle conversion of the
 -- attribute numbers in the RETURNING clause, since they now differ
@@ -504,6 +520,14 @@ RETURNING time, "Color", temp;
              time             | Color | temp 
 ------------------------------+-------+------
  Sat Sep 02 06:09:00 2017 PDT |     1 |  9.8
+(1 row)
+
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-03 06:18', 9, 3, 8.7)
+RETURNING 1;
+ ?column? 
+----------
+        1
 (1 row)
 
 -- On conflict
@@ -526,7 +550,8 @@ SELECT * FROM disttable;
 ------------------------------+--------+------+-------
  Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
  Sat Sep 02 06:09:00 2017 PDT |      4 |  9.8 |     1
-(2 rows)
+ Sun Sep 03 06:18:00 2017 PDT |      9 |  8.7 |     3
+(3 rows)
 
 \c server_3
 SELECT * FROM disttable;
@@ -554,8 +579,9 @@ SELECT * FROM disttable;
  Sun Jan 01 06:05:00 2017 PST |      1 |  1.4 |      
  Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
  Sat Sep 02 06:09:00 2017 PDT |      4 |  9.8 |     1
+ Sun Sep 03 06:18:00 2017 PDT |      9 |  8.7 |     3
  Tue Jan 01 09:11:00 2019 PST |      4 |  2.1 |      
-(6 rows)
+(7 rows)
 
 WITH devices AS (
      SELECT DISTINCT device FROM disttable ORDER BY device
@@ -595,7 +621,8 @@ SELECT * FROM disttable;
  Sun Jan 01 08:01:00 2017 PST |      2 |  1.2 |      
  Sun Jan 01 06:05:00 2017 PST |      2 |  1.4 |      
  Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
-(4 rows)
+ Sun Sep 03 06:18:00 2017 PDT |      9 |  8.7 |     3
+(5 rows)
 
 -- Ensure rows are deleted on the servers
 \c server_1
@@ -612,7 +639,8 @@ SELECT * FROM disttable;
              time             | device | temp | Color 
 ------------------------------+--------+------+-------
  Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
-(1 row)
+ Sun Sep 03 06:18:00 2017 PDT |      9 |  8.7 |     3
+(2 rows)
 
 \c server_3
 SELECT * FROM disttable;
@@ -1328,4 +1356,270 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
          Server: server_3
          Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_11_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
 (81 rows)
+
+-- Test inserts with smaller batch size and more tuples to reach full
+-- batch
+SET timescaledb.max_insert_batch_size=4;
+CREATE TABLE twodim (time timestamptz DEFAULT '2019-02-10 10:11', "Color" int DEFAULT 11 CHECK ("Color" > 0), temp float DEFAULT 22.1);
+-- Create a replicated table to ensure we handle that case correctly
+-- with batching
+SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, servers => '{ "server_1", "server_2", "server_3" }');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             7 | public      | twodim     | t
+(1 row)
+
+SELECT * FROM twodim
+ORDER BY time;
+ time | Color | temp 
+------+-------+------
+(0 rows)
+
+-- INSERT enough data to stretch across multiple batches per
+-- server. Also return a system column. Although we write tuples to
+-- multiple servers, the returned tuple should only be the ones in the
+-- original insert statement (without the replica tuples).
+WITH result AS (
+     INSERT INTO twodim VALUES
+       ('2017-02-01 06:01', 1, 1.1),
+       ('2017-02-01 08:01', 1, 1.2),
+       ('2018-02-02 08:01', 2, 1.3),
+       ('2019-02-01 09:11', 3, 2.1),
+       ('2019-02-02 09:11', 3, 2.1),
+       ('2019-02-02 10:01', 5, 1.2),
+       ('2019-02-03 11:11', 6, 3.5),
+       ('2019-02-04 08:21', 4, 6.6),
+       ('2019-02-04 10:11', 7, 7.4),
+       ('2019-02-04 12:11', 8, 2.1),
+       ('2019-02-05 13:31', 8, 6.3),
+       ('2019-02-06 02:11', 5, 1.8),
+       ('2019-02-06 01:13', 7, 7.9),
+       ('2019-02-06 19:24', 9, 5.9),
+       ('2019-02-07 18:44', 5, 9.7),
+       ('2019-02-07 20:24', 6, NULL),
+       ('2019-02-07 09:33', 7, 9.5),
+       ('2019-02-08 08:54', 1, 7.3),
+       ('2019-02-08 18:14', 4, 8.2),
+       ('2019-02-09 19:23', 8, 9.1)
+     RETURNING tableoid = 'twodim'::regclass AS is_tableoid, time, temp, "Color"
+) SELECT * FROM result ORDER BY time;
+ is_tableoid |             time             | temp | Color 
+-------------+------------------------------+------+-------
+ t           | Wed Feb 01 06:01:00 2017 PST |  1.1 |     1
+ t           | Wed Feb 01 08:01:00 2017 PST |  1.2 |     1
+ t           | Fri Feb 02 08:01:00 2018 PST |  1.3 |     2
+ t           | Fri Feb 01 09:11:00 2019 PST |  2.1 |     3
+ t           | Sat Feb 02 09:11:00 2019 PST |  2.1 |     3
+ t           | Sat Feb 02 10:01:00 2019 PST |  1.2 |     5
+ t           | Sun Feb 03 11:11:00 2019 PST |  3.5 |     6
+ t           | Mon Feb 04 08:21:00 2019 PST |  6.6 |     4
+ t           | Mon Feb 04 10:11:00 2019 PST |  7.4 |     7
+ t           | Mon Feb 04 12:11:00 2019 PST |  2.1 |     8
+ t           | Tue Feb 05 13:31:00 2019 PST |  6.3 |     8
+ t           | Wed Feb 06 01:13:00 2019 PST |  7.9 |     7
+ t           | Wed Feb 06 02:11:00 2019 PST |  1.8 |     5
+ t           | Wed Feb 06 19:24:00 2019 PST |  5.9 |     9
+ t           | Thu Feb 07 09:33:00 2019 PST |  9.5 |     7
+ t           | Thu Feb 07 18:44:00 2019 PST |  9.7 |     5
+ t           | Thu Feb 07 20:24:00 2019 PST |      |     6
+ t           | Fri Feb 08 08:54:00 2019 PST |  7.3 |     1
+ t           | Fri Feb 08 18:14:00 2019 PST |  8.2 |     4
+ t           | Sat Feb 09 19:23:00 2019 PST |  9.1 |     8
+(20 rows)
+
+-- Test insert with default values and a batch size of 1.
+SET timescaledb.max_insert_batch_size=1;
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO twodim DEFAULT VALUES;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+ Insert on distributed hypertable public.twodim
+   Servers: server_1, server_2, server_3
+   ->  Insert on public.twodim
+         ->  Custom Scan (ServerDispatch)
+               Output: 'Sun Feb 10 10:11:00 2019 PST'::timestamp with time zone, 11, '22.1'::double precision
+               Batch size: 1
+               Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3)
+               ->  Custom Scan (ChunkDispatch)
+                     Output: 'Sun Feb 10 10:11:00 2019 PST'::timestamp with time zone, 11, '22.1'::double precision
+                     ->  Result
+                           Output: 'Sun Feb 10 10:11:00 2019 PST'::timestamp with time zone, 11, '22.1'::double precision
+(12 rows)
+
+INSERT INTO twodim DEFAULT VALUES;
+-- Reset the batch size
+SET timescaledb.max_insert_batch_size=4;
+-- Constraint violation
+\set ON_ERROR_STOP 0
+INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2);
+ERROR:  remote connection error: new row for relation "_hyper_7_17_dist_chunk" violates check constraint "twodim_Color_check"
+\set ON_ERROR_STOP 1
+-- Disable batching, reverting to FDW tuple-by-tuple inserts.
+-- First EXPLAIN with batching turned on.
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO twodim VALUES
+       ('2019-02-10 16:23', 5, 7.1),
+       ('2019-02-10 17:11', 7, 3.2);
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+ Insert on distributed hypertable public.twodim
+   Servers: server_1, server_2, server_3
+   ->  Insert on public.twodim
+         ->  Custom Scan (ServerDispatch)
+               Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
+               Batch size: 4
+               Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3), ..., ($10, $11, $12)
+               ->  Custom Scan (ChunkDispatch)
+                     Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
+                     ->  Values Scan on "*VALUES*"
+                           Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
+(12 rows)
+
+SET timescaledb.max_insert_batch_size=0;
+-- Compare without batching
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO twodim VALUES
+       ('2019-02-10 16:23', 5, 7.1),
+       ('2019-02-10 17:11', 7, 3.2);
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+ Insert on distributed hypertable public.twodim
+   Servers: server_1, server_2, server_3
+   Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3)
+   ->  Insert on public.twodim
+         ->  Custom Scan (ChunkDispatch)
+               Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
+               ->  Values Scan on "*VALUES*"
+                     Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
+(9 rows)
+
+-- Insert without batching
+INSERT INTO twodim VALUES
+       ('2019-02-10 16:23', 5, 7.1),
+       ('2019-02-10 17:11', 7, 3.2);
+-- Check results
+SELECT * FROM twodim
+ORDER BY time;
+             time             | Color | temp 
+------------------------------+-------+------
+ Wed Feb 01 06:01:00 2017 PST |     1 |  1.1
+ Wed Feb 01 08:01:00 2017 PST |     1 |  1.2
+ Fri Feb 02 08:01:00 2018 PST |     2 |  1.3
+ Fri Feb 01 09:11:00 2019 PST |     3 |  2.1
+ Sat Feb 02 09:11:00 2019 PST |     3 |  2.1
+ Sat Feb 02 10:01:00 2019 PST |     5 |  1.2
+ Sun Feb 03 11:11:00 2019 PST |     6 |  3.5
+ Mon Feb 04 08:21:00 2019 PST |     4 |  6.6
+ Mon Feb 04 10:11:00 2019 PST |     7 |  7.4
+ Mon Feb 04 12:11:00 2019 PST |     8 |  2.1
+ Tue Feb 05 13:31:00 2019 PST |     8 |  6.3
+ Wed Feb 06 01:13:00 2019 PST |     7 |  7.9
+ Wed Feb 06 02:11:00 2019 PST |     5 |  1.8
+ Wed Feb 06 19:24:00 2019 PST |     9 |  5.9
+ Thu Feb 07 09:33:00 2019 PST |     7 |  9.5
+ Thu Feb 07 18:44:00 2019 PST |     5 |  9.7
+ Thu Feb 07 20:24:00 2019 PST |     6 |     
+ Fri Feb 08 08:54:00 2019 PST |     1 |  7.3
+ Fri Feb 08 18:14:00 2019 PST |     4 |  8.2
+ Sat Feb 09 19:23:00 2019 PST |     8 |  9.1
+ Sun Feb 10 10:11:00 2019 PST |    11 | 22.1
+ Sun Feb 10 16:23:00 2019 PST |     5 |  7.1
+ Sun Feb 10 17:11:00 2019 PST |     7 |  3.2
+(23 rows)
+
+SELECT count(*) FROM twodim;
+ count 
+-------
+    23
+(1 row)
+
+-- Show distribution across servers
+\c server_1
+SELECT * FROM twodim
+ORDER BY time;
+             time             | Color | temp 
+------------------------------+-------+------
+ Wed Feb 01 06:01:00 2017 PST |     1 |  1.1
+ Wed Feb 01 08:01:00 2017 PST |     1 |  1.2
+ Fri Feb 01 09:11:00 2019 PST |     3 |  2.1
+ Sat Feb 02 09:11:00 2019 PST |     3 |  2.1
+ Sun Feb 03 11:11:00 2019 PST |     6 |  3.5
+ Mon Feb 04 12:11:00 2019 PST |     8 |  2.1
+ Tue Feb 05 13:31:00 2019 PST |     8 |  6.3
+ Wed Feb 06 19:24:00 2019 PST |     9 |  5.9
+ Thu Feb 07 20:24:00 2019 PST |     6 |     
+ Fri Feb 08 08:54:00 2019 PST |     1 |  7.3
+ Sat Feb 09 19:23:00 2019 PST |     8 |  9.1
+ Sun Feb 10 10:11:00 2019 PST |    11 | 22.1
+(12 rows)
+
+SELECT count(*) FROM twodim;
+ count 
+-------
+    12
+(1 row)
+
+\c server_2
+SELECT * FROM twodim
+ORDER BY time;
+             time             | Color | temp 
+------------------------------+-------+------
+ Wed Feb 01 06:01:00 2017 PST |     1 |  1.1
+ Wed Feb 01 08:01:00 2017 PST |     1 |  1.2
+ Fri Feb 02 08:01:00 2018 PST |     2 |  1.3
+ Sat Feb 02 10:01:00 2019 PST |     5 |  1.2
+ Sun Feb 03 11:11:00 2019 PST |     6 |  3.5
+ Mon Feb 04 08:21:00 2019 PST |     4 |  6.6
+ Mon Feb 04 10:11:00 2019 PST |     7 |  7.4
+ Mon Feb 04 12:11:00 2019 PST |     8 |  2.1
+ Tue Feb 05 13:31:00 2019 PST |     8 |  6.3
+ Wed Feb 06 01:13:00 2019 PST |     7 |  7.9
+ Wed Feb 06 02:11:00 2019 PST |     5 |  1.8
+ Thu Feb 07 09:33:00 2019 PST |     7 |  9.5
+ Thu Feb 07 18:44:00 2019 PST |     5 |  9.7
+ Thu Feb 07 20:24:00 2019 PST |     6 |     
+ Fri Feb 08 08:54:00 2019 PST |     1 |  7.3
+ Fri Feb 08 18:14:00 2019 PST |     4 |  8.2
+ Sat Feb 09 19:23:00 2019 PST |     8 |  9.1
+ Sun Feb 10 16:23:00 2019 PST |     5 |  7.1
+ Sun Feb 10 17:11:00 2019 PST |     7 |  3.2
+(19 rows)
+
+SELECT count(*) FROM twodim;
+ count 
+-------
+    19
+(1 row)
+
+\c server_3
+SELECT * FROM twodim
+ORDER BY time;
+             time             | Color | temp 
+------------------------------+-------+------
+ Fri Feb 02 08:01:00 2018 PST |     2 |  1.3
+ Fri Feb 01 09:11:00 2019 PST |     3 |  2.1
+ Sat Feb 02 09:11:00 2019 PST |     3 |  2.1
+ Sat Feb 02 10:01:00 2019 PST |     5 |  1.2
+ Mon Feb 04 08:21:00 2019 PST |     4 |  6.6
+ Mon Feb 04 10:11:00 2019 PST |     7 |  7.4
+ Wed Feb 06 01:13:00 2019 PST |     7 |  7.9
+ Wed Feb 06 02:11:00 2019 PST |     5 |  1.8
+ Wed Feb 06 19:24:00 2019 PST |     9 |  5.9
+ Thu Feb 07 09:33:00 2019 PST |     7 |  9.5
+ Thu Feb 07 18:44:00 2019 PST |     5 |  9.7
+ Fri Feb 08 18:14:00 2019 PST |     4 |  8.2
+ Sun Feb 10 10:11:00 2019 PST |    11 | 22.1
+ Sun Feb 10 16:23:00 2019 PST |     5 |  7.1
+ Sun Feb 10 17:11:00 2019 PST |     7 |  3.2
+(15 rows)
+
+SELECT count(*) FROM twodim;
+ count 
+-------
+    15
+(1 row)
 

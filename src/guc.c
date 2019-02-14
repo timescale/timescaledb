@@ -52,6 +52,7 @@ char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
 char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
+TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -179,6 +180,23 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable("timescaledb.max_insert_batch_size",
+							"The max number of tuples to batch before sending to a remote server",
+							"When acting as a frontend server, TimescaleDB splits batches of "
+							"inserted tuples across multiple servers. It will batch up to the "
+							"configured batch size tuples per datastore server before flushing. "
+							"Setting this to 0 disables batching, reverting to tuple-by-tuple "
+							"inserts",
+							&ts_guc_max_insert_batch_size,
+							1000,
+							0,
+							65536,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomIntVariable("timescaledb.max_open_chunks_per_insert",
 							"Maximum open chunks per insert",

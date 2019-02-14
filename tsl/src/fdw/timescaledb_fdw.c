@@ -43,6 +43,7 @@
 #include <hypertable_cache.h>
 #include <chunk_server.h>
 #include <chunk_insert_state.h>
+#include <server_dispatch.h>
 #include <remote/dist_txn.h>
 #include <remote/async.h>
 #include <compat.h>
@@ -160,6 +161,7 @@ typedef struct TsFdwScanState
 typedef struct TsFdwServerState
 {
 	Oid serverid;
+	UserMapping *user;
 	/* for remote query execution */
 	PGconn *conn;		  /* connection for the scan */
 	PreparedStmt *p_stmt; /* prepared statement handle, if created */
@@ -1391,12 +1393,11 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 }
 
 static void
-initialize_fdw_server_state(TsFdwServerState *fdw_server, Oid userid, Oid serverid)
+initialize_fdw_server_state(TsFdwServerState *fdw_server, UserMapping *um)
 {
-	UserMapping *user = GetUserMapping(userid, serverid);
-
-	fdw_server->serverid = serverid;
-	fdw_server->conn = remote_dist_txn_get_connection(user, REMOTE_TXN_USE_PREP_STMT);
+	fdw_server->user = um;
+	fdw_server->serverid = um->serverid;
+	fdw_server->conn = remote_dist_txn_get_connection(fdw_server->user, REMOTE_TXN_USE_PREP_STMT);
 	fdw_server->p_stmt = NULL;
 }
 
@@ -1408,18 +1409,17 @@ initialize_fdw_server_state(TsFdwServerState *fdw_server, Oid userid, Oid server
 static TsFdwModifyState *
 create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, CmdType operation,
 					  Plan *subplan, char *query, List *target_attrs, bool has_returning,
-					  List *retrieved_attrs, List *servers)
+					  List *retrieved_attrs, List *usermappings)
 {
 	TsFdwModifyState *fmstate;
 	Relation rel = rri->ri_RelationDesc;
 	TupleDesc tupdesc = RelationGetDescr(rel);
-	Oid userid;
 	AttrNumber n_params;
 	Oid typefnoid;
 	bool isvarlena;
 	ListCell *lc;
 	int i = 0;
-	int num_servers = servers == NIL ? 1 : list_length(servers);
+	int num_servers = usermappings == NIL ? 1 : list_length(usermappings);
 
 	/* Begin constructing TsFdwModifyState. */
 	fmstate = (TsFdwModifyState *) palloc0(TS_FDW_MODIFY_STATE_SIZE(num_servers));
@@ -1429,9 +1429,8 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 	 * Identify which user to do the remote access as.  This should match what
 	 * ExecCheckRTEPerms() does.
 	 */
-	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
-	if (NIL != servers)
+	if (NIL != usermappings)
 	{
 		/*
 		 * This is either (1) an INSERT on a hypertable chunk, or (2) an
@@ -1441,11 +1440,11 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 		 * in the FDW planning callback.
 		 */
 
-		foreach (lc, servers)
+		foreach (lc, usermappings)
 		{
-			Oid serverid = lfirst_oid(lc);
+			UserMapping *um = lfirst(lc);
 
-			initialize_fdw_server_state(&fmstate->servers[i++], userid, serverid);
+			initialize_fdw_server_state(&fmstate->servers[i++], um);
 		}
 	}
 	else
@@ -1456,8 +1455,10 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 		 * We must get the server from the foreign table's metadata.
 		 */
 		ForeignTable *table = GetForeignTable(rri->ri_RelationDesc->rd_id);
+		Oid userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+		UserMapping *um = GetUserMapping(userid, table->serverid);
 
-		initialize_fdw_server_state(&fmstate->servers[0], userid, table->serverid);
+		initialize_fdw_server_state(&fmstate->servers[0], um);
 	}
 
 	/* Set up remote query information. */
@@ -2162,6 +2163,7 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 							 result_relation,
 							 rel,
 							 target_attrs,
+							 1,
 							 do_nothing,
 							 returning_list,
 							 &retrieved_attrs);
@@ -2244,7 +2246,7 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 	List *target_attrs;
 	bool has_returning;
 	List *retrieved_attrs;
-	List *servers = NIL;
+	List *usermappings = NIL;
 	ChunkInsertState *cis = NULL;
 	RangeTblEntry *rte;
 
@@ -2260,8 +2262,25 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 	has_returning = intVal(list_nth(fdw_private, FdwModifyPrivateHasReturning));
 	retrieved_attrs = (List *) list_nth(fdw_private, FdwModifyPrivateRetrievedAttrs);
 
+	/* Find RTE. */
+	rte = rt_fetch(rri->ri_RangeTableIndex, mtstate->ps.state->es_range_table);
+
+	Assert(NULL != rte);
+
 	if (list_length(fdw_private) > FdwModifyPrivateServers)
-		servers = (List *) list_nth(fdw_private, FdwModifyPrivateServers);
+	{
+		List *servers = (List *) list_nth(fdw_private, FdwModifyPrivateServers);
+		ListCell *lc;
+
+		foreach (lc, servers)
+		{
+			Oid serverid = lfirst_oid(lc);
+			Oid userid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
+			UserMapping *um = GetUserMapping(userid, serverid);
+
+			usermappings = lappend(usermappings, um);
+		}
+	}
 
 	if (list_length(fdw_private) > FdwModifyPrivateChunkInsertState)
 	{
@@ -2291,11 +2310,8 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 		 * If there's a chunk insert state, then it has the authoritative
 		 * server list.
 		 */
-		servers = cis->servers;
+		usermappings = cis->usermappings;
 	}
-
-	/* Find RTE. */
-	rte = rt_fetch(rri->ri_RangeTableIndex, mtstate->ps.state->es_range_table);
 
 	/* Construct an execution state. */
 	fmstate = create_foreign_modify(mtstate->ps.state,
@@ -2307,7 +2323,7 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 									target_attrs,
 									has_returning,
 									retrieved_attrs,
-									servers);
+									usermappings);
 
 	rri->ri_FdwState = fmstate;
 }

@@ -75,7 +75,11 @@ chunk_dispatch_exec(CustomScanState *node)
 
 		/* Save the main table's (hypertable's) ResultRelInfo */
 		if (NULL == dispatch->hypertable_result_rel_info)
+		{
+			Assert(estate->es_result_relation_info->ri_RelationDesc->rd_id ==
+				   state->hypertable_relid);
 			dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
+		}
 
 		/*
 		 * Copy over the index to use in the returning list.
@@ -169,12 +173,26 @@ chunk_dispatch_rescan(CustomScanState *node)
 }
 
 static CustomExecMethods chunk_dispatch_state_methods = {
-	.CustomName = CHUNK_DISPATCH_STATE_NAME,
+	.CustomName = "ChunkDispatchState",
 	.BeginCustomScan = chunk_dispatch_begin,
 	.EndCustomScan = chunk_dispatch_end,
 	.ExecCustomScan = chunk_dispatch_exec,
 	.ReScanCustomScan = chunk_dispatch_rescan,
 };
+
+/*
+ * Check whether the PlanState is a ChunkDispatchState node.
+ */
+bool
+ts_chunk_dispatch_is_state(PlanState *state)
+{
+	CustomScanState *csstate = (CustomScanState *) state;
+
+	if (!IsA(state, CustomScanState))
+		return false;
+
+	return csstate->methods == &chunk_dispatch_state_methods;
+}
 
 ChunkDispatchState *
 ts_chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)

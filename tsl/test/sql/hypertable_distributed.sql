@@ -93,6 +93,7 @@ ALTER TABLE disttable DROP COLUMN color;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
+
 -- EXPLAIN some inserts to see what plans and explain output for
 -- remote inserts look like
 EXPLAIN (COSTS FALSE)
@@ -234,6 +235,8 @@ FROM (SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
       _timescaledb_catalog.chunk_constraint cc
 WHERE c.chunk_id = cc.chunk_id;
 
+-- Show contents after re-adding column
+SELECT * FROM disttable;
 
 -- Test INSERTS with RETURNING. Since we previously dropped a column
 -- on the hypertable, this also tests that we handle conversion of the
@@ -243,6 +246,10 @@ WHERE c.chunk_id = cc.chunk_id;
 INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-02 06:09', 4, 1, 9.8)
 RETURNING time, "Color", temp;
+
+INSERT INTO disttable (time, device, "Color", temp)
+VALUES ('2017-09-03 06:18', 9, 3, 8.7)
+RETURNING 1;
 
 -- On conflict
 INSERT INTO disttable (time, device, "Color", temp)
@@ -505,3 +512,101 @@ WITH devices AS (
      SELECT DISTINCT device FROM disttable_replicated ORDER BY device
 )
 UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
+
+
+-- Test inserts with smaller batch size and more tuples to reach full
+-- batch
+SET timescaledb.max_insert_batch_size=4;
+
+CREATE TABLE twodim (time timestamptz DEFAULT '2019-02-10 10:11', "Color" int DEFAULT 11 CHECK ("Color" > 0), temp float DEFAULT 22.1);
+-- Create a replicated table to ensure we handle that case correctly
+-- with batching
+SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, servers => '{ "server_1", "server_2", "server_3" }');
+
+SELECT * FROM twodim
+ORDER BY time;
+
+-- INSERT enough data to stretch across multiple batches per
+-- server. Also return a system column. Although we write tuples to
+-- multiple servers, the returned tuple should only be the ones in the
+-- original insert statement (without the replica tuples).
+WITH result AS (
+     INSERT INTO twodim VALUES
+       ('2017-02-01 06:01', 1, 1.1),
+       ('2017-02-01 08:01', 1, 1.2),
+       ('2018-02-02 08:01', 2, 1.3),
+       ('2019-02-01 09:11', 3, 2.1),
+       ('2019-02-02 09:11', 3, 2.1),
+       ('2019-02-02 10:01', 5, 1.2),
+       ('2019-02-03 11:11', 6, 3.5),
+       ('2019-02-04 08:21', 4, 6.6),
+       ('2019-02-04 10:11', 7, 7.4),
+       ('2019-02-04 12:11', 8, 2.1),
+       ('2019-02-05 13:31', 8, 6.3),
+       ('2019-02-06 02:11', 5, 1.8),
+       ('2019-02-06 01:13', 7, 7.9),
+       ('2019-02-06 19:24', 9, 5.9),
+       ('2019-02-07 18:44', 5, 9.7),
+       ('2019-02-07 20:24', 6, NULL),
+       ('2019-02-07 09:33', 7, 9.5),
+       ('2019-02-08 08:54', 1, 7.3),
+       ('2019-02-08 18:14', 4, 8.2),
+       ('2019-02-09 19:23', 8, 9.1)
+     RETURNING tableoid = 'twodim'::regclass AS is_tableoid, time, temp, "Color"
+) SELECT * FROM result ORDER BY time;
+
+-- Test insert with default values and a batch size of 1.
+SET timescaledb.max_insert_batch_size=1;
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO twodim DEFAULT VALUES;
+INSERT INTO twodim DEFAULT VALUES;
+
+-- Reset the batch size
+SET timescaledb.max_insert_batch_size=4;
+
+-- Constraint violation
+\set ON_ERROR_STOP 0
+INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2);
+\set ON_ERROR_STOP 1
+
+-- Disable batching, reverting to FDW tuple-by-tuple inserts.
+-- First EXPLAIN with batching turned on.
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO twodim VALUES
+       ('2019-02-10 16:23', 5, 7.1),
+       ('2019-02-10 17:11', 7, 3.2);
+
+SET timescaledb.max_insert_batch_size=0;
+
+-- Compare without batching
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO twodim VALUES
+       ('2019-02-10 16:23', 5, 7.1),
+       ('2019-02-10 17:11', 7, 3.2);
+
+-- Insert without batching
+INSERT INTO twodim VALUES
+       ('2019-02-10 16:23', 5, 7.1),
+       ('2019-02-10 17:11', 7, 3.2);
+
+-- Check results
+SELECT * FROM twodim
+ORDER BY time;
+
+SELECT count(*) FROM twodim;
+
+-- Show distribution across servers
+\c server_1
+SELECT * FROM twodim
+ORDER BY time;
+SELECT count(*) FROM twodim;
+
+\c server_2
+SELECT * FROM twodim
+ORDER BY time;
+SELECT count(*) FROM twodim;
+
+\c server_3
+SELECT * FROM twodim
+ORDER BY time;
+SELECT count(*) FROM twodim;

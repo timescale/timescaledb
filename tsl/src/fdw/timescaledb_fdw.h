@@ -12,6 +12,7 @@
 #include <lib/stringinfo.h>
 #include <nodes/relation.h>
 #include <utils/relcache.h>
+#include <funcapi.h>
 
 #include "server_chunk_assignment.h"
 

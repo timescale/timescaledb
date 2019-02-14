@@ -35,9 +35,8 @@ typedef struct ChunkDispatchState
 	ChunkDispatch *dispatch;
 } ChunkDispatchState;
 
-#define CHUNK_DISPATCH_STATE_NAME "ChunkDispatchState"
-
-extern ChunkDispatchState *ts_chunk_dispatch_state_create(Oid, Plan *);
-void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
+extern bool ts_chunk_dispatch_is_state(PlanState *state);
+extern ChunkDispatchState *ts_chunk_dispatch_state_create(Oid hypertable_oid, Plan *plan);
+extern void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
 
 #endif /* TIMESCALEDB_CHUNK_DISPATCH_STATE_H */

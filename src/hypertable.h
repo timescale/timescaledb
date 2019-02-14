@@ -131,4 +131,6 @@ extern List *ts_hypertable_assign_chunk_servers(Hypertable *ht, Hypercube *cube)
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
 	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
 
+#define hypertable_is_distributed(ht) ((ht)->fd.replication_factor > 0)
+
 #endif /* TIMESCALEDB_HYPERTABLE_H */

@@ -37,6 +37,7 @@
 #include "remote/dist_txn.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
+#include "server_dispatch.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -118,6 +119,14 @@ error_create_chunk_on_servers_not_supported(Chunk *chunk, Hypertable *ht)
 	pg_unreachable();
 }
 
+static Path *
+error_server_dispatch_path_create_not_supported(PlannerInfo *root, ModifyTablePath *mtpath,
+												Index hypertable_rti, int subpath_index)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
 #endif /* PG96 */
 
 /*
@@ -174,6 +183,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.timescaledb_fdw_validator = empty_fn,
 	.set_rel_pathlist = NULL,
 	.hypertable_should_be_expanded = NULL,
+	.server_dispatch_path_create = error_server_dispatch_path_create_not_supported,
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
@@ -190,6 +200,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_txn_heal_server = remote_txn_heal_server,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
 	.hypertable_should_be_expanded = tsl_hypertable_should_be_expanded,
+	.server_dispatch_path_create = server_dispatch_path_create,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };

@@ -15,6 +15,9 @@
 typedef struct HypertableInsertPath
 {
 	CustomPath cpath;
+	/* A bitmapset to remember which subpaths are using server dispatching. */
+	Bitmapset *server_dispatch_plans;
+	/* List of remote servers for the hypertable */
 	List *serveroids;
 } HypertableInsertPath;
 
