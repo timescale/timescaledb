@@ -9,12 +9,14 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/readfuncs.h>
+#include <parser/parsetree.h>
 #include <utils/rel.h>
 #include <catalog/pg_type.h>
 #include <rewrite/rewriteManip.h>
 
 #include "chunk_dispatch_plan.h"
 #include "chunk_dispatch_state.h"
+#include "hypertable.h"
 
 #include "compat.h"
 
@@ -85,10 +87,12 @@ static CustomPathMethods chunk_dispatch_path_methods = {
 };
 
 Path *
-ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hypertable_rti,
-							  Oid hypertable_relid)
+ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
+							  int subpath_index)
 {
 	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
+	Path *subpath = list_nth(mtpath->subpaths, subpath_index);
+	RangeTblEntry *rte = planner_rt_fetch(hypertable_rti, root);
 
 	memcpy(&path->cpath.path, subpath, sizeof(Path));
 	path->cpath.path.type = T_CustomPath;
@@ -97,7 +101,7 @@ ts_chunk_dispatch_path_create(ModifyTablePath *mtpath, Path *subpath, Index hype
 	path->cpath.custom_paths = list_make1(subpath);
 	path->mtpath = mtpath;
 	path->hypertable_rti = hypertable_rti;
-	path->hypertable_relid = hypertable_relid;
+	path->hypertable_relid = rte->relid;
 
 	return &path->cpath.path;
 }

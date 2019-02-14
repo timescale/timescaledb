@@ -11,6 +11,7 @@
 #include <foreign/foreign.h>
 #include <lib/stringinfo.h>
 #include <utils/relcache.h>
+#include <funcapi.h>
 
 #include <compat.h>
 #if PG12_GE

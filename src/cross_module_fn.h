@@ -125,6 +125,8 @@ typedef struct CrossModuleFunctions
 	PGFunction remote_txn_id_out;
 	PGFunction remote_txn_heal_server;
 	void (*create_chunk_on_servers)(Chunk *chunk, Hypertable *ht);
+	Path *(*server_dispatch_path_create)(PlannerInfo *root, ModifyTablePath *mtpath,
+										 Index hypertable_rti, int subpath_index);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

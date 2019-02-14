@@ -11,6 +11,10 @@ set(SOURCES
   server.c
 )
 
+if (NOT ${PG_VERSION} VERSION_LESS "10")
+  list(APPEND SOURCES server_dispatch.c)
+endif()
+
 # Add test source code in Debug builds
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   set(TS_DEBUG 1)

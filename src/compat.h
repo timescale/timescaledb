@@ -15,6 +15,7 @@
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
 #include <nodes/nodes.h>
+#include <commands/explain.h>
 
 #include "export.h"
 #include "import/planner.h"
@@ -350,6 +351,10 @@ ExecInitExtraTupleSlotCompat(EState *estate, TupleDesc tupdesc, void *tts_ops)
 }
 
 #define MakeSingleTupleTableSlotCompat(tupledesc, tts_ops) MakeSingleTupleTableSlot(tupledesc)
+#define ExecStoreHeapTupleCompat(tuple, slot, should_free)                                         \
+	ExecStoreTuple(tuple, slot, InvalidBuffer, should_free)
+#define ExecForceStoreHeapTupleCompat(tuple, slot, should_free)                                    \
+	ExecStoreTuple(tuple, slot, InvalidBuffer, should_free)
 
 /*
  * ExecSetTupleBound is only available starting with PG11 so we map to a backported version
@@ -373,6 +378,10 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 	ExecInitExtraTupleSlot(estate, tupledesc)
 #define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc)
 #define MakeSingleTupleTableSlotCompat(tupdesc, tts_ops) MakeSingleTupleTableSlot(tupdesc)
+#define ExecStoreHeapTupleCompat(tuple, slot, should_free)                                         \
+	ExecStoreTuple(tuple, slot, InvalidBuffer, should_free)
+#define ExecForceStoreHeapTupleCompat(tuple, slot, should_free)                                    \
+	ExecStoreTuple(tuple, slot, InvalidBuffer, should_free)
 
 #else /* PG12_GE */
 
@@ -380,6 +389,10 @@ MakeTupleTableSlotCompat(TupleDesc tupdesc, void *tts_ops)
 	ExecInitExtraTupleSlot(estate, tupdesc, tts_ops)
 #define MakeTupleTableSlotCompat(tupdesc, tts_ops) MakeTupleTableSlot(tupdesc, tts_ops)
 #define MakeSingleTupleTableSlotCompat(tupdesc, tts_ops) MakeSingleTupleTableSlot(tupdesc, tts_ops)
+#define ExecStoreHeapTupleCompat(tuple, slot, should_free)                                         \
+	ExecStoreHeapTuple(tuple, slot, should_free)
+#define ExecForceStoreHeapTupleCompat(tuple, slot, should_free)                                    \
+	ExecForceStoreHeapTuple(tuple, slot, should_free)
 
 #endif
 
@@ -813,8 +826,6 @@ extern int oid_cmp(const void *p1, const void *p2);
 #include "compat/tuptable.h"
 #include "compat/tableam.h"
 
-#define ExecStoreHeapTuple(tuple, slot, should_free)                                               \
-	ExecStoreTuple(tuple, slot, InvalidBuffer, should_free)
 #else
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
 #endif
