@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <nodes/extensible.h>
+#include <nodes/nodes.h>
 #include <nodes/plannodes.h>
 #include <parser/parsetree.h>
 #include <optimizer/plancat.h>
@@ -27,50 +28,18 @@
  * constraint exclusion in PostgreSQL that normally happens at planning
  * time. Therefore, we need to fake a number of planning-related data
  * structures.
- *
- * We also need to walk the expression trees of the restriction clauses and
- * update any Vars that reference the main table to instead reference the child
- * table (chunk) we want to exclude.
  */
 static bool
-excluded_by_constraint(RangeTblEntry *rte, AppendRelInfo *appinfo, List *restrictinfos)
+excluded_by_constraint(PlannerInfo *root, RangeTblEntry *rte, Index rt_index, List *restrictinfos)
 {
-	ListCell *lc;
 	RelOptInfo rel = {
-		.relid = appinfo->child_relid,
+		.type = T_RelOptInfo,
+		.relid = rt_index,
 		.reloptkind = RELOPT_OTHER_MEMBER_REL,
-		.baserestrictinfo = NIL,
-	};
-	Query parse = {
-		.resultRelation = InvalidOid,
-	};
-	PlannerGlobal glob = {
-		.boundParams = NULL,
-	};
-	PlannerInfo root = {
-		.glob = &glob,
-		.parse = &parse,
+		.baserestrictinfo = restrictinfos,
 	};
 
-	foreach (lc, restrictinfos)
-	{
-		/*
-		 * We need a copy to retain the original parent ID in Vars for next
-		 * chunk
-		 */
-		RestrictInfo *old = lfirst(lc);
-		RestrictInfo *rinfo = makeNode(RestrictInfo);
-
-		/*
-		 * Update Vars to reference the child relation (chunk) instead of the
-		 * hypertable main table
-		 */
-		rinfo->clause =
-			(Expr *) adjust_appendrel_attrs_compat(&root, (Node *) old->clause, appinfo);
-		rel.baserestrictinfo = lappend(rel.baserestrictinfo, rinfo);
-	}
-
-	return relation_excluded_by_constraints(&root, &rel, rte);
+	return relation_excluded_by_constraints(root, &rel, rte);
 }
 
 static Plan *
@@ -91,13 +60,34 @@ get_plans_for_exclusion(Plan *plan)
 	return plan;
 }
 
+static AppendRelInfo *
+get_appendrelinfo(PlannerInfo *root, Index rti)
+{
+#if PG96 || PG10
+	ListCell *lc;
+	foreach (lc, root->append_rel_list)
+	{
+		AppendRelInfo *appinfo = lfirst(lc);
+		if (appinfo->child_relid == rti)
+			return appinfo;
+	}
+#else
+	if (root->append_rel_array[rti])
+		return root->append_rel_array[rti];
+#endif
+	ereport(ERROR,
+			(errcode(ERRCODE_INTERNAL_ERROR), errmsg("no appendrelinfo found for index %d", rti)));
+	pg_unreachable();
+}
+
 static bool
-can_exclude_chunk(Scan *scan, AppendRelInfo *appinfo, EState *estate, List *restrictinfos)
+can_exclude_chunk(PlannerInfo *root, Scan *scan, EState *estate, Index rt_index,
+				  List *restrictinfos)
 {
 	RangeTblEntry *rte = rt_fetch(scan->scanrelid, estate->es_range_table);
 
 	return rte->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION && !rte->inh &&
-		   excluded_by_constraint(rte, appinfo, restrictinfos);
+		   excluded_by_constraint(root, rte, rt_index, restrictinfos);
 }
 
 /*
@@ -112,32 +102,18 @@ can_exclude_chunk(Scan *scan, AppendRelInfo *appinfo, EState *estate, List *rest
  * ...WHERE time > '2017-06-02 11:26:43.935712+02'
  */
 static List *
-constify_restrictinfos(List *restrictinfos)
+constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 {
-	List *newinfos = NIL;
 	ListCell *lc;
-	Query parse = {
-		.resultRelation = InvalidOid,
-	};
-	PlannerGlobal glob = {
-		.boundParams = NULL,
-	};
-	PlannerInfo root = {
-		.glob = &glob,
-		.parse = &parse,
-	};
 
 	foreach (lc, restrictinfos)
 	{
-		/* We need a copy to not mess up the plan */
-		RestrictInfo *old = lfirst(lc);
-		RestrictInfo *rinfo = makeNode(RestrictInfo);
+		RestrictInfo *rinfo = lfirst(lc);
 
-		rinfo->clause = (Expr *) estimate_expression_value(&root, (Node *) old->clause);
-		newinfos = lappend(newinfos, rinfo);
+		rinfo->clause = (Expr *) estimate_expression_value(root, (Node *) rinfo->clause);
 	}
 
-	return newinfos;
+	return restrictinfos;
 }
 
 /*
@@ -151,10 +127,24 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	ConstraintAwareAppendState *state = (ConstraintAwareAppendState *) node;
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	Plan *subplan = copyObject(state->subplan);
-	List *append_rel_info = lsecond(cscan->custom_private);
-	List *restrictinfos = constify_restrictinfos(lthird(cscan->custom_private));
+	List *chunk_ri_clauses = lsecond(cscan->custom_private);
 	List **appendplans, *old_appendplans;
-	ListCell *lc_plan, *lc_info;
+	ListCell *lc_plan;
+	ListCell *lc_clauses;
+
+	/*
+	 * create skeleton plannerinfo to reuse some PostgreSQL planner functions
+	 */
+	Query parse = {
+		.resultRelation = InvalidOid,
+	};
+	PlannerGlobal glob = {
+		.boundParams = NULL,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+		.parse = &parse,
+	};
 
 	switch (nodeTag(subplan))
 	{
@@ -186,10 +176,16 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			 */
 			return;
 		default:
-			elog(ERROR, "invalid plan %d", nodeTag(subplan));
+			elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(subplan));
 	}
 
-	forboth (lc_plan, old_appendplans, lc_info, append_rel_info)
+	/*
+	 * clauses should always have the same length as appendplans because
+	 * thats the base for building the lists
+	 */
+	Assert(list_length(old_appendplans) == list_length(chunk_ri_clauses));
+
+	forboth (lc_plan, old_appendplans, lc_clauses, chunk_ri_clauses)
 	{
 		Plan *plan = get_plans_for_exclusion(lfirst(lc_plan));
 
@@ -214,11 +210,31 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				 * If this is a base rel (chunk), check if it can be
 				 * excluded from the scan. Otherwise, fall through.
 				 */
-				if (can_exclude_chunk((Scan *) plan, lfirst(lc_info), estate, restrictinfos))
-					break;
+
+				Index scanrelid = ((Scan *) plan)->scanrelid;
+				List *restrictinfos = NIL;
+				List *ri_clauses = lfirst(lc_clauses);
+				ListCell *lc;
+
+				Assert(scanrelid);
+
+				foreach (lc, ri_clauses)
+				{
+					RestrictInfo *ri = makeNode(RestrictInfo);
+					ri->clause = lfirst(lc);
+					restrictinfos = lappend(restrictinfos, ri);
+				}
+				restrictinfos = constify_restrictinfos(&root, restrictinfos);
+
+				if (can_exclude_chunk(&root, (Scan *) plan, estate, scanrelid, restrictinfos))
+					continue;
+
+				*appendplans = lappend(*appendplans, plan);
+				break;
 			}
 			default:
-				*appendplans = lappend(*appendplans, plan);
+				elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(plan));
+				break;
 		}
 	}
 
@@ -360,13 +376,83 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, struct C
 	CustomScan *cscan = makeNode(CustomScan);
 	Plan *subplan = linitial(custom_plans);
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+	List *chunk_ri_clauses = NIL;
+	List *children = NIL;
+	ListCell *lc_child;
 
 	cscan->scan.scanrelid = 0;			 /* Not a real relation we are scanning */
 	cscan->scan.plan.targetlist = tlist; /* Target list we expect as output */
 	cscan->custom_plans = custom_plans;
-	cscan->custom_private = list_make3(list_make1_oid(rte->relid),
-									   list_copy(root->append_rel_list),
-									   list_copy(clauses));
+
+	/*
+	 * create per chunk RestrictInfo
+	 *
+	 * We also need to walk the expression trees of the restriction clauses and
+	 * update any Vars that reference the main table to instead reference the child
+	 * table (chunk) we want to exclude.
+	 */
+	switch (nodeTag(linitial(custom_plans)))
+	{
+		case T_MergeAppend:
+			children = castNode(MergeAppend, linitial(custom_plans))->mergeplans;
+			break;
+		case T_Append:
+			children = castNode(Append, linitial(custom_plans))->appendplans;
+			break;
+		default:
+			elog(ERROR,
+				 "invalid child of constraint-aware append: %u",
+				 nodeTag(linitial(custom_plans)));
+			break;
+	}
+
+	/*
+	 * we only iterate over the child chunks of this node
+	 * so the list of metadata exactly matches the list of
+	 * child nodes in the executor
+	 */
+	foreach (lc_child, children)
+	{
+		Plan *plan = get_plans_for_exclusion(lfirst(lc_child));
+
+		switch (nodeTag(plan))
+		{
+			case T_SeqScan:
+			case T_SampleScan:
+			case T_IndexScan:
+			case T_IndexOnlyScan:
+			case T_BitmapIndexScan:
+			case T_BitmapHeapScan:
+			case T_TidScan:
+			case T_SubqueryScan:
+			case T_FunctionScan:
+			case T_ValuesScan:
+			case T_CteScan:
+			case T_WorkTableScan:
+			case T_ForeignScan:
+			case T_CustomScan:
+			{
+				List *chunk_clauses = NIL;
+				ListCell *lc;
+				Index scanrelid = ((Scan *) plan)->scanrelid;
+				AppendRelInfo *appinfo = get_appendrelinfo(root, scanrelid);
+
+				foreach (lc, clauses)
+				{
+					Node *clause = (Node *) copyObject(castNode(RestrictInfo, lfirst(lc))->clause);
+					clause = adjust_appendrel_attrs_compat(root, clause, appinfo);
+					chunk_clauses = lappend(chunk_clauses, clause);
+				}
+				chunk_ri_clauses = lappend(chunk_ri_clauses, chunk_clauses);
+				break;
+			}
+			default:
+				elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(plan));
+				break;
+		}
+	}
+
+	cscan->custom_private = list_make2(list_make1_oid(rte->relid), chunk_ri_clauses);
 	cscan->custom_scan_tlist = subplan->targetlist; /* Target list of tuples
 													 * we expect as input */
 	cscan->flags = path->flags;
@@ -395,6 +481,10 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *
 	path->cpath.path.param_info = subpath->param_info;
 	path->cpath.path.pathtarget = subpath->pathtarget;
 
+	path->cpath.path.parallel_aware = false;
+	path->cpath.path.parallel_safe = subpath->parallel_safe;
+	path->cpath.path.parallel_workers = subpath->parallel_workers;
+
 	/*
 	 * Set flags. We can set CUSTOMPATH_SUPPORT_BACKWARD_SCAN and
 	 * CUSTOMPATH_SUPPORT_MARK_RESTORE. The only interesting flag is the first
@@ -416,9 +506,15 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *
 		case T_MergeAppendPath:
 			break;
 		default:
-			elog(ERROR, "invalid node type %u", nodeTag(subpath));
+			elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(subpath));
 			break;
 	}
 
 	return &path->cpath.path;
+}
+
+void
+_constraint_aware_append_init(void)
+{
+	RegisterCustomScanMethods(&constraint_aware_append_plan_methods);
 }

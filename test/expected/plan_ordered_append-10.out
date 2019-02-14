@@ -19,6 +19,15 @@ SELECT
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+-- create a now() function for repeatable testing that always returns
+-- the same timestamp. It needs to be marked STABLE
+CREATE OR REPLACE FUNCTION now_s()
+RETURNS timestamptz LANGUAGE PLPGSQL STABLE AS
+$BODY$
+BEGIN
+    RETURN '2000-01-08T0:00:00+0'::timestamptz;
+END;
+$BODY$;
 -- create a table where we create chunks in order
 CREATE TABLE ordered_append(time timestamptz NOT NULL, device_id INT, value float);
 SELECT create_hypertable('ordered_append','time');
@@ -244,6 +253,76 @@ ORDER BY time DESC LIMIT 1;
          ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 (6 rows)
+
+-- test interaction with constraint aware append
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time > now_s()
+ORDER BY time ASC LIMIT 1;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=1 loops=1)
+         Hypertable: ordered_append
+         Chunks left after exclusion: 2
+         ->  Append (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" > now_s())
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (never executed)
+                     Index Cond: ("time" > now_s())
+(9 rows)
+
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time < now_s()
+ORDER BY time ASC LIMIT 1;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=1 loops=1)
+         Hypertable: ordered_append
+         Chunks left after exclusion: 2
+         ->  Append (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" < now_s())
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+                     Index Cond: ("time" < now_s())
+(9 rows)
+
+-- test interaction withi constraint exclusion and constraint aware append
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time > now_s() AND time < '2000-01-10'
+ORDER BY time ASC LIMIT 1;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=1 loops=1)
+         Hypertable: ordered_append
+         Chunks left after exclusion: 1
+         ->  Append (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                     Index Cond: (("time" > now_s()) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+(7 rows)
+
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time < now_s() AND time > '2000-01-07'
+ORDER BY time ASC LIMIT 1;
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=0 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=0 loops=1)
+         Hypertable: ordered_append
+         Chunks left after exclusion: 1
+         ->  Append (actual rows=0 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=0 loops=1)
+                     Index Cond: (("time" < now_s()) AND ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone))
+(7 rows)
 
 -- min/max queries
 :PREFIX SELECT max(time) FROM ordered_append;

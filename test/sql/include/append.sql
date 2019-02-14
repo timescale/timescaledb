@@ -195,4 +195,3 @@ WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 h
 SELECT * FROM append_test a INNER JOIN join_test j ON (a.colorid = j.colorid)
 WHERE a.time > now_s() - interval '3 hours' AND j.time > now_s() - interval '3 hours';
 
-

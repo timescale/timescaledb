@@ -88,6 +88,32 @@ FROM ordered_append
 WHERE time > '2000-01-07'
 ORDER BY time DESC LIMIT 1;
 
+-- test interaction with constraint aware append
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time > now_s()
+ORDER BY time ASC LIMIT 1;
+
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time < now_s()
+ORDER BY time ASC LIMIT 1;
+
+-- test interaction withi constraint exclusion and constraint aware append
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time > now_s() AND time < '2000-01-10'
+ORDER BY time ASC LIMIT 1;
+
+:PREFIX SELECT
+  time, device_id, value
+FROM ordered_append
+WHERE time < now_s() AND time > '2000-01-07'
+ORDER BY time ASC LIMIT 1;
+
 -- min/max queries
 :PREFIX SELECT max(time) FROM ordered_append;
 

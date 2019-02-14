@@ -3,6 +3,13 @@
 -- LICENSE-APACHE for a copy of the license.
 --parallel queries require big-ish tables so collect them all here
 --so that we need to generate queries only once.
+-- look at postgres version to decide whether we run with analyze or without
+SELECT
+  CASE WHEN current_setting('server_version_num')::int >= 100000
+    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
+    ELSE 'EXPLAIN (costs off)'
+  END AS "PREFIX"
+\gset
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 NOTICE:  adding not-null constraint to column "i"
@@ -17,20 +24,21 @@ SET client_min_messages = 'error';
 --avoid warning polluting output
 ANALYZE;
 RESET client_min_messages;
+SET work_mem TO '50MB';
 SET force_parallel_mode = 'on';
 SET max_parallel_workers_per_gather = 4;
-EXPLAIN (costs off)
-SELECT first(i, j) FROM "test";
-                          QUERY PLAN                           
----------------------------------------------------------------
- Finalize Aggregate
-   ->  Gather
+:PREFIX SELECT first(i, j) FROM "test";
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
          Workers Planned: 2
-         ->  Partial Aggregate
-               ->  Parallel Append
-                     ->  Parallel Seq Scan on _hyper_1_1_chunk
-                     ->  Parallel Seq Scan on _hyper_1_2_chunk
-(7 rows)
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Parallel Append (actual rows=333333 loops=3)
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=166667 loops=3)
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
+(8 rows)
 
 SELECT first(i, j) FROM "test";
  first 
@@ -38,18 +46,18 @@ SELECT first(i, j) FROM "test";
      0
 (1 row)
 
-EXPLAIN (costs off)
-SELECT last(i, j) FROM "test";
-                          QUERY PLAN                           
----------------------------------------------------------------
- Finalize Aggregate
-   ->  Gather
+:PREFIX SELECT last(i, j) FROM "test";
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
          Workers Planned: 2
-         ->  Partial Aggregate
-               ->  Parallel Append
-                     ->  Parallel Seq Scan on _hyper_1_1_chunk
-                     ->  Parallel Seq Scan on _hyper_1_2_chunk
-(7 rows)
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Parallel Append (actual rows=333333 loops=3)
+                     ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=166667 loops=3)
+                     ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
+(8 rows)
 
 SELECT last(i, j) FROM "test";
   last  
@@ -57,8 +65,8 @@ SELECT last(i, j) FROM "test";
  999999
 (1 row)
 
-EXPLAIN (costs off)
-SELECT time_bucket('1 second', ts) sec, last(i, j)
+-- we dont run this with analyze because the sort memory usage is not stable
+EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
 GROUP BY sec
 ORDER BY sec
@@ -166,4 +174,98 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
 -------------------------------------------
  {10,19998,19998,19998,19998,19998,900000}
 (1 row)
+
+-- test constraint aware append
+:PREFIX SELECT i FROM "test" WHERE length(version()) > 0;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Gather (actual rows=1000000 loops=1)
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  Result (actual rows=1000000 loops=1)
+         One-Time Filter: (length(version()) > 0)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=1000000 loops=1)
+               Hypertable: test
+               Chunks left after exclusion: 2
+               ->  Append (actual rows=1000000 loops=1)
+                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+(12 rows)
+
+-- test constraint aware append with parallel aggregation
+:PREFIX SELECT count(*) FROM "test" WHERE length(version()) > 0;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1 loops=1)
+   ->  Gather (actual rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Partial Aggregate (actual rows=1 loops=3)
+               ->  Result (actual rows=333333 loops=3)
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Custom Scan (ConstraintAwareAppend) (actual rows=333333 loops=3)
+                           Hypertable: test
+                           Chunks left after exclusion: 2
+                           ->  Parallel Append (actual rows=333333 loops=3)
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=166667 loops=3)
+                                 ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=250000 loops=2)
+(13 rows)
+
+SELECT count(*) FROM "test" WHERE length(version()) > 0;
+  count  
+---------
+ 1000000
+(1 row)
+
+-- now() is not marked parallel safe in PostgreSQL < 12 so using now()
+-- in a query will prevent parallelism but CURRENT_TIMESTAMP and
+-- transaction_timestamp() are marked parallel safe
+:PREFIX SELECT i FROM "test" WHERE ts < CURRENT_TIMESTAMP;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Gather (actual rows=1000000 loops=1)
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=1000000 loops=1)
+         Hypertable: test
+         Chunks left after exclusion: 2
+         ->  Append (actual rows=1000000 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+                     Filter: (ts < CURRENT_TIMESTAMP)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+                     Filter: (ts < CURRENT_TIMESTAMP)
+(12 rows)
+
+:PREFIX SELECT i FROM "test" WHERE ts < transaction_timestamp();
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Gather (actual rows=1000000 loops=1)
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=1000000 loops=1)
+         Hypertable: test
+         Chunks left after exclusion: 2
+         ->  Append (actual rows=1000000 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+                     Filter: (ts < transaction_timestamp())
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+                     Filter: (ts < transaction_timestamp())
+(12 rows)
+
+-- this won't be parallel query because now() is parallel restricted in PG < 12
+:PREFIX SELECT i FROM "test" WHERE ts < now();
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend) (actual rows=1000000 loops=1)
+   Hypertable: test
+   Chunks left after exclusion: 2
+   ->  Append (actual rows=1000000 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=500000 loops=1)
+               Filter: (ts < now())
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=500000 loops=1)
+               Filter: (ts < now())
+(8 rows)
 
