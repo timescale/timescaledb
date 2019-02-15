@@ -4,6 +4,16 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.3.0 (unreleased)
+
+**Minor Features**
+* [b6d4202] Infer time_bucket_gapfill arguments from WHERE clause
+* [53a1f9c] Add treat_null_as_missing option to locf
+
+**Bugfixes**
+* [5a3edfd] Fix chunk exclusion constraint type inference
+* [8e86bda] Fix sort_transform optimization
+
 ## 1.2.1 (2019-02-11)
 
 This release contains bugfixes.
