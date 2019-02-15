@@ -1,7 +1,8 @@
 version: 1.0.{build}
-image: Visual Studio 2017
+image: Windows Server 2019
 services:
   - postgresql101
+  - docker
 build_script:
 - ps: >-
 
