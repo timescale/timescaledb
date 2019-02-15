@@ -19,8 +19,22 @@ gapfill_locf_initialize(GapFillLocfColumnState *locf, GapFillState *state, FuncE
 {
 	locf->isnull = true;
 
+	/* check if out of boundary lookup expression was supplied */
 	if (list_length(function->args) > 1)
 		locf->lookup_last = gapfill_adjust_varnos(state, lsecond(function->args));
+
+	/* check if treat_null_as_missing was supplied */
+	if (list_length(function->args) > 2)
+	{
+		Const *treat_null_as_missing = lthird(function->args);
+		if (!IsA(treat_null_as_missing, Const) || treat_null_as_missing->consttype != BOOLOID)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg(
+						 "invalid locf argument: treat_null_as_missing must be a BOOL literal")));
+		if (!treat_null_as_missing->constisnull)
+			locf->treat_null_as_missing = DatumGetBool(treat_null_as_missing->constvalue);
+	}
 }
 
 /*

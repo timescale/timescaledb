@@ -18,6 +18,7 @@ typedef struct GapFillLocfColumnState
 	Expr *lookup_last;
 	Datum value;
 	bool isnull;
+	bool treat_null_as_missing;
 } GapFillLocfColumnState;
 
 void gapfill_locf_initialize(GapFillLocfColumnState *, GapFillState *, FuncExpr *);

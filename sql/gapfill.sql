@@ -21,7 +21,7 @@ CREATE OR REPLACE FUNCTION time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTA
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_timestamptz_bucket' LANGUAGE C VOLATILE PARALLEL SAFE;
 
 -- locf function
-CREATE OR REPLACE FUNCTION locf(value ANYELEMENT, prev ANYELEMENT=NULL) RETURNS ANYELEMENT
+CREATE OR REPLACE FUNCTION locf(value ANYELEMENT, prev ANYELEMENT=NULL, treat_null_as_missing BOOL=false) RETURNS ANYELEMENT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_marker' LANGUAGE C STABLE PARALLEL SAFE;
 
 -- interpolate functions

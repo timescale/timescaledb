@@ -16,6 +16,20 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 
+-- test locf with treat_null_as_missing not BOOL
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(min(time),treat_null_as_missing:=1)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test locf with treat_null_as_missing not literal
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(min(time),treat_null_as_missing:=random()>0)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
 -- test interpolate lookup query with 1 element in record
 SELECT
   time_bucket_gapfill(1,time,1,11),
@@ -336,6 +350,32 @@ SELECT
 FROM (values (10,9),(20,3),(50,6)) v(time,value)
 GROUP BY 1 ORDER BY 1;
 
+-- test locf with NULLs in resultset
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value)) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=false) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=NULL) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+
+-- test locf with NULLs in resultset and treat_null_as_missing
+SELECT
+  time_bucket_gapfill(10,time,0,50) AS time,
+  locf(min(value),treat_null_as_missing:=true) AS value
+FROM (values (10,9),(20,3),(30,NULL),(50,6)) v(time,value)
+GROUP BY 1 ORDER BY 1;
+
 -- test locf with constants
 SELECT
   time_bucket_gapfill(1,time,0,5),
@@ -370,6 +410,19 @@ SELECT
   locf(min(v3)) AS "text 4/8k"
 FROM (VALUES
   (1,'foo',ARRAY[1,2,3],repeat('4k',2048)),
+  (3,'bar',ARRAY[3,4,5],repeat('8k',4096))
+) v(time,v1,v2,v3)
+GROUP BY 1;
+
+-- test locf with different datatypes and treat_null_as_missing
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  locf(min(v1),treat_null_as_missing:=true) AS text,
+  locf(min(v2),treat_null_as_missing:=true) AS "int[]",
+  locf(min(v3),treat_null_as_missing:=true) AS "text 4/8k"
+FROM (VALUES
+  (1,'foo',ARRAY[1,2,3],repeat('4k',2048)),
+  (2,NULL,NULL,NULL),
   (3,'bar',ARRAY[3,4,5],repeat('8k',4096))
 ) v(time,v1,v2,v3)
 GROUP BY 1;

@@ -93,7 +93,7 @@ docker_pgdiff() {
     docker_pgtest $1 $3
     docker_pgtest $2 $3
     echo "RUNNING:  diff ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out "
-    diff ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out | tee ${TEST_TMPDIR}/update_test.output
+    diff -u ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out | tee ${TEST_TMPDIR}/update_test.output
 }
 
 docker_run() {
