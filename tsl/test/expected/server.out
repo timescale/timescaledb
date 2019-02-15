@@ -203,9 +203,9 @@ NOTICE:  adding not-null constraint to column "time"
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             1 |                      | server_1
-             1 |                      | server_2
-             1 |                      | server_4
+             1 |                    1 | server_1
+             1 |                    1 | server_2
+             1 |                    1 | server_4
 (3 rows)
 
 DROP TABLE disttable;
@@ -244,8 +244,8 @@ NOTICE:  adding not-null constraint to column "time"
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                      | server_2
-             4 |                      | server_4
+             4 |                    2 | server_2
+             4 |                    2 | server_4
 (2 rows)
 
 -- Deleting a server should remove the hypertable_server mappings for that server
@@ -259,7 +259,7 @@ NOTICE:  drop cascades to 2 other objects
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
-             4 |                      | server_4
+             4 |                    2 | server_4
 (1 row)
 
 -- Should also clean up hypertable_server when using standard DDL commands
