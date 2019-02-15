@@ -12,6 +12,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <foreign/foreign.h>
+#include <libpq-fe.h>
 
 #include <hypertable_server.h>
 #include <errors.h>
@@ -26,7 +27,8 @@
 #include <extension.h>
 
 static List *
-server_append(List *servers, int32 hypertable_id, const char *servername)
+server_append(List *servers, int32 hypertable_id, const char *servername,
+			  int32 server_hypertable_id)
 {
 	ForeignServer *server = GetForeignServerByName(servername, false);
 	HypertableServer *hs = palloc0(sizeof(HypertableServer));
@@ -37,26 +39,47 @@ server_append(List *servers, int32 hypertable_id, const char *servername)
 
 	hs->fd.hypertable_id = hypertable_id;
 	namestrcpy(&hs->fd.server_name, servername);
+	hs->fd.server_hypertable_id = server_hypertable_id;
 	hs->foreign_server_oid = server->serverid;
 
 	return lappend(servers, hs);
 }
 
-static void
+/*  Returns the remote hypertable ids for the servers (in the same order)
+ */
+static List *
 hypertable_create_backend_tables(int32 hypertable_id, List *servers)
 {
 #if !PG96
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
 	ListCell *cell;
+	List *remote_ids = NIL;
+	DistCmdResult *dist_res;
 
 	foreach (cell, deparse_get_tabledef_commands(ht->main_table_relid))
 		ts_dist_cmd_run_on_servers(lfirst(cell), servers);
 
-	ts_dist_cmd_run_on_servers(deparse_get_distributed_hypertable_create_command(ht), servers);
+	dist_res = ts_dist_cmd_invoke_on_servers(deparse_get_distributed_hypertable_create_command(ht),
+											 servers);
+	foreach (cell, servers)
+	{
+		PGresult *res = ts_dist_cmd_get_server_result(dist_res, lfirst(cell));
+
+		Assert(PQntuples(res) == 1);
+		Assert(PQnfields(res) == AttrNumberGetAttrOffset(_Anum_create_hypertable_max));
+		remote_ids =
+			lappend(remote_ids,
+					(void *) Int32GetDatum(atoi(
+						PQgetvalue(res, 0, AttrNumberGetAttrOffset(Anum_create_hypertable_id)))));
+	}
+	ts_dist_cmd_close_response(dist_res);
+
+	return remote_ids;
 #else
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("unable to distribute hypertables in older versions of Postgres (<10)")));
+	return NIL;
 #endif
 }
 
@@ -74,14 +97,14 @@ hypertable_assign_servers(int32 hypertable_id, List *servers)
 {
 	ListCell *lc;
 	List *assigned_servers = NIL;
+	List *remote_ids = hypertable_create_backend_tables(hypertable_id, servers);
+	ListCell *id_cell;
 
-	hypertable_create_backend_tables(hypertable_id, servers);
-
-	foreach (lc, servers)
+	Assert(servers->length == remote_ids->length);
+	forboth (lc, servers, id_cell, remote_ids)
 	{
-		const char *servername = lfirst(lc);
-
-		assigned_servers = server_append(assigned_servers, hypertable_id, servername);
+		assigned_servers =
+			server_append(assigned_servers, hypertable_id, lfirst(lc), lfirst_int(id_cell));
 	}
 
 	ts_hypertable_server_insert_multi(assigned_servers);
