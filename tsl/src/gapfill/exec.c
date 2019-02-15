@@ -885,7 +885,13 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 		{
 			case LOCF_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
-				gapfill_locf_tuple_returned(column.locf, value, isnull);
+				if (isnull && column.locf->treat_null_as_missing && !column.locf->isnull)
+				{
+					state->subslot->tts_isnull[i] = false;
+					state->subslot->tts_values[i] = column.locf->value;
+				}
+				else
+					gapfill_locf_tuple_returned(column.locf, value, isnull);
 				break;
 			case INTERPOLATE_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
