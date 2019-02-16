@@ -373,12 +373,41 @@ deparse_get_tabledef_commands_concat(Oid relid)
 	return tabledef->data;
 }
 
-const char *
+static const char *
+deparse_get_add_dimension_command(Hypertable *ht, Dimension *dimension)
+{
+	StringInfo dim_cmd = makeStringInfo();
+
+	appendStringInfo(dim_cmd,
+					 "SELECT * FROM %s.add_dimension(%s, %s, ",
+					 quote_identifier(ts_extension_schema_name()),
+					 quote_literal_cstr(
+						 quote_qualified_identifier(get_namespace_name(
+														get_rel_namespace(ht->main_table_relid)),
+													get_rel_name(ht->main_table_relid))),
+					 quote_literal_cstr(NameStr(dimension->fd.column_name)));
+
+	if (dimension->type == DIMENSION_TYPE_CLOSED)
+		appendStringInfo(dim_cmd,
+						 "number_partitions => %d, partitioning_func => %s);",
+						 dimension->fd.num_slices,
+						 quote_literal_cstr(
+							 quote_qualified_identifier(NameStr(
+															dimension->fd.partitioning_func_schema),
+														NameStr(dimension->fd.partitioning_func))));
+	else
+		appendStringInfo(dim_cmd, "chunk_time_interval => %ld);", dimension->fd.interval_length);
+
+	return dim_cmd->data;
+}
+
+DeparsedHypertableCommands *
 deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 {
 	Hyperspace *space = ht->space;
 	Dimension *time_dim = &space->dimensions[0];
 	StringInfo hypertable_cmd = makeStringInfo();
+	DeparsedHypertableCommands *result = palloc(sizeof(DeparsedHypertableCommands));
 
 	appendStringInfo(hypertable_cmd,
 					 "SELECT * FROM %s.create_hypertable(%s",
@@ -399,32 +428,6 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 							 quote_qualified_identifier(NameStr(
 															time_dim->fd.partitioning_func_schema),
 														NameStr(time_dim->fd.partitioning_func))));
-
-	if (space->num_dimensions > 1)
-	{
-		Dimension *space_dim = &space->dimensions[1];
-
-		if (space->num_dimensions > 2)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg(
-						 "distribute hypertable doesn't yet support multiple space dimensions")));
-
-		appendStringInfo(hypertable_cmd,
-						 ", partitioning_column => %s",
-						 quote_literal_cstr(NameStr(space_dim->fd.column_name)));
-
-		if (space_dim->type == DIMENSION_TYPE_CLOSED)
-			appendStringInfo(hypertable_cmd, ", number_partitions => %d", space_dim->fd.num_slices);
-		else
-			appendStringInfo(hypertable_cmd,
-							 ", partitioning_func => %s",
-							 quote_literal_cstr(
-								 quote_qualified_identifier(NameStr(space_dim->fd
-																		.partitioning_func_schema),
-															NameStr(
-																space_dim->fd.partitioning_func))));
-	}
 
 	appendStringInfo(hypertable_cmd,
 					 ", associated_schema_name => %s",
@@ -455,5 +458,19 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 	appendStringInfoString(hypertable_cmd, ", replication_factor => 0");
 
 	appendStringInfoString(hypertable_cmd, ");");
-	return hypertable_cmd->data;
+
+	result->table_create_command = hypertable_cmd->data;
+	result->dimension_add_commands = NIL;
+
+	if (space->num_dimensions > 1)
+	{
+		int i;
+
+		for (i = 1; i < space->num_dimensions; i++)
+			result->dimension_add_commands =
+				lappend(result->dimension_add_commands,
+						(char *) deparse_get_add_dimension_command(ht, &space->dimensions[i]));
+	}
+
+	return result;
 }

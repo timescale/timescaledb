@@ -944,3 +944,86 @@ FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.
  ts_insert_blocker |      7 | _timescaledb_internal.insert_blocker |  ts_insert_blocker BEFORE INSERT ON "Table\\Schema"."Param_Table" FOR EACH ROW EXECUTE PROCEDURE _timescaledb_internal.insert_blocker()
 (1 row)
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test multi-dimensional hypertable (note that add_dimension is not currently propagated to backends)
+CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
+SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, servers => '{ "server_1" }');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name |   table_name   | created 
+---------------+-------------+----------------+---------
+             5 | public      | dimented_table | t
+(1 row)
+
+SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
+NOTICE:  adding not-null constraint to column "column2"
+ dimension_id | schema_name |   table_name   | column_name | created 
+--------------+-------------+----------------+-------------+---------
+            8 | public      | dimented_table | column2     | t
+(1 row)
+
+SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+ dimension_id | schema_name |   table_name   | column_name | created 
+--------------+-------------+----------------+-------------+---------
+            9 | public      | dimented_table | column3     | t
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  4 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000
+  5 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash    |                
+  6 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  7 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                
+  8 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000
+  9 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                
+(8 rows)
+
+SELECT * FROM assign_server('dimented_table', 'server_2');
+ assign_server 
+---------------
+ 
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  4 |             4 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000
+  5 |             4 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash    |                
+  6 |             5 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  7 |             5 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                
+  8 |             5 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000
+  9 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                
+(8 rows)
+
+\c server_1
+-- Note that this didn't get the add_dimension
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+--------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  3 |             3 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                    |    604800000000
+  4 |             3 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash |                
+  5 |             4 | time             | timestamp with time zone | t       |            |                          |                    |    604800000000
+  6 |             4 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash |                
+(6 rows)
+
+\c server_2
+SELECT * FROM _timescaledb_catalog.dimension;
+ id | hypertable_id |   column_name    |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length 
+----+---------------+------------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------
+  1 |             1 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  2 |             2 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  3 |             3 | time Col %#^#@$# | timestamp with time zone | t       |            |                          |                       |    604800000000
+  4 |             3 | __region         | text                     | f       |          4 | _timescaledb_internal    | get_partition_hash    |                
+  5 |             4 | time             | timestamp with time zone | t       |            |                          |                       |    604800000000
+  6 |             4 | column1          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_hash    |                
+  7 |             4 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000
+  8 |             4 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                
+(8 rows)
+

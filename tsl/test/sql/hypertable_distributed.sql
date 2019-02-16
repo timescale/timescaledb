@@ -436,3 +436,21 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc, substring(pg_get_triggerdef(t.oid, true) from 15)
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Test multi-dimensional hypertable (note that add_dimension is not currently propagated to backends)
+CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
+SELECT * FROM create_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, servers => '{ "server_1" }');
+SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
+SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+
+SELECT * FROM _timescaledb_catalog.dimension;
+SELECT * FROM assign_server('dimented_table', 'server_2');
+
+SELECT * FROM _timescaledb_catalog.dimension;
+\c server_1
+-- Note that this didn't get the add_dimension
+SELECT * FROM _timescaledb_catalog.dimension;
+\c server_2
+SELECT * FROM _timescaledb_catalog.dimension;
