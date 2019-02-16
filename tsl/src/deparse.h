@@ -28,6 +28,12 @@ typedef struct TableDef
 	List *rule_cmds;
 } TableDef;
 
+typedef struct DeparsedHypertableCommands
+{
+	const char *table_create_command;
+	List *dimension_add_commands;
+} DeparsedHypertableCommands;
+
 typedef struct Hypertable Hypertable;
 
 TableInfo *deparse_create_table_info(Oid relid);
@@ -36,6 +42,6 @@ List *deparse_get_tabledef_commands(Oid relid);
 List *deparse_get_tabledef_commands_from_tabledef(TableDef *table_def);
 const char *deparse_get_tabledef_commands_concat(Oid relid);
 
-const char *deparse_get_distributed_hypertable_create_command(Hypertable *ht);
+DeparsedHypertableCommands *deparse_get_distributed_hypertable_create_command(Hypertable *ht);
 
 #endif

@@ -73,12 +73,12 @@ hypertable_create_backend_tables(int32 hypertable_id, List *servers)
 	ListCell *cell;
 	List *remote_ids = NIL;
 	DistCmdResult *dist_res;
+	DeparsedHypertableCommands *commands = deparse_get_distributed_hypertable_create_command(ht);
 
 	foreach (cell, deparse_get_tabledef_commands(ht->main_table_relid))
 		ts_dist_cmd_run_on_servers(lfirst(cell), servers);
 
-	dist_res = ts_dist_cmd_invoke_on_servers(deparse_get_distributed_hypertable_create_command(ht),
-											 servers);
+	dist_res = ts_dist_cmd_invoke_on_servers(commands->table_create_command, servers);
 	foreach (cell, servers)
 	{
 		PGresult *res = ts_dist_cmd_get_server_result(dist_res, lfirst(cell));
@@ -91,6 +91,9 @@ hypertable_create_backend_tables(int32 hypertable_id, List *servers)
 						PQgetvalue(res, 0, AttrNumberGetAttrOffset(Anum_create_hypertable_id)))));
 	}
 	ts_dist_cmd_close_response(dist_res);
+
+	foreach (cell, commands->dimension_add_commands)
+		ts_dist_cmd_run_on_servers(lfirst(cell), servers);
 
 	return remote_ids;
 #else
