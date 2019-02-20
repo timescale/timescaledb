@@ -248,43 +248,67 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT * FROM disttable;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Foreign Scan on _timescaledb_internal._hyper_1_1_dist_chunk
-         Output: _hyper_1_1_dist_chunk."time", _hyper_1_1_dist_chunk.device, _hyper_1_1_dist_chunk.temp
-         Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_1_dist_chunk
-   ->  Foreign Scan on _timescaledb_internal._hyper_1_2_dist_chunk
-         Output: _hyper_1_2_dist_chunk."time", _hyper_1_2_dist_chunk.device, _hyper_1_2_dist_chunk.temp
-         Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_2_dist_chunk
-   ->  Foreign Scan on _timescaledb_internal._hyper_1_3_dist_chunk
-         Output: _hyper_1_3_dist_chunk."time", _hyper_1_3_dist_chunk.device, _hyper_1_3_dist_chunk.temp
-         Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_3_dist_chunk
-(10 rows)
+   ->  Foreign Scan
+         Output: "time", device, temp
+         Server: server_1
+         Chunks: _hyper_1_1_dist_chunk
+         Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1])
+   ->  Foreign Scan
+         Output: "time", device, temp
+         Server: server_2
+         Chunks: _hyper_1_2_dist_chunk
+         Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1])
+   ->  Foreign Scan
+         Output: "time", device, temp
+         Server: server_3
+         Chunks: _hyper_1_3_dist_chunk
+         Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1])
+(16 rows)
+
+SELECT * FROM disttable;
+             time             | device | temp 
+------------------------------+--------+------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1
+ Sun Jan 01 08:01:00 2017 PST |      1 |  1.2
+ Sun Jan 01 06:05:00 2017 PST |      1 |  1.4
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3
+ Tue Jan 01 09:11:00 2019 PST |      3 |  2.1
+(5 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
 FROM disttable GROUP BY 1, 2
 ORDER BY 1;
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
- GroupAggregate
-   Output: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device, avg(_hyper_1_1_dist_chunk.temp)
-   Group Key: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device
-   ->  Sort
-         Output: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device, _hyper_1_1_dist_chunk.temp
-         Sort Key: (time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time")), _hyper_1_1_dist_chunk.device
-         ->  Append
-               ->  Foreign Scan on _timescaledb_internal._hyper_1_1_dist_chunk
-                     Output: time_bucket('@ 3 hours'::interval, _hyper_1_1_dist_chunk."time"), _hyper_1_1_dist_chunk.device, _hyper_1_1_dist_chunk.temp
-                     Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_1_dist_chunk
-               ->  Foreign Scan on _timescaledb_internal._hyper_1_2_dist_chunk
-                     Output: time_bucket('@ 3 hours'::interval, _hyper_1_2_dist_chunk."time"), _hyper_1_2_dist_chunk.device, _hyper_1_2_dist_chunk.temp
-                     Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_2_dist_chunk
-               ->  Foreign Scan on _timescaledb_internal._hyper_1_3_dist_chunk
-                     Output: time_bucket('@ 3 hours'::interval, _hyper_1_3_dist_chunk."time"), _hyper_1_3_dist_chunk.device, _hyper_1_3_dist_chunk.temp
-                     Remote SQL: SELECT "time", device, temp FROM _timescaledb_internal._hyper_1_3_dist_chunk
-(16 rows)
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: (time_bucket('@ 3 hours'::interval, "time")), device, (avg(temp))
+   Sort Key: (time_bucket('@ 3 hours'::interval, disttable."time"))
+   ->  HashAggregate
+         Output: (time_bucket('@ 3 hours'::interval, "time")), device, avg(temp)
+         Group Key: time_bucket('@ 3 hours'::interval, disttable."time"), disttable.device
+         ->  Result
+               Output: time_bucket('@ 3 hours'::interval, "time"), device, temp
+               ->  Append
+                     ->  Foreign Scan
+                           Output: "time", device, temp
+                           Server: server_1
+                           Chunks: _hyper_1_1_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1])
+                     ->  Foreign Scan
+                           Output: "time", device, temp
+                           Server: server_2
+                           Chunks: _hyper_1_2_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1])
+                     ->  Foreign Scan
+                           Output: "time", device, temp
+                           Server: server_3
+                           Chunks: _hyper_1_3_dist_chunk
+                           Remote SQL: SELECT "time", device, temp FROM public.disttable WHERE _timescaledb_internal.chunks_in(disttable, ARRAY[1])
+(24 rows)
 
 -- Execute some queries on the frontend and return the results
 SELECT * FROM disttable;
@@ -529,8 +553,8 @@ SELECT * FROM disttable;
  Sun Jan 01 08:01:00 2017 PST |      1 |  1.2 |      
  Sun Jan 01 06:05:00 2017 PST |      1 |  1.4 |      
  Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |      
- Tue Jan 01 09:11:00 2019 PST |      4 |  2.1 |      
  Sat Sep 02 06:09:00 2017 PDT |      4 |  9.8 |     1
+ Tue Jan 01 09:11:00 2019 PST |      4 |  2.1 |      
 (6 rows)
 
 WITH devices AS (
@@ -1022,4 +1046,281 @@ SELECT * FROM _timescaledb_catalog.dimension;
   7 |             4 | column2          | timestamp with time zone | t       |            |                          |                       |    604800000000 |                         | 
   8 |             4 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                 |                         | 
 (8 rows)
+
+--test per-server queries
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Create some chunks through insertion
+CREATE TABLE disttable_replicated(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float, "Color" int);
+SELECT * FROM create_hypertable('disttable_replicated', 'time', replication_factor => 2);
+ hypertable_id | schema_name |      table_name      | created 
+---------------+-------------+----------------------+---------
+             6 | public      | disttable_replicated | t
+(1 row)
+
+INSERT INTO disttable_replicated VALUES
+       ('2017-01-01 06:01', 1, 1.1, 1),
+       ('2017-01-01 08:01', 1, 1.2, 2),
+       ('2018-01-02 08:01', 2, 1.3, 3),
+       ('2019-01-01 09:11', 3, 2.1, 4),
+       ('2020-01-01 06:01', 5, 1.1, 10),
+       ('2020-01-01 08:01', 6, 1.2, 11),
+       ('2021-01-02 08:01', 7, 1.3, 12),
+       ('2022-01-01 09:11', 8, 2.1, 13);
+SELECT * FROM disttable_replicated;
+             time             | device | temp | Color 
+------------------------------+--------+------+-------
+ Sun Jan 01 06:01:00 2017 PST |      1 |  1.1 |     1
+ Sun Jan 01 08:01:00 2017 PST |      1 |  1.2 |     2
+ Wed Jan 01 06:01:00 2020 PST |      5 |  1.1 |    10
+ Wed Jan 01 08:01:00 2020 PST |      6 |  1.2 |    11
+ Tue Jan 02 08:01:00 2018 PST |      2 |  1.3 |     3
+ Sat Jan 02 08:01:00 2021 PST |      7 |  1.3 |    12
+ Tue Jan 01 09:11:00 2019 PST |      3 |  2.1 |     4
+ Sat Jan 01 09:11:00 2022 PST |      8 |  2.1 |    13
+(8 rows)
+
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=8 loops=1)
+   ->  Foreign Scan (actual rows=4 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_1
+         Chunks: _hyper_6_6_dist_chunk, _hyper_6_9_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[3, 5])
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_2
+         Chunks: _hyper_6_7_dist_chunk, _hyper_6_10_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7])
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_3
+         Chunks: _hyper_6_8_dist_chunk, _hyper_6_11_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[4, 6])
+(16 rows)
+
+--guc disables the optimization
+SET timescaledb.enable_per_server_queries = FALSE;
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated;
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=8 loops=1)
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_6_dist_chunk (actual rows=2 loops=1)
+         Output: _hyper_6_6_dist_chunk."time", _hyper_6_6_dist_chunk.device, _hyper_6_6_dist_chunk.temp, _hyper_6_6_dist_chunk."Color"
+         Server: server_1
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_6_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_7_dist_chunk (actual rows=1 loops=1)
+         Output: _hyper_6_7_dist_chunk."time", _hyper_6_7_dist_chunk.device, _hyper_6_7_dist_chunk.temp, _hyper_6_7_dist_chunk."Color"
+         Server: server_2
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_7_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_8_dist_chunk (actual rows=1 loops=1)
+         Output: _hyper_6_8_dist_chunk."time", _hyper_6_8_dist_chunk.device, _hyper_6_8_dist_chunk.temp, _hyper_6_8_dist_chunk."Color"
+         Server: server_3
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_8_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_9_dist_chunk (actual rows=2 loops=1)
+         Output: _hyper_6_9_dist_chunk."time", _hyper_6_9_dist_chunk.device, _hyper_6_9_dist_chunk.temp, _hyper_6_9_dist_chunk."Color"
+         Server: server_1
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_9_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_10_dist_chunk (actual rows=1 loops=1)
+         Output: _hyper_6_10_dist_chunk."time", _hyper_6_10_dist_chunk.device, _hyper_6_10_dist_chunk.temp, _hyper_6_10_dist_chunk."Color"
+         Server: server_2
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_10_dist_chunk
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk (actual rows=1 loops=1)
+         Output: _hyper_6_11_dist_chunk."time", _hyper_6_11_dist_chunk.device, _hyper_6_11_dist_chunk.temp, _hyper_6_11_dist_chunk."Color"
+         Server: server_3
+         Remote SQL: SELECT "time", device, temp, "Color" FROM _timescaledb_internal._hyper_6_11_dist_chunk
+(25 rows)
+
+SET timescaledb.enable_per_server_queries = TRUE;
+--test WHERE clause
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE temp > 2.0;
+                                                                                              QUERY PLAN                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Foreign Scan (actual rows=0 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_1
+         Chunks: _hyper_6_6_dist_chunk, _hyper_6_9_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[3, 5]) AND ((temp > 2::double precision))
+   ->  Foreign Scan (actual rows=0 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_2
+         Chunks: _hyper_6_7_dist_chunk, _hyper_6_10_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7]) AND ((temp > 2::double precision))
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_3
+         Chunks: _hyper_6_8_dist_chunk, _hyper_6_11_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[4, 6]) AND ((temp > 2::double precision))
+(16 rows)
+
+--test OR
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE temp > 2.0 or "Color" = 11;
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=3 loops=1)
+   ->  Foreign Scan (actual rows=1 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_1
+         Chunks: _hyper_6_6_dist_chunk, _hyper_6_9_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[3, 5]) AND (((temp > 2::double precision) OR ("Color" = 11)))
+   ->  Foreign Scan (actual rows=0 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_2
+         Chunks: _hyper_6_7_dist_chunk, _hyper_6_10_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7]) AND (((temp > 2::double precision) OR ("Color" = 11)))
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_3
+         Chunks: _hyper_6_8_dist_chunk, _hyper_6_11_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[4, 6]) AND (((temp > 2::double precision) OR ("Color" = 11)))
+(16 rows)
+
+--test some chunks excluded
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE time < '2018-01-01 09:11';
+                                                                                                             QUERY PLAN                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_1
+         Chunks: _hyper_6_6_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[3]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
+   ->  Foreign Scan (actual rows=0 loops=1)
+         Output: "time", device, temp, "Color"
+         Server: server_2
+         Chunks: _hyper_6_7_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5]) AND (("time" < '2018-01-01 09:11:00-08'::timestamp with time zone))
+(11 rows)
+
+--test all chunks excluded
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE time < '2002-01-01 09:11';
+               QUERY PLAN                
+-----------------------------------------
+ Result (actual rows=0 loops=1)
+   Output: "time", device, temp, "Color"
+   One-Time Filter: false
+(3 rows)
+
+--test cte
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+WITH cte AS (
+    SELECT * FROM disttable_replicated
+)
+SELECT * FROM cte;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=8 loops=1)
+   ->  Foreign Scan (actual rows=4 loops=1)
+         Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
+         Server: server_1
+         Chunks: _hyper_6_6_dist_chunk, _hyper_6_9_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[3, 5])
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
+         Server: server_2
+         Chunks: _hyper_6_7_dist_chunk, _hyper_6_10_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[5, 7])
+   ->  Foreign Scan (actual rows=2 loops=1)
+         Output: disttable_replicated."time", disttable_replicated.device, disttable_replicated.temp, disttable_replicated."Color"
+         Server: server_3
+         Chunks: _hyper_6_8_dist_chunk, _hyper_6_11_dist_chunk
+         Remote SQL: SELECT "time", device, temp, "Color" FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(disttable_replicated, ARRAY[4, 6])
+(16 rows)
+
+--queries that involve updates/inserts are not optimized
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+WITH devices AS (
+     SELECT DISTINCT device FROM disttable_replicated ORDER BY device
+)
+UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on public.disttable_replicated (actual rows=0 loops=1)
+   Update on public.disttable_replicated
+   Foreign Update on _timescaledb_internal._hyper_6_6_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_6_dist_chunk SET device = $2 WHERE ctid = $1
+   Foreign Update on _timescaledb_internal._hyper_6_7_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_7_dist_chunk SET device = $2 WHERE ctid = $1
+   Foreign Update on _timescaledb_internal._hyper_6_8_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_8_dist_chunk SET device = $2 WHERE ctid = $1
+   Foreign Update on _timescaledb_internal._hyper_6_9_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_9_dist_chunk SET device = $2 WHERE ctid = $1
+   Foreign Update on _timescaledb_internal._hyper_6_10_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_10_dist_chunk SET device = $2 WHERE ctid = $1
+   Foreign Update on _timescaledb_internal._hyper_6_11_dist_chunk
+     Remote SQL: UPDATE _timescaledb_internal._hyper_6_11_dist_chunk SET device = $2 WHERE ctid = $1
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           Output: disttable_replicated_1.device
+           ->  Unique (actual rows=1 loops=1)
+                 Output: disttable_replicated_1.device
+                 ->  Merge Append (actual rows=1 loops=1)
+                       Sort Key: disttable_replicated_1.device
+                       ->  Sort (actual rows=0 loops=1)
+                             Output: disttable_replicated_1.device
+                             Sort Key: disttable_replicated_1.device
+                             Sort Method: quicksort 
+                             ->  Seq Scan on public.disttable_replicated disttable_replicated_1 (actual rows=0 loops=1)
+                                   Output: disttable_replicated_1.device
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_6_dist_chunk _hyper_6_6_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_6_dist_chunk_1.device
+                             Server: server_1
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_6_dist_chunk ORDER BY device ASC NULLS LAST
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_7_dist_chunk _hyper_6_7_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_7_dist_chunk_1.device
+                             Server: server_2
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_7_dist_chunk ORDER BY device ASC NULLS LAST
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_8_dist_chunk _hyper_6_8_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_8_dist_chunk_1.device
+                             Server: server_3
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_8_dist_chunk ORDER BY device ASC NULLS LAST
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_9_dist_chunk _hyper_6_9_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_9_dist_chunk_1.device
+                             Server: server_1
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_9_dist_chunk ORDER BY device ASC NULLS LAST
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_10_dist_chunk _hyper_6_10_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_10_dist_chunk_1.device
+                             Server: server_2
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_10_dist_chunk ORDER BY device ASC NULLS LAST
+                       ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk _hyper_6_11_dist_chunk_1 (actual rows=1 loops=1)
+                             Output: _hyper_6_11_dist_chunk_1.device
+                             Server: server_3
+                             Remote SQL: SELECT device FROM _timescaledb_internal._hyper_6_11_dist_chunk ORDER BY device ASC NULLS LAST
+   ->  Seq Scan on public.disttable_replicated (actual rows=0 loops=1)
+         Output: disttable_replicated."time", 2, disttable_replicated.temp, disttable_replicated."Color", disttable_replicated.ctid
+         Filter: (disttable_replicated.device = $0)
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_6_dist_chunk (actual rows=2 loops=1)
+         Output: _hyper_6_6_dist_chunk."time", 2, _hyper_6_6_dist_chunk.temp, _hyper_6_6_dist_chunk."Color", _hyper_6_6_dist_chunk.ctid
+         Server: server_1
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_6_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_7_dist_chunk (actual rows=0 loops=1)
+         Output: _hyper_6_7_dist_chunk."time", 2, _hyper_6_7_dist_chunk.temp, _hyper_6_7_dist_chunk."Color", _hyper_6_7_dist_chunk.ctid
+         Server: server_2
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_7_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_8_dist_chunk (actual rows=0 loops=1)
+         Output: _hyper_6_8_dist_chunk."time", 2, _hyper_6_8_dist_chunk.temp, _hyper_6_8_dist_chunk."Color", _hyper_6_8_dist_chunk.ctid
+         Server: server_3
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_8_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_9_dist_chunk (actual rows=0 loops=1)
+         Output: _hyper_6_9_dist_chunk."time", 2, _hyper_6_9_dist_chunk.temp, _hyper_6_9_dist_chunk."Color", _hyper_6_9_dist_chunk.ctid
+         Server: server_1
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_9_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_10_dist_chunk (actual rows=0 loops=1)
+         Output: _hyper_6_10_dist_chunk."time", 2, _hyper_6_10_dist_chunk.temp, _hyper_6_10_dist_chunk."Color", _hyper_6_10_dist_chunk.ctid
+         Server: server_2
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_10_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+   ->  Foreign Scan on _timescaledb_internal._hyper_6_11_dist_chunk (actual rows=0 loops=1)
+         Output: _hyper_6_11_dist_chunk."time", 2, _hyper_6_11_dist_chunk.temp, _hyper_6_11_dist_chunk."Color", _hyper_6_11_dist_chunk.ctid
+         Server: server_3
+         Remote SQL: SELECT "time", temp, "Color", ctid FROM _timescaledb_internal._hyper_6_11_dist_chunk WHERE ((device = $1::integer)) FOR UPDATE
+(78 rows)
 

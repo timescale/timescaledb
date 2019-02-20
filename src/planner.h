@@ -18,6 +18,7 @@
 #include <nodes/relation.h>
 #endif
 
+typedef struct TsFdwRelationInfo TsFdwRelationInfo;
 typedef struct TimescaleDBPrivate
 {
 	bool appends_ordered;
@@ -25,6 +26,8 @@ typedef struct TimescaleDBPrivate
 	int order_attno;
 	List *nested_oids;
 	bool compressed;
+	List *chunk_oids;
+	TsFdwRelationInfo *fdw_relation_info;
 } TimescaleDBPrivate;
 
 extern bool ts_rte_is_hypertable(const RangeTblEntry *rte);

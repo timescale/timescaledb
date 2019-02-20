@@ -70,8 +70,9 @@ EXPLAIN (VERBOSE, COSTS FALSE) SELECT * FROM test_ft;
 -------------------------------------------------
  Foreign Scan on public.test_ft
    Output: c0, c1
+   Server: server_1
    Remote SQL: SELECT c0, c1 FROM public.test_ft
-(3 rows)
+(4 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
                       QUERY PLAN                       
@@ -81,8 +82,9 @@ EXPLAIN (VERBOSE, COSTS FALSE) SELECT avg(c0) FROM test_ft GROUP BY c1;
    Group Key: test_ft.c1
    ->  Foreign Scan on public.test_ft
          Output: c0, c1
+         Server: server_1
          Remote SQL: SELECT c0, c1 FROM public.test_ft
-(6 rows)
+(7 rows)
 
 SELECT * FROM test_ft;
  c0 |   c1   
@@ -110,8 +112,9 @@ RETURNING c1, c0;
    Remote SQL: UPDATE public.test_ft SET c1 = $2 WHERE ctid = $1 RETURNING c0, c1
    ->  Foreign Scan on public.test_ft
          Output: c0, 'new_test'::character varying(10), ctid
+         Server: server_1
          Remote SQL: SELECT c0, ctid FROM public.test_ft WHERE ((c0 = 2)) FOR UPDATE
-(6 rows)
+(7 rows)
 
 UPDATE test_ft SET c1 = 'new_test' WHERE c0 = 2
 RETURNING c1, c0;

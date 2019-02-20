@@ -209,6 +209,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.timescaledb_fdw_validator = empty_fn,
 	.remote_txn_id_in = error_not_supported_default_fn,
 	.remote_txn_id_out = error_not_supported_default_fn,
+	.set_rel_pathlist = NULL,
+	.hypertable_should_be_expanded = NULL,
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
@@ -223,6 +225,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
 	.remote_txn_heal_server = remote_txn_heal_server,
+	.set_rel_pathlist = tsl_set_rel_pathlist,
+	.hypertable_should_be_expanded = tsl_hypertable_should_be_expanded,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };

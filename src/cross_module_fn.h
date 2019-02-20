@@ -20,6 +20,7 @@
 #include "process_utility.h"
 #include "with_clause_parser.h"
 #include "continuous_agg.h"
+#include "plan_expand_hypertable.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -54,6 +55,9 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
+	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+	bool (*hypertable_should_be_expanded)(RelOptInfo *rel, RangeTblEntry *rte, Hypertable *ht,
+										  List *chunk_oids);
 	PGFunction gapfill_marker;
 	PGFunction gapfill_int16_time_bucket;
 	PGFunction gapfill_int32_time_bucket;

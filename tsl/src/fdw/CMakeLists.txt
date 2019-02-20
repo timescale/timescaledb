@@ -4,6 +4,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/shippable.c
   ${CMAKE_CURRENT_SOURCE_DIR}/utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/option.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/server_chunk_assignment.c
 )
 
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
