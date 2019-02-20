@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <parser/parsetree.h>
+#include <foreign/fdwapi.h>
 
 #include <planner.h>
 #include "planner.h"
@@ -14,6 +15,11 @@
 #include "chunk.h"
 #include "hypertable.h"
 #include "hypertable_compression.h"
+#include "hypertable_cache.h"
+#include "compat.h"
+#if !PG96
+#include "fdw/timescaledb_fdw.h"
+#endif
 #include "guc.h"
 
 #include <math.h>
@@ -63,3 +69,52 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 		}
 	}
 }
+
+#if PG_VERSION_SUPPORTS_MULTINODE
+/* The fdw needs to expand a distributed hypertable inside the `GetForeignPath` callback. But, since
+ * the hypertable base table is not a foreign table, that callback would not normally be called.
+ * Thus, we call it manually in this hook.
+ */
+void
+tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+{
+	Cache *hcache;
+	Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_MISSING_OK, &hcache);
+
+	if (rel->fdw_private != NULL && ht != NULL && ht->fd.replication_factor > 0)
+	{
+		FdwRoutine *fdw = (FdwRoutine *) DatumGetPointer(
+			DirectFunctionCall1(timescaledb_fdw_handler, PointerGetDatum(NULL)));
+
+		fdw->GetForeignRelSize(root, rel, rte->relid);
+		fdw->GetForeignPaths(root, rel, rte->relid);
+	}
+
+	ts_cache_release(hcache);
+}
+
+/*
+ * For distributed hypertables, we skip expanding the hypertable chunks when using the
+ * per-server-queries optimization. This is because we don't want the chunk relations in the plan.
+ * Instead the fdw will create paths for hypertable-server relations during path creation.
+ */
+bool
+tsl_hypertable_should_be_expanded(RelOptInfo *rel, RangeTblEntry *rte, Hypertable *ht,
+								  List *chunk_oids)
+{
+	if (ts_guc_enable_per_server_queries && hypertable_is_distributed(ht))
+	{
+		TimescaleDBPrivate *rel_info;
+		Assert(rel->fdw_private != NULL);
+		rel_info = rel->fdw_private;
+		rel_info->chunk_oids = chunk_oids;
+
+		/* turn off expansion */
+		rte->inh = false;
+		return false;
+	}
+
+	return true;
+}
+#endif

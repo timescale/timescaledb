@@ -992,4 +992,53 @@ typedef struct ForeignKeyCacheInfoCompat
 #define copy_fk_list_from_cache(l) copyObject(l)
 #endif /* PG11_LT */
 
+#if PG96
+#define create_append_path_compat(root,                                                            \
+								  rel,                                                             \
+								  subpaths,                                                        \
+								  partial_subpaths,                                                \
+								  pathkeys,                                                        \
+								  required_outer,                                                  \
+								  parallel_workers,                                                \
+								  parallel_aware,                                                  \
+								  partitioned_rels,                                                \
+								  rows)                                                            \
+	create_append_path(rel, subpaths, required_outer, parallel_workers)
+#elif PG10
+#define create_append_path_compat(root,                                                            \
+								  rel,                                                             \
+								  subpaths,                                                        \
+								  partial_subpaths,                                                \
+								  pathkeys,                                                        \
+								  required_outer,                                                  \
+								  parallel_workers,                                                \
+								  parallel_aware,                                                  \
+								  partitioned_rels,                                                \
+								  rows)                                                            \
+	create_append_path(rel, subpaths, required_outer, parallel_workers, partitioned_rels)
+#elif PG11
+#define create_append_path_compat(root,                                                            \
+								  rel,                                                             \
+								  subpaths,                                                        \
+								  partial_subpaths,                                                \
+								  pathkeys,                                                        \
+								  required_outer,                                                  \
+								  parallel_workers,                                                \
+								  parallel_aware,                                                  \
+								  partitioned_rels,                                                \
+								  rows)                                                            \
+	create_append_path(root,                                                                       \
+					   rel,                                                                        \
+					   subpaths,                                                                   \
+					   partial_subpaths,                                                           \
+					   required_outer,                                                             \
+					   parallel_workers,                                                           \
+					   parallel_aware,                                                             \
+					   partitioned_rels,                                                           \
+					   rows)
+
+#else
+#define create_append_path_compat create_append_path
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

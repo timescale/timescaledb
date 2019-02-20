@@ -79,24 +79,9 @@ if (${PG_VERSION_MAJOR} GREATER "9")
 
 endif()
 
-# Regression tests that vary with PostgreSQL version. Generated test
-# files are put in the original source directory since all tests must
-# be in the same directory. These files are updated when the template
-# is edited, but not when the output file is deleted. If the output is
-# deleted either recreate it manually, or rerun cmake on the root dir.
-foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
-  string(LENGTH ${TEMPLATE_FILE} TEMPLATE_NAME_LEN)
-  math(EXPR TEMPLATE_NAME_LEN ${TEMPLATE_NAME_LEN}-7)
-  string(SUBSTRING ${TEMPLATE_FILE} 0 ${TEMPLATE_NAME_LEN} TEMPLATE)
-  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
-  configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE} COPYONLY)
-  list(APPEND TEST_FILES ${TEST_FILE})
-endforeach(TEMPLATE_FILE)
-
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND TEST_FILES
     chunk_api.sql
-    hypertable_distributed.sql
     timescaledb_fdw.sql
   )
   list(APPEND TEST_FILES_DEBUG
@@ -111,7 +96,24 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     server.sql
     server_bootstrap.sql
   )
+  list(APPEND TEST_TEMPLATES
+    hypertable_distributed.sql.in
+  )
 endif ()
+
+# Regression tests that vary with PostgreSQL version. Generated test
+# files are put in the original source directory since all tests must
+# be in the same directory. These files are updated when the template
+# is edited, but not when the output file is deleted. If the output is
+# deleted either recreate it manually, or rerun cmake on the root dir.
+foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
+  string(LENGTH ${TEMPLATE_FILE} TEMPLATE_NAME_LEN)
+  math(EXPR TEMPLATE_NAME_LEN ${TEMPLATE_NAME_LEN}-7)
+  string(SUBSTRING ${TEMPLATE_FILE} 0 ${TEMPLATE_NAME_LEN} TEMPLATE)
+  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
+  configure_file(${TEMPLATE_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE} COPYONLY)
+  list(APPEND TEST_FILES ${TEST_FILE})
+endforeach(TEMPLATE_FILE)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES ${TEST_FILES_DEBUG})

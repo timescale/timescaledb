@@ -6,6 +6,7 @@
 /transparent_decompression-*.sql
 /compression_permissions-*.sql
 /compression_qualpushdown-*.sql
+/hypertable_distributed-*.sql
 /move-*.sql
 /reorder-*.sql
 /jit-*.sql

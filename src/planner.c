@@ -757,6 +757,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 
+	if (ts_cm_functions->set_rel_pathlist != NULL)
+		ts_cm_functions->set_rel_pathlist(root, rel, rti, rte);
+
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
