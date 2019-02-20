@@ -45,8 +45,10 @@ typedef union GapFillColumnStateUnion
 } GapFillColumnStateUnion;
 
 #define foreach_column(column, index, state)                                                       \
-	for ((index) = 0, (column) = (state)->columns[index]; (index) < (state)->ncolumns;             \
-		 (index)++, (column) = (state)->columns[index])
+	Assert((state)->ncolumns > 0);                                                                 \
+	for ((index) = 0, (column) = (state)->columns[index];                                          \
+		 (index) < (state)->ncolumns && ((column) = (state)->columns[index], true);                \
+		 (index)++)
 
 static void gapfill_begin(CustomScanState *node, EState *estate, int eflags);
 static void gapfill_end(CustomScanState *node);
