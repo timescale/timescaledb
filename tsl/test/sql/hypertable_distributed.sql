@@ -143,6 +143,8 @@ SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT * FROM disttable;
 
+SELECT * FROM disttable;
+
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT time_bucket('3 hours', time) AS time, device, avg(temp) AS avg_temp
 FROM disttable GROUP BY 1, 2
@@ -399,7 +401,7 @@ CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __reg
 SELECT * FROM create_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region', number_partitions  => 4,
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
-servers => '{ "server_2", "server_3" }'); 
+servers => '{ "server_2", "server_3" }');
 
 -- Test attach_server
 SELECT * FROM _timescaledb_catalog.hypertable_server;
@@ -446,3 +448,60 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM _timescaledb_catalog.dimension;
 \c server_2
 SELECT * FROM _timescaledb_catalog.dimension;
+
+--test per-server queries
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Create some chunks through insertion
+CREATE TABLE disttable_replicated(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float, "Color" int);
+SELECT * FROM create_hypertable('disttable_replicated', 'time', replication_factor => 2);
+INSERT INTO disttable_replicated VALUES
+       ('2017-01-01 06:01', 1, 1.1, 1),
+       ('2017-01-01 08:01', 1, 1.2, 2),
+       ('2018-01-02 08:01', 2, 1.3, 3),
+       ('2019-01-01 09:11', 3, 2.1, 4),
+       ('2020-01-01 06:01', 5, 1.1, 10),
+       ('2020-01-01 08:01', 6, 1.2, 11),
+       ('2021-01-02 08:01', 7, 1.3, 12),
+       ('2022-01-01 09:11', 8, 2.1, 13);
+
+SELECT * FROM disttable_replicated;
+
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated;
+
+--guc disables the optimization
+SET timescaledb.enable_per_server_queries = FALSE;
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated;
+SET timescaledb.enable_per_server_queries = TRUE;
+
+--test WHERE clause
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE temp > 2.0;
+
+--test OR
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE temp > 2.0 or "Color" = 11;
+
+--test some chunks excluded
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE time < '2018-01-01 09:11';
+
+--test all chunks excluded
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+SELECT * FROM disttable_replicated WHERE time < '2002-01-01 09:11';
+
+--test cte
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+WITH cte AS (
+    SELECT * FROM disttable_replicated
+)
+SELECT * FROM cte;
+
+--queries that involve updates/inserts are not optimized
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE,  TIMING FALSE, SUMMARY FALSE)
+WITH devices AS (
+     SELECT DISTINCT device FROM disttable_replicated ORDER BY device
+)
+UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);

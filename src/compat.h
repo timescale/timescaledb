@@ -603,4 +603,30 @@ extern int oid_cmp(const void *p1, const void *p2);
 #define makeDefElemCompat(name, arg, location) makeDefElem(name, arg, location)
 #endif
 
+#if PG96
+#define create_append_path_compat(root,                                                            \
+								  rel,                                                             \
+								  subpaths,                                                        \
+								  partial_subpaths,                                                \
+								  required_outer,                                                  \
+								  parallel_workers,                                                \
+								  parallel_aware,                                                  \
+								  partitioned_rels,                                                \
+								  rows)                                                            \
+	create_append_path(rel, subpaths, required_outer, parallel_workers)
+#elif PG10
+#define create_append_path_compat(root,                                                            \
+								  rel,                                                             \
+								  subpaths,                                                        \
+								  partial_subpaths,                                                \
+								  required_outer,                                                  \
+								  parallel_workers,                                                \
+								  parallel_aware,                                                  \
+								  partitioned_rels,                                                \
+								  rows)                                                            \
+	create_append_path(rel, subpaths, required_outer, parallel_workers, partitioned_rels)
+#else
+#define create_append_path_compat create_append_path
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

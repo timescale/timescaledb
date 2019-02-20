@@ -45,6 +45,7 @@
 #include "chunk.h"
 #include "extension_constants.h"
 #include "partitioning.h"
+#include "cross_module_fn.h"
 
 typedef struct CollectQualCtx
 {
@@ -59,7 +60,7 @@ typedef struct CollectQualCtx
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
 
 static Oid chunk_exclusion_func = InvalidOid;
-#define CHUNK_EXCL_FUNC_NAME "chunks_in"
+
 static Oid ts_chunks_arg_types[] = { RECORDOID, INT4ARRAYOID };
 
 static void
@@ -862,7 +863,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	List *inh_oids;
 	ListCell *l;
-	Relation oldrelation = heap_open(parent_oid, NoLock);
+	Relation oldrelation;
 	Query *parse = root->parse;
 	Index rti = rel->relid;
 	List *appinfos = NIL;
@@ -894,6 +895,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, Oid parent_o
 		propagate_join_quals(root, rel, &ctx);
 
 	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
+
+	if (ts_cm_functions->hypertable_should_be_expanded != NULL &&
+		!ts_cm_functions->hypertable_should_be_expanded(rel, rte, ht, inh_oids))
+		return;
+
+	oldrelation = heap_open(parent_oid, NoLock);
 
 	/*
 	 * the simple_*_array structures have already been set, we need to add the

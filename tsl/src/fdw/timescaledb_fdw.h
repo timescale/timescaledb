@@ -13,6 +13,8 @@
 #include <nodes/relation.h>
 #include <utils/relcache.h>
 
+#include "server_chunk_assignment.h"
+
 #define TIMESCALEDB_FDW_NAME "timescaledb_fdw"
 
 /*
@@ -21,8 +23,17 @@
  * are not filled till later. GetForeignJoinPaths creates it for a joinrel,
  * and GetForeignUpperPaths creates it for an upperrel.
  */
+
+typedef enum
+{
+	TS_FDW_RELATION_INFO_HYPERTABLE_SERVER = 0,
+	TS_FDW_RELATION_INFO_HYPERTABLE,
+	TS_FDW_RELATION_INFO_FOREIGN_TABLE,
+} TsFdwRelationInfoType;
+
 typedef struct TsFdwRelationInfo
 {
+	TsFdwRelationInfoType type;
 	/*
 	 * True means that the relation can be pushed down. Always true for simple
 	 * foreign scan.
@@ -66,7 +77,6 @@ typedef struct TsFdwRelationInfo
 	List *shippable_extensions; /* OIDs of whitelisted extensions */
 
 	/* Cached catalog information. */
-	ForeignTable *table;
 	ForeignServer *server;
 	UserMapping *user; /* only set in use_remote_estimate mode */
 
@@ -102,9 +112,11 @@ typedef struct TsFdwRelationInfo
 	 * representing the relation.
 	 */
 	int relation_index;
+	ServerChunkAssignment *sca;
 } TsFdwRelationInfo;
 
 extern Datum timescaledb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum timescaledb_fdw_validator(PG_FUNCTION_ARGS);
+TsFdwRelationInfo *fdw_relation_info_get(RelOptInfo *baserel);
 
 #endif /* TIMESCALEDB_TSL_FDW_TIMESCALEDB_FDW_H */

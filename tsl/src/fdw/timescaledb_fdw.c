@@ -47,10 +47,12 @@
 #include <remote/async.h>
 #include <compat.h>
 
+#include <planner.h>
 #include "utils.h"
 #include "timescaledb_fdw.h"
 #include "deparse.h"
 #include "option.h"
+#include "server_chunk_assignment.h"
 
 /* Default CPU cost to start up a foreign query. */
 #define DEFAULT_FDW_STARTUP_COST 100.0
@@ -77,6 +79,10 @@ enum FdwScanPrivateIndex
 	/* Integer representing the desired fetch_size */
 	FdwScanPrivateFetchSize,
 
+	/* Integer for the OID of the foreign server, used by EXPLAIN */
+	FdwScanPrivateServerId,
+	/* OID list of chunk oids, used by EXPLAIN */
+	FdwScanPrivateChunkOids,
 	/*
 	 * String describing join i.e. names of relations being joined and types
 	 * of join, added when the scan is join
@@ -189,6 +195,8 @@ typedef struct TsFdwModifyState
 #define TS_FDW_MODIFY_STATE_SIZE(num_servers)                                                      \
 	(sizeof(TsFdwModifyState) + (sizeof(TsFdwServerState) * num_servers))
 
+static FdwRoutine timescaledb_fdw_routine;
+
 /*
  * Estimate costs of executing a SQL statement remotely.
  * The given "sql" must be an EXPLAIN command.
@@ -260,7 +268,7 @@ estimate_path_cost_size(PlannerInfo *root, RelOptInfo *foreignrel, List *param_j
 						List *pathkeys, double *p_rows, int *p_width, Cost *p_startup_cost,
 						Cost *p_total_cost)
 {
-	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) foreignrel->fdw_private;
+	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(foreignrel);
 	double rows = 0;
 	double retrieved_rows;
 	int width = 0;
@@ -332,7 +340,8 @@ estimate_path_cost_size(PlannerInfo *root, RelOptInfo *foreignrel, List *param_j
 								pathkeys,
 								false,
 								&retrieved_attrs,
-								NULL);
+								NULL,
+								fpinfo->sca);
 
 		/* Get the remote estimate */
 		conn = remote_dist_txn_get_connection(fpinfo->user, REMOTE_TXN_NO_PREP_STMT);
@@ -418,7 +427,7 @@ estimate_path_cost_size(PlannerInfo *root, RelOptInfo *foreignrel, List *param_j
 			 * considering remote and local conditions for costing.
 			 */
 
-			ofpinfo = (TsFdwRelationInfo *) fpinfo->outerrel->fdw_private;
+			ofpinfo = fdw_relation_info_get(fpinfo->outerrel);
 
 			/* Get rows and width from input rel */
 			input_rows = ofpinfo->rows;
@@ -586,11 +595,11 @@ apply_server_options(TsFdwRelationInfo *fpinfo)
  * New options might also require tweaking merge_fdw_options().
  */
 static void
-apply_table_options(TsFdwRelationInfo *fpinfo)
+apply_table_options(ForeignTable *table, TsFdwRelationInfo *fpinfo)
 {
 	ListCell *lc;
 
-	foreach (lc, fpinfo->table->options)
+	foreach (lc, table->options)
 	{
 		DefElem *def = (DefElem *) lfirst(lc);
 
@@ -601,9 +610,22 @@ apply_table_options(TsFdwRelationInfo *fpinfo)
 	}
 }
 
-static void
-get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
+TsFdwRelationInfo *
+fdw_relation_info_get(RelOptInfo *baserel)
 {
+	TimescaleDBPrivate *rel_private = baserel->fdw_private;
+
+	Assert(rel_private != NULL);
+	Assert(rel_private->fdw_relation_info != NULL);
+
+	return (TsFdwRelationInfo *) rel_private->fdw_relation_info;
+}
+
+static void
+fdw_relation_info_create(PlannerInfo *root, RelOptInfo *baserel, Oid server_oid, Oid local_table_id,
+						 TsFdwRelationInfoType type)
+{
+	TimescaleDBPrivate *rel_private = baserel->fdw_private;
 	TsFdwRelationInfo *fpinfo;
 	ListCell *lc;
 	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
@@ -615,15 +637,26 @@ get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	 * We use TsFdwRelationInfo to pass various information to subsequent
 	 * functions.
 	 */
-	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(TsFdwRelationInfo));
-	baserel->fdw_private = (void *) fpinfo;
+	if (baserel->fdw_private == NULL)
+		baserel->fdw_private = palloc0(sizeof(*rel_private));
+	rel_private = baserel->fdw_private;
 
+	fpinfo = (TsFdwRelationInfo *) palloc0(sizeof(*fpinfo));
+	rel_private->fdw_relation_info = (void *) fpinfo;
+
+	fpinfo->type = type;
+
+	if (type == TS_FDW_RELATION_INFO_HYPERTABLE)
+	{
+		/* nothing more to do for hypertables */
+		Assert(!OidIsValid(server_oid));
+		return;
+	}
 	/* Base foreign tables need to be pushed down always. */
 	fpinfo->pushdown_safe = true;
 
 	/* Look up foreign-table catalog info. */
-	fpinfo->table = GetForeignTable(foreigntableid);
-	fpinfo->server = GetForeignServer(fpinfo->table->serverid);
+	fpinfo->server = GetForeignServer(server_oid);
 
 	/*
 	 * Extract user-settable option values.  Note that per-table setting of
@@ -636,7 +669,6 @@ get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	fpinfo->fetch_size = 100;
 
 	apply_server_options(fpinfo);
-	apply_table_options(fpinfo);
 
 	/*
 	 * If the table or the server is configured to use remote estimates,
@@ -764,8 +796,8 @@ get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	 * not, so always schema-qualify the foreign table name.
 	 */
 	fpinfo->relation_name = makeStringInfo();
-	namespace = get_namespace_name(get_rel_namespace(foreigntableid));
-	relname = get_rel_name(foreigntableid);
+	namespace = get_namespace_name(get_rel_namespace(local_table_id));
+	relname = get_rel_name(local_table_id);
 	refname = rte->eref->aliasname;
 	appendStringInfo(fpinfo->relation_name,
 					 "%s.%s",
@@ -780,8 +812,35 @@ get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	fpinfo->lower_subquery_rels = NULL;
 	/* Set the relation index. */
 	fpinfo->relation_index = baserel->relid;
+	return;
 }
 
+/* This creates the fdw_relation_info object for hypertables and foreign table type objects. */
+static void
+get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
+{
+	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
+	/* A base hypertable is a regular table and not a foreign table. It is the only
+	 * kind of regular table that will ever have this callback called on it. */
+	if (RELKIND_RELATION == rte->relkind)
+	{
+		fdw_relation_info_create(root,
+								 baserel,
+								 InvalidOid,
+								 foreigntableid,
+								 TS_FDW_RELATION_INFO_HYPERTABLE);
+	}
+	else
+	{
+		ForeignTable *table = GetForeignTable(foreigntableid);
+		fdw_relation_info_create(root,
+								 baserel,
+								 table->serverid,
+								 foreigntableid,
+								 TS_FDW_RELATION_INFO_FOREIGN_TABLE);
+		apply_table_options(table, fdw_relation_info_get(baserel));
+	}
+}
 /*
  * get_useful_ecs_for_relation
  *		Determine which EquivalenceClasses might be involved in useful
@@ -901,7 +960,7 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 {
 	List *useful_pathkeys_list = NIL;
 	List *useful_eclass_list;
-	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) rel->fdw_private;
+	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(rel);
 	EquivalenceClass *query_ec = NULL;
 	ListCell *lc;
 
@@ -1049,11 +1108,85 @@ add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_pa
 	}
 }
 
+/*
+ * This function adds hypertable-server paths for hypertables when the per-server queries
+ * optimization is enabled. In this case, the base hypertable will not have its chunk's expanded and
+ * so will be a plain relation. Here, we determine server-chunk assignment and create an append
+ * relation with children corresponding to each hypertable-server. In the future, different
+ * assignments can create their own append paths and have the cost optimizer pick the best one.
+ */
+static void
+add_remote_hypertable_paths(PlannerInfo *root, RelOptInfo *hypertable_rel, Oid hypertable_relid)
+{
+	ListCell *lc;
+	List *subpaths = NIL;
+	AppendPath *appendpath;
+	List *server_chunk_assignment_list;
+	TimescaleDBPrivate *rel_info = hypertable_rel->fdw_private;
+	List *chunk_oids = rel_info->chunk_oids;
+
+	/* nothing to do for empty hypertables */
+	if (chunk_oids == NIL)
+		return;
+
+	/* remove the parent if it is in there */
+	chunk_oids = list_delete_oid(chunk_oids, hypertable_relid);
+	server_chunk_assignment_list = server_chunk_assignment_by_using_attached_server(chunk_oids);
+
+	/* remove all existing paths, they are not valid because the contain the un-expanded parent */
+	hypertable_rel->pathlist = NIL;
+	foreach (lc, server_chunk_assignment_list)
+	{
+		ForeignPath *subpath;
+		RelOptInfo *hypertable_server_rel;
+		TsFdwRelationInfo *hypertable_server_fpinfo;
+		ServerChunkAssignment *sca = lfirst(lc);
+
+		Assert(list_length(sca->chunk_oids) == list_length(sca->remote_chunk_ids));
+
+		hypertable_server_rel = palloc(sizeof(RelOptInfo));
+		memcpy(hypertable_server_rel, hypertable_rel, sizeof(*hypertable_server_rel));
+		hypertable_server_rel->serverid = sca->server_oid;
+
+		/* set the fdwroutine, which should always be the timescale_fdw routine because
+		 * hypertables should always be associated with the timescale_fdw */
+		hypertable_server_rel->fdwroutine = GetFdwRoutineByServerId(sca->server_oid);
+		Assert(hypertable_server_rel->fdwroutine == &timescaledb_fdw_routine);
+
+		hypertable_server_rel->fdw_private = NULL;
+		fdw_relation_info_create(root,
+								 hypertable_server_rel,
+								 sca->server_oid,
+								 hypertable_relid,
+								 TS_FDW_RELATION_INFO_HYPERTABLE_SERVER);
+		hypertable_server_fpinfo = fdw_relation_info_get(hypertable_server_rel);
+		hypertable_server_fpinfo->sca = sca;
+
+		subpath = create_foreignscan_path(root,
+										  hypertable_server_rel,
+										  NULL, /* default pathtarget */
+										  hypertable_server_fpinfo->rows,
+										  hypertable_server_fpinfo->startup_cost,
+										  hypertable_server_fpinfo->total_cost,
+										  NIL,  /* no pathkeys */
+										  NULL, /* no outer rel either */
+										  NULL, /* no extra plan */
+										  NIL); /* no fdw_private list */
+		subpaths = lappend(subpaths, subpath);
+	}
+	appendpath =
+		create_append_path_compat(root, hypertable_rel, subpaths, NIL, NULL, 0, false, NIL, -1);
+	add_path(hypertable_rel, (Path *) appendpath);
+}
+
 static void
 get_foreign_paths(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 {
-	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) baserel->fdw_private;
+	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(baserel);
 	ForeignPath *path;
+
+	if (fpinfo->type == TS_FDW_RELATION_INFO_HYPERTABLE)
+		return add_remote_hypertable_paths(root, baserel, foreigntableid);
 
 	if (baserel->reloptkind == RELOPT_JOINREL)
 		ereport(ERROR,
@@ -1087,7 +1220,7 @@ static ForeignScan *
 get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 				 ForeignPath *best_path, List *tlist, List *scan_clauses, Plan *outer_plan)
 {
-	TsFdwRelationInfo *fpinfo = (TsFdwRelationInfo *) foreignrel->fdw_private;
+	TsFdwRelationInfo *fpinfo = fdw_relation_info_get(foreignrel);
 	Index scan_relid;
 	List *fdw_private;
 	List *remote_exprs = NIL;
@@ -1148,6 +1281,22 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 		 * should recheck all the remote quals.
 		 */
 		fdw_recheck_quals = remote_exprs;
+
+		/* check if this is a hypertable-server relation with multi-chunk assignment */
+		if (fpinfo->sca != NULL)
+		{
+			/* Mark as a relation with no RTE. This is usally only done for joins,
+			 * but we do that here because we can't use any real relation:
+			 * - if we use the hypertable than various parts of the planner and executor will try to
+			 *   look up the foreign table information for this but it's not a foreign server
+			 * - if we use a chunk the system will try to use the foreign server associated with the
+			 * chunk relation. But, this is not necessarily the server we want to use (remember,
+			 * there can be several associated with the chunk).
+			 */
+			scan_relid = 0;
+			/* since the relation is 0, have to build the tlist explicitly */
+			fdw_scan_tlist = build_tlist_to_deparse(foreignrel);
+		}
 	}
 	else if (IS_JOIN_REL(foreignrel))
 	{
@@ -1204,7 +1353,8 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 							best_path->path.pathkeys,
 							false,
 							&retrieved_attrs,
-							&params_list);
+							&params_list,
+							fpinfo->sca);
 
 	/* Remember remote_exprs for possible use by postgresPlanDirectModify */
 	fpinfo->final_remote_exprs = remote_exprs;
@@ -1213,9 +1363,11 @@ get_foreign_plan(PlannerInfo *root, RelOptInfo *foreignrel, Oid foreigntableid,
 	 * Build the fdw_private list that will be available to the executor.
 	 * Items in the list must match order in enum FdwScanPrivateIndex.
 	 */
-	fdw_private =
-		list_make3(makeString(sql.data), retrieved_attrs, makeInteger(fpinfo->fetch_size));
-
+	fdw_private = list_make5(makeString(sql.data),
+							 retrieved_attrs,
+							 makeInteger(fpinfo->fetch_size),
+							 makeInteger(fpinfo->server->serverid),
+							 (fpinfo->sca != NULL ? list_copy(fpinfo->sca->chunk_oids) : NIL));
 	Assert(!IS_JOIN_REL(foreignrel));
 
 	if (IS_UPPER_REL(foreignrel))
@@ -1415,10 +1567,10 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 	TsFdwScanState *fsstate;
 	RangeTblEntry *rte;
 	Oid userid;
-	ForeignTable *table;
 	UserMapping *user;
 	int rtindex;
 	int num_params;
+	int server_id;
 
 	/*
 	 * Do nothing in EXPLAIN (no ANALYZE) case.  node->fdw_state stays NULL.
@@ -1446,8 +1598,8 @@ begin_foreign_scan(ForeignScanState *node, int eflags)
 	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
 
 	/* Get info about foreign table. */
-	table = GetForeignTable(rte->relid);
-	user = GetUserMapping(userid, table->serverid);
+	server_id = intVal(list_nth(fsplan->fdw_private, FdwScanPrivateServerId));
+	user = GetUserMapping(userid, server_id);
 
 	/*
 	 * Get connection to the foreign server.  Connection manager will
@@ -2535,10 +2687,34 @@ explain_foreign_scan(ForeignScanState *node, struct ExplainState *es)
 	}
 
 	/*
-	 * Add remote query, when VERBOSE option is specified.
+	 * Add remote query, server name, and chunks when VERBOSE option is specified.
 	 */
 	if (es->verbose)
 	{
+		Oid server_id = intVal(list_nth(fdw_private, FdwScanPrivateServerId));
+		ForeignServer *server = GetForeignServer(server_id);
+		List *chunk_oids = (List *) list_nth(fdw_private, FdwScanPrivateChunkOids);
+
+		ExplainPropertyText("Server", server->servername, es);
+
+		if (chunk_oids != NIL)
+		{
+			StringInfoData chunk_names;
+			ListCell *lc;
+			bool first = true;
+
+			initStringInfo(&chunk_names);
+			foreach (lc, chunk_oids)
+			{
+				if (!first)
+					appendStringInfoString(&chunk_names, ", ");
+				else
+					first = false;
+				appendStringInfoString(&chunk_names, get_rel_name(lfirst_oid(lc)));
+			}
+			ExplainPropertyText("Chunks", chunk_names.data, es);
+		}
+
 		sql = strVal(list_nth(fdw_private, FdwScanPrivateSelectSql));
 		ExplainPropertyText("Remote SQL", sql, es);
 	}

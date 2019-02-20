@@ -42,6 +42,7 @@ bool ts_guc_enable_ordered_append = true;
 bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
+bool ts_guc_enable_per_server_queries = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
 int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
@@ -160,6 +161,18 @@ _guc_init(void)
 							 "Enable 2pc",
 							 "Enable two-phase commit",
 							 &ts_guc_enable_2pc,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_per_server_queries",
+							 "Enable the per-server query optimization for hypertables",
+							 "Enable the optimization that combines different chunks belonging to "
+							 "the same hypertable into a single query per server",
+							 &ts_guc_enable_per_server_queries,
 							 true,
 							 PGC_USERSET,
 							 0,

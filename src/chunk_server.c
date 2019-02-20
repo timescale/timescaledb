@@ -134,3 +134,34 @@ ts_chunk_server_scan(int32 chunk_id, MemoryContext mctx)
 
 	return chunk_servers;
 }
+
+ChunkServer *
+ts_chunk_server_scan_by_server(int32 chunk_id, Name server_name, MemoryContext mctx)
+{
+	ScanKeyData scankey[2];
+	List *chunk_servers = NIL;
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_server_chunk_id_server_name_idx_chunk_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk_id));
+
+	ScanKeyInit(&scankey[1],
+				Anum_chunk_server_chunk_id_server_name_idx_server_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				NameGetDatum(server_name));
+
+	chunk_server_scan_limit_internal(scankey,
+									 2,
+									 CHUNK_SERVER_CHUNK_ID_SERVER_NAME_IDX,
+									 chunk_server_tuple_found,
+									 &chunk_servers,
+									 0,
+									 AccessShareLock,
+									 mctx);
+
+	Assert(list_length(chunk_servers) == 1);
+	return linitial(chunk_servers);
+}

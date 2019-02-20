@@ -8,6 +8,8 @@
 
 #include "hypertable.h"
 
+#define CHUNK_EXCL_FUNC_NAME "chunks_in"
+
 /* This planner optimization reduces planning times when a hypertable has many chunks.
  * It does this by expanding hypertable chunks manually, eliding the `expand_inherited_tables`
  * logic used by PG.

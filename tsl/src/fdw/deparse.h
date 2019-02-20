@@ -7,6 +7,7 @@
 #define TIMESCALEDB_TSL_FDW_DEPARSE_H
 
 #include <postgres.h>
+#include "server_chunk_assignment.h"
 
 extern void deparseInsertSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,
 							 List *targetAttrs, bool doNothing, List *returningList,
@@ -27,7 +28,8 @@ extern List *build_tlist_to_deparse(RelOptInfo *foreignrel);
 
 extern void deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List *tlist,
 									List *remote_conds, List *pathkeys, bool is_subquery,
-									List **retrieved_attrs, List **params_list);
+									List **retrieved_attrs, List **params_list,
+									ServerChunkAssignment *swa);
 
 extern const char *get_jointype_name(JoinType jointype);
 extern void deparseStringLiteral(StringInfo buf, const char *val);
