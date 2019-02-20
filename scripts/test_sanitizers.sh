@@ -93,7 +93,7 @@ docker exec -u postgres \
     -e CMAKE_BUILD_TYPE="Debug" \
     -e PG_SOURCE_DIR="/usr/src/postgresql/" \
     timescaledb-san /bin/bash -c \
-    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap && cd build && make"
+    "cd /tsdb_build/timescaledb && BUILD_FORCE_REMOVE=true ./bootstrap -DTEST_GROUP_SIZE=1 && cd build && make"
 
 wait_for_pg timescaledb-san
 
