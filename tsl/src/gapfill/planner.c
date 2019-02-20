@@ -320,9 +320,23 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 
 	if (context.num_calls == 1)
 	{
-		foreach (lc, group_rel->pathlist)
+		List *copy = group_rel->pathlist;
+		group_rel->pathlist = NIL;
+		group_rel->cheapest_total_path = NULL;
+		group_rel->cheapest_startup_path = NULL;
+		group_rel->cheapest_unique_path = NULL;
+
+		/* TODO parameterized paths */
+		list_free(group_rel->ppilist);
+		group_rel->ppilist = NULL;
+
+		list_free(group_rel->cheapest_parameterized_paths);
+		group_rel->cheapest_parameterized_paths = NULL;
+
+		foreach (lc, copy)
 		{
-			lfirst(lc) = gapfill_path_create(root, lfirst(lc), context.call);
+			add_path(group_rel, gapfill_path_create(root, lfirst(lc), context.call));
 		}
+		list_free(copy);
 	}
 }
