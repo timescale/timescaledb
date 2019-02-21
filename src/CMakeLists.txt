@@ -38,6 +38,7 @@ set(SOURCES
   plan_expand_hypertable.c
   plan_add_hashagg.c
   plan_agg_bookend.c
+  plan_partialize.c
   plan_ordered_append.c
   planner_import.c
   process_utility.c

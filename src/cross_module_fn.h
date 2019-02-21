@@ -56,6 +56,9 @@ typedef struct CrossModuleFunctions
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);
 	void (*sql_drop)(List *dropped_objects);
+	PGFunction partialize_agg;
+	PGFunction finalize_agg_sfunc;
+	PGFunction finalize_agg_ffunc;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

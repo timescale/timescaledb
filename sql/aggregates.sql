@@ -50,3 +50,11 @@ CREATE AGGREGATE histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION
     FINALFUNC = _timescaledb_internal.hist_finalfunc,
     FINALFUNC_EXTRA
 );
+
+CREATE AGGREGATE _timescaledb_internal.finalize_agg( TEXT, NAME, NAME, BYTEA, anyelement) (
+    SFUNC = _timescaledb_internal.finalize_agg_sfunc,
+    STYPE = internal,
+    FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
+    FINALFUNC_EXTRA
+);
+

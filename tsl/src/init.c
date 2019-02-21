@@ -12,6 +12,7 @@
 
 #include "planner.h"
 #include "gapfill/gapfill.h"
+#include "util_aggfns.h"
 
 #include "license.h"
 #include "reorder.h"
@@ -67,6 +68,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_timestamptz_time_bucket = gapfill_timestamptz_time_bucket,
 	.alter_job_schedule = bgw_policy_alter_job_schedule,
 	.reorder_chunk = tsl_reorder_chunk,
+	.partialize_agg = tsl_partialize_agg,
+	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
+	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

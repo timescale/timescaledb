@@ -19,6 +19,9 @@ TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
 TS_FUNCTION_INFO_V1(ts_remove_reorder_policy);
 TS_FUNCTION_INFO_V1(ts_alter_job_schedule);
 TS_FUNCTION_INFO_V1(ts_reorder_chunk);
+TS_FUNCTION_INFO_V1(ts_partialize_agg);
+TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
+TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
 
 Datum
 ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
@@ -54,6 +57,27 @@ Datum
 ts_reorder_chunk(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_DATUM(ts_cm_functions->reorder_chunk(fcinfo));
+}
+
+/*
+ * stub function to trigger aggregate util functions.
+ */
+Datum
+ts_partialize_agg(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->partialize_agg(fcinfo));
+}
+
+Datum
+ts_finalize_agg_sfunc(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->finalize_agg_sfunc(fcinfo));
+}
+
+Datum
+ts_finalize_agg_ffunc(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(ts_cm_functions->finalize_agg_ffunc(fcinfo));
 }
 
 /*
@@ -179,7 +203,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.reorder_chunk = error_no_default_fn_pg_community,
 	.ddl_command_start = NULL,
 	.ddl_command_end = NULL,
-	.sql_drop = NULL
+	.sql_drop = NULL,
+	.partialize_agg = error_no_default_fn_pg_community,
+	.finalize_agg_sfunc = error_no_default_fn_pg_community,
+	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
