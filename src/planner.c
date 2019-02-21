@@ -55,6 +55,7 @@
 #include "plan_add_hashagg.h"
 #include "plan_agg_bookend.h"
 #include "plan_ordered_append.h"
+#include "plan_partialize.h"
 
 void _planner_init(void);
 void _planner_fini(void);
@@ -536,6 +537,9 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	/* Modify for INSERTs on a hypertable */
 	if (output_rel != NULL && output_rel->pathlist != NIL)
 		output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
+
+	/* modify aggregates that need to be partialized */
+	plan_process_partialize_agg(root, input_rel, output_rel);
 
 	if (ts_guc_disable_optimizations || input_rel == NULL || IS_DUMMY_REL(input_rel))
 		return;

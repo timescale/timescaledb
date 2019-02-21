@@ -1,10 +1,13 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 
--- we add an addition optional argument to locf
-DROP FUNCTION IF EXISTS locf(ANYELEMENT,ANYELEMENT);
+CREATE OR REPLACE FUNCTION _timescaledb_internal.partialize_agg(arg ANYELEMENT)
+RETURNS BYTEA AS '@MODULE_PATHNAME@', 'ts_partialize_agg' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_sfunc(
 tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
-RETURNS internal
+RETURNS internal 
 AS '@MODULE_PATHNAME@', 'ts_finalize_agg_sfunc'
 LANGUAGE C IMMUTABLE ;
 
@@ -14,9 +17,3 @@ RETURNS anyelement
 AS '@MODULE_PATHNAME@', 'ts_finalize_agg_ffunc'
 LANGUAGE C IMMUTABLE ;
 
-CREATE AGGREGATE _timescaledb_internal.finalize_agg(TEXT, NAME, NAME, BYTEA, anyelement) (
-    SFUNC = _timescaledb_internal.finalize_agg_sfunc,
-    STYPE = internal,
-    FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
-    FINALFUNC_EXTRA
-);
