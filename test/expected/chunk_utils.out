@@ -80,7 +80,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
+ORDER BY c.id;
  chunk_id | hypertable_id | chunk_schema | chunk_table | range_start | range_end 
 ----------+---------------+--------------+-------------+-------------+-----------
 (0 rows)
@@ -127,7 +128,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           1 |         2
@@ -272,7 +274,8 @@ SELECT show_chunks(newer_than => 2);
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id);
+FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+ORDER BY c.id;
     table_name     | constraint_name | dimension_slice_id |     range_start      |      range_end      
 -------------------+-----------------+--------------------+----------------------+---------------------
  _hyper_1_1_chunk  | constraint_1    |                  1 |                    1 |                   2
@@ -313,7 +316,7 @@ FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension
  _hyper_3_18_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
 (36 rows)
 
-SELECT * FROM _timescaledb_catalog.dimension_slice;
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |      range_end      
 ----+--------------+----------------------+---------------------
   1 |            1 |                    1 |                   2
@@ -352,7 +355,8 @@ DROP TABLE _timescaledb_internal._hyper_2_7_chunk;
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id);
+FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+ORDER BY c.id;
     table_name     | constraint_name | dimension_slice_id |     range_start      |      range_end      
 -------------------+-----------------+--------------------+----------------------+---------------------
  _hyper_1_1_chunk  | constraint_1    |                  1 |                    1 |                   2
@@ -392,7 +396,7 @@ FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension
 (34 rows)
 
 -- Only one dimension slice deleted
-SELECT * FROM _timescaledb_catalog.dimension_slice;
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |      range_end      
 ----+--------------+----------------------+---------------------
   1 |            1 |                    1 |                   2
@@ -432,7 +436,8 @@ INFO:  dropping chunk _timescaledb_internal._hyper_3_13_chunk
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (c.id = cc.chunk_id)
-FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id);
+FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension_slice_id)
+ORDER BY c.id;
     table_name     | constraint_name | dimension_slice_id |     range_start      |      range_end      
 -------------------+-----------------+--------------------+----------------------+---------------------
  _hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
@@ -467,7 +472,7 @@ FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.id = cc.dimension
  _hyper_3_18_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
 (30 rows)
 
-SELECT * FROM _timescaledb_catalog.dimension_slice;
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |      range_end      
 ----+--------------+----------------------+---------------------
   2 |            4 |           1073741823 | 9223372036854775807
@@ -499,7 +504,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
@@ -568,7 +574,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
@@ -637,7 +644,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
@@ -682,7 +690,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
@@ -723,7 +732,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+------------------+-------------+-----------
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |           3 |         4
@@ -762,7 +772,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1');
+WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+------------------+-------------+-----------
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           4 |         5
@@ -791,7 +802,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public';
+WHERE h.schema_name = 'public'
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
@@ -814,7 +826,8 @@ INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
-WHERE h.schema_name = 'public';
+WHERE h.schema_name = 'public'
+ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
