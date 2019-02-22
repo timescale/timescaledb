@@ -2,21 +2,18 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE DATABASE server1;
 SELECT * FROM add_server('server1', 'localhost', 'server1', port=>current_setting('port')::integer);
  server_name |   host    | port  | database |  username  | server_username | created 
 -------------+-----------+-------+----------+------------+-----------------+---------
  server1     | localhost | 15432 | server1  | super_user | super_user      | t
 (1 row)
 
-CREATE DATABASE server2;
 SELECT * FROM add_server('server2', 'localhost', 'server2', port=>current_setting('port')::integer);
  server_name |   host    | port  | database |  username  | server_username | created 
 -------------+-----------+-------+----------+------------+-----------------+---------
  server2     | localhost | 15432 | server2  | super_user | super_user      | t
 (1 row)
 
-CREATE DATABASE server3;
 SELECT * FROM add_server('server3', 'localhost', 'server3', port=>current_setting('port')::integer);
  server_name |   host    | port  | database |  username  | server_username | created 
 -------------+-----------+-------+----------+------------+-----------------+---------

@@ -4,11 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE DATABASE server1;
 SELECT * FROM add_server('server1', 'localhost', 'server1', port=>current_setting('port')::integer);
-CREATE DATABASE server2;
 SELECT * FROM add_server('server2', 'localhost', 'server2', port=>current_setting('port')::integer);
-CREATE DATABASE server3;
 SELECT * FROM add_server('server3', 'localhost', 'server3', port=>current_setting('port')::integer);
 
 \des+
