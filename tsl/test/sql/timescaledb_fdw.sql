@@ -5,14 +5,15 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Cleanup from other potential tests that created this database
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS server_1;
 SET client_min_messages TO NOTICE;
-CREATE DATABASE server_1;
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
+
+SELECT * FROM add_server('server_1', database => 'server_1', local_user => :'ROLE_DEFAULT_CLUSTER_USER', remote_user => :'ROLE_DEFAULT_CLUSTER_USER', password => 'pass', bootstrap_user => :'ROLE_SUPERUSER');
+ALTER SERVER server_1 OWNER TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Set FDW and libpq options to make sure they are validated correctly
 ALTER SERVER server_1 OPTIONS (ADD use_remote_estimate 'true');
@@ -26,7 +27,6 @@ ALTER SERVER server_1 OPTIONS (ADD invalid_option '3');
 
 \c server_1
 SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 CREATE TABLE test_ft (c0 int, c1 varchar(10));
 \c :TEST_DBNAME :ROLE_SUPERUSER

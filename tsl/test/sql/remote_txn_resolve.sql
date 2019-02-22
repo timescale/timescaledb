@@ -14,10 +14,9 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_resolve_create_records_with_concurrent_heal'
 LANGUAGE C;
 
-SELECT true FROM add_server('loopback', port=>current_setting('port')::integer);
-SELECT true FROM add_server('loopback2', port=>current_setting('port')::integer);
-SELECT true FROM add_server('loopback3', port=>current_setting('port')::integer);
-
+SELECT true FROM add_server('loopback', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
+SELECT true FROM add_server('loopback2', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
+SELECT true FROM add_server('loopback3', database => :'TEST_DBNAME', port=>current_setting('port')::integer, if_not_exists => true);
 
 create table table_modified_by_txns (
     describes text

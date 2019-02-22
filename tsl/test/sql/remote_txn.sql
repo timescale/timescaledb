@@ -23,9 +23,8 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'tsl_test_remote_txn_persistent_record'
 LANGUAGE C;
 
-SELECT true FROM add_server('loopback', port=>current_setting('port')::integer);
-SELECT true FROM add_server('loopback2', port=>current_setting('port')::integer);
-
+SELECT * FROM add_server('loopback', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
+SELECT * FROM add_server('loopback2', database => :'TEST_DBNAME', port => current_setting('port')::integer, if_not_exists => true);
 
 -- ===================================================================
 -- create objects used through FDW loopback server
