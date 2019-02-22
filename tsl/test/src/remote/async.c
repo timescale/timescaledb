@@ -153,8 +153,8 @@ test_node_death()
 	pg_res = async_response_result_get_pg_result(result);
 	Assert(PQresultStatus(pg_res) != PGRES_TUPLES_OK);
 	async_response_close(response);
-	/* This will throw if elevel == ERROR so set to DEBUG */
-	response = async_request_set_wait_any_response_deadline(set, DEBUG, TS_NO_TIMEOUT);
+	/* This will throw if elevel == ERROR so set to DEBUG1 */
+	response = async_request_set_wait_any_response_deadline(set, DEBUG1, TS_NO_TIMEOUT);
 	Assert(async_response_get_type(response) == RESPONSE_COMMUNICATION_ERROR);
 	elog(WARNING, "Expect warning about communication error:");
 	async_response_report_error(response, WARNING);
@@ -219,11 +219,11 @@ test_timeout()
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "LOCK \"S 1\".\"T 1\"");
 	response = async_request_set_wait_any_response_deadline(
-		set, DEBUG, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 100));
+		set, DEBUG1, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 100));
 	Assert(async_response_get_type(response) == RESPONSE_TIMEOUT);
 
 	/* try again, use timeout instead of deadline interface */
-	response = async_request_set_wait_any_response_timeout(set, DEBUG, 100);
+	response = async_request_set_wait_any_response_timeout(set, DEBUG1, 100);
 	Assert(async_response_get_type(response) == RESPONSE_TIMEOUT);
 
 	/* cancel the locked query and do another query */
