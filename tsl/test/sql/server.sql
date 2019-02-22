@@ -11,6 +11,14 @@ CREATE OR REPLACE FUNCTION show_servers()
 RETURNS TABLE(server_name NAME, host TEXT, port INT, dbname NAME)
 AS :TSL_MODULE_PATHNAME, 'test_server_show' LANGUAGE C;
 
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS server_3;
+DROP DATABASE IF EXISTS server_4;
+SET client_min_messages TO NOTICE;
+
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Create server with DDL statements as reference. NOTE, 'IF NOT
@@ -23,7 +31,9 @@ OPTIONS (host 'localhost', port '15432', dbname 'server_1');
 CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER server_1 OPTIONS (user 'cluster_user_1');
 
 -- Add servers using TimescaleDB server management API
-SELECT * FROM add_server('server_2', password => 'perm_user_pass', database => 'server_2');
+RESET ROLE;
+SELECT * FROM add_server('server_2', database => 'server_2', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER');
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 \set ON_ERROR_STOP 0
 -- Add again
@@ -34,12 +44,11 @@ SELECT * FROM add_server('server_3');
 SELECT * FROM add_server(NULL);
 \set ON_ERROR_STOP 1
 
--- Should not generate error with if_not_exists option
-SELECT * FROM add_server('server_2', password => 'perm_user_pass', if_not_exists => true);
-
 RESET ROLE;
--- Superuser requires no password
-SELECT * FROM add_server('server_3', host => '192.168.3.4', database => 'server_2', remote_user => 'cluster_user_2');
+-- Should not generate error with if_not_exists option
+SELECT * FROM add_server('server_2', database => 'server_2', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', if_not_exists => true);
+
+SELECT * FROM add_server('server_3', database => 'server_3', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => 'cluster_user_2', bootstrap_user => :'ROLE_SUPERUSER');
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Server exists, but no user mapping
@@ -47,7 +56,9 @@ CREATE SERVER server_4 FOREIGN DATA WRAPPER timescaledb_fdw
 OPTIONS (host 'localhost', port '15432', dbname 'server_4');
 
 -- User mapping should be added with NOTICE
-SELECT * FROM add_server('server_4', password => 'perm_user_pass', if_not_exists => true);
+RESET ROLE;
+SELECT * FROM add_server('server_4', database => 'server_4', local_user => :'ROLE_DEFAULT_PERM_USER', remote_user => :'ROLE_DEFAULT_PERM_USER', password => 'perm_user_pass', bootstrap_user => :'ROLE_SUPERUSER', if_not_exists => true);
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT * FROM show_servers();
 

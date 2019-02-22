@@ -64,6 +64,10 @@ extern bool remote_connection_cancel_query(PGconn *conn);
 	async_response_result_get_pg_result(async_request_wait_ok_result(                              \
 		async_request_send_with_params(conn, sql_statement, n_values, values)));
 
+#define remote_connection_query_with_params_any_result(conn, sql_statement, n_values, values)      \
+	async_response_result_get_pg_result(async_request_wait_any_result(                             \
+		async_request_send_with_params(conn, sql_statement, n_values, values)));
+
 #define remote_connection_result_close(res) PQclear(res);
 
 #endif /* TIMESCALEDB_TSL_REMOTE_CONNECTION_H */

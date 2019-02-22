@@ -10,6 +10,8 @@
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
 #include <catalog/pg_foreign_server.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_namespace.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <utils/builtins.h>
@@ -18,10 +20,15 @@
 #include <funcapi.h>
 
 #include <hypertable_server.h>
+#include <extension.h>
 #include <compat.h>
 #include <catalog.h>
 
 #include "fdw/timescaledb_fdw.h"
+#if !PG96
+#include "remote/async.h"
+#include "remote/connection.h"
+#endif
 #include "server.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
@@ -179,6 +186,148 @@ get_user_mapping(Oid userid, Oid serverid)
 	return um;
 }
 
+#if !PG96 /* Remote server bootstrapping only supported on PG10 and above */
+
+static List *
+create_server_options(const char *host, int32 port, const char *dbname, const char *user,
+					  const char *password)
+{
+	List *server_options;
+	DefElem *host_elm = makeDefElemCompat("host", (Node *) makeString(pstrdup(host)), -1);
+	DefElem *port_elm = makeDefElemCompat("port", (Node *) makeInteger(port), -1);
+	DefElem *dbname_elm = makeDefElemCompat("dbname", (Node *) makeString(pstrdup(dbname)), -1);
+	DefElem *user_elm = makeDefElemCompat("user", (Node *) makeString(pstrdup(user)), -1);
+	DefElem *password_elm;
+
+	server_options = list_make4(host_elm, port_elm, dbname_elm, user_elm);
+	if (password)
+	{
+		password_elm = makeDefElemCompat("password", (Node *) makeString(pstrdup(password)), -1);
+		lappend(server_options, password_elm);
+	}
+	return server_options;
+}
+
+static void
+server_bootstrap_database(const char *servername, const char *host, int32 port, const char *dbname,
+						  bool if_not_exists, const char *bootstrap_database,
+						  const char *bootstrap_user, const char *bootstrap_password)
+{
+	PGconn *conn;
+	List *server_options;
+
+	server_options =
+		create_server_options(host, port, bootstrap_database, bootstrap_user, bootstrap_password);
+	conn = remote_connection_open((char *) servername, server_options, NULL);
+
+	PG_TRY();
+	{
+		bool database_exists = false;
+		char *request;
+		PGresult *res;
+
+		request =
+			psprintf("SELECT 1 FROM pg_database WHERE datname = %s", quote_literal_cstr(dbname));
+		res = remote_connection_query_any_result(conn, request);
+		if (PQntuples(res) > 0)
+			database_exists = true;
+		remote_connection_result_close(res);
+
+		if (database_exists)
+		{
+			if (!if_not_exists)
+				ereport(ERROR,
+						(errcode(ERRCODE_DUPLICATE_OBJECT),
+						 errmsg("database \"%s\" already exists on the remote server", dbname),
+						 errhint("Set if_not_exists => TRUE to add the server to an existing "
+								 "database.")));
+			else
+				elog(NOTICE, "remote server database \"%s\" already exists, skipping", dbname);
+		}
+		else
+		{
+			request = psprintf("CREATE DATABASE %s", quote_identifier(dbname));
+			res = remote_connection_query_ok_result(conn, request);
+			remote_connection_result_close(res);
+		}
+	}
+	PG_CATCH();
+	{
+		remote_connection_close(conn);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	remote_connection_close(conn);
+}
+
+static void
+server_bootstrap_extension(const char *servername, const char *host, int32 port, const char *dbname,
+						   bool if_not_exists, const char *user, const char *user_password)
+{
+	PGconn *conn;
+	List *server_options;
+
+	server_options = create_server_options(host, port, dbname, user, user_password);
+	conn = remote_connection_open((char *) servername, server_options, NULL);
+
+	PG_TRY();
+	{
+		PGresult *res;
+		char *request;
+		const char *schema_name = ts_extension_schema_name();
+		const char *schema_name_quoted = quote_identifier(schema_name);
+		Oid schema_oid = get_namespace_oid(schema_name, true);
+
+		if (schema_oid != PG_PUBLIC_NAMESPACE)
+		{
+			request = psprintf("CREATE SCHEMA %s%s",
+							   if_not_exists ? "IF NOT EXISTS " : "",
+							   schema_name_quoted);
+			res = remote_connection_query_ok_result(conn, request);
+			remote_connection_result_close(res);
+		}
+		request = psprintf("CREATE EXTENSION %s " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
+						   if_not_exists ? "IF NOT EXISTS" : "",
+						   schema_name_quoted);
+		res = remote_connection_query_ok_result(conn, request);
+		remote_connection_result_close(res);
+	}
+	PG_CATCH();
+	{
+		remote_connection_close(conn);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	remote_connection_close(conn);
+}
+
+static void
+server_bootstrap(const char *servername, const char *host, int32 port, const char *dbname,
+				 bool if_not_exists, const char *bootstrap_database, const char *bootstrap_user,
+				 const char *bootstrap_password)
+{
+	server_bootstrap_database(servername,
+							  host,
+							  port,
+							  dbname,
+							  if_not_exists,
+							  bootstrap_database,
+							  bootstrap_user,
+							  bootstrap_password);
+
+	server_bootstrap_extension(servername,
+							   host,
+							   port,
+							   dbname,
+							   if_not_exists,
+							   bootstrap_user,
+							   bootstrap_password);
+}
+
+#endif /* !PG96 */
+
 Datum
 server_add(PG_FUNCTION_ARGS)
 {
@@ -192,11 +341,31 @@ server_add(PG_FUNCTION_ARGS)
 		PG_ARGISNULL(5) ? GetUserNameFromId(userid, false) : PG_GETARG_CSTRING(5);
 	const char *password = PG_ARGISNULL(6) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(6));
 	bool if_not_exists = PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7);
+	const char *bootstrap_database = PG_ARGISNULL(8) ? NULL : PG_GETARG_CSTRING(8);
+	const char *bootstrap_user = NULL;
+	const char *bootstrap_password = NULL;
 	ForeignServer *server;
 	UserMapping *um;
 	const char *username;
 	Oid serverid = InvalidOid;
 	bool created = false;
+
+	/* If bootstrap_user is not set, reuse server_username and its password */
+	if (PG_ARGISNULL(9))
+	{
+		bootstrap_user = server_username;
+		bootstrap_password = password;
+	}
+	else
+	{
+		bootstrap_user = PG_GETARG_CSTRING(9);
+		bootstrap_password = PG_ARGISNULL(10) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(10));
+	}
+
+	if (NULL == bootstrap_database)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 (errmsg("invalid bootstrap database name"))));
 
 	if (NULL == servername)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("invalid server name"))));
@@ -206,6 +375,13 @@ server_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 (errmsg("invalid port"),
 				  errhint("The port number must be between 1 and %u", PG_UINT16_MAX))));
+
+	/*
+	 * Since this function creates databases on remote nodes, and CREATE DATABASE
+	 * cannot run in a transaction block, we cannot run the function in a
+	 * transaction block either.
+	 */
+	PreventInTransactionBlock(true, "add_server");
 
 	/*
 	 * First check for existing foreign server. We could rely on
@@ -255,6 +431,26 @@ server_add(PG_FUNCTION_ARGS)
 				 errmsg("user mapping for user \"%s\" and server \"%s\" already exists",
 						username,
 						servername)));
+
+		/* Try to create database and extension on remote server */
+#if !PG96
+	server_bootstrap(servername,
+					 host,
+					 port,
+					 dbname,
+					 if_not_exists,
+					 bootstrap_database,
+					 bootstrap_user,
+					 bootstrap_password);
+#else
+	/* Those arguments are unused in 9.6, disable compiler warning */
+	(void) bootstrap_database;
+	(void) bootstrap_user;
+	(void) bootstrap_password;
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 (errmsg("remote server bootstrapping only supported on PG10 and above"))));
+#endif
 
 	PG_RETURN_DATUM(create_server_datum(fcinfo,
 										servername,

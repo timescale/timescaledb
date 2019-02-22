@@ -59,6 +59,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     remote_txn.sql
     remote_txn_id.sql
     server.sql
+    server_bootstrap.sql
     dist_commands.sql
     deparse.sql
     deparse_fail.sql

@@ -28,19 +28,22 @@ CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 -- Add servers using the TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "server_1" already exists, skipping
  server_name |   host    | port  | database |       username       |   server_username    | created 
 -------------+-----------+-------+----------+----------------------+----------------------+---------
  server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass');
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "server_2" already exists, skipping
  server_name |   host    | port  | database |       username       |   server_username    | created 
 -------------+-----------+-------+----------+----------------------+----------------------+---------
  server_2    | localhost | 15432 | server_2 | default_cluster_user | default_cluster_user | t
 (1 row)
 
-SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass');
+SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "server_3" already exists, skipping
  server_name |   host    | port  | database |       username       |   server_username    | created 
 -------------+-----------+-------+----------+----------------------+----------------------+---------
  server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t

@@ -147,7 +147,10 @@ CREATE OR REPLACE FUNCTION add_server(
     local_user             REGROLE = NULL,
     remote_user            NAME = NULL,
     password               TEXT = NULL,
-    if_not_exists          BOOLEAN = FALSE
+    if_not_exists          BOOLEAN = FALSE,
+    bootstrap_database     NAME = 'postgres',
+    bootstrap_user         NAME = NULL,
+    bootstrap_password     TEXT = NULL
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME, username NAME, server_username NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_server_add' LANGUAGE C VOLATILE;
 

@@ -15,6 +15,7 @@ DROP DATABASE IF EXISTS server_1;
 DROP DATABASE IF EXISTS server_2;
 DROP DATABASE IF EXISTS server_3;
 SET client_min_messages TO NOTICE;
+
 CREATE DATABASE server_1;
 CREATE DATABASE server_2;
 CREATE DATABASE server_3;
@@ -32,9 +33,9 @@ CREATE EXTENSION timescaledb;
 SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
 
 -- Add servers using the TimescaleDB server management API
-SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass');
-SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass');
-SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass');
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
+SELECT * FROM add_server('server_3', database => 'server_3', port => inet_server_port(), password => 'pass', if_not_exists => true);
 
 -- Create distributed hypertables. Add a trigger and primary key
 -- constraint to test how those work
