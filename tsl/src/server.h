@@ -10,6 +10,7 @@
 
 extern Datum server_add(PG_FUNCTION_ARGS);
 extern Datum server_delete(PG_FUNCTION_ARGS);
+extern Datum server_attach(PG_FUNCTION_ARGS);
 extern List *server_get_servername_list(void);
 
 #endif /* TIMESCALEDB_TSL_SERVER_H */

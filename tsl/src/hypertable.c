@@ -32,6 +32,7 @@
 #include "deparse.h"
 #include "remote/dist_commands.h"
 #include "compat.h"
+#include "hypertable_server.h"
 #include <utils.h>
 #include <extension.h>
 
