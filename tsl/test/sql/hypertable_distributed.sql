@@ -401,18 +401,9 @@ associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chu
 create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
 servers => '{ "server_2", "server_3" }'); 
 
--- Test assign_server
-SET ROLE :ROLE_SUPERUSER;
-CREATE OR REPLACE FUNCTION assign_server(
-	hypertable REGCLASS,
-	server     NAME
-)
-RETURNS void
-AS :TSL_MODULE_PATHNAME, 'tsl_test_assign_server' LANGUAGE C;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
-
+-- Test attach_server
 SELECT * FROM _timescaledb_catalog.hypertable_server;
-SELECT * FROM assign_server('"Table\\Schema"."Param_Table"', 'server_1');
+SELECT * FROM attach_server('"Table\\Schema"."Param_Table"', 'server_1');
 SELECT * FROM _timescaledb_catalog.hypertable_server;
 
 -- Verify hypertables on all servers
@@ -447,7 +438,7 @@ SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => 
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 
 SELECT * FROM _timescaledb_catalog.dimension;
-SELECT * FROM assign_server('dimented_table', 'server_2');
+SELECT * FROM attach_server('dimented_table', 'server_2');
 
 SELECT * FROM _timescaledb_catalog.dimension;
 \c server_1

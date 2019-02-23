@@ -806,15 +806,7 @@ NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
              4 | Table\\Schema | Param_Table | t
 (1 row)
 
--- Test assign_server
-SET ROLE :ROLE_SUPERUSER;
-CREATE OR REPLACE FUNCTION assign_server(
-	hypertable REGCLASS,
-	server     NAME
-)
-RETURNS void
-AS :TSL_MODULE_PATHNAME, 'tsl_test_assign_server' LANGUAGE C;
-SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Test attach_server
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
@@ -828,10 +820,10 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
              4 |                    3 | server_3
 (8 rows)
 
-SELECT * FROM assign_server('"Table\\Schema"."Param_Table"', 'server_1');
- assign_server 
----------------
- 
+SELECT * FROM attach_server('"Table\\Schema"."Param_Table"', 'server_1');
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             4 |                    3 | server_1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_server;
@@ -984,10 +976,10 @@ SELECT * FROM _timescaledb_catalog.dimension;
   9 |             5 | column3          | integer                  | f       |          4 | _timescaledb_internal    | get_partition_for_key |                
 (8 rows)
 
-SELECT * FROM assign_server('dimented_table', 'server_2');
- assign_server 
----------------
- 
+SELECT * FROM attach_server('dimented_table', 'server_2');
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             5 |                    4 | server_2
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;

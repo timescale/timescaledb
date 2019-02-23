@@ -8,12 +8,6 @@ set(SOURCES
 )
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 
-if (NOT ${PG_VERSION} VERSION_LESS "10")
-  list(APPEND SOURCES
-    hypertable.c
-  )
-endif ()
-
 add_library(${TSL_TESTS_LIB_NAME} OBJECT ${SOURCES})
 
 # Since the test library will be linked into the loadable extension

@@ -19,6 +19,7 @@ ORDER BY proname;
  add_reorder_policy
  add_server
  alter_job_schedule
+ attach_server
  attach_tablespace
  chunk_relation_size
  chunk_relation_size_pretty
@@ -52,5 +53,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(38 rows)
+(39 rows)
 

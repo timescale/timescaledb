@@ -30,6 +30,9 @@
 #include "remote/connection.h"
 #endif
 #include "server.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
+#include "errors.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"
@@ -162,6 +165,32 @@ create_server_datum(FunctionCallInfo fcinfo, const char *servername, const char 
 	values[AttrNumberGetAttrOffset(Anum_create_server_server_user)] =
 		CStringGetDatum(server_username);
 	values[AttrNumberGetAttrOffset(Anum_create_server_created)] = BoolGetDatum(created);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
+static Datum
+create_hypertable_server_datum(FunctionCallInfo fcinfo, HypertableServer *server)
+{
+	TupleDesc tupdesc;
+	Datum values[Natts_hypertable_server];
+	bool nulls[Natts_hypertable_server] = { false };
+	HeapTuple tuple;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in "
+						"context that cannot accept type record")));
+
+	tupdesc = BlessTupleDesc(tupdesc);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_server_hypertable_id)] =
+		Int32GetDatum(server->fd.hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_server_server_hypertable_id)] =
+		Int32GetDatum(server->fd.server_hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_server_server_name)] =
+		NameGetDatum(&server->fd.server_name);
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
@@ -496,6 +525,66 @@ server_delete(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_BOOL(deleted);
+}
+
+Datum
+server_attach(PG_FUNCTION_ARGS)
+{
+	Oid table_id = PG_GETARG_OID(0);
+	const char *server_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1)->data;
+	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	Cache *hcache;
+	Hypertable *ht;
+	List *result;
+	ListCell *lc;
+
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypertable: cannot be NULL")));
+
+	if (server_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid server_name: cannot be NULL")));
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, table_id);
+
+	if (ht == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("table \"%s\" is not a hypertable", get_rel_name(table_id))));
+
+	foreach (lc, ts_hypertable_server_scan(ht->fd.id, CurrentMemoryContext))
+	{
+		HypertableServer *server = lfirst(lc);
+
+		if (namestrcmp(&server->fd.server_name, server_name) == 0)
+		{
+			ts_cache_release(hcache);
+			if (if_not_attached)
+			{
+				ereport(NOTICE,
+						(errcode(ERRCODE_TS_TABLESPACE_ALREADY_ATTACHED),
+						 errmsg("server \"%s\" is already attached to hypertable \"%s\", skipping",
+								server_name,
+								get_rel_name(table_id))));
+				PG_RETURN_DATUM(create_hypertable_server_datum(fcinfo, server));
+			}
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_TABLESPACE_ALREADY_ATTACHED),
+						 errmsg("server \"%s\" is already attached to hypertable \"%s\"",
+								server_name,
+								get_rel_name(table_id))));
+		}
+	}
+
+	result = hypertable_assign_servers(ht->fd.id, list_make1((char *) server_name));
+	Assert(result->length == 1);
+	ts_cache_release(hcache);
+	PG_RETURN_DATUM(create_hypertable_server_datum(fcinfo, (HypertableServer *) linitial(result)));
 }
 
 List *

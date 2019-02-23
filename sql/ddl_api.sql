@@ -160,3 +160,11 @@ CREATE OR REPLACE FUNCTION delete_server(
     if_exists              BOOLEAN = FALSE,
     cascade                BOOLEAN = FALSE
 ) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_server_delete' LANGUAGE C VOLATILE;
+
+-- Attach a server to a hypertable
+CREATE OR REPLACE FUNCTION attach_server(
+    hypertable             REGCLASS,
+    server_name            NAME,
+    if_not_attached        BOOLEAN = FALSE
+) RETURNS TABLE(hypertable_id INTEGER, server_hypertable_id INTEGER, server_name NAME)
+AS '@MODULE_PATHNAME@', 'ts_server_attach' LANGUAGE C VOLATILE;

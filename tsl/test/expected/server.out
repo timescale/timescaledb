@@ -210,7 +210,7 @@ NOTICE:  adding not-null constraint to column "time"
              1 | public      | disttable  | t
 (1 row)
 
--- All servers should be added. Remote hypertable ID should be NULL since not set yet
+-- All servers should be added.
 SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
@@ -229,8 +229,11 @@ DROP TABLE disttable;
 DROP TABLE disttable;
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE TABLE disttable(time timestamptz, device int, temp float);
--- Test some bad create_hypertable() parameter values for distributed hypertables
 \set ON_ERROR_STOP 0
+-- Attach server should fail when called on a non-hypertable
+SELECT * FROM attach_server('disttable', 'server_1');
+ERROR:  table "disttable" is not a hypertable
+-- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 0, servers => '{ "server_2", "server_4" }');
 NOTICE:  adding not-null constraint to column "time"
@@ -280,6 +283,41 @@ SELECT * FROM _timescaledb_catalog.hypertable_server;
  hypertable_id | server_hypertable_id | server_name 
 ---------------+----------------------+-------------
 (0 rows)
+
+-- Attach server should now succeed
+SELECT * FROM attach_server('disttable', 'server_1');
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             4 |                    2 | server_1
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             4 |                    2 | server_1
+(1 row)
+
+-- Some attach server error cases
+\set ON_ERROR_STOP 0
+-- Invalid arguments
+SELECT * FROM attach_server(NULL, 'server_1', true);
+ERROR:  invalid hypertable: cannot be NULL
+SELECT * FROM attach_server('disttable', NULL, true);
+ERROR:  invalid server_name: cannot be NULL
+-- Deleted server
+SELECT * FROM attach_server('disttable', 'server_2');
+ERROR:  server "server_2" does not exist
+-- Attchinging to an already attached server without 'if_not_exists'
+SELECT * FROM attach_server('disttable', 'server_1', false);
+ERROR:  server "server_1" is already attached to hypertable "disttable"
+\set ON_ERROR_STOP 1
+-- Attach if not exists
+SELECT * FROM attach_server('disttable', 'server_1', true);
+NOTICE:  server "server_1" is already attached to hypertable "disttable", skipping
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             4 |                    2 | server_1
+(1 row)
 
 -- Creating a distributed hypertable without any servers should fail
 DROP TABLE disttable;
