@@ -10,7 +10,6 @@ include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 if (PG_VERSION_SUPPORTS_MULTINODE)
   list(APPEND SOURCES
     deparse.c
-    hypertable.c
     server.c
   )
 endif ()

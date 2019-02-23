@@ -199,6 +199,7 @@ CrossModuleFunctions tsl_cm_functions = {
 #if !PG_VERSION_SUPPORTS_MULTINODE
 	.add_server = error_not_supported_default_fn,
 	.delete_server = error_not_supported_default_fn,
+	.attach_server = error_not_supported_default_fn,
 	.show_chunk = error_not_supported_default_fn,
 	.create_chunk = error_not_supported_default_fn,
 	.create_chunk_on_servers = error_create_chunk_on_servers_not_supported,
@@ -211,6 +212,7 @@ CrossModuleFunctions tsl_cm_functions = {
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
+	.attach_server = server_attach,
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
 	.create_chunk_on_servers = chunk_api_create_on_servers,
