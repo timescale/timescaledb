@@ -2,14 +2,31 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set ON_ERROR_STOP 0
--- test locf and interpolate call errors out when used outside gapfill context
+CREATE TABLE metrics_int(time int,device_id int, sensor_id int, value float);
+
+INSERT INTO metrics_int VALUES
+(-100,1,1,0.0),
+(-100,1,2,-100.0),
+(0,1,1,5.0),
+(5,1,2,10.0),
+(100,1,1,0.0),
+(100,1,2,-100.0)
+;
+
+CREATE TABLE devices(device_id INT, name TEXT);
+INSERT INTO devices VALUES (1,'Device 1'),(2,'Device 2'),(3,'Device 3');
+
+CREATE TABLE sensors(sensor_id INT, name TEXT);
+INSERT INTO sensors VALUES (1,'Sensor 1'),(2,'Sensor 2'),(3,'Sensor 3');
+
+-- test locf and interpolate call without gapfill
 SELECT locf(1);
 SELECT interpolate(1);
--- test locf and interpolate call errors out when used outside gapfill context with NULL arguments
+-- test locf and interpolate call with NULL input
 SELECT locf(NULL::int);
 SELECT interpolate(NULL);
 
+\set ON_ERROR_STOP 0
 -- test time_bucket_gapfill not top level function call
 SELECT
   1 + time_bucket_gapfill(1,time,1,11)
@@ -106,15 +123,72 @@ SELECT
   time_bucket_gapfill(1,time_bucket_gapfill(1,time,1,11),1,11)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
-\set ON_ERROR_STOP 1
 
--- test time_bucket_gapfill without aggregation
+-- test nested locf calls
 SELECT
-  time_bucket_gapfill(1,time,1,11)
-FROM (VALUES (1),(2)) v(time);
+  time_bucket_gapfill(1,time,1,11),
+  locf(locf(min(time)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test nested interpolate calls
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  interpolate(interpolate(min(time)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test mixed locf/interpolate calls
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(interpolate(min(time)))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test window function inside locf
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  locf(avg(min(time)) OVER ())
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test nested window functions
+-- prevented by postgres
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  avg(avg(min(time)) OVER ()) OVER ()
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test multiple window functions in single column
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  avg(min(time)) OVER () + avg(min(time)) OVER ()
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test window functions with multiple column references
+SELECT
+  time_bucket_gapfill(1,time,1,2),
+  first(min(time),min(time)) OVER ()
+FROM metrics_int
+GROUP BY 1;
+
+-- test locf not toplevel
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  1 + locf(min(time))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+-- test locf inside aggregate
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  min(min(locf(time))) OVER ()
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
 
 -- test NULL args
-\set ON_ERROR_STOP 0
 SELECT
   time_bucket_gapfill(NULL,time,1,11)
 FROM (VALUES (1),(2)) v(time)
@@ -135,6 +209,17 @@ SELECT
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
 \set ON_ERROR_STOP 1
+
+-- test time_bucket_gapfill without aggregation
+-- this will not trigger gapfilling
+SELECT
+  time_bucket_gapfill(1,time,1,11)
+FROM (VALUES (1),(2)) v(time);
+
+SELECT
+  time_bucket_gapfill(1,time,1,11),
+  avg(time) OVER ()
+FROM (VALUES (1),(2)) v(time);
 
 -- test int int2/4/8
 SELECT
@@ -300,6 +385,20 @@ FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
 WHERE false
 GROUP BY 1,color ORDER BY 2,1;
 
+-- test JOINs
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  device_id,
+  d.name,
+  sensor_id,
+  s.name,
+  avg(m.value)
+FROM metrics_int m
+INNER JOIN devices d USING(device_id)
+INNER JOIN sensors s USING(sensor_id)
+WHERE time BETWEEN 0 AND 5
+GROUP BY 1,2,3,4,5;
+
 -- test insert into SELECT
 CREATE TABLE insert_test(id INT);
 INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
@@ -384,23 +483,21 @@ SELECT
 FROM (VALUES (0,1,3),(4,2,3)) v(time,value)
 GROUP BY 1;
 
+-- test expressions inside locf
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  locf(min(value)),
+  locf(4),
+  locf(4 + min(value))
+FROM (VALUES (0,1,3),(4,2,3)) v(time,value)
+GROUP BY 1;
+
 -- test locf with out of boundary lookup
 SELECT
   time_bucket_gapfill(10,time,0,70) AS time,
   locf(min(value),(SELECT 100)) AS value
 FROM (values (20,9),(40,6)) v(time,value)
 GROUP BY 1 ORDER BY 1;
-
-CREATE TABLE metrics_int(time int,device_id int, sensor_id int, value float);
-
-INSERT INTO metrics_int VALUES
-(-100,1,1,0.0),
-(-100,1,2,-100.0),
-(0,1,1,5.0),
-(5,1,2,10.0),
-(100,1,1,0.0),
-(100,1,2,-100.0)
-;
 
 -- test locf with different datatypes
 SELECT
@@ -481,6 +578,17 @@ FROM metrics_int m1
 WHERE time >= 0 AND time < 10
 GROUP BY 1,2,3 ORDER BY 1,2,3;
 
+-- test locf with correlated subquery and window functions
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value),(SELECT value FROM metrics_int m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)),
+  sum(locf(min(value),(SELECT value FROM metrics_int m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1))) OVER (PARTITION BY device_id, sensor_id ROWS 1 PRECEDING)
+FROM metrics_int m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3;
+
 -- test interpolate
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
@@ -547,6 +655,33 @@ FROM metrics_int m1
 WHERE time >= 0 AND time < 10
 GROUP BY 1,2,3 ORDER BY 2,3,1;
 
+-- test interpolate with correlated subquery and window function
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  interpolate(
+    min(value),
+    (SELECT (time,value) FROM metrics_int m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM metrics_int m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  ),
+  sum(interpolate(
+    min(value),
+    (SELECT (time,value) FROM metrics_int m2
+     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time DESC LIMIT 1),
+    (SELECT (time,value) FROM metrics_int m2
+     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
+     ORDER BY time LIMIT 1)
+  )) OVER (PARTITION BY device_id, sensor_id ROWS 1 PRECEDING)
+FROM metrics_int m1
+WHERE time >= 0 AND time < 10
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+
 -- test cte with gap filling in outer query
 WITH data AS (
   SELECT * FROM (VALUES (1,1,1),(2,2,2)) v(time,id,value)
@@ -569,7 +704,6 @@ WITH gapfill AS (
 )
 SELECT * FROM gapfill;
 
-\set ON_ERROR_STOP 0
 -- test window functions
 SELECT
   time_bucket_gapfill(10,time,0,60),
@@ -578,6 +712,20 @@ SELECT
 FROM (VALUES (0),(50)) v(time)
 GROUP BY 1;
 
+-- test window functions with multiple windows
+SELECT
+  time_bucket_gapfill(1,time,0,10),
+  interpolate(min(time)),
+  row_number() OVER (),
+  locf(min(time)),
+  sum(interpolate(min(time))) OVER (ROWS 1 PRECEDING),
+  sum(interpolate(min(time))) OVER (ROWS 2 PRECEDING),
+  sum(interpolate(min(time))) OVER (ROWS 3 PRECEDING),
+  sum(interpolate(min(time))) OVER (ROWS 4 PRECEDING)
+FROM (VALUES (0),(9)) v(time)
+GROUP BY 1;
+
+-- test window functions with constants
 SELECT
 	time_bucket_gapfill(1,time,0,5),
   min(time),
@@ -586,29 +734,83 @@ SELECT
 FROM (VALUES (1),(2),(3)) v(time)
 GROUP BY 1;
 
+--test window functions with locf
 SELECT
-	time_bucket_gapfill(1,time,0,5),
-  min(time),
-  4 as c,
-  lag(min(time)) OVER ()
+  time_bucket_gapfill(1,time,0,5),
+  min(time) AS "min",
+  lag(min(time)) over () AS lag_min,
+  lead(min(time)) over () AS lead_min,
+  locf(min(time)) AS locf,
+  lag(locf(min(time))) over () AS lag_locf,
+  lead(locf(min(time))) over () AS lead_locf
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+--test window functions with interpolate
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  min(time) AS "min",
+  lag(min(time)) over () AS lag_min,
+  lead(min(time)) over () AS lead_min,
+  interpolate(min(time)) AS interpolate,
+  lag(interpolate(min(time))) over () AS lag_interpolate,
+  lead(interpolate(min(time))) over () AS lead_interpolate
 FROM (VALUES (1),(3)) v(time)
 GROUP BY 1;
 
+--test window functions with expressions
 SELECT
-  time_bucket_gapfill(1,time,1,5),
-  locf(min(time)) AS locf,
-  lag(locf(min(time))) over () AS lag
-FROM (VALUES (1),(2)) v(time)
+  time_bucket_gapfill(1,time,0,5),
+  min(time) AS "min",
+  lag(min(time)) over () AS lag_min,
+  1 + lag(min(time)) over () AS lag_min,
+  interpolate(min(time)) AS interpolate,
+  lag(interpolate(min(time))) over () AS lag_interpolate,
+  1 + lag(interpolate(min(time))) over () AS lag_interpolate
+FROM (VALUES (1),(3)) v(time)
 GROUP BY 1;
 
+--test row_number/rank/percent_rank/... window functions with gapfill reference
 SELECT
-  time_bucket_gapfill(1,time,1,5),
-  min(time) AS value,
-  locf(min(time)) AS locf,
-  lag(locf(min(time))) over () AS lag
-FROM (VALUES (1),(2)) v(time)
+  time_bucket_gapfill(1,time,0,5),
+  ntile(2) OVER () AS ntile_2,
+  ntile(3) OVER () AS ntile_3,
+  ntile(5) OVER () AS ntile_5,
+  row_number() OVER (),
+  cume_dist() OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  rank() OVER (),
+  rank() OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  percent_rank() OVER (ORDER BY time_bucket_gapfill(1,time,0,5))
+FROM (VALUES (1),(3)) v(time)
 GROUP BY 1;
-\set ON_ERROR_STOP 1
+
+-- test first_value/last_value/nth_value
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(time)) OVER (),
+  nth_value(min(time),3) OVER (),
+  last_value(min(time)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+
+-- test window functions with PARTITION BY
+SELECT
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER (),
+  row_number() OVER (PARTITION BY color)
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color ORDER BY 2,1;
+
+-- test multiple windows
+\set ON_ERROR_STOP 0
+SELECT
+  time_bucket_gapfill(1,time,0,11),
+  first_value(interpolate(min(time))) OVER (ROWS 1 PRECEDING),
+  interpolate(min(time)),
+  last_value(interpolate(min(time))) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+FROM (VALUES (0),(10)) v(time)
+GROUP BY 1;
 
 -- test reorder
 SELECT
@@ -1014,4 +1216,45 @@ SELECT
 FROM metrics_int m, metrics_int m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
+
+-- test DISTINCT
+SELECT DISTINCT ON (color)
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  min(value) as m
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color ORDER BY 2,1;
+
+-- test DISTINCT with window functions
+SELECT DISTINCT ON (row_number() OVER ())
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER ()
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color;
+
+-- test DISTINCT with window functions and PARTITION BY
+SELECT DISTINCT ON (color,row_number() OVER (PARTITION BY color))
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER (PARTITION BY color)
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color;
+
+-- test DISTINCT with window functions not in targetlist
+SELECT DISTINCT ON (row_number() OVER ())
+  time_bucket_gapfill(1,time,0,5) as time,
+  color,
+  row_number() OVER (PARTITION BY color)
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 1,color;
+
+-- test column references
+SELECT
+  row_number() OVER (PARTITION BY color),
+  locf(min(time)),
+  color,
+  time_bucket_gapfill(1,time,0,5) as time
+FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
+GROUP BY 3,4;
 

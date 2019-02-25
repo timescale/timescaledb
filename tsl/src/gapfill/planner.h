@@ -10,6 +10,8 @@
 #include <optimizer/planner.h>
 
 void plan_add_gapfill(PlannerInfo *, RelOptInfo *);
+void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,
+									  RelOptInfo *output_rel);
 
 typedef struct GapFillPath
 {

@@ -13,10 +13,6 @@
 
 /*
  * stub function to trigger locf and interpolate in gapfill node
- * the calls to these functions will be removed from the final plan
- * for a valid gapfill query. This function will only be called if
- * no timescale license is available or when they are used outside of
- * a valid gapfill query.
  */
 TS_FUNCTION_INFO_V1(ts_gapfill_marker);
 Datum

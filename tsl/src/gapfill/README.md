@@ -18,9 +18,8 @@ customscan node in the planner all the tuple injecting happens in the gapfill
 node and time_bucket_gapfill just calls plain time_bucket.
 
 The locf and interpolate function calls serve as markers in the plan to
-trigger locf or interpolate behaviour for a column but the actual function
-calls are removed from the final plan and for a valid gapfill query those
-functions are never called.
+trigger locf or interpolate behaviour. In the targetlist of the gapfill node
+those functions will be toplevel function calls.
 
 The gapfill state transitions are described in exec.h
 

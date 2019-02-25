@@ -287,19 +287,11 @@ static bool
 is_simple_expr(Expr *node)
 {
 	/*
-	 * we make a list here because expression tree walker will not recurse for
-	 * primitive node types without expression subnodes so the walker function
-	 * would never get called for toplevel Var or Param but we want to check
-	 * for this as well.
-	 */
-	node = (Expr *) list_make1(node);
-
-	/*
 	 * since expression_tree_walker does early exit on true and we use that to
 	 * skip processing on first non-simple expression we invert return value
 	 * from expression_tree_walker here
 	 */
-	return !expression_tree_walker((Node *) node, is_simple_expr_walker, NULL);
+	return !is_simple_expr_walker((Node *) node, NULL);
 }
 
 /*
@@ -375,7 +367,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 {
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
 	FuncExpr *func = linitial(cscan->custom_private);
-	FromExpr *jt = lfourth(cscan->custom_private);
+	FromExpr *jt = lthird(cscan->custom_private);
 	ListCell *lc;
 	Var *ts_var;
 	TypeCacheEntry *tce = lookup_type_cache(state->gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
@@ -604,7 +596,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		if (state->columns[i]->ctype == NULL_COLUMN)
 		{
 			entry = copyObject(list_nth(cscan->custom_scan_tlist, i));
-			entry = expression_tree_mutator(entry, gapfill_aggref_mutator, NULL);
+			entry = gapfill_aggref_mutator(entry, NULL);
 			lfirst(list_nth_cell(targetlist, i)) = entry;
 		}
 	}
@@ -1032,7 +1024,7 @@ gapfill_state_initialize_columns(GapFillState *state)
 	for (i = 0; i < state->ncolumns; i++)
 	{
 		tle = list_nth(cscan->custom_scan_tlist, i);
-		expr = list_nth(lthird(cscan->custom_private), i);
+		expr = tle->expr;
 
 		if (tle->ressortgroupref && gapfill_is_group_column(state, tle))
 		{
@@ -1059,7 +1051,7 @@ gapfill_state_initialize_columns(GapFillState *state)
 		}
 		else if (IsA(expr, FuncExpr))
 		{
-			/* locf and interpolate need to be toplevel function calls */
+			/* locf and interpolate will be toplevel function calls in the gapfill node */
 			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
 						GAPFILL_LOCF_FUNCTION,
 						NAMEDATALEN) == 0)
