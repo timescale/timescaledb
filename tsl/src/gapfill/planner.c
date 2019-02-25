@@ -8,9 +8,12 @@
 #include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/planner.h>
+#include <optimizer/tlist.h>
+#include <optimizer/var.h>
 #include <utils/lsyscache.h>
 #include <parser/parse_func.h>
 
@@ -24,58 +27,91 @@ static CustomScanMethods gapfill_plan_methods = {
 	.CreateCustomScanState = gapfill_state_create,
 };
 
-/*
- * Remove locf and interpolate toplevel function calls
- * and function calls inside window functions
- */
-static inline Expr *
-gapfill_clean_expr(Expr *expr)
-{
-	if (IsA(expr, FuncExpr))
-	{
-		if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
-					GAPFILL_LOCF_FUNCTION,
-					NAMEDATALEN) == 0)
-			return linitial(castNode(FuncExpr, expr)->args);
-		else if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
-						 GAPFILL_INTERPOLATE_FUNCTION,
-						 NAMEDATALEN) == 0)
-			return linitial(castNode(FuncExpr, expr)->args);
-	}
-
-	if (IsA(expr, WindowFunc))
-	{
-		if (list_length(castNode(WindowFunc, expr)->args) == 1)
-			linitial(castNode(WindowFunc, expr)->args) =
-				gapfill_clean_expr(linitial(castNode(WindowFunc, expr)->args));
-	}
-
-	return expr;
-}
-
 typedef struct gapfill_walker_context
 {
-	FuncExpr *call;
-	int num_calls;
+	union
+	{
+		Node *node;
+		Expr *expr;
+		FuncExpr *func;
+		WindowFunc *window;
+	} call;
+	int count;
 } gapfill_walker_context;
+
+/*
+ * FuncExpr is time_bucket_gapfill function call
+ */
+static inline bool
+is_gapfill_function_call(FuncExpr *call)
+{
+	char *func_name = get_func_name(call->funcid);
+	return strncmp(func_name, GAPFILL_FUNCTION, NAMEDATALEN) == 0;
+}
+
+/*
+ * FuncExpr is locf or interpolate function call
+ */
+static inline bool
+is_marker_function_call(FuncExpr *call)
+{
+	char *func_name = get_func_name(call->funcid);
+	return strncmp(func_name, GAPFILL_LOCF_FUNCTION, NAMEDATALEN) == 0 ||
+		   strncmp(func_name, GAPFILL_INTERPOLATE_FUNCTION, NAMEDATALEN) == 0;
+}
 
 /*
  * Find time_bucket_gapfill function call
  */
 static bool
-gapfill_function_call_walker(FuncExpr *node, gapfill_walker_context *context)
+gapfill_function_walker(Node *node, gapfill_walker_context *context)
 {
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(node->funcid), GAPFILL_FUNCTION, NAMEDATALEN) == 0)
+	if (IsA(node, FuncExpr) && is_gapfill_function_call(castNode(FuncExpr, node)))
 	{
-		context->call = (FuncExpr *) node;
-		context->num_calls++;
+		context->call.node = node;
+		context->count++;
 	}
 
-	return expression_tree_walker((Node *) node, gapfill_function_call_walker, context);
+	return expression_tree_walker((Node *) node, gapfill_function_walker, context);
+}
+
+/*
+ * Find locf/interpolate function call
+ */
+static bool
+marker_function_walker(Node *node, gapfill_walker_context *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncExpr) && is_marker_function_call(castNode(FuncExpr, node)))
+	{
+		context->call.node = node;
+		context->count++;
+	}
+
+	return expression_tree_walker((Node *) node, marker_function_walker, context);
+}
+
+/*
+ * Find window function calls
+ */
+static bool
+window_function_walker(Node *node, gapfill_walker_context *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, WindowFunc))
+	{
+		context->call.node = node;
+		context->count++;
+	}
+
+	return expression_tree_walker(node, window_function_walker, context);
 }
 
 /*
@@ -130,12 +166,6 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 {
 	GapFillPath *gfpath = (GapFillPath *) path;
 	CustomScan *cscan = makeNode(CustomScan);
-	ListCell *lc;
-	TargetEntry *tle;
-	Expr *expr;
-	List *tl_exprs = NIL;
-	UpperRelationKind stage;
-	int i;
 
 	cscan->scan.scanrelid = 0;
 	cscan->scan.plan.targetlist = tlist;
@@ -144,58 +174,8 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, struct CustomPath *path,
 	cscan->flags = path->flags;
 	cscan->methods = &gapfill_plan_methods;
 
-	/*
-	 * if window functions are involved the gapfill marker functions might not
-	 * actually be in the targetlist at the aggregation stage
-	 */
-
-	/*
-	 * we currently do not support window functions where the number of
-	 * entries in the target list at window stage is different from the
-	 * number of entries in the target list at aggregation stage. This can
-	 * happen if a subexpression of a column expression is identical for
-	 * multiple columns and postgres planner decides to split up those columns
-	 * above aggregation node.
-	 */
-	if (root->upper_targets[UPPERREL_WINDOW] &&
-		list_length(root->upper_targets[UPPERREL_WINDOW]->exprs) !=
-			list_length(root->upper_targets[UPPERREL_GROUP_AGG]->exprs))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("gapfill functionality with window functions not supported")));
-
-	for (i = 0; i < list_length(tlist); i++)
-	{
-		tle = list_nth(tlist, i);
-		if (root->upper_targets[UPPERREL_WINDOW])
-		{
-			expr = list_nth(root->upper_targets[UPPERREL_WINDOW]->exprs, i);
-			if (IsA(expr, WindowFunc))
-				expr = linitial(castNode(WindowFunc, expr)->args);
-			tl_exprs = lappend(tl_exprs, expr);
-		}
-		else
-			tl_exprs = lappend(tl_exprs, tle->expr);
-	}
 	cscan->custom_private =
-		list_make4(gfpath->func, root->parse->groupClause, tl_exprs, root->parse->jointree);
-
-	/* remove locf and interpolate function calls from targetlists */
-	foreach (lc, ((Plan *) linitial(custom_plans))->targetlist)
-	{
-		castNode(TargetEntry, lfirst(lc))->expr =
-			gapfill_clean_expr(castNode(TargetEntry, lfirst(lc))->expr);
-	}
-	for (stage = UPPERREL_SETOP; stage <= UPPERREL_FINAL; stage++)
-	{
-		if (root->upper_targets[stage])
-		{
-			foreach (lc, root->upper_targets[stage]->exprs)
-			{
-				lfirst(lc) = gapfill_clean_expr(lfirst(lc));
-			}
-		}
-	}
+		list_make3(gfpath->func, root->parse->groupClause, root->parse->jointree);
 
 	return &cscan->scan.plan;
 }
@@ -204,6 +184,127 @@ static CustomPathMethods gapfill_path_methods = {
 	.CustomName = "GapFill",
 	.PlanCustomPath = gapfill_plan_create,
 };
+
+static bool
+gapfill_expression_walker(Expr *node, bool (*walker)(), gapfill_walker_context *context)
+{
+	context->count = 0;
+	context->call.node = NULL;
+
+	return (*walker)((Node *) node, context);
+}
+
+/*
+ * Build expression lists for the gapfill node and the node below.
+ * All marker functions will be top-level function calls in the
+ * resulting gapfill node targetlist and will not be included in
+ * the subpath expression list
+ */
+static void
+gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *pt_subpath)
+{
+	ListCell *lc;
+	int i = -1;
+
+	foreach (lc, pt_upper->exprs)
+	{
+		Expr *expr = lfirst(lc);
+		gapfill_walker_context context;
+		i++;
+
+		/* check for locf/interpolate calls */
+		gapfill_expression_walker(expr, marker_function_walker, &context);
+		if (context.count > 1)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("multiple interpolate/locf function calls per resultset column not "
+							"supported")));
+
+		if (context.count == 1)
+		{
+			/*
+			 * marker needs to be toplevel for now unless we have a projection capable
+			 * node above gapfill node
+			 */
+			if (expr != context.call.expr && !contain_window_function((Node *) expr))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("%s must be toplevel function call",
+								get_func_name(context.call.func->funcid))));
+
+			/* if there is an aggregation it needs to be a child of the marker function */
+			if (contain_agg_clause((Node *) expr) &&
+				!contain_agg_clause(linitial(context.call.func->args)))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("aggregate functions must be below %s",
+								get_func_name(context.call.func->funcid))));
+
+			if (contain_window_function(context.call.node))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("window functions must not be below %s",
+								get_func_name(context.call.func->funcid))));
+
+			add_column_to_pathtarget(pt_path, context.call.expr, pt_upper->sortgrouprefs[i]);
+			add_column_to_pathtarget(pt_subpath,
+									 linitial(context.call.func->args),
+									 pt_upper->sortgrouprefs[i]);
+			continue;
+		}
+
+		/* check for plain window function calls without locf/interpolate */
+		gapfill_expression_walker(expr, window_function_walker, &context);
+		if (context.count > 1)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("multiple window function calls per column not supported")));
+
+		if (context.count == 1)
+		{
+			/*
+			 * window functions without arguments like rank() don't need to
+			 * appear in the target list below WindowAgg node
+			 */
+			if (context.call.window->args != NIL)
+			{
+				ListCell *lc_arg;
+
+				/*
+				 * check arguments past first argument dont have Vars
+				 */
+				for (lc_arg = lnext(list_head(context.call.window->args)); lc_arg != NULL;
+					 lc_arg = lnext(lc_arg))
+				{
+					if (contain_var_clause(lfirst(lc_arg)))
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("window functions with multiple column "
+										"references not supported")));
+				}
+
+				if (contain_var_clause(linitial(context.call.window->args)))
+				{
+					add_column_to_pathtarget(pt_path,
+											 linitial(context.call.window->args),
+											 pt_upper->sortgrouprefs[i]);
+					add_column_to_pathtarget(pt_subpath,
+											 linitial(context.call.window->args),
+											 pt_upper->sortgrouprefs[i]);
+				}
+			}
+		}
+		else
+		{
+			/*
+			 * no locf/interpolate or window functions found so we can
+			 * use expression verbatim
+			 */
+			add_column_to_pathtarget(pt_path, expr, pt_upper->sortgrouprefs[i]);
+			add_column_to_pathtarget(pt_subpath, expr, pt_upper->sortgrouprefs[i]);
+		}
+	}
+}
 
 /*
  * Create a Gapfill Path node.
@@ -229,9 +330,14 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	path->cpath.path.rows = subpath->rows;
 	path->cpath.path.parent = subpath->parent;
 	path->cpath.path.param_info = subpath->param_info;
-	path->cpath.path.pathtarget = subpath->pathtarget;
 	path->cpath.flags = 0;
 	path->cpath.path.pathkeys = subpath->pathkeys;
+
+	path->cpath.path.pathtarget = create_empty_pathtarget();
+	subpath->pathtarget = create_empty_pathtarget();
+	gapfill_build_pathtarget(root->upper_targets[UPPERREL_FINAL],
+							 path->cpath.path.pathtarget,
+							 subpath->pathtarget);
 
 	if (!gapfill_correct_order(root, subpath, func))
 	{
@@ -287,7 +393,7 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 {
 	ListCell *lc;
 	Query *parse = root->parse;
-	gapfill_walker_context context = { .call = NULL, .num_calls = 0 };
+	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
 
 	if (CMD_SELECT != parse->commandType || parse->groupClause == NIL)
 		return;
@@ -295,9 +401,9 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	/*
 	 * look for time_bucket_gapfill function call
 	 */
-	expression_tree_walker((Node *) parse->targetList, gapfill_function_call_walker, &context);
+	gapfill_function_walker((Node *) parse->targetList, &context);
 
-	if (context.num_calls == 0)
+	if (context.count == 0)
 		return;
 
 	license_print_expiration_warning_if_needed();
@@ -314,12 +420,12 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 					"timestamps")));
 #endif
 
-	if (context.num_calls > 1)
+	if (context.count > 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("multiple time_bucket_gapfill calls not allowed")));
 
-	if (context.num_calls == 1)
+	if (context.count == 1)
 	{
 		List *copy = group_rel->pathlist;
 		group_rel->pathlist = NIL;
@@ -336,8 +442,119 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 
 		foreach (lc, copy)
 		{
-			add_path(group_rel, gapfill_path_create(root, lfirst(lc), context.call));
+			add_path(group_rel, gapfill_path_create(root, lfirst(lc), context.call.func));
 		}
 		list_free(copy);
+	}
+}
+
+static inline bool
+is_gapfill_path(Path *path)
+{
+	return IsA(path, CustomPath) && castNode(CustomPath, path)->methods == &gapfill_path_methods;
+}
+
+/*
+ * Since we construct the targetlist for the gapfill node from the
+ * final targetlist we need to adjust any intermediate targetlists
+ * between toplevel window agg node and gapfill node. This adjustment
+ * is only necessary if multiple WindowAgg nodes are present.
+ * In that case we need to adjust the targetlists of nodes between
+ * toplevel WindowAgg node and Gapfill node
+ *
+ * Gapfill plan with multiple WindowAgg nodes:
+ *
+ *  WindowAgg
+ *    ->  WindowAgg
+ *          ->  Custom Scan (GapFill)
+ *                ->  Sort
+ *                      Sort Key: (time_bucket_gapfill(1, "time"))
+ *                      ->  HashAggregate
+ *                            Group Key: time_bucket_gapfill(1, "time")
+ *                            ->  Seq Scan on metrics_int
+ *
+ */
+void
+gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
+{
+	ListCell *lc;
+
+	if (!is_gapfill_path(linitial(input_rel->pathlist)))
+		return;
+
+	foreach (lc, output_rel->pathlist)
+	{
+		WindowAggPath *toppath = lfirst(lc);
+
+		/*
+		 * the toplevel WindowAggPath has the highest index. If winref is
+		 * 1 we only have one WindowAggPath if its greater then 1 then there
+		 * are multiple WindowAgg nodes.
+		 *
+		 * we skip toplevel WindowAggPath because targetlist of toplevel WindowAggPath
+		 * is our starting point for building gapfill targetlist so we don't need to
+		 * adjust the toplevel targetlist
+		 */
+		if (IsA(toppath, WindowAggPath) && toppath->winclause->winref > 1)
+		{
+			WindowAggPath *path;
+			for (path = (WindowAggPath *) toppath->subpath; IsA(path, WindowAggPath);
+				 path = (WindowAggPath *) path->subpath)
+			{
+				List *exprs = NIL;
+				ListCell *lc_expr;
+
+				/*
+				 * for each child we build targetlist based on top path
+				 * targetlist
+				 */
+				foreach (lc_expr, toppath->path.pathtarget->exprs)
+				{
+					gapfill_walker_context context;
+
+					gapfill_expression_walker(lfirst(lc_expr), window_function_walker, &context);
+
+					/*
+					 * we error out on multiple window functions per resultset column
+					 * when building gapfill node targetlist so we only assert here
+					 */
+					Assert(context.count <= 1);
+
+					if (context.count == 1)
+					{
+						if (context.call.window->winref <= path->winclause->winref)
+							/*
+							 * window function of current level or below
+							 * so we can put in verbatim
+							 */
+							exprs = lappend(exprs, lfirst(lc_expr));
+						else if (context.call.window->args != NIL)
+						{
+							ListCell *lc_arg;
+							if (list_length(context.call.window->args) > 1)
+								/*
+								 * check arguments past first argument dont have Vars
+								 */
+								for (lc_arg = lnext(list_head(context.call.window->args));
+									 lc_arg != NULL;
+									 lc_arg = lnext(lc_arg))
+								{
+									if (contain_var_clause(lfirst(lc_arg)))
+										ereport(ERROR,
+												(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+												 errmsg("window functions with multiple column "
+														"references not supported")));
+								}
+
+							if (contain_var_clause(linitial(context.call.window->args)))
+								exprs = lappend(exprs, linitial(context.call.window->args));
+						}
+					}
+					else
+						exprs = lappend(exprs, lfirst(lc_expr));
+				}
+				path->path.pathtarget->exprs = exprs;
+			}
+		}
 	}
 }

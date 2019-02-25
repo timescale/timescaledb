@@ -15,11 +15,10 @@ Datum
 gapfill_marker(PG_FUNCTION_ARGS)
 {
 	license_print_expiration_warning_if_needed();
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("%s can only be used in an aggregation query with time_bucket_gapfill",
-					get_func_name(fcinfo->flinfo->fn_oid))));
-	pg_unreachable();
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(PG_GETARG_DATUM(0));
 }
 
 #define GAPFILL_TIMEBUCKET_WRAPPER(datatype)                                                       \
