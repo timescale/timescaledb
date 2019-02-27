@@ -206,6 +206,14 @@
 				quiet)
 #endif
 
+#if PG96
+#define DefineRelationCompat(stmt, relkind, ownerid, typaddress, queryString)                      \
+	DefineRelation(stmt, relkind, ownerid, typaddress)
+#else
+#define DefineRelationCompat(stmt, relkind, ownerid, typaddress, queryString)                      \
+	DefineRelation(stmt, relkind, ownerid, typaddress, queryString)
+#endif
+
 /* ExecARInsertTriggers */
 #if PG96
 #define ExecARInsertTriggersCompat(estate, result_rel_info, tuple, recheck_indexes)                \

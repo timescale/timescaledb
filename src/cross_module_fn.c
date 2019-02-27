@@ -173,6 +173,12 @@ error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+static bool
+process_cagg_viewstmt_default(ViewStmt *stmt, const char *query_string, void *pstmt)
+{
+	return error_no_default_fn_bool_void_community();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -207,6 +213,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
+	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
