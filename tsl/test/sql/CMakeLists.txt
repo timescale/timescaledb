@@ -3,6 +3,9 @@ set(TEST_FILES
     gapfill.sql
     reorder.sql
     partialize_finalize.sql
+    ddl_hook.sql
+    contaggviews.sql
+    contaggviews_neg.sql
 )
 
 set(TEST_FILES_DEBUG

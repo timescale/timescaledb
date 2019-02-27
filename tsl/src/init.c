@@ -20,6 +20,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/drop_chunks_api.h"
+#include "continuous_aggs/cagg_create.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -71,6 +72,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.partialize_agg = tsl_partialize_agg,
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
+	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);
