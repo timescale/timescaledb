@@ -59,6 +59,7 @@ typedef struct CrossModuleFunctions
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
 	PGFunction finalize_agg_ffunc;
+	bool (*process_cagg_viewstmt)(ViewStmt *stmt, const char *query_string, void *pstmt);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

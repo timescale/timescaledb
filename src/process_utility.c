@@ -2439,6 +2439,48 @@ process_create_trigger_end(Node *parsetree)
 	foreach_chunk_relation(stmt->relation, create_trigger_chunk, stmt);
 }
 
+/* TODO need to decide on additional options for create view for continuous aggregate */
+typedef enum CaggViewOptions
+{
+	CaggViewState = 0
+} CaggViewOptions;
+
+static bool
+process_viewstmt(ProcessUtilityArgs *args)
+{
+	WithClauseDefinition caggview_with_clauses[] = {
+		[CaggViewState] = { .arg_name = "continuous_agg", .type_id = TEXTOID, .default_val = 'f' }
+	};
+	WithClauseResult *parse_results;
+	bool is_cagg = false;
+	Node *parsetree = args->parsetree;
+	ViewStmt *stmt = (ViewStmt *) parsetree;
+	List *pg_options = NIL, *cagg_options = NIL;
+	Assert(IsA(parsetree, ViewStmt));
+	/* is this a continuous agg */
+	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
+	if (cagg_options)
+	{
+		parse_results = ts_with_clauses_parse(cagg_options,
+											  caggview_with_clauses,
+											  TS_ARRAY_LEN(caggview_with_clauses));
+		if (parse_results[CaggViewState].is_default == false)
+			is_cagg = true;
+	}
+	if (!is_cagg)
+		return false;
+	if (pg_options != NIL)
+		elog(ERROR,
+			 "only timescaledb namespace parameters allowed in WITH clause for continuous "
+			 "aggregate");
+
+#if !PG96
+	return ts_cm_functions->process_cagg_viewstmt(stmt, args->query_string, args->pstmt);
+#else
+	return ts_cm_functions->process_cagg_viewstmt(stmt, args->query_string, NULL);
+#endif
+}
+
 /*
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
@@ -2500,6 +2542,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_ClusterStmt:
 			handled = process_cluster_start(args);
+			break;
+		case T_ViewStmt:
+			handled = process_viewstmt(args); //->parsetree);
 			break;
 		default:
 			break;
