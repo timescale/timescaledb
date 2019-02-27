@@ -78,6 +78,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.table_name = BGW_POLICY_CHUNK_STATS_TABLE_NAME,
 	},
+	[CONTINUOUS_AGG] = {
+			.schema_name = CATALOG_SCHEMA_NAME,
+			.table_name = CONTINUOUS_AGG_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -266,7 +270,7 @@ catalog_database_info_init(CatalogDatabaseInfo *info)
 		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
 }
 
-CatalogDatabaseInfo *
+TSDLLEXPORT CatalogDatabaseInfo *
 ts_catalog_database_info_get()
 {
 	if (!ts_extension_is_loaded())
@@ -341,7 +345,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 	}
 }
 
-Catalog *
+TSDLLEXPORT Catalog *
 ts_catalog_get(void)
 {
 	int i;
@@ -480,7 +484,7 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
  * context will be saved. The original security context can later be restored
  * with ts_catalog_restore_user().
  */
-bool
+TSDLLEXPORT bool
 ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
 									  CatalogSecurityContext *sec_ctx)
 {
@@ -501,7 +505,7 @@ ts_catalog_database_info_become_owner(CatalogDatabaseInfo *database_info,
  * owner. The user should pass the original CatalogSecurityContext that was used
  * with ts_catalog_database_info_become_owner().
  */
-void
+TSDLLEXPORT void
 ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
 {
 	SetUserIdAndSecContext(sec_ctx->saved_uid, sec_ctx->saved_security_context);
@@ -522,7 +526,7 @@ catalog_insert(Relation rel, HeapTuple tuple)
 /*
  * Insert a new row into a catalog table.
  */
-void
+TSDLLEXPORT void
 ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls)
 {
 	HeapTuple tuple = heap_form_tuple(tupdesc, values, nulls);
