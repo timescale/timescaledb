@@ -209,3 +209,65 @@ INSERT INTO upsert_test_arbiter (time, device_id) VALUES
  ON CONFLICT (time, device_id) DO UPDATE SET device_id = 'dev3'
 RETURNING *)
 select * from cte;
+
+-- test ON CONFLICT with prepared statements
+CREATE TABLE prepared_test(time timestamptz PRIMARY KEY, value float);
+SELECT create_hypertable('prepared_test','time');
+
+PREPARE prep_insert AS INSERT INTO prepared_test VALUES('2000-01-01',0.5) ON CONFLICT (time) DO UPDATE SET value = EXCLUDED.value;
+
+-- at some point PostgreSQL will turn the plan into a generic plan
+-- so we execute the prepared statement 10 times
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+EXECUTE prep_insert;
+
+SELECT * FROM prepared_test;
+DELETE FROM prepared_test;
+
+-- test ON CONFLICT with functions
+CREATE OR REPLACE FUNCTION test_upsert(t timestamptz, v float) RETURNS VOID AS $sql$
+BEGIN
+INSERT INTO prepared_test VALUES(t,v) ON CONFLICT (time) DO UPDATE SET value = EXCLUDED.value;
+END;
+$sql$ LANGUAGE PLPGSQL;
+
+-- at some point PostgreSQL will turn the plan into a generic plan
+-- so we execute the function 10 times
+SELECT counter,test_upsert('2000-01-01',0.5) FROM generate_series(1,10) AS g(counter);
+
+SELECT * FROM prepared_test;
+DELETE FROM prepared_test;
+
+-- at some point PostgreSQL will turn the plan into a generic plan
+-- so we execute the function 10 times
+SELECT counter,test_upsert('2000-01-01',0.5) FROM generate_series(1,10) AS g(counter);
+
+SELECT * FROM prepared_test;
+DELETE FROM prepared_test;
+
+-- run it again to ensure INSERT path is still working as well
+SELECT counter,test_upsert('2000-01-01',0.5) FROM generate_series(1,10) AS g(counter);
+
+SELECT * FROM prepared_test;
+DELETE FROM prepared_test;
+
+-- test ON CONFLICT with functions
+CREATE OR REPLACE FUNCTION test_upsert2(t timestamptz, v float) RETURNS VOID AS $sql$
+BEGIN
+INSERT INTO prepared_test VALUES(t,v) ON CONFLICT (time) DO UPDATE SET value = prepared_test.value + 1.0;
+END;
+$sql$ LANGUAGE PLPGSQL;
+
+-- at some point PostgreSQL will turn the plan into a generic plan
+-- so we execute the function 10 times
+SELECT counter,test_upsert2('2000-01-01',1.0) FROM generate_series(1,10) AS g(counter);
+
+SELECT * FROM prepared_test;
