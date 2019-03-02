@@ -88,9 +88,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		{
 			/*
 			 * Update the arbiter indexes for ON CONFLICT statements so that they
-			 * match the chunk. Note that this requires updating the existing List
-			 * head (not replacing it), or otherwise the ModifyTableState node
-			 * won't pick it up.
+			 * match the chunk.
 			 */
 			if (cis->arbiter_indexes != NIL)
 			{
@@ -160,6 +158,17 @@ chunk_dispatch_end(CustomScanState *node)
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
 	ts_cache_release(state->hypertable_cache);
+
+	/*
+	 * we need to restore arbiterIndexes list to it's original value
+	 * in case this gets turned into generic plan and skips the plan
+	 * creation for the next execution
+	 */
+#if PG96 || PG10
+	state->parent->mt_arbiterindexes = state->dispatch->arbiter_indexes;
+#else
+	((ModifyTable *) state->parent->ps.plan)->arbiterIndexes = state->dispatch->arbiter_indexes;
+#endif
 }
 
 static void
@@ -240,9 +249,17 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	mt_plan = (ModifyTable *) parent->ps.plan;
 
 	state->dispatch->returning_lists = mt_plan->returningLists;
-	state->dispatch->on_conflict_set = mt_plan->onConflictSet;
-	state->dispatch->arbiter_indexes = mt_plan->arbiterIndexes;
 	state->dispatch->on_conflict = mt_plan->onConflictAction;
+	state->dispatch->on_conflict_set = mt_plan->onConflictSet;
+
+	/*
+	 * Save arbiterIndexes from the ModifyTable plan node because we
+	 * replace the list during execution with our modified version.
+	 * We restore it to it's original value after execution in
+	 * chunk_dispatch_end, this is required should this plan be
+	 * turned into a generic plan.
+	 */
+	state->dispatch->arbiter_indexes = mt_plan->arbiterIndexes;
 
 	Assert(mt_plan->onConflictWhere == NULL || IsA(mt_plan->onConflictWhere, List));
 	state->dispatch->on_conflict_where = (List *) mt_plan->onConflictWhere;
