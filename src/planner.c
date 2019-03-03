@@ -143,10 +143,10 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 	if (prev_planner_hook != NULL)
 		/* Call any earlier hooks */
-		return (prev_planner_hook)(parse, cursor_opts, bound_params);
-
-	/* Call the standard planner */
-	stmt = standard_planner(parse, cursor_opts, bound_params);
+		stmt = (prev_planner_hook)(parse, cursor_opts, bound_params);
+	else
+		/* Call the standard planner */
+		stmt = standard_planner(parse, cursor_opts, bound_params);
 
 	/*
 	 * Our top-level HypertableInsert plan node that wraps ModifyTable needs
