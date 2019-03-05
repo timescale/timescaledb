@@ -147,35 +147,35 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id, hypertable_index_name, chunk_id;
  chunk_id |                        index_name                         | hypertable_id |          hypertable_index_name           
 ----------+-----------------------------------------------------------+---------------+------------------------------------------
         1 | _hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
         2 | _hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
         3 | _hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
+        1 | _hyper_1_1_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
+        2 | _hyper_1_2_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
         3 | _hyper_1_3_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
+        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
+        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
+        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
+        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
+        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
+        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
+        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
+        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
+        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
+        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
+        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
+        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
         4 | _hyper_2_4_chunk_1dim_time_idx                            |             2 | 1dim_time_idx
+        5 | _hyper_3_5_chunk_Hypertable_1_Device_id_time_idx          |             3 | Hypertable_1_Device_id_time_idx
         5 | _hyper_3_5_chunk_Hypertable_1_time_Device_id_idx          |             3 | Hypertable_1_time_Device_id_idx
         5 | _hyper_3_5_chunk_Hypertable_1_time_idx                    |             3 | Hypertable_1_time_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_Device_id_time_idx          |             3 | Hypertable_1_Device_id_time_idx
         5 | _hyper_3_5_chunk_Hypertable_1_time_temp_c_idx             |             3 | Hypertable_1_time_temp_c_idx
+        5 | _hyper_3_5_chunk_Unique1                                  |             3 | Unique1
         5 | _hyper_3_5_chunk_ind_humidity                             |             3 | ind_humidity
         5 | _hyper_3_5_chunk_ind_sensor_1                             |             3 | ind_sensor_1
-        5 | _hyper_3_5_chunk_Unique1                                  |             3 | Unique1
         6 | _hyper_4_6_chunk_Hypertable_1_time_Device_id_idx          |             4 | Hypertable_1_time_Device_id_idx
         6 | _hyper_4_6_chunk_Hypertable_1_time_idx                    |             4 | Hypertable_1_time_idx
         6 | _hyper_4_6_chunk_Unique1                                  |             4 | Unique1
