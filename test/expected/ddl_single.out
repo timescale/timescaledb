@@ -60,16 +60,16 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id;
+SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id, hypertable_index_name, chunk_id;
  chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
 ----------+--------------------------------------------------+---------------+---------------------------------
+        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
         1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
         1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
         1 | _hyper_1_1_chunk_Hypertable_1_time_temp_c_idx    |             1 | Hypertable_1_time_temp_c_idx
+        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
         1 | _hyper_1_1_chunk_ind_humidity                    |             1 | ind_humidity
         1 | _hyper_1_1_chunk_ind_sensor_1                    |             1 | ind_sensor_1
-        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
         2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
         2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
         2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
