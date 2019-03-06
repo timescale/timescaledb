@@ -9,5 +9,7 @@
 #include <optimizer/planner.h>
 
 void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *);
+void post_standard_planner_hook(PlannedStmt *stmt, Query *parse, int cursor_opts,
+								ParamListInfo bound_params);
 
 #endif /* TIMESCALEDB_TSL_PLANNER_H */

@@ -148,6 +148,9 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		/* Call the standard planner */
 		stmt = standard_planner(parse, cursor_opts, bound_params);
 
+	if (ts_cm_functions->post_standard_planner_hook != NULL)
+		ts_cm_functions->post_standard_planner_hook(stmt, parse, cursor_opts, bound_params);
+
 	/*
 	 * Our top-level HypertableInsert plan node that wraps ModifyTable needs
 	 * to have a final target list that is the same as the ModifyTable plan

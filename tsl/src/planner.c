@@ -14,3 +14,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	if (UPPERREL_GROUP_AGG == stage)
 		plan_add_gapfill(root, output_rel);
 }
+
+void
+post_standard_planner_hook(PlannedStmt *stmt, Query *parse, int cursor_opts,
+						   ParamListInfo bound_params)
+{
+}
