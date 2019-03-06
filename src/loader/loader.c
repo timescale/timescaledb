@@ -18,6 +18,7 @@
 #include <utils/inval.h>
 #include <nodes/print.h>
 #include <commands/dbcommands.h>
+#include <commands/defrem.h>
 #include <access/parallel.h>
 
 #include "../extension_utils.c"
@@ -354,13 +355,38 @@ post_analyze_hook(ParseState *pstate, Query *query)
 {
 	if (query->commandType == CMD_UTILITY)
 	{
-		/*
-		 * If we drop a database, we need to intercept and stop any of our
-		 * schedulers that might be connected to said db.
-		 */
 		switch (nodeTag(query->utilityStmt))
 		{
+			case T_AlterDatabaseStmt:
+			{
+				/*
+				 * On ALTER DATABASE SET TABLESPACE we need to stop background
+				 * workers for the command to succeed.
+				 */
+				AlterDatabaseStmt *stmt = (AlterDatabaseStmt *) query->utilityStmt;
+				if (list_length(stmt->options) == 1)
+				{
+					DefElem *option = linitial(stmt->options);
+					if (option->defname && strcmp(option->defname, "tablespace") == 0)
+					{
+						Oid db_oid = get_database_oid(stmt->dbname, false);
+
+						if (OidIsValid(db_oid))
+						{
+							ts_bgw_message_send_and_wait(RESTART, db_oid);
+							ereport(WARNING,
+									(errmsg("You may need to manually restart any running "
+											"background workers after this command.")));
+						}
+					}
+				}
+				break;
+			}
 			case T_DropdbStmt:
+				/*
+				 * If we drop a database, we need to intercept and stop any of our
+				 * schedulers that might be connected to said db.
+				 */
 				stop_workers_on_db_drop((DropdbStmt *) query->utilityStmt);
 				break;
 			case T_DropStmt:

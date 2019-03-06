@@ -14,15 +14,18 @@ accidentally triggering the load of a previous DB version.**
 * PR #1067 Add treat_null_as_missing option to locf
 
 **Bugfixes**
+* PR #1079 Stop background worker on ALTER DATABASE SET TABLESPACE and CREATE DATABASE WITH TEMPLATE
 * PR #1088 Fix ON CONFLICT when using prepared statements and functions
 * PR #1089 Fix compatibility with extensions that define planner_hook
-* [5a3edfd] Fix chunk exclusion constraint type inference
-* [8e86bda] Fix sort_transform optimization
+* PR #1057 Fix chunk exclusion constraint type inference
+* PR #1060 Fix sort_transform optimization
 
 **Thanks**
 * @esatterwhite for reporting a bug when using timescaledb with zombodb
 * @eeeebbbbrrrr for fixing compatibility with extensions that also define planner_hook
 * @naquad for reporting a segfault when using ON conflict in stored procedures
+* @aaronkaplan for reporting an issue with ALTER DATABASE SET TABLESPACE
+* @quetz for reporting an issue with CREATE DATABASE WITH TEMPLATE
 
 ## 1.2.1 (2019-02-11)
 
