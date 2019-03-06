@@ -210,17 +210,27 @@ RESET client_min_messages;
 \c :TEST_DBNAME_2
 SELECT wait_worker_counts(1,1,0,0);
 
--- clean up additional database
-\c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :TEST_DBNAME_2;
-
 -- test rename database
 CREATE DATABASE db_rename_test;
 
 \c db_rename_test :ROLE_SUPERUSER
 SET client_min_messages=error;
 CREATE EXTENSION timescaledb;
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+SELECT wait_for_bgw_scheduler('db_rename_test');
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
 DROP DATABASE db_rename_test2;
+
+-- test alter database set tablespace
+SET client_min_messages TO error;
+DROP TABLESPACE IF EXISTS tablespace1;
+RESET client_min_messages;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+
+SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
+
+-- clean up additional database
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE :TEST_DBNAME_2;
 

@@ -34,3 +34,31 @@ END LOOP;
 RETURN FALSE;
 END
 $BODY$;
+
+CREATE FUNCTION wait_for_bgw_scheduler(_datname NAME, _count INT DEFAULT 1, _ticks INT DEFAULT 10) RETURNS TEXT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  r INTEGER;
+BEGIN
+  FOR i in 1.._ticks
+  LOOP
+    SELECT count(*)
+    FROM pg_stat_activity
+    WHERE
+      application_name = 'TimescaleDB Background Worker Scheduler' AND
+      datname = _datname
+    INTO r;
+
+    IF(r <> _count) THEN
+      PERFORM pg_sleep(0.1);
+      PERFORM pg_stat_clear_snapshot();
+    ELSE
+      RETURN 'BGW Scheduler found.';
+    END IF;
+
+  END LOOP;
+
+  RETURN 'BGW Scheduler NOT found.';
+
+END
+$BODY$;
