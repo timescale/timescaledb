@@ -132,17 +132,18 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 	}
 
 	/*
-	 * we set subpaths as NIL initially to skip PostgreSQL cost calculation
-	 * for children
+	 * we use normal postgresql append cost calculation, which means
+	 * the cost estimate is rather pessimistic
 	 */
 #if PG96
-	append = create_append_path(rel, NIL, PATH_REQ_OUTER(&merge->path), 0);
+	append = create_append_path(rel, sorted, PATH_REQ_OUTER(&merge->path), 0);
 #elif PG10
-	append = create_append_path(rel, NIL, PATH_REQ_OUTER(&merge->path), 0, merge->partitioned_rels);
+	append =
+		create_append_path(rel, sorted, PATH_REQ_OUTER(&merge->path), 0, merge->partitioned_rels);
 #else
 	append = create_append_path(root,
 								rel,
-								NIL,
+								sorted,
 								NULL,
 								PATH_REQ_OUTER(&merge->path),
 								0,
@@ -151,9 +152,6 @@ ts_ordered_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht
 								root->limit_tuples);
 #endif
 
-	append->subpaths = sorted;
-	if (list_length(sorted) > 0)
-		append->path.startup_cost = ((Path *) linitial(sorted))->startup_cost;
 	append->path.pathkeys = merge->path.pathkeys;
 	append->path.parallel_aware = false;
 	append->path.parallel_safe = parallel_safe;
