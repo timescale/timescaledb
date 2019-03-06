@@ -39,6 +39,33 @@ END LOOP;
 RETURN FALSE;
 END
 $BODY$;
+CREATE FUNCTION wait_for_bgw_scheduler(_datname NAME, _count INT DEFAULT 1, _ticks INT DEFAULT 10) RETURNS TEXT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  r INTEGER;
+BEGIN
+  FOR i in 1.._ticks
+  LOOP
+    SELECT count(*)
+    FROM pg_stat_activity
+    WHERE
+      application_name = 'TimescaleDB Background Worker Scheduler' AND
+      datname = _datname
+    INTO r;
+
+    IF(r <> _count) THEN
+      PERFORM pg_sleep(0.1);
+      PERFORM pg_stat_clear_snapshot();
+    ELSE
+      RETURN 'BGW Scheduler found.';
+    END IF;
+
+  END LOOP;
+
+  RETURN 'BGW Scheduler NOT found.';
+
+END
+$BODY$;
 -- When we've connected to test db 2, we should be able to see the cluster launcher
 -- and the scheduler for test db in pg_stat_activity
 -- but test db 2 shouldn't have a scheduler because ext not created yet
@@ -381,6 +408,33 @@ END LOOP;
 RETURN FALSE;
 END
 $BODY$;
+CREATE FUNCTION wait_for_bgw_scheduler(_datname NAME, _count INT DEFAULT 1, _ticks INT DEFAULT 10) RETURNS TEXT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  r INTEGER;
+BEGIN
+  FOR i in 1.._ticks
+  LOOP
+    SELECT count(*)
+    FROM pg_stat_activity
+    WHERE
+      application_name = 'TimescaleDB Background Worker Scheduler' AND
+      datname = _datname
+    INTO r;
+
+    IF(r <> _count) THEN
+      PERFORM pg_sleep(0.1);
+      PERFORM pg_stat_clear_snapshot();
+    ELSE
+      RETURN 'BGW Scheduler found.';
+    END IF;
+
+  END LOOP;
+
+  RETURN 'BGW Scheduler NOT found.';
+
+END
+$BODY$;
 BEGIN;
 -- Then create extension there in a txn and make sure we see a scheduler start
 SET client_min_messages = ERROR;
@@ -407,6 +461,7 @@ SELECT wait_worker_counts(1,0,0,0);
 -- LICENSE-APACHE for a copy of the license.
 DROP FUNCTION wait_worker_counts(integer, integer, integer, integer);
 DROP VIEW worker_counts;
+DROP FUNCTION wait_for_bgw_scheduler(name,int,int);
 \c :TEST_DBNAME_2
 -- Now try creating a DB from a template with the extension already installed.
 -- Make sure we see a scheduler start.
@@ -435,14 +490,33 @@ SELECT wait_worker_counts(1,1,0,0);
  t
 (1 row)
 
--- clean up additional database
-\c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :TEST_DBNAME_2;
 -- test rename database
 CREATE DATABASE db_rename_test;
 \c db_rename_test :ROLE_SUPERUSER
 SET client_min_messages=error;
 CREATE EXTENSION timescaledb;
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+SELECT wait_for_bgw_scheduler('db_rename_test');
+ wait_for_bgw_scheduler 
+------------------------
+ BGW Scheduler found.
+(1 row)
+
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
 DROP DATABASE db_rename_test2;
+-- test alter database set tablespace
+SET client_min_messages TO error;
+DROP TABLESPACE IF EXISTS tablespace1;
+RESET client_min_messages;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+ wait_for_bgw_scheduler 
+------------------------
+ BGW Scheduler found.
+(1 row)
+
+ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
+WARNING:  You may need to manually restart any running background workers after this command.
+-- clean up additional database
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE :TEST_DBNAME_2;
