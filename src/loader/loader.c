@@ -382,6 +382,30 @@ post_analyze_hook(ParseState *pstate, Query *query)
 				}
 				break;
 			}
+			case T_CreatedbStmt:
+			{
+				/*
+				 * If we create a database and the database used as template
+				 * has background workers we need to stop those background
+				 * workers connected to the template database.
+				 */
+				CreatedbStmt *stmt = (CreatedbStmt *) query->utilityStmt;
+				ListCell *lc;
+
+				foreach (lc, stmt->options)
+				{
+					DefElem *option = lfirst(lc);
+					if (option->defname != NULL && option->arg != NULL &&
+						strcmp(option->defname, "template") == 0)
+					{
+						Oid db_oid = get_database_oid(defGetString(option), false);
+
+						if (OidIsValid(db_oid))
+							ts_bgw_message_send_and_wait(RESTART, db_oid);
+					}
+				}
+				break;
+			}
 			case T_DropdbStmt:
 				/*
 				 * If we drop a database, we need to intercept and stop any of our
@@ -411,7 +435,7 @@ post_analyze_hook(ParseState *pstate, Query *query)
 					Oid db_oid = get_database_oid(stmt->subname, stmt->missing_ok);
 
 					if (OidIsValid(db_oid))
-						ts_bgw_message_send_and_wait(STOP, db_oid);
+						ts_bgw_message_send_and_wait(RESTART, db_oid);
 				}
 				break;
 			default:
