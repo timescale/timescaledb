@@ -28,6 +28,7 @@ SELECT create_hypertable('ordered_append','time');
 (1 row)
 
 CREATE index on ordered_append(time DESC,device_id);
+CREATE index on ordered_append(device_id,time DESC);
 INSERT INTO ordered_append VALUES('2000-01-01',1,1.0);
 INSERT INTO ordered_append VALUES('2000-01-08',1,2.0);
 INSERT INTO ordered_append VALUES('2000-01-15',1,3.0);
@@ -157,18 +158,16 @@ ORDER BY time DESC, device_id LIMIT 1;
   time, device_id, value
 FROM ordered_append
 ORDER BY device_id LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=1 loops=1)
          Sort Key: ordered_append.device_id
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on ordered_append (actual rows=0 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-(9 rows)
+         ->  Index Scan using ordered_append_device_id_time_idx on ordered_append (actual rows=0 loops=1)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_device_id_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_device_id_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_device_id_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+(7 rows)
 
 -- time column must be primary sort order
 :PREFIX SELECT
@@ -430,19 +429,48 @@ SELECT * FROM i;
                ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
                ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
                ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
-         ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-(7 rows)
+         ->  Materialize (actual rows=2 loops=1)
+               ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+(8 rows)
 
 -- test LATERAL with ordered append in the lateral query
 :PREFIX SELECT * FROM (VALUES (1),(2)) v, LATERAL(SELECT * FROM ordered_append ORDER BY time DESC limit 2) l;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=4 loops=1)
-   ->  Limit (actual rows=2 loops=1)
-         ->  Append (actual rows=2 loops=1)
-               ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
-   ->  Values Scan on "*VALUES*" (actual rows=2 loops=2)
-(7 rows)
+   ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+   ->  Materialize (actual rows=2 loops=2)
+         ->  Limit (actual rows=2 loops=1)
+               ->  Append (actual rows=2 loops=1)
+                     ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(8 rows)
+
+-- test plan with best index is chosen
+-- this should use device_id, time index
+:PREFIX SELECT * FROM ordered_append WHERE device_id = 1 ORDER BY time DESC LIMIT 1;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_device_id_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_device_id_time_idx on _hyper_1_2_chunk (never executed)
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_device_id_time_idx on _hyper_1_1_chunk (never executed)
+               Index Cond: (device_id = 1)
+(8 rows)
+
+-- test plan with best index is chosen
+-- this should use time index
+:PREFIX SELECT * FROM ordered_append ORDER BY time DESC LIMIT 1;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 

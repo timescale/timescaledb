@@ -104,12 +104,14 @@ ANALYZE;
 RESET client_min_messages;
 --non-aggregates use MergeAppend in both optimized and non-optimized
 EXPLAIN (costs off) SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                   QUERY PLAN                   
+------------------------------------------------
  Limit
-   ->  Append
-         ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-(3 rows)
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk."time" DESC
+         ->  Append
+               ->  Seq Scan on _hyper_1_1_chunk
+(5 rows)
 
 SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
            time           | series_0 | series_1 |     series_2     

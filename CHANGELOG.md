@@ -14,6 +14,7 @@ accidentally triggering the load of a previous DB version.**
 * PR #1067 Add treat_null_as_missing option to locf
 
 **Bugfixes**
+* PR #1097 Adjust ordered append plan cost
 * PR #1079 Stop background worker on ALTER DATABASE SET TABLESPACE and CREATE DATABASE WITH TEMPLATE
 * PR #1088 Fix ON CONFLICT when using prepared statements and functions
 * PR #1089 Fix compatibility with extensions that define planner_hook
@@ -26,6 +27,7 @@ accidentally triggering the load of a previous DB version.**
 * @naquad for reporting a segfault when using ON conflict in stored procedures
 * @aaronkaplan for reporting an issue with ALTER DATABASE SET TABLESPACE
 * @quetz for reporting an issue with CREATE DATABASE WITH TEMPLATE
+* @nbouscal for reporting an issue with ordered append resulting in bad plans
 
 ## 1.2.1 (2019-02-11)
 

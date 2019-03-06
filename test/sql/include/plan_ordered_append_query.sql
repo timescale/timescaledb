@@ -130,3 +130,12 @@ SELECT * FROM i;
 -- test LATERAL with ordered append in the lateral query
 :PREFIX SELECT * FROM (VALUES (1),(2)) v, LATERAL(SELECT * FROM ordered_append ORDER BY time DESC limit 2) l;
 
+-- test plan with best index is chosen
+-- this should use device_id, time index
+:PREFIX SELECT * FROM ordered_append WHERE device_id = 1 ORDER BY time DESC LIMIT 1;
+
+-- test plan with best index is chosen
+-- this should use time index
+:PREFIX SELECT * FROM ordered_append ORDER BY time DESC LIMIT 1;
+
+
