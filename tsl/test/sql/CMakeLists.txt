@@ -90,6 +90,7 @@ if (PG_VERSION_SUPPORTS_MULTINODE)
     dist_commands.sql
     remote_connection.sql
     remote_connection_cache.sql
+    remote_stmt_params.sql
     remote_txn.sql
     remote_txn_id.sql
     remote_txn_resolve.sql

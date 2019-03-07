@@ -10,6 +10,8 @@
 #include <libpq-fe.h>
 #include <utils/timestamp.h>
 
+#include "stmt_params.h"
+
 #define DEFAULT_TIMEOUT_MS (SECS_PER_HOUR * 1000)
 
 typedef struct AsyncRequest AsyncRequest;
@@ -66,6 +68,8 @@ extern AsyncRequest *async_request_send_prepare(PGconn *conn, const char *sql_st
 												int n_params);
 extern AsyncRequest *async_request_send_prepared_stmt(PreparedStmt *stmt,
 													  const char *const *paramValues);
+extern AsyncRequest *async_request_send_prepared_stmt_with_params(PreparedStmt *stmt,
+																  StmtParams *params);
 extern void async_request_attach_user_data(AsyncRequest *req, void *user_data);
 extern AsyncResponseResult *async_request_wait_ok_result(AsyncRequest *request);
 extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request);
