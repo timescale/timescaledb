@@ -512,7 +512,7 @@ DROP POLICY p3 on s1;
 ALTER POLICY p2 ON s2 USING (x % 2 = 0);
 
 SET SESSION AUTHORIZATION regress_rls_bob;
-SELECT * FROM s1 WHERE f_leak(b);	-- OK
+SELECT * FROM s1 WHERE f_leak(b) ORDER BY a;	-- OK
 EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
 
 SET SESSION AUTHORIZATION regress_rls_alice;

@@ -2,7 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SET random_page_cost TO 1.0;
 -- create a now() function for repeatable testing that always returns
 -- the same timestamp. It needs to be marked STABLE
 CREATE OR REPLACE FUNCTION now_s()

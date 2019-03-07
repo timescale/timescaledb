@@ -531,14 +531,14 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE INDEX second_index on test_table (time);
 insert into test_table values (now(), 1);
 insert into test_table values (now() - INTERVAL '5 weeks', 123);
-select c.id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table';
+select c.id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table' ORDER BY c.id;
  id 
 ----
   1
   2
 (2 rows)
 
-select c.id as chunk_id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table' LIMIT 1 \gset
+select c.id as chunk_id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table' ORDER BY c.id LIMIT 1 \gset
 select add_reorder_policy('test_table', 'second_index') as job_id \gset
 WARNING:  Timescale License expired
 -- Simulate reorder job running and setting this stat row
