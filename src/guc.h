@@ -29,6 +29,7 @@ extern char *ts_last_tune_version;
 extern char *ts_telemetry_cloud;
 extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT int ts_guc_max_insert_batch_size;
+extern TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
 
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;

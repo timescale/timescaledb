@@ -10,9 +10,16 @@
 #include <storage/latch.h>
 #include <miscadmin.h>
 #include <pgstat.h>
+#include <fmgr.h>
+#include <utils/lsyscache.h>
+#include <catalog/pg_type.h>
+#include <nodes/relation.h>
+#include <access/tuptoaster.h>
 
 #include "async.h"
 #include "connection.h"
+#include "fdw/utils.h"
+#include "utils.h"
 
 #define MAX_ASYNC_TIMEOUT_MS 60000
 
@@ -155,8 +162,9 @@ async_request_send_prepare(PGconn *conn, const char *sql, int n_params)
 	return req;
 }
 
-AsyncRequest *
-async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *param_values)
+static AsyncRequest *
+async_request_send_prepared_stmt_with_formats(PreparedStmt *stmt, const char *const *param_values,
+											  const int *param_lengths, const int *param_formats)
 {
 	AsyncRequest *req = palloc(sizeof(AsyncRequest));
 
@@ -170,8 +178,8 @@ async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *param_va
 							 stmt->stmt_name,
 							 stmt->n_params,
 							 param_values,
-							 NULL,
-							 NULL,
+							 param_lengths,
+							 param_formats,
 							 0))
 	{
 		/*
@@ -182,6 +190,21 @@ async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *param_va
 		return NULL;
 	}
 	return req;
+}
+
+extern AsyncRequest *
+async_request_send_prepared_stmt(PreparedStmt *stmt, const char *const *paramValues)
+{
+	return async_request_send_prepared_stmt_with_formats(stmt, paramValues, NULL, NULL);
+}
+
+AsyncRequest *
+async_request_send_prepared_stmt_with_params(PreparedStmt *stmt, StmtParams *params)
+{
+	return async_request_send_prepared_stmt_with_formats(stmt,
+														 stmt_params_values(params),
+														 stmt_params_lengths(params),
+														 stmt_params_formats(params));
 }
 
 /* Set user data. Often it is useful to attach data with a request so

@@ -610,3 +610,18 @@ SELECT count(*) FROM twodim;
 SELECT * FROM twodim
 ORDER BY time;
 SELECT count(*) FROM twodim;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+
+-- Distributed table with custom type that has no binary output
+CREATE TABLE disttable_with_ct(time timestamptz, txn_id rxid, val float, info text);
+SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor => 1);
+
+-- Insert data with custom type
+INSERT INTO disttable_with_ct VALUES
+    ('2019-01-01 01:01', 'ts-1-10-20', 1.1, 'a'),
+    ('2019-01-01 01:02', 'ts-1-11-20', 2.0, repeat('abc', 1000000)); -- TOAST
+
+-- Test queries on distributed table with custom type
+SELECT time,txn_id, val, substring(info for 20)  FROM disttable_with_ct;

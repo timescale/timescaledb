@@ -46,6 +46,7 @@
 #include <server_dispatch.h>
 #include <remote/dist_txn.h>
 #include <remote/async.h>
+#include <remote/stmt_params.h>
 #include <compat.h>
 
 #include <planner.h>
@@ -181,16 +182,14 @@ typedef struct TsFdwModifyState
 	bool has_returning;	/* is there a RETURNING clause? */
 	List *retrieved_attrs; /* attr numbers retrieved by RETURNING */
 
-	/* info about parameters for prepared statement */
 	AttrNumber ctid_attno; /* attnum of input resjunk ctid column */
-	int p_nums;			   /* number of parameters to transmit */
-	FmgrInfo *p_flinfo;	/* output conversion functions for them */
 
 	/* working memory context */
 	MemoryContext temp_cxt; /* context for per-tuple temporary data */
 
 	bool prepared;
 	int num_servers;
+	StmtParams *stmt_params; /* prepared statement paremeters */
 	TsFdwServerState servers[FLEXIBLE_ARRAY_MEMBER];
 } TsFdwModifyState;
 
@@ -1414,9 +1413,6 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 	TsFdwModifyState *fmstate;
 	Relation rel = rri->ri_RelationDesc;
 	TupleDesc tupdesc = RelationGetDescr(rel);
-	AttrNumber n_params;
-	Oid typefnoid;
-	bool isvarlena;
 	ListCell *lc;
 	int i = 0;
 	int num_servers = usermappings == NIL ? 1 : list_length(usermappings);
@@ -1478,11 +1474,6 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 	if (fmstate->has_returning)
 		fmstate->attinmeta = TupleDescGetAttInMetadata(tupdesc);
 
-	/* Prepare for output conversion of parameters used in prepared stmt. */
-	n_params = list_length(fmstate->target_attrs) + 1;
-	fmstate->p_flinfo = (FmgrInfo *) palloc0(sizeof(FmgrInfo) * n_params);
-	fmstate->p_nums = 0;
-
 	if (operation == CMD_UPDATE || operation == CMD_DELETE)
 	{
 		Assert(subplan != NULL);
@@ -1491,30 +1482,12 @@ create_foreign_modify(EState *estate, RangeTblEntry *rte, ResultRelInfo *rri, Cm
 		fmstate->ctid_attno = ExecFindJunkAttributeInTlist(subplan->targetlist, "ctid");
 		if (!AttributeNumberIsValid(fmstate->ctid_attno))
 			elog(ERROR, "could not find junk ctid column");
-
-		/* First transmittable parameter will be ctid */
-		getTypeOutputInfo(TIDOID, &typefnoid, &isvarlena);
-		fmgr_info(typefnoid, &fmstate->p_flinfo[fmstate->p_nums]);
-		fmstate->p_nums++;
 	}
 
-	if (operation == CMD_INSERT || operation == CMD_UPDATE)
-	{
-		/* Set up for remaining transmittable parameters */
-		foreach (lc, fmstate->target_attrs)
-		{
-			int attnum = lfirst_int(lc);
-			Form_pg_attribute attr = TupleDescAttr(tupdesc, attnum - 1);
-
-			Assert(!attr->attisdropped);
-
-			getTypeOutputInfo(attr->atttypid, &typefnoid, &isvarlena);
-			fmgr_info(typefnoid, &fmstate->p_flinfo[fmstate->p_nums]);
-			fmstate->p_nums++;
-		}
-	}
-
-	Assert(fmstate->p_nums <= n_params);
+	fmstate->stmt_params = stmt_params_create(fmstate->target_attrs,
+											  operation == CMD_UPDATE || operation == CMD_DELETE,
+											  tupdesc,
+											  1);
 
 	return fmstate;
 }
@@ -2329,66 +2302,6 @@ begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_pr
 }
 
 /*
- * convert_prep_stmt_params
- *		Create array of text strings representing parameter values
- *
- * tupleid is ctid to send, or NULL if none
- * slot is slot to get remaining parameters from, or NULL if none
- *
- * Data is constructed in temp_cxt; caller should reset that after use.
- */
-static const char **
-convert_prep_stmt_params(TsFdwModifyState *fmstate, ItemPointer tupleid, TupleTableSlot *slot)
-{
-	const char **p_values;
-	int pindex = 0;
-	MemoryContext oldcontext;
-
-	oldcontext = MemoryContextSwitchTo(fmstate->temp_cxt);
-
-	p_values = (const char **) palloc(sizeof(char *) * fmstate->p_nums);
-
-	/* 1st parameter should be ctid, if it's in use */
-	if (tupleid != NULL)
-	{
-		/* don't need set_transmission_modes for TID output */
-		p_values[pindex] = OutputFunctionCall(&fmstate->p_flinfo[pindex], PointerGetDatum(tupleid));
-		pindex++;
-	}
-
-	/* get following parameters from slot */
-	if (slot != NULL && fmstate->target_attrs != NIL)
-	{
-		int nestlevel;
-		ListCell *lc;
-
-		nestlevel = set_transmission_modes();
-
-		foreach (lc, fmstate->target_attrs)
-		{
-			int attnum = lfirst_int(lc);
-			Datum value;
-			bool isnull;
-
-			value = slot_getattr(slot, attnum, &isnull);
-			if (isnull)
-				p_values[pindex] = NULL;
-			else
-				p_values[pindex] = OutputFunctionCall(&fmstate->p_flinfo[pindex], value);
-			pindex++;
-		}
-
-		reset_transmission_modes(nestlevel);
-	}
-
-	Assert(pindex == fmstate->p_nums);
-
-	MemoryContextSwitchTo(oldcontext);
-
-	return p_values;
-}
-
-/*
  * store_returning_result
  *		Store the result of a RETURNING clause
  *
@@ -2428,7 +2341,9 @@ prepare_foreign_modify_server(TsFdwModifyState *fmstate, TsFdwServerState *fdw_s
 
 	Assert(NULL == fdw_server->p_stmt);
 
-	req = async_request_send_prepare(fdw_server->conn, fmstate->query, fmstate->p_nums);
+	req = async_request_send_prepare(fdw_server->conn,
+									 fmstate->query,
+									 stmt_params_num_params(fmstate->stmt_params));
 
 	Assert(NULL != req);
 
@@ -2463,24 +2378,24 @@ exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 					TupleTableSlot *planSlot)
 {
 	TsFdwModifyState *fmstate = (TsFdwModifyState *) rri->ri_FdwState;
+	StmtParams *params = fmstate->stmt_params;
 	AsyncRequestSet *reqset;
 	AsyncResponseResult *rsp;
-	const char **p_values;
 	int n_rows = -1;
 	int i;
-
-	/* Convert parameters needed by prepared statement to text form */
-	p_values = convert_prep_stmt_params(fmstate, NULL, slot);
 
 	if (!fmstate->prepared)
 		prepare_foreign_modify(fmstate);
 
 	reqset = async_request_set_create();
 
+	stmt_params_convert_values(params, slot, NULL);
+
 	for (i = 0; i < fmstate->num_servers; i++)
 	{
 		TsFdwServerState *fdw_server = &fmstate->servers[i];
-		AsyncRequest *req = async_request_send_prepared_stmt(fdw_server->p_stmt, p_values);
+		AsyncRequest *req =
+			async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params);
 
 		Assert(NULL != req);
 
@@ -2514,6 +2429,7 @@ exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
 
 		/* And clean up */
 		async_response_result_close(rsp);
+		stmt_params_reset(params);
 	}
 
 	/*
@@ -2544,11 +2460,11 @@ exec_foreign_update_or_delete(EState *estate, ResultRelInfo *rri, TupleTableSlot
 							  TupleTableSlot *plan_slot, ModifyCommand cmd)
 {
 	TsFdwModifyState *fmstate = (TsFdwModifyState *) rri->ri_FdwState;
+	StmtParams *params = fmstate->stmt_params;
 	AsyncRequestSet *reqset;
 	AsyncResponseResult *rsp;
 	Datum datum;
 	bool is_null;
-	const char **p_values;
 	int n_rows = -1;
 	int i;
 
@@ -2563,16 +2479,16 @@ exec_foreign_update_or_delete(EState *estate, ResultRelInfo *rri, TupleTableSlot
 	if (is_null)
 		elog(ERROR, "ctid is NULL");
 
-	/* Convert parameters needed by prepared statement to text form */
-	p_values = convert_prep_stmt_params(fmstate,
-										(ItemPointer) DatumGetPointer(datum),
-										(cmd == UPDATE_CMD ? slot : NULL));
+	stmt_params_convert_values(params,
+							   (cmd == UPDATE_CMD ? slot : NULL),
+							   (ItemPointer) DatumGetPointer(datum));
 	reqset = async_request_set_create();
 
 	for (i = 0; i < fmstate->num_servers; i++)
 	{
 		TsFdwServerState *fdw_server = &fmstate->servers[i];
-		AsyncRequest *req = async_request_send_prepared_stmt(fdw_server->p_stmt, p_values);
+		AsyncRequest *req =
+			async_request_send_prepared_stmt_with_params(fdw_server->p_stmt, params);
 
 		Assert(NULL != req);
 
@@ -2617,6 +2533,7 @@ exec_foreign_update_or_delete(EState *estate, ResultRelInfo *rri, TupleTableSlot
 	 * inserts
 	 */
 	pfree(reqset);
+	stmt_params_reset(params);
 
 	MemoryContextReset(fmstate->temp_cxt);
 
@@ -2662,6 +2579,8 @@ finish_foreign_modify(TsFdwModifyState *fmstate)
 
 		fdw_server->conn = NULL;
 	}
+
+	stmt_params_free(fmstate->stmt_params);
 }
 
 static void

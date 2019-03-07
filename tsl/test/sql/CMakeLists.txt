@@ -64,6 +64,7 @@ if (NOT ${PG_VERSION} VERSION_LESS "10")
     deparse.sql
     deparse_fail.sql
     remote_txn_resolve.sql
+    remote_stmt_params.sql
   )
 endif ()
 
