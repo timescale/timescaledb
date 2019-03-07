@@ -114,11 +114,11 @@ CREATE POLICY p1r ON document AS RESTRICTIVE TO regress_rls_dave
                     |          |       | =arwdDxt/regress_rls_alice                  |                   |   (u): (dlevel <= ( SELECT uaccount.seclv +
                     |          |       |                                             |                   |    FROM uaccount                          +
                     |          |       |                                             |                   |   WHERE (uaccount.pguser = CURRENT_USER)))+
-                    |          |       |                                             |                   | p2r (RESTRICTIVE):                        +
-                    |          |       |                                             |                   |   (u): ((cid <> 44) AND (cid < 50))       +
-                    |          |       |                                             |                   |   to: regress_rls_dave                    +
                     |          |       |                                             |                   | p1r (RESTRICTIVE):                        +
                     |          |       |                                             |                   |   (u): (cid <> 44)                        +
+                    |          |       |                                             |                   |   to: regress_rls_dave                    +
+                    |          |       |                                             |                   | p2r (RESTRICTIVE):                        +
+                    |          |       |                                             |                   |   (u): ((cid <> 44) AND (cid < 50))       +
                     |          |       |                                             |                   |   to: regress_rls_dave
  regress_rls_schema | uaccount | table | regress_rls_alice=arwdDxt/regress_rls_alice+|                   | 
                     |          |       | =r/regress_rls_alice                        |                   | 
@@ -497,29 +497,28 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
 (16 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Hash Join
-   Hash Cond: (category.cid = document.cid)
-   ->  Seq Scan on category
-   ->  Hash
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: document
-               Chunks left after exclusion: 6
-               ->  Append
-                     ->  Seq Scan on _hyper_1_1_chunk
-                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_2_chunk
-                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_3_chunk
-                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_4_chunk
-                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_5_chunk
-                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-                     ->  Seq Scan on _hyper_1_6_chunk
-                           Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
-(20 rows)
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Nested Loop
+   ->  Custom Scan (ConstraintAwareAppend)
+         Hypertable: document
+         Chunks left after exclusion: 6
+         ->  Append
+               ->  Seq Scan on _hyper_1_1_chunk
+                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_2_chunk
+                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_4_chunk
+                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_5_chunk
+                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
+   ->  Index Scan using category_pkey on category
+         Index Cond: (cid = document.cid)
+(19 rows)
 
 -- interaction of FK/PK constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -2237,44 +2236,32 @@ CREATE VIEW bv1 WITH (security_barrier) AS SELECT * FROM b1 WHERE a > 0 WITH CHE
 GRANT ALL ON bv1 TO regress_rls_carol;
 SET SESSION AUTHORIZATION regress_rls_carol;
 EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Subquery Scan on bv1
    Filter: f_leak(bv1.b)
    ->  Append
          ->  Seq Scan on b1
                Filter: ((a > 0) AND ((a % 2) = 0))
-         ->  Bitmap Heap Scan on _hyper_8_43_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_43_chunk_b1_a_idx on _hyper_8_43_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_43_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_42_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_42_chunk_b1_a_idx on _hyper_8_42_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_42_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_39_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_39_chunk_b1_a_idx on _hyper_8_39_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_39_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_40_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_40_chunk_b1_a_idx on _hyper_8_40_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_40_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_41_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_44_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_44_chunk_b1_a_idx on _hyper_8_44_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_44_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-(35 rows)
+(23 rows)
 
 SELECT * FROM bv1 WHERE f_leak(b);
 NOTICE:  f_leak => c9f0f895fb98ab9159f51fd0297e236d
@@ -2297,36 +2284,32 @@ INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
-                              QUERY PLAN                               
------------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Update on b1
    Update on b1
    Update on _hyper_8_41_chunk
    ->  Seq Scan on b1
          Filter: ((a > 0) AND (a = 4) AND ((a % 2) = 0) AND f_leak(b))
-   ->  Bitmap Heap Scan on _hyper_8_41_chunk
-         Recheck Cond: ((a > 0) AND (a = 4))
+   ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk
+         Index Cond: ((a > 0) AND (a = 4))
          Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
-               Index Cond: ((a > 0) AND (a = 4))
-(10 rows)
+(8 rows)
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
-                              QUERY PLAN                               
------------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Delete on b1
    Delete on b1
    Delete on _hyper_8_42_chunk
    ->  Seq Scan on b1
          Filter: ((a > 0) AND (a = 6) AND ((a % 2) = 0) AND f_leak(b))
-   ->  Bitmap Heap Scan on _hyper_8_42_chunk
-         Recheck Cond: ((a > 0) AND (a = 6))
+   ->  Index Scan using _hyper_8_42_chunk_b1_a_idx on _hyper_8_42_chunk
+         Index Cond: ((a > 0) AND (a = 6))
          Filter: (((a % 2) = 0) AND f_leak(b))
-         ->  Bitmap Index Scan on _hyper_8_42_chunk_b1_a_idx
-               Index Cond: ((a > 0) AND (a = 6))
-(10 rows)
+(8 rows)
 
 DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
 NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
@@ -3169,18 +3152,16 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Custom Scan (ConstraintAwareAppend)
    Hypertable: y1
    Chunks left after exclusion: 1
    ->  Append
-         ->  Bitmap Heap Scan on _hyper_12_57_chunk
-               Recheck Cond: (a = 1)
+         ->  Index Scan using _hyper_12_57_chunk_y1_a_idx on _hyper_12_57_chunk
+               Index Cond: (a = 1)
                Filter: f_leak(b)
-               ->  Bitmap Index Scan on _hyper_12_57_chunk_y1_a_idx
-                     Index Cond: (a = 1)
-(9 rows)
+(7 rows)
 
 DROP VIEW rls_sbv;
 -- Create view as role that does not own table.  RLS should be applied.
@@ -3188,18 +3169,16 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Custom Scan (ConstraintAwareAppend)
    Hypertable: y1
    Chunks left after exclusion: 1
    ->  Append
-         ->  Bitmap Heap Scan on _hyper_12_57_chunk
-               Recheck Cond: (a = 1)
+         ->  Index Scan using _hyper_12_57_chunk_y1_a_idx on _hyper_12_57_chunk
+               Index Cond: (a = 1)
                Filter: (((a > 2) OR ((a % 2) = 0)) AND f_leak(b))
-               ->  Bitmap Index Scan on _hyper_12_57_chunk_y1_a_idx
-                     Index Cond: (a = 1)
-(9 rows)
+(7 rows)
 
 DROP VIEW rls_sbv;
 --

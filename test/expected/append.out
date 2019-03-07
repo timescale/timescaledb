@@ -161,19 +161,16 @@ EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_i() - interval '2 months'
 ORDER BY time;
 psql:include/append.sql:79: NOTICE:  Immutable function now_i() called!
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
- Sort
-   Sort Key: append_test."time"
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: append_test
-         Chunks left after exclusion: 1
-         ->  Append
-               ->  Bitmap Heap Scan on _hyper_1_3_chunk
-                     Recheck Cond: ("time" > ('Tue Aug 22 10:00:00 2017 PDT'::timestamp with time zone - '@ 2 mons'::interval))
-                     ->  Bitmap Index Scan on _hyper_1_3_chunk_append_test_time_idx
-                           Index Cond: ("time" > ('Tue Aug 22 10:00:00 2017 PDT'::timestamp with time zone - '@ 2 mons'::interval))
-(10 rows)
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: append_test
+   Chunks left after exclusion: 1
+   ->  Merge Append
+         Sort Key: _hyper_1_3_chunk."time"
+         ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+               Index Cond: ("time" > ('Tue Aug 22 10:00:00 2017 PDT'::timestamp with time zone - '@ 2 mons'::interval))
+(7 rows)
 
 -- currently, we cannot distinguish between stable and volatile
 -- functions as far as applying our modified plan. However, volatile
@@ -182,21 +179,20 @@ psql:include/append.sql:79: NOTICE:  Immutable function now_i() called!
 EXPLAIN (costs off)
 SELECT * FROM append_test WHERE time > now_v() - interval '2 months'
 ORDER BY time;
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Sort
-   Sort Key: append_test."time"
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: append_test
-         Chunks left after exclusion: 3
-         ->  Append
-               ->  Seq Scan on _hyper_1_1_chunk
-                     Filter: ("time" > (now_v() - '@ 2 mons'::interval))
-               ->  Seq Scan on _hyper_1_2_chunk
-                     Filter: ("time" > (now_v() - '@ 2 mons'::interval))
-               ->  Seq Scan on _hyper_1_3_chunk
-                     Filter: ("time" > (now_v() - '@ 2 mons'::interval))
-(12 rows)
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Custom Scan (ConstraintAwareAppend)
+   Hypertable: append_test
+   Chunks left after exclusion: 3
+   ->  Merge Append
+         Sort Key: _hyper_1_1_chunk."time"
+         ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk
+               Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+         ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk
+               Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+         ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+               Filter: ("time" > (now_v() - '@ 2 mons'::interval))
+(11 rows)
 
 SELECT * FROM append_test WHERE time > now_v() - interval '2 months'
 ORDER BY time;
@@ -314,18 +310,15 @@ SELECT * FROM append_test WHERE time > $1 ORDER BY time;
 EXPLAIN (costs off)
 EXECUTE query_param(now_s() - interval '2 months');
 psql:include/append.sql:134: NOTICE:  Stable function now_s() called!
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
- Sort
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: append_test."time"
-   ->  Append
-         ->  Seq Scan on append_test
-               Filter: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
-         ->  Bitmap Heap Scan on _hyper_1_3_chunk
-               Recheck Cond: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
-               ->  Bitmap Index Scan on _hyper_1_3_chunk_append_test_time_idx
-                     Index Cond: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
-(9 rows)
+   ->  Index Scan Backward using append_test_time_idx on append_test
+         Index Cond: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk
+         Index Cond: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
+(6 rows)
 
 --test with cte
 EXPLAIN (costs off)

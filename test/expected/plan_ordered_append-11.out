@@ -74,102 +74,84 @@ ORDER BY ht.table_name, range_start;
   time, device_id, value
 FROM ordered_append
 ORDER BY time ASC LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (never executed)
+(5 rows)
 
 -- test DESC for ordered chunks
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
 ORDER BY time DESC LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 
 -- test ASC for reverse ordered chunks
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append_reverse
 ORDER BY time ASC LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_2_6_chunk."time"
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_2_6_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_2_5_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_2_4_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_2_6_chunk_ordered_append_reverse_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_2_5_chunk_ordered_append_reverse_time_idx on _hyper_2_5_chunk (never executed)
+         ->  Index Scan Backward using _hyper_2_4_chunk_ordered_append_reverse_time_idx on _hyper_2_4_chunk (never executed)
+(5 rows)
 
 -- test DESC for reverse ordered chunks
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append_reverse
 ORDER BY time DESC LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_2_4_chunk."time" DESC
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_2_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_2_5_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_2_6_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_2_4_chunk_ordered_append_reverse_time_idx on _hyper_2_4_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_2_5_chunk_ordered_append_reverse_time_idx on _hyper_2_5_chunk (never executed)
+         ->  Index Scan using _hyper_2_6_chunk_ordered_append_reverse_time_idx on _hyper_2_6_chunk (never executed)
+(5 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX SELECT
   device_id, value
 FROM ordered_append
 ORDER BY time ASC LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (never executed)
+(5 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
 ORDER BY time DESC, device_id LIMIT 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device_id
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX SELECT
@@ -241,48 +223,30 @@ LIMIT 1;
 FROM ordered_append
 WHERE time > '2000-01-07'
 ORDER BY time ASC LIMIT 1;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_2_chunk."time"
-         Sort Method: quicksort  Memory: 25kB
-         ->  Append (actual rows=2 loops=1)
-               ->  Bitmap Heap Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                     Recheck Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_2_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Bitmap Heap Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-                     Recheck Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_3_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(15 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+               Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (never executed)
+               Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+(6 rows)
 
 :PREFIX SELECT
   time, device_id, value
 FROM ordered_append
 WHERE time > '2000-01-07'
 ORDER BY time DESC LIMIT 1;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
-         Sort Method: quicksort  Memory: 25kB
-         ->  Append (actual rows=2 loops=1)
-               ->  Bitmap Heap Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-                     Recheck Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_3_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Bitmap Heap Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                     Recheck Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_2_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(15 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+               Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+(6 rows)
 
 -- min/max queries
 :PREFIX SELECT max(time) FROM ordered_append;
@@ -373,18 +337,15 @@ ORDER BY time DESC LIMIT 1;
   time_bucket('1d',time), device_id, value
 FROM ordered_append
 ORDER BY time ASC LIMIT 1;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Result (actual rows=3 loops=1)
-               ->  Append (actual rows=3 loops=1)
-                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-(9 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Append (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (never executed)
+(6 rows)
 
 -- test query with order by time_bucket (should not use ordered append)
 :PREFIX SELECT
@@ -423,64 +384,40 @@ ORDER BY time_bucket('1d',time) LIMIT 1;
 -- test query with now() should result in ordered append with constraint aware append
 :PREFIX SELECT * FROM ordered_append WHERE time < now() + '1 month'
 ORDER BY time DESC limit 1;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: ordered_append."time" DESC
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3 loops=1)
-               Hypertable: ordered_append
-               Chunks left after exclusion: 3
-               ->  Append (actual rows=3 loops=1)
-                     ->  Bitmap Heap Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-                           Recheck Cond: ("time" < (now() + '@ 1 mon'::interval))
-                           Heap Blocks: exact=1
-                           ->  Bitmap Index Scan on _hyper_1_3_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                                 Index Cond: ("time" < (now() + '@ 1 mon'::interval))
-                     ->  Bitmap Heap Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                           Recheck Cond: ("time" < (now() + '@ 1 mon'::interval))
-                           Heap Blocks: exact=1
-                           ->  Bitmap Index Scan on _hyper_1_2_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                                 Index Cond: ("time" < (now() + '@ 1 mon'::interval))
-                     ->  Bitmap Heap Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-                           Recheck Cond: ("time" < (now() + '@ 1 mon'::interval))
-                           Heap Blocks: exact=1
-                           ->  Bitmap Index Scan on _hyper_1_1_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                                 Index Cond: ("time" < (now() + '@ 1 mon'::interval))
-(23 rows)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=1 loops=1)
+         Hypertable: ordered_append
+         Chunks left after exclusion: 3
+         ->  Append (actual rows=1 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     Index Cond: ("time" < (now() + '@ 1 mon'::interval))
+               ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+                     Index Cond: ("time" < (now() + '@ 1 mon'::interval))
+               ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+                     Index Cond: ("time" < (now() + '@ 1 mon'::interval))
+(11 rows)
 
 -- test CTE
 :PREFIX WITH i AS (SELECT * FROM ordered_append WHERE time < now() ORDER BY time DESC limit 100)
 SELECT * FROM i;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
  CTE Scan on i (actual rows=3 loops=1)
    CTE i
      ->  Limit (actual rows=3 loops=1)
-           ->  Sort (actual rows=3 loops=1)
-                 Sort Key: ordered_append."time" DESC
-                 Sort Method: quicksort  Memory: 25kB
-                 ->  Custom Scan (ConstraintAwareAppend) (actual rows=3 loops=1)
-                       Hypertable: ordered_append
-                       Chunks left after exclusion: 3
-                       ->  Append (actual rows=3 loops=1)
-                             ->  Bitmap Heap Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-                                   Recheck Cond: ("time" < now())
-                                   Heap Blocks: exact=1
-                                   ->  Bitmap Index Scan on _hyper_1_3_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                                         Index Cond: ("time" < now())
-                             ->  Bitmap Heap Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                                   Recheck Cond: ("time" < now())
-                                   Heap Blocks: exact=1
-                                   ->  Bitmap Index Scan on _hyper_1_2_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                                         Index Cond: ("time" < now())
-                             ->  Bitmap Heap Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-                                   Recheck Cond: ("time" < now())
-                                   Heap Blocks: exact=1
-                                   ->  Bitmap Index Scan on _hyper_1_1_chunk_ordered_append_time_device_id_idx (actual rows=1 loops=1)
-                                         Index Cond: ("time" < now())
-(25 rows)
+           ->  Custom Scan (ConstraintAwareAppend) (actual rows=3 loops=1)
+                 Hypertable: ordered_append
+                 Chunks left after exclusion: 3
+                 ->  Append (actual rows=3 loops=1)
+                       ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                             Index Cond: ("time" < now())
+                       ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                             Index Cond: ("time" < now())
+                       ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                             Index Cond: ("time" < now())
+(13 rows)
 
 -- test LATERAL with ordered append in the outer query
 :PREFIX SELECT * FROM ordered_append, LATERAL(SELECT * FROM (VALUES (1),(2)) v) l ORDER BY time DESC limit 2;
@@ -498,60 +435,42 @@ SELECT * FROM i;
 
 -- test LATERAL with ordered append in the lateral query
 :PREFIX SELECT * FROM (VALUES (1),(2)) v, LATERAL(SELECT * FROM ordered_append ORDER BY time DESC limit 2) l;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=4 loops=1)
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Materialize (actual rows=2 loops=2)
          ->  Limit (actual rows=2 loops=1)
-               ->  Sort (actual rows=2 loops=1)
-                     Sort Key: _hyper_1_3_chunk."time" DESC
-                     Sort Method: quicksort  Memory: 25kB
-                     ->  Append (actual rows=3 loops=1)
-                           ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-                           ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                           ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-(11 rows)
+               ->  Append (actual rows=2 loops=1)
+                     ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(8 rows)
 
 -- test plan with best index is chosen
 -- this should use device_id, time index
 :PREFIX SELECT * FROM ordered_append WHERE device_id = 1 ORDER BY time DESC LIMIT 1;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Bitmap Heap Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-                     Recheck Cond: (device_id = 1)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_3_chunk_ordered_append_device_id_time_idx (actual rows=1 loops=1)
-                           Index Cond: (device_id = 1)
-               ->  Bitmap Heap Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-                     Recheck Cond: (device_id = 1)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_2_chunk_ordered_append_device_id_time_idx (actual rows=1 loops=1)
-                           Index Cond: (device_id = 1)
-               ->  Bitmap Heap Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-                     Recheck Cond: (device_id = 1)
-                     Heap Blocks: exact=1
-                     ->  Bitmap Index Scan on _hyper_1_1_chunk_ordered_append_device_id_time_idx (actual rows=1 loops=1)
-                           Index Cond: (device_id = 1)
-(20 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_device_id_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_device_id_time_idx on _hyper_1_2_chunk (never executed)
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_device_id_time_idx on _hyper_1_1_chunk (never executed)
+               Index Cond: (device_id = 1)
+(8 rows)
 
 -- test plan with best index is chosen
 -- this should use time index
 :PREFIX SELECT * FROM ordered_append ORDER BY time DESC LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_1_3_chunk."time" DESC
-         Sort Method: top-N heapsort  Memory: 25kB
-         ->  Append (actual rows=3 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-(8 rows)
+   ->  Append (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ordered_append_time_device_id_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ordered_append_time_device_id_idx on _hyper_1_2_chunk (never executed)
+         ->  Index Scan using _hyper_1_1_chunk_ordered_append_time_device_id_idx on _hyper_1_1_chunk (never executed)
+(5 rows)
 

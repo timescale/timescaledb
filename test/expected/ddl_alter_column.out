@@ -47,20 +47,16 @@ SELECT * FROM _timescaledb_catalog.dimension;
 
 EXPLAIN (costs off)
 SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
  Append
    ->  Seq Scan on alter_test
          Filter: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
-   ->  Bitmap Heap Scan on _hyper_1_2_chunk
-         Recheck Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
-         ->  Bitmap Index Scan on _hyper_1_2_chunk_alter_test_time_idx
-               Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
-   ->  Bitmap Heap Scan on _hyper_1_3_chunk
-         Recheck Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
-         ->  Bitmap Index Scan on _hyper_1_3_chunk_alter_test_time_idx
-               Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
-(11 rows)
+   ->  Index Scan using _hyper_1_2_chunk_alter_test_time_idx on _hyper_1_2_chunk
+         Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+   ->  Index Scan using _hyper_1_3_chunk_alter_test_time_idx on _hyper_1_3_chunk
+         Index Cond: ("time" > 'Sat May 20 10:00:01 2017 PDT'::timestamp with time zone)
+(7 rows)
 
 -- rename column and change its type
 ALTER TABLE alter_test RENAME COLUMN time TO time_us;

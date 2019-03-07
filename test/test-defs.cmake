@@ -41,7 +41,14 @@ set(PG_ISOLATION_REGRESS_OPTS_INOUT
 set(PG_REGRESS_OPTS_TEMP_INSTANCE
   --port=${TEST_PGPORT_TEMP_INSTANCE}
   --temp-instance=${TEST_CLUSTER}
-  --temp-config=${TEST_INPUT_DIR}/postgresql.conf)
+  --temp-config=${TEST_INPUT_DIR}/postgresql.conf
+)
+
+set(PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST
+  --port=${TEST_PGPORT_TEMP_INSTANCE}
+  --temp-instance=${TEST_CLUSTER}
+  --temp-config=${TEST_INPUT_DIR}/pgtest.conf
+)
 
 set(PG_REGRESS_OPTS_LOCAL_INSTANCE
   --port=${TEST_PGPORT_LOCAL})
