@@ -56,6 +56,7 @@ char *ts_last_tune_version = NULL;
 char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
+TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -234,6 +235,17 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_connection_binary_data",
+							 "Enable binary format for connection",
+							 "Enable binary format for data exchanged between nodes in the cluster",
+							 &ts_guc_enable_connection_binary_data,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 	DefineCustomIntVariable("timescaledb.max_open_chunks_per_insert",
 							"Maximum open chunks per insert",
