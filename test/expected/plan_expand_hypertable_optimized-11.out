@@ -858,14 +858,15 @@ SELECT * FROM cte ORDER BY value;
 ----------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_3_116_chunk.value
-   ->  Hash Join
-         Hash Cond: (tag.id = _hyper_3_116_chunk.tag_id)
-         ->  Seq Scan on tag
-         ->  Hash
+   ->  Merge Join
+         Merge Cond: (tag.id = _hyper_3_116_chunk.tag_id)
+         ->  Index Scan using tag_pkey on tag
+         ->  Sort
+               Sort Key: _hyper_3_116_chunk.tag_id
                ->  Append
                      ->  Seq Scan on _hyper_3_116_chunk
                            Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
-(9 rows)
+(10 rows)
 
 :PREFIX SELECT * FROM hyper_ts JOIN tag on (hyper_ts.tag_id = tag.id ) WHERE tag.name = 'tag1' and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;
                                                             QUERY PLAN                                                            
@@ -1139,14 +1140,15 @@ SET constraint_exclusion = 'off';
 ----------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: h.value
-   ->  Hash Join
-         Hash Cond: (tag.id = h.tag_id)
-         ->  Seq Scan on tag
-         ->  Hash
+   ->  Merge Join
+         Merge Cond: (tag.id = h.tag_id)
+         ->  Index Scan using tag_pkey on tag
+         ->  Sort
+               Sort Key: h.tag_id
                ->  Append
                      ->  Seq Scan on _hyper_3_116_chunk h
                            Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
-(9 rows)
+(10 rows)
 
 :PREFIX SELECT * FROM hyper_w_space h1 JOIN hyper_ts h2 ON h1.device_id=h2.device_id WHERE _timescaledb_internal.chunks_in(h1, ARRAY[104,105]) AND _timescaledb_internal.chunks_in(h2, ARRAY[116,117]) ORDER BY h1.value;
                          QUERY PLAN                          

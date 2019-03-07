@@ -52,7 +52,7 @@ add_custom_target(pginstallcheck
   ${PG_REGRESS}
   ${PG_REGRESS_OPTS_BASE}
   ${PG_REGRESS_OPTS_PGTEST}
-  ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+  ${PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST}
   USES_TERMINAL)
 
 add_custom_target(pginstallchecklocal

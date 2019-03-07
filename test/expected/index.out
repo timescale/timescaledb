@@ -439,14 +439,12 @@ INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "val
 INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "value2"}');
 EXPLAIN (verbose, costs off)
 SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
- Bitmap Heap Scan on public.index_expr_test
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Index Scan using index_expr_test_expr_idx on public.index_expr_test
    Output: "time", temp, meta
-   Recheck Cond: ((index_expr_test.meta ->> 'field'::text) = 'value1'::text)
-   ->  Bitmap Index Scan on index_expr_test_expr_idx
-         Index Cond: ((index_expr_test.meta ->> 'field'::text) = 'value1'::text)
-(5 rows)
+   Index Cond: ((index_expr_test.meta ->> 'field'::text) = 'value1'::text)
+(3 rows)
 
 SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
              time             | temp |        meta         

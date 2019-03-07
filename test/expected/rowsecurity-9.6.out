@@ -322,31 +322,30 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
 (18 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                              QUERY PLAN                              
-----------------------------------------------------------------------
- Hash Join
-   Hash Cond: (category.cid = document.cid)
-   ->  Seq Scan on category
-   ->  Hash
-         ->  Subquery Scan on document
-               Filter: f_leak(document.dtitle)
-               ->  Custom Scan (ConstraintAwareAppend)
-                     Hypertable: document
-                     Chunks left after exclusion: 6
-                     ->  Append
-                           ->  Seq Scan on _hyper_1_1_chunk
-                                 Filter: (dauthor = "current_user"())
-                           ->  Seq Scan on _hyper_1_2_chunk
-                                 Filter: (dauthor = "current_user"())
-                           ->  Seq Scan on _hyper_1_3_chunk
-                                 Filter: (dauthor = "current_user"())
-                           ->  Seq Scan on _hyper_1_4_chunk
-                                 Filter: (dauthor = "current_user"())
-                           ->  Seq Scan on _hyper_1_5_chunk
-                                 Filter: (dauthor = "current_user"())
-                           ->  Seq Scan on _hyper_1_6_chunk
-                                 Filter: (dauthor = "current_user"())
-(22 rows)
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Nested Loop
+   ->  Subquery Scan on document
+         Filter: f_leak(document.dtitle)
+         ->  Custom Scan (ConstraintAwareAppend)
+               Hypertable: document
+               Chunks left after exclusion: 6
+               ->  Append
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: (dauthor = "current_user"())
+                     ->  Seq Scan on _hyper_1_2_chunk
+                           Filter: (dauthor = "current_user"())
+                     ->  Seq Scan on _hyper_1_3_chunk
+                           Filter: (dauthor = "current_user"())
+                     ->  Seq Scan on _hyper_1_4_chunk
+                           Filter: (dauthor = "current_user"())
+                     ->  Seq Scan on _hyper_1_5_chunk
+                           Filter: (dauthor = "current_user"())
+                     ->  Seq Scan on _hyper_1_6_chunk
+                           Filter: (dauthor = "current_user"())
+   ->  Index Scan using category_pkey on category
+         Index Cond: (cid = document.cid)
+(21 rows)
 
 -- interaction of FK/PK constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -1376,9 +1375,9 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 DROP POLICY p3 on s1;
 ALTER POLICY p2 ON s2 USING (x % 2 = 0);
 SET SESSION AUTHORIZATION regress_rls_bob;
-SELECT * FROM s1 WHERE f_leak(b);	-- OK
-NOTICE:  f_leak => c81e728d9d4c2f636f067f89cc14862c
+SELECT * FROM s1 WHERE f_leak(b) ORDER BY a;	-- OK
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
+NOTICE:  f_leak => c81e728d9d4c2f636f067f89cc14862c
  a |                b                 
 ---+----------------------------------
  2 | c81e728d9d4c2f636f067f89cc14862c
@@ -1426,45 +1425,54 @@ NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
 (2 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
  Subquery Scan on s1
    Filter: f_leak(s1.b)
-   ->  Hash Join
-         Hash Cond: (_hyper_6_13_chunk.a = s2.x)
+   ->  Nested Loop
+         ->  HashAggregate
+               Group Key: s2.x
+               ->  Subquery Scan on s2
+                     Filter: (s2.y ~~ '%af%'::text)
+                     ->  Append
+                           ->  Seq Scan on _hyper_7_24_chunk
+                                 Filter: ((x % 2) = 0)
+                           ->  Seq Scan on _hyper_7_25_chunk
+                                 Filter: ((x % 2) = 0)
+                           ->  Seq Scan on _hyper_7_26_chunk
+                                 Filter: ((x % 2) = 0)
+                           ->  Seq Scan on _hyper_7_27_chunk
+                                 Filter: ((x % 2) = 0)
+                           ->  Seq Scan on _hyper_7_28_chunk
+                                 Filter: ((x % 2) = 0)
+                           ->  Seq Scan on _hyper_7_29_chunk
+                                 Filter: ((x % 2) = 0)
+                           ->  Seq Scan on _hyper_7_30_chunk
+                                 Filter: ((x % 2) = 0)
          ->  Append
-               ->  Seq Scan on _hyper_6_13_chunk
-               ->  Seq Scan on _hyper_6_14_chunk
-               ->  Seq Scan on _hyper_6_15_chunk
-               ->  Seq Scan on _hyper_6_16_chunk
-               ->  Seq Scan on _hyper_6_17_chunk
-               ->  Seq Scan on _hyper_6_18_chunk
-               ->  Seq Scan on _hyper_6_19_chunk
-               ->  Seq Scan on _hyper_6_20_chunk
-               ->  Seq Scan on _hyper_6_21_chunk
-               ->  Seq Scan on _hyper_6_22_chunk
-               ->  Seq Scan on _hyper_6_23_chunk
-         ->  Hash
-               ->  HashAggregate
-                     Group Key: s2.x
-                     ->  Subquery Scan on s2
-                           Filter: (s2.y ~~ '%af%'::text)
-                           ->  Append
-                                 ->  Seq Scan on _hyper_7_24_chunk
-                                       Filter: ((x % 2) = 0)
-                                 ->  Seq Scan on _hyper_7_25_chunk
-                                       Filter: ((x % 2) = 0)
-                                 ->  Seq Scan on _hyper_7_26_chunk
-                                       Filter: ((x % 2) = 0)
-                                 ->  Seq Scan on _hyper_7_27_chunk
-                                       Filter: ((x % 2) = 0)
-                                 ->  Seq Scan on _hyper_7_28_chunk
-                                       Filter: ((x % 2) = 0)
-                                 ->  Seq Scan on _hyper_7_29_chunk
-                                       Filter: ((x % 2) = 0)
-                                 ->  Seq Scan on _hyper_7_30_chunk
-                                       Filter: ((x % 2) = 0)
-(36 rows)
+               ->  Index Scan using _hyper_6_13_chunk_s1_a_idx on _hyper_6_13_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_14_chunk_s1_a_idx on _hyper_6_14_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_15_chunk_s1_a_idx on _hyper_6_15_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_16_chunk_s1_a_idx on _hyper_6_16_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_17_chunk_s1_a_idx on _hyper_6_17_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_18_chunk_s1_a_idx on _hyper_6_18_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_19_chunk_s1_a_idx on _hyper_6_19_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_20_chunk_s1_a_idx on _hyper_6_20_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_21_chunk_s1_a_idx on _hyper_6_21_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_22_chunk_s1_a_idx on _hyper_6_22_chunk
+                     Index Cond: (a = s2.x)
+               ->  Index Scan using _hyper_6_23_chunk_s1_a_idx on _hyper_6_23_chunk
+                     Index Cond: (a = s2.x)
+(45 rows)
 
 SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
  xx | x  |                y                 
@@ -2047,42 +2055,30 @@ CREATE VIEW bv1 WITH (security_barrier) AS SELECT * FROM b1 WHERE a > 0 WITH CHE
 GRANT ALL ON bv1 TO regress_rls_carol;
 SET SESSION AUTHORIZATION regress_rls_carol;
 EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Subquery Scan on bv1
    Filter: f_leak(bv1.b)
    ->  Append
-         ->  Bitmap Heap Scan on _hyper_8_36_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_36_chunk_b1_a_idx on _hyper_8_36_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_36_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_38_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_38_chunk_b1_a_idx on _hyper_8_38_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_38_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_39_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_39_chunk_b1_a_idx on _hyper_8_39_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_39_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_40_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_40_chunk_b1_a_idx on _hyper_8_40_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_40_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_41_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-         ->  Bitmap Heap Scan on _hyper_8_37_chunk
-               Recheck Cond: (a > 0)
+         ->  Index Scan using _hyper_8_37_chunk_b1_a_idx on _hyper_8_37_chunk
+               Index Cond: (a > 0)
                Filter: ((a % 2) = 0)
-               ->  Bitmap Index Scan on _hyper_8_37_chunk_b1_a_idx
-                     Index Cond: (a > 0)
-(33 rows)
+(21 rows)
 
 SELECT * FROM bv1 WHERE f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
@@ -2105,8 +2101,8 @@ INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
  Update on b1 b1_13
    Update on b1 b1_13
    Update on _hyper_8_31_chunk b1
@@ -2131,117 +2127,93 @@ EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
          Filter: f_leak(b1_1.b)
          ->  Subquery Scan on b1_16
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_31_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_31_chunk_b1_a_idx on _hyper_8_31_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_31_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_2
          Filter: f_leak(b1_2.b)
          ->  Subquery Scan on b1_17
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_32_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_32_chunk_b1_a_idx on _hyper_8_32_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_32_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_3
          Filter: f_leak(b1_3.b)
          ->  Subquery Scan on b1_18
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_33_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_33_chunk_b1_a_idx on _hyper_8_33_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_33_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_4
          Filter: f_leak(b1_4.b)
          ->  Subquery Scan on b1_19
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_34_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_34_chunk_b1_a_idx on _hyper_8_34_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_34_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_5
          Filter: f_leak(b1_5.b)
          ->  Subquery Scan on b1_20
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_35_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_35_chunk_b1_a_idx on _hyper_8_35_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_35_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_6
          Filter: f_leak(b1_6.b)
          ->  Subquery Scan on b1_21
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_36_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_36_chunk_b1_a_idx on _hyper_8_36_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_36_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_7
          Filter: f_leak(b1_7.b)
          ->  Subquery Scan on b1_22
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_37_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_37_chunk_b1_a_idx on _hyper_8_37_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_37_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_8
          Filter: f_leak(b1_8.b)
          ->  Subquery Scan on b1_23
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_38_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_38_chunk_b1_a_idx on _hyper_8_38_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_38_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_9
          Filter: f_leak(b1_9.b)
          ->  Subquery Scan on b1_24
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_39_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_39_chunk_b1_a_idx on _hyper_8_39_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_39_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_10
          Filter: f_leak(b1_10.b)
          ->  Subquery Scan on b1_25
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_40_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_40_chunk_b1_a_idx on _hyper_8_40_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_40_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_11
          Filter: f_leak(b1_11.b)
          ->  Subquery Scan on b1_26
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_41_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
    ->  Subquery Scan on b1_12
          Filter: f_leak(b1_12.b)
          ->  Subquery Scan on b1_27
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_42_chunk
-                           Recheck Cond: ((a > 0) AND (a = 4))
+                     ->  Index Scan using _hyper_8_42_chunk_b1_a_idx on _hyper_8_42_chunk
+                           Index Cond: ((a > 0) AND (a = 4))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_42_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 4))
-(128 rows)
+(104 rows)
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
  Delete on b1 b1_13
    Delete on b1 b1_13
    Delete on _hyper_8_31_chunk b1
@@ -2266,111 +2238,87 @@ EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
          Filter: f_leak(b1_1.b)
          ->  Subquery Scan on b1_16
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_31_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_31_chunk_b1_a_idx on _hyper_8_31_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_31_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_2
          Filter: f_leak(b1_2.b)
          ->  Subquery Scan on b1_17
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_32_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_32_chunk_b1_a_idx on _hyper_8_32_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_32_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_3
          Filter: f_leak(b1_3.b)
          ->  Subquery Scan on b1_18
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_33_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_33_chunk_b1_a_idx on _hyper_8_33_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_33_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_4
          Filter: f_leak(b1_4.b)
          ->  Subquery Scan on b1_19
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_34_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_34_chunk_b1_a_idx on _hyper_8_34_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_34_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_5
          Filter: f_leak(b1_5.b)
          ->  Subquery Scan on b1_20
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_35_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_35_chunk_b1_a_idx on _hyper_8_35_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_35_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_6
          Filter: f_leak(b1_6.b)
          ->  Subquery Scan on b1_21
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_36_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_36_chunk_b1_a_idx on _hyper_8_36_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_36_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_7
          Filter: f_leak(b1_7.b)
          ->  Subquery Scan on b1_22
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_37_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_37_chunk_b1_a_idx on _hyper_8_37_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_37_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_8
          Filter: f_leak(b1_8.b)
          ->  Subquery Scan on b1_23
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_38_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_38_chunk_b1_a_idx on _hyper_8_38_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_38_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_9
          Filter: f_leak(b1_9.b)
          ->  Subquery Scan on b1_24
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_39_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_39_chunk_b1_a_idx on _hyper_8_39_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_39_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_10
          Filter: f_leak(b1_10.b)
          ->  Subquery Scan on b1_25
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_40_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_40_chunk_b1_a_idx on _hyper_8_40_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_40_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_11
          Filter: f_leak(b1_11.b)
          ->  Subquery Scan on b1_26
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_41_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_41_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
    ->  Subquery Scan on b1_12
          Filter: f_leak(b1_12.b)
          ->  Subquery Scan on b1_27
                ->  LockRows
-                     ->  Bitmap Heap Scan on _hyper_8_42_chunk
-                           Recheck Cond: ((a > 0) AND (a = 6))
+                     ->  Index Scan using _hyper_8_42_chunk_b1_a_idx on _hyper_8_42_chunk
+                           Index Cond: ((a > 0) AND (a = 6))
                            Filter: ((a % 2) = 0)
-                           ->  Bitmap Index Scan on _hyper_8_42_chunk_b1_a_idx
-                                 Index Cond: ((a > 0) AND (a = 6))
-(128 rows)
+(104 rows)
 
 DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
 NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
@@ -3177,18 +3125,16 @@ SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Custom Scan (ConstraintAwareAppend)
    Hypertable: y1
    Chunks left after exclusion: 1
    ->  Append
-         ->  Bitmap Heap Scan on _hyper_12_54_chunk
-               Recheck Cond: (a = 1)
+         ->  Index Scan using _hyper_12_54_chunk_y1_a_idx on _hyper_12_54_chunk
+               Index Cond: (a = 1)
                Filter: f_leak(b)
-               ->  Bitmap Index Scan on _hyper_12_54_chunk_y1_a_idx
-                     Index Cond: (a = 1)
-(9 rows)
+(7 rows)
 
 DROP VIEW rls_sbv;
 -- Create view as role that does not own table.  RLS should be applied.
@@ -3196,17 +3142,15 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
 EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Subquery Scan on y1
    Filter: f_leak(y1.b)
    ->  Append
-         ->  Bitmap Heap Scan on _hyper_12_54_chunk
-               Recheck Cond: (a = 1)
+         ->  Index Scan using _hyper_12_54_chunk_y1_a_idx on _hyper_12_54_chunk
+               Index Cond: (a = 1)
                Filter: ((a > 2) OR ((a % 2) = 0))
-               ->  Bitmap Index Scan on _hyper_12_54_chunk_y1_a_idx
-                     Index Cond: (a = 1)
-(8 rows)
+(6 rows)
 
 DROP VIEW rls_sbv;
 --

@@ -232,8 +232,8 @@ WHERE to_timestamp(time) < to_timestamp(900)
 GROUP BY t
 ORDER BY t DESC
 LIMIT 2;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: (date_trunc('minute'::text, to_timestamp(_hyper_5_19_chunk."time"))) DESC
@@ -241,11 +241,9 @@ LIMIT 2;
                Group Key: date_trunc('minute'::text, to_timestamp(_hyper_5_19_chunk."time"))
                ->  Result
                      ->  Append
-                           ->  Bitmap Heap Scan on _hyper_5_19_chunk
-                                 Recheck Cond: (to_timestamp("time") < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-                                 ->  Bitmap Index Scan on _hyper_5_19_chunk_time_plain_timefunc
-                                       Index Cond: (to_timestamp("time") < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(11 rows)
+                           ->  Index Scan using _hyper_5_19_chunk_time_plain_timefunc on _hyper_5_19_chunk
+                                 Index Cond: (to_timestamp("time") < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(9 rows)
 
 SELECT date_trunc('minute', to_timestamp(time)) t, avg(series_0), min(series_1), avg(series_2)
 FROM hyper_timefunc
@@ -490,18 +488,16 @@ WHERE time < to_timestamp(900)
 GROUP BY t
 ORDER BY t DESC
 LIMIT 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: (date_trunc('minute'::text, "time")) DESC
          ->  HashAggregate
                Group Key: date_trunc('minute'::text, "time")
-               ->  Bitmap Heap Scan on plain_table
-                     Recheck Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-                     ->  Bitmap Index Scan on time_plain_plain_table
-                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(9 rows)
+               ->  Index Scan using time_plain_plain_table on plain_table
+                     Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(7 rows)
 
 SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2)
 FROM plain_table

@@ -73,6 +73,8 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "max_worker_processes=16"
 
+    Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "random_page_cost=1.0"
+
     Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'"
 
     Add-Content "C:\Program Files\postgresql\10\data\postgresql.conf" "timescaledb.last_tuned_version='0.0.1'"
