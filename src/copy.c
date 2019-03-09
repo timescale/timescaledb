@@ -35,6 +35,7 @@
 #include "chunk_dispatch.h"
 #include "subspace_store.h"
 #include "compat.h"
+#include "cross_module_fn.h"
 
 /*
  * Copy from a file to a hypertable.
@@ -612,7 +613,11 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 #endif
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate);
 
-	*processed = timescaledb_CopyFrom(ccstate, range_table, ht);
+	if (hypertable_is_distributed(ht))
+		ts_cm_functions->distributed_copy(stmt, processed, ht, cstate, attnums);
+	else
+		*processed = timescaledb_CopyFrom(ccstate, range_table, ht);
+
 	EndCopyFrom(cstate);
 
 	heap_close(rel, NoLock);

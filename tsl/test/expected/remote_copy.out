@@ -1,0 +1,258 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Need to be super user to create extension and add servers
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+ALTER ROLE :ROLE_DEFAULT_PERM_USER PASSWORD 'perm_user_pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_PERM_USER;
+-- Need to be super user to create extension and add servers
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+-- Need explicit password for non-super users to connect
+ALTER ROLE :ROLE_DEFAULT_CLUSTER_USER CREATEDB PASSWORD 'pass';
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_DEFAULT_CLUSTER_USER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS server_1;
+DROP DATABASE IF EXISTS server_2;
+DROP DATABASE IF EXISTS server_3;
+SET client_min_messages TO NOTICE;
+CREATE DATABASE server_1;
+CREATE DATABASE server_2;
+CREATE DATABASE server_3;
+\c server_1
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_2
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c server_3
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+-- Add servers using the TimescaleDB server management API
+SELECT * FROM add_server('server_1', database => 'server_1', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "server_1" already exists, skipping
+ server_name |   host    | port  | database |       username       |   server_username    | created 
+-------------+-----------+-------+----------+----------------------+----------------------+---------
+ server_1    | localhost | 15432 | server_1 | default_cluster_user | default_cluster_user | t
+(1 row)
+
+SELECT * FROM add_server('server_2', database => 'server_2', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "server_2" already exists, skipping
+ server_name |   host    | port  | database |       username       |   server_username    | created 
+-------------+-----------+-------+----------+----------------------+----------------------+---------
+ server_2    | localhost | 15432 | server_2 | default_cluster_user | default_cluster_user | t
+(1 row)
+
+SELECT * FROM add_server('server_3', database => 'server_3', password => 'pass', if_not_exists => true);
+NOTICE:  remote server database "server_3" already exists, skipping
+ server_name |   host    | port  | database |       username       |   server_username    | created 
+-------------+-----------+-------+----------+----------------------+----------------------+---------
+ server_3    | localhost | 15432 | server_3 | default_cluster_user | default_cluster_user | t
+(1 row)
+
+-- Use some horrible names to make sure the parsing code works
+CREATE TABLE "+ri(k33_')" (       
+    "thyme" bigint NOT NULL,
+    "))_" double precision NOT NULL,
+    "flavor" text DEFAULT 'mint',
+    "pH" float DEFAULT 7.0,
+    optional text
+);
+SELECT create_hypertable('"+ri(k33_'')"', 'thyme', partitioning_column=>'pH', number_partitions=>4, chunk_time_interval => 100, replication_factor => 2);
+     create_hypertable     
+---------------------------
+ (1,public,"+ri(k33_')",t)
+(1 row)
+
+-- Run some successful copies
+COPY "+ri(k33_')" FROM STDIN;
+\copy public   	.		"+ri(k33_')" ("pH", 	"))_"   ,	thyme) fROm stdIN deLIMitER '-';
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm 
+StDiN wiTH dElImITeR ','
+;
+COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FORMAT csv, NULL 'empties', FORCE_NOT_NULL ("pH", "thyme"));
+-- Run some error cases
+\set ON_ERROR_STOP 0
+-- Bad input
+COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
+ERROR:  invalid input syntax for integer: "red"
+-- Missing paritioning column
+COPY "+ri(k33_')" (thYme, "))_", "flavor") FROM STDIN;
+ERROR:  unable to use default value for partitioning column pH
+-- Missing required column, these generate a WARNING with a transaction id in them (too flimsy to output)
+SET client_min_messages TO ERROR;
+COPY "+ri(k33_')" (thyme, flavor, "pH") FROM STDIN WITH DELIMITER ',';
+ERROR:  error during copy completion
+COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
+ERROR:  error during copy completion
+SET client_min_messages TO INFO;
+-- Invalid data after new chunk creation, data and chunks should be rolled back
+COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
+ERROR:  invalid input syntax for integer: "red"
+\set ON_ERROR_STOP 1
+SELECT * FROM "+ri(k33_')";
+ thyme  |         ))_          |        flavor         |  pH  | optional 
+--------+----------------------+-----------------------+------+----------
+      1 |                   11 | strawberry            |  2.3 | stuff
+    208 |                   40 | mint                  | 0.01 | 
+     15 |                  403 |                       |    1 | 
+    203 |              3.21321 | something like lemon  |    1 | 
+    333 |           2309424231 |   _''garbled*(#)@#$*) |    1 | 
+    342 |                 4324 | "empties"             |    4 | \N
+ 120321 |     4.43244243242544 |                       |    0 | 
+   4201 | 3.33333333333333e+27 | ""                    |    1 | 
+    315 |                   37 | mint                  |   10 | 
+(9 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |      table_name       
+----+---------------+-----------------------+-----------------------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_dist_chunk
+  2 |             1 | _timescaledb_internal | _hyper_1_2_dist_chunk
+  3 |             1 | _timescaledb_internal | _hyper_1_3_dist_chunk
+  4 |             1 | _timescaledb_internal | _hyper_1_4_dist_chunk
+  5 |             1 | _timescaledb_internal | _hyper_1_5_dist_chunk
+  6 |             1 | _timescaledb_internal | _hyper_1_6_dist_chunk
+  7 |             1 | _timescaledb_internal | _hyper_1_7_dist_chunk
+  8 |             1 | _timescaledb_internal | _hyper_1_8_dist_chunk
+(8 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_server;
+ chunk_id | server_chunk_id | server_name 
+----------+-----------------+-------------
+        1 |               1 | server_1
+        1 |               1 | server_2
+        2 |               2 | server_1
+        2 |               2 | server_2
+        3 |               3 | server_2
+        3 |               1 | server_3
+        4 |               3 | server_1
+        4 |               4 | server_2
+        5 |               4 | server_1
+        5 |               5 | server_2
+        6 |               5 | server_1
+        6 |               6 | server_2
+        7 |               6 | server_1
+        7 |               7 | server_2
+        8 |               7 | server_1
+        8 |               8 | server_2
+(16 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable_server;
+ hypertable_id | server_hypertable_id | server_name 
+---------------+----------------------+-------------
+             1 |                    1 | server_1
+             1 |                    1 | server_2
+             1 |                    1 | server_3
+(3 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                 
+---------------------------------------------
+ _timescaledb_internal._hyper_1_1_dist_chunk
+ _timescaledb_internal._hyper_1_2_dist_chunk
+ _timescaledb_internal._hyper_1_3_dist_chunk
+ _timescaledb_internal._hyper_1_4_dist_chunk
+ _timescaledb_internal._hyper_1_5_dist_chunk
+ _timescaledb_internal._hyper_1_6_dist_chunk
+ _timescaledb_internal._hyper_1_7_dist_chunk
+ _timescaledb_internal._hyper_1_8_dist_chunk
+(8 rows)
+
+\c server_1
+SELECT * FROM "+ri(k33_')";
+ thyme  |         ))_          |        flavor         |  pH  | optional 
+--------+----------------------+-----------------------+------+----------
+      1 |                   11 | strawberry            |  2.3 | stuff
+    208 |                   40 | mint                  | 0.01 | 
+     15 |                  403 |                       |    1 | 
+    203 |              3.21321 | something like lemon  |    1 | 
+    333 |           2309424231 |   _''garbled*(#)@#$*) |    1 | 
+    342 |                 4324 | "empties"             |    4 | \N
+ 120321 |     4.43244243242544 |                       |    0 | 
+   4201 | 3.33333333333333e+27 | ""                    |    1 | 
+(8 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                 
+---------------------------------------------
+ _timescaledb_internal._hyper_1_1_dist_chunk
+ _timescaledb_internal._hyper_1_2_dist_chunk
+ _timescaledb_internal._hyper_1_4_dist_chunk
+ _timescaledb_internal._hyper_1_5_dist_chunk
+ _timescaledb_internal._hyper_1_6_dist_chunk
+ _timescaledb_internal._hyper_1_7_dist_chunk
+ _timescaledb_internal._hyper_1_8_dist_chunk
+(7 rows)
+
+\c server_2
+SELECT * FROM "+ri(k33_')";
+ thyme  |         ))_          |        flavor         |  pH  | optional 
+--------+----------------------+-----------------------+------+----------
+      1 |                   11 | strawberry            |  2.3 | stuff
+    208 |                   40 | mint                  | 0.01 | 
+    315 |                   37 | mint                  |   10 | 
+     15 |                  403 |                       |    1 | 
+    203 |              3.21321 | something like lemon  |    1 | 
+    333 |           2309424231 |   _''garbled*(#)@#$*) |    1 | 
+    342 |                 4324 | "empties"             |    4 | \N
+ 120321 |     4.43244243242544 |                       |    0 | 
+   4201 | 3.33333333333333e+27 | ""                    |    1 | 
+(9 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                 
+---------------------------------------------
+ _timescaledb_internal._hyper_1_1_dist_chunk
+ _timescaledb_internal._hyper_1_2_dist_chunk
+ _timescaledb_internal._hyper_1_3_dist_chunk
+ _timescaledb_internal._hyper_1_4_dist_chunk
+ _timescaledb_internal._hyper_1_5_dist_chunk
+ _timescaledb_internal._hyper_1_6_dist_chunk
+ _timescaledb_internal._hyper_1_7_dist_chunk
+ _timescaledb_internal._hyper_1_8_dist_chunk
+(8 rows)
+
+\c server_3
+SELECT * FROM "+ri(k33_')";
+ thyme | ))_ | flavor | pH | optional 
+-------+-----+--------+----+----------
+   315 |  37 | mint   | 10 | 
+(1 row)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                 
+---------------------------------------------
+ _timescaledb_internal._hyper_1_3_dist_chunk
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_DEFAULT_CLUSTER_USER;
+DROP TABLE "+ri(k33_')" CASCADE;
+SELECT * FROM delete_server('server_1', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_1
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_2', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_2
+ delete_server 
+---------------
+ t
+(1 row)
+
+SELECT * FROM delete_server('server_3', cascade => true);
+NOTICE:  drop cascades to user mapping for default_cluster_user on server server_3
+ delete_server 
+---------------
+ t
+(1 row)
+
+DROP DATABASE server_1;
+DROP DATABASE server_2;
+DROP DATABASE server_3;

@@ -38,6 +38,7 @@
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "server_dispatch.h"
+#include "remote/distributed_copy.h"
 #endif
 
 #ifdef PG_MODULE_MAGIC
@@ -127,6 +128,14 @@ error_server_dispatch_path_create_not_supported(PlannerInfo *root, ModifyTablePa
 	pg_unreachable();
 }
 
+static void
+error_distributed_copy_not_supported(const CopyStmt *stmt, uint64 *processed, Hypertable *ht,
+									 CopyState cstate, List *attnums)
+{
+	error_not_supported();
+	pg_unreachable();
+}
+
 #endif /* PG96 */
 
 /*
@@ -184,6 +193,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.set_rel_pathlist = NULL,
 	.hypertable_should_be_expanded = NULL,
 	.server_dispatch_path_create = error_server_dispatch_path_create_not_supported,
+	.distributed_copy = error_distributed_copy_not_supported,
 #else
 	.add_server = server_add,
 	.delete_server = server_delete,
@@ -201,6 +211,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.set_rel_pathlist = tsl_set_rel_pathlist,
 	.hypertable_should_be_expanded = tsl_hypertable_should_be_expanded,
 	.server_dispatch_path_create = server_dispatch_path_create,
+	.distributed_copy = remote_distributed_copy,
 #endif
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 };

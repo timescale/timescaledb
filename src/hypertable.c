@@ -932,14 +932,14 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 }
 
 /* finds the chunk for a given point, returning NULL if none exists */
-Chunk *
+TSDLLEXPORT Chunk *
 ts_hypertable_find_chunk_if_exists(Hypertable *h, Point *point)
 {
 	return hypertable_get_chunk(h, point, false);
 }
 
 /* gets the chunk for a given point, creating it if it does not exist */
-Chunk *
+TSDLLEXPORT Chunk *
 ts_hypertable_get_or_create_chunk(Hypertable *h, Point *point)
 {
 	return hypertable_get_chunk(h, point, true);

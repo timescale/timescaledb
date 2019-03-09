@@ -305,6 +305,13 @@ server_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
 	return NULL;
 }
 
+static void
+distributed_copy_default(const CopyStmt *stmt, uint64 *processed, Hypertable *ht, CopyState cstate,
+						 List *attnums)
+{
+	error_no_default_fn_community();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -361,6 +368,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_txn_id_out = error_no_default_fn_pg_community,
 	.remote_txn_heal_server = error_no_default_fn_pg_community,
 	.server_dispatch_path_create = server_dispatch_path_create_default,
+	.distributed_copy = distributed_copy_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
